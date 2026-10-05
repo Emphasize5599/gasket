@@ -25,7 +25,7 @@ async function (reqId, args) {
   const hav = (a, b) => { const R = 3958.8, r = Math.PI / 180, dl = (b[0] - a[0]) * r, dg = (b[1] - a[1]) * r;
     const h = Math.sin(dl / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
   // The page's own directions answer (already downloaded, so read from the browser cache) has every route option with
-  // its turn-by-turn points in order. Hand back ~40 of them per route so the app can ask Google's Routes API for
+  // its turn-by-turn points in order. Hand back up to ~300 of them per route so the app can ask Google's Routes API for
   // exactly that route (pass-through points), instead of guessing.
   async function paths() {
     try {
@@ -43,7 +43,7 @@ async function (reqId, args) {
         })(r[1]);
         const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + hav(pts[i - 1], pts[i]));
         const L = cum[cum.length - 1] || 1, thin = [];
-        for (let k = 0, j = 0; k <= 40; k++) { const want = L * k / 40; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
+        for (let k = 0, j = 0; k <= 300; k++) { const want = L * k / 300; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
         return { via: String(head[1] || ''), miles: head[2] ? head[2][0] / 1609.344 : null, minutes: head[3] ? head[3][0] / 60 : null,
           pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) };
       }).filter((x) => x.pts.length > 5);

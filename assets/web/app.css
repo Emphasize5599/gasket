@@ -430,3 +430,26 @@ b.good, .leg-sub.good { color: var(--save); }
 .rd-county { background: #f2c200; color: #1a3d8f; }
 .leg-h small { font-weight: 400; color: var(--ink-2); font-size: 12px; }
 .leg.all { border-top: none; background: var(--surface-2); border-radius: 14px; padding: 8px 12px 4px; margin: 8px 0; }
+
+.road-g { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; }
+.road-h { display: flex; align-items: center; gap: 8px; }
+.road-h small { color: var(--ink-2); font-size: 12px; }
+.road-g .leg { border-top: none; padding: 6px 0 2px 10px; margin-left: 4px; border-left: 3px solid var(--line); }
+.road-g .leg.on { border-left-color: var(--accent); }
+.leg-h .lim { display: inline-grid; place-items: center; min-width: 30px; height: 30px; border: 2px solid var(--ink); border-radius: 6px; font-size: 15px; background: var(--surface); }
+
+/* route options on a small map */
+.rmap { height: 240px; border-radius: 16px; overflow: hidden; margin: 6px 0 8px; border: 1px solid var(--line); background: var(--surface-2); }
+.rlabel { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 3px 7px; box-shadow: 0 1px 4px rgba(0,0,0,.3); font-size: 11.5px; line-height: 1.2; text-align: center; cursor: pointer; }
+.rlabel::before { display: none; }
+.rlabel b { display: block; font-size: 12.5px; }
+.rlabel span { color: var(--ink-2); }
+.rlabel.on { background: #1a73e8; color: #fff; border-color: #1a73e8; z-index: 1000 !important; }
+.rlabel.on span { color: #dbe8ff; }
+.opt-sel { font-size: 13.5px; color: var(--ink-2); margin: 0 2px 4px; }
+.opt-sel b { color: var(--ink); }
+.alts-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.alts-pick button { flex: 1 1 45%; }
+
+.leaflet-tooltip.rlabel { pointer-events: auto; }
+.rlabel .rl b { display: block; font-size: 12.5px; }

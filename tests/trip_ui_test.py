@@ -112,7 +112,7 @@ with sync_playwright() as p:
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         ts = pg.inner_text('#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
         nroads = pg.locator('#tsSpeed .leg[data-leg]').count()
-        assert nroads == 2 and ts.index('US-67 S') < ts.index('I-30 W'), ts
+        assert nroads == 3 and ts.index('US-67 S') < ts.index('I-30 W') and '2 speed limits' in ts and 'At the limit — 75 mph' in ts and 'about 7' not in ts, ts
         assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts and 'All roads' in ts
         assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
         pg.screenshot(path=f'{OUT}/{name}-s1-trip-speed.png')
@@ -140,7 +140,7 @@ with sync_playwright() as p:
         assert rep_speed['offsets']['1'] == 6 and rep_speed['stats']['hpms'] > 0 and [r['name'] for r in rep_speed['roads']] == ['US-67 S', 'I-30 W'], rep_speed['roads']
         # the "all roads" slider moves every road
         pg.evaluate("() => { const r = document.getElementById('lgAll'); r.value = 5; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
-        assert pg.input_value('#lgR0') == '5' and pg.input_value('#lgR1') == '5' and pg.inner_text('#lgAllSub').startswith('+$')
+        assert pg.input_value('#lgR0') == '5' and pg.input_value('#lgR1') == '5' and pg.input_value('#lgR2') == '5' and pg.inner_text('#lgAllSub').startswith('+$')
         pg.click('#lgReset'); pg.wait_for_timeout(150)
         assert pg.locator('#lgTot.zero').count() == 1
         seen = pg.evaluate('window.__progSeen') or []
@@ -314,7 +314,12 @@ with sync_playwright() as p:
         assert urls == ['https://www.google.com/maps/dir/34.7464809%2C-92.2895948/41.7640350%2C-72.6823870/'], 'route options read by exact spots'
         txt = pg.inner_text('#tParsed'); print('  after reading the link:', txt.replace('\n', ' | '))
         assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
-        assert 'Google Maps shows 3 routes' in txt and 'I-71 N and I-86 E · 1,406 mi' in txt, txt
+        assert 'Google Maps shows 3 routes' in txt and pg.locator('#tOptMap .rlabel').count() == 3 and pg.locator('#tOptMap .rlabel.on').count() == 1, txt
+        pg.evaluate("document.getElementById('tOptMap').scrollIntoView({block:'center'})"); pg.wait_for_timeout(300)
+        pg.screenshot(path=f'{OUT}/{name}-t8b-optmap.png')
+        pg.click('#tOptMap [data-opt="1"]', timeout=5000); pg.wait_for_timeout(300)
+        sel = pg.inner_text('.opt-sel'); print('  tapped route 2 on the map:', sel)
+        assert 'I-71 N and I-86 E' in sel and '1,406 mi' in sel
         pg.screenshot(path=f'{OUT}/{name}-t8a-cities.png')
         finds = len(pg.evaluate('window.__finds') or [])
         pg.fill('#tMiles', '300'); pg.click('#tGo'); pg.wait_for_timeout(1800)
@@ -323,6 +328,9 @@ with sync_playwright() as p:
         assert len(pg.evaluate('window.__finds') or []) == finds, 'addresses were already done'
         assert pg.locator('.alts-pick button').count() == 3 and info.index('via I-71 N\n') < info.index('I-86') < info.index('I-81'), info
         assert '1404 mi' in info and '1324 mi' in info and pg.evaluate('window.__viaCalls') == [8], info
+        assert 'I-86' in pg.inner_text('.alts-pick button.on') and pg.locator('#tRmap .rlabel').count() == 3, 'the route tapped on the map is the one picked'
+        pg.click('#tRmap [data-opt="2"]'); pg.wait_for_timeout(300)
+        assert 'I-81' in pg.inner_text('.alts-pick button.on'), 'tapping a route on the map after Get route switches to it'
         pg.screenshot(path=f'{OUT}/{name}-t9-three-routes.png')
         pg.evaluate("window.__mocks.route = window.__origRoute; window.__gmapsAnswer = null")
         txt = pg.inner_text('#tParsed'); print('  real link:', txt.replace('\n', ' | '))

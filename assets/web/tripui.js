@@ -408,7 +408,12 @@
     if (r.mode && r.mode !== 'drive') h += '<div class="msg err">This link is for ' + esc(r.mode) + ' directions; fuel stops will use driving directions.</div>';
     if (r.avoidDetected) h += '<div class="msg">Route options from your link: ' + (['tolls', 'highways', 'ferries'].filter(function (k) { return r.avoid[k]; }).map(function (k) { return 'avoid ' + k; }).join(', ') || 'none') + '.</div>';
     var picked = pickedRoute(r);
-    if (r.mapsRoutes && r.mapsRoutes.length > 1) {
+    var withPts = r.mapsRoutes && r.mapsRoutes.length > 1 && r.mapsRoutes.every(function (m) { return m.pts && m.pts.length > 1; });
+    if (withPts && !model) {
+      var selK = r.routeIndex != null ? Math.min(r.routeIndex, r.mapsRoutes.length - 1) : 0;
+      h += '<div class="maps-opts"><div class="sub-h">Google Maps shows ' + r.mapsRoutes.length + ' routes — tap one</div><div class="rmap" id="tOptMap"></div>' +
+        '<div class="opt-sel">via <b>' + esc(r.mapsRoutes[selK].via) + '</b> · ' + Math.round(r.mapsRoutes[selK].miles || 0).toLocaleString() + ' mi · ' + fmtDur((r.mapsRoutes[selK].minutes || 0) * 60) + '</div></div>';
+    } else if (r.mapsRoutes && r.mapsRoutes.length > 1) {
       h += '<div class="msg maps-opts">Google Maps shows ' + r.mapsRoutes.length + ' routes' + (picked && r.routeIndex != null ? ' — you picked <b>via ' + esc(picked.via) + '</b>' : '') + ':<ol>' + r.mapsRoutes.map(function (m) {
         return '<li' + (m === picked && r.routeIndex != null ? ' class="on"' : '') + '>via ' + esc(m.via) + (m.miles ? ' · ' + Math.round(m.miles).toLocaleString() + ' mi' : '') + (m.minutes ? ' · ' + fmtDur(m.minutes * 60) : '') + '</li>';
       }).join('') + '</ol>Pick one after <b>Get route</b>.</div>';
@@ -416,6 +421,9 @@
     else if (r.routeIndex) h += '<div class="msg">Your link says you picked route option ' + (r.routeIndex + 1) + ' in Google Maps.</div>';
     if (r.note) h += '<div class="msg err">' + esc(r.note) + '</div>';
     el.innerHTML = h;
+    if ($('tOptMap')) optionsMap($('tOptMap'), r.mapsRoutes.map(function (m) {
+      return { pts: m.pts, time: fmtDur((m.minutes || 0) * 60), miles: Math.round(m.miles || 0).toLocaleString() + ' mi' };
+    }), r.routeIndex != null ? Math.min(r.routeIndex, r.mapsRoutes.length - 1) : 0, function (k) { r.routeIndex = k; LG.info('route', 'Picked route option ' + (k + 1) + ' on the map', r.mapsRoutes[k].via); renderStops(); });
     el.querySelectorAll('[data-choice]').forEach(function (b) {
       b.onclick = function () {
         var st = r.stops[+b.dataset.stop], c = st.choices[+b.dataset.choice];
@@ -750,7 +758,8 @@
     var h = '<div class="card route-card">';
     if (alts.length > 1) {
       var pk = pickedRoute(route);
-      h += '<div class="sub-h">' + (pk ? 'You picked via ' + esc(pk.via) + ' in Google Maps' + (altSure ? ' — matched below' : ' — check the closest one below') : 'Which route? Pick the one you chose in Google Maps') + '</div><div class="alts-pick">' + alts.map(function (a, k) {
+      h += '<div class="sub-h">' + (pk ? 'You picked via ' + esc(pk.via) + ' in Google Maps' + (altSure ? ' — matched on the map' : ' — check the closest one') : 'Which route? Tap the one you want') + '</div>' +
+        '<div class="rmap" id="tRmap"></div><div class="alts-pick">' + alts.map(function (a, k) {
         var mi = (a.distanceMeters || 0) / 1609.344, sec = parseFloat(String(a.duration || '0'));
         return '<button data-alt="' + k + '" class="' + (k === altSel ? 'on' : '') + '"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b>' +
           '<span>' + Math.round(mi) + ' mi · ' + fmtDur(sec) + (k === altSel && pickedRoute(route) ? (altSure ? ' · ✓ same as in Google Maps' : ' · closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? ' · matches your link' : '')) + '</span></button>';
@@ -769,10 +778,79 @@
     h += '<div class="lead small">Finding stations uses ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') + (S.monthlyCap ? ' (' + Math.max(0, left) + ' left this month)' : '') : 'no Google lookups') +
       (official('walmart') || official('murphy') ? '; Walmart and Murphy prices come from their own sites.' : '.') + '</div></div>';
     el.innerHTML = h;
-    el.querySelectorAll('[data-alt]').forEach(function (b) {
-      b.onclick = function () { altSel = +b.dataset.alt; rawRoute = alts[altSel]; model = T.buildRoute(rawRoute, carModel()); renderInfo(); };
-    });
+    var pickAlt = function (k) { if (k === altSel) return; altSel = k; rawRoute = alts[altSel]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); renderInfo(); };
+    el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
+    if ($('tRmap')) optionsMap($('tRmap'), alts.map(function (a) {
+      return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' };
+    }), altSel, pickAlt);
     $('tGo').textContent = startGal - need >= bufGal ? 'Look for a cheaper fill-up anyway' : 'Find the best stops';
+  }
+  // ---------- route options on a small map (like Google Maps) ----------
+  var rmap = null;
+  var ROUTE_GRAY = '#8a94a6';
+  /** lines: [{pts: [[lat,lng],...], time, miles, via}]; sel: index; onPick(k). */
+  function optionsMap(el, lines, sel, onPick) {
+    if (rmap) { try { rmap.remove(); } catch (e) { } rmap = null; }
+    if (!el || !lines.length) return;
+    rmap = L.map(el, { zoomControl: false, attributionControl: true, tap: false, scrollWheelZoom: false, zoomSnap: 0.25 });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'osm-tiles', attribution: '© OpenStreetMap' }).addTo(rmap);
+    var all = [], tips = [], order = lines.map(function (_, k) { return k; }).filter(function (k) { return k !== sel; }).concat([sel]);   // chosen one drawn on top
+    order.forEach(function (k) {
+      var ln = lines[k]; if (!ln || !ln.pts || ln.pts.length < 2) return;
+      var on = k === sel;
+      L.polyline(ln.pts, { color: '#ffffff', weight: on ? 9 : 7, opacity: 0.95, interactive: false }).addTo(rmap);
+      var line = L.polyline(ln.pts, { color: on ? '#1a73e8' : ROUTE_GRAY, weight: on ? 6 : 5, opacity: 1 }).addTo(rmap);
+      L.polyline(ln.pts, { color: '#000', weight: 22, opacity: 0.001 }).addTo(rmap).on('click', function () { onPick(k); });   // easier to tap
+      line.on('click', function () { onPick(k); });
+      var cands = labelSpots(lines, k), mid = cands[0];
+      tips.push({ k: k, cands: cands, tip: null });
+      var tip = tips[tips.length - 1].tip = L.tooltip({ permanent: true, direction: 'center', className: 'rlabel' + (on ? ' on' : ''), interactive: true })
+        .setLatLng(mid).setContent('<div class="rl" data-opt="' + k + '"><b>' + esc(ln.time) + '</b><span>' + esc(ln.miles) + '</span></div>').addTo(rmap);
+      all = all.concat(ln.pts);
+    });
+    rmap.attributionControl.setPrefix(false);
+    // tapping a time/miles label picks that route too
+    el.onclick = null; el.addEventListener('click', function (e) { var t = e.target.closest && e.target.closest('[data-opt]'); if (t) { e.stopPropagation(); onPick(+t.dataset.opt); } }, true);
+    var a = lines[0].pts[0], b = lines[0].pts[lines[0].pts.length - 1];
+    var mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(rmap); };
+    mk(a, 'A'); mk(b, 'B');
+    rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] });
+    setTimeout(function () { if (rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] }); placeLabels(rmap, tips, sel); } }, 60);
+  }
+  /** Candidate label spots on a route, best first: points far from the other routes (where it splits off), like Google Maps. */
+  function labelSpots(lines, k) {
+    var me = lines[k].pts, n = me.length, out = [], others = [];
+    lines.forEach(function (ln, j) { if (j !== k && ln.pts) { var st = Math.max(1, Math.floor(ln.pts.length / 120)); for (var i = 0; i < ln.pts.length; i += st) others.push(ln.pts[i]); } });
+    var st2 = Math.max(1, Math.floor(n / 60));
+    for (var i = Math.floor(n * 0.12); i < n * 0.88; i += st2) {
+      var p = me[i], d = Infinity;
+      for (var o = 0; o < others.length; o++) { var dd = T.hav({ lat: p[0], lng: p[1] }, { lat: others[o][0], lng: others[o][1] }); if (dd < d) d = dd; }
+      out.push({ p: p, d: d });
+    }
+    out.sort(function (a, b) { return b.d - a.d; });
+    return out.length ? out.map(function (x) { return x.p; }) : [me[Math.floor(n / 2)]];
+  }
+  /** Move labels so none overlap on screen: the chosen route's label first, then each at its best free spot. */
+  function placeLabels(m, tips, sel) {
+    var placed = [], size = m.getSize();
+    tips.slice().sort(function (a, b) { return (b.k === sel) - (a.k === sel); }).forEach(function (t) {
+      var el = t.tip.getElement && t.tip.getElement(); if (!el) return;
+      var w = el.offsetWidth + 6, h = el.offsetHeight + 6, pick = null;
+      for (var c = 0; c < t.cands.length && !pick; c++) {
+        var pt = m.latLngToContainerPoint(t.cands[c]), r = { x: pt.x - w / 2, y: pt.y - h / 2, w: w, h: h };
+        if (r.x < 2 || r.y < 2 || r.x + w > size.x - 2 || r.y + h > size.y - 2) continue;
+        if (placed.some(function (q) { return r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h; })) continue;
+        pick = { c: t.cands[c], r: r };
+      }
+      if (!pick) { var pt0 = m.latLngToContainerPoint(t.cands[0]); pick = { c: t.cands[0], r: { x: pt0.x - w / 2, y: pt0.y - h / 2, w: w, h: h } }; }
+      t.tip.setLatLng(pick.c); placed.push(pick.r);
+    });
+  }
+  function thinAlt(a) {
+    var pts = decoded(a), out = [], step = Math.max(1, Math.floor(pts.length / 1500));
+    for (var i = 0; i < pts.length; i += step) out.push([pts[i].lat, pts[i].lng]);
+    var l = pts[pts.length - 1]; out.push([l.lat, l.lng]);
+    return out;
   }
   function toastMsg(m) { if (window.toast) window.toast(m); }
 
@@ -1030,7 +1108,13 @@
     var legs = speedLegs(), lim = model._lim, st = result.speedState = result.speedState || {};
     var priceAt = function (d) { var L = legs.filter(function (x) { return d >= x.a && d < x.b; })[0] || legs[legs.length - 1]; return L ? L.price : result.startPrice; };
     var roads = lim && lim.roads ? lim.roads.map(function (r) {
-      return Object.assign({}, r, { pieces: r.pieces.map(function (pc) { return Object.assign({}, pc, { price: priceAt((pc.from + pc.to) / 2) }); }) });
+      var secs = (r.sections || []).map(function (sec) {
+        // the section's miles, split where the gas in the tank changes (at stops), each at the section's limit
+        var cuts = [sec.from].concat(legs.map(function (L) { return L.b; }).filter(function (d) { return d > sec.from && d < sec.to; })).concat([sec.to]), pieces = [];
+        for (var k = 0; k < cuts.length - 1; k++) pieces.push({ from: cuts[k], to: cuts[k + 1], mi: cuts[k + 1] - cuts[k], limit: sec.limit, price: priceAt((cuts[k] + cuts[k + 1]) / 2) });
+        return Object.assign({}, sec, { pieces: pieces });
+      });
+      return Object.assign({}, r, { sections: secs });
     }) : [];
     Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', state: st });
   }
@@ -1344,6 +1428,7 @@
     return h;
   }
 
+  var dotsRenderer = null;
   function drawRoute() {
     layer.clearLayers();
     if (!map.hasLayer(layer)) layer.addTo(map);
@@ -1358,10 +1443,13 @@
     if (result) {
       var chosen = {};
       if (result.plan.ok) result.plan.stops.forEach(function (s, i) { chosen[s.c.id] = i + 1; });
-      var cv = L.canvas({ padding: 0.3 });     // hundreds of stations on a long trip: one canvas, not hundreds of page elements
+      // hundreds of stations on a long trip: drawn on one canvas, in a layer above the route line (like the pins)
+      if (!map.getPane('tdots')) { var pn = map.createPane('tdots'); pn.style.zIndex = 590; }
+      var cv = dotsRenderer || (dotsRenderer = L.canvas({ padding: 0.3, pane: 'tdots' }));
+      var ring = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#ffffff';
       result.cands.forEach(function (c) {
         if (chosen[c.id]) return;
-        L.circleMarker([c.lat, c.lng], { renderer: cv, radius: 5.5, color: '#ffffff', weight: 1.5, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 })
+        L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: 6, color: ring, weight: 2, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 })
           .bindPopup('<b>' + esc(c.station.name) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
             (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : '')).addTo(layer);
       });

@@ -386,7 +386,10 @@
     var bal = SP.balanced(f, 45, hi);
     var h = '<div class="spd-stick"><div class="tb-h">Cruising speed for this trip</div>';
     if (ctx.loading) { el.innerHTML = h + '</div><div class="lead small">Looking up speed limits along the route…</div>'; return; }
-    var roads = ctx.roads || [];
+    var roadList = ctx.roads || [];
+    // one slider per posted-limit section of each major road
+    var roads = [];
+    roadList.forEach(function (r, ri) { (r.sections || []).forEach(function (sec, si) { roads.push({ road: r, ri: ri, si: si, name: r.name, cls: r.cls, from: sec.from, to: sec.to, mi: sec.mi, limit: sec.limit, src: sec.src, pieces: sec.pieces }); }); });
     if (!roads.length) { el.innerHTML = h + '</div><div class="lead small">No Interstate, U.S., state or county route stretches found on this route.</div>'; return; }
     var st = ctx.state; st.offsets = st.offsets || {};
     roads.forEach(function (r, i) { if (st.offsets[i] == null) st.offsets[i] = 0; });
@@ -403,25 +406,33 @@
     h += chartSvg(rows, 45, hi, { id: 'tChart', shadeTo: bal, sel: a0.avgSpeed || 65, marks: roads.map(function (r, i) { return cost(r, st.offsets[i]).avgSpeed; }) });
     h += '<div class="leg-total" id="lgTot"></div></div>';
     var stt = ctx.stats || {}, tot = (stt.hpms || 0) + (stt.state || 0) + (stt.google || 0);
-    h += '<div class="lead small">One slider per major road — Interstates, U.S., state and county routes. Each starts at the posted limit (no extra cost). ' +
+    h += '<div class="lead small">Major roads — Interstates, U.S., state and county routes — with a slider for each stretch at one speed limit. Each starts at the limit (no extra cost). ' +
       (tot ? 'Limits: ' + Math.round((stt.hpms || 0) / tot * 100) + '% from the FHWA road inventory' + (stt.state ? ', ' + Math.round(stt.state / tot * 100) + '% state maximums' : '') + (stt.google ? ', ' + Math.round(stt.google / tot * 100) + '% Google\'s typical speed' : '') + '.' : '') +
       ' Cost uses the gas in your tank on each part.</div>';
     h += '<div class="leg all"><div class="leg-h"><span>All roads</span><b class="leg-sub" id="lgAllSub"></b></div>' +
       '<input type="range" min="-10" max="15" step="1" value="' + (st.all || 0) + '" id="lgAll" aria-label="Speed on all roads">' +
       '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div></div>';
+    var lastRi = -1;
     roads.forEach(function (r, i) {
-      var lims = r.pieces.map(function (p) { return p.limit; }), l0 = Math.min.apply(null, lims), l1 = Math.max.apply(null, lims);
-      h += '<div class="leg" data-leg="' + i + '"><div class="leg-h"><span><b class="rd rd-' + r.cls + '">' + esc(r.name) + '</b> <small>mile ' + Math.round(r.from) + '–' + Math.round(r.to) + ' · ' + fmtMi(r.mi) +
-        ' · limit ' + (l0 === l1 ? l0 : l0 + '–' + l1) + '</small></span><b class="leg-sub" id="lgSub' + i + '"></b></div>' +
-        '<input type="range" min="-10" max="15" step="1" value="' + st.offsets[i] + '" id="lgR' + i + '" aria-label="Speed on ' + esc(r.name) + '">' +
+      if (r.ri !== lastRi) {
+        if (lastRi >= 0) h += '</div>';
+        var rr = r.road;
+        h += '<div class="road-g"><div class="road-h"><b class="rd rd-' + r.cls + '">' + esc(r.name) + '</b><small>mile ' + Math.round(rr.from) + '–' + Math.round(rr.to) + ' · ' + fmtMi(rr.mi) +
+          (rr.sections.length > 1 ? ' · ' + rr.sections.length + ' speed limits' : '') + '</small></div>';
+        lastRi = r.ri;
+      }
+      h += '<div class="leg" data-leg="' + i + '"><div class="leg-h"><span><b class="lim">' + r.limit + '</b> <small>mph limit · mile ' + Math.round(r.from) + '–' + Math.round(r.to) + ' · ' + fmtMi(r.mi) +
+        (r.src !== 'hpms' ? ' · state max' : '') + '</small></span><b class="leg-sub" id="lgSub' + i + '"></b></div>' +
+        '<input type="range" min="-10" max="15" step="1" value="' + st.offsets[i] + '" id="lgR' + i + '" aria-label="Speed on ' + esc(r.name) + ' where the limit is ' + r.limit + '">' +
         '<div class="leg-out" id="lgOut' + i + '"></div></div>';
     });
+    if (lastRi >= 0) h += '</div>';
     h += disclaimer();
     el.innerHTML = h;
     function update(i, move) {
       var r = roads[i], x = cost(r, st.offsets[i]), out = $('lgOut' + i), sub = $('lgSub' + i), off = st.offsets[i];
-      if (out) out.textContent = off === 0 ? 'At the limit (about ' + Math.round(x.avgLimit) + ' mph)' :
-        (off > 0 ? '+' : '−') + Math.abs(off) + ' mph (about ' + Math.round(x.avgSpeed) + ' vs. ' + Math.round(x.avgLimit) + ') · ' + (x.minSaved >= 0 ? fmtMin(x.minSaved) + ' sooner' : fmtMin(-x.minSaved) + ' later');
+      if (out) out.textContent = off === 0 ? 'At the limit — ' + r.limit + ' mph' :
+        Math.round(x.avgSpeed) + ' mph (' + (off > 0 ? '+' : '−') + Math.abs(off) + ') · ' + (x.minSaved >= 0 ? fmtMin(x.minSaved) + ' sooner' : fmtMin(-x.minSaved) + ' later');
       if (sub) { sub.textContent = off === 0 ? '$0.00' : (x.cost >= 0 ? '+' : '−') + money(x.cost); sub.className = 'leg-sub' + (x.cost > 0.005 ? ' cost' : x.cost < -0.005 ? ' good' : ''); }
       if (move) moveSel($('tChart'), x.avgSpeed || 65, 100 / f(x.avgSpeed || 65));
     }

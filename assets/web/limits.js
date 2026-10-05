@@ -159,7 +159,7 @@
     opts = opts || {};
     var rs = roads(model), todo = [], stats = { hpms: 0, state: 0, google: 0, errors: 0 };
     rs.forEach(function (r) {
-      var n = Math.max(1, Math.ceil(r.mi / 15)), w = r.mi / n;
+      var n = Math.max(1, Math.ceil(r.mi / 5)), w = r.mi / n;   // a check every ~5 miles, so limit changes land close to where they are
       r.pieces = [];
       for (var k = 0; k < n; k++) {
         var a = r.from + k * w, b = a + w, sec = 0, mi = 0;
@@ -193,8 +193,24 @@
     }
     var ws = []; for (var w = 0; w < Math.min(8, todo.length); w++) ws.push(worker());
     await Promise.all(ws);
-    rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; }); });
+    rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; }); r.sections = sections(r.pieces); });
     return { roads: rs, stats: stats };
+  }
+  /**
+   * One section per posted limit: consecutive pieces with the same limit are joined; a single short reading that
+   * differs from equal neighbors on both sides (e.g. 70 70 65 70 70 over 5-mile checks) is treated as noise.
+   */
+  function sections(pieces) {
+    var lim = pieces.map(function (p) { return p.limit; });
+    for (var i = 1; i < lim.length - 1; i++) if (lim[i] !== lim[i - 1] && lim[i - 1] === lim[i + 1] && pieces[i].mi < 6) lim[i] = lim[i - 1];
+    var out = [];
+    pieces.forEach(function (p, k) {
+      var last = out[out.length - 1];
+      if (last && last.limit === lim[k]) { last.to = p.to; last.mi += p.mi; last.n++; if (p.src === 'hpms') last.hpms++; return; }
+      out.push({ from: p.from, to: p.to, mi: p.mi, limit: lim[k], st: p.st, n: 1, hpms: p.src === 'hpms' ? 1 : 0 });
+    });
+    out.forEach(function (x) { x.src = x.hpms * 2 >= x.n ? 'hpms' : 'state'; });
+    return out;
   }
   function roadName(a) {
     if (!a || !a.route_number) return '';
@@ -202,6 +218,6 @@
     return (sig === 2 ? 'I-' : sig === 3 ? 'US-' : sig === 4 ? 'State ' : '') + a.route_number;
   }
 
-  var api = { MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, along: along, hpmsUrl: hpmsUrl };
+  var api = { MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, sections: sections, along: along, hpmsUrl: hpmsUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Limits = api;
 })(this);
