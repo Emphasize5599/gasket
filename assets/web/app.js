@@ -56,6 +56,7 @@
   if (!S.logLevel) S.logLevel = 3;
   if (S.osmPreview == null) S.osmPreview = true;
   function logSetup() {
+    if (P.setCents) P.setCents(S.roundCents);
     if (!window.FLog) return;
     FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey]);
   }
@@ -440,6 +441,8 @@
       '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" data-verify="walmart">Walmart</button>' +
       '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" data-verify="murphy">Murphy</button></div>' +
       '<p class="lead" style="font-size:12.5px;margin:4px 0 10px">Google fills in the other brands (needs the key above). Official prices replace Google\'s when both exist.</p></div>';
+    h += '<div class="card"><h3>Prices</h3>' +
+      '<div class="field"><div class="lbl">Show prices to the cent<small>Rounded up — $3.199 shows as $3.20. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
     h += '<div class="card"><h3>Search</h3>' +
       '<div class="field"><div class="lbl">Search radius (miles)</div><input type="number" id="radiusMi" min="2" max="25" step="1" value="' + S.radiusMi + '"></div>' +
       '<div class="field"><div class="lbl">Mark prices stale after (hours)</div><input type="number" id="staleHours" min="1" max="168" step="1" value="' + S.staleHours + '"></div>';

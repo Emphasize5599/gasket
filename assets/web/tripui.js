@@ -105,6 +105,9 @@
       '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
       '<span></span></div>' +
       '<div class="field"><div class="lbl">Estimate the round trip<small>the drive back on the same roads, at today\'s prices</small></div>' + sw('tRound', t.roundTrip) + '</div>' +
+      '<div class="sub-h">Cruising speed</div>' +
+      '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
+      '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', (S.speed.rule && S.speed.rule.over) || 9, 1) + num('tRuleCap', '…but no faster than (mph)', (S.speed.rule && S.speed.rule.cap) || 70, 1) + '</div>' +
       '<div class="sub-h">Other routes</div>' +
       '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
@@ -132,6 +135,12 @@
       Array.prototype.forEach.call($('tArrive').children, function (x) { x.classList.toggle('on', x === b); });
       arriveHelp();
     };
+    var ruleSave = function () {
+      S.speed.rule = { on: $('tRule').checked, over: Math.max(-10, Math.min(15, parseInt($('tRuleOver').value, 10) || 0)), cap: Math.max(40, Math.min(90, parseInt($('tRuleCap').value, 10) || 70)) };
+      $('tRuleBox').classList.toggle('hidden', !S.speed.rule.on); A.save();
+      if (result) result.speedState = null;      // new defaults next time the results open
+    };
+    $('tRule').onchange = ruleSave; $('tRuleOver').onchange = ruleSave; $('tRuleCap').onchange = ruleSave;
     $('tAltCmp').onchange = function () { $('tAltBox').classList.toggle('hidden', !this.checked); collect(); renderInfo(); };
     $('tAltSave').addEventListener('change', function () { collect(); });
     arriveHelp();
@@ -373,8 +382,8 @@
     var el = $('tParsed'); if (!el || !parsing) return;
     parsing.frac = Math.max(parsing.frac || 0, Math.min(1, f));
     var pct = Math.round(parsing.frac * 100), bar = el.querySelector('.parse-load i');
-    if (bar) { bar.style.width = pct + '%'; return; }
-    el.innerHTML = '<div class="parse-load"><span>Loading…</span><span class="pbar"><i style="width:' + pct + '%"></i></span></div>';
+    if (bar) { bar.style.width = pct + '%'; el.querySelector('.parse-load .pct').textContent = pct + '%'; return; }
+    el.innerHTML = '<div class="parse-load"><span>Loading…</span><span class="pbar"><i style="width:' + pct + '%"></i></span><span class="pct">' + pct + '%</span></div>';
   }
   /** Creep the bar toward `to` while waiting on something that reports no progress (the hidden Google Maps page). */
   function creep(from, to, sec) {
@@ -767,6 +776,7 @@
     } else if (route && route.routeIndex > 0 && route.stops.length > 2) {
       h += '<div class="msg">You picked another route option in Google Maps, but Google only offers options for trips without stops in between, so this is its main route.</div>';
     }
+    h += limBar(model, 'Speed limits', true);
     h += '<div class="rc-top"><b>' + Math.round(model.totalMi) + ' mi</b> · ' + fmtDur(model.durationSec) +
       ' · about ' + need.toFixed(1) + ' gal</div>';
     if (startGal - need >= bufGal) h += '<div class="msg ok">No stop needed — you\'d arrive with about ' + Math.round(spare) + ' miles left.</div>';
@@ -1077,13 +1087,27 @@
       if (o) return Promise.resolve(o.v);
       return call('fetchJson', url).then(function (res) { if (res.body && res.body.indexOf('"error"') < 0) A.KV.put('limits', url, res); return res; });
     };
-    Limits.along(m, getJson, { lookup: S.limitLookup !== false }).then(function (res) {
-      hit.res = res;
+    Limits.along(m, getJson, { lookup: S.limitLookup !== false, onProg: function (d, t) { hit.frac = t ? d / t : 1; limBars(hit.frac); } }).then(function (res) {
+      hit.res = res; limBars(1);
       hit.waiting.forEach(function (w) { w._lim = res; });
       if (hit.waiting.indexOf(model) >= 0 && $('tsSpeed')) renderTripSpeed();
       LG.info('speed', 'Speed limits along the route in ' + (Date.now() - t0) + ' ms', res.stats);
       LG.debug('speed', 'Roads', res.roads.map(function (r) { return [r.name, Math.round(r.from), Math.round(r.to), r.pieces.map(function (p) { return p.st + ':' + p.limit + (p.src === 'hpms' ? '' : '(' + p.src + ')'); }).join(' ')]; }));
     }).catch(function (e) { delete limCache[sig]; hit.waiting.forEach(function (w) { w._lim = { roads: [], stats: {}, error: String(e) }; }); LG.error('speed', 'Speed limit lookup failed', String(e)); });
+  }
+  /** Every "Looking up speed limits" bar on screen. */
+  function limBars(f) {
+    var pct = Math.round(Math.min(1, f) * 100);
+    document.querySelectorAll('.lim-load').forEach(function (el) {
+      var i = el.querySelector('i'), p = el.querySelector('.pct');
+      if (i) i.style.width = pct + '%'; if (p) p.textContent = pct + '%';
+      if (pct >= 100 && el.dataset.hideDone) el.classList.add('hidden');
+    });
+  }
+  function limFrac(m) { var sig = m && m.pts.length + ':' + m.totalMi.toFixed(3) + ':' + m.pts[0].lat.toFixed(5), h = sig && limCache[sig]; return h ? (h.res ? 1 : h.frac || 0) : 0; }
+  function limBar(m, label, hideDone) {
+    var pct = Math.round(limFrac(m) * 100);
+    return '<div class="parse-load lim-load' + (pct >= 100 && hideDone ? ' hidden' : '') + '"' + (hideDone ? ' data-hide-done="1"' : '') + '><span>' + label + '</span><span class="pbar"><i style="width:' + pct + '%"></i></span><span class="pct">' + pct + '%</span></div>';
   }
   function speedLegs() {
     var r = result, p = r.plan; if (!p.ok) return [];
@@ -1116,7 +1140,7 @@
       });
       return Object.assign({}, r, { sections: secs });
     }) : [];
-    Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', state: st });
+    Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', loadingHtml: limBar(model, 'Looking up speed limits'), state: st });
   }
 
 
@@ -1180,6 +1204,7 @@
   }
   function bindBuf() {
     var inp = $('tsBuf'); if (!inp) return;
+    Garage.guardRange(inp);
     var r = result, cur = swRow(r.bufMi);
     inp.oninput = function () { var x = swRow(+inp.value); $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, cur); };
     inp.onchange = function () {

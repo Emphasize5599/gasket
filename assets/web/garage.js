@@ -326,7 +326,7 @@
         : '<b>' + v + ' mph</b> instead of ' + base + ': ' + (t > 0 ? '<b>' + fmtMin(t) + ' sooner</b> for <b class="cost">+' + money(cost) + '</b> in gas'
           : '<b>' + fmtMin(-t) + ' later</b>, <b class="good">saves ' + money(-cost) + '</b> in gas') + ' over ' + fmtMi(mi) + ' (at ' + money(m.price) + '/gal).';
     };
-    $('gTry').oninput = tryOut;
+    $('gTry').oninput = tryOut; guardRange($('gTry'));
     $('gTripMi').onchange = function () { lastTripMi = parseFloat(this.value) || 500; tryOut(); };
     tryOut();
   }
@@ -351,7 +351,7 @@
     }
     for (var k = 0; k <= 2; k++) { var gv = y0 + (y1 - y0) * k / 2; s += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(gv) + '" y2="' + Y(gv) + '"/><text class="ax" x="' + (L - 4) + '" y="' + (Y(gv) + 3) + '" text-anchor="end">' + gv.toFixed(1) + '</text>'; }
     for (var v = Math.ceil(min / 5) * 5; v <= max; v += 5) s += '<text class="ax" x="' + X(v) + '" y="' + (H - 6) + '" text-anchor="middle">' + v + '</text>';
-    (o.marks || []).forEach(function (mk) { s += '<line class="mk" x1="' + X(mk) + '" x2="' + X(mk) + '" y1="' + T + '" y2="' + (H - B) + '"/>'; });
+    (o.marks || []).forEach(function (mk, i) { s += '<line class="mk" data-i="' + i + '" x1="' + X(mk) + '" x2="' + X(mk) + '" y1="' + T + '" y2="' + (H - B) + '"/>'; });
     s += '<path class="ln" d="' + d + '"/>';
     (o.points || []).forEach(function (p) { var sp = +p.e.speed; if (sp >= min && sp <= max) s += '<circle class="obs" cx="' + X(sp) + '" cy="' + Y(100 / p.e.mpg) + '" r="3"/>'; });
     var sv = Math.max(min, Math.min(max, o.sel)), sr = rows[Math.round(sv) - min] || rows[0];
@@ -359,6 +359,33 @@
       '<text class="ax sel-t" x="' + X(sv) + '" y="' + (T - 4) + '" text-anchor="middle">' + Math.round(sv) + '</text>';
     s += '<text class="ax unit" x="' + (W - R) + '" y="' + (T - 4) + '" text-anchor="end">gal / 100 mi</text></svg>';
     return s;
+  }
+  /** Move one road section's faint marker line on the chart to its current speed. */
+  function moveMark(svg, i, mph) {
+    if (!svg) return;
+    var l = svg.querySelector('.mk[data-i="' + i + '"]'); if (!l) return;
+    var g = svg.getAttribute('data-g').split(',').map(Number), min = g[0], max = g[1], L = g[2], R = g[3], W = g[6];
+    var x = L + (Math.max(min, Math.min(max, mph)) - min) / (max - min) * (W - L - R);
+    l.setAttribute('x1', x); l.setAttribute('x2', x);
+  }
+  /**
+   * Sliders that only move when you grab the knob: a touch that starts away from the knob (scrolling past, or a stray
+   * tap) leaves the value alone, so scrolling the list can't knock a setting.
+   */
+  function guardRange(inp) {
+    if (!inp || inp._guarded) return;
+    inp._guarded = true;
+    var far = false, startVal = null;
+    inp.addEventListener('pointerdown', function (e) {
+      var r = inp.getBoundingClientRect(), min = +inp.min, max = +inp.max, f = (+inp.value - min) / ((max - min) || 1);
+      var thumbX = r.left + 14 + f * (r.width - 28);
+      far = Math.abs(e.clientX - thumbX) > 30; startVal = inp.value;
+    }, true);
+    var hold = function (e) { if (far) { inp.value = startVal; e.stopImmediatePropagation(); e.preventDefault(); } };
+    inp.addEventListener('input', hold, true);
+    inp.addEventListener('change', hold, true);
+    var end = function () { setTimeout(function () { far = false; }, 0); };
+    inp.addEventListener('pointerup', end); inp.addEventListener('pointercancel', end);
   }
   function moveSel(svg, mph, gal) {
     if (!svg) return;
@@ -385,14 +412,23 @@
     var rows = []; for (var v = 45; v <= hi; v++) rows.push({ mph: v, galPer100: 100 / f(v) });
     var bal = SP.balanced(f, 45, hi);
     var h = '<div class="spd-stick"><div class="tb-h">Cruising speed for this trip</div>';
-    if (ctx.loading) { el.innerHTML = h + '</div><div class="lead small">Looking up speed limits along the route…</div>'; return; }
+    if (ctx.loading) { el.innerHTML = h + '</div>' + (ctx.loadingHtml || '<div class="lead small">Looking up speed limits along the route…</div>'); return; }
     var roadList = ctx.roads || [];
     // one slider per posted-limit section of each major road
     var roads = [];
     roadList.forEach(function (r, ri) { (r.sections || []).forEach(function (sec, si) { roads.push({ road: r, ri: ri, si: si, name: r.name, cls: r.cls, from: sec.from, to: sec.to, mi: sec.mi, limit: sec.limit, src: sec.src, pieces: sec.pieces }); }); });
     if (!roads.length) { el.innerHTML = h + '</div><div class="lead small">No Interstate, U.S., state or county route stretches found on this route.</div>'; return; }
     var st = ctx.state; st.offsets = st.offsets || {};
-    roads.forEach(function (r, i) { if (st.offsets[i] == null) st.offsets[i] = 0; });
+    // your default: the limit, or "+N over the limit but never above M mph" (roads already at/above M stay at the limit)
+    var rule = S.speed.rule || {};
+    var ruleOff = function (limit, v) {
+      if (!rule.on) return v == null ? 0 : v;
+      var over = v == null ? +rule.over || 0 : v, cap = +rule.cap || 70;
+      if (over < 0) return over;
+      return limit >= cap ? 0 : Math.max(0, Math.min(over, cap - limit));
+    };
+    roads.forEach(function (r, i) { if (st.offsets[i] == null) st.offsets[i] = ruleOff(r.limit); });
+    if (st.all == null) st.all = rule.on ? +rule.over || 0 : 0;
     var cost = function (r, off) {          // each piece at its own limit and at the gas price in the tank there
       var o = { mi: 0, minSaved: 0, extraGal: 0, cost: 0, w0: 0, w1: 0 };
       r.pieces.forEach(function (pc) {
@@ -409,7 +445,8 @@
     h += '<div class="lead small">Major roads — Interstates, U.S., state and county routes — with a slider for each stretch at one speed limit. Each starts at the limit (no extra cost). ' +
       (tot ? 'Limits: ' + Math.round((stt.hpms || 0) / tot * 100) + '% from the FHWA road inventory' + (stt.state ? ', ' + Math.round(stt.state / tot * 100) + '% state maximums' : '') + (stt.google ? ', ' + Math.round(stt.google / tot * 100) + '% Google\'s typical speed' : '') + '.' : '') +
       ' Cost uses the gas in your tank on each part.</div>';
-    h += '<div class="leg all"><div class="leg-h"><span>All roads</span><b class="leg-sub" id="lgAllSub"></b></div>' +
+    if (rule.on) h += '<div class="lead small rule-line">Your rule: <b>+' + (+rule.over || 0) + ' over the limit, never above ' + (+rule.cap || 70) + ' mph</b> (roads at ' + (+rule.cap || 70) + '+ stay at the limit). <a href="#" id="lgRule">Back to my rule</a></div>';
+    h += '<div class="leg all"><div class="leg-h"><span>All roads' + (rule.on ? ' <small>up to ' + (+rule.cap || 70) + ' mph</small>' : '') + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
       '<input type="range" min="-10" max="15" step="1" value="' + (st.all || 0) + '" id="lgAll" aria-label="Speed on all roads">' +
       '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div></div>';
     var lastRi = -1;
@@ -434,6 +471,7 @@
       if (out) out.textContent = off === 0 ? 'At the limit — ' + r.limit + ' mph' :
         Math.round(x.avgSpeed) + ' mph (' + (off > 0 ? '+' : '−') + Math.abs(off) + ') · ' + (x.minSaved >= 0 ? fmtMin(x.minSaved) + ' sooner' : fmtMin(-x.minSaved) + ' later');
       if (sub) { sub.textContent = off === 0 ? '$0.00' : (x.cost >= 0 ? '+' : '−') + money(x.cost); sub.className = 'leg-sub' + (x.cost > 0.005 ? ' cost' : x.cost < -0.005 ? ' good' : ''); }
+      moveMark($('tChart'), i, x.avgSpeed || r.limit);
       if (move) moveSel($('tChart'), x.avgSpeed || 65, 100 / f(x.avgSpeed || 65));
     }
     function total() {
@@ -452,11 +490,11 @@
           warn.push('reach ' + esc(L.toName) + ' with about ' + Math.max(0, Math.round((L.arriveGal - g) * L.mpgMix)) + ' mi left (buffer ' + Math.round(L.needGal * L.mpgMix) + ')');
       });
       var t = $('lgTot'); t.classList.toggle('zero', !any);
-      if (!any) t.innerHTML = '<span>Time-saving cost</span><b>$0.00</b><small>at the posted limits</small>';
+      if (!any) t.innerHTML = '<span>Time-saving cost</span><b>$0.00</b><small>at the speed limits</small>';
       else t.innerHTML = '<span>Time-saving cost</span><b class="' + (cst > 0.005 ? 'cost' : 'good') + '">' + (cst >= 0 ? '+' : '−') + money(cst) + '</b><small>' +
         (mins >= 0 ? fmtMin(mins) + ' sooner' : fmtMin(-mins) + ' later') + ' over the whole trip · <a href="#" id="lgReset">reset</a>' +
         (warn.length ? '<br><span class="warn">At these speeds you\'d ' + warn.join('; ') + ' — re-plan with this in mind.</span>' : '') + '</small>';
-      if ($('lgReset')) $('lgReset').onclick = function (e) { e.preventDefault(); st.offsets = {}; st.all = 0; tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
+      if ($('lgReset')) $('lgReset').onclick = function (e) { e.preventDefault(); st.offsets = {}; roads.forEach(function (r, i) { st.offsets[i] = 0; }); st.all = 0; tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
       var all = cost({ pieces: roads.reduce(function (a, r) { return a.concat(r.pieces); }, []) }, 0);
       $('lgAllSub').textContent = any ? (cst >= 0 ? '+' : '−') + money(cst) : '$0.00';
       st.cost = cst; st.minSaved = mins;
@@ -471,12 +509,14 @@
     });
     $('lgAll').oninput = function () {
       var v = +$('lgAll').value; st.all = v;
-      roads.forEach(function (r, i) { st.offsets[i] = v; $('lgR' + i).value = v; update(i, false); });
+      roads.forEach(function (r, i) { st.offsets[i] = ruleOff(r.limit, v); $('lgR' + i).value = st.offsets[i]; update(i, false); });
       var all = cost({ pieces: roads.reduce(function (a, r) { return a.concat(r.pieces); }, []) }, v);
       moveSel($('tChart'), all.avgSpeed || 65, 100 / f(all.avgSpeed || 65));
       total();
     };
     $('lgAll').onchange = function () { LG.info('speed', 'All roads speed offset ' + st.all, { cost: st.cost }); if (ctx.onChange) ctx.onChange(); };
+    if ($('lgRule')) $('lgRule').onclick = function (e) { e.preventDefault(); st.offsets = {}; st.all = null; tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
+    el.querySelectorAll('input[type=range]').forEach(guardRange);
     activate(act);
     total();
     lastTripMi = ctx.model.totalMi;
@@ -491,5 +531,5 @@
     return out;
   }
 
-  window.Garage = { tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
+  window.Garage = { guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

@@ -141,6 +141,21 @@ with sync_playwright() as p:
         # the "all roads" slider moves every road
         pg.evaluate("() => { const r = document.getElementById('lgAll'); r.value = 5; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
         assert pg.input_value('#lgR0') == '5' and pg.input_value('#lgR1') == '5' and pg.input_value('#lgR2') == '5' and pg.inner_text('#lgAllSub').startswith('+$')
+        mk0 = pg.get_attribute('#tChart .mk[data-i="2"]', 'x1')
+        pg.evaluate("() => { const r = document.getElementById('lgAll'); r.value = 12; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
+        assert pg.get_attribute('#tChart .mk[data-i="2"]', 'x1') != mk0, 'section markers follow the All roads slider'
+        # a touch that starts away from the knob (scrolling past) doesn't change the slider
+        before = pg.input_value('#lgR1')
+        pg.evaluate('''() => { const r = document.getElementById('lgR1'), b = r.getBoundingClientRect();
+          r.dispatchEvent(new PointerEvent('pointerdown', { clientX: b.left + 4, clientY: b.top + 5, bubbles: true }));
+          r.value = -10; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); }''')
+        pg.wait_for_timeout(50)
+        assert pg.input_value('#lgR1') == before, 'stray touch ignored'
+        pg.evaluate('''() => { const r = document.getElementById('lgR1'), b = r.getBoundingClientRect(), f = (+r.value - +r.min) / (+r.max - +r.min);
+          r.dispatchEvent(new PointerEvent('pointerdown', { clientX: b.left + 14 + f * (b.width - 28), clientY: b.top + 5, bubbles: true }));
+          r.value = 3; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); }''')
+        pg.wait_for_timeout(50)
+        assert pg.input_value('#lgR1') == '3', 'dragging the knob works'
         pg.click('#lgReset'); pg.wait_for_timeout(150)
         assert pg.locator('#lgTot.zero').count() == 1
         seen = pg.evaluate('window.__progSeen') or []
@@ -158,6 +173,13 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__saved'), 'saved to downloads'
         print('  report keys:', list(rj.keys()), 'candidates', len(rj['candidates']))
         SHARED_TRIP = shtxt
+        # default speed rule: +9 over the limit but never above 74 -> 70 roads get +4, 75 roads stay at 75
+        pg.click('#tsEdit'); pg.wait_for_timeout(300)
+        pg.check('#tRule', force=True); pg.fill('#tRuleOver', '9'); pg.fill('#tRuleCap', '74'); pg.dispatch_event('#tRuleCap', 'change'); pg.wait_for_timeout(100)
+        pg.click('#tGo'); pg.wait_for_timeout(1500); pg.wait_for_selector('#lgR2', timeout=5000)
+        vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = pg.inner_text('.rule-line'); print('  rule +9 up to 74:', vals, '|', rl)
+        assert vals == ['4', '4', '0'] and 'never above 74 mph' in rl and pg.inner_text('#lgTot').find('+$') >= 0
+        pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.uncheck('#tRule', force=True); pg.dispatch_event('#tRule', 'change'); pg.click('#tGo'); pg.wait_for_timeout(1500)
         # finding stops again on the same route reuses the saved search (no Google lookups); "Get fresh prices" searches again
         pg.evaluate("window.__jobs = null"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.click('#tGo'); pg.wait_for_timeout(1500)
         assert pg.evaluate('window.__jobs') is None, 'saved search reused'
