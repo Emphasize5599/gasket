@@ -23,13 +23,58 @@ with sync_playwright() as p:
         assert 'avoid tolls' in pg.inner_text('#tParsed') and 'route option 2' in pg.inner_text('#tParsed')
         assert 'North Little Rock, AR 72114' in pg.inner_text('#tParsed'), 'full address shown'
         # EPA lookup
-        pg.click('#tEpa summary'); pg.wait_for_timeout(300)
+        # ---- garage: your two cars are there, EPA numbers read-only, the rest behind Edit ----
+        chips = pg.inner_text('#gCars'); head = pg.inner_text('.g-head'); tiles = pg.inner_text('.epa-tiles')
+        print('  cars:', chips.replace('\n', ' | '), '||', head.replace('\n', ' | '), '||', tiles.replace('\n', ' '))
+        assert '2020 Corolla Hybrid' in chips and '2012 Venza' in chips and 'Hybrid' in head and '11.3 gal tank' in head and '54' in tiles and '50' in tiles
+        assert pg.locator('.epa-tiles input').count() == 0 and pg.locator('#gTank').count() == 0, 'EPA not editable; tank only after Edit'
+        pg.click('.epa-note summary'); pg.wait_for_timeout(100)
+        assert '48 mph' in pg.inner_text('.epa-note') and '21 mph' in pg.inner_text('.epa-note')
+        pg.click('#gEdit'); pg.wait_for_timeout(150)
+        assert pg.input_value('#gTank') == '11.3' and pg.input_value('#gType') == 'hybrid'
+        pg.screenshot(path=f'{OUT}/{name}-g1-edit.png')
+        pg.click('#gEdit'); pg.wait_for_timeout(150)
+        # observed mileage <-> % of EPA
+        pg.fill('#oHwy', '45'); pg.wait_for_timeout(100)
+        print('  obs hwy 45 -> pct', pg.input_value('#oPct'))
+        assert pg.input_value('#oPct') == '95', pg.input_value('#oPct')
+        pg.fill('#oPct', '110'); pg.wait_for_timeout(100)
+        assert pg.input_value('#oCity') == '59.4' and pg.input_value('#oHwy') == '55', (pg.input_value('#oCity'), pg.input_value('#oHwy'))
+        pg.fill('#oPct', '100'); pg.wait_for_timeout(400)
+        assert pg.input_value('#oCity') == '' and pg.input_value('#oHwy') == ''
+        # best cruising speed: hybrid, balanced (no time value)
+        sp = pg.inner_text('#tSpeed'); print('  speed card:', sp.replace('\n', ' | ')[:420])
+        assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'Going 5 mph faster' in sp and 'Not calibrated yet' in sp
+        # log an observed tank with the speed you held -> calibrates
+        pg.fill('#lMpg', '52'); pg.select_option('#lKind', 'highway'); pg.fill('#lSpeed', '72'); pg.click('#lAdd'); pg.wait_for_timeout(400)
+        lg = pg.inner_text('.log-list'); sp = pg.inner_text('#tSpeed'); print('  log:', lg.replace('\n', ' | '), '||', [l for l in sp.split('\n') if 'Calibrated' in l])
+        assert '52.0 mpg' in lg and 'at 72 mph' in lg and 'Calibrated from 1 of your entries' in sp
+        pg.fill('#lMpg', '61'); pg.select_option('#lKind', 'mixed'); pg.click('#lAdd'); pg.wait_for_timeout(300)   # no speed: still fine
+        assert pg.locator('.log-row').count() == 2 and 'Calibrated from 1 of' in pg.inner_text('#tSpeed')
+        pg.evaluate("document.getElementById('tSpeed').scrollIntoView()"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-g2-speed.png')
+        # with a time value
+        pg.click('.spd-set summary'); pg.fill('#sTime', '10'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
+        sp = pg.inner_text('#tSpeed'); print('  at $10/hr:', sp.split('\n')[1:3])
+        assert '84mph' in sp and 'gas never outweighs' in sp
+        pg.fill('#sTime', '0'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
+        pg.fill('#sPrice', '3.50'); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
+        assert '$3.50 (yours)' in pg.inner_text('.spd-set summary')
+        pg.fill('#sPrice', ''); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
+        # the Venza: its own card
+        pg.click('[data-car="venza12"]'); pg.wait_for_timeout(300)
+        sp = pg.inner_text('#tSpeed'); print('  Venza:', sp.split('\n')[0:3])
+        assert 'venza' in sp.lower() and '65mph' in sp and '20 gal tank' in pg.inner_text('.g-head')
+        pg.screenshot(path=f'{OUT}/{name}-g3-venza.png')
+        # add a car from the EPA (the trip tests below use it)
+        pg.click('[data-car="+"]'); pg.wait_for_timeout(400)
         pg.select_option('#eYear', '2021'); pg.wait_for_timeout(200)
         pg.select_option('#eMake', 'Honda'); pg.wait_for_timeout(200)
-        pg.select_option('#eModel', 'Accord'); pg.wait_for_timeout(500)
-        print('  car:', pg.inner_text('#tCarSum').replace('\n', ' | '), '| city/hwy', pg.input_value('#cCity'), pg.input_value('#cHwy'))
-        assert pg.input_value('#cCity') == '30'
-        pg.fill('#cTank', '12'); pg.fill('#tMiles', '80'); pg.fill('#tBuffer', '30')
+        pg.select_option('#eModel', 'Accord'); pg.wait_for_timeout(600)
+        print('  car:', pg.inner_text('.g-head').replace('\n', ' | '), '|', pg.inner_text('.epa-tiles').replace('\n', ' '), '|', pg.inner_text('#eMsg'))
+        assert 'Accord' in pg.inner_text('.g-head') and '30' in pg.inner_text('.epa-tiles') and "doesn't publish it" in pg.inner_text('#eMsg')
+        pg.fill('#gTank', '12'); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(200); pg.click('#gEdit')
+        pg.fill('#tMiles', '80'); pg.fill('#tBuffer', '30')
         pg.fill('#tMinSave', '1'); pg.fill('#tMaxMin', '10')
         pg.evaluate("document.getElementById('tMinSave').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t1-setup.png')

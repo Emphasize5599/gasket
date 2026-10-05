@@ -569,6 +569,6 @@
   N.locate();
   window.addEventListener('resize', sizeSheet);
   window.__app = { S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
-    me: function () { return me; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
+    me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render };
 })();

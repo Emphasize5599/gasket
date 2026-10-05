@@ -6,7 +6,6 @@
   var esc = A.esc, priceHtml = A.priceHtml;
 
   // ---------- persistent inputs ----------
-  S.car = Object.assign({ name: '', city: 25, hwy: 33, comb: 28, tank: 14, adjustPct: 100, grade: '', epaFuel: '' }, S.car || {});
   S.trip = Object.assign({ link: '', from: '', to: '', milesLeft: '', bufferMi: 40, fillUp: false, minSave: 1, timeValue: 0,
     arrive: 'buffer', topUpMi: 1.0, roundTrip: true, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
@@ -70,13 +69,13 @@
   function show(el, on) { el.classList.toggle('hidden', !on); }
   function fmtDur(sec) { var m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? h + ' h ' + (m % 60) + ' min' : m + ' min'; }
   function money(v) { return (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2); }
-  function gradeOf() { return S.car.grade || S.grade || 'regular'; }
+  function gradeOf() { return window.Garage ? Garage.grade() : (S.grade || 'regular'); }
 
   // ---------- setup page ----------
   function openTrip() {
     A.closeDetail();
     var pg = $('trip');
-    var c = S.car, t = S.trip;
+    var t = S.trip;
     var h = '<div class="t-head"><h1>Plan fuel stops</h1><button class="x" id="tClose" aria-label="Close">✕</button></div>' +
       '<p class="lead">Bring in a Google Maps route, and Fuel+ picks the stops that save money — counting detours — then sends the route back with the stops added.</p>';
 
@@ -90,17 +89,7 @@
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div></div>';
 
-    h += '<div class="card"><h3>2 · Your car</h3>' +
-      '<div class="car-sum" id="tCarSum"></div>' +
-      '<details class="epa" id="tEpa"><summary>Look up EPA mileage by year / make / model</summary>' +
-      '<div class="epa-grid"><select id="eYear"><option value="">Year</option></select><select id="eMake" disabled><option>Make</option></select>' +
-      '<select id="eModel" disabled><option>Model</option></select><select id="eOpt" disabled><option>Engine / transmission</option></select></div>' +
-      '<div class="epa-msg" id="eMsg"></div></details>' +
-      '<div class="grid2">' +
-      num('cCity', 'City MPG', c.city, 1) + num('cHwy', 'Highway MPG', c.hwy, 1) + num('cTank', 'Tank size (gal)', c.tank, 0.5) +
-      num('cAdj', 'Your MPG vs EPA (%)', c.adjustPct, 5) + '</div>' +
-      '<div class="field"><div class="lbl">Fuel grade</div><select id="cGrade">' + Object.keys(P.GRADES).map(function (g) {
-        return '<option value="' + g + '"' + (gradeOf() === g ? ' selected' : '') + '>' + P.GRADES[g].label + '</option>'; }).join('') + '</select></div></div>';
+    h += '<div class="card" id="tGarage"></div><div class="card spd" id="tSpeed"></div>';
 
     h += '<div class="card"><h3>3 · This trip</h3><div class="grid2">' +
       num('tMiles', 'Miles left in tank now', t.milesLeft, 1, 'from your dash') + num('tBuffer', 'Keep at least (miles)', t.bufferMi, 5, 'never go below') + '</div>' +
@@ -150,15 +139,15 @@
       var b = e.target.closest('button'); if (!b) return;
       Array.prototype.forEach.call($('tMode').children, function (x) { x.classList.toggle('on', x === b); });
     };
-    ['cCity', 'cHwy'].forEach(function (id) { $(id).addEventListener('input', function () { S.car.name = ''; S.car.epaFuel = ''; carSum(); }); });
     $('tGo').onclick = go;
     $('tReport').onclick = function (e) { e.preventDefault(); collect(); shareReport(); };
     $('tLog').onclick = function (e) { e.preventDefault(); if (window.__showLog) window.__showLog(); };
-    ['tMiles', 'tBuffer', 'cCity', 'cHwy', 'cAdj', 'cTank'].forEach(function (id) {
+    $('tTime').addEventListener('change', function () { collect(); Garage.drawSpeed(); });
+    Garage.render($('tGarage'), $('tSpeed'), function () { if (model) { model = T.buildRoute(rawRoute, carModel()); } renderInfo(); }, call);
+    ['tMiles', 'tBuffer'].forEach(function (id) {
       $(id).addEventListener('input', debounce(function () { collect(); if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); } }, 300));
     });
-    $('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && $('eYear').options.length < 2) epaYears(); });
-    carSum(); renderInfo(); costLine();
+    renderInfo(); costLine();
     if (t.link && !route) readLink();
   }
   function sw(id, on) { return '<label class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
@@ -166,13 +155,8 @@
     return '<label class="nf"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><input type="number" inputmode="decimal" id="' + id + '" step="' + step + '" value="' + esc(v) + '"></label>';
   }
   function debounce(f, ms) { var t; return function () { clearTimeout(t); t = setTimeout(f, ms); }; }
-  function carSum() {
-    var c = S.car;
-    $('tCarSum').innerHTML = c.name ? '<b>' + esc(c.name) + '</b><br><span>EPA ' + c.city + ' city / ' + c.hwy + ' hwy / ' + c.comb + ' combined' +
-      (c.epaFuel ? ' · ' + esc(c.epaFuel) : '') + '</span>' : '<span>Enter your MPG below, or look it up from the EPA.</span>';
-  }
   function collect() {
-    var t = S.trip, c = S.car;
+    var t = S.trip;
     t.link = $('tLink').value.trim(); t.from = $('tFrom').value.trim(); t.to = $('tTo').value.trim();
     Array.prototype.forEach.call($('tAvoid').children, function (b) { t.avoid[b.dataset.av] = b.classList.contains('on'); });
     t.fillUp = $('tMode').querySelector('.on').dataset.m === 'fill';
@@ -184,10 +168,6 @@
     t.milesLeft = $('tMiles').value; t.bufferMi = Math.max(0, parseFloat($('tBuffer').value) || 0);
     t.minSave = Math.max(0, parseFloat($('tMinSave').value) || 0); t.timeValue = Math.max(0, parseFloat($('tTime').value) || 0);
     var mm = parseFloat($('tMaxMin').value); t.maxDetourMin = mm >= 0 ? mm : 10;
-    c.city = parseFloat($('cCity').value) || c.city; c.hwy = parseFloat($('cHwy').value) || c.hwy;
-    if (!c.name) c.comb = Math.round(1 / (0.55 / c.city + 0.45 / c.hwy));
-    c.tank = parseFloat($('cTank').value) || c.tank; c.adjustPct = parseFloat($('cAdj').value) || 100;
-    c.grade = $('cGrade').value;
     A.save();
   }
   function costLine() {
@@ -502,7 +482,7 @@
     var milesLeft = parseFloat(S.trip.milesLeft);
     if (!(milesLeft >= 0)) { A.$('tMiles').focus(); toastMsg('Enter how many miles are left in your tank.'); return; }
     busy = true; prog(0.03, 'Reading the link');
-    LG.info('route', 'Get route pressed', { miles: S.trip.milesLeft, buffer: S.trip.bufferMi, car: S.car });
+    LG.info('route', 'Get route pressed', { miles: S.trip.milesLeft, buffer: S.trip.bufferMi, car: Garage.car() });
     try {
       var r = route || (S.trip.link ? await readLink() : null) || typedRoute();
       if (!r) throw new Error('Paste a Google Maps directions link, or type where you\'re going.');
@@ -548,7 +528,7 @@
     progEnd();
     renderInfo();
   }
-  function carModel() { var c = S.car; return { city: c.city, hwy: c.hwy, comb: c.comb, adjustPct: c.adjustPct }; }
+  function carModel() { return Garage.carModel(); }
   function official(k) { return (k === 'walmart' || k === 'murphy') && A.siteOn(k); }
   function googleBrands() {
     return Object.keys(P.BRANDS).filter(function (k) { return S.brands[k] && !official(k); });
@@ -821,7 +801,7 @@
   }
 
   function makeOpts(model, cands, startGal) {
-    return { model: model, cands: cands, startGal: startGal, capGal: S.car.tank, bufferGal: S.trip.bufferMi * model.combGpm,
+    return { model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: S.trip.bufferMi * model.combGpm,
       arriveGal: S.trip.bufferMi * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
       stopPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
@@ -935,7 +915,7 @@
       if (p.firstDip && p.stops.length) h += '<div class="msg">You can\'t keep a ' + r.bufMi + '-mile buffer on the way to the first stop — you\'ll get there with about ' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' miles left. Stop 1 is the closest workable station.</div>';
       if (!t.stops) h += '<div class="msg ok">No stop is worth it — you\'ll arrive with about ' + Math.round(p.arriveMi) + ' miles left.</div>';
       p.stops.forEach(function (s, i) { h += stopCard(s, i); });
-      if (t.stops) h += '<div class="lead small">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / S.car.tank * 100) + '% of the tank)' : '') +
+      if (t.stops) h += '<div class="lead small">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') +
         '. When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
       h += bufBox();
       if (S.trip.arrive === 'full') h += topUpBox();
@@ -1019,7 +999,7 @@
     var h = '<div class="stop"><div class="s-top" data-fly="' + i + '"><span class="num">' + (i + 1) + '</span><span class="badge" style="background:' + br.color + '">' + br.short + '</span>' +
       '<div class="mid"><div class="nm">' + esc(st.name) + '</div><div class="sub">Mile ' + Math.round(c.d) + ' · about ' + fmtDur(s.etaSec) + ' in · arrive with ~' + Math.round(s.arriveMi) + ' mi left</div></div>' +
       '<div class="pr"><div class="f">' + priceHtml(c.price) + '</div><div class="o">' + (c.calc.stale ? '<span class="stale">stale</span>' : 'your price') + '</div></div></div>';
-    h += '<div class="s-buy">Buy <b>' + s.buyGal.toFixed(1) + ' gal</b>' + (S.trip.fillUp ? ' (fill up)' : s.departGal >= S.car.tank - 0.05 ? ' (fill up — cheapest gas on this route)' : ' (just enough to reach the next good price)') + ' · <b>' + money(s.cost) + '</b> · ' +
+    h += '<div class="s-buy">Buy <b>' + s.buyGal.toFixed(1) + ' gal</b>' + (S.trip.fillUp ? ' (fill up)' : s.departGal >= Garage.tank() - 0.05 ? ' (fill up — cheapest gas on this route)' : ' (just enough to reach the next good price)') + ' · <b>' + money(s.cost) + '</b> · ' +
       (c.detourMi < 0.15 ? 'right on the route' : 'detour +' + c.detourMi.toFixed(1) + ' mi / +' + Math.max(1, Math.round(c.detourMin)) + ' min' + (c.detourExact ? '' : ' (est.)')) + '</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';
     if (s.alts.length) {
@@ -1086,49 +1066,5 @@
   };
   if (window.__pendingShare) { var t0 = window.__pendingShare; window.__pendingShare = null; window.onSharedText(t0); }
 
-  // ---------- EPA (fueleconomy.gov) ----------
-  var EPA = 'https://www.fueleconomy.gov/ws/rest/vehicle/';
-  function items(body) { try { var j = JSON.parse(body); var m = j && j.menuItem; return !m ? [] : Array.isArray(m) ? m : [m]; } catch (e) { return []; } }
-  async function epaGet(path) { var r = await call('fetchJson', EPA + path); if (r.error) throw new Error(r.error); return r.body; }
-  function fill(sel, list, ph) {
-    sel.innerHTML = '<option value="">' + ph + '</option>' + list.map(function (x) { return '<option value="' + esc(x.value) + '">' + esc(x.text) + '</option>'; }).join('');
-    sel.disabled = !list.length;
-  }
-  function eMsg(m, err) { var el = $('eMsg'); if (el) { el.textContent = m || ''; el.classList.toggle('err', !!err); } }
-  async function epaYears() {
-    try {
-      eMsg('Loading…');
-      fill($('eYear'), items(await epaGet('menu/year')), 'Year'); eMsg('');
-      $('eYear').onchange = async function () {
-        var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission'); if (!y) return;
-        fill($('eMake'), items(await epaGet('menu/make?year=' + encodeURIComponent(y))), 'Make');
-      };
-      $('eMake').onchange = async function () {
-        var y = $('eYear').value, mk = this.value; fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission'); if (!mk) return;
-        fill($('eModel'), items(await epaGet('menu/model?year=' + encodeURIComponent(y) + '&make=' + encodeURIComponent(mk))), 'Model');
-      };
-      $('eModel').onchange = async function () {
-        var y = $('eYear').value, mk = $('eMake').value, md = this.value; fill($('eOpt'), [], 'Engine / transmission'); if (!md) return;
-        var opts = items(await epaGet('menu/options?year=' + encodeURIComponent(y) + '&make=' + encodeURIComponent(mk) + '&model=' + encodeURIComponent(md)));
-        fill($('eOpt'), opts, 'Engine / transmission');
-        if (opts.length === 1) { $('eOpt').value = opts[0].value; $('eOpt').onchange(); }
-      };
-      $('eOpt').onchange = async function () {
-        var id = $('eOpt').value; if (!id) return;
-        eMsg('Loading…');
-        var v = JSON.parse(await epaGet(encodeURIComponent(id)));
-        var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;
-        if (!(city > 0 && hwy > 0)) { eMsg('The EPA has no gas mileage for that one (electric?).', true); return; }
-        var fuel = String(v.fuelType1 || v.fuelType || '');
-        var grade = /premium/i.test(fuel) ? 'premium' : /midgrade/i.test(fuel) ? 'midgrade' : /diesel/i.test(fuel) ? 'diesel' : 'regular';
-        S.car.name = [v.year, v.make, v.model].join(' ') + ($('eOpt').selectedOptions[0] ? ' · ' + $('eOpt').selectedOptions[0].text : '');
-        S.car.city = city; S.car.hwy = hwy; S.car.comb = comb || Math.round(1 / (0.55 / city + 0.45 / hwy)); S.car.epaFuel = fuel; S.car.grade = grade;
-        $('cCity').value = city; $('cHwy').value = hwy; $('cGrade').value = grade;
-        A.save(); carSum(); eMsg('Set from the EPA. Enter your tank size below — the EPA doesn\'t list it.');
-        model = null; renderInfo();
-      };
-    } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '. You can type your MPG instead.', true); }
-  }
-
-  window.__trip = { open: openTrip, state: function () { return { route: route, model: model, result: result }; } };
+  window.__trip = { call: call, open: openTrip, state: function () { return { route: route, model: model, result: result }; } };
 })();
