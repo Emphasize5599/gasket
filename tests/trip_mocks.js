@@ -56,6 +56,12 @@
       });
       return { results, errors: [], calls: jobs.length };
     },
+    hpms: (url) => {
+      (window.__hpms = window.__hpms || []).push(url);
+      const st = (url.match(/HPMS_FULL_(\w\w)_/) || [])[1];
+      return { features: [{ attributes: { speed_limit: st === 'TX' ? 75 : 70, f_system: 1, route_signing: 2, route_number: 30, urban_id: 99999, facility_type: 2 } },
+        { attributes: { speed_limit: 45, f_system: 5, route_signing: 4, route_number: 5 } }] };
+    },
     osm: (url) => {
       (window.__osm = window.__osm || []).push(url);
       if (/lat=34\.74/.test(url)) return { address: { house_number: '500', road: 'Woodlane Street', city: 'Little Rock', state: 'Arkansas', 'ISO3166-2-lvl4': 'US-AR', postcode: '72032' } };

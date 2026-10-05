@@ -91,6 +91,32 @@
     return { speed: rec, mode: tv > 0 ? 'time' : 'balanced', rows: rows, curve: c, up: up, down: down, between: between };
   }
 
-  var api = { TYPES: TYPES, typeFromEpa: typeFromEpa, curve: curve, at: at, calibrate: calibrate, recommend: recommend };
+  /**
+   * One leg of a trip at "posted limit + offset" on its cruising stretches (offset can be negative).
+   * stretches: [{mi, limit, cruise}] (only cruise ones count). mpg(v): the car's curve.
+   * Returns minutes saved vs. driving the limit, extra gallons, and the cost at this leg's gas price.
+   */
+  function leg(stretches, offset, mpg, price, lo, hi) {
+    var mi = 0, minSaved = 0, extraGal = 0, w0 = 0, w1 = 0;
+    (stretches || []).forEach(function (s) {
+      if (!s.cruise || !(s.mi > 0)) return;
+      var v0 = s.limit, v1 = Math.max(lo || 40, Math.min(hi || 90, v0 + offset));
+      mi += s.mi; w0 += s.mi * v0; w1 += s.mi * v1;
+      minSaved += s.mi * (1 / v0 - 1 / v1) * 60;
+      extraGal += s.mi * (1 / mpg(v1) - 1 / mpg(v0));
+    });
+    return { mi: mi, minSaved: minSaved, extraGal: extraGal, cost: extraGal * price, avgLimit: mi ? w0 / mi : 0, avgSpeed: mi ? w1 / mi : 0 };
+  }
+  /** Highest speed where 1 mph faster still costs less (in %) in gas than it saves (in %) in time. */
+  function balanced(mpg, lo, hi) {
+    var v = lo;
+    for (var x = lo + 1; x <= hi; x++) {
+      var extra = 1 / mpg(x) - 1 / mpg(x - 1), saved = 1 / (x - 1) - 1 / x;
+      if ((extra * mpg(x - 1)) / (saved * (x - 1)) <= 1) v = x; else break;
+    }
+    return v;
+  }
+
+  var api = { leg: leg, balanced: balanced, TYPES: TYPES, typeFromEpa: typeFromEpa, curve: curve, at: at, calibrate: calibrate, recommend: recommend };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Speed = api;
 })(this);

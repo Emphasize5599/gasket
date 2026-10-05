@@ -320,6 +320,8 @@
         stops: (r.plan.stops || []).map(function (s) { return { id: s.c.id, name: s.c.station.name, mile: Math.round(s.c.d * 10) / 10, price: s.c.price, buyGal: s.buyGal, arriveGal: s.arriveGal, departGal: s.departGal, why: s.why }; }),
         notes: r.notes, bufferMi: r.bufMi } : null,
       otherRoutes: r && r.routes ? compareRoutes() : null,
+      speed: model && model._lim && model._lim.stretches ? { stats: model._lim.stats, offsets: r && r.speedState && r.speedState.offsets, cost: r && r.speedState && r.speedState.cost,
+        stretches: model._lim.stretches.map(function (x) { return [Math.round(x.from), x.cruise ? 1 : 0, x.st || '', x.road || '', x.limit || null, x.src || '', Math.round(x.googleMph)]; }) } : null,
       bufferSweep: r && r.sweep ? r.sweep.map(function (x) { return { mi: x.mi, ok: x.ok, net: x.net && Math.round(x.net * 100) / 100, mark: x.mark, stops: x.ok ? x.plan.stops.map(function (s) { return s.c.station.name + ' @' + Math.round(s.c.d); }) : null }; }) : null,
       log: window.FLog ? FLog.entries().slice(-300) : []
     };
@@ -519,6 +521,7 @@
       else altSel = r.routeIndex != null && r.routeIndex < alts.length ? r.routeIndex : 0;
       rawRoute = alts[altSel];
       model = T.buildRoute(rawRoute, carModel());
+      ensureLimits(model);
       LG.info('route', 'Route ready', { options: alts.map(function (a) { return a.description; }), picked: altSel, sure: altSure, miles: Math.round(model.totalMi) });
     } catch (e) {
       LG.error('route', e.message || String(e));
@@ -726,6 +729,44 @@
     return h;
   }
 
+  // ---------- cruising speed per leg ----------
+  function ensureLimits(m) {
+    if (!m || m._lim) return;
+    m._lim = 'loading';
+    var t0 = Date.now();
+    Limits.along(m, function (url) { return call('fetchJson', url); }, { lookup: S.limitLookup !== false }).then(function (res) {
+      m._lim = res;
+      LG.info('speed', 'Speed limits along the route in ' + (Date.now() - t0) + ' ms', res.stats);
+      LG.debug('speed', 'Stretches', res.stretches.filter(function (x) { return x.cruise; }).map(function (x) { return [Math.round(x.from), x.st, x.road, x.limit, x.src, Math.round(x.googleMph)]; }));
+      if (model === m && $('tsSpeed')) renderTripSpeed();
+    }).catch(function (e) { m._lim = { stretches: [], stats: {}, error: String(e) }; LG.error('speed', 'Speed limit lookup failed', String(e)); });
+  }
+  function speedLegs() {
+    var r = result, p = r.plan; if (!p.ok) return [];
+    var pts = [{ name: route.stops[0].current ? 'Start' : (route.stops[0].short || 'Start'), d: 0 }], avg = r.startPrice || p.refPrice, legs = [];
+    var stops = p.stops.slice();
+    var gal0 = r.startGal;
+    stops.forEach(function (s, i) { pts.push({ name: (i + 1) + ' · ' + s.c.station.name, d: s.c.d, s: s }); });
+    var dest = route.stops[route.stops.length - 1];
+    pts.push({ name: dest.short || dest.label || 'Destination', d: model.totalMi });
+    for (var i = 0; i < pts.length - 1; i++) {
+      var s = pts[i].s;
+      if (s) { avg = s.departGal > 0 ? (s.arriveGal * avg + s.buyGal * s.c.price) / s.departGal : s.c.price; }
+      var next = pts[i + 1].s;
+      legs.push({ label: pts[i].name + ' → ' + pts[i + 1].name, toName: pts[i + 1].name, a: pts[i].d, b: pts[i + 1].d, price: avg,
+        arriveGal: next ? next.arriveGal : p.arriveGal, needGal: r.opts.bufferGal, mpgMix: 1 / model.combGpm });
+    }
+    return legs;
+  }
+  function renderTripSpeed() {
+    var el = $('tsSpeed'); if (!el || !result || !result.plan.ok) return;
+    ensureLimits(model);
+    var legs = speedLegs();
+    var st = result.speedState = result.speedState || {};
+    if (st.offsets && st.offsets.length !== legs.length) st.offsets = null;
+    Garage.tripSpeed(el, { model: model, legs: legs, limits: model._lim, state: st });
+  }
+
   // ---------- buffer slider ----------
   function startSweep() {
     var r = result;
@@ -918,6 +959,7 @@
       if (t.stops) h += '<div class="lead small">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') +
         '. When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
       h += bufBox();
+      h += '<div class="spdbox" id="tsSpeed"></div>';
       if (S.trip.arrive === 'full') h += topUpBox();
       if (r.back) h += backBox();
     }
@@ -956,6 +998,7 @@
       b.onclick = function (e) { e.preventDefault(); N.haptic && N.haptic(); switchRoute(+b.dataset.route); };
     });
     bindBuf();
+    renderTripSpeed();
     el.querySelectorAll('[data-fly]').forEach(function (b) {
       b.onclick = function () { var s = p.stops[+b.dataset.fly].c; map.setView([s.lat, s.lng], 14); };
     });

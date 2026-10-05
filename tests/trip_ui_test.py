@@ -43,8 +43,18 @@ with sync_playwright() as p:
         pg.fill('#oPct', '100'); pg.wait_for_timeout(400)
         assert pg.input_value('#oCity') == '' and pg.input_value('#oHwy') == ''
         # best cruising speed: hybrid, balanced (no time value)
+        assert pg.locator('details.spd-card[open]').count() == 0, 'general speed card starts collapsed'
+        print('  speed card (collapsed):', pg.inner_text('#tSpeed').replace('\n', ' | '))
+        pg.click('details.spd-card > summary'); pg.wait_for_timeout(200)
         sp = pg.inner_text('#tSpeed'); print('  speed card:', sp.replace('\n', ' | ')[:420])
-        assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'Going 5 mph faster' in sp and 'Not calibrated yet' in sp
+        assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'the recommended speed' in sp and 'Not calibrated yet' in sp
+        assert pg.locator('#gChart .zone').count() == 1
+        x0 = pg.get_attribute('#gChart .sel-l', 'x1')
+        pg.fill('#gTripMi', '1300'); pg.dispatch_event('#gTripMi', 'change')
+        pg.evaluate("() => { const r = document.getElementById('gTry'); r.value = 78; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
+        out = pg.inner_text('#gTryOut'); print('  try 78:', out)
+        assert '78 mph instead of 70' in out and 'sooner' in out and '+$' in out and '1,300 mi' in out
+        assert pg.get_attribute('#gChart .sel-l', 'x1') != x0 and pg.text_content('#gChart .sel-t') == '78', 'line follows the slider'
         # log an observed tank with the speed you held -> calibrates
         pg.fill('#lMpg', '52'); pg.select_option('#lKind', 'highway'); pg.fill('#lSpeed', '72'); pg.click('#lAdd'); pg.wait_for_timeout(400)
         lg = pg.inner_text('.log-list'); sp = pg.inner_text('#tSpeed'); print('  log:', lg.replace('\n', ' | '), '||', [l for l in sp.split('\n') if 'Calibrated' in l])
@@ -55,8 +65,8 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-g2-speed.png')
         # with a time value
         pg.click('.spd-set summary'); pg.fill('#sTime', '10'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
-        sp = pg.inner_text('#tSpeed'); print('  at $10/hr:', sp.split('\n')[1:3])
-        assert '84mph' in sp and 'gas never outweighs' in sp
+        sp = pg.inner_text('#tSpeed'); print('  at $10/hr:', sp.split('\n')[0:4])
+        assert '84 mph' in sp and 'gas never outweighs' in sp
         pg.fill('#sTime', '0'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
         pg.fill('#sPrice', '3.50'); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
         assert '$3.50 (yours)' in pg.inner_text('.spd-set summary')
@@ -64,7 +74,7 @@ with sync_playwright() as p:
         # the Venza: its own card
         pg.click('[data-car="venza12"]'); pg.wait_for_timeout(300)
         sp = pg.inner_text('#tSpeed'); print('  Venza:', sp.split('\n')[0:3])
-        assert 'venza' in sp.lower() and '65mph' in sp and '20 gal tank' in pg.inner_text('.g-head')
+        assert 'venza' in sp.lower() and '65 mph' in sp and '20 gal tank' in pg.inner_text('.g-head')
         pg.screenshot(path=f'{OUT}/{name}-g3-venza.png')
         # add a car from the EPA (the trip tests below use it)
         pg.click('[data-car="+"]'); pg.wait_for_timeout(400)
@@ -97,6 +107,27 @@ with sync_playwright() as p:
         txt = pg.inner_text('#tripSheet')
         print('  RESULT:', txt.replace('\n', ' | ')[:900])
         pg.screenshot(path=f'{OUT}/{name}-t2-result.png')
+        # cruising speed per leg: limits from the (mock) FHWA inventory, sliders start at $0
+        pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
+        pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
+        ts = pg.inner_text('#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
+        nlegs = pg.locator('#tsSpeed .leg').count(); nstops = pg.evaluate('window.__trip.state().result.plan.stops.length')
+        assert nlegs == nstops + 1, (nlegs, nstops)
+        assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.hidden').count() == 1 and 'FHWA road inventory' in ts
+        assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
+        pg.screenshot(path=f'{OUT}/{name}-s1-trip-speed.png')
+        x0 = pg.get_attribute('#tChart .sel-l', 'x1')
+        pg.evaluate("() => { const r = document.getElementById('lgR1'); r.value = 6; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
+        pg.evaluate("() => { const r = document.getElementById('lgR0'); r.value = -5; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
+        ts = pg.inner_text('#tsSpeed'); print('  after sliding:', [l for l in ts.split('\n') if 'sooner' in l or 'later' in l or 'Time-saving' in l or l.startswith(('+', '−'))])
+        tot = pg.inner_text('#lgTot'); print('  total:', tot.replace('\n', ' | '))
+        assert 'Time-saving cost' in tot and pg.get_attribute('#tChart .sel-l', 'x1') != x0
+        assert pg.inner_text('#lgSub1').startswith('+$') and pg.inner_text('#lgSub0').startswith('−$')
+        pg.screenshot(path=f'{OUT}/{name}-s2-trip-speed-slid.png')
+        rep_speed = pg.evaluate("JSON.parse(window.__tripReport()).speed")
+        assert rep_speed['offsets'][1] == 6 and rep_speed['stats']['hpms'] > 0
+        pg.click('#lgReset'); pg.wait_for_timeout(150)
+        assert pg.locator('#lgTot.hidden').count() == 1
         seen = pg.evaluate('window.__progSeen') or []
         print('  progress seen:', seen[:3], '...')
         assert any('%' in (x or '') for x in seen), seen
