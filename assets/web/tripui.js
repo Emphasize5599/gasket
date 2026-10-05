@@ -342,7 +342,7 @@
   async function openInGoogleMaps(url) {
     var u = url.replace(/^https?:\/\/(maps\.google\.com|google\.com|www\.google\.com)\/maps\//, 'https://www.google.com/maps/');
     if (!/^https:\/\/www\.google\.com\/maps\/dir\//.test(u)) return null;
-    return site('gmaps', { url: u }, 25000);
+    return site('gmaps', { url: u }, 40000);
   }
   function stopLine(s) {
     if (s.current) return 'Your location';
@@ -556,6 +556,9 @@
   function sameAsMaps(a, m) {
     if (!m.miles) return false;
     var dmi = Math.abs(altMiles(a) - m.miles) / m.miles, ns = nameSim(a.description, m.via);
+    // Maps and the Routes API sometimes name the same road differently ("via I-71 N" vs "I-64 E"): a near-identical
+    // length and time means the same route even when the names disagree
+    if (dmi <= 0.004 && (!m.minutes || Math.abs(altMinutes(a) - m.minutes) / m.minutes <= 0.08)) return true;
     if (ns != null) return ns >= 0.99 && dmi <= 0.03;
     return dmi <= 0.02 && (!m.minutes || Math.abs(altMinutes(a) - m.minutes) / m.minutes <= 0.06);
   }
@@ -621,7 +624,7 @@
     var left = alts.slice(), out = [];
     mr.forEach(function (m) {
       var k = -1; left.forEach(function (a, i) { if (k < 0 && sameAsMaps(a, m)) k = i; });
-      if (k >= 0) out.push(left.splice(k, 1)[0]);
+      if (k >= 0) { var a = left.splice(k, 1)[0]; a.description = m.via.replace(/^via\s+/i, ''); out.push(a); }   // name it the way Maps does
     });
     alts = out.concat(left);
   }

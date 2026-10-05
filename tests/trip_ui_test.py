@@ -288,20 +288,21 @@ with sync_playwright() as p:
           window.__mocks.route = (body) => {
             window.__routeBody = body;
             const v = body.intermediates && body.intermediates[0];
-            if (v && v.via) {                     // north of the main route -> the I-78 option; south -> some other road
+            if (v && v.via) {                     // north of the main route -> the I-71/I-86 option; south -> some other road
               window.__viaCalls.push(v.location.latLng);
-              return { routes: [v.location.latLng.latitude > 38.6 ? mk('', 1336, 1.2, 1205) : mk('', 1460, -2.5, 1330)] };
+              return { routes: [v.location.latLng.latitude > 38.6 ? mk('', 1404, 2.4, 1318) : mk('', 1460, -2.5, 1330)] };
             }
-            return { routes: [mk('I-40 E and I-81 N', 1310, 0, 1185), mk('I-70 E and I-80 E', 1391, 2.6, 1262)] };
+            return { routes: [mk('I-40 E and I-81 N', 1306.9, 0, 1202), mk('I-64 E', 1323.6, 1.0, 1216)] };
           };
-          window.__gmapsAnswer = { href: null, routes: [{ via: 'I-40 E and I-81 N', miles: 1310, minutes: 1185 }, { via: 'I-40 E and I-78 E', miles: 1335, minutes: 1203 }, { via: 'I-70 E and I-80 E', miles: 1391, minutes: 1262 }] };
+          // what Google Maps really listed for this trip on Oct 5 (note "1,324 miles" and a different name for the I-64 route)
+          window.__gmapsAnswer = { href: null, routes: [{ via: 'I-71 N', miles: 1324, minutes: 1216 }, { via: 'I-71 N and I-86 E', miles: 1406, minutes: 1322 }, { via: 'I-40 E and I-81 N', miles: 1308, minutes: 1222 }] };
           window.__gmapsUrl = null;
         }''')
         pg.fill('#tMiles', '300'); pg.click('#tGo'); pg.wait_for_timeout(1800)
         info = pg.inner_text('.alts-pick'); print('  3 routes:', info.replace('\n', ' | '), '| pass-through lookups:', len(pg.evaluate('window.__viaCalls')))
         assert pg.evaluate('window.__gmapsUrl') is not None, 'asked Google Maps which routes it shows'
-        assert pg.locator('.alts-pick button').count() == 3 and info.index('I-81') < info.index('I-78') < info.index('I-80'), info
-        assert '1336 mi' in info, info
+        assert pg.locator('.alts-pick button').count() == 3 and info.index('via I-71 N\n') < info.index('I-86') < info.index('I-81'), info
+        assert '1404 mi' in info and '1324 mi' in info, info
         pg.screenshot(path=f'{OUT}/{name}-t9-three-routes.png')
         pg.evaluate("window.__mocks.route = window.__origRoute; window.__gmapsAnswer = null")
         txt = pg.inner_text('#tParsed'); print('  real link:', txt.replace('\n', ' | '))

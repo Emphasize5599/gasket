@@ -13,7 +13,7 @@ async function (reqId, args) {
     leaves.forEach((e) => {
       let p = e;
       for (let k = 0; k < 6 && p && !/\d+(\.\d+)?\s*(mi|miles|km)\b/.test(p.innerText || ''); k++) p = p.parentElement;
-      const t = p ? p.innerText : '';
+      const t = (p ? p.innerText : '').replace(/(\d),(?=\d{3}\b)/g, '$1');      // "1,324 miles" -> "1324 miles"
       const mi = /(\d+(?:\.\d+)?)\s*(?:mi|miles)\b/.exec(t);
       const km = /(\d+(?:\.\d+)?)\s*km\b/.exec(t);
       const h = /(\d+)\s*hr/.exec(t), m = /(\d+)\s*min/.exec(t);
@@ -33,8 +33,9 @@ async function (reqId, args) {
       // done when every stop has coordinates, or when Maps has settled (some places never get them in the address)
       stable = href === last ? stable + 1 : 0;
       const settled = stable >= 3 && i > 6;
-      const done = /\/maps\/dir\//.test(href) && (coordsNow >= places || settled) && (r.length > 0 || i > 12 || settled);
-      if (done && (stable >= 1 || settled)) return send({ href, title: document.title, routes: r });
+      // the route list can take several seconds after the address bar settles (long trips especially): wait for it
+      const done = /\/maps\/dir\//.test(href) && (coordsNow >= places || settled) && (r.length > 0 || i > 36);
+      if (done && (stable >= 1 || settled)) { if (r.length) await pause(800); return send({ href, title: document.title, routes: r.length ? routes() : r }); }
       last = href;
       await pause(500);
     }
