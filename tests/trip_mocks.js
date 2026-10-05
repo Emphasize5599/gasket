@@ -4,6 +4,7 @@
   const N = 1200, line = [];
   for (let i = 0; i <= N; i++) { const t = i / N; line.push({ lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * 9) * 0.05, lng: A[1] + (B[1] - A[1]) * t }); }
   const total = 318;
+  const lineI30 = line.map((p) => ({ lat: p.lat + 0.003, lng: p.lng }));   // a hair north, so tests can tell the two routes apart
   const enc = window.Trip.encodePolyline;
   const at = (mi) => { const t = mi / total; return { lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * 9) * 0.05, lng: A[1] + (B[1] - A[1]) * t }; };
   const money = (v) => ({ currencyCode: 'USD', units: String(Math.floor(v)), nanos: Math.round((v - Math.floor(v)) * 1e9) });
@@ -14,8 +15,8 @@
   window.__mocks = {
     route: (body) => {
       window.__routeBody = body;
-      const main = { description: 'I-30 W', routeLabels: ['DEFAULT_ROUTE'], distanceMeters: total * 1609.344, duration: '17600s', polyline: { encodedPolyline: enc(line) }, legs: [{ distanceMeters: total * 1609.344, steps }] };
-      const alt = Object.assign({}, main, { description: 'US-67 S and I-30 W', routeLabels: ['DEFAULT_ROUTE_ALTERNATE'], distanceMeters: (total + 12) * 1609.344, duration: '18300s' });
+      const main = { description: 'I-30 W', routeLabels: ['DEFAULT_ROUTE'], distanceMeters: total * 1609.344, duration: '17600s', polyline: { encodedPolyline: enc(lineI30) }, legs: [{ distanceMeters: total * 1609.344, steps }] };
+      const alt = Object.assign({}, main, { polyline: { encodedPolyline: enc(line) }, description: 'US-67 S and I-30 W', routeLabels: ['DEFAULT_ROUTE_ALTERNATE'], distanceMeters: (total + 12) * 1609.344, duration: '18300s' });
       return { routes: body.computeAlternativeRoutes ? [main, alt] : [main] };
     },
     find: (q, lat, lng, radius) => {
@@ -38,7 +39,10 @@
         const list = (brandAt[j.q] || []).filter(([mi]) => mi >= j.fromMi && mi < j.toMi);
         if (!list.length) return;
         const places = [], sums = [];
-        list.forEach(([mi, price, det], k) => {
+        const onI30 = Math.abs(j.lat - lineI30[0].lat) < 0.002;
+        (window.__alongRoutes = window.__alongRoutes || {})[onI30 ? 'I-30' : 'US-67'] = true;
+        list.forEach(([mi, price0, det], k) => {
+          const price = onI30 && window.__cheapI30 ? price0 - 0.35 : price0;
           const p = at(mi);
           const name = j.q === "Sam's Club Gas Station" ? "Sam's Club Fuel Center" : j.q;
           places.push({ id: 'g-' + name.replace(/\W/g, '') + mi, displayName: { text: name }, location: { latitude: p.lat + det / 69 / 2.6, longitude: p.lng },

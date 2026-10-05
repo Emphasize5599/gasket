@@ -335,8 +335,9 @@
     var lv = function (g) { return Math.round(g / STEP); };
     var start = Math.min(LV, Math.floor(o.startGal / STEP + 1e-9));
     var buf = Math.ceil(o.bufferGal / STEP - 1e-9), arr = Math.ceil(o.arriveGal / STEP - 1e-9);
-    // already below the buffer: allow the first hop to dip toward empty instead of failing outright
-    var firstMin = start <= buf ? 0 : buf;
+    // o.firstDip: no plan keeps the buffer on the way to the first station (you're already low), so let that
+    // first hop dip toward empty instead of failing outright. plan() retries with it only when it has to.
+    var firstMin = o.firstDip ? 0 : buf;
     var price = priceFn || function (c) { return c.price; };
     // Extra time has to pay for itself: every stop must save at least stopPenalty, and leaving the road for a
     // station (more than ~1.5 min of detour) must save at least detourPenalty more than staying on the route.
@@ -442,6 +443,7 @@
     var oo = Object.assign({}, o, { cands: cands });
     var noStopGal = o.startGal - o.model.galTo(o.model.totalMi);
     var best = optimize(oo);
+    if (!best.ok) { oo.firstDip = true; best = optimize(oo); }
     if (!best.ok) return { ok: false, reachMi: best.reachMi, noStopGal: noStopGal, refPrice: o.refPrice, tooFar: tooFar };
     var bestEval = evaluate(oo, best);
     // baseline: what you'd do without the app -- fewest stops, closest to the road, fill up each time
@@ -459,15 +461,17 @@
     });
     best.stops.forEach(function (s, k) { s.why = whyNotCheaper(oo, best.stops, k, cands, farList); });
     return { ok: true, tooFar: tooFar, cands: cands, stops: best.stops, arriveGal: best.arriveGal, totals: bestEval, easy: easy.ok ? { stops: easy.stops, totals: easyEval } : null,
-      minStops: minStops, refPrice: o.refPrice, noStopGal: noStopGal,
+      minStops: minStops, refPrice: o.refPrice, noStopGal: noStopGal, firstDip: !!oo.firstDip,
       arriveMi: best.arriveGal / o.model.combGpm, savings: easyEval ? easyEval.net - bestEval.net : null };
   }
 
   /**
-   * When a stop isn't the cheapest station around, say why in one sentence. Looks at the cheapest station between the
+   * When a stop isn't the cheapest station around, say why in one sentence. Looks at the cheapest station within
+   * 15 route miles of the stop (the same "cluster" — somewhere you'd practically have stopped instead), between the
    * previous stop and the next one (including ones skipped for being too far out of the way) and finds the reason the
    * plan passed on it: out of your time limit, can't reach it above your buffer, or the detour/threshold eats the savings.
    */
+  var CLUSTER_MI = 15;
   function whyNotCheaper(o, stops, k, cands, farList) {
     var m = o.model, s = stops[k], c0 = s.c;
     var prevD = k ? stops[k - 1].c.d : 0, nextD = k < stops.length - 1 ? stops[k + 1].c.d : m.totalMi;
@@ -478,6 +482,7 @@
     pool.forEach(function (p) {
       var c = p.c;
       if (chosen[c.id] || !(c.price < c0.price - 0.0005) || c.d < prevD - 0.01 || c.d > nextD + 0.01) return;
+      if (Math.abs(c.d - c0.d) > (o.clusterMi || CLUSTER_MI)) return;   // only stations you could practically have used instead
       if (!alt || c.price < alt.c.price - 0.0005 || (Math.abs(c.price - alt.c.price) < 0.0005 && Math.abs(c.d - c0.d) < Math.abs(alt.c.d - c0.d))) alt = p;
     });
     if (!alt) return null;
@@ -501,6 +506,29 @@
     if (pen > 0 && save - detCost <= pen + 0.005) return head + 'it\'s ' + off + ', and leaving the route has to save at least ' + money(pen) + ' — this would save about ' + money(save - detCost) + '.';
     if (timeCost > 0 && save - detCost - pen <= timeCost + 0.005) return head + 'the extra ' + Math.round((c.detourMin || 0) - (c0.detourMin || 0)) + ' min of detour is worth ' + money(timeCost) + ' at your time value, more than the ' + money(save - detCost) + ' it saves.';
     return head + 'stopping there instead throws off the rest of the trip — the plan as a whole comes out cheaper this way.';
+  }
+
+  /**
+   * Re-plan the same trip at several buffers (miles you always keep). Gas left at the end is valued at the same
+   * reference price for every buffer so the totals compare fairly. Returns [{mi, ok, net, plan, opts}] in ascending mi,
+   * with mark=true where lowering the buffer to that point saves money vs. the next higher buffer.
+   */
+  function bufferSweep(o, list, refPrice) {
+    var out = list.map(function (mi) {
+      var oo = Object.assign({}, o, { bufferGal: mi * o.model.combGpm, arriveGal: mi * o.model.combGpm, refPrice: refPrice });
+      var p = plan(oo);
+      var net = p.ok ? p.totals.net + (o.timeValue || 0) * (p.totals.detourMin + p.stops.length * (o.stopMinutes || 0)) / 60 : null;
+      return { mi: mi, ok: p.ok, net: net, plan: p, opts: oo };
+    });
+    marks(out);
+    return out;
+  }
+  function marks(out) {
+    for (var i = 0; i < out.length; i++) {
+      var a = out[i], b = out[i + 1];
+      a.mark = !!(a.ok && b && b.ok && a.net < b.net - 0.2);
+    }
+    return out;
   }
 
   /** Other priced stations within +-25 route miles of a chosen stop, with what using them instead would cost. */
@@ -605,6 +633,6 @@
 
   var api = { fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
-    optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav };
+    optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
 })(this);

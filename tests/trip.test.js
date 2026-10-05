@@ -157,13 +157,33 @@ assert.ok(/burns about \$0\.\d\d of gas, more than the \$0\.\d\d it would save/.
 p = T.plan(Object.assign({}, o, { maxDetourMin: 10 }));
 assert.ok(/15 min out of the way — over your 10-minute limit/.test(p.stops[0].why), p.stops[0].why);
 // can't reach the cheaper one above the buffer
-o = Object.assign({}, base, { startGal: 50 / 29, stopPenalty: 1, cands: [at(10, 3.40, 0.1, 'near'), Object.assign(at(30, 3.35, 0.1, 'beyond'), { station: { name: 'CITGO' } })] });
+o = Object.assign({}, base, { startGal: 50 / 29, stopPenalty: 1, cands: [at(12, 3.40, 0.1, 'near'), Object.assign(at(26, 3.35, 0.1, 'beyond'), { station: { name: 'CITGO' } })] });
 p = T.plan(o);
 assert.equal(p.stops[0].c.id, 'near');
 assert.ok(/less than your 30-mile buffer/.test(p.stops[0].why), p.stops[0].why);
+// a cheaper station far from the stop (not the same cluster) -> no explanation needed
+o = Object.assign({}, base, { startGal: 100 / 29, stopPenalty: 1, detourPenalty: 1,
+  cands: [at(40, 3.30, 0.1, 'onroad'), Object.assign(at(5, 2.90, 0.1, 'early'), { station: { name: 'CITGO' } }), Object.assign(at(42, 3.24, 1.2, 'offroad'), { detourMin: 3, station: { name: 'Murphy USA' } })] });
+p = T.plan(o);
+assert.ok(!/CITGO/.test(p.stops.map(s => s.why).join(' ')), 'station 35 mi away is not in the cluster: ' + p.stops.map(s => s.why).join(' | '));
 // cheapest station chosen -> no explanation
 o = Object.assign({}, base, { startGal: 100 / 29, cands: [at(40, 3.10, 0.1, 'best'), at(45, 3.30, 0.1, 'worse')] });
 assert.equal(T.plan(o).stops[0].why, null);
+
+// ---- buffer slider: re-plan at other buffers, mark where a lower buffer saves money ----
+{
+  const ob = Object.assign({}, base, { startGal: 60 / 29, stopPenalty: 0.5, detourPenalty: 0.5,
+    cands: [at(20, 3.40, 0.1, 'early'), at(45, 2.90, 0.1, 'cheap'), at(80, 3.20, 0.1, 'late')] });
+  const ref = T.plan(Object.assign({}, ob, { bufferGal: 30 / 29, arriveGal: 30 / 29 })).refPrice;
+  const sw = T.bufferSweep(ob, [5, 10, 15, 20, 25, 30, 35, 40], ref);
+  const row = (mi) => sw.find(x => x.mi === mi);
+  // 60 combined-mpg miles is ~72 highway miles: the $2.90 station at mile 45 needs a buffer of 20 or less
+  assert.equal(row(20).plan.stops[0].c.id, 'cheap', JSON.stringify(row(20).plan.stops.map(s => s.c.id)));
+  assert.notEqual(row(30).plan.stops[0].c.id, 'cheap');
+  assert.ok(row(20).mark && !row(25).mark && !row(15).mark, 'mark at 20 mi only: ' + sw.map(x => x.mi + ':' + (x.net && x.net.toFixed(2)) + (x.mark ? '*' : '')).join(' '));
+  assert.ok(row(20).net < row(30).net - 0.4, 'lower buffer saves money');
+  console.log('  buffer sweep:', sw.map(x => x.mi + ':' + (x.net == null ? '-' : x.net.toFixed(2)) + (x.mark ? '*' : '')).join(' '));
+}
 
 // ---- export: full addresses, place IDs when every stop has one ----
 const rt = { stops: [{ current: true, label: 'Your location' }, { address: '100 Main St, Conway, AR 72032' }, { address: 'Dallas, TX', lat: 32.77, lng: -96.79 }] };

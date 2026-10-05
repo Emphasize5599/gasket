@@ -8,7 +8,7 @@
   // ---------- persistent inputs ----------
   S.car = Object.assign({ name: '', city: 25, hwy: 33, comb: 28, tank: 14, adjustPct: 100, grade: '', epaFuel: '' }, S.car || {});
   S.trip = Object.assign({ link: '', from: '', to: '', milesLeft: '', bufferMi: 40, fillUp: false, minSave: 1, timeValue: 0,
-    arrive: 'buffer', topUpMi: 1.0, roundTrip: true, tankPrice: '', maxDetourMin: 10,
+    arrive: 'buffer', topUpMi: 1.0, roundTrip: true, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
 
   // ---------- native calls as promises ----------
@@ -114,7 +114,10 @@
       '<div class="lead small" id="tArriveHelp"></div>' +
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up station within (mi of destination)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
-      '<label class="nf"><span>Drive back too?<small>same roads, today\'s prices</small></span><span class="chips one"><button id="tRound" class="' + (t.roundTrip ? 'on' : '') + '">Estimate round trip</button></span></label></div></div>';
+      '<label class="nf"><span>Drive back too?<small>same roads, today\'s prices</small></span><span class="chips one"><button id="tRound" class="' + (t.roundTrip ? 'on' : '') + '">Estimate round trip</button></span></label></div>' +
+      '<div class="sub-h">Other routes</div>' +
+      '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
+      '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
 
     h += '<div id="tRouteInfo"></div><button class="btn primary" id="tGo">Get route</button>' +
       '<p class="lead small" id="tCost"></p>' +
@@ -140,6 +143,8 @@
       arriveHelp();
     };
     $('tRound').onclick = function () { this.classList.toggle('on'); };
+    $('tAltCmp').onchange = function () { $('tAltBox').classList.toggle('hidden', !this.checked); collect(); renderInfo(); };
+    $('tAltSave').addEventListener('change', function () { collect(); });
     arriveHelp();
     $('tMode').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
@@ -156,6 +161,7 @@
     carSum(); renderInfo(); costLine();
     if (t.link && !route) readLink();
   }
+  function sw(id, on) { return '<label class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
   function num(id, label, v, step, hint) {
     return '<label class="nf"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><input type="number" inputmode="decimal" id="' + id + '" step="' + step + '" value="' + esc(v) + '"></label>';
   }
@@ -173,6 +179,7 @@
     t.arrive = $('tArrive').querySelector('.on').dataset.a;
     t.topUpMi = Math.max(0, Math.round((parseFloat($('tTopMi').value) || 0) * 10) / 10);
     t.roundTrip = $('tRound').classList.contains('on');
+    t.altCompare = $('tAltCmp').checked; t.altMinSave = Math.max(0, parseFloat($('tAltSave').value) || 0);
     t.tankPrice = $('tTankPrice').value.trim();
     t.milesLeft = $('tMiles').value; t.bufferMi = Math.max(0, parseFloat($('tBuffer').value) || 0);
     t.minSave = Math.max(0, parseFloat($('tMinSave').value) || 0); t.timeValue = Math.max(0, parseFloat($('tTime').value) || 0);
@@ -331,7 +338,9 @@
       }) : null,
       plan: r && r.plan ? { ok: r.plan.ok, reachMi: r.plan.reachMi, tooFar: r.plan.tooFar, refPrice: r.plan.refPrice, totals: r.plan.totals, savings: r.plan.savings,
         stops: (r.plan.stops || []).map(function (s) { return { id: s.c.id, name: s.c.station.name, mile: Math.round(s.c.d * 10) / 10, price: s.c.price, buyGal: s.buyGal, arriveGal: s.arriveGal, departGal: s.departGal, why: s.why }; }),
-        notes: r.notes } : null,
+        notes: r.notes, bufferMi: r.bufMi } : null,
+      otherRoutes: r && r.routes ? compareRoutes() : null,
+      bufferSweep: r && r.sweep ? r.sweep.map(function (x) { return { mi: x.mi, ok: x.ok, net: x.net && Math.round(x.net * 100) / 100, mark: x.mark, stops: x.ok ? x.plan.stops.map(function (s) { return s.c.station.name + ' @' + Math.round(s.c.d); }) : null }; }) : null,
       log: window.FLog ? FLog.entries().slice(-300) : []
     };
     return JSON.stringify(rep, null, 1);
@@ -546,7 +555,9 @@
   }
   function estLookups() {
     if (!model || !S.apiKey) return 0;
-    return T.chunks(model, 125).length * googleBrands().length;
+    var n = T.chunks(model, 125).length;
+    altCompareList().forEach(function (k) { n += Math.max(1, Math.ceil((alts[k].distanceMeters || 0) / 1609.344 / 125)); });
+    return n * googleBrands().length;
   }
   function renderInfo() {
     var el = $('tRouteInfo'); if (!el) return;
@@ -573,7 +584,8 @@
       var range = Math.max(0, (startGal - bufGal) / model.combGpm);
       h += '<div class="msg">You\'ll need gas within about ' + Math.round(range) + ' miles (keeping your ' + S.trip.bufferMi + '-mile buffer).</div>';
     }
-    h += '<div class="lead small">Finding stations uses ' + (est ? 'about ' + est + ' Google lookups' + (S.monthlyCap ? ' (' + Math.max(0, left) + ' left this month)' : '') : 'no Google lookups') +
+    var nOther = altCompareList().length;
+    h += '<div class="lead small">Finding stations uses ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') + (S.monthlyCap ? ' (' + Math.max(0, left) + ' left this month)' : '') : 'no Google lookups') +
       (official('walmart') || official('murphy') ? '; Walmart and Murphy prices come from their own sites.' : '.') + '</div></div>';
     el.innerHTML = h;
     el.querySelectorAll('[data-alt]').forEach(function (b) {
@@ -584,19 +596,21 @@
   function toastMsg(m) { if (window.toast) window.toast(m); }
 
   // ---------- step 2: stations along the route ----------
-  async function findStops() {
-    busy = true;
-    var go = $('tGo');
+  /**
+   * Stations along one route with your price at each (Google along the route + Walmart's and Murphy's own sites).
+   * pg(frac 0..1, label) reports progress; dbgS collects what happened for the troubleshooting report.
+   */
+  async function gather(model, pg, dbgS) {
     var notes = [], stations = [], official = [];
     // overall progress = weighted parts that run at the same time
     var part = { google: 0, murphy: 0, walmart: 0 }, weight = { google: 0, murphy: 0, walmart: 0 }, label = 'Finding stations';
     var tick = function () {
       var tw = weight.google + weight.murphy + weight.walmart;
       var f = tw ? (part.google * weight.google + part.murphy * weight.murphy + part.walmart * weight.walmart) / tw : 1;
-      prog(0.02 + f * 0.9, label);
+      pg(f, label);
     };
     var progress = function (m) { label = m; tick(); };
-    dbg.search = { started: new Date().toISOString() };
+    var dbgSearch = dbgS; dbgSearch.started = new Date().toISOString();
     tick();
     var maxOff = 3;
     try {
@@ -611,12 +625,12 @@
       if (jobs.length) weight.google = 0.6;
       if (A.siteOn('murphy')) weight.murphy = 0.15;
       if (A.siteOn('walmart')) weight.walmart = 0.25;
-      dbg.search.googleLookups = jobs.length;
+      dbgSearch.googleLookups = jobs.length;
       LG.info('stations', 'Searching along the route', { googleLookups: jobs.length, walmart: A.siteOn('walmart'), murphy: A.siteOn('murphy') });
       if (jobs.length) tasks.push(callP(function (d, t) { part.google = t ? d / t : 0; tick(); }, 'routeSearch', S.apiKey, JSON.stringify(jobs), Number(S.monthlyCap) || 0).then(function (res) {
         part.google = 1; tick();
-        dbg.search.google = { results: (res.results || []).length, errors: res.errors, places: (res.results || []).reduce(function (a, x) { return a + (x.places || []).length; }, 0) };
-        LG.info('stations', 'Google along-route search done', dbg.search.google);
+        dbgSearch.google = { results: (res.results || []).length, errors: res.errors, places: (res.results || []).reduce(function (a, x) { return a + (x.places || []).length; }, 0) };
+        LG.info('stations', 'Google along-route search done', dbgSearch.google);
         (res.errors || []).forEach(function (e) { notes.push(e); LG.warn('stations', e); });
         (res.results || []).forEach(function (r) {
           var job = jobs[r.job] || {};
@@ -636,15 +650,15 @@
       var pts40 = T.samplePoints(model, 40);
       if (A.siteOn('murphy')) tasks.push(site('murphy', { points: T.samplePoints(model, 50), radiusMi: 30, max: 25 }, 90000, function (d, t) { part.murphy = t ? d / t : 0; tick(); }).then(function (res) {
         part.murphy = 1; tick();
-        dbg.search.murphy = { stores: (res.stores || []).length, error: res.error, blocked: res.blocked };
-        LG.info('stations', 'Murphy USA done', dbg.search.murphy);
+        dbgSearch.murphy = { stores: (res.stores || []).length, error: res.error, blocked: res.blocked };
+        LG.info('stations', 'Murphy USA done', dbgSearch.murphy);
         if (res.error) notes.push('Murphy USA: ' + (res.blocked ? 'wants an “are you human?” check (Settings → Site checks)' : res.error));
         (res.stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s) official.push(s); });
       }));
       if (A.siteOn('walmart')) tasks.push(site('walmart', { mode: 'nodes', points: pts40, radiusMi: 25 }, 90000, function (d, t) { part.walmart = t ? 0.5 * d / t : 0; tick(); }).then(async function (res) {
         part.walmart = 0.5; tick();
-        dbg.search.walmartNodes = { nodes: (res.nodes || []).length, error: res.error, blocked: res.blocked };
-        LG.info('stations', 'Walmart stores along the route', dbg.search.walmartNodes);
+        dbgSearch.walmartNodes = { nodes: (res.nodes || []).length, error: res.error, blocked: res.blocked };
+        LG.info('stations', 'Walmart stores along the route', dbgSearch.walmartNodes);
         if (res.error || res.blocked) { part.walmart = 1; tick(); notes.push('Walmart: ' + (res.blocked ? 'wants a “Robot or human?” check (Settings → Site checks)' : res.error)); return; }
         var near = (res.nodes || []).filter(function (n) {
           return n.geoPoint && T.project(model, { lat: n.geoPoint.latitude, lng: n.geoPoint.longitude }).offset <= maxOff;
@@ -653,15 +667,15 @@
         progress('Reading Walmart prices');
         var pr = await site('walmart', { mode: 'prices', nodes: near }, 90000, function (d, t) { part.walmart = 0.5 + (t ? 0.5 * d / t : 0); tick(); });
         part.walmart = 1; tick();
-        dbg.search.walmartPrices = { asked: near.length, got: (pr.stores || []).length, blocked: pr.blocked, error: pr.error };
-        LG.info('stations', 'Walmart prices', dbg.search.walmartPrices);
+        dbgSearch.walmartPrices = { asked: near.length, got: (pr.stores || []).length, blocked: pr.blocked, error: pr.error };
+        LG.info('stations', 'Walmart prices', dbgSearch.walmartPrices);
         if (pr.blocked) notes.push('Walmart: wants a “Robot or human?” check for some prices (Settings → Site checks)');
         (pr.stores || []).forEach(function (w) { var s = P.normalizeWalmart(w); if (s) official.push(s); });
       }));
       await Promise.all(tasks);
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
 
-    label = 'Choosing stops'; prog(0.94, label);
+
     var merged = P.mergeOfficial(dedupe(stations), official);
     var grade = gradeOf(), cands = [], unpriced = 0, stale = 0;
     merged.forEach(function (s) {
@@ -678,14 +692,154 @@
       cands.push({ id: s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
         price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng });
     });
-    var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
-    var opts = { model: model, cands: cands, startGal: startGal, capGal: S.car.tank, bufferGal: S.trip.bufferMi * model.combGpm,
+    return { cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade };
+  }
+  // ---------- other routes ----------
+  function altCompareList() {
+    if (!S.trip.altCompare || alts.length < 2) return [];
+    var out = []; alts.forEach(function (a, k) { if (k !== altSel) out.push(k); }); return out.slice(0, 2);
+  }
+  function routeNet(e) {
+    var p = e.res.plan; if (!p.ok) return null;
+    return p.totals.net + (S.trip.timeValue || 0) * routeMin(e) / 60;
+  }
+  function routeMin(e) { var p = e.res.plan; return e.model.durationSec / 60 + (p.ok ? p.totals.detourMin + p.stops.length * 8 : 0); }
+  /** How each other checked route compares to the one you're on (same gas price for leftover gas, same rules). */
+  function compareRoutes() {
+    var list = result.routes || [], cur = list.filter(function (e) { return e.k === altSel; })[0];
+    if (!cur) return [];
+    var nc = routeNet(cur);
+    return list.filter(function (e) { return e !== cur; }).map(function (e) {
+      var no = routeNet(e), a = alts[e.k];
+      var c = { k: e.k, via: a.description || 'route ' + (e.k + 1), ok: e.res.plan.ok, error: e.error,
+        extraMi: e.model.totalMi - cur.model.totalMi, extraMin: routeMin(e) - routeMin(cur), stops: e.res.plan.ok ? e.res.plan.stops.length : 0 };
+      c.saves = no != null && nc != null ? nc - no : null;
+      c.worth = !c.error && c.ok && (nc == null || c.saves >= (S.trip.altMinSave || 0));
+      return c;
+    }).sort(function (x, y) { return (y.saves || -1e9) - (x.saves || -1e9); });
+  }
+  function switchRoute(k) {
+    var list = result.routes, e = list.filter(function (x) { return x.k === k; })[0];
+    if (!e || e.error) return;
+    LG.info('routes', 'Switched to via ' + (alts[k].description || k));
+    altSel = k; rawRoute = alts[k]; model = e.model; result = e.res; result.routes = list;
+    recompute(); startSweep(); showResult();
+  }
+  function routeBox() {
+    var cs = compareRoutes(); if (!cs.length) return '';
+    var h = '', best = cs.filter(function (c) { return c.worth; })[0];
+    var dmi = function (v) { return Math.abs(v) < 0.5 ? 'same distance' : Math.round(Math.abs(v)) + ' mi ' + (v > 0 ? 'longer' : 'shorter'); };
+    var dmin = function (v) { return Math.abs(v) < 1 ? 'about the same time' : Math.round(Math.abs(v)) + ' min ' + (v > 0 ? 'longer' : 'shorter'); };
+    if (best) {
+      h += '<div class="routebox good"><div class="tb-h">Cheaper route: via ' + esc(best.via) + '</div>' +
+        '<div class="lead small">' + (best.saves != null ? 'Saves about <b>' + money(best.saves) + '</b>' : 'Works with your buffer when this one doesn\'t') + ' · ' + dmi(best.extraMi) + ' · ' + dmin(best.extraMin) +
+        ' · ' + best.stops + ' stop' + (best.stops === 1 ? '' : 's') + (S.trip.timeValue > 0 ? ' (your time counted)' : '') + '.</div>' +
+        '<button class="btn tonal" data-route="' + best.k + '">Switch to this route</button></div>';
+    }
+    var rest = cs.filter(function (c) { return c !== best; });
+    if (rest.length) h += '<div class="lead small">Also checked: ' + rest.map(function (c) {
+      if (c.error) return 'via ' + esc(c.via) + ' (couldn\'t check: ' + esc(c.error) + ')';
+      if (!c.ok) return 'via ' + esc(c.via) + ' (no plan keeps your buffer)';
+      return 'via ' + esc(c.via) + ' — ' + (c.saves > 0.005 ? 'saves only ' + money(c.saves) + ' (your bar is ' + money(S.trip.altMinSave) + ')' : money(-c.saves) + ' more') + ', ' + dmin(c.extraMin) +
+        ' · <a href="#" data-route="' + c.k + '">use this route</a>';
+    }).join('; ') + '.</div>';
+    return h;
+  }
+
+  // ---------- buffer slider ----------
+  function startSweep() {
+    var r = result;
+    if (r.sweep || r.sweeping || !r.opts.refPrice) return;
+    r.sweeping = true;
+    var top = Math.min(100, Math.max(60, Math.ceil(S.trip.bufferMi * 1.5 / 5) * 5)), list = [];
+    for (var b = 5; b <= top; b += 5) list.push(b);
+    [S.trip.bufferMi, r.bufMi].forEach(function (v) { if (v >= 0 && list.indexOf(v) < 0) list.push(v); });
+    list.sort(function (a, b2) { return a - b2; });
+    var rows = [], i = 0, t0 = Date.now();
+    (function next() {
+      if (result !== r) { r.sweeping = false; return; }
+      var end = Date.now() + 40;
+      while (i < list.length && Date.now() < end) rows.push(T.bufferSweep(r.opts, [list[i++]], r.opts.refPrice)[0]);
+      if (i < list.length) return setTimeout(next, 0);
+      r.sweep = T.marks(rows); r.sweeping = false;
+      LG.debug('plan', 'Buffer sweep in ' + (Date.now() - t0) + ' ms', rows.map(function (x) { return x.mi + ':' + (x.net == null ? '-' : x.net.toFixed(2)) + (x.mark ? '*' : ''); }).join(' '));
+      if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); }
+    })();
+  }
+  function swRow(mi) {
+    var sw = result.sweep, best = null;
+    sw.forEach(function (x) { if (!best || Math.abs(x.mi - mi) < Math.abs(best.mi - mi)) best = x; });
+    return best;
+  }
+  function bufBox() {
+    var r = result, sw = r.sweep;
+    var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
+    if (!sw) return h + '<div class="lead small">Checking what other buffers would cost…</div></div>';
+    var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi);
+    h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, cur) + '</span></div>';
+    h += '<div class="buf-track"><div class="buf-marks">' + sw.filter(function (x) { return x.mark; }).map(function (x) {
+      var d = cur.ok ? cur.net - x.net : null;
+      return '<span class="bm" style="left:' + ((x.mi - min) / (max - min) * 100).toFixed(2) + '%"><i></i>' + (d != null && d >= 0.05 ? '−' + money(d) : x.mi) + '</span>';
+    }).join('') + sw.filter(function (x) { return !x.ok; }).slice(0, 1).map(function (x) {
+      return '<span class="bno" style="left:' + ((x.mi - min) / (max - min) * 100).toFixed(2) + '%"></span>';
+    }).join('') + '</div><input type="range" id="tsBuf" min="' + min + '" max="' + max + '" step="1" value="' + r.bufMi + '"></div>';
+    h += '<div class="buf-scale"><span>' + min + ' mi</span><span>' + max + ' mi</span></div>';
+    var lower = sw.filter(function (x) { return x.mark && x.mi < r.bufMi && cur.ok && cur.net - x.net >= 0.05; });
+    var hint = lower.length ? lower[lower.length - 1] : null;
+    if (!cur.ok) {
+      var okRows = sw.filter(function (x) { return x.ok; });
+      h += '<div class="lead small">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : 'No buffer works — check the miles left.') + '</div>';
+    } else if (hint) {
+      var hs = hint.plan.stops.filter(function (s) { return !cur.plan.stops.some(function (c) { return c.c.id === s.c.id; }); })[0];
+      h += '<div class="lead small">Marks show where a smaller buffer saves money. Down to ' + hint.mi + ' mi saves ' + money(cur.net - hint.net) +
+        (hs ? ' — it can reach ' + esc(hs.c.station.name) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ')' : '') + '.</div>';
+    } else h += '<div class="lead small">A smaller buffer wouldn\'t save anything on this trip.</div>';
+    if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small">For this trip only — your usual buffer is ' + S.trip.bufferMi + ' mi. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer</a></div>';
+    return h + '</div>';
+  }
+  function bufText(x, cur) {
+    if (!x.ok) return 'can\'t keep this much — no priced station in reach';
+    var dip = x.plan.firstDip ? ' · dips below it before the first stop' : '';
+    if (x === cur || !cur.ok) return x.plan.stops.length + ' stop' + (x.plan.stops.length === 1 ? '' : 's') + dip;
+    var d = x.net - cur.net;
+    return (Math.abs(d) < 0.05 ? 'same cost' : d < 0 ? 'saves ' + money(-d) : money(d) + ' more') + ' · ' + x.plan.stops.length + ' stop' + (x.plan.stops.length === 1 ? '' : 's') + dip;
+  }
+  function bindBuf() {
+    var inp = $('tsBuf'); if (!inp) return;
+    var r = result, cur = swRow(r.bufMi);
+    inp.oninput = function () { var x = swRow(+inp.value); $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, cur); };
+    inp.onchange = function () {
+      var x = swRow(+inp.value);
+      if (x.mi === r.bufMi) { inp.value = x.mi; return; }
+      LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
+      if (!x.ok) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, cur); toastMsg('No plan can keep ' + x.mi + ' mi on this trip.'); return; }
+      N.haptic && N.haptic();
+      r.plan = x.plan; r.opts = x.opts; r.bufMi = x.mi; r.topSel = -1;
+      recompute(); keepScroll(showResult);
+    };
+    if ($('tsBufKeep')) $('tsBufKeep').onclick = function (e) { e.preventDefault(); S.trip.bufferMi = r.bufMi; A.save(); keepScroll(showResult); };
+  }
+
+  function makeOpts(model, cands, startGal) {
+    return { model: model, cands: cands, startGal: startGal, capGal: S.car.tank, bufferGal: S.trip.bufferMi * model.combGpm,
       arriveGal: S.trip.bufferMi * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
       stopPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
       detourPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
       maxDetourMin: S.trip.maxDetourMin, timeValue: S.trip.timeValue, stopMinutes: 8,
       lastFull: S.trip.arrive === 'full' };
+  }
+  async function findStops() {
+    busy = true;
+    var go = $('tGo');
+    var others = altCompareList();
+    var share = others.length ? 0.9 / (others.length + 1) : 0.9;
+    dbg.search = {};
+    var g = await gather(model, function (f, l) { prog(0.02 + f * share, l + (others.length ? ' (your route)' : '')); }, dbg.search);
+    var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
+    var label = 'Choosing stops'; prog(0.02 + share, label);
+    var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
+    var opts = makeOpts(model, cands, startGal);
     var t0 = Date.now();
     var plan = T.plan(opts);
     LG.info('plan', plan.ok ? 'Planned ' + plan.stops.length + ' stop(s) in ' + (Date.now() - t0) + ' ms' : 'No workable plan', {
@@ -693,8 +847,27 @@
       stops: plan.ok ? plan.stops.map(function (s) { return { name: s.c.station.name, mile: Math.round(s.c.d), price: s.c.price, buy: Math.round(s.buyGal * 10) / 10, why: s.why }; }) : null });
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
-      topMi: S.trip.topUpMi, topSel: -1 };
+      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi };
     recompute();
+    // other routes Google suggested: same trip, same rules, gas valued at the same price so totals compare fairly
+    if (others.length) {
+      result.routes = [{ k: altSel, model: model, res: result }];
+      for (var oi = 0; oi < others.length; oi++) {
+        var k = others[oi], base = 0.02 + share * (oi + 1), via = alts[k].description || 'route ' + (k + 1);
+        try {
+          var m2 = T.buildRoute(alts[k], carModel());
+          dbg['search_route' + k] = {};
+          var g2 = await gather(m2, function (f, l) { prog(base + f * share, l + ' (via ' + via + ')'); }, dbg['search_route' + k]);
+          var o2 = makeOpts(m2, g2.cands, startGal);
+          if (plan.ok) o2.refPrice = plan.refPrice;
+          var p2 = T.plan(o2);
+          result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
+            startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi } });
+        } catch (e) { LG.error('routes', 'Checking via ' + via + ' failed', String(e && e.message || e)); result.routes.push({ k: k, model: model, res: { plan: { ok: false } }, error: String(e && e.message || e) }); }
+      }
+      LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
+    }
+    startSweep();
     busy = false;
     prog(1, 'Done'); progEnd();
     go.textContent = 'Find the best stops';
@@ -739,14 +912,16 @@
       '<button class="x" id="tsClose" aria-label="Close trip">✕</button></div>';
 
     if (!p.ok) {
-      h += '<div class="msg err">No plan keeps you above your ' + S.trip.bufferMi + '-mile buffer. ' +
+      h += '<div class="msg err">No plan keeps you above a ' + r.bufMi + '-mile buffer. ' +
         (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your current range.') +
         ' Try a smaller buffer, check the miles left, or turn on more brands.</div>';
+      h += routeBox() + bufBox();
     } else {
       var t = p.totals, out = r.acc.legs[0];
       h += '<div class="kpis"><div><b>' + money(out.cost) + '</b><span>trip cost</span></div>' +
         '<div><b>' + money(out.spend) + '</b><span>at the pump · ' + out.bought.toFixed(1) + ' gal</span></div>' +
         '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved vs. easiest</span></div></div>';
+      h += routeBox();
       h += '<div class="lead small">Trip cost is the ' + out.burnGal.toFixed(1) + ' gal this drive burns: gas already in your tank at ' + priceText(r.startPrice) + '/gal' +
         (S.trip.tankPrice ? ' (what you said it cost)' : ' (typical on this route — set what you paid in Edit trip)') + ', plus what you buy at what you pay. ' +
         (t.stops ? t.stops + ' stop' + (t.stops === 1 ? '' : 's') + '.' : 'No stops.') + '</div>';
@@ -757,10 +932,12 @@
           ' — ' + money(p.easy.totals.net) + ' net. This plan: ' + money(t.net) + ' net' + (t.detourMin - p.easy.totals.detourMin > 0.5 ? ', ' + Math.round(t.detourMin - p.easy.totals.detourMin) + ' more min of detours' : '') + '.</div>';
       } else if (p.easy && t.stops) h += '<div class="lead small">The easiest stops are also the cheapest here.</div>';
       if (p.minStops != null && t.stops > p.minStops) h += '<div class="lead small">You only need ' + p.minStops + ' stop' + (p.minStops === 1 ? '' : 's') + '; the extra one pays for itself with cheaper gas.</div>';
+      if (p.firstDip && p.stops.length) h += '<div class="msg">You can\'t keep a ' + r.bufMi + '-mile buffer on the way to the first stop — you\'ll get there with about ' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' miles left. Stop 1 is the closest workable station.</div>';
       if (!t.stops) h += '<div class="msg ok">No stop is worth it — you\'ll arrive with about ' + Math.round(p.arriveMi) + ' miles left.</div>';
       p.stops.forEach(function (s, i) { h += stopCard(s, i); });
       if (t.stops) h += '<div class="lead small">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / S.car.tank * 100) + '% of the tank)' : '') +
         '. When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
+      h += bufBox();
       if (S.trip.arrive === 'full') h += topUpBox();
       if (r.back) h += backBox();
     }
@@ -774,6 +951,7 @@
       '<div class="btn-row"><button class="btn tonal" id="tsShare">Share trip</button><button class="btn tonal" id="tsReport">Troubleshooting report</button></div>' +
       '<div class="btn-row"><button class="btn tonal" id="tsEdit">Edit trip</button><button class="btn tonal" id="tsDone">Done</button></div></div>';
     if (ex && altSel > 0 && !p.stops.length && !r.top) h += '<div class="note">Google Maps may open on its usual route; pick the “via ' + esc(alts[altSel].description || 'other road') + '” option there.</div>';
+    else if (ex && route.routeIndex != null && altSel !== route.routeIndex && alts[altSel]) h += '<div class="note">This isn\'t the route you picked in Google Maps. Maps picks its own roads between stops — check that it goes via ' + esc(alts[altSel].description || 'this route') + '.</div>';
     if (ex && ex.tooMany) h += '<div class="note">Google Maps takes up to 9 stops in a shared route; this trip has ' + ex.waypoints + '. Remove a stop in Maps if it complains.</div>';
     if (route.avoidDetected || S.trip.avoid.tolls || S.trip.avoid.highways || S.trip.avoid.ferries) h += '<div class="note">Google Maps links can\'t carry “avoid” options — turn them back on in Maps (Route options).</div>';
     el.innerHTML = h; show(el, true); el.scrollTop = 0;
@@ -794,6 +972,10 @@
     el.querySelectorAll('[data-why]').forEach(function (b) {
       b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
     });
+    el.querySelectorAll('[data-route]').forEach(function (b) {
+      b.onclick = function (e) { e.preventDefault(); N.haptic && N.haptic(); switchRoute(+b.dataset.route); };
+    });
+    bindBuf();
     el.querySelectorAll('[data-fly]').forEach(function (b) {
       b.onclick = function () { var s = p.stops[+b.dataset.fly].c; map.setView([s.lat, s.lng], 14); };
     });

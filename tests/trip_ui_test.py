@@ -67,6 +67,59 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__saved'), 'saved to downloads'
         print('  report keys:', list(rj.keys()), 'candidates', len(rj['candidates']))
         SHARED_TRIP = shtxt
+        # buffer slider: checks other buffers in the background, marks where a smaller one saves money
+        pg.wait_for_selector('#tsBuf', timeout=5000)
+        pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
+        bt = pg.inner_text('#tsBufBox'); print('  buffer box:', bt.replace('\n', ' | '))
+        sweep = pg.evaluate("window.__trip.state().result.sweep.map(x => [x.mi, x.ok, x.net && +x.net.toFixed(2), x.mark])")
+        print('  sweep:', sweep)
+        assert pg.input_value('#tsBuf') == '30' and 'Buffer for this trip' in bt
+        pg.screenshot(path=f'{OUT}/{name}-t2b-buffer.png')
+        marks = [x for x in sweep if x[3] and x[0] < 30]
+        if marks:
+            m = marks[-1][0]
+            pg.evaluate("(v) => { const i = document.getElementById('tsBuf'); i.value = v; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); }", m)
+            pg.wait_for_timeout(300)
+            bt2 = pg.inner_text('#tsBufBox'); print('  after slide to', m, ':', bt2.replace('\n', ' | '))
+            assert pg.evaluate('window.__trip.state().result.bufMi') == m and 'For this trip only' in bt2
+        # too much buffer: refused, stays put
+        cur = pg.evaluate('window.__trip.state().result.bufMi')
+        pg.evaluate("() => { const i = document.getElementById('tsBuf'); i.value = i.max; i.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(300)
+        print('  max buffer ->', pg.evaluate('window.__trip.state().result.bufMi'), '| ok at max:', sweep[-1][1])
+        if not sweep[-1][1]: assert pg.evaluate('window.__trip.state().result.bufMi') == cur
+        # other routes: plan the trip on I-30 too, where (in this test) gas is 35c cheaper
+        pg.click('#tsEdit'); pg.wait_for_timeout(300)
+        pg.check('#tAltCmp', force=True); pg.fill('#tAltSave', '2'); pg.dispatch_event('#tAltSave', 'change'); pg.wait_for_timeout(200)
+        info = pg.inner_text('#tRouteInfo'); print('  with other routes:', info.replace('\n', ' | ')[-160:])
+        assert 'your route + 1 other' in info, info
+        pg.evaluate("window.__cheapI30 = true; window.__alongRoutes = {}"); pg.click('#tGo'); pg.wait_for_timeout(2500)
+        assert pg.evaluate('window.__alongRoutes') == {'I-30': True, 'US-67': True}, pg.evaluate('window.__alongRoutes')
+        rb = pg.inner_text('.routebox'); print('  route box:', rb.replace('\n', ' | '))
+        assert 'Cheaper route: via I-30 W' in rb, rb
+        pg.evaluate("document.querySelector('.routebox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t2c-otherroute.png')
+        pg.click('.routebox [data-route="0"]'); pg.wait_for_timeout(400)
+        sub = pg.inner_text('#tripSheet .sub'); after = pg.inner_text('#tripSheet'); print('  switched:', sub, '|', [l for l in after.split('\n') if 'Also checked' in l])
+        assert '318 mi' in sub and 'via US-67 S and I-30 W' in after and 'Cheaper route' not in after
+        assert "isn't the route you picked in Google Maps" in after
+        pg.evaluate("window.__cheapI30 = false"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.uncheck('#tAltCmp', force=True)
+        pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(150)
+        # with 140 mi in the tank a smaller buffer reaches cheaper gas: marks show up on the slider
+        pg.fill('#tMiles', '140'); pg.click('#tGo'); pg.wait_for_timeout(1500)
+        pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
+        pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
+        bt = pg.inner_text('#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
+        assert pg.locator('.buf-marks .bm').count() >= 1 and 'saves' in bt, bt
+        pg.screenshot(path=f'{OUT}/{name}-t2d-buffer-marks.png')
+        mk = pg.evaluate("Math.max(...window.__trip.state().result.sweep.filter(x => x.mark && x.mi < 30).map(x => x.mi))")
+        before = pg.evaluate('window.__trip.state().result.plan.totals.net')
+        pg.evaluate("(v) => { const i = document.getElementById('tsBuf'); i.value = v; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); }", mk); pg.wait_for_timeout(300)
+        after = pg.evaluate('window.__trip.state().result.plan.totals.net'); print('  slid to', mk, 'net', round(before, 2), '->', round(after, 2))
+        assert after < before - 0.2
+        pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-t2e-buffer-slid.png')
+        pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.fill('#tMiles', '80'); pg.click('#tGo'); pg.wait_for_timeout(1500)
+        assert '330 mi' in pg.inner_text('#tripSheet .sub')
         pg.evaluate("document.getElementById('tripSheet').scrollTop = 99999"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t3-result-bottom.png')
         pg.click('#tsExport'); url = pg.evaluate('window.__lastUrl'); print('  export:', url)

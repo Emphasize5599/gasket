@@ -304,3 +304,17 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 #tGo.busy { background: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); color: var(--ink); }
 #tGo .pfill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); transition: width .35s ease; opacity: .9; }
 #tGo .plab { position: relative; z-index: 1; color: var(--ink); text-shadow: 0 0 6px var(--surface); font-weight: 700; }
+
+.bufbox, .routebox { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 12px 0; }
+.routebox.good { border-color: var(--save); background: var(--save-bg); }
+.routebox .btn { margin-top: 10px; width: 100%; }
+.buf-read { display: flex; gap: 10px; align-items: baseline; margin: 6px 0 2px; }
+.buf-read b { font-size: 1.25rem; }
+.buf-read span { color: var(--ink-2); font-size: .92rem; }
+.buf-track { position: relative; padding-top: 26px; }
+.buf-track input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); height: 28px; }
+.buf-marks { position: absolute; left: 11px; right: 11px; top: 0; height: 40px; pointer-events: none; }
+.buf-marks .bm { position: absolute; transform: translateX(-50%); font-size: .72rem; font-weight: 700; color: var(--save); white-space: nowrap; top: 0; }
+.buf-marks .bm i { position: absolute; left: 50%; top: 17px; width: 3px; height: 22px; margin-left: -1.5px; border-radius: 2px; background: var(--save); }
+.buf-marks .bno { position: absolute; top: 26px; right: 0; height: 28px; background: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--warn) 35%, transparent) 4px 8px); border-radius: 6px; }
+.buf-scale { display: flex; justify-content: space-between; color: var(--ink-2); font-size: .75rem; margin-top: 2px; }
