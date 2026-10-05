@@ -77,7 +77,7 @@
     }
   };
   window.__siteMock = (key, a) => {
-    if (key === 'gmaps') { window.__gmapsUrl = a.url; return window.__gmapsAnswer || { error: 'no gmaps mock' }; }
+    if (key === 'gmaps') { window.__gmapsUrl = a.url; (window.__gmapsUrls = window.__gmapsUrls || []).push(a.url); return window.__gmapsAnswer || { error: 'no gmaps mock' }; }
     if (!a.points && !a.mode) return null;
     if (key === 'murphy') { const p = at(96); return { stores: [{ id: 501, storeNumber: 7001, chainName: 'Murphy USA', address: '96 Hwy 67', city: 'Malvern', state: 'AR', zip: '72104', latitude: p.lat, longitude: p.lng + 0.004, closeDate: '',
       gasPrices: [{ fuelType: 'Regular', price: 3.089, lastUpdateUtc: now }, { fuelType: 'Premium', price: 3.899, lastUpdateUtc: now }] }, { id: 502, chainName: 'Murphy USA', address: 'Far away', latitude: 34.0, longitude: -90.0, closeDate: '', gasPrices: [{ fuelType: 'Regular', price: 2.5, lastUpdateUtc: now }] }] }; }

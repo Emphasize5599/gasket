@@ -155,6 +155,14 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__saved'), 'saved to downloads'
         print('  report keys:', list(rj.keys()), 'candidates', len(rj['candidates']))
         SHARED_TRIP = shtxt
+        # finding stops again on the same route reuses the saved search (no Google lookups); "Get fresh prices" searches again
+        pg.evaluate("window.__jobs = null"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.click('#tGo'); pg.wait_for_timeout(1500)
+        assert pg.evaluate('window.__jobs') is None, 'saved search reused'
+        sv = pg.inner_text('.note.saved'); print('  second search:', sv)
+        assert 'saved' in sv and 'Get fresh prices' in sv
+        pg.click('#tsRefresh'); pg.wait_for_timeout(1800)
+        assert pg.evaluate('window.__jobs') and pg.locator('.note.saved').count() == 0, 'fresh search'
+        print('  refreshed with', len(pg.evaluate('window.__jobs')), 'Google lookups')
         # buffer slider: checks other buffers in the background, marks where a smaller one saves money
         pg.wait_for_selector('#tsBuf', timeout=5000)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
@@ -256,7 +264,7 @@ with sync_playwright() as p:
                     " onSharedText('Directions from 100 Main St to Dallas\\nhttps://maps.app.goo.gl/PhOnE123?g_st=ac')" % (json.dumps(PHONE), json.dumps(FULL)))
         pg.wait_for_timeout(900)
         txt = pg.inner_text('#tParsed'); print('  phone link:', txt.replace('\n', ' | '))
-        assert pg.evaluate('window.__gmapsUrl') == PHONE, 'opened the phone link in the hidden Google Maps page'
+        assert PHONE in pg.evaluate('window.__gmapsUrls'), 'opened the phone link in the hidden Google Maps page'
         assert '100 Main St, North Little Rock, AR 72114 ✓' in txt and 'via US-67 S and I-30 W' in txt, txt
         pg.screenshot(path=f'{OUT}/{name}-t7-phonelink.png')
         pg.fill('#tMiles', '80'); pg.click('#tGo'); pg.wait_for_timeout(700)
@@ -269,40 +277,49 @@ with sync_playwright() as p:
         # A real-world share link (Oct 5): street-only names, exact spots as !8m2!3d!4d -- start must not be guessed
         REAL = ('https://www.google.com/maps/dir/500+Woodlane+St/210+Capitol+Ave/data=!4m14!4m13!1m5!1m4!1s0x5:0x6'
                 '!8m2!3d34.7464809!4d-92.2895948!1m5!1m4!1s0x7:0x8!8m2!3d41.7640350!4d-72.6823870!3e0?utm_source=mstt_0')
-        pg.evaluate("window.__finds = null; window.__gmapsUrl = null; window.__osm = null; window.__mocks.link = {url: %s}; onSharedText('https://maps.app.goo.gl/ReAlTrIp42')" % json.dumps(REAL))
-        pg.wait_for_timeout(2600)
-        assert pg.evaluate('window.__gmapsUrl') is None, 'link already had exact spots: no hidden page needed'
-        txt = pg.inner_text('#tParsed'); print('  cities before Get route:', txt.replace('\n', ' | '))
-        assert '500 Woodlane St, Little Rock, AR 72201' in txt and '210 Capitol Ave, Hartford, CT 06106' in txt, txt
-        assert pg.evaluate('window.__finds') is None, 'city preview used no Google lookups'
-        pg.screenshot(path=f'{OUT}/{name}-t8a-cities.png')
-        # Google Maps shows 3 routes; the Routes API only returns 2 -> the app finds the 3rd with a pass-through point
+        # what Google Maps really listed for this trip on Oct 5; the Routes API only returns 2 of them
         pg.evaluate('''() => {
           window.__origRoute = window.__mocks.route; window.__viaCalls = [];
           const enc = window.Trip.encodePolyline, A = [34.746, -92.29], B = [41.764, -72.682];
+          const lineOf = (bend) => { const line = []; for (let i = 0; i <= 300; i++) { const t = i / 300; line.push({ lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * Math.PI) * bend, lng: A[1] + (B[1] - A[1]) * t }); } return line; };
           const mk = (desc, mi, bend, minutes) => {
-            const line = []; for (let i = 0; i <= 300; i++) { const t = i / 300; line.push({ lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * Math.PI) * bend, lng: A[1] + (B[1] - A[1]) * t }); }
             const steps = []; for (let k = 0; k < 20; k++) steps.push({ distanceMeters: mi / 20 * 1609.344, staticDuration: Math.round(mi / 20 / 66 * 3600) + 's' });
-            return { description: desc, distanceMeters: mi * 1609.344, duration: (minutes * 60) + 's', polyline: { encodedPolyline: enc(line) }, legs: [{ distanceMeters: mi * 1609.344, steps }] };
+            return { description: desc, distanceMeters: mi * 1609.344, duration: (minutes * 60) + 's', polyline: { encodedPolyline: enc(lineOf(bend)) }, legs: [{ distanceMeters: mi * 1609.344, steps }] };
           };
+          const turns = (bend) => lineOf(bend).filter((p, i) => i % 8 === 0).map((p) => [p.lat, p.lng]);
           window.__mocks.route = (body) => {
             window.__routeBody = body;
-            const v = body.intermediates && body.intermediates[0];
-            if (v && v.via) {                     // north of the main route -> the I-71/I-86 option; south -> some other road
-              window.__viaCalls.push(v.location.latLng);
-              return { routes: [v.location.latLng.latitude > 38.6 ? mk('', 1404, 2.4, 1318) : mk('', 1460, -2.5, 1330)] };
+            const v = (body.intermediates || []).filter((x) => x.via);
+            if (v.length) {                      // pass-through points well north of the line -> the I-71/I-86 route
+              window.__viaCalls.push(v.length);
+              const north = v.some((x) => { const t = (x.location.latLng.longitude - A[1]) / (B[1] - A[1]); return x.location.latLng.latitude - (A[0] + (B[0] - A[0]) * t) > 1.7; });
+              return { routes: [north ? mk('', 1404, 2.4, 1318) : mk('', 1460, -2.5, 1330)] };
             }
             return { routes: [mk('I-40 E and I-81 N', 1306.9, 0, 1202), mk('I-64 E', 1323.6, 1.0, 1216)] };
           };
-          // what Google Maps really listed for this trip on Oct 5 (note "1,324 miles" and a different name for the I-64 route)
-          window.__gmapsAnswer = { href: null, routes: [{ via: 'I-71 N', miles: 1324, minutes: 1216 }, { via: 'I-71 N and I-86 E', miles: 1406, minutes: 1322 }, { via: 'I-40 E and I-81 N', miles: 1308, minutes: 1222 }] };
-          window.__gmapsUrl = null;
+          window.__gmapsAnswer = { href: null, routes: [{ via: 'I-71 N', miles: 1324, minutes: 1216, pts: turns(1.0) }, { via: 'I-71 N and I-86 E', miles: 1406, minutes: 1322, pts: turns(2.4) },
+            { via: 'I-40 E and I-81 N', miles: 1308, minutes: 1222, pts: turns(0) }] };
+          window.__gmapsUrls = []; window.__finds = null; window.__osm = null; window.__gmapsDelay = 1200;
         }''')
+        pg.evaluate("window.__mocks.link = {url: %s}; onSharedText('https://maps.app.goo.gl/ReAlTrIp42')" % json.dumps(REAL))
+        pg.wait_for_timeout(150)
+        ld = pg.inner_text('#tParsed'); print('  while reading the link:', ld.replace('\n', ' | '))
+        assert 'Loading…' in ld and pg.locator('.parse-load .pbar i').count() == 1
+        pg.screenshot(path=f'{OUT}/{name}-t8-loading.png')
+        pg.wait_for_timeout(2600); pg.evaluate('window.__gmapsDelay = 0')
+        urls = pg.evaluate('window.__gmapsUrls'); print('  Maps scan:', urls)
+        assert urls == ['https://www.google.com/maps/dir/34.7464809%2C-92.2895948/41.7640350%2C-72.6823870/'], 'route options read by exact spots'
+        txt = pg.inner_text('#tParsed'); print('  after reading the link:', txt.replace('\n', ' | '))
+        assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
+        assert 'Google Maps shows 3 routes' in txt and 'I-71 N and I-86 E · 1,406 mi' in txt, txt
+        pg.screenshot(path=f'{OUT}/{name}-t8a-cities.png')
+        finds = len(pg.evaluate('window.__finds') or [])
         pg.fill('#tMiles', '300'); pg.click('#tGo'); pg.wait_for_timeout(1800)
-        info = pg.inner_text('.alts-pick'); print('  3 routes:', info.replace('\n', ' | '), '| pass-through lookups:', len(pg.evaluate('window.__viaCalls')))
-        assert pg.evaluate('window.__gmapsUrl') is not None, 'asked Google Maps which routes it shows'
+        info = pg.inner_text('.alts-pick'); print('  3 routes:', info.replace('\n', ' | '), '| rebuilt with', pg.evaluate('window.__viaCalls'), 'pass-through points')
+        assert len(pg.evaluate('window.__gmapsUrls')) == 1, 'Get route reused the scan'
+        assert len(pg.evaluate('window.__finds') or []) == finds, 'addresses were already done'
         assert pg.locator('.alts-pick button').count() == 3 and info.index('via I-71 N\n') < info.index('I-86') < info.index('I-81'), info
-        assert '1404 mi' in info and '1324 mi' in info, info
+        assert '1404 mi' in info and '1324 mi' in info and pg.evaluate('window.__viaCalls') == [8], info
         pg.screenshot(path=f'{OUT}/{name}-t9-three-routes.png')
         pg.evaluate("window.__mocks.route = window.__origRoute; window.__gmapsAnswer = null")
         txt = pg.inner_text('#tParsed'); print('  real link:', txt.replace('\n', ' | '))
@@ -323,7 +340,7 @@ with sync_playwright() as p:
         # debug log: on at level 4, records the trip steps, never the key
         lg = pg.evaluate('FLog.text()')
         print('  log lines:', lg.count('\n'), '| areas:', sorted(set(e['a'] for e in pg.evaluate('FLog.entries()'))))
-        assert '[route] Route ready' in lg and '[plan] Planned' in lg and '[osm] City for stop' in lg, lg[-1500:]
+        assert '[route] Route ready' in lg and '[plan] Planned' in lg and '[route] Google Maps route options' in lg, lg[-1500:]
         assert 'AIzaSyTESTKEY' not in lg and 'AIzaSyTESTKEY' not in rtxt, 'key leaked'
         # share intent path with a short link that resolves
         pg.evaluate("window.__mocks.link = {url: %s}; onSharedText('Directions to Dallas\\nhttps://maps.app.goo.gl/AbCdEf')" % json.dumps(LINK))

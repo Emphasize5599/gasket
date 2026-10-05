@@ -121,7 +121,7 @@
         done++; if (opts.onProg) opts.onProg(done, todo.length);
       }
     }
-    var ws = []; for (var w = 0; w < Math.min(4, todo.length); w++) ws.push(worker());
+    var ws = []; for (var w = 0; w < Math.min(8, todo.length); w++) ws.push(worker());
     await Promise.all(ws);
     return { stretches: out, stats: stats };
   }

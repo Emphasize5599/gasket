@@ -412,3 +412,13 @@ b.good, .leg-sub.good { color: var(--save); }
 .leg-total.zero { padding: 6px 12px; }
 .leg-total.zero b { font-size: 16px; }
 .leg-total.zero small { flex-basis: auto; order: 1; }
+
+/* reading a link: "Loading…" with a bar beside it */
+.parse-load { display: flex; align-items: center; gap: 12px; padding: 12px 2px 4px; font-size: 14px; color: var(--ink-2); font-weight: 600; }
+.parse-load .pbar { flex: 1; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--line); }
+.parse-load .pbar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
+.note.saved a { color: var(--accent); font-weight: 600; }
+
+.maps-opts ol { margin: 6px 0 6px 18px; padding: 0; }
+.maps-opts li { margin: 2px 0; }
+.maps-opts li.on { font-weight: 700; }

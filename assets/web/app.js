@@ -19,7 +19,7 @@
       openInOtherApp: function (lat, lng) { console.log('geo', lat, lng); },
       siteSearch: function (key, req, argsJson) {
         var a = JSON.parse(argsJson), lat = a.lat, lng = a.lng;
-        if (window.__siteMock) { var mr = window.__siteMock(key, a); if (mr) { window.onSiteProgress && onSiteProgress(key, req, 1, 2); return setTimeout(function () { window.onSiteResult(key, req, mr); }, 60); } }
+        if (window.__siteMock) { var mr = window.__siteMock(key, a); if (mr) { window.onSiteProgress && onSiteProgress(key, req, 1, 2); return setTimeout(function () { window.onSiteResult(key, req, mr); }, (key === 'gmaps' && window.__gmapsDelay) || 60); } }
         setTimeout(function () {
           if (key === 'murphy') return window.onSiteResult('murphy', req, window.__muMock || { stores: [{ id: 1111, storeNumber: 2222, chainName: 'Murphy USA',
             address: '1 Test Dr', city: 'Testville', state: 'AR', zip: '72000', latitude: lat - 0.02, longitude: lng + 0.015, closeDate: '',
@@ -34,6 +34,9 @@
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },
       saveDownload: function (name, mime, t) { window.__saved = { name: name, text: t }; return 'Downloads/FuelPlus/' + name; },
       appVersion: function () { return 'test'; },
+      kvGet: function (ns, k) { var m = window.__kv = window.__kv || {}; return m[ns + '|' + k] || ''; },
+      kvPut: function (ns, k, v) { var m = window.__kv = window.__kv || {}; m[ns + '|' + k] = v; },
+      kvClear: function (ns) { var m = window.__kv = window.__kv || {}, n = 0; Object.keys(m).forEach(function (x) { if (x.indexOf(ns + '|') === 0) { delete m[x]; n++; } }); return n; },
       routeCallsThisMonth: function () { return 0; },
       placesFind: function (req, key, q, lat, lng, bias, radius) { setTimeout(function () { var m = window.__mocks && window.__mocks.find; window.onNativeResult(req, m ? { body: JSON.stringify(m(q, lat, lng, radius)) } : { error: 'No find mock' }); }, 50); },
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
@@ -446,7 +449,9 @@
     h += '</div>';
     h += '<div class="card"><h3>Trip planner</h3>' +
       '<div class="field"><div class="lbl">Show cities when a route is imported<small>Free lookup from OpenStreetMap using each stop\'s spot (sends those coordinates to OpenStreetMap). No Google lookups.</small></div>' + sw('osmPreview', S.osmPreview !== false) + '</div>' +
-      '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div></div>';
+      '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
+      '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
+      '<div class="field"><div class="lbl">Saved trip searches<small>Stations, speed limits and routes the app has saved.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div></div>';
     h += '<div class="card"><h3>Debugging</h3>' +
       '<div class="field"><div class="lbl">Debug logging<small>Keeps a log on this phone you can share for troubleshooting. Your API key is never written to it.</small></div>' + sw('debug', !!S.debug) + '</div>' +
       '<div class="field"><div class="lbl">How much detail</div><select id="logLevel">' +
@@ -464,6 +469,7 @@
     $('sDone').onclick = function () { closeSettings(true); };
     $('sLogView').onclick = function () { showLog(); };
     $('sLogShare').onclick = function () { shareLog(); };
+    $('kvClear').onclick = function () { var n = 0; ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'mapsopts', 'find'].forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
     $('sLogClear').onclick = function () { if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); };
     pg.querySelectorAll('[data-verify]').forEach(function (bt) {
       bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };
@@ -569,7 +575,15 @@
   if (!S.apiKey && !S.setupDone) openSettings(true);
   N.locate();
   window.addEventListener('resize', sizeSheet);
-  window.__app = { S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  /** Saved answers (searches, speed limits, routes) in the app's private storage: {t: saved ms, v: value}. */
+  var KV = {
+    get: function (ns, key, maxAgeMs) {
+      try { if (!N.kvGet) return null; var s = N.kvGet(ns, key); if (!s) return null; var o = JSON.parse(s); return maxAgeMs && Date.now() - o.t > maxAgeMs ? null : o; } catch (e) { return null; }
+    },
+    put: function (ns, key, v) { try { if (N.kvPut) N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v })); } catch (e) { } },
+    clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
+  };
+  window.__app = { KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render };
 })();

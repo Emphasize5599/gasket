@@ -22,6 +22,43 @@ async function (reqId, args) {
     });
     return out;
   }
+  const hav = (a, b) => { const R = 3958.8, r = Math.PI / 180, dl = (b[0] - a[0]) * r, dg = (b[1] - a[1]) * r;
+    const h = Math.sin(dl / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  // The page's own directions answer (already downloaded, so read from the browser cache) has every route option with
+  // its turn-by-turn points in order. Hand back ~40 of them per route so the app can ask Google's Routes API for
+  // exactly that route (pass-through points), instead of guessing.
+  async function paths() {
+    try {
+      const e = performance.getEntriesByType('resource').filter((x) => /\/maps\/preview\/directions\?/.test(x.name)).pop();
+      if (!e) return [];
+      const t = await (await fetch(e.name, { credentials: 'include', cache: 'force-cache' })).text();
+      const d = JSON.parse(t.slice(t.indexOf('\n') + 1));
+      const list = (d && d[0] && d[0][1]) || [];
+      return list.map((r) => {
+        const head = r[0] || [], pts = [];
+        (function walk(x) {
+          if (!Array.isArray(x)) return;
+          if (x.length === 4 && x[0] === null && x[1] === null && typeof x[2] === 'number' && typeof x[3] === 'number') { pts.push([x[2], x[3]]); return; }
+          x.forEach(walk);
+        })(r[1]);
+        const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + hav(pts[i - 1], pts[i]));
+        const L = cum[cum.length - 1] || 1, thin = [];
+        for (let k = 0, j = 0; k <= 40; k++) { const want = L * k / 40; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
+        return { via: String(head[1] || ''), miles: head[2] ? head[2][0] / 1609.344 : null, minutes: head[3] ? head[3][0] / 60 : null,
+          pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) };
+      }).filter((x) => x.pts.length > 5);
+    } catch (e) { return []; }
+  }
+  /** DOM list (Maps' order and names as shown) + the points from the data, matched by length. */
+  async function withPaths(r) {
+    const ps = await paths();
+    if (!r.length) return ps;
+    r.forEach((x) => {
+      let best = null; ps.forEach((p) => { const dd = Math.abs(p.miles - x.miles); if (dd < x.miles * 0.01 && (!best || dd < Math.abs(best.miles - x.miles))) best = p; });
+      if (best) { x.pts = best.pts; if (!x.minutes) x.minutes = best.minutes; }
+    });
+    return r;
+  }
   try {
     let last = '', stable = 0;
     for (let i = 0; i < 40; i++) {                    // up to ~20 s
@@ -35,11 +72,11 @@ async function (reqId, args) {
       const settled = stable >= 3 && i > 6;
       // the route list can take several seconds after the address bar settles (long trips especially): wait for it
       const done = /\/maps\/dir\//.test(href) && (coordsNow >= places || settled) && (r.length > 0 || i > 36);
-      if (done && (stable >= 1 || settled)) { if (r.length) await pause(800); return send({ href, title: document.title, routes: r.length ? routes() : r }); }
+      if (done && (stable >= 1 || settled)) { if (r.length) await pause(800); return send({ href, title: document.title, routes: await withPaths(r.length ? routes() : r) }); }
       last = href;
       await pause(500);
     }
-    send({ href: location.href, title: document.title, routes: routes(), partial: true });
+    send({ href: location.href, title: document.title, routes: await withPaths(routes()), partial: true });
   } catch (e) {
     send({ error: String(e && e.message || e) });
   }

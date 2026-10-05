@@ -27,16 +27,20 @@ async function (reqId, args) {
   try {
     const points = args.points ? args.points.slice(0, 40) : [{ lat: args.lat, lng: args.lng }];
     const seen = {}, stores = [];
-    for (let pi = 0; pi < points.length; pi++) {
-      const p = points[pi];
-      if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, pi, points.length);
+    // a few lookups at a time, like the map does when you pan around
+    let done = 0;
+    const one = async (p) => {
       (await near(p.lat, p.lng)).forEach((s) => {
         if (seen[s.id]) return;
         seen[s.id] = 1;
         stores.push({ id: s.id, storeNumber: s.storeNumber, chainName: s.chainName, address: s.address, city: s.city, state: s.state, zip: s.zip,
-          latitude: s.latitude, longitude: s.longitude, closeDate: s.closeDate, gasPrices: s.gasPrices || [] });
+          latitude: s.latitude, longitude: s.longitude, closeDate: s.closeDate, gasPrices: s.gasPrices || [], at: p.key });
       });
-      if (points.length > 1) await pause(250);
+      done++; if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, done, points.length);
+    };
+    for (let i = 0; i < points.length; i += 4) {
+      await Promise.all(points.slice(i, i + 4).map(one));
+      if (i + 4 < points.length) await pause(150);
     }
     send({ stores: stores });
   } catch (e) {

@@ -103,7 +103,8 @@
       '<div class="lead small" id="tArriveHelp"></div>' +
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up station within (mi of destination)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
-      '<label class="nf"><span>Drive back too?<small>same roads, today\'s prices</small></span><span class="chips one"><button id="tRound" class="' + (t.roundTrip ? 'on' : '') + '">Estimate round trip</button></span></label></div>' +
+      '<span></span></div>' +
+      '<div class="field"><div class="lbl">Estimate the round trip<small>the drive back on the same roads, at today\'s prices</small></div>' + sw('tRound', t.roundTrip) + '</div>' +
       '<div class="sub-h">Other routes</div>' +
       '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
@@ -131,7 +132,6 @@
       Array.prototype.forEach.call($('tArrive').children, function (x) { x.classList.toggle('on', x === b); });
       arriveHelp();
     };
-    $('tRound').onclick = function () { this.classList.toggle('on'); };
     $('tAltCmp').onchange = function () { $('tAltBox').classList.toggle('hidden', !this.checked); collect(); renderInfo(); };
     $('tAltSave').addEventListener('change', function () { collect(); });
     arriveHelp();
@@ -162,7 +162,7 @@
     t.fillUp = $('tMode').querySelector('.on').dataset.m === 'fill';
     t.arrive = $('tArrive').querySelector('.on').dataset.a;
     t.topUpMi = Math.max(0, Math.round((parseFloat($('tTopMi').value) || 0) * 10) / 10);
-    t.roundTrip = $('tRound').classList.contains('on');
+    t.roundTrip = $('tRound').checked;
     t.altCompare = $('tAltCmp').checked; t.altMinSave = Math.max(0, parseFloat($('tAltSave').value) || 0);
     t.tankPrice = $('tTankPrice').value.trim();
     t.milesLeft = $('tMiles').value; t.bufferMi = Math.max(0, parseFloat($('tBuffer').value) || 0);
@@ -177,19 +177,32 @@
   }
 
   // ---------- reading the link ----------
-  async function readLink() {
+  function readLink() {
     var text = $('tLink').value.trim();
-    if (!text) { route = null; $('tParsed').innerHTML = ''; return null; }
+    if (!text) { parsing = null; route = null; $('tParsed').innerHTML = ''; return Promise.resolve(null); }
+    if (parsing && parsing.text === text) return parsing.p;
+    var job = parsing = { text: text, frac: 0 };
+    parseBar(0.03);
+    job.p = readLink0(text, job).then(function (r) {
+      if (parsing === job) { parsing = null; if (r) { route = r; renderStops(); } }
+      return parsing === null || parsing === job ? r : null;
+    }, function (e) {
+      if (parsing === job) { parsing = null; $('tParsed').innerHTML = '<div class="msg err">' + esc(e.message || String(e)) + '</div>'; }
+      LG.error('link', e.message || String(e)); return null;
+    });
+    return job.p;
+  }
+  async function readLink0(text, job) {
     var shared = importTrip(text);
-    if (shared) { route = shared; LG.info('link', 'Imported a shared Fuel+ trip', { stops: shared.stops.length }); renderStops(); previewCities(route); return route; }
+    if (shared) { LG.info('link', 'Imported a shared Fuel+ trip', { stops: shared.stops.length }); previewCities(shared); return shared; }
     dbg = { linkText: text.slice(0, 2000), at: new Date().toISOString() };
     var url = T.extractUrl(text);
     LG.info('link', 'Reading link', url);
-    if (!url) { $('tParsed').innerHTML = '<div class="msg err">That doesn\'t look like a link.</div>'; return null; }
+    if (!url) throw new Error('That doesn\'t look like a link.');
     if (T.isShortLink(url)) {
-      $('tParsed').innerHTML = '<div class="msg">Opening the link…</div>';
+      parseBar(0.06);
       var r = await call('resolveLink', url);
-      if (r.error || !r.url) { LG.error('link', 'Short link failed', r.error); dbg.linkError = r.error; $('tParsed').innerHTML = '<div class="msg err">' + esc(r.error || 'Couldn\'t open the link.') + '</div>'; return null; }
+      if (r.error || !r.url) { LG.error('link', 'Short link failed', r.error); dbg.linkError = r.error; throw new Error(r.error || 'Couldn\'t open the link.'); }
       url = r.url;
       LG.debug('link', 'Short link opened to', url);
     }
@@ -198,12 +211,14 @@
     var parsed = T.parseMapsUrl(url);
     dbg.parsed = parsed && JSON.parse(JSON.stringify(parsed));
     LG.debug('link', 'Parsed link', parsed);
-    if (!parsed) { $('tParsed').innerHTML = '<div class="msg err">That link isn\'t a Google Maps directions link. Open directions first, then share.</div>'; return null; }
+    if (!parsed) throw new Error('That link isn\'t a Google Maps directions link. Open directions first, then share.');
+    parseBar(0.15);
     // Phone share links name stops loosely ("100 Main St") and identify them only by Google's internal place ID.
     // Let Google Maps itself (in a hidden page) turn them into full addresses + exact coordinates and list the routes.
     if (parsed.stops.some(function (st) { return !st.current && st.lat == null; }) || parsed.routeIndex != null) {
-      $('tParsed').innerHTML = '<div class="msg">Opening the link in Google Maps to get the exact stops…</div>';
+      var stopCreep = creep(0.15, 0.5, 8);
       var g = await openInGoogleMaps(url);
+      stopCreep();
       dbg.googleMapsPage = g;
       LG.debug('link', 'Hidden Google Maps page answered', g);
       if (g && g.href) {
@@ -224,13 +239,21 @@
         parsed.note = 'Couldn\'t open the link in Google Maps' + (g && g.error ? ' (' + g.error + ')' : '') + ', so the addresses are checked by name instead.';
       }
     }
-    route = parsed;
     parsed.mapsUrl = mapsUrl;
-    previewCities(parsed);
     if (parsed.avoidDetected) {
       Array.prototype.forEach.call($('tAvoid').children, function (b) { b.classList.toggle('on', !!parsed.avoid[b.dataset.av]); });
     }
-    renderStops();
+    // now, at the same time: full addresses for every stop (Google) and the route options Google Maps shows
+    parseBar(0.5);
+    var addrF = 0, scanF = 0, both = function () { parseBar(0.5 + 0.5 * (addrF * 0.4 + scanF * 0.6)); };
+    var scanCreep = setInterval(function () { scanF = Math.min(0.9, scanF + 0.04); both(); }, 400);
+    await Promise.all([
+      resolveStops(parsed, function (f) { addrF = f; both(); }, true).catch(function (e) { LG.warn('address', String(e)); }),
+      mapsOptions(parsed).catch(function (e) { LG.warn('route', 'Route options scan failed', String(e)); })
+    ]);
+    clearInterval(scanCreep);
+    parseBar(1);
+    previewCities(parsed);
     return parsed;
   }
 
@@ -344,13 +367,29 @@
     if (!/^https:\/\/www\.google\.com\/maps\/dir\//.test(u)) return null;
     return site('gmaps', { url: u }, 40000);
   }
+  var parsing = null;      // {text, p, frac}
+  function parseBar(f) {
+    var el = $('tParsed'); if (!el || !parsing) return;
+    parsing.frac = Math.max(parsing.frac || 0, Math.min(1, f));
+    var pct = Math.round(parsing.frac * 100), bar = el.querySelector('.parse-load i');
+    if (bar) { bar.style.width = pct + '%'; return; }
+    el.innerHTML = '<div class="parse-load"><span>Loading…</span><span class="pbar"><i style="width:' + pct + '%"></i></span></div>';
+  }
+  /** Creep the bar toward `to` while waiting on something that reports no progress (the hidden Google Maps page). */
+  function creep(from, to, sec) {
+    var t0 = Date.now(), id = setInterval(function () {
+      if (!parsing) return clearInterval(id);
+      var x = (Date.now() - t0) / 1000 / sec; parseBar(from + (to - from) * (1 - Math.exp(-3 * x)));
+    }, 250);
+    return function () { clearInterval(id); };
+  }
   function stopLine(s) {
     if (s.current) return 'Your location';
     if (!T.fullAddress(s.address) && s.osmPlace) return (s.address || s.label) + ', ' + s.osmPlace;
     return s.address || s.label;
   }
   function renderStops() {
-    var el = $('tParsed'); if (!el) return;
+    var el = $('tParsed'); if (!el || parsing) return;
     if (!route) { el.innerHTML = ''; return; }
     var r = route;
     var h = '<ol class="stops">' + r.stops.map(function (s, i) {
@@ -368,7 +407,11 @@
     if (r.mode && r.mode !== 'drive') h += '<div class="msg err">This link is for ' + esc(r.mode) + ' directions; fuel stops will use driving directions.</div>';
     if (r.avoidDetected) h += '<div class="msg">Route options from your link: ' + (['tolls', 'highways', 'ferries'].filter(function (k) { return r.avoid[k]; }).map(function (k) { return 'avoid ' + k; }).join(', ') || 'none') + '.</div>';
     var picked = pickedRoute(r);
-    if (picked) h += '<div class="msg">Route you picked in Google Maps: <b>via ' + esc(picked.via) + '</b>' + (picked.miles ? ' · ' + picked.miles + ' mi' : '') + (picked.minutes ? ' · ' + fmtDur(picked.minutes * 60) : '') + '</div>';
+    if (r.mapsRoutes && r.mapsRoutes.length > 1) {
+      h += '<div class="msg maps-opts">Google Maps shows ' + r.mapsRoutes.length + ' routes' + (picked && r.routeIndex != null ? ' — you picked <b>via ' + esc(picked.via) + '</b>' : '') + ':<ol>' + r.mapsRoutes.map(function (m) {
+        return '<li' + (m === picked && r.routeIndex != null ? ' class="on"' : '') + '>via ' + esc(m.via) + (m.miles ? ' · ' + Math.round(m.miles).toLocaleString() + ' mi' : '') + (m.minutes ? ' · ' + fmtDur(m.minutes * 60) : '') + '</li>';
+      }).join('') + '</ol>Pick one after <b>Get route</b>.</div>';
+    } else if (picked) h += '<div class="msg">Route you picked in Google Maps: <b>via ' + esc(picked.via) + '</b>' + (picked.miles ? ' · ' + Math.round(picked.miles) + ' mi' : '') + (picked.minutes ? ' · ' + fmtDur(picked.minutes * 60) : '') + '</div>';
     else if (r.routeIndex) h += '<div class="msg">Your link says you picked route option ' + (r.routeIndex + 1) + ' in Google Maps.</div>';
     if (r.note) h += '<div class="msg err">' + esc(r.note) + '</div>';
     el.innerHTML = h;
@@ -416,9 +459,17 @@
   }
   /** A stop whose exact spot we know but whose name is just a street ("500 Woodlane St"): ask Google for the place
    *  at that spot (tight 300 m circle) to get its full address. The link's coordinates are always kept. */
+  /** Google place lookup, saved for a month (an address doesn't move). */
+  async function findPlace(q, lat, lng, bias, radius) {
+    var key = [q, (+lat).toFixed(4), (+lng).toFixed(4), bias ? 1 : 0, radius].join('|'), o = A.KV.get('find', key, 30 * 24 * 3600e3);
+    if (o) return o.v;
+    var res = await call('placesFind', S.apiKey, q, lat, lng, bias, radius);
+    if (!res.error) A.KV.put('find', key, res);
+    return res;
+  }
   async function completeAddress(st) {
     try {
-      var res = await call('placesFind', S.apiKey, st.address, st.lat, st.lng, true, 300);
+      var res = await findPlace(st.address, st.lat, st.lng, true, 300);
       if (res.error) return;
       var list = (JSON.parse(res.body).places || []).filter(function (c) { return c.location && c.formattedAddress; });
       var best = null, bestD = 0.25;
@@ -434,29 +485,32 @@
     } catch (e) { /* keep the exact spot; the street name stays as the label */ }
   }
   /** Look up every stop that has only text (typed, or a link without exact coordinates). Returns false if you need to pick. */
-  async function resolveStops(r, onProg) {
-    var me = A.me(), near = me ? { lat: me.lat, lng: me.lng } : null, need = false;
-    for (var i = 0; i < r.stops.length; i++) {
-      var st = r.stops[i];
-      if (onProg) onProg(i / r.stops.length);
-      if (st.current) continue;
-      if (st.lat != null) {
-        near = { lat: st.lat, lng: st.lng };
-        if (!st.placeId && !T.fullAddress(st.address) && st.address) await completeAddress(st);
-        continue;
-      }
-      if (st.choices) { need = true; continue; }
-      var res = await call('placesFind', S.apiKey, st.address, near ? near.lat : 0, near ? near.lng : 0, !!near, 50000);
-      if (res.error) { st.err = res.error; need = true; continue; }
+  async function resolveStops(r, onProg, quiet) {
+    var me = A.me(), need = false, done = 0, n = r.stops.length;
+    var tick = function () { done++; if (onProg) onProg(done / n); };
+    // stops with an exact spot: fill in the full address, all at once
+    await Promise.all(r.stops.map(function (st) {
+      if (st.current || st.lat == null) return Promise.resolve();
+      return (!st.placeId && !T.fullAddress(st.address) && st.address && S.apiKey ? completeAddress(st) : Promise.resolve()).then(tick);
+    }));
+    // text-only stops: look each one up near the stop before it (also all at once)
+    await Promise.all(r.stops.map(async function (st, i) {
+      if (st.current || st.lat != null) return;
+      if (st.choices) { need = true; return; }
+      var prev = null;
+      for (var k = i - 1; k >= 0 && !prev; k--) if (r.stops[k].lat != null) prev = { lat: r.stops[k].lat, lng: r.stops[k].lng };
+      var near = prev || (me ? { lat: me.lat, lng: me.lng } : null);
+      var res = await findPlace(st.address, near ? near.lat : 0, near ? near.lng : 0, !!near, 50000);
+      tick();
+      if (res.error) { st.err = res.error; need = true; return; }
       var list = (JSON.parse(res.body).places || []).filter(function (c) { return c.location && c.formattedAddress; });
-      if (!list.length) { st.err = 'Google couldn\'t find this address. Add the city and state.'; need = true; continue; }
-      if (clearMatch(st.address, list)) { setPlace(st, list[0]); near = { lat: st.lat, lng: st.lng }; LG.debug('address', 'Found ' + st.address); }
+      if (!list.length) { st.err = 'Google couldn\'t find this address. Add the city and state.'; need = true; return; }
+      if (clearMatch(st.address, list)) { setPlace(st, list[0]); LG.debug('address', 'Found ' + st.address); }
       else { st.choices = list.slice(0, 5); need = true; LG.info('address', 'Several matches for “' + st.address + '”', list.map(function (c) { return c.formattedAddress; })); }
-    }
-    renderStops();
+    }));
+    if (!quiet) renderStops();
     return !need;
   }
-
 
   function typedRoute() {
     var from = $('tFrom').value.trim(), to = $('tTo').value.trim();
@@ -488,7 +542,8 @@
     busy = true; prog(0.03, 'Reading the link');
     LG.info('route', 'Get route pressed', { miles: S.trip.milesLeft, buffer: S.trip.bufferMi, car: Garage.car() });
     try {
-      var r = route || (S.trip.link ? await readLink() : null) || typedRoute();
+      if (parsing) prog(0.05, 'Reading the link');
+      var r = (parsing ? await parsing.p : route) || (S.trip.link && !route ? await readLink() : null) || route || typedRoute();
       if (!r) throw new Error('Paste a Google Maps directions link, or type where you\'re going.');
       route = r;
       prog(0.15, 'Checking addresses');
@@ -510,7 +565,7 @@
       if (!body.intermediates.length) body.computeAlternativeRoutes = true;   // so you can pick the same one as in Google Maps
       dbg.routeBody = body;
       LG.debug('route', 'Routes request', body);
-      var res = await call('computeRoute', S.apiKey, JSON.stringify(body));
+      var res = await routesCall(body);
       if (res.error) { LG.error('route', 'Routes failed', res.error); throw new Error(res.error); }
       prog(0.9, 'Reading the route');
       LG.trace('route', 'Routes answer', res.body);
@@ -573,57 +628,98 @@
     return n ? near / n : 0;
   }
   async function mapsOptions(r) {
-    if (r.mapsRoutes && r.mapsRoutes.length) return r.mapsRoutes;
-    if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current; })) return null;
-    var place = function (s) { return s.lat != null ? s.lat.toFixed(6) + ',' + s.lng.toFixed(6) : (s.address || s.label); };
-    var url = r.mapsUrl || ('https://www.google.com/maps/dir/' + encodeURIComponent(place(r.stops[0])) + '/' + encodeURIComponent(place(r.stops[1])) + '/');
-    prog(0.7, 'Checking the routes Google Maps shows');
-    var g = await openInGoogleMaps(url);
-    dbg.mapsOptionsPage = g;
-    LG.debug('route', 'Google Maps route options', g && (g.routes || g.error));
+    if (r.mapsRoutes && r.mapsRoutes.length && r.mapsRoutes[0].pts) return r.mapsRoutes;
+    if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current; })) return r.mapsRoutes || null;
+    // exact spots when known: Google Maps on a desktop page sometimes "can't find" a street-only name from a phone link
+    var place = function (s) { return s.lat != null ? s.lat.toFixed(7) + ',' + s.lng.toFixed(7) : (s.address || s.label); };
+    var url = 'https://www.google.com/maps/dir/' + encodeURIComponent(place(r.stops[0])) + '/' + encodeURIComponent(place(r.stops[1])) + '/';
+    var o = A.KV.get('mapsopts', url, 2 * 3600e3), g;
+    if (o) g = o.v;
+    else {
+      g = await openInGoogleMaps(url);
+      if (g && g.routes && g.routes.length) A.KV.put('mapsopts', url, g);
+    }
+    dbg.mapsOptionsPage = g && { href: g.href, title: g.title, error: g.error, routes: (g.routes || []).map(function (x) { return { via: x.via, miles: x.miles, minutes: x.minutes, pts: x.pts ? x.pts.length : 0 }; }) };
+    LG.info('route', 'Google Maps route options', dbg.mapsOptionsPage);
     if (g && g.routes && g.routes.length) r.mapsRoutes = g.routes;
     return r.mapsRoutes || null;
+  }
+  /** Share of Maps' turn points that lie within 1.5 miles of a Routes API route (1 = the same route). */
+  function onRoute(a, pts) {
+    var pa = T.decodePolyline(a.polyline.encodedPolyline), step = Math.max(1, Math.floor(pa.length / 1500)), near = 0;
+    pts.forEach(function (p) {
+      var q = { lat: p[0], lng: p[1] };
+      for (var k = 0; k < pa.length; k += step) if (T.hav(q, pa[k]) < 1.5) { near++; break; }
+    });
+    return pts.length ? near / pts.length : 0;
   }
   async function allMapsRoutes(r, body) {
     var mr = await mapsOptions(r);
     if (!mr || !mr.length) return;
-    var missing = mr.filter(function (m) { return !alts.some(function (a) { return sameAsMaps(a, m); }); });
-    dbg.mapsMissing = missing;
-    if (!missing.length) { orderLikeMaps(mr); return; }
-    LG.info('route', 'Google Maps shows ' + mr.length + ' routes; the Routes API returned ' + alts.length + '. Looking for: ' + missing.map(function (m) { return m.via; }).join(' / '));
-    var base = T.buildRoute(alts[0], carModel()), L = base.totalMi, tries = 0;
-    var plan = [[0.5, 60], [0.5, -60], [0.5, 130], [0.5, -130], [0.35, 90], [0.35, -90], [0.65, 90], [0.65, -90], [0.5, 220], [0.5, -220]];
-    for (var mi = 0; mi < missing.length && mi < 2; mi++) {
-      var m = missing[mi], found = null;
-      for (var t = 0; t < plan.length && !found; t++) {
-        var f = plan[t][0], off = plan[t][1], d = f * L;
-        var p = base.pointAt(d), a = base.pointAt(Math.max(0, d - 15)), b = base.pointAt(Math.min(L, d + 15));
-        var dx = (b.lng - a.lng) * Math.cos(p.lat * Math.PI / 180), dy = b.lat - a.lat, len = Math.sqrt(dx * dx + dy * dy) || 1;
-        var nx = -dy / len, ny = dx / len;                                   // left of the direction of travel
-        var via = { latitude: p.lat + ny * off / 69, longitude: p.lng + nx * off / (69 * Math.cos(p.lat * Math.PI / 180)) };
-        prog(0.72 + 0.15 * (t + 1) / plan.length, 'Finding the route via ' + m.via);
-        var b2 = Object.assign({}, body, { intermediates: [{ via: true, location: { latLng: via } }] });
-        delete b2.computeAlternativeRoutes;
-        tries++;
-        var res = await call('computeRoute', S.apiKey, JSON.stringify(b2));
-        if (res.error) { LG.warn('route', 'Pass-through route failed', res.error); continue; }
-        var cand = (JSON.parse(res.body).routes || [])[0];
-        if (!cand) continue;
-        var dup = alts.some(function (x) { return overlap(x, cand) > 0.9; });
-        LG.debug('route', 'Pass-through try ' + tries, { via: via, miles: Math.round(altMiles(cand)), minutes: Math.round(altMinutes(cand)), description: cand.description, dup: dup, target: m });
-        if (!dup && sameAsMaps(cand, m)) found = cand;
-      }
-      if (found) { found.description = found.description || m.via.replace(/^via\s+/i, ''); found.fromMaps = true; alts.push(found); }
-      LG.info('route', found ? 'Found Google Maps\' route via ' + m.via + ' (' + tries + ' route lookups)' : 'Couldn\'t reproduce the route via ' + m.via);
+    var same = function (a, m) { return m.pts && m.pts.length > 5 ? onRoute(a, m.pts) >= 0.9 : sameAsMaps(a, m); };
+    var missing = mr.filter(function (m) { return !alts.some(function (a) { return same(a, m); }); });
+    dbg.mapsMissing = missing.map(function (m) { return m.via; });
+    if (missing.length) {
+      LG.info('route', 'Google Maps shows ' + mr.length + ' routes; the Routes API returned ' + alts.length + '. Rebuilding: ' + missing.map(function (m) { return m.via; }).join(' / '));
+      prog(0.8, 'Getting the other Google Maps routes');
+      var found = await Promise.all(missing.map(async function (m) {
+        if (m.pts && m.pts.length > 5) {
+          // pass through 8 of Maps' own turn points, spread along the route -> Google returns that same route
+          var pts = m.pts.slice(2, -2), via = [];
+          for (var k = 1; k <= 8; k++) { var p = pts[Math.round(k * (pts.length - 1) / 9)]; if (p) via.push({ via: true, location: { latLng: { latitude: p[0], longitude: p[1] } } }); }
+          var b2 = Object.assign({}, body, { intermediates: via }); delete b2.computeAlternativeRoutes;
+          var res = await routesCall(b2);
+          var cand = !res.error && (JSON.parse(res.body).routes || [])[0];
+          var ok = cand && onRoute(cand, m.pts) >= 0.85 && (!m.miles || Math.abs(altMiles(cand) - m.miles) / m.miles <= 0.04);
+          LG.debug('route', 'Rebuilt via ' + m.via, { ok: !!ok, error: res.error, miles: cand && Math.round(altMiles(cand)), mapsMiles: m.miles, onRoute: cand && Math.round(onRoute(cand, m.pts) * 100) / 100 });
+          if (ok) return { m: m, a: cand };
+        }
+        var c2 = await searchVia(m, body);
+        return c2 ? { m: m, a: c2 } : null;
+      }));
+      found.forEach(function (f) { if (f) { f.a.description = f.m.via.replace(/^via\s+/i, ''); f.a.fromMaps = true; alts.push(f.a); } });
+      LG.info('route', 'Rebuilt ' + found.filter(Boolean).length + ' of ' + missing.length + ' missing Google Maps route(s)');
     }
-    dbg.passThroughLookups = tries;
-    orderLikeMaps(mr);
+    orderLikeMaps(mr, same);
+  }
+  /** Fallback when Maps' turn points aren't available: nudge a pass-through point to either side of the main route. */
+  async function searchVia(m, body) {
+    var base = T.buildRoute(alts[0], carModel()), L = base.totalMi, tries = 0, found = null;
+    var plan = [[0.5, 60], [0.5, -60], [0.5, 130], [0.5, -130], [0.35, 90], [0.35, -90], [0.65, 90], [0.65, -90], [0.5, 220], [0.5, -220]];
+    for (var t = 0; t < plan.length && !found; t++) {
+      var f = plan[t][0], off = plan[t][1], d = f * L;
+      var p = base.pointAt(d), a = base.pointAt(Math.max(0, d - 15)), b = base.pointAt(Math.min(L, d + 15));
+      var dx = (b.lng - a.lng) * Math.cos(p.lat * Math.PI / 180), dy = b.lat - a.lat, len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var nx = -dy / len, ny = dx / len;
+      var via = { latitude: p.lat + ny * off / 69, longitude: p.lng + nx * off / (69 * Math.cos(p.lat * Math.PI / 180)) };
+      var b2 = Object.assign({}, body, { intermediates: [{ via: true, location: { latLng: via } }] });
+      delete b2.computeAlternativeRoutes;
+      tries++;
+      var res = await routesCall(b2);
+      if (res.error) { LG.warn('route', 'Pass-through route failed', res.error); continue; }
+      var cand = (JSON.parse(res.body).routes || [])[0];
+      if (!cand) continue;
+      var dup = alts.some(function (x) { return overlap(x, cand) > 0.9; });
+      LG.debug('route', 'Pass-through try ' + tries, { miles: Math.round(altMiles(cand)), dup: dup, target: m.via });
+      if (!dup && sameAsMaps(cand, m)) found = cand;
+    }
+    dbg.passThroughLookups = (dbg.passThroughLookups || 0) + tries;
+    return found;
+  }
+  /** Routes API call, saved for a day (same request -> same route). */
+  async function routesCall(body) {
+    var key = JSON.stringify(body), o = A.KV.get('routes', key, 24 * 3600e3);
+    if (o) return o.v;
+    var res = await call('computeRoute', S.apiKey, key);
+    if (!res.error) A.KV.put('routes', key, res);
+    return res;
   }
   /** Put the options in the same order as Google Maps (so “route option 2” means the same thing). */
-  function orderLikeMaps(mr) {
+  function orderLikeMaps(mr, same) {
+    same = same || sameAsMaps;
     var left = alts.slice(), out = [];
     mr.forEach(function (m) {
-      var k = -1; left.forEach(function (a, i) { if (k < 0 && sameAsMaps(a, m)) k = i; });
+      var k = -1; left.forEach(function (a, i) { if (k < 0 && same(a, m)) k = i; });
       if (k >= 0) { var a = left.splice(k, 1)[0]; a.description = m.via.replace(/^via\s+/i, ''); out.push(a); }   // name it the way Maps does
     });
     alts = out.concat(left);
@@ -676,102 +772,150 @@
 
   // ---------- step 2: stations along the route ----------
   /**
-   * Stations along one route with your price at each (Google along the route + Walmart's and Murphy's own sites).
-   * pg(frac 0..1, label) reports progress; dbgS collects what happened for the troubleshooting report.
+   * Stations along one or more routes with your price at each — everything at once: Google's along-route lookups
+   * (run in parallel natively), Murphy USA and Walmart's own sites (a few requests at a time), all started together.
+   * Answers already found for the same stretch are reused (saved searches) unless force, or older than staleHours.
+   * pg(frac 0..1, label). Returns { per: [{cands, notes, unpriced, stale, grade}] per model, cachedAgeMs }.
    */
-  async function gather(model, pg, dbgS) {
-    var notes = [], stations = [], official = [];
-    // overall progress = weighted parts that run at the same time
+  async function gatherAll(models, pg, dbgS, force) {
+    var KV = A.KV, notes = [], official = [], perModel = models.map(function () { return []; });
+    var maxAge = force || S.alwaysRefresh ? 0 : (Number(S.staleHours) || 24) * 3600e3, oldest = 0, saved = 0;
+    var use = function (o) { if (!o) return null; oldest = Math.max(oldest, Date.now() - o.t); saved++; return o.v; };
+    var getKV = function (ns, key, age) { return age ? KV.get(ns, key, age) : null; };
     var part = { google: 0, murphy: 0, walmart: 0 }, weight = { google: 0, murphy: 0, walmart: 0 }, label = 'Finding stations';
     var tick = function () {
       var tw = weight.google + weight.murphy + weight.walmart;
-      var f = tw ? (part.google * weight.google + part.murphy * weight.murphy + part.walmart * weight.walmart) / tw : 1;
-      pg(f, label);
+      pg(tw ? (part.google * weight.google + part.murphy * weight.murphy + part.walmart * weight.walmart) / tw : 1, label);
     };
-    var progress = function (m) { label = m; tick(); };
     var dbgSearch = dbgS; dbgSearch.started = new Date().toISOString();
-    tick();
     var maxOff = 3;
+    var nearAny = function (lat, lng) { return models.some(function (m) { return T.project(m, { lat: lat, lng: lng }).offset <= maxOff; }); };
+    var ptsUnion = function (gap) {
+      var seen = {}, out = [];
+      models.forEach(function (m) { T.samplePoints(m, gap).forEach(function (p) { var k = p.lat.toFixed(2) + ',' + p.lng.toFixed(2); if (!seen[k]) { seen[k] = 1; out.push(p); } }); });
+      return out;
+    };
     try {
+      // --- Google, along each route ---
       var jobs = [];
       if (S.apiKey) {
         var gb = googleBrands();
-        T.chunks(model, 125).forEach(function (ch, ci) {
-          gb.forEach(function (b) { jobs.push({ q: P.BRANDS[b].query, polyline: ch.polyline, lat: ch.start.lat, lng: ch.start.lng, chunk: ci, fromMi: ch.fromMi, toMi: ch.toMi }); });
-        });
-      }
-      var tasks = [];
-      if (jobs.length) weight.google = 0.6;
-      if (A.siteOn('murphy')) weight.murphy = 0.15;
-      if (A.siteOn('walmart')) weight.walmart = 0.25;
-      dbgSearch.googleLookups = jobs.length;
-      LG.info('stations', 'Searching along the route', { googleLookups: jobs.length, walmart: A.siteOn('walmart'), murphy: A.siteOn('murphy') });
-      if (jobs.length) tasks.push(callP(function (d, t) { part.google = t ? d / t : 0; tick(); }, 'routeSearch', S.apiKey, JSON.stringify(jobs), Number(S.monthlyCap) || 0).then(function (res) {
-        part.google = 1; tick();
-        dbgSearch.google = { results: (res.results || []).length, errors: res.errors, places: (res.results || []).reduce(function (a, x) { return a + (x.places || []).length; }, 0) };
-        LG.info('stations', 'Google along-route search done', dbgSearch.google);
-        (res.errors || []).forEach(function (e) { notes.push(e); LG.warn('stations', e); });
-        (res.results || []).forEach(function (r) {
-          var job = jobs[r.job] || {};
-          (r.places || []).forEach(function (pl, k) {
-            var st = P.normalize(pl); if (!st || !S.brands[st.brand]) return;
-            var sum = r.routingSummaries && r.routingSummaries[k];
-            if (sum && sum.legs && sum.legs.length >= 2 && job.toMi != null) {
-              // Google's road distance through the station minus the route's own distance for that piece = the detour.
-              // (Travel times come from two different Google services, so minutes are derived from miles instead.)
-              var mi = (sum.legs[0].distanceMeters + sum.legs[1].distanceMeters) / 1609.344 - (job.toMi - job.fromMi);
-              if (mi > -0.5 && mi < 30) { st.detourMi = Math.max(0, mi); st.detourExact = true; }
-            }
-            stations.push(st);
+        models.forEach(function (m, mi) {
+          T.chunks(m, 125).forEach(function (ch, ci) {
+            gb.forEach(function (b) { jobs.push({ q: P.BRANDS[b].query, polyline: ch.polyline, lat: ch.start.lat, lng: ch.start.lng, chunk: ci, fromMi: ch.fromMi, toMi: ch.toMi, m: mi }); });
           });
         });
-      }));
-      var pts40 = T.samplePoints(model, 40);
-      if (A.siteOn('murphy')) tasks.push(site('murphy', { points: T.samplePoints(model, 50), radiusMi: 30, max: 25 }, 90000, function (d, t) { part.murphy = t ? d / t : 0; tick(); }).then(function (res) {
-        part.murphy = 1; tick();
-        dbgSearch.murphy = { stores: (res.stores || []).length, error: res.error, blocked: res.blocked };
-        LG.info('stations', 'Murphy USA done', dbgSearch.murphy);
-        if (res.error) notes.push('Murphy USA: ' + (res.blocked ? 'wants an “are you human?” check (Settings → Site checks)' : res.error));
-        (res.stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s) official.push(s); });
-      }));
-      if (A.siteOn('walmart')) tasks.push(site('walmart', { mode: 'nodes', points: pts40, radiusMi: 25 }, 90000, function (d, t) { part.walmart = t ? 0.5 * d / t : 0; tick(); }).then(async function (res) {
-        part.walmart = 0.5; tick();
-        dbgSearch.walmartNodes = { nodes: (res.nodes || []).length, error: res.error, blocked: res.blocked };
-        LG.info('stations', 'Walmart stores along the route', dbgSearch.walmartNodes);
-        if (res.error || res.blocked) { part.walmart = 1; tick(); notes.push('Walmart: ' + (res.blocked ? 'wants a “Robot or human?” check (Settings → Site checks)' : res.error)); return; }
-        var near = (res.nodes || []).filter(function (n) {
-          return n.geoPoint && T.project(model, { lat: n.geoPoint.latitude, lng: n.geoPoint.longitude }).offset <= maxOff;
+      }
+      var todo = [], done = [];
+      jobs.forEach(function (j, i) {
+        var o = getKV('along', j.q + '|' + j.polyline, maxAge);
+        if (o) done.push({ job: i, results: use(o) }); else todo.push(i);
+      });
+      var takeGoogle = function (job, r) {
+        (r.places || []).forEach(function (pl, k) {
+          var st = P.normalize(pl); if (!st || !S.brands[st.brand]) return;
+          var sum = r.routingSummaries && r.routingSummaries[k];
+          if (sum && sum.legs && sum.legs.length >= 2 && job.toMi != null) {
+            // Google's road distance through the station minus the route's own distance for that piece = the detour.
+            // (Travel times come from two different Google services, so minutes are derived from miles instead.)
+            var mi = (sum.legs[0].distanceMeters + sum.legs[1].distanceMeters) / 1609.344 - (job.toMi - job.fromMi);
+            if (mi > -0.5 && mi < 30) { st.detourMi = Math.max(0, mi); st.detourExact = true; }
+          }
+          perModel[job.m].push(st);
         });
-        if (!near.length) { part.walmart = 1; tick(); return; }
-        progress('Reading Walmart prices');
-        var pr = await site('walmart', { mode: 'prices', nodes: near }, 90000, function (d, t) { part.walmart = 0.5 + (t ? 0.5 * d / t : 0); tick(); });
+      };
+      done.forEach(function (d) { d.results.forEach(function (r) { takeGoogle(jobs[d.job], r); }); });
+      var tasks = [];
+      if (todo.length) weight.google = 0.55;
+      if (A.siteOn('murphy')) weight.murphy = 0.15;
+      if (A.siteOn('walmart')) weight.walmart = 0.3;
+      dbgSearch.googleLookups = todo.length; dbgSearch.googleSaved = done.length;
+      LG.info('stations', 'Searching along ' + models.length + ' route(s)', { googleLookups: todo.length, saved: done.length, walmart: A.siteOn('walmart'), murphy: A.siteOn('murphy'), force: !maxAge });
+      if (todo.length) {
+        var send = todo.map(function (i) { return jobs[i]; });
+        tasks.push(callP(function (d, t) { part.google = t ? d / t : 0; tick(); }, 'routeSearch', S.apiKey, JSON.stringify(send), Number(S.monthlyCap) || 0).then(function (res) {
+          part.google = 1; tick();
+          dbgSearch.google = { results: (res.results || []).length, errors: res.errors, places: (res.results || []).reduce(function (a, x) { return a + (x.places || []).length; }, 0) };
+          LG.info('stations', 'Google along-route search done', dbgSearch.google);
+          (res.errors || []).forEach(function (e) { notes.push(e); LG.warn('stations', e); });
+          var byJob = {};
+          (res.results || []).forEach(function (r) { (byJob[r.job] = byJob[r.job] || []).push(r); });
+          var failed = (res.errors || []).join(' | ');
+          send.forEach(function (job, k) {
+            var list = byJob[k] || [];
+            list.forEach(function (r) { takeGoogle(job, r); });
+            // save every finished lookup, empty ones too (nothing there is an answer); skip ones that errored
+            if (list.length || failed.indexOf(job.q + ':') < 0 && !/cap reached/i.test(failed))
+              KV.put('along', job.q + '|' + job.polyline, list.map(function (r) { return { places: r.places, routingSummaries: r.routingSummaries }; }));
+          });
+        }));
+      }
+      // --- Murphy USA (their store finder), one pass for all routes ---
+      if (A.siteOn('murphy')) {
+        var mpts = ptsUnion(50), mkey = mpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
+        var mo = getKV('murphy', mkey, maxAge);
+        var takeMurphy = function (stores) { (stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s) official.push(s); }); };
+        if (mo) { takeMurphy(use(mo)); part.murphy = 1; }
+        else tasks.push(site('murphy', { points: mpts, radiusMi: 30, max: 25 }, 120000, function (d, t) { part.murphy = t ? d / t : 0; tick(); }).then(function (res) {
+          part.murphy = 1; tick();
+          dbgSearch.murphy = { stores: (res.stores || []).length, error: res.error, blocked: res.blocked };
+          LG.info('stations', 'Murphy USA done', dbgSearch.murphy);
+          if (res.error) notes.push('Murphy USA: ' + (res.blocked ? 'wants an “are you human?” check (Settings → Site checks)' : res.error));
+          else KV.put('murphy', mkey, res.stores || []);
+          takeMurphy(res.stores);
+        }));
+      }
+      // --- Walmart: which stores have fuel (kept a month), then today's prices for the ones near a route ---
+      if (A.siteOn('walmart')) tasks.push((async function () {
+        var wpts = ptsUnion(40), wkey = wpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
+        var no = KV.get('wmnodes', wkey, 30 * 24 * 3600e3), nodes;
+        if (no) nodes = no.v;
+        else {
+          var res = await site('walmart', { mode: 'nodes', points: wpts, radiusMi: 25 }, 120000, function (d, t) { part.walmart = t ? 0.4 * d / t : 0; tick(); });
+          dbgSearch.walmartNodes = { nodes: (res.nodes || []).length, error: res.error, blocked: res.blocked };
+          LG.info('stations', 'Walmart stores along the route', dbgSearch.walmartNodes);
+          if (res.error || res.blocked) { part.walmart = 1; tick(); notes.push('Walmart: ' + (res.blocked ? 'wants a “Robot or human?” check (Settings → Site checks)' : res.error)); return; }
+          nodes = res.nodes || [];
+          KV.put('wmnodes', wkey, nodes);
+        }
+        part.walmart = 0.4; tick();
+        var near = nodes.filter(function (n) { return n.geoPoint && nearAny(n.geoPoint.latitude, n.geoPoint.longitude); });
+        var ask = [];
+        near.forEach(function (n) { var o = getKV('wmprice', String(n.id), maxAge); if (o) { var w = P.normalizeWalmart(use(o)); if (w) official.push(w); } else ask.push(n); });
+        if (!ask.length) { part.walmart = 1; tick(); return; }
+        label = 'Reading Walmart prices';
+        var pr = await site('walmart', { mode: 'prices', nodes: ask }, 120000, function (d, t) { part.walmart = 0.4 + (t ? 0.6 * d / t : 0); tick(); });
         part.walmart = 1; tick();
-        dbgSearch.walmartPrices = { asked: near.length, got: (pr.stores || []).length, blocked: pr.blocked, error: pr.error };
+        dbgSearch.walmartPrices = { asked: ask.length, saved: near.length - ask.length, got: (pr.stores || []).length, blocked: pr.blocked, error: pr.error };
         LG.info('stations', 'Walmart prices', dbgSearch.walmartPrices);
         if (pr.blocked) notes.push('Walmart: wants a “Robot or human?” check for some prices (Settings → Site checks)');
-        (pr.stores || []).forEach(function (w) { var s = P.normalizeWalmart(w); if (s) official.push(s); });
-      }));
+        (pr.stores || []).forEach(function (w) { KV.put('wmprice', String(w.id), w); var s = P.normalizeWalmart(w); if (s) official.push(s); });
+      })());
+      tick();
       await Promise.all(tasks);
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
+    dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
 
-
-    var merged = P.mergeOfficial(dedupe(stations), official);
-    var grade = gradeOf(), cands = [], unpriced = 0, stale = 0;
-    merged.forEach(function (s) {
-      var pr = T.project(model, { lat: s.lat, lng: s.lng });
-      if (pr.offset > maxOff) return;
-      var c = P.compute(s, grade, S, new Date());
-      if (!c) { unpriced++; return; }
-      if (c.stale) stale++;
-      var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
-      // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently)
-      var exact = s.detourExact && s.detourMi <= est * 3 + 2;
-      var det = exact ? s.detourMi : est;
-      var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
-      cands.push({ id: s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
-        price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng });
+    var grade = gradeOf();
+    var per = models.map(function (model, mi) {
+      var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0;
+      merged.forEach(function (s) {
+        var pr = T.project(model, { lat: s.lat, lng: s.lng });
+        if (pr.offset > maxOff) return;
+        var c = P.compute(s, grade, S, new Date());
+        if (!c) { unpriced++; return; }
+        if (c.stale) stale++;
+        var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
+        // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently)
+        var exact = s.detourExact && s.detourMi <= est * 3 + 2;
+        var det = exact ? s.detourMi : est;
+        var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
+        cands.push({ id: s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
+          price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng });
+      });
+      return { cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade };
     });
-    return { cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade };
+    return { per: per, cachedAgeMs: saved ? oldest : 0 };
   }
   // ---------- other routes ----------
   function altCompareList() {
@@ -830,7 +974,12 @@
     if (!m || m._lim) return;
     m._lim = 'loading';
     var t0 = Date.now();
-    Limits.along(m, function (url) { return call('fetchJson', url); }, { lookup: S.limitLookup !== false }).then(function (res) {
+    var getJson = function (url) {      // posted limits rarely change: saved for 90 days
+      var o = A.KV.get('limits', url, 90 * 24 * 3600e3);
+      if (o) return Promise.resolve(o.v);
+      return call('fetchJson', url).then(function (res) { if (res.body && res.body.indexOf('"error"') < 0) A.KV.put('limits', url, res); return res; });
+    };
+    Limits.along(m, getJson, { lookup: S.limitLookup !== false }).then(function (res) {
       m._lim = res;
       LG.info('speed', 'Speed limits along the route in ' + (Date.now() - t0) + ' ms', res.stats);
       LG.debug('speed', 'Stretches', res.stretches.filter(function (x) { return x.cruise; }).map(function (x) { return [Math.round(x.from), x.st, x.road, x.limit, x.src, Math.round(x.googleMph)]; }));
@@ -946,15 +1095,18 @@
       maxDetourMin: S.trip.maxDetourMin, timeValue: S.trip.timeValue, stopMinutes: 8,
       lastFull: S.trip.arrive === 'full' };
   }
-  async function findStops() {
+  async function findStops(force) {
     busy = true;
     var go = $('tGo');
     var others = altCompareList();
-    var share = others.length ? 0.9 / (others.length + 1) : 0.9;
     dbg.search = {};
-    var g = await gather(model, function (f, l) { prog(0.02 + f * share, l + (others.length ? ' (your route)' : '')); }, dbg.search);
+    var models = [model];
+    others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
+    var okModels = models.filter(Boolean);
+    var ga = await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force === true);
+    var g = ga.per[0];
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
-    var label = 'Choosing stops'; prog(0.02 + share, label);
+    prog(0.93, 'Choosing stops');
     var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
     var opts = makeOpts(model, cands, startGal);
     var t0 = Date.now();
@@ -964,24 +1116,22 @@
       stops: plan.ok ? plan.stops.map(function (s) { return { name: s.c.station.name, mile: Math.round(s.c.d), price: s.c.price, buy: Math.round(s.buyGal * 10) / 10, why: s.why }; }) : null });
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
-      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi };
+      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs };
     recompute();
     // other routes Google suggested: same trip, same rules, gas valued at the same price so totals compare fairly
     if (others.length) {
       result.routes = [{ k: altSel, model: model, res: result }];
-      for (var oi = 0; oi < others.length; oi++) {
-        var k = others[oi], base = 0.02 + share * (oi + 1), via = alts[k].description || 'route ' + (k + 1);
-        try {
-          var m2 = T.buildRoute(alts[k], carModel());
-          dbg['search_route' + k] = {};
-          var g2 = await gather(m2, function (f, l) { prog(base + f * share, l + ' (via ' + via + ')'); }, dbg['search_route' + k]);
-          var o2 = makeOpts(m2, g2.cands, startGal);
-          if (plan.ok) o2.refPrice = plan.refPrice;
-          var p2 = T.plan(o2);
-          result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
-            startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi } });
-        } catch (e) { LG.error('routes', 'Checking via ' + via + ' failed', String(e && e.message || e)); result.routes.push({ k: k, model: model, res: { plan: { ok: false } }, error: String(e && e.message || e) }); }
-      }
+      var gi = 1;
+      others.forEach(function (k, oi) {
+        var m2 = models[oi + 1], via = alts[k].description || 'route ' + (k + 1);
+        if (!m2) { result.routes.push({ k: k, model: model, res: { plan: { ok: false } }, error: 'couldn\'t read that route' }); return; }
+        var g2 = ga.per[gi++];
+        var o2 = makeOpts(m2, g2.cands, startGal);
+        if (plan.ok) o2.refPrice = plan.refPrice;
+        var p2 = T.plan(o2);
+        result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
+          startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs } });
+      });
       LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
     }
     startSweep();
@@ -1059,6 +1209,7 @@
       if (S.trip.arrive === 'full') h += topUpBox();
       if (r.back) h += backBox();
     }
+    if (r.cachedAgeMs > 0) h += '<div class="note saved">Using stations and prices saved ' + agoText(r.cachedAgeMs) + ' for this route. <a href="#" id="tsRefresh">Get fresh prices</a></div>';
     var notes = r.notes.slice();
     if (r.stale) notes.push(r.stale + ' station' + (r.stale === 1 ? ' has a price' : 's have prices') + ' older than ' + S.staleHours + ' hours (marked).');
     if (p.tooFar) notes.push(p.tooFar + ' station' + (p.tooFar === 1 ? ' was' : 's were') + ' skipped for being more than ' + S.trip.maxDetourMin + ' min out of the way.');
@@ -1076,6 +1227,7 @@
     $('tsClose').onclick = $('tsDone').onclick = endTrip;
     $('tsEdit').onclick = function () { show(el, false); openTrip(); };
     $('tsShare').onclick = shareTrip;
+    if ($('tsRefresh')) $('tsRefresh').onclick = function (e) { e.preventDefault(); show(el, false); document.body.classList.add('trip-on'); openTrip(); findStops(true); };
     $('tsReport').onclick = shareReport;
     if (ex) $('tsExport').onclick = function () { N.haptic(); N.openUrl(ex.url); };
     el.querySelectorAll('[data-top]').forEach(function (b) {
@@ -1099,6 +1251,7 @@
       b.onclick = function () { var s = p.stops[+b.dataset.fly].c; map.setView([s.lat, s.lng], 14); };
     });
   }
+  function agoText(ms) { var m = Math.round(ms / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; }
   function priceText(v) { return '$' + P.fmt3(v); }
   function keepScroll(f) { var el = $('tripSheet'), y = el.scrollTop; f(); el.scrollTop = y; }
   function topUpBox() {

@@ -753,46 +753,61 @@ public class MainActivity extends Activity {
         public void routeSearch(final int reqId, final String apiKey, final String jobsJson, final int monthlyCap) {
             new Thread(new Runnable() {
                 public void run() {
-                    JSONObject out = new JSONObject();
-                    JSONArray results = new JSONArray(), errors = new JSONArray();
+                    final JSONObject out = new JSONObject();
+                    final JSONArray results = new JSONArray(), errors = new JSONArray();
                     try {
-                        JSONArray jobs = new JSONArray(jobsJson);
-                        outer:
-                        for (int i = 0; i < jobs.length(); i++) {
-                            JSONObject job = jobs.getJSONObject(i);
-                            String token = null;
-                            int pages = Math.max(1, Math.min(3, job.optInt("pages", 1)));
-                            for (int pg = 0; pg < pages; pg++) {
-                                int used = prefs().getInt(monthKey(), 0);
-                                if (monthlyCap > 0 && used >= monthlyCap) {
-                                    errors.put("Monthly Google lookup cap reached (" + used + "/" + monthlyCap + "). Planned with what was found.");
-                                    break outer;
+                        final JSONArray jobs = new JSONArray(jobsJson);
+                        final int n = jobs.length();
+                        final java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger(0);
+                        final java.util.concurrent.atomic.AtomicBoolean stop = new java.util.concurrent.atomic.AtomicBoolean(false);
+                        // several lookups at once (Google allows plenty of parallel requests); the monthly counter is shared
+                        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(Math.max(1, Math.min(6, n)));
+                        for (int ii = 0; ii < n; ii++) {
+                            final int i = ii;
+                            pool.execute(new Runnable() {
+                                public void run() {
+                                    try {
+                                        JSONObject job = jobs.getJSONObject(i);
+                                        String token = null;
+                                        int pages = Math.max(1, Math.min(3, job.optInt("pages", 1)));
+                                        for (int pg = 0; pg < pages && !stop.get(); pg++) {
+                                            synchronized (MainActivity.this) {
+                                                int used = prefs().getInt(monthKey(), 0);
+                                                if (monthlyCap > 0 && used >= monthlyCap) {
+                                                    if (!stop.getAndSet(true)) synchronized (errors) { errors.put("Monthly Google lookup cap reached (" + used + "/" + monthlyCap + "). Planned with what was found."); }
+                                                    return;
+                                                }
+                                                prefs().edit().putInt(monthKey(), used + 1).apply();
+                                            }
+                                            JSONObject body = new JSONObject();
+                                            body.put("textQuery", job.getString("q"));
+                                            body.put("includedType", "gas_station");
+                                            body.put("pageSize", 20);
+                                            body.put("searchAlongRouteParameters", new JSONObject().put("polyline",
+                                                    new JSONObject().put("encodedPolyline", job.getString("polyline"))));
+                                            body.put("routingParameters", new JSONObject().put("origin",
+                                                    new JSONObject().put("latitude", job.getDouble("lat")).put("longitude", job.getDouble("lng"))));
+                                            if (token != null) body.put("pageToken", token);
+                                            try {
+                                                JSONObject r = new JSONObject(googlePost(PLACES_URL, apiKey, ALONG_MASK, body.toString(), "Google Places"));
+                                                r.put("job", i);
+                                                synchronized (results) { results.put(r); }
+                                                token = r.optString("nextPageToken", null);
+                                                if (token == null || token.length() == 0) break;
+                                                Thread.sleep(400);
+                                            } catch (Exception e) {
+                                                synchronized (errors) { errors.put(job.getString("q") + ": " + e.getMessage()); }
+                                                if (String.valueOf(e.getMessage()).contains(" 40")) stop.set(true);
+                                                break;
+                                            }
+                                        }
+                                    } catch (Exception e) { synchronized (errors) { errors.put(String.valueOf(e)); } }
+                                    finally { js("window.onNativeProgress&&onNativeProgress(" + reqId + "," + done.incrementAndGet() + "," + n + ")"); }
                                 }
-                                prefs().edit().putInt(monthKey(), used + 1).apply();
-                                JSONObject body = new JSONObject();
-                                body.put("textQuery", job.getString("q"));
-                                body.put("includedType", "gas_station");
-                                body.put("pageSize", 20);
-                                body.put("searchAlongRouteParameters", new JSONObject().put("polyline",
-                                        new JSONObject().put("encodedPolyline", job.getString("polyline"))));
-                                body.put("routingParameters", new JSONObject().put("origin",
-                                        new JSONObject().put("latitude", job.getDouble("lat")).put("longitude", job.getDouble("lng"))));
-                                if (token != null) body.put("pageToken", token);
-                                try {
-                                    js("window.onNativeProgress&&onNativeProgress(" + reqId + "," + i + "," + jobs.length() + ")");
-                                    JSONObject r = new JSONObject(googlePost(PLACES_URL, apiKey, ALONG_MASK, body.toString(), "Google Places"));
-                                    r.put("job", i);
-                                    results.put(r);
-                                    token = r.optString("nextPageToken", null);
-                                    if (token == null || token.length() == 0) break;
-                                    Thread.sleep(400);
-                                } catch (Exception e) {
-                                    errors.put(job.getString("q") + ": " + e.getMessage());
-                                    if (String.valueOf(e.getMessage()).contains(" 40")) break outer;
-                                    break;
-                                }
-                            }
+                            });
                         }
+                        pool.shutdown();
+                        pool.awaitTermination(5, java.util.concurrent.TimeUnit.MINUTES);
                     } catch (Exception e) { errors.put(String.valueOf(e)); }
                     try {
                         out.put("results", results);
@@ -802,6 +817,44 @@ public class MainActivity extends Activity {
                     reply(reqId, out);
                 }
             }).start();
+        }
+
+        // ---- small key/value cache in the app's private storage (saved searches, speed limits, routes) ----
+        private java.io.File kvFile(String ns, String key) throws Exception {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+            byte[] h = md.digest(key.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte x : h) sb.append(String.format("%02x", x));
+            java.io.File dir = new java.io.File(new java.io.File(getFilesDir(), "kv"), ns.replaceAll("[^a-z0-9_-]", "_"));
+            if (!dir.exists()) dir.mkdirs();
+            return new java.io.File(dir, sb.toString());
+        }
+
+        @JavascriptInterface
+        public String kvGet(String ns, String key) {
+            try {
+                java.io.File f = kvFile(ns, key);
+                if (!f.exists()) return "";
+                return readAll(new java.io.FileInputStream(f));
+            } catch (Exception e) { return ""; }
+        }
+
+        @JavascriptInterface
+        public void kvPut(String ns, String key, String value) {
+            try {
+                java.io.FileOutputStream o = new java.io.FileOutputStream(kvFile(ns, key));
+                o.write(value.getBytes("UTF-8"));
+                o.close();
+            } catch (Exception ignored) { }
+        }
+
+        @JavascriptInterface
+        public int kvClear(String ns) {
+            int n = 0;
+            java.io.File dir = new java.io.File(new java.io.File(getFilesDir(), "kv"), ns.replaceAll("[^a-z0-9_-]", "_"));
+            java.io.File[] fs = dir.listFiles();
+            if (fs != null) for (java.io.File f : fs) if (f.delete()) n++;
+            return n;
         }
 
         @JavascriptInterface
@@ -922,32 +975,44 @@ public class MainActivity extends Activity {
             new Thread(new Runnable() {
                 public void run() {
                     JSONObject out = new JSONObject();
-                    JSONArray places = new JSONArray();
-                    JSONArray errors = new JSONArray();
+                    final JSONArray places = new JSONArray();
+                    final JSONArray errors = new JSONArray();
                     try {
-                        JSONArray queries = new JSONArray(queriesJson);
-                        for (int i = 0; i < queries.length(); i++) {
-                            String text = queries.getString(i);
-                            int used = prefs().getInt(monthKey(), 0);
-                            if (monthlyCap > 0 && used >= monthlyCap) {
-                                errors.put("Monthly API-call cap reached (" + used + "/" + monthlyCap
-                                        + "). Showing cached prices. Raise the cap in Settings if you accept possible charges.");
-                                break;
-                            }
-                            prefs().edit().putInt(monthKey(), used + 1).apply();
-                            try {
-                                JSONObject r = new JSONObject(placesSearch(apiKey, text, minLat, minLng, maxLat, maxLng));
-                                JSONArray arr = r.optJSONArray("places");
-                                if (arr != null) for (int k = 0; k < arr.length(); k++) {
-                                    JSONObject p = arr.getJSONObject(k);
-                                    p.put("_query", text);
-                                    places.put(p);
+                        final JSONArray queries = new JSONArray(queriesJson);
+                        final java.util.concurrent.atomic.AtomicBoolean stop = new java.util.concurrent.atomic.AtomicBoolean(false);
+                        // one lookup per brand, all at once
+                        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(Math.max(1, Math.min(6, queries.length())));
+                        for (int ii = 0; ii < queries.length(); ii++) {
+                            final String text = queries.getString(ii);
+                            pool.execute(new Runnable() {
+                                public void run() {
+                                    if (stop.get()) return;
+                                    synchronized (MainActivity.this) {
+                                        int used = prefs().getInt(monthKey(), 0);
+                                        if (monthlyCap > 0 && used >= monthlyCap) {
+                                            if (!stop.getAndSet(true)) synchronized (errors) { errors.put("Monthly API-call cap reached (" + used + "/" + monthlyCap
+                                                    + "). Showing cached prices. Raise the cap in Settings if you accept possible charges."); }
+                                            return;
+                                        }
+                                        prefs().edit().putInt(monthKey(), used + 1).apply();
+                                    }
+                                    try {
+                                        JSONObject r = new JSONObject(placesSearch(apiKey, text, minLat, minLng, maxLat, maxLng));
+                                        JSONArray arr = r.optJSONArray("places");
+                                        if (arr != null) for (int k = 0; k < arr.length(); k++) {
+                                            JSONObject p = arr.getJSONObject(k);
+                                            p.put("_query", text);
+                                            synchronized (places) { places.put(p); }
+                                        }
+                                    } catch (Exception e) {
+                                        synchronized (errors) { errors.put(text + ": " + e.getMessage()); }
+                                        if (String.valueOf(e.getMessage()).contains(" 40")) stop.set(true); // bad key / not enabled: don't burn calls
+                                    }
                                 }
-                            } catch (Exception e) {
-                                errors.put(text + ": " + e.getMessage());
-                                if (String.valueOf(e.getMessage()).contains(" 40")) break; // bad key / not enabled: don't burn calls
-                            }
+                            });
                         }
+                        pool.shutdown();
+                        pool.awaitTermination(2, java.util.concurrent.TimeUnit.MINUTES);
                         out.put("places", places);
                         out.put("errors", errors);
                         out.put("calls", prefs().getInt(monthKey(), 0));

@@ -33,20 +33,24 @@ async function (reqId, args) {
     (n.services || []).some((s) => s.name === 'GAS_STATION');
   async function prices(list) {
     const stores = []; let blocked = false;
-    for (let ni = 0; ni < list.length; ni++) { // one at a time, like a person opening each store page
-      const n = list[ni];
-      if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, ni, list.length);
+    let done = 0;
+    const one = async (n) => {
+      if (blocked) return;
       try {
         const pr = await fetch('/store/' + n.id, { credentials: 'include' });
         const html = await pr.text();
         const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-        if (!m) { if (isBlocked(html)) { blocked = true; break; } continue; }
+        if (!m) { if (isBlocked(html)) blocked = true; return; }
         const j = JSON.parse(m[1]);
         const init = (j.props && j.props.pageProps && j.props.pageProps.initialData) || {};
         const f = init.initialDataFuelSubgraph && init.initialDataFuelSubgraph.data && init.initialDataFuelSubgraph.data.storeFuelPrices;
         stores.push({ id: n.id, name: n.displayName || n.name, address: n.address, geo: n.geoPoint || n.geo, fuel: f || null });
-        if (list.length > 6) await pause(250);
       } catch (e) { /* skip this store */ }
+      finally { done++; if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, done, list.length); }
+    };
+    for (let i = 0; i < list.length && !blocked; i += 3) {     // three store pages at a time
+      await Promise.all(list.slice(i, i + 3).map(one));
+      if (list.length > 6) await pause(200);
     }
     return { stores, blocked };
   }
@@ -55,12 +59,15 @@ async function (reqId, args) {
     if (args.mode === 'nodes') {
       const seen = {}, out = [];
       const pts = (args.points || []).slice(0, 40);
-      for (let pi = 0; pi < pts.length; pi++) {
-        const p = pts[pi];
-        if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, pi, pts.length);
+      let done = 0;
+      const one = async (p) => {
         const nodes = await nearby(p.lat, p.lng, args.radiusMi || 25);
         nodes.filter(hasFuel).forEach((n) => { if (!seen[n.id]) { seen[n.id] = 1; out.push({ id: n.id, displayName: n.displayName, address: n.address, geoPoint: n.geoPoint }); } });
-        await pause(300);
+        done++; if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, done, pts.length);
+      };
+      for (let i = 0; i < pts.length; i += 3) {
+        await Promise.all(pts.slice(i, i + 3).map(one));
+        if (i + 3 < pts.length) await pause(200);
       }
       return send({ nodes: out });
     }
