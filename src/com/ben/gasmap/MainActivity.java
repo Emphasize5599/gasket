@@ -1,0 +1,962 @@
+package com.ben.gasmap;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
+import android.content.res.Configuration;
+import android.graphics.Color;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.HapticFeedbackConstants;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.CookieManager;
+import android.net.http.HttpResponseCache;
+import android.widget.FrameLayout;
+import android.widget.TextView;
+import android.view.Gravity;
+import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Single-activity shell. The UI lives in assets/web (Leaflet + OpenStreetMap tiles);
+ * this class provides location (straight from the OS, no Google Play services needed,
+ * so it works on GrapheneOS without sandboxed Play), Google Places API calls (done here
+ * because the Places REST API has no browser CORS support), settings storage,
+ * a monthly API-call guard, and the hand-off to Google Maps for directions.
+ */
+public class MainActivity extends Activity {
+
+    private static final int REQ_LOC = 42;
+    private static final String PREFS = "gasmap";
+    private static final String PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
+    private static final String FIELD_MASK =
+            "places.id,places.displayName,places.location,places.formattedAddress,"
+            + "places.addressComponents,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
+
+    private WebView web;
+    /** Off-screen pages on each chain's own site, used to read that chain's official prices
+     *  (see assets/<key>_worker.js). Each runs the same requests the site's own store finder makes. */
+    private FrameLayout root;
+    private TextView wmDone;
+    private SiteWorker verifying = null;
+    private final Map<String, SiteWorker> workers = new HashMap<String, SiteWorker>();
+    private LocationManager lm;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final List<LocationListener> listeners = new ArrayList<LocationListener>();
+    private Location best;
+    private boolean pageReady = false;
+    private String pendingInsets = null;
+    private String pendingShare = null;
+
+    @Override
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        Window w = getWindow();
+        // Edge-to-edge (enforced on Android 15+/16 anyway); the web UI pads itself with the real insets.
+        w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        w.setStatusBarColor(Color.TRANSPARENT);
+        w.setNavigationBarColor(Color.TRANSPARENT);
+        w.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+
+        lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        web = new WebView(this);
+        web.setBackgroundColor(isDark() ? Color.rgb(16, 18, 22) : Color.rgb(242, 243, 245));
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        s.setTextZoom(100);
+        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        web.addJavascriptInterface(new Bridge(), "Native");
+        web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url.startsWith("file:")) return false;
+                openExternal(url);
+                return true;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+                String u = req.getUrl().toString();
+                if (u.startsWith("https://tile.openstreetmap.org/")) return fetchTile(u);
+                return null;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                pageReady = true;
+                if (pendingInsets != null) js(pendingInsets);
+                if (pendingShare != null) { js(pendingShare); pendingShare = null; }
+            }
+        });
+        web.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
+                float d = getResources().getDisplayMetrics().density;
+                String call = "window.setInsets&&setInsets(" + (in.getSystemWindowInsetTop() / d) + ","
+                        + (in.getSystemWindowInsetBottom() / d) + "," + (in.getSystemWindowInsetLeft() / d) + ","
+                        + (in.getSystemWindowInsetRight() / d) + ")";
+                pendingInsets = call;
+                if (pageReady) js(call);
+                return in;
+            }
+        });
+        try {
+            HttpResponseCache.install(new File(getCacheDir(), "tiles"), 80L * 1024 * 1024);
+        } catch (Exception ignored) { }
+
+        root = new FrameLayout(this);
+        workers.put("walmart", new SiteWorker("walmart", "https://www.walmart.com/store-finder", "https://www.walmart.com/"));
+        workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
+        workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
+        for (SiteWorker sw : workers.values()) {
+            // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
+            if (sw.key.equals("gmaps")) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
+            else root.addView(sw.view, new FrameLayout.LayoutParams(-1, -1));
+        }
+        root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        wmDone = new TextView(this);
+        wmDone.setText("Done \u2014 back to the map");
+        wmDone.setTextSize(17);
+        wmDone.setTextColor(Color.WHITE);
+        wmDone.setGravity(Gravity.CENTER);
+        wmDone.setBackgroundColor(Color.rgb(11, 95, 217));
+        wmDone.setVisibility(View.GONE);
+        float dens = getResources().getDisplayMetrics().density;
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, (int) (64 * dens), Gravity.BOTTOM);
+        lp.bottomMargin = (int) (48 * dens);
+        root.addView(wmDone, lp);
+        wmDone.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { endVerify(); }
+        });
+        setContentView(root);
+        applyBarIconColors();
+        web.loadUrl("file:///android_asset/web/index.html");
+        handleShare(getIntent());
+    }
+
+    private boolean isDark() {
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    private void applyBarIconColors() {
+        int flags = web != null ? getWindow().getDecorView().getSystemUiVisibility() : 0;
+        int lightStatus = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR; // 0x2000
+        int lightNav = 0x10; // SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR (API 26)
+        if (isDark()) flags &= ~(lightStatus | lightNav);
+        else flags |= (lightStatus | lightNav);
+        getWindow().getDecorView().setSystemUiVisibility(flags);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration c) {
+        super.onConfigurationChanged(c);
+        applyBarIconColors();
+    }
+
+    private void js(final String code) {
+        main.post(new Runnable() {
+            public void run() {
+                if (web != null) web.evaluateJavascript(code, null);
+            }
+        });
+    }
+
+    private static String q(String s) {
+        return JSONObject.quote(s == null ? "" : s);
+    }
+
+    // ---------------- OpenStreetMap tiles (identified, cached; OSM tile policy) ----------------
+
+    private WebResourceResponse fetchTile(String u) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
+            c.setUseCaches(true);
+            c.setConnectTimeout(10000);
+            c.setReadTimeout(15000);
+            c.setRequestProperty("User-Agent", "FuelPlusMap/1.2 (Android; personal use; com.ben.gasmap)");
+            int st = c.getResponseCode();
+            if (st != 200) return null;
+            Map<String, String> h = new HashMap<String, String>();
+            h.put("Access-Control-Allow-Origin", "*");
+            h.put("Cache-Control", "max-age=604800");
+            return new WebResourceResponse("image/png", null, 200, "OK", h, c.getInputStream());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ---------------- official chain prices (off-screen site pages) ----------------
+
+    class SiteWorker {
+        final String key, home, origin;
+        final WebView view;
+        boolean ready = false;
+        final List<String> queue = new ArrayList<String>();
+
+        SiteWorker(String key, String home, String origin) { this(key, home, origin, false); }
+
+        SiteWorker(String key, String home, String origin, boolean desktop) {
+            this.key = key; this.home = home; this.origin = origin;
+            view = new WebView(MainActivity.this);
+            WebSettings ws = view.getSettings();
+            ws.setJavaScriptEnabled(true);
+            ws.setDomStorageEnabled(true);
+            if (desktop) {
+                // Google Maps' desktop page is the one that spells out every stop's coordinates in its address
+                ws.setUserAgentString("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
+                ws.setUseWideViewPort(true);
+                ws.setLoadWithOverviewMode(true);
+            }
+            CookieManager.getInstance().setAcceptCookie(true);
+            CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
+            view.addJavascriptInterface(new SiteBridge(key), "FuelPlusSite");
+            view.setWebChromeClient(new WebChromeClient());
+            view.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(WebView v, String url) {
+                    String title = String.valueOf(v.getTitle()).toLowerCase(Locale.US);
+                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || title.contains("robot") || title.contains("access denied")
+                            || title.contains("captcha") || title.contains("unusual traffic");
+                    ready = !blocked && url.startsWith(SiteWorker.this.origin);
+                    if (verifying == SiteWorker.this) {
+                        if (ready) js("window.toast&&toast(" + q("Check passed. Tap Done.") + ")");
+                        return;
+                    }
+                    if (blocked) {
+                        js("window.onSiteBlocked&&onSiteBlocked(" + q(SiteWorker.this.key) + ")");
+                        queue.clear();
+                    } else if (ready) {
+                        for (String call : queue) view.evaluateJavascript(call, null);
+                        queue.clear();
+                    }
+                }
+            });
+        }
+
+        /** Open a specific page (a shared Google Maps link), then run the script once it has loaded. */
+        void loadAndRun(String url, String call) {
+            queue.clear();
+            queue.add(call);
+            ready = false;
+            view.loadUrl(url);
+        }
+
+        void run(String call) {
+            if (ready && view.getUrl() != null && view.getUrl().startsWith(origin)) {
+                view.evaluateJavascript(call, null);
+            } else {
+                queue.clear();
+                queue.add(call);
+                view.loadUrl(home);
+            }
+        }
+    }
+
+    public class SiteBridge {
+        private final String key;
+        SiteBridge(String key) { this.key = key; }
+
+        @JavascriptInterface
+        public void progress(int reqId, int done, int total) {
+            js("window.onSiteProgress&&onSiteProgress(" + q(key) + "," + reqId + "," + done + "," + total + ")");
+        }
+
+        /** Called by the worker script; payload is data only and is parsed with JSON.parse on the app side. */
+        @JavascriptInterface
+        public void result(int reqId, String json) {
+            js("window.onSiteResult&&onSiteResult(" + q(key) + "," + reqId + ",JSON.parse(" + q(json) + "))");
+        }
+    }
+
+    private void startVerify(SiteWorker w) {
+        verifying = w;
+        w.view.loadUrl(w.home);
+        web.setVisibility(View.INVISIBLE);
+        wmDone.setVisibility(View.VISIBLE);
+        w.view.bringToFront();
+        wmDone.bringToFront();
+    }
+
+    private void endVerify() {
+        String key = verifying != null ? verifying.key : "";
+        verifying = null;
+        wmDone.setVisibility(View.GONE);
+        web.setVisibility(View.VISIBLE);
+        web.bringToFront();
+        wmDone.bringToFront();
+        js("window.onSiteVerified&&onSiteVerified(" + q(key) + ")");
+    }
+
+    private String asset(String name) {
+        try {
+            InputStream is = getAssets().open(name);
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
+            is.close();
+            return bo.toString("UTF-8");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (verifying != null) { endVerify(); return; }
+        web.evaluateJavascript("window.onBack?onBack():false", new android.webkit.ValueCallback<String>() {
+            public void onReceiveValue(String handled) {
+                if (!"true".equals(handled)) MainActivity.super.onBackPressed();
+            }
+        });
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopLocation();
+    }
+
+    // ---------------- location (OS LocationManager; GPS + network/fused if present) ----------------
+
+    private boolean hasLocPerm() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void startLocation() {
+        if (!hasLocPerm()) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOC);
+            return;
+        }
+        stopLocation();
+        best = null;
+        List<String> providers = lm.getProviders(true);
+        if (providers.isEmpty()) {
+            js("window.onLocationError&&onLocationError(" + q("Location is turned off. Enable it in quick settings.") + ")");
+            return;
+        }
+        for (String p : providers) {
+            if ("passive".equals(p)) continue;
+            try {
+                Location last = lm.getLastKnownLocation(p);
+                if (last != null && System.currentTimeMillis() - last.getTime() < 10 * 60 * 1000) consider(last);
+            } catch (SecurityException ignored) { }
+        }
+        for (String p : providers) {
+            if ("passive".equals(p)) continue;
+            LocationListener l = new LocationListener() {
+                public void onLocationChanged(Location loc) { consider(loc); }
+                public void onStatusChanged(String pr, int st, Bundle b) { }
+                public void onProviderEnabled(String pr) { }
+                public void onProviderDisabled(String pr) { }
+            };
+            try {
+                lm.requestLocationUpdates(p, 2000, 5, l, Looper.getMainLooper());
+                listeners.add(l);
+            } catch (SecurityException ignored) { } catch (IllegalArgumentException ignored) { }
+        }
+        // Save battery: stop listening after 45 s; the user can tap "locate" again.
+        main.postDelayed(new Runnable() { public void run() { stopLocation(); } }, 45000);
+    }
+
+    private void consider(Location loc) {
+        if (best == null || loc.getAccuracy() <= best.getAccuracy() || loc.getTime() - best.getTime() > 15000) {
+            best = loc;
+            js("window.onLocation&&onLocation(" + loc.getLatitude() + "," + loc.getLongitude() + "," + loc.getAccuracy() + ")");
+        }
+        if (loc.getAccuracy() > 0 && loc.getAccuracy() < 25) stopLocation();
+    }
+
+    private void stopLocation() {
+        for (LocationListener l : listeners) {
+            try { lm.removeUpdates(l); } catch (SecurityException ignored) { }
+        }
+        listeners.clear();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code != REQ_LOC) return;
+        if (hasLocPerm()) startLocation();
+        else js("window.onLocationError&&onLocationError(" + q("Location permission denied. You can still pan the map and tap 'Search this area'.") + ")");
+    }
+
+    // ---------------- external apps ----------------
+
+    private void openExternal(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException e) {
+            js("window.toast&&toast(" + q("No app can open that link.") + ")");
+        }
+    }
+
+    private String certSha1() {
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_SIGNATURES);
+            Signature sig = pi.signatures[0];
+            byte[] dg = MessageDigest.getInstance("SHA-1").digest(sig.toByteArray());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : dg) sb.append(String.format(Locale.US, "%02X", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private SharedPreferences prefs() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE);
+    }
+
+    private static String monthKey() {
+        return "calls_" + new SimpleDateFormat("yyyy-MM", Locale.US).format(new Date());
+    }
+
+    // ---------------- Places API ----------------
+
+    private String placesSearch(String apiKey, String text, double minLat, double minLng, double maxLat, double maxLng)
+            throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("textQuery", text);
+        body.put("includedType", "gas_station");
+        body.put("pageSize", 20);
+        JSONObject rect = new JSONObject();
+        rect.put("low", new JSONObject().put("latitude", minLat).put("longitude", minLng));
+        rect.put("high", new JSONObject().put("latitude", maxLat).put("longitude", maxLng));
+        body.put("locationRestriction", new JSONObject().put("rectangle", rect));
+
+        HttpURLConnection c = (HttpURLConnection) new URL(PLACES_URL).openConnection();
+        c.setRequestMethod("POST");
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(20000);
+        c.setDoOutput(true);
+        c.setRequestProperty("Content-Type", "application/json");
+        c.setRequestProperty("X-Goog-Api-Key", apiKey);
+        c.setRequestProperty("X-Goog-FieldMask", FIELD_MASK);
+        // Lets the key be restricted to this app in Google Cloud Console.
+        c.setRequestProperty("X-Android-Package", getPackageName());
+        c.setRequestProperty("X-Android-Cert", certSha1());
+        OutputStream os = c.getOutputStream();
+        os.write(body.toString().getBytes("UTF-8"));
+        os.close();
+        int status = c.getResponseCode();
+        InputStream is = status >= 400 ? c.getErrorStream() : c.getInputStream();
+        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+        if (is != null) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
+            is.close();
+        }
+        String resp = bo.toString("UTF-8");
+        if (status >= 400) {
+            String msg = resp;
+            try { msg = new JSONObject(resp).getJSONObject("error").getString("message"); } catch (Exception ignored) { }
+            throw new Exception("Google Places error " + status + ": " + msg);
+        }
+        return resp;
+    }
+
+    // ---------------- trip planning: Google Routes + along-route Places search, link resolving, EPA data ----------------
+
+    private static final String ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
+    private static final String ROUTES_MASK = "routes.description,routes.routeLabels,routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,"
+            + "routes.legs.distanceMeters,routes.legs.duration,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration";
+    private static final String ALONG_MASK = FIELD_MASK + ",routingSummaries,nextPageToken";
+
+    private static String routeMonthKey() {
+        return "rcalls_" + new SimpleDateFormat("yyyy-MM", Locale.US).format(new Date());
+    }
+
+    private static String readAll(InputStream is) throws Exception {
+        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+        if (is != null) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
+            is.close();
+        }
+        return bo.toString("UTF-8");
+    }
+
+    private String googlePost(String url, String apiKey, String mask, String body, String what) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setRequestMethod("POST");
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(30000);
+        c.setDoOutput(true);
+        c.setRequestProperty("Content-Type", "application/json");
+        c.setRequestProperty("X-Goog-Api-Key", apiKey);
+        c.setRequestProperty("X-Goog-FieldMask", mask);
+        c.setRequestProperty("X-Android-Package", getPackageName());
+        c.setRequestProperty("X-Android-Cert", certSha1());
+        OutputStream os = c.getOutputStream();
+        os.write(body.getBytes("UTF-8"));
+        os.close();
+        int status = c.getResponseCode();
+        String resp = readAll(status >= 400 ? c.getErrorStream() : c.getInputStream());
+        if (status >= 400) {
+            String msg = resp;
+            try { msg = new JSONObject(resp).getJSONObject("error").getString("message"); } catch (Exception ignored) { }
+            throw new Exception(what + " error " + status + ": " + msg);
+        }
+        return resp;
+    }
+
+    private static boolean hostAllowed(String url, String[] hosts) {
+        try {
+            String h = new URL(url).getHost().toLowerCase(Locale.US);
+            if (!url.startsWith("https://")) return false;
+            for (String a : hosts) if (h.equals(a)) return true;
+        } catch (Exception ignored) { }
+        return false;
+    }
+
+    private static final String[] LINK_HOSTS = {"maps.app.goo.gl", "goo.gl", "g.co", "maps.google.com", "www.google.com", "google.com"};
+
+    /** Follows a shared Google Maps short link (maps.app.goo.gl/...) to the full directions URL. */
+    private String resolveMapsLink(String url) throws Exception {
+        String cur = url;
+        for (int hop = 0; hop < 8; hop++) {
+            if (!hostAllowed(cur, LINK_HOSTS)) throw new Exception("Not a Google Maps link");
+            if (cur.contains("/maps/dir") || cur.contains("daddr=") || cur.contains("destination=")) return cur;
+            HttpURLConnection c = (HttpURLConnection) new URL(cur).openConnection();
+            c.setInstanceFollowRedirects(false);
+            c.setConnectTimeout(10000);
+            c.setReadTimeout(15000);
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 16; Pixel 10 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36");
+            int st = c.getResponseCode();
+            if (st >= 300 && st < 400) {
+                String loc = c.getHeaderField("Location");
+                if (loc == null) break;
+                cur = new URL(new URL(cur), loc).toString();
+                continue;
+            }
+            String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("https://(?:www\\.)?google\\.com/maps/dir/[^\"'\\s<>]+").matcher(body.replace("\\u003d", "=").replace("\\u0026", "&"));
+            if (m.find()) return m.group().replace("&amp;", "&");
+            break;
+        }
+        throw new Exception("Couldn't open that link. In Google Maps use Share \u2192 Copy, then paste it here.");
+    }
+
+    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org"};
+
+    private String getJson(String url) throws Exception {
+        if (!hostAllowed(url, JSON_HOSTS)) throw new Exception("Host not allowed");
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(20000);
+        c.setRequestProperty("Accept", "application/json");
+        // OpenStreetMap's usage policy asks apps to identify themselves
+        c.setRequestProperty("User-Agent", "FuelPlusMap/2.0 (personal Android app; com.ben.gasmap)");
+        int st = c.getResponseCode();
+        String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
+        if (st >= 400) throw new Exception("HTTP " + st);
+        return body;
+    }
+
+    private void reply(final int reqId, final JSONObject o) {
+        js("window.onNativeResult&&onNativeResult(" + reqId + "," + o.toString() + ")");
+    }
+
+    private void handleShare(Intent i) {
+        if (i == null || !Intent.ACTION_SEND.equals(i.getAction())) return;
+        String t = i.getStringExtra(Intent.EXTRA_TEXT);
+        if (t == null) return;
+        final String call = "window.onSharedText?onSharedText(" + q(t) + "):(window.__pendingShare=" + q(t) + ")";
+        if (pageReady) js(call); else pendingShare = call;
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        handleShare(i);
+    }
+
+    public class Bridge {
+        /** Debug log lives in a private file (only when you turn debug logging on). */
+        @JavascriptInterface
+        public void saveLog(String text) {
+            try {
+                java.io.FileOutputStream f = openFileOutput("debug-log.json", MODE_PRIVATE);
+                f.write(text.getBytes("UTF-8"));
+                f.close();
+            } catch (Exception ignored) { }
+        }
+
+        @JavascriptInterface
+        public String loadLog() {
+            try { return readAll(openFileInput("debug-log.json")); } catch (Exception e) { return ""; }
+        }
+
+        /** Android share sheet with plain text (trip summaries, troubleshooting reports). */
+        @JavascriptInterface
+        public void shareText(final String subject, final String text) {
+            main.post(new Runnable() {
+                public void run() {
+                    Intent i = new Intent(Intent.ACTION_SEND);
+                    i.setType("text/plain");
+                    i.putExtra(Intent.EXTRA_SUBJECT, subject);
+                    i.putExtra(Intent.EXTRA_TEXT, text);
+                    try { startActivity(Intent.createChooser(i, subject)); }
+                    catch (Exception e) { js("window.toast&&toast(" + q("No app can share that.") + ")"); }
+                }
+            });
+        }
+
+        /** Saves a file to Downloads/FuelPlus (no storage permission needed on Android 10+). Returns where, or an error. */
+        @JavascriptInterface
+        public String saveDownload(String name, String mime, String text) {
+            try {
+                android.content.ContentValues v = new android.content.ContentValues();
+                v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
+                v.put("mime_type", mime);
+                v.put("relative_path", "Download/FuelPlus");
+                Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
+                if (uri == null) return "error: couldn't create the file";
+                OutputStream os = getContentResolver().openOutputStream(uri);
+                os.write(text.getBytes("UTF-8"));
+                os.close();
+                return "Downloads/FuelPlus/" + name;
+            } catch (Exception e) {
+                return "error: " + e.getMessage();
+            }
+        }
+
+        @JavascriptInterface
+        public String appVersion() {
+            try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
+        }
+
+        @JavascriptInterface
+        public int routeCallsThisMonth() { return prefs().getInt(routeMonthKey(), 0); }
+
+        /**
+         * Address / place lookup: returns full Google addresses with place IDs and coordinates, biased toward
+         * (lat, lng) when given. Basic fields only (Text Search Essentials), counted separately from price lookups.
+         */
+        @JavascriptInterface
+        public void placesFind(final int reqId, final String apiKey, final String query, final double lat, final double lng, final boolean bias, final double radiusM) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        JSONObject body = new JSONObject();
+                        body.put("textQuery", query);
+                        body.put("pageSize", 5);
+                        if (bias) body.put("locationBias", new JSONObject().put("circle", new JSONObject()
+                                .put("center", new JSONObject().put("latitude", lat).put("longitude", lng)).put("radius", radiusM > 0 ? Math.min(50000.0, radiusM) : 50000.0)));
+                        String k = "fcalls_" + new SimpleDateFormat("yyyy-MM", Locale.US).format(new Date());
+                        prefs().edit().putInt(k, prefs().getInt(k, 0) + 1).apply();
+                        o.put("body", googlePost(PLACES_URL, apiKey, "places.id,places.displayName,places.formattedAddress,places.location", body.toString(), "Google Places"));
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void resolveLink(final int reqId, final String url) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try { o.put("url", resolveMapsLink(url)); } catch (Exception e) { try { o.put("error", e.getMessage()); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        /** fueleconomy.gov (EPA) vehicle menus and records. */
+        @JavascriptInterface
+        public void fetchJson(final int reqId, final String url) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try { o.put("body", getJson(url)); } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void computeRoute(final int reqId, final String apiKey, final String bodyJson) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        String body = new JSONObject(bodyJson).toString();
+                        prefs().edit().putInt(routeMonthKey(), prefs().getInt(routeMonthKey(), 0) + 1).apply();
+                        o.put("body", googlePost(ROUTES_URL, apiKey, ROUTES_MASK, body, "Google Routes"));
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        /**
+         * Text Search along route. jobs = [{q, polyline, lat, lng, pages}] (lat/lng = where that piece of the
+         * route starts, for detour summaries). Each request counts toward the monthly Places cap.
+         */
+        @JavascriptInterface
+        public void routeSearch(final int reqId, final String apiKey, final String jobsJson, final int monthlyCap) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject out = new JSONObject();
+                    JSONArray results = new JSONArray(), errors = new JSONArray();
+                    try {
+                        JSONArray jobs = new JSONArray(jobsJson);
+                        outer:
+                        for (int i = 0; i < jobs.length(); i++) {
+                            JSONObject job = jobs.getJSONObject(i);
+                            String token = null;
+                            int pages = Math.max(1, Math.min(3, job.optInt("pages", 1)));
+                            for (int pg = 0; pg < pages; pg++) {
+                                int used = prefs().getInt(monthKey(), 0);
+                                if (monthlyCap > 0 && used >= monthlyCap) {
+                                    errors.put("Monthly Google lookup cap reached (" + used + "/" + monthlyCap + "). Planned with what was found.");
+                                    break outer;
+                                }
+                                prefs().edit().putInt(monthKey(), used + 1).apply();
+                                JSONObject body = new JSONObject();
+                                body.put("textQuery", job.getString("q"));
+                                body.put("includedType", "gas_station");
+                                body.put("pageSize", 20);
+                                body.put("searchAlongRouteParameters", new JSONObject().put("polyline",
+                                        new JSONObject().put("encodedPolyline", job.getString("polyline"))));
+                                body.put("routingParameters", new JSONObject().put("origin",
+                                        new JSONObject().put("latitude", job.getDouble("lat")).put("longitude", job.getDouble("lng"))));
+                                if (token != null) body.put("pageToken", token);
+                                try {
+                                    js("window.onNativeProgress&&onNativeProgress(" + reqId + "," + i + "," + jobs.length() + ")");
+                                    JSONObject r = new JSONObject(googlePost(PLACES_URL, apiKey, ALONG_MASK, body.toString(), "Google Places"));
+                                    r.put("job", i);
+                                    results.put(r);
+                                    token = r.optString("nextPageToken", null);
+                                    if (token == null || token.length() == 0) break;
+                                    Thread.sleep(400);
+                                } catch (Exception e) {
+                                    errors.put(job.getString("q") + ": " + e.getMessage());
+                                    if (String.valueOf(e.getMessage()).contains(" 40")) break outer;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception e) { errors.put(String.valueOf(e)); }
+                    try {
+                        out.put("results", results);
+                        out.put("errors", errors);
+                        out.put("calls", prefs().getInt(monthKey(), 0));
+                    } catch (Exception ignored) { }
+                    reply(reqId, out);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public String loadSettings() { return prefs().getString("settings", ""); }
+
+        @JavascriptInterface
+        public void saveSettings(String json) { prefs().edit().putString("settings", json).apply(); }
+
+        @JavascriptInterface
+        public String loadCache() { return prefs().getString("cache", ""); }
+
+        @JavascriptInterface
+        public void saveCache(String json) { prefs().edit().putString("cache", json).apply(); }
+
+        @JavascriptInterface
+        public int callsThisMonth() { return prefs().getInt(monthKey(), 0); }
+
+        @JavascriptInterface
+        public String certFingerprint() { return certSha1(); }
+
+        @JavascriptInterface
+        public String packageName() { return getPackageName(); }
+
+        /** Runs assets/<key>_worker.js inside that chain's own site page. argsJson is built by the app. */
+        @JavascriptInterface
+        public void siteSearch(final String key, final int reqId, final String argsJson) {
+            main.post(new Runnable() {
+                public void run() {
+                    SiteWorker w = workers.get(key);
+                    if (w == null) return;
+                    String script = asset(key + "_worker.js");
+                    if (script.length() == 0) return;
+                    String args, url = null;
+                    try {
+                        JSONObject a = new JSONObject(argsJson);
+                        args = a.toString();
+                        url = a.optString("url", null);
+                    } catch (Exception e) { return; }
+                    String call = "(" + script + ")(" + reqId + "," + args + ")";
+                    if (url != null && url.length() > 0) {
+                        // only Google Maps directions links may be opened this way
+                        if (!url.startsWith("https://www.google.com/maps/dir/")) return;
+                        w.loadAndRun(url, call);
+                    } else w.run(call);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void siteVerify(final String key) {
+            main.post(new Runnable() {
+                public void run() {
+                    SiteWorker w = workers.get(key);
+                    if (w != null) startVerify(w);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void locate() {
+            main.post(new Runnable() { public void run() { startLocation(); } });
+        }
+
+        @JavascriptInterface
+        public void haptic() {
+            main.post(new Runnable() {
+                public void run() { web.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); }
+            });
+        }
+
+        @JavascriptInterface
+        public void setStatusBarDark(final boolean darkUi) {
+            main.post(new Runnable() { public void run() { applyBarIconColors(); } });
+        }
+
+        @JavascriptInterface
+        public void openUrl(final String url) {
+            main.post(new Runnable() { public void run() { openExternal(url); } });
+        }
+
+        /** Google Maps turn-by-turn; falls back to the browser version of Maps. */
+        @JavascriptInterface
+        public void navigate(final double lat, final double lng, final String placeId, final String name) {
+            main.post(new Runnable() {
+                public void run() {
+                    String url = "https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate"
+                            + "&destination=" + lat + "," + lng
+                            + (placeId != null && placeId.length() > 0 ? "&destination_place_id=" + Uri.encode(placeId) : "");
+                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    i.setPackage("com.google.android.apps.maps");
+                    try {
+                        startActivity(i);
+                    } catch (ActivityNotFoundException e) {
+                        openExternal(url);
+                    }
+                }
+            });
+        }
+
+        /** Any installed maps app (Organic Maps, CoMaps, OsmAnd, Magic Earth...). */
+        @JavascriptInterface
+        public void openInOtherApp(final double lat, final double lng, final String name) {
+            main.post(new Runnable() {
+                public void run() {
+                    openExternal("geo:" + lat + "," + lng + "?q=" + lat + "," + lng + "(" + Uri.encode(name) + ")");
+                }
+            });
+        }
+
+        /**
+         * Runs one Text Search per query string inside the bounding box, in a background thread.
+         * Calls window.onSearchResult(reqId, {places:[...], errors:[...], calls:n}).
+         */
+        @JavascriptInterface
+        public void search(final int reqId, final String apiKey, final String queriesJson,
+                           final double minLat, final double minLng, final double maxLat, final double maxLng,
+                           final int monthlyCap) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject out = new JSONObject();
+                    JSONArray places = new JSONArray();
+                    JSONArray errors = new JSONArray();
+                    try {
+                        JSONArray queries = new JSONArray(queriesJson);
+                        for (int i = 0; i < queries.length(); i++) {
+                            String text = queries.getString(i);
+                            int used = prefs().getInt(monthKey(), 0);
+                            if (monthlyCap > 0 && used >= monthlyCap) {
+                                errors.put("Monthly API-call cap reached (" + used + "/" + monthlyCap
+                                        + "). Showing cached prices. Raise the cap in Settings if you accept possible charges.");
+                                break;
+                            }
+                            prefs().edit().putInt(monthKey(), used + 1).apply();
+                            try {
+                                JSONObject r = new JSONObject(placesSearch(apiKey, text, minLat, minLng, maxLat, maxLng));
+                                JSONArray arr = r.optJSONArray("places");
+                                if (arr != null) for (int k = 0; k < arr.length(); k++) {
+                                    JSONObject p = arr.getJSONObject(k);
+                                    p.put("_query", text);
+                                    places.put(p);
+                                }
+                            } catch (Exception e) {
+                                errors.put(text + ": " + e.getMessage());
+                                if (String.valueOf(e.getMessage()).contains(" 40")) break; // bad key / not enabled: don't burn calls
+                            }
+                        }
+                        out.put("places", places);
+                        out.put("errors", errors);
+                        out.put("calls", prefs().getInt(monthKey(), 0));
+                    } catch (Exception e) {
+                        try { out.put("places", places); out.put("errors", errors.put(String.valueOf(e))); } catch (Exception ignored) { }
+                    }
+                    js("window.onSearchResult&&onSearchResult(" + reqId + "," + out.toString() + ")");
+                }
+            }).start();
+        }
+    }
+}

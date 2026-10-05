@@ -1,0 +1,22 @@
+# build outputs
+build/
+*.apk
+*.apk.idsig
+*.aab
+*.ipa
+.gradle/
+# signing keys and secrets (supply separately)
+keystore/
+*.jks
+*.keystore
+*.p12
+.env*
+local.properties
+google-services.json
+GoogleService-Info.plist
+# caches
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+node_modules/
