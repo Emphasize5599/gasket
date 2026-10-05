@@ -460,7 +460,7 @@
       '<div class="field"><div class="lbl">How much detail</div><select id="logLevel">' +
       [[1, 'Errors only'], [2, 'Errors + warnings'], [3, 'Steps'], [4, 'Details'], [5, 'Everything']].map(function (o) {
         return '<option value="' + o[0] + '"' + (S.logLevel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
-      '<div class="field"><div class="lbl">Log<small id="logCount">' + (window.FLog ? FLog.entries().length : 0) + ' entries</small></div>' +
+      '<div class="field"><div class="lbl">Log<small class="keep" id="logCount">' + (window.FLog ? FLog.entries().length : 0) + ' entries</small></div>' +
       '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" id="sLogView">View</button>' +
       '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" id="sLogShare">Share</button>' +
       '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" id="sLogClear">Clear</button></div></div>';
@@ -586,6 +586,49 @@
     put: function (ns, key, v) { try { if (N.kvPut) N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v })); } catch (e) { } },
     clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
   };
+  // ---------- quiet UI: explanations live behind a small (?) instead of filling the screen ----------
+  // Hint text under labels and explanatory paragraphs become a circled ? that shows the text when tapped.
+  // Warnings (.msg, .note, .warn) and anything marked .keep stay on screen.
+  function qBtn(html) { return '<button type="button" class="qi" aria-label="More info" data-q="' + encodeURIComponent(html) + '">?</button>'; }
+  function qify(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('.lbl > small, .nf > span > small, .sub-h > small, .switch-row small').forEach(function (sm) {
+      if (sm.closest('.keep') || sm.dataset.qd || !sm.textContent.trim() || /&nbsp;/.test(sm.innerHTML) && !sm.textContent.trim()) return;
+      var host = sm.parentElement;
+      sm.dataset.qd = 1;
+      sm.insertAdjacentHTML('beforebegin', qBtn(sm.innerHTML));
+      sm.remove();
+      host.classList.add('has-q');
+    });
+    root.querySelectorAll('.lead.small:not(.keep), .disclaimer:not(.keep), p.lead.intro').forEach(function (el) {
+      if (el.dataset.qd || !el.textContent.trim()) return;
+      el.dataset.qd = 1;
+      var prev = el.previousElementSibling, html = el.innerHTML;
+      // several explanation lines in a row share one (?)
+      if (prev && prev.classList.contains('qline') && !el.classList.contains('disclaimer')) {
+        var qb = prev.querySelector('.qi'); qb.dataset.q = encodeURIComponent(decodeURIComponent(qb.dataset.q) + '<p>' + html + '</p>'); el.remove(); return;
+      }
+      html = '<p>' + html + '</p>';
+      var okPrev = prev && !prev.matches('.kpis, .epa-tiles, .grid2, .grid3, .btn-row, .alts-pick, .rmap, .leaflet-container, input, select, textarea, .spd-chart, svg, .buf-track, .buf-scale, .actions, .chips, .stop, .scard, details, .leg, .road-g, .parse-load') && !prev.querySelector('input[type=range]');
+      if (okPrev && prev.children.length < 12 && !prev.classList.contains('keep') && !prev.matches('.lead, .msg, .note')) { prev.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); prev.classList.add('has-q'); el.remove(); }
+      else { el.outerHTML = '<div class="qline">' + qBtn(html) + '<span>' + (el.classList.contains('disclaimer') ? 'About these estimates' : 'Details') + '</span></div>'; }
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('.qi'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    var host = b.closest('.grid2, .grid3') || b.closest('.field, .nf, .sub-h, .qline, h3, .tb-h, .leg-h, .lead, .msg, div, p') || b.parentElement;
+    var open = host.nextElementSibling && host.nextElementSibling.classList.contains('qpop') && host.nextElementSibling._from === b ? host.nextElementSibling : null;
+    document.querySelectorAll('.qpop').forEach(function (x) { if (x !== open) x.remove(); });
+    document.querySelectorAll('.qi.on').forEach(function (x) { if (x !== b) x.classList.remove('on'); });
+    if (open) { open.remove(); b.classList.remove('on'); return; }
+    var pop = document.createElement('div'); pop.className = 'qpop'; pop.innerHTML = decodeURIComponent(b.dataset.q); pop._from = b;
+    host.parentNode.insertBefore(pop, host.nextSibling); b.classList.add('on');
+  }, true);
+  new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) qify(n.parentElement || n); }); }); })
+    .observe(document.body, { childList: true, subtree: true });
+  qify(document.body);
+
   window.__app = { KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render };

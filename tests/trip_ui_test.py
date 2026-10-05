@@ -8,6 +8,10 @@ MOCKS = open(os.path.join(ROOT, 'tests', 'trip_mocks.js')).read()
 LINK = ('https://www.google.com/maps/dir/North+Little+Rock,+AR+72114/Dallas,+TX/@34,-94,7z/data=!4m19!4m18!1m5!1m1!1s0x1:0x2!2m2!1d-92.2671!2d34.7695'
         '!1m5!1m1!1s0x3:0x4!2m2!1d-96.797!2d32.7767!2m3!1b0!2b1!3b0!3e0!5i1')
 errors = []
+def ft(pg, sel):
+    # visible text plus whatever sits behind (?) buttons
+    return pg.evaluate('''(s) => { const e = document.querySelector(s); if (!e) throw new Error('no ' + s);
+      return e.innerText + '\\n' + [...e.querySelectorAll('.qi')].map(b => decodeURIComponent(b.dataset.q).replace(/<[^>]+>/g, '')).join('\\n'); }''', sel)
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/opt/google/chrome/chrome', args=['--no-sandbox'])
     for name, w, h, scheme in [('pixel10pro', 412, 915, 'dark'), ('pixel8pro', 448, 998, 'light')]:
@@ -19,17 +23,17 @@ with sync_playwright() as p:
         pg.evaluate(MOCKS)
         pg.click('#btnTrip'); pg.wait_for_timeout(300)
         pg.fill('#tLink', LINK); pg.wait_for_timeout(700)
-        print(name, 'parsed:', pg.inner_text('#tParsed').replace('\n', ' | '))
-        assert 'avoid tolls' in pg.inner_text('#tParsed') and 'route option 2' in pg.inner_text('#tParsed')
-        assert 'North Little Rock, AR 72114' in pg.inner_text('#tParsed'), 'full address shown'
+        print(name, 'parsed:', ft(pg, '#tParsed').replace('\n', ' | '))
+        assert 'avoid tolls' in ft(pg, '#tParsed') and 'route option 2' in ft(pg, '#tParsed')
+        assert 'North Little Rock, AR 72114' in ft(pg, '#tParsed'), 'full address shown'
         # EPA lookup
         # ---- garage: your two cars are there, EPA numbers read-only, the rest behind Edit ----
-        chips = pg.inner_text('#gCars'); head = pg.inner_text('.g-head'); tiles = pg.inner_text('.epa-tiles')
+        chips = ft(pg, '#gCars'); head = ft(pg, '.g-head'); tiles = ft(pg, '.epa-tiles')
         print('  cars:', chips.replace('\n', ' | '), '||', head.replace('\n', ' | '), '||', tiles.replace('\n', ' '))
         assert '2020 Corolla Hybrid' in chips and '2012 Venza' in chips and 'Hybrid' in head and '11.3 gal tank' in head and '54' in tiles and '50' in tiles
         assert pg.locator('.epa-tiles input').count() == 0 and pg.locator('#gTank').count() == 0, 'EPA not editable; tank only after Edit'
         pg.click('.epa-note summary'); pg.wait_for_timeout(100)
-        assert '48 mph' in pg.inner_text('.epa-note') and '21 mph' in pg.inner_text('.epa-note')
+        assert '48 mph' in ft(pg, '.epa-note') and '21 mph' in ft(pg, '.epa-note')
         pg.click('#gEdit'); pg.wait_for_timeout(150)
         assert pg.input_value('#gTank') == '11.3' and pg.input_value('#gType') == 'hybrid'
         pg.screenshot(path=f'{OUT}/{name}-g1-edit.png')
@@ -44,45 +48,45 @@ with sync_playwright() as p:
         assert pg.input_value('#oCity') == '' and pg.input_value('#oHwy') == ''
         # best cruising speed: hybrid, balanced (no time value)
         assert pg.locator('details.spd-card[open]').count() == 0, 'general speed card starts collapsed'
-        print('  speed card (collapsed):', pg.inner_text('#tSpeed').replace('\n', ' | '))
+        print('  speed card (collapsed):', ft(pg, '#tSpeed').replace('\n', ' | '))
         pg.click('details.spd-card > summary'); pg.wait_for_timeout(200)
-        sp = pg.inner_text('#tSpeed'); print('  speed card:', sp.replace('\n', ' | ')[:420])
+        sp = ft(pg, '#tSpeed'); print('  speed card:', sp.replace('\n', ' | ')[:420])
         assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'the recommended speed' in sp and 'Not calibrated yet' in sp
         assert pg.locator('#gChart .zone').count() == 1
         x0 = pg.get_attribute('#gChart .sel-l', 'x1')
         pg.fill('#gTripMi', '1300'); pg.dispatch_event('#gTripMi', 'change')
         pg.evaluate("() => { const r = document.getElementById('gTry'); r.value = 78; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
-        out = pg.inner_text('#gTryOut'); print('  try 78:', out)
+        out = ft(pg, '#gTryOut'); print('  try 78:', out)
         assert '78 mph instead of 70' in out and 'sooner' in out and '+$' in out and '1,300 mi' in out
         assert pg.get_attribute('#gChart .sel-l', 'x1') != x0 and pg.text_content('#gChart .sel-t') == '78', 'line follows the slider'
         # log an observed tank with the speed you held -> calibrates
         pg.fill('#lMpg', '52'); pg.select_option('#lKind', 'highway'); pg.fill('#lSpeed', '72'); pg.click('#lAdd'); pg.wait_for_timeout(400)
-        lg = pg.inner_text('.log-list'); sp = pg.inner_text('#tSpeed'); print('  log:', lg.replace('\n', ' | '), '||', [l for l in sp.split('\n') if 'Calibrated' in l])
+        lg = ft(pg, '.log-list'); sp = ft(pg, '#tSpeed'); print('  log:', lg.replace('\n', ' | '), '||', [l for l in sp.split('\n') if 'Calibrated' in l])
         assert '52.0 mpg' in lg and 'at 72 mph' in lg and 'Calibrated from 1 of your entries' in sp
         pg.fill('#lMpg', '61'); pg.select_option('#lKind', 'mixed'); pg.click('#lAdd'); pg.wait_for_timeout(300)   # no speed: still fine
-        assert pg.locator('.log-row').count() == 2 and 'Calibrated from 1 of' in pg.inner_text('#tSpeed')
+        assert pg.locator('.log-row').count() == 2 and 'Calibrated from 1 of' in ft(pg, '#tSpeed')
         pg.evaluate("document.getElementById('tSpeed').scrollIntoView()"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-g2-speed.png')
         # with a time value
         pg.click('.spd-set summary'); pg.fill('#sTime', '10'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
-        sp = pg.inner_text('#tSpeed'); print('  at $10/hr:', sp.split('\n')[0:4])
+        sp = ft(pg, '#tSpeed'); print('  at $10/hr:', sp.split('\n')[0:4])
         assert '84 mph' in sp and 'gas never outweighs' in sp
         pg.fill('#sTime', '0'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
         pg.fill('#sPrice', '3.50'); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
-        assert '$3.50 (yours)' in pg.inner_text('.spd-set summary')
+        assert '$3.50 (yours)' in ft(pg, '.spd-set summary')
         pg.fill('#sPrice', ''); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
         # the Venza: its own card
         pg.click('[data-car="venza12"]'); pg.wait_for_timeout(300)
-        sp = pg.inner_text('#tSpeed'); print('  Venza:', sp.split('\n')[0:3])
-        assert 'venza' in sp.lower() and '65 mph' in sp and '20 gal tank' in pg.inner_text('.g-head')
+        sp = ft(pg, '#tSpeed'); print('  Venza:', sp.split('\n')[0:3])
+        assert 'venza' in sp.lower() and '65 mph' in sp and '20 gal tank' in ft(pg, '.g-head')
         pg.screenshot(path=f'{OUT}/{name}-g3-venza.png')
         # add a car from the EPA (the trip tests below use it)
         pg.click('[data-car="+"]'); pg.wait_for_timeout(400)
         pg.select_option('#eYear', '2021'); pg.wait_for_timeout(200)
         pg.select_option('#eMake', 'Honda'); pg.wait_for_timeout(200)
         pg.select_option('#eModel', 'Accord'); pg.wait_for_timeout(600)
-        print('  car:', pg.inner_text('.g-head').replace('\n', ' | '), '|', pg.inner_text('.epa-tiles').replace('\n', ' '), '|', pg.inner_text('#eMsg'))
-        assert 'Accord' in pg.inner_text('.g-head') and '30' in pg.inner_text('.epa-tiles') and "doesn't publish it" in pg.inner_text('#eMsg')
+        print('  car:', ft(pg, '.g-head').replace('\n', ' | '), '|', ft(pg, '.epa-tiles').replace('\n', ' '), '|', ft(pg, '#eMsg'))
+        assert 'Accord' in ft(pg, '.g-head') and '30' in ft(pg, '.epa-tiles') and "doesn't publish it" in ft(pg, '#eMsg')
         pg.fill('#gTank', '12'); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(200); pg.click('#gEdit')
         pg.fill('#tMiles', '80'); pg.fill('#tBuffer', '30')
         pg.fill('#tMinSave', '1'); pg.fill('#tMaxMin', '10')
@@ -91,26 +95,26 @@ with sync_playwright() as p:
         pg.click('#tGo'); pg.wait_for_timeout(600)
         body = pg.evaluate('window.__routeBody')
         assert body['routeModifiers']['avoidTolls'] is True and body['origin']['location']['latLng']['latitude'] == 34.7695, body
-        print('  route:', pg.inner_text('#tRouteInfo').replace('\n', ' | '))
+        print('  route:', ft(pg, '#tRouteInfo').replace('\n', ' | '))
         assert pg.evaluate('window.__finds') is None, 'link stops had exact coordinates: no lookups'
-        assert 'matches your link' in pg.inner_text('.alts-pick button.on'), 'route option from the link pre-selected'
+        assert 'matches your link' in ft(pg, '.alts-pick button.on'), 'route option from the link pre-selected'
         pg.evaluate("document.querySelector('.alts-pick').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t1b-routes.png')
         pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(150)
-        assert '318 mi' in pg.inner_text('.rc-top')
+        assert '318 mi' in ft(pg, '.rc-top')
         pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(150)
-        assert '330 mi' in pg.inner_text('.rc-top')
+        assert '330 mi' in ft(pg, '.rc-top')
         pg.click('#tGo'); pg.wait_for_timeout(1500)
         print('  notes:', pg.evaluate('JSON.stringify(window.__trip.state().result && window.__trip.state().result.notes)'), pg.evaluate('typeof window.__siteMock'))
         print('  google jobs:', len(pg.evaluate('window.__jobs')), '| walmart price ids:', pg.evaluate('window.__wmPriceIds'))
         assert pg.evaluate('window.__wmPriceIds') == ['777'], 'only on-route Walmart priced'
-        txt = pg.inner_text('#tripSheet')
+        txt = ft(pg, '#tripSheet')
         print('  RESULT:', txt.replace('\n', ' | ')[:900])
         pg.screenshot(path=f'{OUT}/{name}-t2-result.png')
         # cruising speed per leg: limits from the (mock) FHWA inventory, sliders start at $0
         pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
-        ts = pg.inner_text('#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
+        ts = ft(pg, '#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
         nroads = pg.locator('#tsSpeed .leg[data-leg]').count()
         assert nroads == 3 and ts.index('US-67 S') < ts.index('I-30 W') and '2 speed limits' in ts and 'At the limit — 75 mph' in ts and 'about 7' not in ts, ts
         assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts and 'All roads' in ts
@@ -131,16 +135,16 @@ with sync_playwright() as p:
         x0 = pg.get_attribute('#tChart .sel-l', 'x1')
         pg.evaluate("() => { const r = document.getElementById('lgR1'); r.value = 6; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
         pg.evaluate("() => { const r = document.getElementById('lgR0'); r.value = -5; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
-        ts = pg.inner_text('#tsSpeed'); print('  after sliding:', [l for l in ts.split('\n') if 'sooner' in l or 'later' in l or 'Time-saving' in l or l.startswith(('+', '−'))])
-        tot = pg.inner_text('#lgTot'); print('  total:', tot.replace('\n', ' | '))
+        ts = ft(pg, '#tsSpeed'); print('  after sliding:', [l for l in ts.split('\n') if 'sooner' in l or 'later' in l or 'Time-saving' in l or l.startswith(('+', '−'))])
+        tot = ft(pg, '#lgTot'); print('  total:', tot.replace('\n', ' | '))
         assert 'Time-saving cost' in tot and pg.get_attribute('#tChart .sel-l', 'x1') != x0
-        assert pg.inner_text('#lgSub1').startswith('+$') and pg.inner_text('#lgSub0').startswith('−$')
+        assert ft(pg, '#lgSub1').startswith('+$') and ft(pg, '#lgSub0').startswith('−$')
         pg.screenshot(path=f'{OUT}/{name}-s2-trip-speed-slid.png')
         rep_speed = pg.evaluate("JSON.parse(window.__tripReport()).speed")
         assert rep_speed['offsets']['1'] == 6 and rep_speed['stats']['hpms'] > 0 and [r['name'] for r in rep_speed['roads']] == ['US-67 S', 'I-30 W'], rep_speed['roads']
         # the "all roads" slider moves every road
         pg.evaluate("() => { const r = document.getElementById('lgAll'); r.value = 5; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
-        assert pg.input_value('#lgR0') == '5' and pg.input_value('#lgR1') == '5' and pg.input_value('#lgR2') == '5' and pg.inner_text('#lgAllSub').startswith('+$')
+        assert pg.input_value('#lgR0') == '5' and pg.input_value('#lgR1') == '5' and pg.input_value('#lgR2') == '5' and ft(pg, '#lgAllSub').startswith('+$')
         mk0 = pg.get_attribute('#tChart .mk[data-i="2"]', 'x1')
         pg.evaluate("() => { const r = document.getElementById('lgAll'); r.value = 12; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
         assert pg.get_attribute('#tChart .mk[data-i="2"]', 'x1') != mk0, 'section markers follow the All roads slider'
@@ -177,13 +181,13 @@ with sync_playwright() as p:
         pg.click('#tsEdit'); pg.wait_for_timeout(300)
         pg.check('#tRule', force=True); pg.fill('#tRuleOver', '9'); pg.fill('#tRuleCap', '74'); pg.dispatch_event('#tRuleCap', 'change'); pg.wait_for_timeout(100)
         pg.click('#tGo'); pg.wait_for_timeout(1500); pg.wait_for_selector('#lgR2', timeout=5000)
-        vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = pg.inner_text('.rule-line'); print('  rule +9 up to 74:', vals, '|', rl)
-        assert vals == ['4', '4', '0'] and 'never above 74 mph' in rl and pg.inner_text('#lgTot').find('+$') >= 0
+        vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = ft(pg, '.rule-line'); print('  rule +9 up to 74:', vals, '|', rl)
+        assert vals == ['4', '4', '0'] and 'never above 74 mph' in rl and ft(pg, '#lgTot').find('+$') >= 0
         pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.uncheck('#tRule', force=True); pg.dispatch_event('#tRule', 'change'); pg.click('#tGo'); pg.wait_for_timeout(1500)
         # finding stops again on the same route reuses the saved search (no Google lookups); "Get fresh prices" searches again
         pg.evaluate("window.__jobs = null"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.click('#tGo'); pg.wait_for_timeout(1500)
         assert pg.evaluate('window.__jobs') is None, 'saved search reused'
-        sv = pg.inner_text('.note.saved'); print('  second search:', sv)
+        sv = ft(pg, '.note.saved'); print('  second search:', sv)
         assert 'saved' in sv and 'Get fresh prices' in sv
         pg.click('#tsRefresh'); pg.wait_for_timeout(1800)
         assert pg.evaluate('window.__jobs') and pg.locator('.note.saved').count() == 0, 'fresh search'
@@ -191,7 +195,7 @@ with sync_playwright() as p:
         # buffer slider: checks other buffers in the background, marks where a smaller one saves money
         pg.wait_for_selector('#tsBuf', timeout=5000)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
-        bt = pg.inner_text('#tsBufBox'); print('  buffer box:', bt.replace('\n', ' | '))
+        bt = ft(pg, '#tsBufBox'); print('  buffer box:', bt.replace('\n', ' | '))
         sweep = pg.evaluate("window.__trip.state().result.sweep.map(x => [x.mi, x.ok, x.net && +x.net.toFixed(2), x.mark])")
         print('  sweep:', sweep)
         assert pg.input_value('#tsBuf') == '30' and 'Buffer for this trip' in bt
@@ -201,7 +205,7 @@ with sync_playwright() as p:
             m = marks[-1][0]
             pg.evaluate("(v) => { const i = document.getElementById('tsBuf'); i.value = v; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); }", m)
             pg.wait_for_timeout(300)
-            bt2 = pg.inner_text('#tsBufBox'); print('  after slide to', m, ':', bt2.replace('\n', ' | '))
+            bt2 = ft(pg, '#tsBufBox'); print('  after slide to', m, ':', bt2.replace('\n', ' | '))
             assert pg.evaluate('window.__trip.state().result.bufMi') == m and 'For this trip only' in bt2
         # too much buffer: refused, stays put
         cur = pg.evaluate('window.__trip.state().result.bufMi')
@@ -211,16 +215,16 @@ with sync_playwright() as p:
         # other routes: plan the trip on I-30 too, where (in this test) gas is 35c cheaper
         pg.click('#tsEdit'); pg.wait_for_timeout(300)
         pg.check('#tAltCmp', force=True); pg.fill('#tAltSave', '2'); pg.dispatch_event('#tAltSave', 'change'); pg.wait_for_timeout(200)
-        info = pg.inner_text('#tRouteInfo'); print('  with other routes:', info.replace('\n', ' | ')[-160:])
+        info = ft(pg, '#tRouteInfo'); print('  with other routes:', info.replace('\n', ' | ')[-160:])
         assert 'your route + 1 other' in info, info
         pg.evaluate("window.__cheapI30 = true; window.__alongRoutes = {}"); pg.click('#tGo'); pg.wait_for_timeout(2500)
         assert pg.evaluate('window.__alongRoutes') == {'I-30': True, 'US-67': True}, pg.evaluate('window.__alongRoutes')
-        rb = pg.inner_text('.routebox'); print('  route box:', rb.replace('\n', ' | '))
+        rb = ft(pg, '.routebox'); print('  route box:', rb.replace('\n', ' | '))
         assert 'Cheaper route: via I-30 W' in rb, rb
         pg.evaluate("document.querySelector('.routebox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2c-otherroute.png')
         pg.click('.routebox [data-route="0"]'); pg.wait_for_timeout(400)
-        sub = pg.inner_text('#tripSheet .sub'); after = pg.inner_text('#tripSheet'); print('  switched:', sub, '|', [l for l in after.split('\n') if 'Also checked' in l])
+        sub = ft(pg, '#tripSheet .sub'); after = ft(pg, '#tripSheet'); print('  switched:', sub, '|', [l for l in after.split('\n') if 'Also checked' in l])
         assert '318 mi' in sub and 'via US-67 S and I-30 W' in after and 'Cheaper route' not in after
         assert "isn't the route you picked in Google Maps" in after
         pg.evaluate("window.__cheapI30 = false"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.uncheck('#tAltCmp', force=True)
@@ -229,7 +233,7 @@ with sync_playwright() as p:
         pg.fill('#tMiles', '140'); pg.click('#tGo'); pg.wait_for_timeout(1500)
         pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
-        bt = pg.inner_text('#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
+        bt = ft(pg, '#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
         assert pg.locator('.buf-marks .bm').count() >= 1 and 'saves' in bt, bt
         pg.screenshot(path=f'{OUT}/{name}-t2d-buffer-marks.png')
         mk = pg.evaluate("Math.max(...window.__trip.state().result.sweep.filter(x => x.mark && x.mi < 30).map(x => x.mi))")
@@ -240,7 +244,7 @@ with sync_playwright() as p:
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t2e-buffer-slid.png')
         pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.fill('#tMiles', '80'); pg.click('#tGo'); pg.wait_for_timeout(1500)
-        assert '330 mi' in pg.inner_text('#tripSheet .sub')
+        assert '330 mi' in ft(pg, '#tripSheet .sub')
         pg.evaluate("document.getElementById('tripSheet').scrollTop = 99999"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t3-result-bottom.png')
         pg.click('#tsExport'); url = pg.evaluate('window.__lastUrl'); print('  export:', url)
@@ -252,7 +256,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-t4-arrive-setup.png', full_page=True)
         pg.click('#tGo'); pg.wait_for_timeout(1500)
         pg.evaluate("document.querySelector('.topbox').scrollIntoView()"); pg.wait_for_timeout(150)
-        print('  TOP-UP:', pg.inner_text('.topbox').replace('\n', ' | '))
+        print('  TOP-UP:', ft(pg, '.topbox').replace('\n', ' | '))
         pg.click('[data-top="0"]'); pg.wait_for_timeout(300)
         pg.evaluate("document.querySelector('.topbox').scrollIntoView()"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t5-topup.png')
@@ -261,7 +265,7 @@ with sync_playwright() as p:
         pg.click('#tsExport'); url2 = pg.evaluate('window.__lastUrl'); print('  export with top-up:', url2)
         assert url2.count('%7C') == url.count('%7C') + 1 or 'waypoints=' in url2
         pg.fill('#tsTopMi', '0.5'); pg.dispatch_event('#tsTopMi', 'change'); pg.wait_for_timeout(300)
-        assert 'No priced station that close' in pg.inner_text('.topbox'), 'radius in tenths respected'
+        assert 'No priced station that close' in ft(pg, '.topbox'), 'radius in tenths respected'
         pg.click('[data-why="0"]'); pg.wait_for_timeout(150)
         pg.click('#tsDone'); pg.wait_for_timeout(200)
         assert not pg.evaluate("document.body.classList.contains('trip-on')")
@@ -270,11 +274,11 @@ with sync_playwright() as p:
         pg.fill('#tLink', ''); pg.wait_for_timeout(500)
         pg.click('.alt-entry summary'); pg.fill('#tFrom', '100 Main St'); pg.fill('#tTo', 'Dallas, TX')
         pg.click('#tGo'); pg.wait_for_timeout(700)
-        txt = pg.inner_text('#tParsed'); print('  typed:', txt.replace('\n', ' | '))
+        txt = ft(pg, '#tParsed'); print('  typed:', txt.replace('\n', ' | '))
         assert 'Which one?' in txt and 'Conway, AR 72032' in txt and 'North Little Rock, AR 72114' in txt
         pg.screenshot(path=f'{OUT}/{name}-t6-pick.png')
         pg.click('[data-choice="1"]'); pg.wait_for_timeout(200)
-        assert '100 N Main St, Conway, AR 72032, USA' in pg.inner_text('#tParsed') and 'Which one?' not in pg.inner_text('#tParsed')
+        assert '100 N Main St, Conway, AR 72032, USA' in ft(pg, '#tParsed') and 'Which one?' not in ft(pg, '#tParsed')
         pg.click('#tGo'); pg.wait_for_timeout(700)
         body = pg.evaluate('window.__routeBody')
         assert body['origin'] == {'placeId': 'P-main-conway'} and body['destination'] == {'placeId': 'P-dallas'}, body
@@ -288,7 +292,7 @@ with sync_playwright() as p:
         pg.evaluate("window.__finds = null; window.__mocks.link = {url: %s}; window.__gmapsAnswer = {href: %s, routes: [{via:'I-30 W', miles:318, minutes:293}, {via:'US-67 S and I-30 W', miles:330, minutes:305}]};"
                     " onSharedText('Directions from 100 Main St to Dallas\\nhttps://maps.app.goo.gl/PhOnE123?g_st=ac')" % (json.dumps(PHONE), json.dumps(FULL)))
         pg.wait_for_timeout(900)
-        txt = pg.inner_text('#tParsed'); print('  phone link:', txt.replace('\n', ' | '))
+        txt = ft(pg, '#tParsed'); print('  phone link:', txt.replace('\n', ' | '))
         assert PHONE in pg.evaluate('window.__gmapsUrls'), 'opened the phone link in the hidden Google Maps page'
         assert '100 Main St, North Little Rock, AR 72114 ✓' in txt and 'via US-67 S and I-30 W' in txt, txt
         pg.screenshot(path=f'{OUT}/{name}-t7-phonelink.png')
@@ -296,7 +300,7 @@ with sync_playwright() as p:
         body = pg.evaluate('window.__routeBody')
         assert body['origin']['location']['latLng']['latitude'] == 34.7690 and body['computeAlternativeRoutes'] is True, body
         assert pg.evaluate('window.__finds') is None, 'no guessing by street name'
-        sel = pg.inner_text('.alts-pick button.on'); print('  picked route:', sel.replace('\n', ' | '))
+        sel = ft(pg, '.alts-pick button.on'); print('  picked route:', sel.replace('\n', ' | '))
         assert 'US-67 S and I-30 W' in sel and 'same as in Google Maps' in sel
         pg.click('#tClose'); pg.wait_for_timeout(200)
         # A real-world share link (Oct 5): street-only names, exact spots as !8m2!3d!4d -- start must not be guessed
@@ -328,34 +332,34 @@ with sync_playwright() as p:
         }''')
         pg.evaluate("window.__mocks.link = {url: %s}; onSharedText('https://maps.app.goo.gl/ReAlTrIp42')" % json.dumps(REAL))
         pg.wait_for_timeout(150)
-        ld = pg.inner_text('#tParsed'); print('  while reading the link:', ld.replace('\n', ' | '))
+        ld = ft(pg, '#tParsed'); print('  while reading the link:', ld.replace('\n', ' | '))
         assert 'Loading…' in ld and pg.locator('.parse-load .pbar i').count() == 1
         pg.screenshot(path=f'{OUT}/{name}-t8-loading.png')
         pg.wait_for_timeout(2600); pg.evaluate('window.__gmapsDelay = 0')
         urls = pg.evaluate('window.__gmapsUrls'); print('  Maps scan:', urls)
         assert urls == ['https://www.google.com/maps/dir/34.7464809%2C-92.2895948/41.7640350%2C-72.6823870/'], 'route options read by exact spots'
-        txt = pg.inner_text('#tParsed'); print('  after reading the link:', txt.replace('\n', ' | '))
+        txt = ft(pg, '#tParsed'); print('  after reading the link:', txt.replace('\n', ' | '))
         assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
         assert 'Google Maps shows 3 routes' in txt and pg.locator('#tOptMap .rlabel').count() == 3 and pg.locator('#tOptMap .rlabel.on').count() == 1, txt
         pg.evaluate("document.getElementById('tOptMap').scrollIntoView({block:'center'})"); pg.wait_for_timeout(300)
         pg.screenshot(path=f'{OUT}/{name}-t8b-optmap.png')
         pg.click('#tOptMap [data-opt="1"]', timeout=5000); pg.wait_for_timeout(300)
-        sel = pg.inner_text('.opt-sel'); print('  tapped route 2 on the map:', sel)
+        sel = ft(pg, '.opt-sel'); print('  tapped route 2 on the map:', sel)
         assert 'I-71 N and I-86 E' in sel and '1,406 mi' in sel
         pg.screenshot(path=f'{OUT}/{name}-t8a-cities.png')
         finds = len(pg.evaluate('window.__finds') or [])
         pg.fill('#tMiles', '300'); pg.click('#tGo'); pg.wait_for_timeout(1800)
-        info = pg.inner_text('.alts-pick'); print('  3 routes:', info.replace('\n', ' | '), '| rebuilt with', pg.evaluate('window.__viaCalls'), 'pass-through points')
+        info = ft(pg, '.alts-pick'); print('  3 routes:', info.replace('\n', ' | '), '| rebuilt with', pg.evaluate('window.__viaCalls'), 'pass-through points')
         assert len(pg.evaluate('window.__gmapsUrls')) == 1, 'Get route reused the scan'
         assert len(pg.evaluate('window.__finds') or []) == finds, 'addresses were already done'
         assert pg.locator('.alts-pick button').count() == 3 and info.index('via I-71 N\n') < info.index('I-86') < info.index('I-81'), info
         assert '1404 mi' in info and '1324 mi' in info and pg.evaluate('window.__viaCalls') == [8], info
-        assert 'I-86' in pg.inner_text('.alts-pick button.on') and pg.locator('#tRmap .rlabel').count() == 3, 'the route tapped on the map is the one picked'
+        assert 'I-86' in ft(pg, '.alts-pick button.on') and pg.locator('#tRmap .rlabel').count() == 3, 'the route tapped on the map is the one picked'
         pg.click('#tRmap [data-opt="2"]'); pg.wait_for_timeout(300)
-        assert 'I-81' in pg.inner_text('.alts-pick button.on'), 'tapping a route on the map after Get route switches to it'
+        assert 'I-81' in ft(pg, '.alts-pick button.on'), 'tapping a route on the map after Get route switches to it'
         pg.screenshot(path=f'{OUT}/{name}-t9-three-routes.png')
         pg.evaluate("window.__mocks.route = window.__origRoute; window.__gmapsAnswer = null")
-        txt = pg.inner_text('#tParsed'); print('  real link:', txt.replace('\n', ' | '))
+        txt = ft(pg, '#tParsed'); print('  real link:', txt.replace('\n', ' | '))
         assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
         body = pg.evaluate('window.__routeBody'); print('  route from:', body['origin'], 'to:', body['destination'])
         assert body['origin']['location']['latLng'] == {'latitude': 34.7464809, 'longitude': -92.2895948}, body
@@ -365,7 +369,7 @@ with sync_playwright() as p:
         # pasting a shared Fuel+ trip restores the route, no Google lookups or link opening
         pg.evaluate("window.__finds = null; window.__gmapsUrl = null; window.__mocks.link = {error: 'should not be used'}; onSharedText(%s)" % json.dumps(SHARED_TRIP))
         pg.wait_for_timeout(600)
-        txt = pg.inner_text('#tParsed'); print('  imported shared trip:', txt.replace('\n', ' | '))
+        txt = ft(pg, '#tParsed'); print('  imported shared trip:', txt.replace('\n', ' | '))
         assert 'Dallas' in txt and 'error' not in txt.lower(), txt
         pg.click('#tGo'); pg.wait_for_timeout(700)
         assert pg.evaluate('window.__routeBody')['destination'], 'route from the imported trip'
@@ -378,7 +382,7 @@ with sync_playwright() as p:
         # share intent path with a short link that resolves
         pg.evaluate("window.__mocks.link = {url: %s}; onSharedText('Directions to Dallas\\nhttps://maps.app.goo.gl/AbCdEf')" % json.dumps(LINK))
         pg.wait_for_timeout(800)
-        assert 'Dallas' in pg.inner_text('#tParsed'), pg.inner_text('#tParsed')
+        assert 'Dallas' in ft(pg, '#tParsed'), ft(pg, '#tParsed')
         pg.close()
     b.close()
 print('JS errors:', errors or 'none')

@@ -76,8 +76,7 @@
     A.closeDetail();
     var pg = $('trip');
     var t = S.trip;
-    var h = '<div class="t-head"><h1>Plan fuel stops</h1><button class="x" id="tClose" aria-label="Close">✕</button></div>' +
-      '<p class="lead">Bring in a Google Maps route, and Fuel+ picks the stops that save money — counting detours — then sends the route back with the stops added.</p>';
+    var h = '<div class="t-head"><h1>Plan fuel stops <button type="button" class="qi" data-q="' + encodeURIComponent('Bring in a Google Maps route, and Fuel+ picks the stops that save money — counting detours — then sends the route back with the stops added.') + '">?</button></h1><button class="x" id="tClose" aria-label="Close">✕</button></div>';
 
     h += '<div class="card"><h3>1 · Route</h3>' +
       '<div class="field col"><div class="lbl">Google Maps directions link<small>In Google Maps: get directions → ⋮ → <b>Share directions</b> → Fuel+ Map. Or copy the link and paste it here.</small></div>' +
@@ -100,7 +99,7 @@
       '<div class="grid2">' + num('tTime', 'Your time is worth ($/hr)', t.timeValue, 5, 'optional · 0 = off') + '<span class="lead small">Adds a cost for every minute of detour and stop time, on top of the rule above.</span></div></details>' +
       '<div class="sub-h">When you get there</div>' +
       '<div class="seg2" id="tArrive"><button data-a="buffer" class="' + (t.arrive !== 'full' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most gas</button></div>' +
-      '<div class="lead small" id="tArriveHelp"></div>' +
+      '<div class="lead small keep" id="tArriveHelp"></div>' +
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up station within (mi of destination)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
       '<span></span></div>' +
@@ -113,8 +112,8 @@
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
 
     h += '<div id="tRouteInfo"></div><button class="btn primary" id="tGo">Get route</button>' +
-      '<p class="lead small" id="tCost"></p>' +
-      '<p class="lead small"><a href="#" id="tReport">Send a troubleshooting report</a> · <a href="#" id="tLog">Debug log</a></p>';
+      '<p class="lead small keep" id="tCost"></p>' +
+      '<p class="lead small keep"><a href="#" id="tReport">Send a troubleshooting report</a> · <a href="#" id="tLog">Debug log</a></p>';
     pg.innerHTML = h; show(pg, true); pg.scrollTop = 0;
 
     $('tClose').onclick = closeTrip;
@@ -1053,12 +1052,12 @@
     var dmin = function (v) { return Math.abs(v) < 1 ? 'about the same time' : Math.round(Math.abs(v)) + ' min ' + (v > 0 ? 'longer' : 'shorter'); };
     if (best) {
       h += '<div class="routebox good"><div class="tb-h">Cheaper route: via ' + esc(best.via) + '</div>' +
-        '<div class="lead small">' + (best.saves != null ? 'Saves about <b>' + money(best.saves) + '</b>' : 'Works with your buffer when this one doesn\'t') + ' · ' + dmi(best.extraMi) + ' · ' + dmin(best.extraMin) +
+        '<div class="lead small keep">' + (best.saves != null ? 'Saves about <b>' + money(best.saves) + '</b>' : 'Works with your buffer when this one doesn\'t') + ' · ' + dmi(best.extraMi) + ' · ' + dmin(best.extraMin) +
         ' · ' + best.stops + ' stop' + (best.stops === 1 ? '' : 's') + (S.trip.timeValue > 0 ? ' (your time counted)' : '') + '.</div>' +
         '<button class="btn tonal" data-route="' + best.k + '">Switch to this route</button></div>';
     }
     var rest = cs.filter(function (c) { return c !== best; });
-    if (rest.length) h += '<div class="lead small">Also checked: ' + rest.map(function (c) {
+    if (rest.length) h += '<div class="lead small keep">Also checked: ' + rest.map(function (c) {
       if (c.error) return 'via ' + esc(c.via) + ' (couldn\'t check: ' + esc(c.error) + ')';
       if (!c.ok) return 'via ' + esc(c.via) + ' (no plan keeps your buffer)';
       return 'via ' + esc(c.via) + ' — ' + (c.saves > 0.005 ? 'saves only ' + money(c.saves) + ' (your bar is ' + money(S.trip.altMinSave) + ')' : money(-c.saves) + ' more') + ', ' + dmin(c.extraMin) +
@@ -1172,7 +1171,7 @@
   function bufBox() {
     var r = result, sw = r.sweep;
     var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
-    if (!sw) return h + '<div class="lead small">Checking what other buffers would cost…</div></div>';
+    if (!sw) return h + '<div class="lead small keep">Checking what other buffers would cost…</div></div>';
     var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi);
     h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, cur) + '</span></div>';
     h += '<div class="buf-track"><div class="buf-marks">' + sw.filter(function (x) { return x.mark; }).map(function (x) {
@@ -1186,13 +1185,13 @@
     var hint = lower.length ? lower[lower.length - 1] : null;
     if (!cur.ok) {
       var okRows = sw.filter(function (x) { return x.ok; });
-      h += '<div class="lead small">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : 'No buffer works — check the miles left.') + '</div>';
+      h += '<div class="lead small keep">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : 'No buffer works — check the miles left.') + '</div>';
     } else if (hint) {
       var hs = hint.plan.stops.filter(function (s) { return !cur.plan.stops.some(function (c) { return c.c.id === s.c.id; }); })[0];
-      h += '<div class="lead small">Marks show where a smaller buffer saves money. Down to ' + hint.mi + ' mi saves ' + money(cur.net - hint.net) +
+      h += '<div class="lead small keep">Marks show where a smaller buffer saves money. Down to ' + hint.mi + ' mi saves ' + money(cur.net - hint.net) +
         (hs ? ' — it can reach ' + esc(hs.c.station.name) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ')' : '') + '.</div>';
     } else h += '<div class="lead small">A smaller buffer wouldn\'t save anything on this trip.</div>';
-    if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small">For this trip only — your usual buffer is ' + S.trip.bufferMi + ' mi. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer</a></div>';
+    if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small keep">For this trip only — your usual buffer is ' + S.trip.bufferMi + ' mi. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer</a></div>';
     return h + '</div>';
   }
   function bufText(x, cur) {
@@ -1347,8 +1346,8 @@
       if (p.firstDip && p.stops.length) h += '<div class="msg">You can\'t keep a ' + r.bufMi + '-mile buffer on the way to the first stop — you\'ll get there with about ' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' miles left. Stop 1 is the closest workable station.</div>';
       if (!t.stops) h += '<div class="msg ok">No stop is worth it — you\'ll arrive with about ' + Math.round(p.arriveMi) + ' miles left.</div>';
       p.stops.forEach(function (s, i) { h += stopCard(s, i); });
-      if (t.stops) h += '<div class="lead small">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') +
-        '. When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
+      if (t.stops) h += '<div class="lead small keep arrive">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') + '.</div>' +
+        '<div class="lead small">When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
       h += bufBox();
       h += '<div class="spdbox" id="tsSpeed"></div>';
       if (S.trip.arrive === 'full') h += topUpBox();
@@ -1404,7 +1403,7 @@
     var h = '<div class="topbox"><div class="tb-h">Top up near ' + esc(route.stops[route.stops.length - 1].label) + '?</div>' +
       '<div class="tb-row">Stations within <input type="number" id="tsTopMi" step="0.1" min="0" inputmode="decimal" value="' + r.topMi.toFixed(1) + '"> mi of the destination</div>';
     if (!r.tops.length) {
-      h += '<div class="lead small">No priced station that close' + (last ? ' after your last stop' : '') + '. Try a bigger distance.</div></div>';
+      h += '<div class="lead small keep">No priced station that close' + (last ? ' after your last stop' : '') + '. Try a bigger distance.</div></div>';
       return h;
     }
     r.tops.forEach(function (t, k) {
@@ -1421,7 +1420,7 @@
     var r = result, b = r.back, bp = b.plan, acc = r.acc;
     var h = '<div class="topbox"><div class="tb-h">Round trip estimate</div>';
     if (!bp.ok) {
-      return h + '<div class="lead small">Couldn\'t plan the drive back on these roads with your buffer (starting with ~' + Math.round(b.startGal / model.combGpm) + ' mi of gas).</div></div>';
+      return h + '<div class="lead small keep">Couldn\'t plan the drive back on these roads with your buffer (starting with ~' + Math.round(b.startGal / model.combGpm) + ' mi of gas).</div></div>';
     }
     var there = acc.legs[0], back = acc.legs[1];
     h += '<div class="kpis two"><div><b>' + money(there.cost + back.cost) + '</b><span>round trip cost</span></div><div><b>' + money(there.spend + back.spend) + '</b><span>at the pump both ways</span></div></div>';
@@ -1453,7 +1452,21 @@
     return h;
   }
 
-  var dotsRenderer = null;
+  var dotsRenderer = null, dots = [];
+  /**
+   * Station dots: a fixed pixel size looks bigger and bigger against the map as you zoom out (a 1,300-mile trip at
+   * zoom 5 turns into a solid bead chain). So they shrink gently as you zoom out — about a tenth of the map's own
+   * scaling — from 6 px at street level to ~2.5 px at country level, never below a tappable-looking dot.
+   */
+  function dotSize(z) {
+    var r = Math.max(2.4, Math.min(6, 6 - (13 - z) * 0.45));
+    return { r: r, w: r > 4 ? 2 : r > 3 ? 1.5 : 1 };
+  }
+  map.on('zoomend', function () {
+    if (!dots.length) return;
+    var dz = dotSize(map.getZoom());
+    dots.forEach(function (d) { d.setRadius(dz.r); d.setStyle({ weight: dz.w }); });
+  });
   function drawRoute() {
     layer.clearLayers();
     if (!map.hasLayer(layer)) layer.addTo(map);
@@ -1472,9 +1485,13 @@
       if (!map.getPane('tdots')) { var pn = map.createPane('tdots'); pn.style.zIndex = 590; }
       var cv = dotsRenderer || (dotsRenderer = L.canvas({ padding: 0.3, pane: 'tdots' }));
       var ring = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#ffffff';
+      var dz = dotSize(map.getZoom());
+      dots = [];
       result.cands.forEach(function (c) {
         if (chosen[c.id]) return;
-        L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: 6, color: ring, weight: 2, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 })
+        var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 });
+        dots.push(dot);
+        dot
           .bindPopup('<b>' + esc(c.station.name) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
             (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : '')).addTo(layer);
       });

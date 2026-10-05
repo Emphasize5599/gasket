@@ -469,3 +469,22 @@ b.good, .leg-sub.good { color: var(--save); }
 .buf-scale { margin-right: 48px; }
 .rule-line b { color: var(--ink); }
 .leg-h small { white-space: nowrap; }
+
+/* trip planner button right above the list, location button above it */
+.fab-x { bottom: calc(var(--sb) + var(--sheet-h, 132px) + 14px); }
+.fab { bottom: calc(var(--sb) + var(--sheet-h, 132px) + 74px); }
+
+.all-v { font-weight: 800; color: var(--accent); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* (?) info buttons */
+.qi { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--ink-2); color: var(--ink-2);
+  font-size: 12px; font-weight: 800; line-height: 1; padding: 0; margin-left: 6px; vertical-align: middle; background: none; flex: none; }
+.qi.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.qpop { font-size: 13px; line-height: 1.45; color: var(--ink-2); background: var(--surface-2); border-radius: 12px; padding: 9px 12px; margin: 4px 0 8px; }
+.qpop b { color: var(--ink); }
+.qline { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); margin: 6px 0; }
+.qline .qi { margin-left: 0; }
+.lbl.has-q, .sub-h.has-q { display: block; }
+.nf > span.has-q { display: block; padding-top: .2em; }
+.nf > span.has-q .qi, .lbl.has-q .qi { margin-left: 4px; position: relative; top: -1px; }
+.qpop p { margin: 0 0 6px; } .qpop p:last-child { margin-bottom: 0; }

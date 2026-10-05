@@ -122,7 +122,7 @@
       '<label class="nf"><span>City mpg</span><input type="number" inputmode="decimal" step="0.1" id="oCity" placeholder="' + esc(hasEpa(c) ? c.epa.city : '') + '" value="' + esc(c.obs.city || '') + '"></label>' +
       '<label class="nf"><span>Highway mpg</span><input type="number" inputmode="decimal" step="0.1" id="oHwy" placeholder="' + esc(hasEpa(c) ? c.epa.hwy : '') + '" value="' + esc(c.obs.hwy || '') + '"></label>' +
       '<label class="nf"><span>% of EPA</span><input type="number" inputmode="decimal" step="1" id="oPct" value="' + pctOf(c) + '"' + (hasEpa(c) ? '' : ' disabled') + '></label></div>';
-    if (hw || ct) h += '<div class="lead small">Your log averages ' + [ct ? ct.mpg.toFixed(1) + ' city (' + ct.n + ')' : '', hw ? hw.mpg.toFixed(1) + ' highway (' + hw.n + ')' : ''].filter(Boolean).join(' · ') +
+    if (hw || ct) h += '<div class="lead small keep">Your log averages ' + [ct ? ct.mpg.toFixed(1) + ' city (' + ct.n + ')' : '', hw ? hw.mpg.toFixed(1) + ' highway (' + hw.n + ')' : ''].filter(Boolean).join(' · ') +
       '. <a href="#" id="oUseLog">Use these</a></div>';
     h += '<div class="log-list">' + (c.entries.length ? c.entries.slice().reverse().map(function (e) {
       return '<div class="log-row"><b>' + (+e.mpg).toFixed(1) + ' mpg</b><span>' + esc(e.kind) + (e.speed ? ' · at ' + e.speed + ' mph' : '') + ' · ' + esc(fmtDate(e.date)) + '</span>' +
@@ -288,7 +288,7 @@
     var wasOpen = speedHost.querySelector('details.spd-card') && speedHost.querySelector('details.spd-card').open;
     var h = '<details class="spd-card"' + (wasOpen ? ' open' : '') + '><summary><span class="h3">Best cruising speed · ' + esc(shortName(c)) + '</span>' +
       (m ? '<b class="spd-pill">' + m.rec.speed + ' mph</b>' : '') + '</summary>';
-    if (!m) { speedHost.innerHTML = h + '<div class="lead small">Look your car up from the EPA (Edit) to see this.</div></details>'; return; }
+    if (!m) { speedHost.innerHTML = h + '<div class="lead small keep">Look your car up from the EPA (Edit) to see this.</div></details>'; return; }
     var r = m.rec, row = r.rows[r.speed - m.min], f = mpgFn(c, m.cal), bal = SP.balanced(f, m.min, m.max);
     h += '<div class="spd-top"><div class="spd-big">' + r.speed + '<span>mph</span></div><div class="spd-sub">about ' + row.mpg.toFixed(0) + ' mpg · ' + row.galPer100.toFixed(2) + ' gal per 100 mi<br>' +
       (r.mode === 'time' ? 'where an hour saved costs about your $' + m.tv + '/hr' : 'past this, each 1% of time saved costs more than 1% more gas') + '</div></div>';
@@ -406,18 +406,18 @@
   function tripSpeed(el, ctx) {
     var c = car();
     if (!el) return;
-    if (!hasEpa(c)) { el.innerHTML = '<div class="tb-h">Cruising speed</div><div class="lead small">Look your car up from the EPA to plan speeds.</div>'; return; }
+    if (!hasEpa(c)) { el.innerHTML = '<div class="tb-h">Cruising speed</div><div class="lead small keep">Look your car up from the EPA to plan speeds.</div>'; return; }
     var cal = SP.calibrate(c.type || 'car', c.epa.hwy, c.entries), f = mpgFn(c, cal);
     var lo = 25, hi = Math.max(80, +S.speed.max || 84);
     var rows = []; for (var v = 45; v <= hi; v++) rows.push({ mph: v, galPer100: 100 / f(v) });
     var bal = SP.balanced(f, 45, hi);
     var h = '<div class="spd-stick"><div class="tb-h">Cruising speed for this trip</div>';
-    if (ctx.loading) { el.innerHTML = h + '</div>' + (ctx.loadingHtml || '<div class="lead small">Looking up speed limits along the route…</div>'); return; }
+    if (ctx.loading) { el.innerHTML = h + '</div>' + (ctx.loadingHtml || '<div class="lead small keep">Looking up speed limits along the route…</div>'); return; }
     var roadList = ctx.roads || [];
     // one slider per posted-limit section of each major road
     var roads = [];
     roadList.forEach(function (r, ri) { (r.sections || []).forEach(function (sec, si) { roads.push({ road: r, ri: ri, si: si, name: r.name, cls: r.cls, from: sec.from, to: sec.to, mi: sec.mi, limit: sec.limit, src: sec.src, pieces: sec.pieces }); }); });
-    if (!roads.length) { el.innerHTML = h + '</div><div class="lead small">No Interstate, U.S., state or county route stretches found on this route.</div>'; return; }
+    if (!roads.length) { el.innerHTML = h + '</div><div class="lead small keep">No Interstate, U.S., state or county route stretches found on this route.</div>'; return; }
     var st = ctx.state; st.offsets = st.offsets || {};
     // your default: the limit, or "+N over the limit but never above M mph" (roads already at/above M stay at the limit)
     var rule = S.speed.rule || {};
@@ -445,8 +445,8 @@
     h += '<div class="lead small">Major roads — Interstates, U.S., state and county routes — with a slider for each stretch at one speed limit. Each starts at the limit (no extra cost). ' +
       (tot ? 'Limits: ' + Math.round((stt.hpms || 0) / tot * 100) + '% from the FHWA road inventory' + (stt.state ? ', ' + Math.round(stt.state / tot * 100) + '% state maximums' : '') + (stt.google ? ', ' + Math.round(stt.google / tot * 100) + '% Google\'s typical speed' : '') + '.' : '') +
       ' Cost uses the gas in your tank on each part.</div>';
-    if (rule.on) h += '<div class="lead small rule-line">Your rule: <b>+' + (+rule.over || 0) + ' over the limit, never above ' + (+rule.cap || 70) + ' mph</b> (roads at ' + (+rule.cap || 70) + '+ stay at the limit). <a href="#" id="lgRule">Back to my rule</a></div>';
-    h += '<div class="leg all"><div class="leg-h"><span>All roads' + (rule.on ? ' <small>up to ' + (+rule.cap || 70) + ' mph</small>' : '') + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
+    if (rule.on) h += '<div class="lead small keep rule-line">Your rule: <b>+' + (+rule.over || 0) + ' over the limit, never above ' + (+rule.cap || 70) + ' mph</b> (roads at ' + (+rule.cap || 70) + '+ stay at the limit). <a href="#" id="lgRule">Back to my rule</a></div>';
+    h += '<div class="leg all"><div class="leg-h"><span>All roads <b class="all-v" id="lgAllV"></b>' + (rule.on ? ' <small>up to ' + (+rule.cap || 70) + ' mph</small>' : '') + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
       '<input type="range" min="-10" max="15" step="1" value="' + (st.all || 0) + '" id="lgAll" aria-label="Speed on all roads">' +
       '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div></div>';
     var lastRi = -1;
@@ -507,8 +507,10 @@
       inp.oninput = function () { st.offsets[i] = +inp.value; activate(i); update(i, true); total(); };
       inp.onchange = function () { LG.info('speed', r.name + ' speed offset ' + st.offsets[i], { cost: st.cost, minSaved: st.minSaved }); if (ctx.onChange) ctx.onChange(); };
     });
+    var allLabel = function (v) { $('lgAllV').textContent = v === 0 ? 'at the limit' : (v > 0 ? '+' : '−') + Math.abs(v) + ' mph'; };
+    allLabel(+st.all || 0);
     $('lgAll').oninput = function () {
-      var v = +$('lgAll').value; st.all = v;
+      var v = +$('lgAll').value; st.all = v; allLabel(v);
       roads.forEach(function (r, i) { st.offsets[i] = ruleOff(r.limit, v); $('lgR' + i).value = st.offsets[i]; update(i, false); });
       var all = cost({ pieces: roads.reduce(function (a, r) { return a.concat(r.pieces); }, []) }, v);
       moveSel($('tChart'), all.avgSpeed || 65, 100 / f(all.avgSpeed || 65));
