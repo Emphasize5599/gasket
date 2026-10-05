@@ -20,15 +20,30 @@ assert.equal(L.stateMax('AR', { f_system: 1, urban_id: 4100 }, 60), 65, 'urban')
 assert.equal(L.stateMax('TX', { f_system: 3, urban_id: 99999 }, 52), 60, 'capped near Google speed (52 + 8 -> 60, under the 75 max)');
 assert.equal(L.stateMax('ZZ', null, 60), null);
 
+// road names from Google's instructions, grouped into major stretches
+assert.deepEqual(L.roadOf('Use the right 2 lanes to take exit 1A to merge onto I-81 N toward Roanoke'), { key: 'I-81', name: 'I-81 N', cls: 'interstate', num: '81' });
+assert.equal(L.roadOf('Turn left onto Main St'), null);
+assert.equal(L.roadOf('Turn right onto AR-367 N').cls, 'state');
+assert.equal(L.roadOf('Turn right onto County Rd 12').cls, 'county');
+assert.equal(L.roadOf('Take exit 45 toward Downtown'), null);
+const fakeSegs = [['Head east on Main St', 0, 1], ['Merge onto US-67 S', 1, 40], ['Continue onto US-67 S', 40, 60], ['Take exit 1A to merge onto I-30 W', 60, 61],
+  ['Take exit 2 for I-440', 61, 62], ['Merge onto I-30 W', 62, 200], ['Turn right onto Elm St', 200, 201]].map(([instr, from, to]) => ({ instr, from, to }));
+const rs = L.roads({ segs: fakeSegs });
+assert.deepEqual(rs.map(r => [r.name, r.from, r.to]), [['US-67 S', 1, 60], ['I-30 W', 60, 200]], JSON.stringify(rs));
+// matching the HPMS segment for that road (not the crossing one)
+assert.equal(L.pickFor([{ attributes: { speed_limit: 55, route_number: 67, route_signing: 3 } }, { attributes: { speed_limit: 70, route_number: 30, route_signing: 2 } }], { cls: 'interstate', num: '30' }, 50).limit, 70);
+
 // along(): a synthetic 300-mile route across AR, with an answer for every point
 const line = []; for (let i = 0; i <= 400; i++) line.push({ lat: 34.77 - 0.4 * i / 400, lng: -92.27 - 2.0 * i / 400 });
-const steps = [{ distanceMeters: 10 * 1609.344, staticDuration: Math.round(10 / 35 * 3600) + 's' }, { distanceMeters: 290 * 1609.344, staticDuration: Math.round(290 / 68 * 3600) + 's' }];
+const steps = [{ distanceMeters: 10 * 1609.344, staticDuration: Math.round(10 / 35 * 3600) + 's', navigationInstruction: { instructions: 'Head west on Main St' } },
+  { distanceMeters: 290 * 1609.344, staticDuration: Math.round(290 / 68 * 3600) + 's', navigationInstruction: { instructions: 'Merge onto I-30 W' } }];
 const route = { distanceMeters: 300 * 1609.344, duration: '16000s', polyline: { encodedPolyline: T.encodePolyline(line) }, legs: [{ steps }] };
 const m = T.buildRoute(route, { city: 30, hwy: 38, comb: 33 });
 const urls = [];
 L.along(m, async (u) => { urls.push(u); return { body: JSON.stringify({ features: urls.length % 3 ? [{ attributes: { speed_limit: 70, f_system: 1, route_signing: 2, route_number: 30 } }] : [{ attributes: { f_system: 1, urban_id: 99999 } }] }) }; }, {}).then((res) => {
-  const cruise = res.stretches.filter(s => s.cruise);
-  assert.ok(!res.stretches[0].cruise, 'first 10 mi at 35 mph is town driving');
+  assert.equal(res.roads.length, 1); assert.equal(res.roads[0].name, 'I-30 W');
+  const cruise = res.roads[0].pieces.map(p => Object.assign({ cruise: true }, p));
+  assert.ok(res.roads[0].from >= 9.9, 'town streets left out');
   assert.ok(urls.every(u => /HPMS_FULL_AR_2023\/FeatureServer\/0\/query\?geometry=-9\d\.\d+,3\d\.\d+&geometryType=esriGeometryPoint/.test(u)), urls[0]);
   assert.ok(cruise.every(s => s.limit === 70 || s.limit === 75), cruise.map(s => s.limit));
   assert.ok(res.stats.hpms > 0 && res.stats.state > 0);

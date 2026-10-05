@@ -10,7 +10,10 @@
   const money = (v) => ({ currencyCode: 'USD', units: String(Math.floor(v)), nanos: Math.round((v - Math.floor(v)) * 1e9) });
   const now = new Date().toISOString();
   const steps = [];
-  for (let k = 0; k < 12; k++) steps.push({ distanceMeters: total / 12 * 1609.344, staticDuration: Math.round(total / 12 / (k === 0 || k === 11 ? 35 : 66) * 3600) + 's' });
+  const instr = ['Head south on N Main St toward Main St', 'Turn right to merge onto US-67 S', 'Continue onto US-67 S', 'Use the right lane to take exit 1A to merge onto I-30 W toward Texarkana',
+    'Continue straight to stay on I-30 W', 'Continue straight to stay on I-30 W', 'Keep left to continue on I-30 W, follow signs for Dallas', 'Continue straight to stay on I-30 W',
+    'Continue straight to stay on I-30 W', 'Continue straight to stay on I-30 W', 'Keep right to stay on I-30 W', 'Take exit 45 toward Downtown'];
+  for (let k = 0; k < 12; k++) steps.push({ distanceMeters: total / 12 * 1609.344, staticDuration: Math.round(total / 12 / (k === 0 || k === 11 ? 35 : 66) * 3600) + 's', navigationInstruction: { maneuver: 'STRAIGHT', instructions: instr[k] } });
   const brandAt = { Exxon: [[38, 3.299, 0.3], [150, 3.149, 0.4], [262, 3.259, 0.2], [317.4, 3.459, 0.2]], Mobil: [[60, 3.349, 0.2], [205, 3.199, 1.6]], CITGO: [[118, 3.059, 2.4], [240, 3.329, 0.3]], "Sam's Club Gas Station": [[176, 2.999, 3.2]] };
   window.__mocks = {
     route: (body) => {

@@ -217,7 +217,7 @@
         var mi = (st.distanceMeters || 0) / M_PER_MI, sec = parseDur(st.staticDuration);
         if (mi <= 0) return;
         var mph = sec > 0 ? mi / (sec / 3600) : 45;
-        segs.push({ from: at, to: at + mi, gpm: gpmAt(mph), t0: tAt, t1: tAt + sec, mph: mph });
+        segs.push({ from: at, to: at + mi, gpm: gpmAt(mph), t0: tAt, t1: tAt + sec, mph: mph, instr: st.navigationInstruction && st.navigationInstruction.instructions || '' });
         at += mi; tAt += sec;
       });
       legEnds.push(at);

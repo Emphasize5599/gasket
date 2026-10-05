@@ -469,7 +469,7 @@
     $('sDone').onclick = function () { closeSettings(true); };
     $('sLogView').onclick = function () { showLog(); };
     $('sLogShare').onclick = function () { shareLog(); };
-    $('kvClear').onclick = function () { var n = 0; ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'mapsopts', 'find'].forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
+    $('kvClear').onclick = function () { var n = 0; ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find'].forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
     $('sLogClear').onclick = function () { if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); };
     pg.querySelectorAll('[data-verify]').forEach(function (bt) {
       bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };

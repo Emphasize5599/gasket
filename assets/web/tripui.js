@@ -345,8 +345,9 @@
         stops: (r.plan.stops || []).map(function (s) { return { id: s.c.id, name: s.c.station.name, mile: Math.round(s.c.d * 10) / 10, price: s.c.price, buyGal: s.buyGal, arriveGal: s.arriveGal, departGal: s.departGal, why: s.why }; }),
         notes: r.notes, bufferMi: r.bufMi } : null,
       otherRoutes: r && r.routes ? compareRoutes() : null,
-      speed: model && model._lim && model._lim.stretches ? { stats: model._lim.stats, offsets: r && r.speedState && r.speedState.offsets, cost: r && r.speedState && r.speedState.cost,
-        stretches: model._lim.stretches.map(function (x) { return [Math.round(x.from), x.cruise ? 1 : 0, x.st || '', x.road || '', x.limit || null, x.src || '', Math.round(x.googleMph)]; }) } : null,
+      speed: model && model._lim && model._lim.roads ? { stats: model._lim.stats, offsets: r && r.speedState && r.speedState.offsets, cost: r && r.speedState && r.speedState.cost,
+        roads: model._lim.roads.map(function (x) { return { name: x.name, cls: x.cls, from: Math.round(x.from), to: Math.round(x.to), pieces: x.pieces.map(function (p) { return [Math.round(p.from), p.st || '', p.limit, p.src, Math.round(p.googleMph)]; }) }; }),
+        instructions: model.segs.filter(function (sg) { return sg.to - sg.from > 0.5; }).slice(0, 200).map(function (sg) { return [Math.round(sg.from * 10) / 10, Math.round((sg.to - sg.from) * 10) / 10, sg.instr]; }) } : null,
       bufferSweep: r && r.sweep ? r.sweep.map(function (x) { return { mi: x.mi, ok: x.ok, net: x.net && Math.round(x.net * 100) / 100, mark: x.mark, stops: x.ok ? x.plan.stops.map(function (s) { return s.c.station.name + ' @' + Math.round(s.c.d); }) : null }; }) : null,
       log: window.FLog ? FLog.entries().slice(-300) : []
     };
@@ -708,10 +709,10 @@
   }
   /** Routes API call, saved for a day (same request -> same route). */
   async function routesCall(body) {
-    var key = JSON.stringify(body), o = A.KV.get('routes', key, 24 * 3600e3);
+    var key = JSON.stringify(body), o = A.KV.get('routes2', key, 24 * 3600e3);
     if (o) return o.v;
     var res = await call('computeRoute', S.apiKey, key);
-    if (!res.error) A.KV.put('routes', key, res);
+    if (!res.error) A.KV.put('routes2', key, res);
     return res;
   }
   /** Put the options in the same order as Google Maps (so “route option 2” means the same thing). */
@@ -982,9 +983,9 @@
     Limits.along(m, getJson, { lookup: S.limitLookup !== false }).then(function (res) {
       m._lim = res;
       LG.info('speed', 'Speed limits along the route in ' + (Date.now() - t0) + ' ms', res.stats);
-      LG.debug('speed', 'Stretches', res.stretches.filter(function (x) { return x.cruise; }).map(function (x) { return [Math.round(x.from), x.st, x.road, x.limit, x.src, Math.round(x.googleMph)]; }));
+      LG.debug('speed', 'Roads', res.roads.map(function (r) { return [r.name, Math.round(r.from), Math.round(r.to), r.pieces.map(function (p) { return p.st + ':' + p.limit + (p.src === 'hpms' ? '' : '(' + p.src + ')'); }).join(' ')]; }));
       if (model === m && $('tsSpeed')) renderTripSpeed();
-    }).catch(function (e) { m._lim = { stretches: [], stats: {}, error: String(e) }; LG.error('speed', 'Speed limit lookup failed', String(e)); });
+    }).catch(function (e) { m._lim = { roads: [], stats: {}, error: String(e) }; LG.error('speed', 'Speed limit lookup failed', String(e)); });
   }
   function speedLegs() {
     var r = result, p = r.plan; if (!p.ok) return [];
@@ -1006,11 +1007,14 @@
   function renderTripSpeed() {
     var el = $('tsSpeed'); if (!el || !result || !result.plan.ok) return;
     ensureLimits(model);
-    var legs = speedLegs();
-    var st = result.speedState = result.speedState || {};
-    if (st.offsets && st.offsets.length !== legs.length) st.offsets = null;
-    Garage.tripSpeed(el, { model: model, legs: legs, limits: model._lim, state: st });
+    var legs = speedLegs(), lim = model._lim, st = result.speedState = result.speedState || {};
+    var priceAt = function (d) { var L = legs.filter(function (x) { return d >= x.a && d < x.b; })[0] || legs[legs.length - 1]; return L ? L.price : result.startPrice; };
+    var roads = lim && lim.roads ? lim.roads.map(function (r) {
+      return Object.assign({}, r, { pieces: r.pieces.map(function (pc) { return Object.assign({}, pc, { price: priceAt((pc.from + pc.to) / 2) }); }) });
+    }) : [];
+    Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', state: st });
   }
+
 
   // ---------- buffer slider ----------
   function startSweep() {

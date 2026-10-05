@@ -111,9 +111,9 @@ with sync_playwright() as p:
         pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         ts = pg.inner_text('#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
-        nlegs = pg.locator('#tsSpeed .leg').count(); nstops = pg.evaluate('window.__trip.state().result.plan.stops.length')
-        assert nlegs == nstops + 1, (nlegs, nstops)
-        assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts
+        nroads = pg.locator('#tsSpeed .leg[data-leg]').count()
+        assert nroads == 2 and ts.index('US-67 S') < ts.index('I-30 W'), ts
+        assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts and 'All roads' in ts
         assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
         pg.screenshot(path=f'{OUT}/{name}-s1-trip-speed.png')
         # scroll so the first leg is under the chart: the chart stays pinned under the map
@@ -137,7 +137,10 @@ with sync_playwright() as p:
         assert pg.inner_text('#lgSub1').startswith('+$') and pg.inner_text('#lgSub0').startswith('−$')
         pg.screenshot(path=f'{OUT}/{name}-s2-trip-speed-slid.png')
         rep_speed = pg.evaluate("JSON.parse(window.__tripReport()).speed")
-        assert rep_speed['offsets'][1] == 6 and rep_speed['stats']['hpms'] > 0
+        assert rep_speed['offsets']['1'] == 6 and rep_speed['stats']['hpms'] > 0 and [r['name'] for r in rep_speed['roads']] == ['US-67 S', 'I-30 W'], rep_speed['roads']
+        # the "all roads" slider moves every road
+        pg.evaluate("() => { const r = document.getElementById('lgAll'); r.value = 5; r.dispatchEvent(new Event('input')); }"); pg.wait_for_timeout(100)
+        assert pg.input_value('#lgR0') == '5' and pg.input_value('#lgR1') == '5' and pg.inner_text('#lgAllSub').startswith('+$')
         pg.click('#lgReset'); pg.wait_for_timeout(150)
         assert pg.locator('#lgTot.zero').count() == 1
         seen = pg.evaluate('window.__progSeen') or []

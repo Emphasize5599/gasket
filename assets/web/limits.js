@@ -88,42 +88,113 @@
    * cruise=false where Google's typical speed is under 45 mph (towns, ramps) — speed choice doesn't apply there.
    * getJson(url) -> Promise<{body}|{error}>.  onProg(done, total).
    */
+  // ---------- which road each part of the route is on (from Google's turn-by-turn instructions) ----------
+  var STATES = 'AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY'.split(' ');
+  var CLASS = { interstate: 'Interstate', us: 'U.S. route', state: 'State route', county: 'County road' };
+  var SIGN = { interstate: 2, us: 3, state: 4, county: 6 };
+  /** The numbered road an instruction puts you on: {key, name, cls, num} or null ("Turn left onto Main St"). */
+  function roadOf(text) {
+    var t = String(text || '').split('\n')[0].replace(/\b(toward|follow signs|signs for)\b[\s\S]*$/i, '');
+    var m = /\b(?:onto|on|to stay on|for|via)\b\s+([\s\S]*)$/i.exec(t), part = m ? m[1] : t;
+    var hit = find(part) || find(t);
+    return hit;
+    function find(x) {
+      var re = /\b(I)-(\d{1,3})(?:\s+([NSEW]))?\b|\b(US)[- ](\d{1,3}[A-Z]?)(?:\s+([NSEW]))?\b|\b([A-Z]{2})-(\d{1,4}[A-Z]?)(?:\s+([NSEW]))?\b|\b(?:State (?:Hwy|Highway|Route|Rte|Road)|SR)[- ]?(\d{1,4}[A-Z]?)(?:\s+([NSEW]))?\b|\b(?:County (?:Rd|Road|Hwy|Highway|Route)|CR)[- ]?([A-Z]?\d{1,4}[A-Z]?)(?:\s+([NSEW]))?\b/g, r;
+      while ((r = re.exec(x))) {
+        if (r[1]) return { key: 'I-' + r[2], name: 'I-' + r[2] + (r[3] ? ' ' + r[3] : ''), cls: 'interstate', num: r[2] };
+        if (r[4]) return { key: 'US-' + r[5], name: 'US-' + r[5] + (r[6] ? ' ' + r[6] : ''), cls: 'us', num: r[5] };
+        if (r[7] && STATES.indexOf(r[7]) >= 0) return { key: r[7] + '-' + r[8], name: r[7] + '-' + r[8] + (r[9] ? ' ' + r[9] : ''), cls: 'state', num: r[8] };
+        if (r[10]) return { key: 'SR-' + r[10], name: 'State Hwy ' + r[10] + (r[11] ? ' ' + r[11] : ''), cls: 'state', num: r[10] };
+        if (r[12]) return { key: 'CR-' + r[12], name: 'County Rd ' + r[12] + (r[13] ? ' ' + r[13] : ''), cls: 'county', num: r[12] };
+      }
+      return null;
+    }
+  }
+  /**
+   * Major stretches of road along a route: consecutive steps on the same Interstate / U.S. / state / county route,
+   * joined across short interruptions (exits, interchanges), anything else left out. [{key, name, cls, from, to, mi}]
+   */
+  function roads(model) {
+    var out = [], cur = null;
+    model.segs.forEach(function (s) {
+      var r = roadOf(s.instr);
+      if (!r && cur && /^(continue|keep|stay|slight)/i.test(String(s.instr || '').trim())) r = cur;   // "Continue straight" stays on the road
+      if (r && cur && r.key === cur.key && s.from - cur.to < 3) { cur.to = s.to; return; }
+      if (!r) { cur = null; return; }
+      // short hop on another road, then back on the one before (a ramp, a bit of concurrency): one stretch
+      for (var k = out.length - 1; k >= 0 && s.from - out[k].to < 3; k--) {
+        if (out[k].key === r.key && out.slice(k + 1).every(function (x) { return x.to - x.from < 3; })) {
+          out.splice(k + 1); out[k].to = s.to; cur = out[k]; return;
+        }
+      }
+      cur = { key: r.key, name: r.name, cls: r.cls, num: r.num, from: s.from, to: s.to };
+      out.push(cur);
+    });
+    out.forEach(function (x) { x.mi = x.to - x.from; });
+    return out.filter(function (x) { return x.mi >= 2; });
+  }
+  /** Pick the HPMS segment for this road: same route number and signing if present, else the overall best guess. */
+  function pickFor(features, road, googleMph) {
+    var fs = (features || []).map(function (f) { return f.attributes || f; }).filter(function (a) { return +a.facility_type !== 4; });
+    var same = fs.filter(function (a) { return String(a.route_number) === String(parseInt(road.num, 10)) && (+a.route_signing === SIGN[road.cls] || !a.route_signing); });
+    var sameLim = same.filter(function (a) { return +a.speed_limit >= 25 && +a.speed_limit <= 85; });
+    if (sameLim.length) { sameLim.sort(function (a, b) { return (+b.speed_limit) - (+a.speed_limit); }); return { limit: +sameLim[0].speed_limit, a: sameLim[0], src: 'hpms' }; }
+    var p = pick(features, googleMph);
+    if (same.length) return { limit: null, a: same[0] };
+    return p && p.limit ? p : (p ? { limit: null, a: p.a } : null);
+  }
+  function fallback(st, road, a, googleMph) {
+    if (!st || !MAX[st]) return null;
+    var synth = a || {};
+    var f = road.cls === 'interstate' ? 1 : googleMph >= 62 && road.cls !== 'county' ? 2 : 3;
+    return stateMax(st, { f_system: f, route_signing: SIGN[road.cls], urban_id: synth.urban_id }, googleMph);
+  }
+
+  /**
+   * Speed limits for each major road stretch, in pieces of up to ~15 miles (each piece gets its own limit, so a
+   * stretch across states or from rural to city can change). getJson(url) -> Promise<{body}|{error}>.
+   * -> { roads: [{key, name, cls, from, to, mi, pieces: [{from, to, mi, limit, src, st, googleMph}]}], stats }
+   */
   async function along(model, getJson, opts) {
     opts = opts || {};
-    var L = model.totalMi, step = Math.max(10, L / 150), out = [];
-    for (var a = 0; a < L - 0.01; a += step) {
-      var b = Math.min(L, a + step), sec = 0, mi = 0;
-      model.segs.forEach(function (s) {
-        var o = Math.min(b, s.to) - Math.max(a, s.from); if (o <= 0) return;
-        mi += o; sec += (s.t1 - s.t0) * o / (s.to - s.from || 1);
-      });
-      var g = sec > 0 ? mi / (sec / 3600) : 0;
-      out.push({ from: a, to: b, mi: b - a, googleMph: g, cruise: g >= 45 });
-    }
-    var todo = out.filter(function (s) { return s.cruise; }), done = 0, i = 0, stats = { hpms: 0, state: 0, google: 0, errors: 0 };
+    var rs = roads(model), todo = [], stats = { hpms: 0, state: 0, google: 0, errors: 0 };
+    rs.forEach(function (r) {
+      var n = Math.max(1, Math.ceil(r.mi / 15)), w = r.mi / n;
+      r.pieces = [];
+      for (var k = 0; k < n; k++) {
+        var a = r.from + k * w, b = a + w, sec = 0, mi = 0;
+        model.segs.forEach(function (s) {
+          var o = Math.min(b, s.to) - Math.max(a, s.from); if (o <= 0) return;
+          mi += o; sec += (s.t1 - s.t0) * o / (s.to - s.from || 1);
+        });
+        var pc = { from: a, to: b, mi: w, googleMph: sec > 0 ? mi / (sec / 3600) : 55, road: r };
+        r.pieces.push(pc); todo.push(pc);
+      }
+    });
+    var i = 0, done = 0;
     async function worker() {
       while (i < todo.length) {
-        var s = todo[i++], p = model.pointAt((s.from + s.to) / 2);
-        s.st = stateAt(p.lat, p.lng);
+        var pc = todo[i++], road = pc.road, p = model.pointAt((pc.from + pc.to) / 2);
+        pc.st = stateAt(p.lat, p.lng);
         var hit = null;
-        if (s.st && opts.lookup !== false) {
-          var r = await getJson(hpmsUrl(s.st, p.lat, p.lng));
-          if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else hit = pick(j.features, s.googleMph); } catch (e) { stats.errors++; } }
+        if (pc.st && opts.lookup !== false) {
+          var r = await getJson(hpmsUrl(pc.st, p.lat, p.lng));
+          if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else hit = pickFor(j.features, road, pc.googleMph); } catch (e) { stats.errors++; } }
           else stats.errors++;
         }
-        if (hit && hit.limit) { s.limit = hit.limit; s.src = 'hpms'; s.road = roadName(hit.a); stats.hpms++; }
+        if (hit && hit.limit) { pc.limit = hit.limit; pc.src = 'hpms'; stats.hpms++; }
         else {
-          var v = s.st ? stateMax(s.st, hit && hit.a, s.googleMph) : null;
-          if (v) { s.limit = v; s.src = 'state'; s.road = roadName(hit && hit.a); stats.state++; }
-          else { s.limit = Math.max(45, Math.round(s.googleMph / 5) * 5); s.src = 'google'; stats.google++; }
+          var v = fallback(pc.st, road, hit && hit.a, pc.googleMph);
+          if (v) { pc.limit = v; pc.src = 'state'; stats.state++; }
+          else { pc.limit = Math.max(25, Math.round(pc.googleMph / 5) * 5); pc.src = 'google'; stats.google++; }
         }
-        if (s.limit < 50) s.cruise = false;          // a 45-mph road isn't a place to pick a cruising speed
         done++; if (opts.onProg) opts.onProg(done, todo.length);
       }
     }
     var ws = []; for (var w = 0; w < Math.min(8, todo.length); w++) ws.push(worker());
     await Promise.all(ws);
-    return { stretches: out, stats: stats };
+    rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; }); });
+    return { roads: rs, stats: stats };
   }
   function roadName(a) {
     if (!a || !a.route_number) return '';
@@ -131,6 +202,6 @@
     return (sig === 2 ? 'I-' : sig === 3 ? 'US-' : sig === 4 ? 'State ' : '') + a.route_number;
   }
 
-  var api = { MAX: MAX, stateAt: stateAt, pick: pick, stateMax: stateMax, along: along, hpmsUrl: hpmsUrl };
+  var api = { MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, along: along, hpmsUrl: hpmsUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Limits = api;
 })(this);
