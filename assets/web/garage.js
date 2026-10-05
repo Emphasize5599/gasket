@@ -383,13 +383,14 @@
     var lo = 40, hi = Math.max(80, +S.speed.max || 84);
     var rows = []; for (var v = 45; v <= hi; v++) rows.push({ mph: v, galPer100: 100 / f(v) });
     var bal = SP.balanced(f, 45, hi);
-    var h = '<div class="tb-h">Cruising speed for this trip</div>';
+    var h = '<div class="spd-stick"><div class="tb-h">Cruising speed for this trip</div>';
     var lim = ctx.limits;
-    if (!lim || lim === 'loading') { el.innerHTML = h + '<div class="lead small">Looking up speed limits along the route…</div>'; return; }
+    if (!lim || lim === 'loading') { el.innerHTML = h + '</div><div class="lead small">Looking up speed limits along the route…</div>'; return; }
     var st = ctx.state; st.offsets = st.offsets || ctx.legs.map(function () { return 0; });
     var legs = ctx.legs.map(function (L) { return Object.assign({}, L, { str: clip(lim.stretches, L.a, L.b) }); });
     var act = st.active || 0, a0 = SP.leg(legs[act].str, st.offsets[act], f, legs[act].price, lo, hi);
     h += chartSvg(rows, 45, hi, { id: 'tChart', shadeTo: bal, sel: a0.avgSpeed || 65, marks: legs.map(function (L, i) { return SP.leg(L.str, st.offsets[i], f, L.price, lo, hi).avgSpeed; }).filter(Boolean) });
+    h += '<div class="leg-total" id="lgTot"></div></div>';
     var stt = lim.stats || {}, tot = (stt.hpms || 0) + (stt.state || 0) + (stt.google || 0);
     h += '<div class="lead small">Each slider starts at the posted limit (no extra cost) and moves your highway cruising speed on that leg. ' +
       (tot ? 'Limits: ' + Math.round((stt.hpms || 0) / tot * 100) + '% from the FHWA road inventory' + (stt.state ? ', ' + Math.round(stt.state / tot * 100) + '% state maximums' : '') + (stt.google ? ', ' + Math.round(stt.google / tot * 100) + '% Google\'s typical speed' : '') + '.' : '') +
@@ -401,7 +402,6 @@
           '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div><div class="leg-out" id="lgOut' + i + '"></div>'
           : '<div class="leg-out">No highway cruising on this leg.</div>') + '</div>';
     });
-    h += '<div class="leg-total" id="lgTot"></div>';
     h += disclaimer();
     el.innerHTML = h;
     function update(i, final) {
@@ -419,8 +419,9 @@
     function total() {
       var cost = 0, mins = 0, any = false;
       legs.forEach(function (L, i) { if (st.offsets[i]) { any = true; var r = SP.leg(L.str, st.offsets[i], f, L.price, lo, hi); cost += r.cost; mins += r.minSaved; } });
-      var t = $('lgTot'); t.classList.toggle('hidden', !any);
-      if (any) t.innerHTML = '<span>Time-saving cost</span><b class="' + (cost > 0.005 ? 'cost' : 'good') + '">' + (cost >= 0 ? '+' : '−') + money(cost) + '</b><small>' +
+      var t = $('lgTot'); t.classList.toggle('zero', !any);
+      if (!any) t.innerHTML = '<span>Time-saving cost</span><b>$0.00</b><small>at the posted limits</small>';
+      else t.innerHTML = '<span>Time-saving cost</span><b class="' + (cost > 0.005 ? 'cost' : 'good') + '">' + (cost >= 0 ? '+' : '−') + money(cost) + '</b><small>' +
         (mins >= 0 ? fmtMin(mins) + ' sooner' : fmtMin(-mins) + ' later') + ' over the whole trip · <a href="#" id="lgReset">reset</a></small>';
       if ($('lgReset')) $('lgReset').onclick = function (e) { e.preventDefault(); st.offsets = legs.map(function () { return 0; }); tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
       st.cost = cost; st.minSaved = mins;

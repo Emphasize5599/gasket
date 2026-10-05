@@ -402,3 +402,13 @@ b.good, .leg-sub.good { color: var(--save); }
 
 .leg-scale { position: relative; display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-2); margin: -2px 2px 4px; height: 13px; }
 .leg-scale .z { position: absolute; transform: translateX(-50%); font-weight: 700; }
+
+/* chart + total stay pinned under the map while the leg sliders scroll, until the last leg passes */
+.spd-stick { position: sticky; top: 0; z-index: 3; background: var(--surface); margin: -14px -16px 0; padding: 12px 16px 8px; border-radius: 18px 18px 0 0;
+  box-shadow: 0 8px 12px -10px rgba(0,0,0,.35); }
+.spd-stick .spd-chart { margin: 4px 0 2px; max-height: 26vh; }
+.spd-stick .leg-total { margin-top: 4px; }
+.leg-total.zero b { color: var(--ink-2); }
+.leg-total.zero { padding: 6px 12px; }
+.leg-total.zero b { font-size: 16px; }
+.leg-total.zero small { flex-basis: auto; order: 1; }

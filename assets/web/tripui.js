@@ -194,6 +194,7 @@
       LG.debug('link', 'Short link opened to', url);
     }
     dbg.resolvedUrl = url;
+    var mapsUrl = url;
     var parsed = T.parseMapsUrl(url);
     dbg.parsed = parsed && JSON.parse(JSON.stringify(parsed));
     LG.debug('link', 'Parsed link', parsed);
@@ -224,6 +225,7 @@
       }
     }
     route = parsed;
+    parsed.mapsUrl = mapsUrl;
     previewCities(parsed);
     if (parsed.avoidDetected) {
       Array.prototype.forEach.call($('tAvoid').children, function (b) { b.classList.toggle('on', !!parsed.avoid[b.dataset.av]); });
@@ -515,6 +517,7 @@
       var j = JSON.parse(res.body);
       if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for that trip.');
       alts = j.routes;
+      if (!body.intermediates.length) await allMapsRoutes(r, body);
       var picked = pickedRoute(r);
       altSure = false;
       if (picked && alts.length > 1) { var mt = matchRoute(alts, picked); altSel = mt.index; altSure = mt.sure; }
@@ -532,6 +535,96 @@
     renderInfo();
   }
   function carModel() { return Garage.carModel(); }
+
+  // ---------- every route option Google Maps shows ----------
+  // The Routes API often returns fewer alternatives than the Maps app. So: read the options from Google Maps itself
+  // (the hidden Maps page, no lookup), and for any option the Routes API didn't return, ask for it again with a
+  // pass-through point pushed off to one side of the main route until the answer matches that option's length/roads.
+  function roadTokens(x) {
+    var out = [], re = /\b(I|US|SR|[A-Z]{2})[-\s]?(\d{1,3}[A-Z]?)\b/gi, m;
+    while ((m = re.exec(String(x || '')))) out.push(m[1].toUpperCase().replace(/^SR$/, 'ST') + m[2].toUpperCase());
+    return out;
+  }
+  function nameSim(a, b) {
+    var ta = roadTokens(a), tb = roadTokens(b);
+    if (!ta.length || !tb.length) return null;
+    var common = ta.filter(function (t) { return tb.indexOf(t) >= 0; }).length;
+    return common / Math.max(ta.length, tb.length);
+  }
+  function altMiles(a) { return (a.distanceMeters || 0) / 1609.344; }
+  function altMinutes(a) { return parseFloat(String(a.duration || '0')) / 60; }
+  function sameAsMaps(a, m) {
+    if (!m.miles) return false;
+    var dmi = Math.abs(altMiles(a) - m.miles) / m.miles, ns = nameSim(a.description, m.via);
+    if (ns != null) return ns >= 0.99 && dmi <= 0.03;
+    return dmi <= 0.02 && (!m.minutes || Math.abs(altMinutes(a) - m.minutes) / m.minutes <= 0.06);
+  }
+  /** Share of route b's points that lie within 2 miles of route a (1 = same road all the way). */
+  function overlap(a, b) {
+    var pa = T.decodePolyline(a.polyline.encodedPolyline), pb = T.decodePolyline(b.polyline.encodedPolyline);
+    var stepA = Math.max(1, Math.floor(pa.length / 400)), stepB = Math.max(1, Math.floor(pb.length / 60)), near = 0, n = 0;
+    for (var i = 0; i < pb.length; i += stepB) {
+      n++;
+      for (var k = 0; k < pa.length; k += stepA) if (T.hav(pb[i], pa[k]) < 2) { near++; break; }
+    }
+    return n ? near / n : 0;
+  }
+  async function mapsOptions(r) {
+    if (r.mapsRoutes && r.mapsRoutes.length) return r.mapsRoutes;
+    if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current; })) return null;
+    var place = function (s) { return s.lat != null ? s.lat.toFixed(6) + ',' + s.lng.toFixed(6) : (s.address || s.label); };
+    var url = r.mapsUrl || ('https://www.google.com/maps/dir/' + encodeURIComponent(place(r.stops[0])) + '/' + encodeURIComponent(place(r.stops[1])) + '/');
+    prog(0.7, 'Checking the routes Google Maps shows');
+    var g = await openInGoogleMaps(url);
+    dbg.mapsOptionsPage = g;
+    LG.debug('route', 'Google Maps route options', g && (g.routes || g.error));
+    if (g && g.routes && g.routes.length) r.mapsRoutes = g.routes;
+    return r.mapsRoutes || null;
+  }
+  async function allMapsRoutes(r, body) {
+    var mr = await mapsOptions(r);
+    if (!mr || !mr.length) return;
+    var missing = mr.filter(function (m) { return !alts.some(function (a) { return sameAsMaps(a, m); }); });
+    dbg.mapsMissing = missing;
+    if (!missing.length) { orderLikeMaps(mr); return; }
+    LG.info('route', 'Google Maps shows ' + mr.length + ' routes; the Routes API returned ' + alts.length + '. Looking for: ' + missing.map(function (m) { return m.via; }).join(' / '));
+    var base = T.buildRoute(alts[0], carModel()), L = base.totalMi, tries = 0;
+    var plan = [[0.5, 60], [0.5, -60], [0.5, 130], [0.5, -130], [0.35, 90], [0.35, -90], [0.65, 90], [0.65, -90], [0.5, 220], [0.5, -220]];
+    for (var mi = 0; mi < missing.length && mi < 2; mi++) {
+      var m = missing[mi], found = null;
+      for (var t = 0; t < plan.length && !found; t++) {
+        var f = plan[t][0], off = plan[t][1], d = f * L;
+        var p = base.pointAt(d), a = base.pointAt(Math.max(0, d - 15)), b = base.pointAt(Math.min(L, d + 15));
+        var dx = (b.lng - a.lng) * Math.cos(p.lat * Math.PI / 180), dy = b.lat - a.lat, len = Math.sqrt(dx * dx + dy * dy) || 1;
+        var nx = -dy / len, ny = dx / len;                                   // left of the direction of travel
+        var via = { latitude: p.lat + ny * off / 69, longitude: p.lng + nx * off / (69 * Math.cos(p.lat * Math.PI / 180)) };
+        prog(0.72 + 0.15 * (t + 1) / plan.length, 'Finding the route via ' + m.via);
+        var b2 = Object.assign({}, body, { intermediates: [{ via: true, location: { latLng: via } }] });
+        delete b2.computeAlternativeRoutes;
+        tries++;
+        var res = await call('computeRoute', S.apiKey, JSON.stringify(b2));
+        if (res.error) { LG.warn('route', 'Pass-through route failed', res.error); continue; }
+        var cand = (JSON.parse(res.body).routes || [])[0];
+        if (!cand) continue;
+        var dup = alts.some(function (x) { return overlap(x, cand) > 0.9; });
+        LG.debug('route', 'Pass-through try ' + tries, { via: via, miles: Math.round(altMiles(cand)), minutes: Math.round(altMinutes(cand)), description: cand.description, dup: dup, target: m });
+        if (!dup && sameAsMaps(cand, m)) found = cand;
+      }
+      if (found) { found.description = found.description || m.via.replace(/^via\s+/i, ''); found.fromMaps = true; alts.push(found); }
+      LG.info('route', found ? 'Found Google Maps\' route via ' + m.via + ' (' + tries + ' route lookups)' : 'Couldn\'t reproduce the route via ' + m.via);
+    }
+    dbg.passThroughLookups = tries;
+    orderLikeMaps(mr);
+  }
+  /** Put the options in the same order as Google Maps (so “route option 2” means the same thing). */
+  function orderLikeMaps(mr) {
+    var left = alts.slice(), out = [];
+    mr.forEach(function (m) {
+      var k = -1; left.forEach(function (a, i) { if (k < 0 && sameAsMaps(a, m)) k = i; });
+      if (k >= 0) out.push(left.splice(k, 1)[0]);
+    });
+    alts = out.concat(left);
+  }
   function official(k) { return (k === 'walmart' || k === 'murphy') && A.siteOn(k); }
   function googleBrands() {
     return Object.keys(P.BRANDS).filter(function (k) { return S.brands[k] && !official(k); });

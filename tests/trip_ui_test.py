@@ -113,9 +113,21 @@ with sync_playwright() as p:
         ts = pg.inner_text('#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
         nlegs = pg.locator('#tsSpeed .leg').count(); nstops = pg.evaluate('window.__trip.state().result.plan.stops.length')
         assert nlegs == nstops + 1, (nlegs, nstops)
-        assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.hidden').count() == 1 and 'FHWA road inventory' in ts
+        assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts
         assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
         pg.screenshot(path=f'{OUT}/{name}-s1-trip-speed.png')
+        # scroll so the first leg is under the chart: the chart stays pinned under the map
+        pos = pg.evaluate('''() => { const sh = document.getElementById('tripSheet'), box = document.getElementById('tsSpeed'), stick = box.querySelector('.spd-stick');
+          sh.scrollTop += box.getBoundingClientRect().top - sh.getBoundingClientRect().top + 220;
+          return [sh.getBoundingClientRect().top, stick.getBoundingClientRect().top, box.getBoundingClientRect().top]; }''')
+        pg.wait_for_timeout(150); print('  sticky (sheet top, chart top, box top):', [round(x) for x in pos])
+        assert abs(pos[1] - pos[0]) < 2 and pos[2] < pos[0] - 100, pos
+        pg.screenshot(path=f'{OUT}/{name}-s1b-pinned.png')
+        pos = pg.evaluate('''() => { const sh = document.getElementById('tripSheet'), box = document.getElementById('tsSpeed'), stick = box.querySelector('.spd-stick');
+          sh.scrollTop += box.getBoundingClientRect().bottom - sh.getBoundingClientRect().top - 60;
+          return [sh.getBoundingClientRect().top, stick.getBoundingClientRect().top, stick.getBoundingClientRect().bottom, box.getBoundingClientRect().bottom]; }''')
+        pg.wait_for_timeout(150); print('  past the last leg (sheet top, chart top, chart bottom, box bottom):', [round(x) for x in pos])
+        assert pos[1] < pos[0] - 5 and 0 <= pos[3] - pos[2] < 20, 'chart scrolls away with the last leg'
         x0 = pg.get_attribute('#tChart .sel-l', 'x1')
         pg.evaluate("() => { const r = document.getElementById('lgR1'); r.value = 6; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
         pg.evaluate("() => { const r = document.getElementById('lgR0'); r.value = -5; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
@@ -127,7 +139,7 @@ with sync_playwright() as p:
         rep_speed = pg.evaluate("JSON.parse(window.__tripReport()).speed")
         assert rep_speed['offsets'][1] == 6 and rep_speed['stats']['hpms'] > 0
         pg.click('#lgReset'); pg.wait_for_timeout(150)
-        assert pg.locator('#lgTot.hidden').count() == 1
+        assert pg.locator('#lgTot.zero').count() == 1
         seen = pg.evaluate('window.__progSeen') or []
         print('  progress seen:', seen[:3], '...')
         assert any('%' in (x or '') for x in seen), seen
@@ -264,7 +276,34 @@ with sync_playwright() as p:
         assert '500 Woodlane St, Little Rock, AR 72201' in txt and '210 Capitol Ave, Hartford, CT 06106' in txt, txt
         assert pg.evaluate('window.__finds') is None, 'city preview used no Google lookups'
         pg.screenshot(path=f'{OUT}/{name}-t8a-cities.png')
-        pg.fill('#tMiles', '300'); pg.click('#tGo'); pg.wait_for_timeout(900)
+        # Google Maps shows 3 routes; the Routes API only returns 2 -> the app finds the 3rd with a pass-through point
+        pg.evaluate('''() => {
+          window.__origRoute = window.__mocks.route; window.__viaCalls = [];
+          const enc = window.Trip.encodePolyline, A = [34.746, -92.29], B = [41.764, -72.682];
+          const mk = (desc, mi, bend, minutes) => {
+            const line = []; for (let i = 0; i <= 300; i++) { const t = i / 300; line.push({ lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * Math.PI) * bend, lng: A[1] + (B[1] - A[1]) * t }); }
+            const steps = []; for (let k = 0; k < 20; k++) steps.push({ distanceMeters: mi / 20 * 1609.344, staticDuration: Math.round(mi / 20 / 66 * 3600) + 's' });
+            return { description: desc, distanceMeters: mi * 1609.344, duration: (minutes * 60) + 's', polyline: { encodedPolyline: enc(line) }, legs: [{ distanceMeters: mi * 1609.344, steps }] };
+          };
+          window.__mocks.route = (body) => {
+            window.__routeBody = body;
+            const v = body.intermediates && body.intermediates[0];
+            if (v && v.via) {                     // north of the main route -> the I-78 option; south -> some other road
+              window.__viaCalls.push(v.location.latLng);
+              return { routes: [v.location.latLng.latitude > 38.6 ? mk('', 1336, 1.2, 1205) : mk('', 1460, -2.5, 1330)] };
+            }
+            return { routes: [mk('I-40 E and I-81 N', 1310, 0, 1185), mk('I-70 E and I-80 E', 1391, 2.6, 1262)] };
+          };
+          window.__gmapsAnswer = { href: null, routes: [{ via: 'I-40 E and I-81 N', miles: 1310, minutes: 1185 }, { via: 'I-40 E and I-78 E', miles: 1335, minutes: 1203 }, { via: 'I-70 E and I-80 E', miles: 1391, minutes: 1262 }] };
+          window.__gmapsUrl = null;
+        }''')
+        pg.fill('#tMiles', '300'); pg.click('#tGo'); pg.wait_for_timeout(1800)
+        info = pg.inner_text('.alts-pick'); print('  3 routes:', info.replace('\n', ' | '), '| pass-through lookups:', len(pg.evaluate('window.__viaCalls')))
+        assert pg.evaluate('window.__gmapsUrl') is not None, 'asked Google Maps which routes it shows'
+        assert pg.locator('.alts-pick button').count() == 3 and info.index('I-81') < info.index('I-78') < info.index('I-80'), info
+        assert '1336 mi' in info, info
+        pg.screenshot(path=f'{OUT}/{name}-t9-three-routes.png')
+        pg.evaluate("window.__mocks.route = window.__origRoute; window.__gmapsAnswer = null")
         txt = pg.inner_text('#tParsed'); print('  real link:', txt.replace('\n', ' | '))
         assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
         body = pg.evaluate('window.__routeBody'); print('  route from:', body['origin'], 'to:', body['destination'])
