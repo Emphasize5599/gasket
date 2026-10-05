@@ -537,7 +537,7 @@
     if (busy) return;
     collect();
     if (!S.apiKey) { A.openSettings(false); return; }
-    if (model) { model = T.buildRoute(rawRoute, carModel()); return findStops(); }
+    if (model) { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); return findStops(); }
     var milesLeft = parseFloat(S.trip.milesLeft);
     if (!(milesLeft >= 0)) { A.$('tMiles').focus(); toastMsg('Enter how many miles are left in your tank.'); return; }
     busy = true; prog(0.03, 'Reading the link');
@@ -620,7 +620,7 @@
   }
   /** Share of route b's points that lie within 2 miles of route a (1 = same road all the way). */
   function overlap(a, b) {
-    var pa = T.decodePolyline(a.polyline.encodedPolyline), pb = T.decodePolyline(b.polyline.encodedPolyline);
+    var pa = decoded(a), pb = decoded(b);
     var stepA = Math.max(1, Math.floor(pa.length / 400)), stepB = Math.max(1, Math.floor(pb.length / 60)), near = 0, n = 0;
     for (var i = 0; i < pb.length; i += stepB) {
       n++;
@@ -645,9 +645,14 @@
     if (g && g.routes && g.routes.length) r.mapsRoutes = g.routes;
     return r.mapsRoutes || null;
   }
+  /** A route's points, decoded once (long trips have 100,000+). */
+  function decoded(a) {
+    if (!a._pts) try { Object.defineProperty(a, '_pts', { value: T.decodePolyline(a.polyline.encodedPolyline), enumerable: false }); } catch (e) { a._pts = T.decodePolyline(a.polyline.encodedPolyline); }
+    return a._pts;
+  }
   /** Share of Maps' turn points that lie within 1.5 miles of a Routes API route (1 = the same route). */
   function onRoute(a, pts) {
-    var pa = T.decodePolyline(a.polyline.encodedPolyline), step = Math.max(1, Math.floor(pa.length / 1500)), near = 0;
+    var pa = decoded(a), step = Math.max(1, Math.floor(pa.length / 1500)), near = 0;
     pts.forEach(function (p) {
       var q = { lat: p[0], lng: p[1] };
       for (var k = 0; k < pa.length; k += step) if (T.hav(q, pa[k]) < 1.5) { near++; break; }
@@ -897,14 +902,17 @@
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
 
-    var grade = gradeOf();
-    var per = models.map(function (model, mi) {
+    var grade = gradeOf(), per = [], t0 = Date.now();
+    for (var mi = 0; mi < models.length; mi++) {
+      var model = models[mi];
       var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0;
-      merged.forEach(function (s) {
+      for (var si = 0; si < merged.length; si++) {
+        if (si % 150 === 149) await new Promise(function (r) { setTimeout(r, 0); });   // let the screen breathe on big trips
+        var s = merged[si];
         var pr = T.project(model, { lat: s.lat, lng: s.lng });
-        if (pr.offset > maxOff) return;
+        if (pr.offset > maxOff) continue;
         var c = P.compute(s, grade, S, new Date());
-        if (!c) { unpriced++; return; }
+        if (!c) { unpriced++; continue; }
         if (c.stale) stale++;
         var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
         // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently)
@@ -913,9 +921,10 @@
         var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
         cands.push({ id: s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
           price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng });
-      });
-      return { cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade };
-    });
+      }
+      per.push({ cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade });
+    }
+    LG.debug('stations', 'Matched stations to ' + models.length + ' route(s) in ' + (Date.now() - t0) + ' ms', per.map(function (x) { return x.cands.length; }));
     return { per: per, cachedAgeMs: saved ? oldest : 0 };
   }
   // ---------- other routes ----------
@@ -971,8 +980,18 @@
   }
 
   // ---------- cruising speed per leg ----------
+  var limCache = {};          // one lookup per route shape, shared by every model built from it
   function ensureLimits(m) {
-    if (!m || m._lim) return;
+    if (!m || (m._lim && m._lim !== 'loading')) return;
+    var sig = m.pts.length + ':' + m.totalMi.toFixed(3) + ':' + m.pts[0].lat.toFixed(5);
+    var hit = limCache[sig];
+    if (hit) {
+      if (hit.res) { m._lim = hit.res; return; }
+      m._lim = 'loading';
+      if (!hit.waiting.includes(m)) hit.waiting.push(m);
+      return;
+    }
+    hit = limCache[sig] = { res: null, waiting: [m] };
     m._lim = 'loading';
     var t0 = Date.now();
     var getJson = function (url) {      // posted limits rarely change: saved for 90 days
@@ -981,11 +1000,12 @@
       return call('fetchJson', url).then(function (res) { if (res.body && res.body.indexOf('"error"') < 0) A.KV.put('limits', url, res); return res; });
     };
     Limits.along(m, getJson, { lookup: S.limitLookup !== false }).then(function (res) {
-      m._lim = res;
+      hit.res = res;
+      hit.waiting.forEach(function (w) { w._lim = res; });
+      if (hit.waiting.indexOf(model) >= 0 && $('tsSpeed')) renderTripSpeed();
       LG.info('speed', 'Speed limits along the route in ' + (Date.now() - t0) + ' ms', res.stats);
       LG.debug('speed', 'Roads', res.roads.map(function (r) { return [r.name, Math.round(r.from), Math.round(r.to), r.pieces.map(function (p) { return p.st + ':' + p.limit + (p.src === 'hpms' ? '' : '(' + p.src + ')'); }).join(' ')]; }));
-      if (model === m && $('tsSpeed')) renderTripSpeed();
-    }).catch(function (e) { m._lim = { roads: [], stats: {}, error: String(e) }; LG.error('speed', 'Speed limit lookup failed', String(e)); });
+    }).catch(function (e) { delete limCache[sig]; hit.waiting.forEach(function (w) { w._lim = { roads: [], stats: {}, error: String(e) }; }); LG.error('speed', 'Speed limit lookup failed', String(e)); });
   }
   function speedLegs() {
     var r = result, p = r.plan; if (!p.ok) return [];
@@ -1026,7 +1046,7 @@
     [S.trip.bufferMi, r.bufMi].forEach(function (v) { if (v >= 0 && list.indexOf(v) < 0) list.push(v); });
     list.sort(function (a, b2) { return a - b2; });
     var rows = [], i = 0, t0 = Date.now();
-    (function next() {
+    setTimeout(function next() {
       if (result !== r) { r.sweeping = false; return; }
       var end = Date.now() + 40;
       while (i < list.length && Date.now() < end) rows.push(T.bufferSweep(r.opts, [list[i++]], r.opts.refPrice)[0]);
@@ -1034,7 +1054,7 @@
       r.sweep = T.marks(rows); r.sweeping = false;
       LG.debug('plan', 'Buffer sweep in ' + (Date.now() - t0) + ' ms', rows.map(function (x) { return x.mi + ':' + (x.net == null ? '-' : x.net.toFixed(2)) + (x.mark ? '*' : ''); }).join(' '));
       if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); }
-    })();
+    }, 300);
   }
   function swRow(mi) {
     var sw = result.sweep, best = null;
@@ -1084,7 +1104,7 @@
       LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
       if (!x.ok) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, cur); toastMsg('No plan can keep ' + x.mi + ' mi on this trip.'); return; }
       N.haptic && N.haptic();
-      r.plan = x.plan; r.opts = x.opts; r.bufMi = x.mi; r.topSel = -1;
+      var fo = Object.assign({}, x.opts, { lite: false }); r.plan = T.plan(fo); r.opts = fo; r.bufMi = x.mi; r.topSel = -1;   // the slider's quick plan -> the full one
       recompute(); keepScroll(showResult);
     };
     if ($('tsBufKeep')) $('tsBufKeep').onclick = function (e) { e.preventDefault(); S.trip.bufferMi = r.bufMi; A.save(); keepScroll(showResult); };
@@ -1099,9 +1119,13 @@
       maxDetourMin: S.trip.maxDetourMin, timeValue: S.trip.timeValue, stopMinutes: 8,
       lastFull: S.trip.arrive === 'full' };
   }
+  function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
   async function findStops(force) {
     busy = true;
     var go = $('tGo');
+    prog(0.01, 'Finding stations');
+    LG.info('stations', 'Find the best stops pressed', { miles: Math.round(model.totalMi), points: model.pts.length, force: force === true });
+    await new Promise(function (r) { setTimeout(r, 30); });
     var others = altCompareList();
     dbg.search = {};
     var models = [model];
@@ -1113,6 +1137,7 @@
     prog(0.93, 'Choosing stops');
     var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
     var opts = makeOpts(model, cands, startGal);
+    await breathe();
     var t0 = Date.now();
     var plan = T.plan(opts);
     LG.info('plan', plan.ok ? 'Planned ' + plan.stops.length + ' stop(s) in ' + (Date.now() - t0) + ' ms' : 'No workable plan', {
@@ -1121,29 +1146,36 @@
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
       topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs };
+    await breathe();
+    var t1 = Date.now();
     recompute();
+    LG.debug('plan', 'Top-ups, trip cost and drive back in ' + (Date.now() - t1) + ' ms');
     // other routes Google suggested: same trip, same rules, gas valued at the same price so totals compare fairly
     if (others.length) {
       result.routes = [{ k: altSel, model: model, res: result }];
       var gi = 1;
-      others.forEach(function (k, oi) {
-        var m2 = models[oi + 1], via = alts[k].description || 'route ' + (k + 1);
-        if (!m2) { result.routes.push({ k: k, model: model, res: { plan: { ok: false } }, error: 'couldn\'t read that route' }); return; }
+      for (var oi = 0; oi < others.length; oi++) {
+        await breathe();
+        var k = others[oi], m2 = models[oi + 1];
+        if (!m2) { result.routes.push({ k: k, model: model, res: { plan: { ok: false } }, error: 'couldn\'t read that route' }); continue; }
         var g2 = ga.per[gi++];
         var o2 = makeOpts(m2, g2.cands, startGal);
         if (plan.ok) o2.refPrice = plan.refPrice;
         var p2 = T.plan(o2);
         result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
           startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs } });
-      });
+      }
       LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
     }
     startSweep();
     busy = false;
     prog(1, 'Done'); progEnd();
     go.textContent = 'Find the best stops';
+    await breathe();
     closePage();
+    var t2 = Date.now();
     showResult();
+    LG.debug('plan', 'Results drawn in ' + (Date.now() - t2) + ' ms');
   }
   /** Top-ups, trip cost, and the drive back — cheap to redo when you change the top-up choice. */
   function recompute() {
@@ -1315,7 +1347,9 @@
   function drawRoute() {
     layer.clearLayers();
     if (!map.hasLayer(layer)) layer.addTo(map);
-    var ll = model.pts.map(function (p) { return [p.lat, p.lng]; });
+    // long routes have 100,000+ points: draw one about every 1/20 mile (plenty at any zoom you'd use on a trip)
+    var ll = [], lastD = -1;
+    model.pts.forEach(function (p, i) { if (model.cum[i] - lastD >= 0.05 || i === model.pts.length - 1) { ll.push([p.lat, p.lng]); lastD = model.cum[i]; } });
     L.polyline(ll, { color: '#ffffff', weight: 9, opacity: 0.9, interactive: false }).addTo(layer);
     L.polyline(ll, { color: '#1a73e8', weight: 5, opacity: 0.95, interactive: false }).addTo(layer);
     var mk = function (p, cls, html) { return L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'pin', html: '<div class="' + cls + '">' + html + '</div>', iconSize: null }), keyboard: false }); };
@@ -1324,9 +1358,10 @@
     if (result) {
       var chosen = {};
       if (result.plan.ok) result.plan.stops.forEach(function (s, i) { chosen[s.c.id] = i + 1; });
+      var cv = L.canvas({ padding: 0.3 });     // hundreds of stations on a long trip: one canvas, not hundreds of page elements
       result.cands.forEach(function (c) {
         if (chosen[c.id]) return;
-        mk(c, 'tdot" style="--bc:' + P.BRANDS[c.station.brand].color, '').setZIndexOffset(-100)
+        L.circleMarker([c.lat, c.lng], { renderer: cv, radius: 5.5, color: '#ffffff', weight: 1.5, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 })
           .bindPopup('<b>' + esc(c.station.name) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
             (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : '')).addTo(layer);
       });

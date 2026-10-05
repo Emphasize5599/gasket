@@ -284,18 +284,62 @@
   }
 
   /** Nearest point on the route: {along: route mile, offset: miles off the road line}. */
-  function project(model, p) {
-    var pts = model.pts, cum = model.cum, best = { along: 0, offset: Infinity };
-    var kx = 69.17 * Math.cos(p.lat * Math.PI / 180), ky = 69.0;
-    for (var i = 1; i < pts.length; i++) {
-      var ax = pts[i - 1].lng * kx, ay = pts[i - 1].lat * ky, bx = pts[i].lng * kx, by = pts[i].lat * ky;
-      var px = p.lng * kx, py = p.lat * ky;
-      var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-      var t = L2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
-      var qx = ax + t * dx, qy = ay + t * dy;
-      var off = Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
-      if (off < best.offset) best = { along: cum[i - 1] + t * (cum[i] - cum[i - 1]), offset: off };
+  /**
+   * Nearest point on the route to p: {along (route miles), offset (miles off the route)}.
+   * Long routes have 100,000+ points, so this uses a grid of ~3.5-mile cells built once per route and only checks the
+   * pieces of road near p; points farther away fall back to a coarse pass plus a local refine.
+   */
+  var CELL = 0.02;
+  function segDist(pts, cum, i, p, kx, ky) {
+    var ax = pts[i - 1].lng * kx, ay = pts[i - 1].lat * ky, bx = pts[i].lng * kx, by = pts[i].lat * ky;
+    var px = p.lng * kx, py = p.lat * ky;
+    var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    var t = L2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+    var qx = ax + t * dx, qy = ay + t * dy;
+    return { along: cum[i - 1] + t * (cum[i] - cum[i - 1]), offset: Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy)) };
+  }
+  /** Built once per route: the route thinned to a point every ~0.1 mile, and a grid of which pieces cross each cell. */
+  function gridOf(model) {
+    if (model._grid) return model._grid;
+    var P = model.pts, C = model.cum, pts = [P[0]], cum = [C[0]];
+    for (var i = 1; i < P.length; i++) if (C[i] - cum[cum.length - 1] >= 0.1 || i === P.length - 1) { pts.push(P[i]); cum.push(C[i]); }
+    var g = {};
+    for (i = 1; i < pts.length; i++) {
+      var a = pts[i - 1], b = pts[i];
+      var x0 = Math.floor(Math.min(a.lng, b.lng) / CELL), x1 = Math.floor(Math.max(a.lng, b.lng) / CELL);
+      var y0 = Math.floor(Math.min(a.lat, b.lat) / CELL), y1 = Math.floor(Math.max(a.lat, b.lat) / CELL);
+      for (var x = x0; x <= x1; x++) for (var y = y0; y <= y1; y++) { var k = x * 100000 + y; (g[k] || (g[k] = [])).push(i); }
     }
+    var G = { pts: pts, cum: cum, cells: g, stamp: new Int32Array(pts.length), q: 0 };
+    try { Object.defineProperty(model, '_grid', { value: G, enumerable: false }); } catch (e) { model._grid = G; }
+    return G;
+  }
+  function project(model, p) {
+    var best = { along: 0, offset: Infinity };
+    if (model.pts.length < 2) return model.pts.length ? { along: 0, offset: hav(model.pts[0], p) } : best;
+    var kx = 69.17 * Math.cos(p.lat * Math.PI / 180), ky = 69.0, i;
+    if (model.pts.length < 3000) {
+      for (i = 1; i < model.pts.length; i++) { var r = segDist(model.pts, model.cum, i, p, kx, ky); if (r.offset < best.offset) best = r; }
+      return best;
+    }
+    var G = gridOf(model), pts = G.pts, cum = G.cum, cx = Math.floor(p.lng / CELL), cy = Math.floor(p.lat / CELL), q = ++G.q;
+    var cellMi = CELL * Math.min(kx, ky);
+    for (var ring = 0; ring <= 6; ring++) {
+      for (var x = cx - ring; x <= cx + ring; x++) for (var y = cy - ring; y <= cy + ring; y++) {
+        if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== ring) continue;
+        var list = G.cells[x * 100000 + y]; if (!list) continue;
+        for (var j = 0; j < list.length; j++) {
+          var si = list[j]; if (G.stamp[si] === q) continue; G.stamp[si] = q;
+          var r2 = segDist(pts, cum, si, p, kx, ky); if (r2.offset < best.offset) best = r2;
+        }
+      }
+      if (best.offset <= ring * cellMi) return best;      // nothing in a farther ring can be closer
+    }
+    if (best.offset <= 6 * cellMi) return best;
+    // far from the route: coarse pass over every k-th point, then the exact pieces around the closest one
+    var k = Math.ceil(pts.length / 1500), bi = 0, bd = Infinity;
+    for (var c = 0; c < pts.length; c += k) { var d = hav(pts[c], p); if (d < bd) { bd = d; bi = c; } }
+    for (i = Math.max(1, bi - 2 * k); i < Math.min(pts.length, bi + 2 * k + 1); i++) { var r3 = segDist(pts, cum, i, p, kx, ky); if (r3.offset < best.offset) best = r3; }
     return best;
   }
 
@@ -446,6 +490,8 @@
     if (!best.ok) { oo.firstDip = true; best = optimize(oo); }
     if (!best.ok) return { ok: false, reachMi: best.reachMi, noStopGal: noStopGal, refPrice: o.refPrice, tooFar: tooFar };
     var bestEval = evaluate(oo, best);
+    if (o.lite) return { ok: true, lite: true, tooFar: tooFar, cands: cands, stops: best.stops, arriveGal: best.arriveGal, totals: bestEval, refPrice: o.refPrice, noStopGal: noStopGal,
+      firstDip: !!oo.firstDip, arriveMi: best.arriveGal / o.model.combGpm };
     // baseline: what you'd do without the app -- fewest stops, closest to the road, fill up each time
     var easy = optimize(Object.assign({}, oo, { fillUp: true, refPrice: oo.refPrice * 1e-4 }),
       function (c) { return c.price * 1e-4; },
@@ -515,7 +561,7 @@
    */
   function bufferSweep(o, list, refPrice) {
     var out = list.map(function (mi) {
-      var oo = Object.assign({}, o, { bufferGal: mi * o.model.combGpm, arriveGal: mi * o.model.combGpm, refPrice: refPrice });
+      var oo = Object.assign({}, o, { bufferGal: mi * o.model.combGpm, arriveGal: mi * o.model.combGpm, refPrice: refPrice, lite: true });
       var p = plan(oo);
       var net = p.ok ? p.totals.net + (o.timeValue || 0) * (p.totals.detourMin + p.stops.length * (o.stopMinutes || 0)) / 60 : null;
       return { mi: mi, ok: p.ok, net: net, plan: p, opts: oo };

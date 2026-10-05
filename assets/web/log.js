@@ -25,7 +25,7 @@
     saveT = setTimeout(function () {
       while (entries.length > 50 && size() > MAX) entries.splice(0, Math.ceil(entries.length / 10));
       try { store.save(JSON.stringify(entries)); } catch (e) { }
-    }, 800);
+    }, 150);
   }
   function log(lvl, area, msg, data) {
     if (!level || lvl > level) return;
