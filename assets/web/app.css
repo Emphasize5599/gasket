@@ -613,3 +613,17 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .field input[type=datetime-local] { width: 100%; min-height: 46px; }
 .dt-row { display: flex; gap: 8px; align-items: center; }
 .dt-row input { flex: 1; min-width: 0; }
+.ideal-row { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+.ideal-l { flex: none; }
+.ideal-l .ideal-big { margin: 0; line-height: 1.05; }
+.ideal-l .ideal-sub { margin: 2px 0 0; }
+.ideal-r { margin-left: auto; text-align: right; font-size: 15px; line-height: 1.25; }
+.ideal-r b { font-size: 18px; }
+.ideal-r small { display: block; color: var(--ink-2); font-size: 12.5px; }
+/* pinned only while the per-road sliders are open */
+.spdbox:not(.exp) .spd-stick, #tSpeed:not(.exp) .spd-stick { position: relative; }
+.spdbox.exp .adj-tools { position: sticky; top: var(--stick-h, 0px); z-index: 2; background: var(--surface); margin: 0 -12px; padding: 6px 12px 8px; box-shadow: 0 6px 8px -8px rgba(0,0,0,.4); }
+.road-tog { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; }
+.road-tog .sec-h { flex: 1; padding: 8px 2px; }
+.road-tog .sec-h small { color: var(--ink-2); font-weight: 600; font-size: 13px; margin-left: 6px; }
+.leg.all small a { color: var(--accent); }

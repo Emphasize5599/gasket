@@ -456,43 +456,47 @@
     var helpHtml = 'Major roads — Interstates, U.S., state and county routes — with a slider for each stretch at one speed limit. Each starts at the limit (no extra cost). ' +
       (tot ? 'Limits: ' + Math.round((stt.hpms || 0) / tot * 100) + '% from the FHWA road inventory' + (stt.state ? ', ' + Math.round(stt.state / tot * 100) + '% state maximums' : '') + (stt.google ? ', ' + Math.round(stt.google / tot * 100) + '% Google\'s typical speed' : '') + '.' : '') +
       ' Cost uses the gas in your tank on each part.' + ' Stops are planned at these speeds, so you still reach every station with at least your buffer. The All roads slider sets every road, shown or hidden.';
-    h += '<div class="adj-h"><span>Cruise speed adjustments</span><button type="button" class="qi" aria-label="How these sliders work" data-q="' + encodeURIComponent(helpHtml) + '">?</button></div>';
-    // which roads to show, and in what order
-    h += '<div class="adj-tools"><div class="chips mini" id="lgShow">' + ['interstate', 'us', 'state', 'county'].map(function (k) {
-      return '<button data-cls="' + k + '" class="' + (V.hide[k] ? '' : 'on') + '">' + { interstate: 'Interstates', us: 'U.S.', state: 'State', county: 'County' }[k] + '</button>'; }).join('') + '</div>' +
-      '<div class="adj-sort"><select id="lgSort" aria-label="Sort roads"><option value="route"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' selected') + '>Route order</option><option value="type"' + (V.sort === 'type' ? ' selected' : '') + '>Road type</option><option value="limit"' + (V.sort === 'limit' ? ' selected' : '') + '>Speed limit</option></select>' +
-      '<button type="button" id="lgDir" class="dir" aria-label="' + (V.dir === 'desc' ? 'Descending' : 'Ascending') + '"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' disabled') + '>' + (V.dir === 'desc' ? '↓' : '↑') + '</button></div></div>';
-    if (rule.on) h += '<div class="lead small keep rule-line">Your rule: <b>+' + (+rule.over || 0) + ' over the limit, never above ' + (+rule.cap || 70) + ' mph</b> (roads at ' + (+rule.cap || 70) + '+ stay at the limit). <a href="#" id="lgRule">Back to my rule</a></div>';
-    h += '<div class="leg all"><div class="spd-warn hidden" id="lgWarnAll"></div><div class="leg-h"><span>All roads <b class="all-v" id="lgAllV"></b>' + (rule.on ? ' <small>up to ' + (+rule.cap || 70) + ' mph</small>' : '') + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
+    h += '<div class="leg all"><div class="spd-warn hidden" id="lgWarnAll"></div><div class="leg-h"><span>All roads <b class="all-v" id="lgAllV"></b>' + ' <small>' + (rule.on ? 'rule: +' + (+rule.over || 0) + ', up to ' + (+rule.cap || 70) + ' mph · ' : '') + '<a href="#" id="lgRuleEdit">' + (rule.on ? 'change rule' : 'set a rule') + '</a></small>' + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
       '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + (st.all || 0) + '" id="lgAll" aria-label="Speed on all roads"><i class="gray" id="lgGrayAll"></i></div>' +
       '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div></div>';
-    // road groups (each major road with its speed-limit sections), filtered and sorted as you chose
-    var RANK = { interstate: 0, us: 1, state: 2, county: 3 };
-    var groups = [];
-    roads.forEach(function (r, i) { var g = groups[groups.length - 1]; if (!g || g.ri !== r.ri) groups.push(g = { ri: r.ri, road: r.road, cls: r.cls, items: [] }); g.items.push(i); });
-    var shown = groups.filter(function (g) { return !V.hide[g.cls]; });
-    var dir = V.dir === 'desc' ? -1 : 1, topLim = function (g) { return Math.max.apply(null, g.items.map(function (i) { return roads[i].limit; })); };
-    if (V.sort === 'type') shown.sort(function (a, b) { return dir * (RANK[a.cls] - RANK[b.cls]) || a.ri - b.ri; });
-    else if (V.sort === 'limit') {
-      shown.sort(function (a, b) { return dir * (topLim(a) - topLim(b)) || a.ri - b.ri; });
-      shown.forEach(function (g) { g.items.sort(function (x, y) { return dir * (roads[x].limit - roads[y].limit) || x - y; }); });
-    }
-    if (!shown.length) h += '<div class="lead small keep">No roads of the kinds you picked on this route.</div>';
-    else if (shown.length < groups.length) h += '<div class="lead small keep">' + (groups.length - shown.length) + ' road' + (groups.length - shown.length === 1 ? '' : 's') + ' hidden (All roads still sets them).</div>';
-    shown.forEach(function (g) {
-      var rr = g.road;
-      h += '<div class="road-g"><div class="road-h"><b class="rd rd-' + g.cls + '">' + esc(roads[g.items[0]].name) + '</b><small>mile ' + Math.round(rr.from) + '–' + Math.round(rr.to) + ' · ' + fmtMi(rr.mi) +
-        (rr.sections.length > 1 ? ' · ' + rr.sections.length + ' speed limits' : '') + '</small></div>';
-      g.items.forEach(function (i) {
-        var r = roads[i];
-        h += '<div class="leg" data-leg="' + i + '"><div class="spd-warn hidden" id="lgWarn' + i + '"></div><div class="leg-h"><span><b class="lim' + (r.posted && r.posted !== r.limit ? ' truck' : '') + '">' + r.limit + '</b> <small>' +
-          (r.posted && r.posted !== r.limit ? 'mph for trucks (' + r.posted + ' posted)' : 'mph') + (r.road.sections.length > 1 ? ' · mile ' + Math.round(r.from) + '–' + Math.round(r.to) : '') +
-          (r.src !== 'hpms' ? ' · state max' : '') + '</small></span><b class="leg-sub" id="lgSub' + i + '"></b></div>' +
-          '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + st.offsets[i] + '" id="lgR' + i + '" aria-label="Speed on ' + esc(r.name) + ' where the limit is ' + r.limit + '"><i class="gray" id="lgGray' + i + '"></i></div>' +
-          '<div class="leg-out" id="lgOut' + i + '"></div></div>';
+    // the per-road sliders: collapsed until you open them; the chart, total and filters stay pinned only while open
+    var nRoads = 0; (function () { var last = -1; roads.forEach(function (r) { if (r.ri !== last) { nRoads++; last = r.ri; } }); })();
+    h += '<div class="road-tog"><button type="button" class="sec-h" id="lgTog" aria-expanded="' + !!V.open + '"><span>Speed by road <small>' + nRoads + ' road' + (nRoads === 1 ? '' : 's') + '</small></span><span class="chev' + (V.open ? ' up' : '') + '"></span></button>' +
+      '<button type="button" class="qi" aria-label="How these sliders work" data-q="' + encodeURIComponent(helpHtml) + '">?</button></div>';
+    if (V.open) {
+      // which roads to show, and in what order
+      h += '<div class="adj-tools"><div class="chips mini" id="lgShow">' + ['interstate', 'us', 'state', 'county'].map(function (k) {
+        return '<button data-cls="' + k + '" class="' + (V.hide[k] ? '' : 'on') + '">' + { interstate: 'Interstates', us: 'U.S.', state: 'State', county: 'County' }[k] + '</button>'; }).join('') + '</div>' +
+        '<div class="adj-sort"><select id="lgSort" aria-label="Sort roads"><option value="route"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' selected') + '>Route order</option><option value="type"' + (V.sort === 'type' ? ' selected' : '') + '>Road type</option><option value="limit"' + (V.sort === 'limit' ? ' selected' : '') + '>Speed limit</option></select>' +
+        '<button type="button" id="lgDir" class="dir" aria-label="' + (V.dir === 'desc' ? 'Descending' : 'Ascending') + '"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' disabled') + '>' + (V.dir === 'desc' ? '↓' : '↑') + '</button></div></div>';
+      // road groups (each major road with its speed-limit sections), filtered and sorted as you chose
+      var RANK = { interstate: 0, us: 1, state: 2, county: 3 };
+      var groups = [];
+      roads.forEach(function (r, i) { var g = groups[groups.length - 1]; if (!g || g.ri !== r.ri) groups.push(g = { ri: r.ri, road: r.road, cls: r.cls, items: [] }); g.items.push(i); });
+      var shown = groups.filter(function (g) { return !V.hide[g.cls]; });
+      var dir = V.dir === 'desc' ? -1 : 1, topLim = function (g) { return Math.max.apply(null, g.items.map(function (i) { return roads[i].limit; })); };
+      if (V.sort === 'type') shown.sort(function (a, b) { return dir * (RANK[a.cls] - RANK[b.cls]) || a.ri - b.ri; });
+      else if (V.sort === 'limit') {
+        shown.sort(function (a, b) { return dir * (topLim(a) - topLim(b)) || a.ri - b.ri; });
+        shown.forEach(function (g) { g.items.sort(function (x, y) { return dir * (roads[x].limit - roads[y].limit) || x - y; }); });
+      }
+      if (!shown.length) h += '<div class="lead small keep">No roads of the kinds you picked on this route.</div>';
+      else if (shown.length < groups.length) h += '<div class="lead small keep">' + (groups.length - shown.length) + ' road' + (groups.length - shown.length === 1 ? '' : 's') + ' hidden (All roads still sets them).</div>';
+      shown.forEach(function (g) {
+        var rr = g.road;
+        h += '<div class="road-g"><div class="road-h"><b class="rd rd-' + g.cls + '">' + esc(roads[g.items[0]].name) + '</b><small>mile ' + Math.round(rr.from) + '–' + Math.round(rr.to) + ' · ' + fmtMi(rr.mi) +
+          (rr.sections.length > 1 ? ' · ' + rr.sections.length + ' speed limits' : '') + '</small></div>';
+        g.items.forEach(function (i) {
+          var r = roads[i];
+          h += '<div class="leg" data-leg="' + i + '"><div class="spd-warn hidden" id="lgWarn' + i + '"></div><div class="leg-h"><span><b class="lim' + (r.posted && r.posted !== r.limit ? ' truck' : '') + '">' + r.limit + '</b> <small>' +
+            (r.posted && r.posted !== r.limit ? 'mph for trucks (' + r.posted + ' posted)' : 'mph') + (r.road.sections.length > 1 ? ' · mile ' + Math.round(r.from) + '–' + Math.round(r.to) : '') +
+            (r.src !== 'hpms' ? ' · state max' : '') + '</small></span><b class="leg-sub" id="lgSub' + i + '"></b></div>' +
+            '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + st.offsets[i] + '" id="lgR' + i + '" aria-label="Speed on ' + esc(r.name) + ' where the limit is ' + r.limit + '"><i class="gray" id="lgGray' + i + '"></i></div>' +
+            '<div class="leg-out" id="lgOut' + i + '"></div></div>';
+        });
+        h += '</div>';
       });
-      h += '</div>';
-    });
+    }
     h += disclaimer();
     el.innerHTML = h;
     function update(i, move) {
@@ -514,7 +518,7 @@
       if (!any) t.innerHTML = '<span>Time-saving cost</span><b>$0.00</b><small>at the speed limits</small>';
       else t.innerHTML = '<span>Time-saving cost</span><b class="' + (cst > 0.005 ? 'cost' : 'good') + '">' + (cst >= 0 ? '+' : '−') + money(cst) + '</b><small>' +
         (mins >= 0 ? fmtMin(mins) + ' sooner' : fmtMin(-mins) + ' later') + ' over the whole trip · <a href="#" id="lgReset">reset</a></small>';
-      if ($('lgReset')) $('lgReset').onclick = function (e) { e.preventDefault(); st.offsets = {}; roads.forEach(function (r, i) { st.offsets[i] = 0; }); st.all = 0; tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
+      if ($('lgReset')) $('lgReset').onclick = function (e) { e.preventDefault(); st.offsets = {}; st.all = null; tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
       var all = cost({ pieces: roads.reduce(function (a, r) { return a.concat(r.pieces); }, []) }, 0);
       $('lgAllSub').textContent = any ? (cst >= 0 ? '+' : '−') + money(cst) : '$0.00';
       st.cost = cst; st.minSaved = mins;
@@ -562,11 +566,18 @@
       var w = $(at === 'all' ? 'lgWarnAll' : 'lgWarn' + at);
       if (w && notes.length) { w.innerHTML = notes.map(function (n) { return '<span>' + n + '</span>'; }).join(''); w.classList.remove('hidden'); }
     }
-    if ($('lgRule')) $('lgRule').onclick = function (e) { e.preventDefault(); st.offsets = {}; st.all = null; tripSpeed(el, ctx); if (ctx.onChange) ctx.onChange(); };
+    if ($('lgRuleEdit')) $('lgRuleEdit').onclick = function (e) { e.preventDefault(); if (ctx.onEditRule) ctx.onEditRule(); };
+    $('lgTog').onclick = function () { V.open = !V.open; save(); tripSpeed(el, ctx); if (ctx.onToggle) ctx.onToggle(V.open); };
+    el.classList.toggle('exp', !!V.open);
+    // the pinned filters sit right under the pinned chart: measure it once it's laid out (and again as the sheet changes)
+    var stick = el.querySelector('.spd-stick');
+    var measure = function () { if (stick && stick.isConnected) el.style.setProperty('--stick-h', Math.ceil(stick.getBoundingClientRect().height) + 'px'); };
+    measure(); requestAnimationFrame(measure); setTimeout(measure, 300);
+    if (!el._measure) { el._measure = true; window.addEventListener('resize', function () { var s0 = el.querySelector('.spd-stick'); if (s0) el.style.setProperty('--stick-h', Math.ceil(s0.getBoundingClientRect().height) + 'px'); }); }
     el.querySelectorAll('input[type=range]').forEach(guardRange);
-    $('lgShow').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; V.hide[b.dataset.cls] = !V.hide[b.dataset.cls]; save(); tripSpeed(el, ctx); };
-    $('lgSort').onchange = function () { V.sort = this.value; save(); tripSpeed(el, ctx); };
-    $('lgDir').onclick = function () { V.dir = V.dir === 'desc' ? 'asc' : 'desc'; save(); tripSpeed(el, ctx); };
+    if ($('lgShow')) $('lgShow').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; V.hide[b.dataset.cls] = !V.hide[b.dataset.cls]; save(); tripSpeed(el, ctx); };
+    if ($('lgSort')) $('lgSort').onchange = function () { V.sort = this.value; save(); tripSpeed(el, ctx); };
+    if ($('lgDir')) $('lgDir').onclick = function () { V.dir = V.dir === 'desc' ? 'asc' : 'desc'; save(); tripSpeed(el, ctx); };
     activate(act);
     total(); guards();
     lastTripMi = ctx.model.totalMi;

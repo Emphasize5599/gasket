@@ -1365,7 +1365,9 @@
       });
       return Object.assign({}, r, { sections: secs });
     }) : [];
-    Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', loadingHtml: limBar(model, 'Looking up speed limits'), state: st, guard: speedGuard() });
+    Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', loadingHtml: limBar(model, 'Looking up speed limits'), state: st, guard: speedGuard(),
+      onEditRule: function () { show($('tripSheet'), false); openTrip(); setTimeout(function () { var f = $('tRule') && $('tRule').closest('.field'); if (f) f.scrollIntoView({ block: 'center' }); }, 60); },
+      onToggle: function () { sheetSize(); } });
     // first time the speeds are known (speed limits just arrived, or your rule): plan the stops at those speeds
     var cx0 = speedCx();
     if (cx0 && result.planOffs == null) {
@@ -1520,56 +1522,19 @@
     }, 300);
   }
   // ---------- how much gas to leave with ----------
-  /** Cheapest gas right by the start of the trip (first 5 route miles), else the map's stations near where you are. */
-  function startStation(r) {
-    var near = r.cands.filter(function (c) { return c.d <= 5 && c.detourMin <= S.trip.maxDetourMin; }).sort(function (a, b) { return a.price - b.price; })[0];
-    if (near) return { name: P.BRANDS[near.station.brand].name, price: near.price, mile: near.d, id: near.id };
-    try {
-      var p0 = model.pts[0], best = null, now = new Date();
-      (A.stations() || []).forEach(function (st) {
-        if (!st || st.lat == null || P.haversineMi(p0.lat, p0.lng, st.lat, st.lng) > 5) return;
-        var c = P.compute(st, r.grade, S, now, departAt()); if (c && (!best || c.final < best.price)) best = { name: P.BRANDS[st.brand] ? P.BRANDS[st.brand].name : st.name, price: c.final, mile: 0, id: st.id };
-      });
-      return best;
-    } catch (e) { return null; }
-  }
-  function startIdeal() {
-    var r = result; if (!r || !r.opts || r.idealBusy) return;
-    var key = r.opts.bufferGal + ':' + r.opts.startGal;
-    if (r.idealKey === key) return;
-    r.idealBusy = true;
-    setTimeout(function () {
-      r.idealBusy = false; r.idealKey = key;
-      if (result !== r) return;
-      var st = startStation(r), t0 = Date.now();
-      r.ideal = null;
-      if (st) {
-        var ref = S.trip.arrive === 'full' ? r.plan.refPrice : Math.min(r.plan.refPrice || st.price, st.price);
-        var id = T.idealStart(r.opts, st.price, ref);
-        if (id) { id.st = st; r.ideal = id; }
-        LG.debug('plan', 'Best gas to leave with in ' + (Date.now() - t0) + ' ms', id ? { gal: +id.gal.toFixed(1), add: +id.addGal.toFixed(1), saves: id.saves && +id.saves.toFixed(2), at: st.name + ' $' + st.price } : 'n/a');
-      }
-      if (result === r && $('tsIdeal')) $('tsIdeal').outerHTML = idealBox();
-    }, 350);
-  }
+  /**
+   * Read straight from the plan (so it can never disagree with the stops): when the first stop is at the start of
+   * the trip, that's the gas to add before you go; otherwise leave with what you have.
+   */
   function idealBox() {
-    var r = result, id = r && r.ideal;
-    if (!id) return '<div id="tsIdeal"></div>';
-    var gpm = model.galTo(model.totalMi) / model.totalMi || model.combGpm, st = id.st, rng = function (g) { return Math.round(g / gpm); };
-    var where = esc(st.name) + (st.mile > 0.3 ? ' (mile ' + st.mile.toFixed(1) + ')' : '') + ' at ' + priceText(st.price);
-    var h = '<div class="ideal" id="tsIdeal"><div class="ideal-h">Gas to leave with ' + A.qBtn('Fuel+ tries every amount from what you have now up to a full tank, bought at the cheapest gas at the start of the trip, and plans the rest of the trip for each. This is the least gas that makes the whole trip cheapest' + (S.trip.arrive === 'full' ? ' (gas left at the end counts at the typical price, since you chose to arrive with the most gas)' : ' — only what you\'ll use, so no gas is bought there just to carry around') + '. It counts your stop rule (adding gas before you go is a stop too).') + '</div>';
-    if (!id.nowOk) {
-      h += '<div class="ideal-big">Leave with at least ' + id.gal.toFixed(1) + ' gal <small>~' + rng(id.gal) + ' mi of range</small></div>' +
-        '<div class="ideal-sub">Add ' + id.addGal.toFixed(1) + ' gal at ' + where + ' before you go.</div>';
-    } else if (id.addGal < 0.3 || !(id.scoreGain > 0.05)) {
-      h += '<div class="ideal-sub">Leave with what you have — gas at the start (' + where + ') isn\'t cheaper than what\'s on the way.</div>';
-    } else {
-      var ps = id.plan.stops;
-      h += '<div class="ideal-big">' + id.gal.toFixed(1) + ' gal <small>~' + rng(id.gal) + ' mi of range</small></div>' +
-        '<div class="ideal-sub">Add <b>' + id.addGal.toFixed(1) + ' gal</b> at ' + where + ' before you go' + (id.saves > 0.005 ? ' — saves <b class="good">' + money(id.saves) + '</b>' : '') + '. ' +
-        (ps.length ? 'Then ' + ps.length + ' stop' + (ps.length === 1 ? '' : 's') + ': ' + ps.map(function (s) { return esc(P.BRANDS[s.c.station.brand].name) + ' at mile ' + Math.round(s.c.d) + ' (' + s.buyGal.toFixed(1) + ' gal)'; }).join(', ') + '.' : 'No other stops.') + '</div>';
-    }
-    return h + '</div>';
+    var r = result, p = r && r.plan; if (!p || !p.ok) return '';
+    var m = r.opts.model || model, gpm = m.galTo(m.totalMi) / m.totalMi || model.combGpm;
+    var first = p.stops[0], atStart = first && first.c.d <= 5;
+    var gal = r.startGal + (atStart ? first.buyGal : 0);
+    var help = 'The gas to have in the tank when you set off, from your plan: if its first stop is by the start (within 5 miles), you buy that much before you go. Range is at this trip\'s mileage and your speeds.';
+    return '<div class="ideal" id="tsIdeal"><div class="ideal-h">Gas to leave with ' + A.qBtn(help) + '</div>' +
+      '<div class="ideal-row"><div class="ideal-l"><div class="ideal-big">' + gal.toFixed(1) + ' gal</div><div class="ideal-sub">~' + Math.round(gal / gpm) + ' mi of range</div></div>' +
+      '<div class="ideal-r">' + (atStart ? 'Add <b>' + first.buyGal.toFixed(1) + ' gal</b><small>' + esc(first.c.station.name) + (first.c.d >= 0.5 ? ' · mile ' + first.c.d.toFixed(1) : '') + '</small>' : '<b>Nothing to add</b><small>leave with what you have</small>') + '</div></div></div>';
   }
   function swRow(mi) {
     var sw = result.sweep, best = null;
@@ -1875,7 +1840,6 @@
     }
     if (!userMoved) fitRoute(false);
     fitBtn();
-    startIdeal();
     $('tsClose').onclick = $('tsDone').onclick = endTrip;
     $('tsEdit').onclick = function () { show(el, false); openTrip(); };
     $('tsShare').onclick = shareTrip;

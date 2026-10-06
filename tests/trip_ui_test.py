@@ -113,12 +113,23 @@ with sync_playwright() as p:
         print('  RESULT:', txt.replace('\n', ' | ')[:900])
         pg.screenshot(path=f'{OUT}/{name}-t2-result.png')
         pg.wait_for_timeout(600)
-        idl = ft(pg, '#tsIdeal'); print('  ideal start:', idl.replace('\n', ' | '), '|', pg.evaluate("(r => r.ideal ? [r.ideal.gal, r.ideal.addGal, r.ideal.saves, r.ideal.st] : null)(window.__trip.state().result)"))
+        idl = ft(pg, '#tsIdeal'); print('  gas to leave with:', idl.replace('\n', ' | ')[:200])
+        # it comes from the plan itself: if stop 1 is at the start, that's what to add; never a different station
+        st1 = pg.evaluate("(r => r.plan.stops[0] && [r.plan.stops[0].c.d, +r.plan.stops[0].buyGal.toFixed(1), r.plan.stops[0].c.station.name])(window.__trip.state().result)")
+        if st1 and st1[0] <= 5: assert ('Add %.1f gal' % st1[1]) in idl and st1[2] in idl, idl
+        else: assert 'Nothing to add' in idl, idl
         if 'gal' in idl:
             pg.evaluate("document.getElementById('tsIdeal').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
             pg.screenshot(path=f'{OUT}/{name}-t2i-ideal.png')
         # cruising speed per leg: limits from the (mock) FHWA inventory, sliders start at $0
         pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
+        assert pg.locator('#tsSpeed .leg[data-leg]').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0, 'road sliders start collapsed'
+        assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") != 'sticky', 'not pinned while collapsed'
+        pg.click('#lgTog'); pg.wait_for_timeout(300)
+        assert pg.locator('#tsSpeed.exp').count() == 1 and pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") == 'sticky'
+        assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .adj-tools')).position") == 'sticky', 'filters pinned while open'
+        order = pg.evaluate("[...document.querySelectorAll('#tsSpeed .leg.all, #tsSpeed .road-tog, #tsSpeed .adj-tools, #tsSpeed .road-g')].map(e => e.className.split(' ')[0])")
+        print('  speed card order:', order[:4]); assert order[:3] == ['leg', 'road-tog', 'adj-tools'] and order[3] == 'road-g'
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         ts = ft(pg, '#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
         nroads = pg.locator('#tsSpeed .leg[data-leg]').count()
@@ -143,6 +154,9 @@ with sync_playwright() as p:
           return [sh.getBoundingClientRect().top, stick.getBoundingClientRect().top, box.getBoundingClientRect().top]; }''')
         pg.wait_for_timeout(150); print('  sticky (sheet top, chart top, box top):', [round(x) for x in pos])
         assert abs(pos[1] - pos[0]) < 2 and pos[2] < pos[0] - 100, pos
+        pg.wait_for_timeout(350)
+        gap = pg.evaluate("(() => { const a = document.querySelector('#tsSpeed .spd-stick').getBoundingClientRect(), b = document.querySelector('#tsSpeed .adj-tools').getBoundingClientRect(); return [Math.round(a.bottom), Math.round(b.top)]; })()")
+        print('  pinned chart bottom / filters top:', gap); assert gap[1] >= gap[0] - 1, 'filters not under the chart'
         pg.screenshot(path=f'{OUT}/{name}-s1b-pinned.png')
         pos = pg.evaluate('''() => { const sh = document.getElementById('tripSheet'), box = document.getElementById('tsSpeed'), stick = box.querySelector('.spd-stick');
           sh.scrollTop += box.getBoundingClientRect().bottom - sh.getBoundingClientRect().top - 60;
@@ -198,8 +212,8 @@ with sync_playwright() as p:
         pg.click('#tsEdit'); pg.wait_for_timeout(300)
         pg.check('#tRule', force=True); pg.fill('#tRuleOver', '9'); pg.fill('#tRuleCap', '74'); pg.dispatch_event('#tRuleCap', 'change'); pg.wait_for_timeout(100)
         pg.click('#tGo'); pg.wait_for_timeout(1500); pg.wait_for_selector('#lgR2', timeout=5000)
-        vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = ft(pg, '.rule-line'); print('  rule +9 up to 74:', vals, '|', rl)
-        assert vals == ['4', '4', '0'] and 'never above 74 mph' in rl and ft(pg, '#lgTot').find('+$') >= 0
+        vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = ft(pg, '.leg.all .leg-h'); print('  rule +9 up to 74:', vals, '|', rl)
+        assert vals == ['4', '4', '0'] and 'rule: +9, up to 74 mph' in rl and 'change rule' in rl and pg.locator('.rule-line').count() == 0 and ft(pg, '#lgTot').find('+$') >= 0
         pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.uncheck('#tRule', force=True); pg.dispatch_event('#tRule', 'change'); pg.click('#tGo'); pg.wait_for_timeout(1500)
         # buffer <-> speed: stops are planned at your speeds, so every station (and the end) is reached with at least the buffer
         tank0 = pg.evaluate("(() => { const S = window.__app.S, c = S.cars.filter(c => c.id === S.carId)[0] || S.cars[0]; const t = c.tank; c.tank = 3; return t; })()")
