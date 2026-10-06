@@ -190,6 +190,47 @@ with sync_playwright() as p:
         vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = ft(pg, '.rule-line'); print('  rule +9 up to 74:', vals, '|', rl)
         assert vals == ['4', '4', '0'] and 'never above 74 mph' in rl and ft(pg, '#lgTot').find('+$') >= 0
         pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.uncheck('#tRule', force=True); pg.dispatch_event('#tRule', 'change'); pg.click('#tGo'); pg.wait_for_timeout(1500)
+        # buffer <-> speed: the tank never runs dry. Probe first (what the mock trip allows), then check both modes.
+        pg.wait_for_selector('#lgAll', timeout=5000); pg.wait_for_timeout(600)
+        probe = pg.evaluate("(() => { const G = window.__trip.guard(), r = window.__trip.state().result; return {maxAll: G.maxAll(), buf: r.bufMi, sweep: (r.sweep||[]).map(x => x.mi + (x.ok ? '' : 'x')).join(' ')}; })()")
+        print('  speed/buffer probe (linked):', probe)
+        pg.evaluate("(() => { const i = document.getElementById('lgAll'); i.value = 15; i.dispatchEvent(new Event('input')); })()"); pg.wait_for_timeout(200)
+        v = pg.input_value('#lgAll'); wtxt = ft(pg, '#lgWarnAll') if pg.locator('#lgWarnAll:not(.hidden)').count() else ''
+        print('  All roads dragged to +15 ->', v, '| warning:', wtxt)
+        assert int(v) == probe['maxAll'], 'slider stops at the edge of the gray'
+        if probe['maxAll'] < 15: assert pg.locator('#lgGrayAll').evaluate("e => getComputedStyle(e).display") != 'none' and 'can' in wtxt
+        pg.evaluate("(() => { const i = document.getElementById('lgAll'); i.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(900)
+        r2 = pg.evaluate("(() => { const r = window.__trip.state().result; return {buf: r.bufMi, all: r.speedState.all}; })()"); print('  after release (linked):', r2)
+        pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
+        pg.evaluate("(() => { const i = document.getElementById('tsBuf'); i.value = 5; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(900)
+        r3 = pg.evaluate("(() => { const r = window.__trip.state().result; return {buf: r.bufMi, all: r.speedState.all}; })()"); print('  linked: buffer down to 5 ->', r3)
+        assert r3['buf'] == 5 and r3['all'] <= 5, 'a smaller buffer slowed all roads down'
+        pg.wait_for_selector('#lgAll', timeout=5000); pg.wait_for_timeout(300)
+        assert int(pg.input_value('#lgAll')) == r3['all']
+        pg.wait_for_selector('#tsBufBox', timeout=5000)
+        bt = ft(pg, '#tsBufBox'); print('  buffer box at those speeds:', bt.replace('\n', ' | ')[:300], '| gray bands:', pg.locator('.buf-marks .bgray').count())
+        pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-c1-speed-linked.png')
+        pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-c2-buffer-linked.png')
+        # unlinked: each slider simply stops at the gray, with a warning on both sides
+        pg.click('#tsEdit'); pg.wait_for_timeout(300)
+        pg.evaluate("document.getElementById('tLinkSl').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-c0-settings.png')
+        pg.uncheck('#tLinkSl', force=True); pg.dispatch_event('#tLinkSl', 'change'); pg.fill('#tBuffer', '5'); pg.dispatch_event('#tBuffer', 'input'); pg.wait_for_timeout(400)
+        pg.click('#tGo'); pg.wait_for_timeout(1800); pg.wait_for_selector('#lgAll', timeout=5000); pg.wait_for_timeout(600)
+        mx = pg.evaluate("window.__trip.guard().maxAll()")
+        pg.evaluate("(() => { const i = document.getElementById('lgAll'); i.value = 15; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(500)
+        print('  unlinked, 5-mi buffer: All roads max', mx, '| slider at', pg.input_value('#lgAll'), '| buffer', pg.evaluate('window.__trip.state().result.bufMi'))
+        assert int(pg.input_value('#lgAll')) == mx and pg.evaluate('window.__trip.state().result.bufMi') == 5, 'unlinked: buffer stays, speed stops'
+        if mx < 15:
+            assert 'buffer keeps this at' in ft(pg, '#lgWarnAll'), ft(pg, '#lgWarnAll')
+            assert 'This buffer keeps All roads at' in ft(pg, '#tsBufBox'), ft(pg, '#tsBufBox')
+        pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-c3-speed-unlinked.png')
+        pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.check('#tLinkSl', force=True); pg.dispatch_event('#tLinkSl', 'change'); pg.fill('#tBuffer', '30'); pg.dispatch_event('#tBuffer', 'input')
+        pg.wait_for_timeout(400); pg.click('#tGo'); pg.wait_for_timeout(1500)
+        pg.evaluate("(() => { const r = window.__trip.state().result; r.speedState.offsets = {}; r.speedState.all = 0; })()")
         # finding stops again on the same route reuses the saved search (no Google lookups); "Get fresh prices" searches again
         pg.evaluate("window.__jobs = null"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.click('#tGo'); pg.wait_for_timeout(1500)
         assert pg.evaluate('window.__jobs') is None, 'saved search reused'

@@ -548,3 +548,14 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 :root[data-theme="dark"] .buf-marks .bm.bad em { color: #ffd45c; background: rgba(224, 168, 0, .18); }
 .buf-marks .bm i { pointer-events: none; }
 .st-a .ret { color: var(--accent); font-weight: 700; }
+
+/* sliders that the gas in the tank limits: the gray part can't be used */
+.rng { position: relative; }
+.rng .gray { position: absolute; top: 50%; height: 10px; margin-top: -5px; left: calc(11px + (100% - 70px) * var(--g, 1)); right: 59px; border-radius: 5px; pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgba(140, 148, 162, .55) 0 4px, rgba(140, 148, 162, .3) 4px 8px); }
+.buf-marks .bgray { position: absolute; top: 49px; height: 10px; border-radius: 5px; background: repeating-linear-gradient(135deg, rgba(140, 148, 162, .55) 0 4px, rgba(140, 148, 162, .3) 4px 8px); }
+.spd-warn { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; line-height: 1.35; color: #8a6100; background: #fff3c4; border-radius: 10px; padding: 6px 9px; margin: 2px 0 6px; }
+:root[data-theme="dark"] .spd-warn { color: #ffd45c; background: rgba(224, 168, 0, .14); }
+.lim.truck { background: #fff3c4; }
+/* required */
+.req { color: #e5484d; font-weight: 800; margin-left: 2px; }

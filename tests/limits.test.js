@@ -15,7 +15,15 @@ assert.equal(L.stateAt(30.0, -88.5), null, 'Gulf of Mexico');
 let p = L.pick([{ attributes: { speed_limit: 45, f_system: 4 } }, { attributes: { speed_limit: 70, f_system: 1, route_signing: 2, route_number: 40 } }, { attributes: { speed_limit: 55, facility_type: 4 } }], 68);
 assert.equal(p.limit, 70);
 p = L.pick([{ attributes: { speed_limit: null, f_system: 1, urban_id: 99999 } }], 70);
-assert.equal(p.limit, null); assert.equal(L.stateMax('AR', p.a, 70), 75, 'rural interstate max in Arkansas');
+assert.equal(p.limit, null); // truck limits (state law; no road database carries them): I-57 in Arkansas is posted 75, trucks 70
+assert.equal(L.truckLimit('AR', 'interstate', 1, 75), 70, 'I-57 Arkansas: trucks 70');
+assert.equal(L.truckLimit('AR', 'us', 2, 75), 70, 'Arkansas freeways too');
+assert.equal(L.truckLimit('AR', 'us', 3, 65), 65, 'other Arkansas roads: same as cars');
+assert.equal(L.truckLimit('IL', 'interstate', 1, 70), 70, 'I-57 Illinois: trucks 70 too');
+assert.equal(L.truckLimit('CA', 'state', 3, 65), 55); assert.equal(L.truckLimit('MI', 'interstate', 1, 75), 65); assert.equal(L.truckLimit('TX', 'interstate', 1, 75), 75);
+const secT = L.sections([{ from: 0, to: 5, mi: 5, limit: 75, truck: 70, src: 'hpms', st: 'AR' }, { from: 5, to: 10, mi: 5, limit: 75, truck: 70, src: 'hpms', st: 'AR' }, { from: 10, to: 15, mi: 5, limit: 70, truck: 70, src: 'hpms', st: 'MO' }]);
+assert.equal(secT.length, 2); assert.equal(secT[0].truck, 70); assert.equal(secT[1].truck, 70);
+assert.equal(L.stateMax('AR', p.a, 70), 75, 'rural interstate max in Arkansas');
 assert.equal(L.stateMax('AR', { f_system: 1, urban_id: 4100 }, 60), 65, 'urban');
 assert.equal(L.stateMax('TX', { f_system: 3, urban_id: 99999 }, 52), 60, 'capped near Google speed (52 + 8 -> 60, under the 75 max)');
 assert.equal(L.stateMax('ZZ', null, 60), null);

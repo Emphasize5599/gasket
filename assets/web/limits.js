@@ -19,6 +19,24 @@
     TN: [70, 70, 70, 65], TX: [75, 75, 75, 75], UT: [75, 70, 75, 65], VT: [65, 55, 50, 50], VA: [70, 70, 65, 55], WA: [70, 60, 60, 60],
     WV: [70, 55, 65, 55], WI: [70, 70, 70, 55], WY: [75, 75, 70, 70]
   };
+  /**
+   * Large-truck limits where a state sets one below the car limit (IIHS, Oct 2026). No road database (FHWA HPMS,
+   * OpenStreetMap) carries these per road for the U.S. — checked on I-57 in Arkansas: posted 75, no truck tag — so
+   * they come from state law: i = Interstates, la = other limited-access roads (freeways), o = other roads.
+   * Not covered: Illinois' county truck limits (Cook, DuPage, Kane, Lake, Madison, McHenry, St. Clair, Will).
+   */
+  var TRUCK = {
+    AR: { i: 70, la: 70 }, CA: { i: 55, la: 55, o: 55 }, IN: { i: 65 }, MI: { i: 65 }, MT: { i: 70 }, WA: { i: 60 },
+    OR: { i: function (lim) { return lim >= 70 ? 65 : 55; } }, AZ: { o: 65 }
+  };
+  /** The large-truck limit on a road with car limit lim (= lim where trucks get the same). */
+  function truckLimit(st, cls, fsys, lim) {
+    var t = TRUCK[st]; if (!t || !(lim > 0)) return lim;
+    var kind = cls === 'interstate' || +fsys === 1 ? 'i' : +fsys === 2 ? 'la' : 'o';
+    var v = t[kind]; if (v == null && kind === 'la') v = null;
+    if (typeof v === 'function') v = v(lim);
+    return v ? Math.min(lim, v) : lim;
+  }
   var boxes = null;
   function prep() {
     var US = (typeof window !== 'undefined' && window.US_STATES) || root.US_STATES;
@@ -182,12 +200,14 @@
           if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else hit = pickFor(j.features, road, pc.googleMph); } catch (e) { stats.errors++; } }
           else stats.errors++;
         }
+        pc.fsys = hit && hit.a ? +hit.a.f_system : (road.cls === 'interstate' ? 1 : 0);
         if (hit && hit.limit) { pc.limit = hit.limit; pc.src = 'hpms'; stats.hpms++; }
         else {
           var v = fallback(pc.st, road, hit && hit.a, pc.googleMph);
           if (v) { pc.limit = v; pc.src = 'state'; stats.state++; }
           else { pc.limit = Math.max(25, Math.round(pc.googleMph / 5) * 5); pc.src = 'google'; stats.google++; }
         }
+        pc.truck = truckLimit(pc.st, road.cls, pc.fsys, pc.limit);
         done++; if (opts.onProg) opts.onProg(done, todo.length);
       }
     }
@@ -206,8 +226,9 @@
     var out = [];
     pieces.forEach(function (p, k) {
       var last = out[out.length - 1];
-      if (last && last.limit === lim[k]) { last.to = p.to; last.mi += p.mi; last.n++; if (p.src === 'hpms') last.hpms++; return; }
-      out.push({ from: p.from, to: p.to, mi: p.mi, limit: lim[k], st: p.st, n: 1, hpms: p.src === 'hpms' ? 1 : 0 });
+      var tk = p.truck != null && p.limit === lim[k] ? p.truck : lim[k];
+      if (last && last.limit === lim[k]) { last.to = p.to; last.mi += p.mi; last.n++; if (p.src === 'hpms') last.hpms++; last.truck = Math.min(last.truck, tk); return; }
+      out.push({ from: p.from, to: p.to, mi: p.mi, limit: lim[k], st: p.st, n: 1, hpms: p.src === 'hpms' ? 1 : 0, truck: tk });
     });
     out.forEach(function (x) { x.src = x.hpms * 2 >= x.n ? 'hpms' : 'state'; });
     return out;
@@ -218,6 +239,6 @@
     return (sig === 2 ? 'I-' : sig === 3 ? 'US-' : sig === 4 ? 'State ' : '') + a.route_number;
   }
 
-  var api = { MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, sections: sections, along: along, hpmsUrl: hpmsUrl };
+  var api = { TRUCK: TRUCK, truckLimit: truckLimit, MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, sections: sections, along: along, hpmsUrl: hpmsUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Limits = api;
 })(this);

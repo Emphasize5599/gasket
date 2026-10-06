@@ -252,4 +252,30 @@ assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
   assert.ok(/origin=Memphis/.test(per[1].url) && /2%20B%20St/.test(per[1].url) && per[1].fuelStops === 1, per[1].url);
   console.log('legs: joined', Math.round(mj.totalMi), 'mi; way-back pieces skipped', skipped, 'of', chs.length);
 }
+// ---- cruising speed vs. gas in the tank ----
+{
+  const mpg = (v) => 40 * Math.pow(0.986, v - 55);                  // ~1.4% worse per mph
+  const secs = [{ from: 0, to: 150, limit: 75 }, { from: 150, to: 283.5, limit: 65 }];
+  // a plan with one stop at mile 140: arrive there with 0.6 gal, at the end with 1.0 gal
+  const plan = { ok: true, stops: [{ c: { d: 140 }, arriveGal: 0.6 }], arriveGal: 1.0 };
+  const at = (o) => T.fuelCheck(plan, T.speedRates(secs, o, mpg, 25, 90), 283.5);
+  assert.ok(at([0, 0]).ok, 'at the limits: fine');
+  const fast = at([10, 0]);
+  assert.ok(!fast.ok && fast.bad.length === 1 && fast.bad[0].b === 140, JSON.stringify(fast));
+  assert.ok(at([-5, 0]).ok, 'slower is always fine');
+  // the most +N on the 75 road that still gets you to the stop
+  let mx = 0; while (mx < 15 && at([mx + 1, 0]).ok) mx++;
+  assert.ok(mx >= 1 && mx < 10, 'speed cap ' + mx);
+  // slowing down for it: all roads together, or the fastest (75) road first; never under the floor
+  const rule = (lim, v) => v;
+  const ok = (o) => at(o).ok, failing = (o) => at(o).bad;
+  const sa = T.slowDown({ secs, offsets: [10, 10], all: 10, mode: 'all', floor: -5, ruleOff: rule, ok, failing });
+  assert.ok(sa && sa.changed && sa.all === mx && sa.offsets.every((v) => v === mx), JSON.stringify(sa));
+  const sf = T.slowDown({ secs, offsets: [10, 10], all: 10, mode: 'fastest', floor: -5, ruleOff: rule, ok, failing });
+  assert.ok(sf && sf.offsets[0] === mx && sf.offsets[1] === 10, 'only the 75 road, on the stretch that ran short: ' + JSON.stringify(sf));
+  const tight = { ok: true, stops: [{ c: { d: 140 }, arriveGal: 0.01 }], arriveGal: 1 };
+  const okT = (o) => T.fuelCheck(tight, T.speedRates(secs, o, mpg, 25, 90), 283.5).ok;
+  assert.ok(T.slowDown({ secs, offsets: [12, 0], all: 0, mode: 'fastest', floor: 0, ruleOff: rule, ok: okT, failing: (o) => T.fuelCheck(tight, T.speedRates(secs, o, mpg, 25, 90), 283.5).bad }).offsets[0] === 0);
+  console.log('speed vs. tank: +' + mx + ' max on the 75 road with 0.6 gal to spare; all-roads slow to +' + sa.all + ', fastest-first', JSON.stringify(sf.offsets));
+}
 console.log('trip tests passed (1,000-mile / 300-station plan in ' + ms + ' ms, ' + p.stops.length + ' stops, saves $' + p.savings.toFixed(2) + ')');

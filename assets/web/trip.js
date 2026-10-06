@@ -793,7 +793,69 @@
     return out;
   }
 
-  var api = { projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
+  // ---------------- cruising speed vs. gas in the tank ----------------
+  /**
+   * Extra gallons per mile on each speed-limit section at its offset from the limit (0 at the limit, negative when
+   * slower). secs: [{from, to, limit}], offsets: [mph], mpg(v): the car's curve.
+   */
+  function speedRates(secs, offsets, mpg, lo, hi) {
+    return secs.map(function (sc, i) {
+      var off = offsets[i] || 0, v0 = sc.limit, v1 = Math.max(lo || 25, Math.min(hi || 90, v0 + off));
+      return { from: sc.from, to: sc.to, rate: off ? 1 / mpg(v1) - 1 / mpg(v0) : 0 };
+    });
+  }
+  function extraBetween(rates, a, b) {
+    var g = 0;
+    rates.forEach(function (r) { var o = Math.min(b, r.to) - Math.max(a, r.from); if (o > 0) g += o * r.rate; });
+    return g;
+  }
+  /**
+   * Does a fuel plan still work at these speeds? Each stretch (start → stop 1 → … → end) burns its extra gas from what
+   * you'd have arrived with; the tank must never run dry (you buy back what driving faster used at the next stop).
+   * -> {ok, worst: {leg, a, b, margin(gal)}, bad: [{a, b}]}
+   */
+  function fuelCheck(plan, rates, totalMi) {
+    if (!plan || !plan.ok) return { ok: false, worst: null, bad: [] };
+    var pts = [0], arr = [];
+    (plan.stops || []).forEach(function (st) { pts.push(st.c.d); arr.push(st.arriveGal); });
+    pts.push(totalMi); arr.push(plan.arriveGal);
+    var worst = null, bad = [];
+    for (var i = 0; i < arr.length; i++) {
+      var m = arr[i] - extraBetween(rates, pts[i], pts[i + 1]);
+      if (!worst || m < worst.margin) worst = { leg: i, a: pts[i], b: pts[i + 1], margin: m };
+      if (m < -1e-6) bad.push({ a: pts[i], b: pts[i + 1] });
+    }
+    return { ok: !bad.length, worst: worst, bad: bad };
+  }
+  /**
+   * Slow down just enough for ok(offsets): either every road together (mode 'all': the "All roads" setting steps down)
+   * or the roads with the highest limits first (mode 'fastest': on the stretches that run short, one mph at a time).
+   * Never below floor (e.g. −5 = five under the limit). -> {offsets, all, changed} or null when even that isn't enough.
+   */
+  function slowDown(o) {
+    var offs = o.offsets.slice(), all = o.all || 0;
+    if (o.ok(offs)) return { offsets: offs, all: all, changed: false };
+    if (o.mode !== 'fastest') {
+      for (var v = Math.min(all, 15) - 1; v >= o.floor; v--) {
+        var t = o.secs.map(function (sc) { return o.ruleOff(sc.limit, v); });
+        if (o.ok(t)) return { offsets: t, all: v, changed: true };
+      }
+      return null;
+    }
+    for (var guard = 0; guard < 2000; guard++) {
+      var bad = o.failing(offs), cand = -1;
+      o.secs.forEach(function (sc, i) {
+        if (offs[i] <= o.floor || !bad.some(function (r) { return sc.to > r.a && sc.from < r.b; })) return;
+        if (cand < 0 || sc.limit > o.secs[cand].limit || (sc.limit === o.secs[cand].limit && offs[i] > offs[cand])) cand = i;
+      });
+      if (cand < 0) return null;
+      offs[cand]--;
+      if (o.ok(offs)) return { offsets: offs, all: all, changed: true };
+    }
+    return null;
+  }
+
+  var api = { speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, slowDown: slowDown, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
