@@ -578,7 +578,7 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 /* cruise speed adjustments: header with its (?), road filters and sorting */
 .adj-h { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; margin: 12px 0 6px; }
 .adj-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
-.adj-tools .chips.mini { flex-wrap: wrap; }
+.adj-tools .chips.mini { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
 .adj-sort { display: flex; gap: 6px; margin-left: auto; }
 .adj-sort select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
 .adj-sort .dir { width: 34px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-weight: 800; color: var(--ink); }
@@ -715,7 +715,7 @@ body.trip-full .top { z-index: 1000; }
 .tp-step { min-width: 0; }
 /* "North Little Rock →" / "Dallas": names wrap whole, the arrow stays with the first */
 .arws { min-width: 0; flex: 1; }
-.arw { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+.arw { display: inline-block; max-width: 100%; vertical-align: top; }   /* a long name wraps inside itself; never cut off */
 /* small route maps: room on both sides to scroll the page past them */
 .rmap { margin-left: 14px; margin-right: 14px; }
 /* never scroll sideways */
@@ -726,7 +726,10 @@ body.trip-full .top { z-index: 1000; }
 .grades > *, .btn-row > *, .epa-grid > *, .kpis > *, .epa-tiles > *, .alts-pick > * { min-width: 0; }
 .tp-body input, .tp-body select, .tp-body textarea, .page input, .page select { min-width: 0; max-width: 100%; }
 .tp-body .card, .tp-body .field, .tp-body .nf, .tp-body details { min-width: 0; max-width: 100%; }
-.tp-body .kpis b { overflow-wrap: anywhere; }
+.tp-body .kpis b { white-space: nowrap; font-size: min(19px, 5vw); }
 .tp-body, .tp-body * { overflow-wrap: break-word; }
 /* narrow screens: name only the step you're on */
 @media (max-width: 400px) { .tp-steps { justify-content: space-between; } .tp-steps button:not(.on) span { display: none; } .tp-steps button { flex: 0 0 auto; } .tp-steps button.on { flex: 0 1 auto; padding: 0 12px 0 8px; } }
+/* one-column grids: the column is the screen's width, never the width of its longest line */
+.actions, .pick, .alts-pick { grid-template-columns: minmax(0, 1fr); }
+.leg-link b { white-space: normal; overflow: visible; }

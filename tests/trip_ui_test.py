@@ -29,9 +29,21 @@ OVER = '''() => { const W = innerWidth, out = [];
     const r = e.getBoundingClientRect(); if (!r.width) return;
     if (r.right > W + 0.5 || r.left < -0.5) out.push((e.id ? '#' + e.id : e.tagName.toLowerCase() + '.' + String(e.className).split(' ').join('.')) + ' ' + Math.round(r.left) + '..' + Math.round(r.right));
   });
-  const b = document.getElementById('tpBody'); if (b && b.scrollWidth > b.clientWidth + 1) out.unshift('tpBody scrollWidth ' + b.scrollWidth + ' > ' + b.clientWidth);
+  const b = document.getElementById('tpBody'); if (b && b.scrollWidth > b.clientWidth + 1) { out.unshift('tpBody scrollWidth ' + b.scrollWidth + ' > ' + b.clientWidth);
+    let culprit = null; b.querySelectorAll('.tp-step:not(.hidden) *').forEach(e => { const d = e.style.display; e.style.display = 'none'; if (b.scrollWidth <= b.clientWidth + 1) culprit = e; e.style.display = d; });
+    if (culprit) out.push('culprit: ' + culprit.outerHTML.slice(0, 160));
+    b.querySelectorAll('*').forEach(e => { if (e.closest('.leaflet-container')) return; const r = e.getBoundingClientRect(); if (r.width && r.right > W + 0.5 && out.length < 12) out.push('~' + (e.id ? '#' + e.id : e.tagName.toLowerCase() + '.' + String(e.className).split(' ').join('.')) + ' ' + Math.round(r.left) + '..' + Math.round(r.right) + ' ' + getComputedStyle(e).position); }); }
   return out.slice(0, 12); }'''
 WIDE = []
+BIG = '''() => { const els = [...document.querySelectorAll('#trip .tp-head *, #trip .tp-nav *, #trip .tp-step:not(.hidden) *')].filter(e => !e.dataset.big && !e.closest('.leaflet-container'));
+  const fs = els.map(e => parseFloat(getComputedStyle(e).fontSize)); els.forEach((e, i) => { e.style.fontSize = (fs[i] * 1.3) + 'px'; e.dataset.big = 1; }); }'''
+def stress(pg, label):
+    # long place names and a 130% font size (Android's font-size setting scales WebView text): still no sideways scrolling
+    pg.evaluate('''() => { const r = window.__trip.state().route; r.stops.forEach((s, i) => { s.short = ['500 Woodlane Street, Little Rock, Arkansas', '210 Capitol Ave, Hartford, Connecticut', '1600 Pennsylvania Avenue NW, Washington'][i % 3]; }); }''')
+    for k in [1, 2, 3, 4]:
+        goto(pg, k); wide(pg, label + ' step %d long names' % k)
+        pg.evaluate(BIG); pg.wait_for_timeout(150); wide(pg, label + ' step %d big text' % k)
+        if k == 4: pg.screenshot(path=f'{OUT}/{name}-z4-stress.png')
 def wide(pg, label):
     o = pg.evaluate(OVER)
     if o: print('  TOO WIDE at', label, o); WIDE.append((label, o))
@@ -615,6 +627,7 @@ with sync_playwright() as p:
         assert 'waypoints=' in one and leg2 != one
         pg.evaluate("document.querySelector('.leg-links').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-l2-leglinks.png'); wide(pg, 'leg links')
+        stress(pg, 'legs')
         pg.click('#tClose'); pg.wait_for_timeout(200)
         # the Round trip switch on a one-way link: adds the way back as its own leg, just like importing a round trip
         ONEWAY = ('https://www.google.com/maps/dir/North+Little+Rock,+AR+72114/Dallas,+TX/data=!4m14!4m13!1m5!1m1!1s0x1:0x2!2m2!1d-92.2671!2d34.7695'
