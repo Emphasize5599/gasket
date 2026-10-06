@@ -42,7 +42,7 @@
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
       fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
-      routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tGo') && document.getElementById('tGo').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
+      routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
       search: function (req) { setTimeout(function () { window.onSearchResult(req, { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
     };
   })();
@@ -135,10 +135,18 @@
     if (!lastFetch) { status(me ? 'Ready' : 'Finding you…'); return; }
     var priced = stations.filter(function (s) { return s.prices[S.grade]; }).length;
     var msg = (demo ? 'DEMO data · ' : '') + stations.length + ' stations · ' + priced + ' priced · ' + ago(lastFetch.ts);
-    if (!demo && S.apiKey) msg += ' · ' + N.callsThisMonth() + '/' + S.monthlyCap + ' calls';
     status(msg);
   }
   setInterval(refreshStatus, 30000);
+  /** Google lookups used this month, always in the top-left corner. */
+  function apiCount() {
+    var el = $('apiCount'); if (!el) return;
+    var n = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
+    el.textContent = n + ' / ' + (cap || '∞');
+    el.classList.toggle('hi', cap > 0 && n >= cap * 0.85);
+  }
+  window.__apiCount = apiCount;
+  apiCount(); setInterval(apiCount, 4000);
 
   // ---------- location ----------
   var firstFix = true;

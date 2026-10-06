@@ -75,7 +75,7 @@
   }
   function draw0() {
     var c = car();
-    var h = '<h3>2 · Your car</h3><div class="chips cars" id="gCars">' + S.cars.map(function (x) {
+    var h = '<h3>Your car</h3><div class="chips cars" id="gCars">' + S.cars.map(function (x) {
       return '<button data-car="' + esc(x.id) + '" class="' + (x.id === c.id ? 'on' : '') + '">' + esc(shortName(x)) + '</button>';
     }).join('') + '<button data-car="+">+ Add car</button></div>';
     h += '<div class="g-head"><div><b>' + esc(c.name || 'New car') + '</b><span>' + esc((SP.TYPES[c.type] || SP.TYPES.car).label) + ' · ' +
@@ -94,6 +94,21 @@
     host.innerHTML = h;
     bind(c);
     drawSpeed();
+  }
+  /**
+   * What the trip planner still needs from the car, top to bottom: the EPA lookup (or your own city + highway mpg),
+   * then the tank size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
+   */
+  function need() {
+    var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0;
+    if (mpgOk && tankOk) return null;
+    if (!editing && host) { editing = true; epaOpen = !mpgOk; draw(); epaOpen = false; }
+    if (!mpgOk) {
+      var d = document.getElementById('tEpa'); if (d && !d.open) d.open = true;
+      var sel = ['eYear', 'eMake', 'eModel', 'eOpt'].map(function (id) { return document.getElementById(id); }).filter(function (e) { return e && !e.value; })[0];
+      return { el: sel || d, kind: 'pick', msg: 'Look up your car so trips know its mileage.' };
+    }
+    return { el: document.getElementById('gTank'), kind: 'box', msg: 'Enter your tank size.' };
   }
   function shortName(x) {
     if (x.year && x.model) return x.year + ' ' + String(x.model).replace(/\s+(2WD|4WD|FWD|AWD)$/i, '');
@@ -592,5 +607,5 @@
     return out;
   }
 
-  window.Garage = { ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
+  window.Garage = { need: need, ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

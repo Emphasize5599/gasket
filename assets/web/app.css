@@ -197,7 +197,7 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .t-head > div { flex: 1; min-width: 0; }
 .t-title { font-weight: 800; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t-head .sub { color: var(--ink-2); font-size: 12.5px; }
-.page .lead.small, .tsheet .lead.small { font-size: 12.5px; margin: 8px 2px; color: var(--ink-2); }
+.page .lead.small { font-size: 12.5px; margin: 8px 2px; color: var(--ink-2); }
 .page textarea { width: 100%; font: 14px/1.35 ui-monospace, "Roboto Mono", monospace; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line);
   border-radius: 12px; padding: 10px 12px; resize: none; }
 .alt-entry { margin: 4px 0 8px; }
@@ -229,8 +229,6 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .stops .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent); width: 38px; flex: none; }
 .route-card { padding: 12px 16px; }
 .rc-top { font-size: 15px; }
-.tsheet { max-height: 52vh; overflow: auto; overscroll-behavior: contain; padding-top: 0; transition: max-height .25s ease; }
-.tsheet.tall { max-height: 75vh; }   /* room for the speed sliders; the map re-frames the route above it */
 .fab-fit { position: fixed; right: 14px; z-index: 950; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 10px; border-radius: 20px;
   background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 700; font-size: 13.5px; transition: bottom .25s ease; }
 .fab-fit svg { width: 20px; height: 20px; fill: var(--accent); }
@@ -266,7 +264,6 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .tdot { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--bc); border: 2px solid var(--surface); transform: translate(-50%, -50%); box-shadow: 0 1px 3px rgba(0,0,0,.4); }
 .tend { position: absolute; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; background: #1a73e8; color: #fff; font-weight: 800; font-size: 13px;
   display: grid; place-items: center; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
-.tsheet .actions { margin-bottom: 6px; }
 
 .sub-h { font-weight: 700; font-size: 13px; margin: 12px 0 4px; }
 .chips.one { padding: 0; }
@@ -627,3 +624,88 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .road-tog .sec-h { flex: 1; padding: 8px 2px; }
 .road-tog .sec-h small { color: var(--ink-2); font-weight: 600; font-size: 13px; margin-left: 6px; }
 .leg.all small a { color: var(--accent); }
+
+/* ---------- trip planner panel: Garage → Route → Stops → Departure ---------- */
+.page.tpanel { inset: auto 0 0 0; top: auto; height: var(--panel-h, 58vh); padding: 0; overflow: hidden; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: 26px 26px 0 0; box-shadow: 0 -6px 26px rgba(0,0,0,.2); z-index: 900; transition: height .22s ease; }
+.page.tpanel.tall { height: max(var(--panel-h, 58vh), 75vh); }
+.page.tpanel.dragging { transition: none; }
+.tp-grab { height: 22px; display: grid; place-items: center; flex: none; touch-action: none; cursor: grab; }
+.tp-grab span { width: 40px; height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 25%, transparent); }
+.tp-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; flex: none; touch-action: none; }
+.tp-steps { flex: 1; display: flex; gap: 2px; min-width: 0; }
+.tp-steps button { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; height: 34px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); padding: 0 6px; }
+.tp-steps button b { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; flex: none;
+  border: 1.5px solid currentColor; }
+.tp-steps button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-steps button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.tp-steps button.on b { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tp-steps button.done b { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); border-color: transparent; }
+.tp-head .x { margin-left: 0; width: 36px; height: 36px; font-size: 17px; }
+.tp-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 12px 16px; }
+.tp-body > .card:first-child { margin-top: 0; }
+.tp-nav { flex: none; display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; padding: 10px 12px calc(var(--sb) + 10px);
+  background: var(--bg); border-top: 1px solid var(--line); }
+.tp-nav .btn { width: 100%; margin: 0; height: 48px; position: relative; overflow: hidden; }
+.tp-nav .btn.busy { pointer-events: none; }
+.tp-body .lead.small { font-size: 12.5px; margin: 8px 2px; color: var(--ink-2); }
+.tp-body .actions { margin: 14px 0 6px; }
+.tp-body .actions .btn[disabled] { opacity: .45; filter: grayscale(1); pointer-events: none; }
+.tp-body .sub-h.center { text-align: center; margin: 6px 0 0; }
+.res-head { display: flex; flex-direction: column; gap: 1px; margin: 6px 2px 10px; }
+.res-head b { font-size: 17px; }
+.res-head span { font-size: 12.5px; color: var(--ink-2); }
+.warns:empty { display: none; }
+.warns { margin: 8px 0 4px; }
+.warns .note { margin: 6px 2px; }
+.empty-res { color: var(--ink-2); font-size: 14px; text-align: center; padding: 18px 12px; }
+.finding { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--ink-2); padding: 18px; }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+details.set-more > summary { font-weight: 700; cursor: pointer; padding: 2px 0; }
+details.set-more[open] > summary { margin-bottom: 8px; }
+
+/* what still needs filling in */
+.need, input.need, select.need { outline: 2px solid #d93025 !important; outline-offset: 1px; border-radius: 12px; }
+.in-q.need > input.need, .in-btn.need > input.need { outline: none !important; }
+.pulse { animation: needPulse .6s ease-in-out 3; border-radius: 14px; }
+@keyframes needPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); background-color: transparent; }
+  50% { box-shadow: 0 0 0 4px rgba(255,255,255,.55); background-color: rgba(255,255,255,.28); } }
+
+/* the small route maps: show every route again */
+.rmap { position: relative; }
+.rmap-fit { position: absolute; z-index: 500; right: 8px; top: 8px; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--surface); box-shadow: var(--shadow); }
+.rmap-fit svg { width: 20px; height: 20px; fill: var(--accent); }
+
+/* Trip button: new trip or a saved one */
+.tpick-bg { position: fixed; inset: 0; z-index: 1500; background: rgba(8, 10, 14, 0); display: flex; align-items: flex-end; justify-content: center;
+  transition: background .2s ease; }
+.tpick-bg.on { background: rgba(8, 10, 14, .42); }
+.tpick { width: 100%; max-width: 560px; max-height: 78vh; overflow: auto; background: var(--surface); border-radius: 26px 26px 0 0;
+  padding: 18px 14px calc(var(--sb) + 16px); transform: translateY(100%); transition: transform .22s ease; }
+.tpick-bg.on .tpick { transform: none; }
+.tpick-h { font-size: 20px; font-weight: 800; margin: 0 4px 12px; }
+.tpick-new { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px; border-radius: 18px;
+  background: var(--accent); color: var(--accent-ink); margin-bottom: 8px; }
+.tpick-new.cont { background: var(--surface-2); color: var(--ink); }
+.tpick-new .plus { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; font-weight: 700;
+  background: color-mix(in srgb, currentColor 16%, transparent); flex: none; }
+.tpick-new b { display: block; font-size: 16px; }
+.tpick-new small { display: block; opacity: .8; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpick-new > span:last-child { min-width: 0; }
+.tpick-sub { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; font-weight: 700; color: var(--ink-2);
+  text-transform: uppercase; letter-spacing: .04em; margin: 14px 4px 4px; }
+.tpick-sub span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.tpick-list .hist-row { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); }
+.tpick-list .hist-open { flex: 1; min-width: 0; text-align: left; padding: 11px 4px; }
+.tpick-list .hist-open b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpick-list .hist-open small { display: block; color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpick-list .hist-del { width: 34px; height: 34px; border-radius: 50%; color: var(--ink-2); flex: none; }
+
+/* lookups this month, always in view */
+.apic { flex: none; pointer-events: auto; height: 30px; padding: 0 10px; border-radius: 999px; display: flex; align-items: center;
+  background: var(--surface); box-shadow: var(--shadow); font-size: 12px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.apic.hi { color: var(--warn); }
+body.trip-on .top .bar { justify-content: space-between; }
