@@ -34,8 +34,7 @@
     walmartPlus: true,
     samsMode: 'member',          // 'member' = Google's Sam's price is already member price; 'minus10' = take 10¢ more
     citgoTier: 'club',           // 'none' | 'club' | 'premier'
-    citgoBonus: 'none',          // 'none' | 'friday' | 'tuesday'  (valid only on citgoBonusDate)
-    citgoBonusDate: '',
+    citgoUsed: { tuesday: '', friday: '' },   // month ("2026-10") you already used that monthly bonus in
     cashbackPct: 0,              // card cash back applied to the final pump charge
     grade: 'regular',
     radiusMi: 8,
@@ -178,10 +177,24 @@
     return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
   }
 
+  function monthKey(d) { d = d || new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); }
+  /**
+   * Club CITGO's monthly bonuses apply on their own day: Triple Tuesday (3× the everyday reward: 9¢ Club / 18¢ Premier)
+   * on a Tuesday, and Friday Savings (5¢ Club / 8¢ Premier) on a Friday — each once a month, on the first fill that day,
+   * so they stop once you mark them used for the month. d = when you'll be at the pump.
+   */
+  function citgoBonus(s, d) {
+    d = d || new Date();
+    var used = s.citgoUsed || {}, day = d.getDay(), mk = monthKey(d);
+    if (day === 2 && used.tuesday !== mk) return 'tuesday';
+    if (day === 5 && used.friday !== mk) return 'friday';
+    return 'none';
+  }
   function r3(x) { return Math.round(x * 1000) / 1000; }
 
   /** Returns {base, final, steps:[{label, amount, note}], notes:[], updated} or null if no price for grade. */
-  function compute(station, grade, s, now) {
+  /** at: when you'll be at the pump (for day-based rewards); defaults to now. */
+  function compute(station, grade, s, now, at) {
     var gp = station.prices[grade];
     if (!gp) return null;
     s = s || DEFAULTS;
@@ -212,10 +225,11 @@
 
     if (b === 'citgo' && s.citgoTier && s.citgoTier !== 'none') {
       var base = s.citgoTier === 'premier' ? 0.06 : 0.03;
-      var bonus = s.citgoBonusDate === todayKey(now) ? s.citgoBonus : 'none';
+      var bonus = citgoBonus(s, at || now);
       var rate = base, label = 'Club CITGO ' + (s.citgoTier === 'premier' ? 'Premier reward' : 'reward');
-      if (bonus === 'tuesday') { rate = base * 3; label += ' ×3 (Triple Tuesday)'; }
-      else if (bonus === 'friday') { rate = base + 0.02; label += ' +2¢ (Friday Savings)'; }
+      var when = at && at.toDateString() !== (now || new Date()).toDateString() ? ' — ' + at.toLocaleDateString([], { weekday: 'short' }) + ' when you get there' : '';
+      if (bonus === 'tuesday') { rate = base * 3; label += ' ×3 (Triple Tuesday' + when + ')'; }
+      else if (bonus === 'friday') { rate = base + 0.02; label += ' +2¢ (Friday Savings' + when + ')'; }
       add(label, -rate, 'Applies to up to 30 gal per fill-up.');
     }
 
@@ -249,6 +263,6 @@
   }
 
   var api = { BRANDS: BRANDS, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
-    compute: compute, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, moneyToNumber: moneyToNumber };
+    compute: compute, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

@@ -57,6 +57,7 @@
   var alts = [], altSel = 0, altSure = false;   // Google's route options for this trip
   var layer = L.layerGroup();
   var busy = false;
+  var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
 
   /** Progress inside the Get route / Find stops button: frac 0..1 and what it's doing. */
   function prog(frac, label) {
@@ -78,6 +79,7 @@
     var t = S.trip;
     var h = '<div class="t-head"><h1>Plan fuel stops <button type="button" class="qi" data-q="' + encodeURIComponent('Bring in a Google Maps route, and Fuel+ picks the stops that save money — counting detours — then sends the route back with the stops added.') + '">?</button></h1><button class="x" id="tClose" aria-label="Close">✕</button></div>';
 
+    h += histCard();
     h += '<div class="card"><h3>1 · Route</h3>' +
       '<div class="field col"><div class="lbl">Google Maps directions link<small>In Google Maps: get directions → ⋮ → <b>Share directions</b> → Fuel+ Map. Or copy the link and paste it here.</small></div>' +
       '<textarea id="tLink" rows="2" placeholder="https://maps.app.goo.gl/…" spellcheck="false">' + esc(t.link) + '</textarea></div>' +
@@ -117,11 +119,12 @@
     pg.innerHTML = h; show(pg, true); pg.scrollTop = 0;
 
     $('tClose').onclick = closeTrip;
-    $('tLink').addEventListener('input', debounce(function () { route = null; model = null; renderInfo(); readLink(); }, 400));
-    ['tFrom', 'tTo'].forEach(function (id) { $(id).addEventListener('input', function () { route = null; model = null; renderInfo(); renderStops(); }); });
+    bindHist();
+    $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; renderInfo(); readLink(); }, 400));
+    ['tFrom', 'tTo'].forEach(function (id) { $(id).addEventListener('input', function () { route = null; model = null; replay = null; renderInfo(); renderStops(); }); });
     $('tAvoid').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
-      b.classList.toggle('on'); model = null; renderInfo();
+      b.classList.toggle('on'); model = null; replay = null; renderInfo();
     };
     var arriveHelp = function () {
       var full = $('tArrive').querySelector('.on').dataset.a === 'full';
@@ -870,8 +873,20 @@
    * Answers already found for the same stretch are reused (saved searches) unless force, or older than staleHours.
    * pg(frac 0..1, label). Returns { per: [{cands, notes, unpriced, stale, grade}] per model, cachedAgeMs }.
    */
-  async function gatherAll(models, pg, dbgS, force) {
+  async function gatherAll(models, pg, dbgS, force, replay, ks) {
     var KV = A.KV, notes = [], official = [], perModel = models.map(function () { return []; });
+    if (replay) {
+      // a saved trip: the stations (with their prices) it found then — no lookups at all
+      official = (replay.official || []).slice();
+      perModel = (ks || []).map(function (k) {
+        var hit = (replay.google || []).filter(function (g) { return g.k === k; })[0];
+        if (hit) return hit.list.slice();
+        // a route it didn't check then: every station it found, with Google's exact detours dropped (they were for another route)
+        var all = []; (replay.google || []).forEach(function (g) { g.list.forEach(function (st) { var c = Object.assign({}, st); delete c.detourExact; delete c.detourMi; all.push(c); }); });
+        return all;
+      });
+      while (perModel.length < models.length) perModel.push([]);
+    }
     var maxAge = force || S.alwaysRefresh ? 0 : (Number(S.staleHours) || 24) * 3600e3, oldest = 0, saved = 0;
     var use = function (o) { if (!o) return null; oldest = Math.max(oldest, Date.now() - o.t); saved++; return o.v; };
     var getKV = function (ns, key, age) { return age ? KV.get(ns, key, age) : null; };
@@ -888,7 +903,7 @@
       models.forEach(function (m) { T.samplePoints(m, gap).forEach(function (p) { var k = p.lat.toFixed(2) + ',' + p.lng.toFixed(2); if (!seen[k]) { seen[k] = 1; out.push(p); } }); });
       return out;
     };
-    try {
+    if (!replay) try {
       // --- Google, along each route ---
       var jobs = [];
       if (S.apiKey) {
@@ -989,7 +1004,7 @@
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
 
-    var grade = gradeOf(), per = [], t0 = Date.now();
+    var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date();
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];
       var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0;
@@ -998,7 +1013,7 @@
         var s = merged[si];
         var pr = T.project(model, { lat: s.lat, lng: s.lng });
         if (pr.offset > maxOff) continue;
-        var c = P.compute(s, grade, S, new Date());
+        var c = P.compute(s, grade, S, nowD, new Date(nowD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // CITGO's day bonuses go by when you'll be there
         if (!c) { unpriced++; continue; }
         if (c.stale) stale++;
         var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
@@ -1012,7 +1027,7 @@
       per.push({ cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade });
     }
     LG.debug('stations', 'Matched stations to ' + models.length + ' route(s) in ' + (Date.now() - t0) + ' ms', per.map(function (x) { return x.cands.length; }));
-    return { per: per, cachedAgeMs: saved ? oldest : 0 };
+    return { per: per, cachedAgeMs: saved ? oldest : 0, raw: { official: official, google: perModel } };
   }
   // ---------- other routes ----------
   function altCompareList() {
@@ -1163,6 +1178,58 @@
       if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); }
     }, 300);
   }
+  // ---------- how much gas to leave with ----------
+  /** Cheapest gas right by the start of the trip (first 5 route miles), else the map's stations near where you are. */
+  function startStation(r) {
+    var near = r.cands.filter(function (c) { return c.d <= 5 && c.detourMin <= S.trip.maxDetourMin; }).sort(function (a, b) { return a.price - b.price; })[0];
+    if (near) return { name: P.BRANDS[near.station.brand].name, price: near.price, mile: near.d, id: near.id };
+    try {
+      var p0 = model.pts[0], best = null, now = new Date();
+      (A.stations() || []).forEach(function (st) {
+        if (!st || st.lat == null || P.haversineMi(p0.lat, p0.lng, st.lat, st.lng) > 5) return;
+        var c = P.compute(st, r.grade, S, now); if (c && (!best || c.final < best.price)) best = { name: P.BRANDS[st.brand] ? P.BRANDS[st.brand].name : st.name, price: c.final, mile: 0, id: st.id };
+      });
+      return best;
+    } catch (e) { return null; }
+  }
+  function startIdeal() {
+    var r = result; if (!r || !r.opts || r.idealBusy) return;
+    var key = r.opts.bufferGal + ':' + r.opts.startGal;
+    if (r.idealKey === key) return;
+    r.idealBusy = true;
+    setTimeout(function () {
+      r.idealBusy = false; r.idealKey = key;
+      if (result !== r) return;
+      var st = startStation(r), t0 = Date.now();
+      r.ideal = null;
+      if (st) {
+        var ref = S.trip.arrive === 'full' ? r.plan.refPrice : Math.min(r.plan.refPrice || st.price, st.price);
+        var id = T.idealStart(r.opts, st.price, ref);
+        if (id) { id.st = st; r.ideal = id; }
+        LG.debug('plan', 'Best gas to leave with in ' + (Date.now() - t0) + ' ms', id ? { gal: +id.gal.toFixed(1), add: +id.addGal.toFixed(1), saves: id.saves && +id.saves.toFixed(2), at: st.name + ' $' + st.price } : 'n/a');
+      }
+      if (result === r && $('tsIdeal')) $('tsIdeal').outerHTML = idealBox();
+    }, 350);
+  }
+  function idealBox() {
+    var r = result, id = r && r.ideal;
+    if (!id) return '<div id="tsIdeal"></div>';
+    var gpm = model.galTo(model.totalMi) / model.totalMi || model.combGpm, st = id.st, rng = function (g) { return Math.round(g / gpm); };
+    var where = esc(st.name) + (st.mile > 0.3 ? ' (mile ' + st.mile.toFixed(1) + ')' : '') + ' at ' + priceText(st.price);
+    var h = '<div class="ideal" id="tsIdeal"><div class="ideal-h">Gas to leave with ' + A.qBtn('Fuel+ tries every amount from what you have now up to a full tank, bought at the cheapest gas at the start of the trip, and plans the rest of the trip for each. This is the least gas that makes the whole trip cheapest' + (S.trip.arrive === 'full' ? ' (gas left at the end counts at the typical price, since you chose to arrive with the most gas)' : ' — only what you\'ll use, so no gas is bought there just to carry around') + '. It counts your stop rule (adding gas before you go is a stop too).') + '</div>';
+    if (!id.nowOk) {
+      h += '<div class="ideal-big">Leave with at least ' + id.gal.toFixed(1) + ' gal <small>~' + rng(id.gal) + ' mi of range</small></div>' +
+        '<div class="ideal-sub">Add ' + id.addGal.toFixed(1) + ' gal at ' + where + ' before you go.</div>';
+    } else if (id.addGal < 0.3 || !(id.scoreGain > 0.05)) {
+      h += '<div class="ideal-sub">Leave with what you have — gas at the start (' + where + ') isn\'t cheaper than what\'s on the way.</div>';
+    } else {
+      var ps = id.plan.stops;
+      h += '<div class="ideal-big">' + id.gal.toFixed(1) + ' gal <small>~' + rng(id.gal) + ' mi of range</small></div>' +
+        '<div class="ideal-sub">Add <b>' + id.addGal.toFixed(1) + ' gal</b> at ' + where + ' before you go' + (id.saves > 0.005 ? ' — saves <b class="good">' + money(id.saves) + '</b>' : '') + '. ' +
+        (ps.length ? 'Then ' + ps.length + ' stop' + (ps.length === 1 ? '' : 's') + ': ' + ps.map(function (s) { return esc(P.BRANDS[s.c.station.brand].name) + ' at mile ' + Math.round(s.c.d) + ' (' + s.buyGal.toFixed(1) + ' gal)'; }).join(', ') + '.' : 'No other stops.') + '</div>';
+    }
+    return h + '</div>';
+  }
   function swRow(mi) {
     var sw = result.sweep, best = null;
     sw.forEach(function (x) { if (!best || Math.abs(x.mi - mi) < Math.abs(best.mi - mi)) best = x; });
@@ -1238,8 +1305,12 @@
     dbg.search = {};
     var models = [model];
     others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
-    var okModels = models.filter(Boolean);
-    var ga = await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force === true);
+    var okModels = models.filter(Boolean), okKs = [altSel].concat(others).filter(function (k, i) { return models[i]; });
+    var rp = force === true ? null : replay;
+    if (rp) LG.info('stations', 'Using the stations saved with this trip (' + agoText(Date.now() - rp.t) + ') — no lookups');
+    var ga = await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force === true, rp && rp.stations, okKs);
+    if (rp) ga.cachedAgeMs = Date.now() - rp.t;
+    else { try { saveTrip(ga.raw, okKs); } catch (e) { LG.warn('history', 'Couldn\'t save the trip', String(e)); } }
     var g = ga.per[0];
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
@@ -1253,7 +1324,7 @@
       stops: plan.ok ? plan.stops.map(function (s) { return { name: s.c.station.name, mile: Math.round(s.c.d), price: s.c.price, buy: Math.round(s.buyGal * 10) / 10, why: s.why }; }) : null });
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
-      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs };
+      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp };
     await breathe();
     var t1 = Date.now();
     recompute();
@@ -1348,12 +1419,13 @@
       p.stops.forEach(function (s, i) { h += stopCard(s, i); });
       if (t.stops) h += '<div class="lead small keep arrive">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') + '.</div>' +
         '<div class="lead small">When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
+      h += idealBox();
       h += bufBox();
       h += '<div class="spdbox" id="tsSpeed"></div>';
       if (S.trip.arrive === 'full') h += topUpBox();
       if (r.back) h += backBox();
     }
-    if (r.cachedAgeMs > 0) h += '<div class="note saved">Using stations and prices saved ' + agoText(r.cachedAgeMs) + ' for this route. <a href="#" id="tsRefresh">Get fresh prices</a></div>';
+    if (r.cachedAgeMs > 0) h += '<div class="note saved">' + (r.fromHistory ? 'Saved trip: stations and prices from ' + agoText(r.cachedAgeMs) + ', no lookups used.' : 'Using stations and prices saved ' + agoText(r.cachedAgeMs) + ' for this route.') + ' <a href="#" id="tsRefresh">Get fresh prices</a></div>';
     var notes = r.notes.slice();
     if (r.stale) notes.push(r.stale + ' station' + (r.stale === 1 ? ' has a price' : 's have prices') + ' older than ' + S.staleHours + ' hours (marked).');
     if (p.tooFar) notes.push(p.tooFar + ' station' + (p.tooFar === 1 ? ' was' : 's were') + ' skipped for being more than ' + S.trip.maxDetourMin + ' min out of the way.');
@@ -1368,6 +1440,7 @@
     if (ex && ex.tooMany) h += '<div class="note">Google Maps takes up to 9 stops in a shared route; this trip has ' + ex.waypoints + '. Remove a stop in Maps if it complains.</div>';
     if (route.avoidDetected || S.trip.avoid.tolls || S.trip.avoid.highways || S.trip.avoid.ferries) h += '<div class="note">Google Maps links can\'t carry “avoid” options — turn them back on in Maps (Route options).</div>';
     el.innerHTML = h; show(el, true); el.scrollTop = 0;
+    startIdeal();
     $('tsClose').onclick = $('tsDone').onclick = endTrip;
     $('tsEdit').onclick = function () { show(el, false); openTrip(); };
     $('tsShare').onclick = shareTrip;
@@ -1395,7 +1468,83 @@
       b.onclick = function () { var s = p.stops[+b.dataset.fly].c; map.setView([s.lat, s.lng], 14); };
     });
   }
-  function agoText(ms) { var m = Math.round(ms / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; }
+  function agoText(ms) { var m = Math.round(ms / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 48 * 60 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; }
+
+  // ---------- trip history ----------
+  // Every planned trip is kept (route, Google's route options and the stations it found, with prices) so it can be
+  // reopened later with no Google lookups at all. Same stops = same entry, replaced by the newer search.
+  var HIST_MAX = 25;
+  function histIndex() { var o = A.KV.get('trips', 'index'); return (o && o.v) || []; }
+  function histId(r) {
+    var key = r.stops.map(function (st) { return st.current ? 'here' : (st.lat != null ? st.lat.toFixed(3) + ',' + st.lng.toFixed(3) : norm(st.address || st.label)); }).join('|') +
+      '|' + ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; }).join(',');
+    var h = 0; for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+    return 't' + (h >>> 0).toString(36);
+  }
+  function stopName(st) { return st.current ? 'Your location' : (st.short || st.label || st.address || '?'); }
+  function saveTrip(raw, ks) {
+    if (!route || !raw) return;
+    var id = histId(route), now = Date.now();
+    var google = (raw.google || []).map(function (list, i) { return { k: ks[i], list: list }; });
+    var keepStop = function (st) { var o = Object.assign({}, st); delete o.choices; return o; };
+    A.KV.put('trips', 'trip|' + id, {
+      route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes },
+      alts: alts, altSel: altSel, altSure: altSure,
+      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, avoid: S.trip.avoid, milesLeft: S.trip.milesLeft },
+      stations: { official: raw.official || [], google: google }
+    });
+    var idx = histIndex().filter(function (x) { return x.id !== id; });
+    idx.unshift({ id: id, t: now, title: stopName(route.stops[0]) + ' → ' + stopName(route.stops[route.stops.length - 1]),
+      mi: Math.round(model.totalMi), via: alts[altSel] && alts[altSel].description || '', n: route.stops.length });
+    idx.slice(HIST_MAX).forEach(function (x) { A.KV.put('trips', 'trip|' + x.id, null); });
+    A.KV.put('trips', 'index', idx.slice(0, HIST_MAX));
+    LG.info('history', 'Saved trip to history', idx[0].title);
+  }
+  function dayText(t) {
+    var d = new Date(t), now = new Date(), days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+    var tm = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return days === 0 ? 'Today ' + tm : days === 1 ? 'Yesterday ' + tm : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+  function histCard() {
+    var idx = histIndex();
+    if (!idx.length) return '';
+    return '<details class="card hist" id="tHist"><summary><span>Recent trips</span><small>' + idx.length + '</small></summary><div class="hist-list">' +
+      idx.map(function (x) {
+        return '<div class="hist-row"><button class="hist-open" data-hist="' + x.id + '"><b>' + esc(x.title) + '</b><small>' + x.mi + ' mi' +
+          (x.via ? ' · via ' + esc(x.via) : '') + (x.n > 2 ? ' · ' + (x.n - 2) + ' stop' + (x.n > 3 ? 's' : '') : '') + ' · ' + dayText(x.t) + '</small></button>' +
+          '<button class="hist-del" data-hdel="' + x.id + '" aria-label="Remove from history">✕</button></div>';
+      }).join('') + '</div><div class="qline">' + A.qBtn('Opening a saved trip reuses its route and the stations and prices it found, so it uses no Google lookups. Prices are as of that search (old ones are marked); tap “Get fresh prices” on the result to look them up again.') + '<span>Saved trips use no lookups</span></div></details>';
+  }
+  function bindHist() {
+    var box = $('tHist'); if (!box) return;
+    box.querySelectorAll('[data-hist]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); openSaved(b.dataset.hist); }; });
+    box.querySelectorAll('[data-hdel]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.dataset.hdel;
+        A.KV.put('trips', 'index', histIndex().filter(function (x) { return x.id !== id; }));
+        A.KV.put('trips', 'trip|' + id, null);
+        var row = b.closest('.hist-row'); if (row) row.remove();
+        if (!histIndex().length) box.remove();
+      };
+    });
+  }
+  async function openSaved(id) {
+    if (busy) return;
+    var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
+    if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
+    Object.assign(S.trip, { link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
+    if (!(parseFloat(S.trip.milesLeft) >= 0)) S.trip.milesLeft = v.trip.milesLeft;
+    A.save();
+    route = v.route; alts = v.alts; altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
+    rawRoute = alts[altSel]; result = null; parsing = null;
+    replay = { id: id, t: o.t, stations: v.stations };
+    model = T.buildRoute(rawRoute, carModel());
+    ensureLimits(model);
+    LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
+    show($('tripSheet'), false); openTrip();
+    if (!(parseFloat(S.trip.milesLeft) >= 0)) { $('tMiles').focus(); toastMsg('Enter how many miles are left in your tank.'); return; }
+    findStops();
+  }
   function priceText(v) { return '$' + P.fmt3(v); }
   function keepScroll(f) { var el = $('tripSheet'), y = el.scrollTop; f(); el.scrollTop = y; }
   function topUpBox() {
@@ -1522,7 +1671,7 @@
 
   // Google Maps -> Share directions -> Fuel+ Map
   window.onSharedText = function (text) {
-    S.trip.link = text; A.save(); route = null; model = null; result = null;
+    S.trip.link = text; A.save(); route = null; model = null; result = null; replay = null;
     show($('tripSheet'), false); openTrip();
   };
   if (window.__pendingShare) { var t0 = window.__pendingShare; window.__pendingShare = null; window.onSharedText(t0); }

@@ -412,8 +412,8 @@
   function sw(key, on) { return '<label class="switch"><input type="checkbox" data-k="' + key + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
   function openSettings(onboarding) {
     var calls = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
-    var today = new Date().getDay(); // 2 = Tue, 5 = Fri
-    var bonusToday = S.citgoBonusDate === P.todayKey() ? S.citgoBonus : 'none';
+    var mk = P.monthKey();
+    var used = function (k) { return (S.citgoUsed || {})[k] === mk; };
     var h = '<h1>' + (onboarding ? 'Set up Fuel+ Map' : 'Settings') + '</h1>';
     if (onboarding) h += '<p class="lead">Walmart and Murphy USA prices come straight from their own sites — no key needed. For Sam\'s, Exxon, Mobil and CITGO, add a free Google Places API key (optional), or try the demo first.</p>';
     h += '<div class="card"><h3>Google Places API key (optional)</h3>' +
@@ -428,8 +428,9 @@
       '<div class="field"><div class="lbl">Walmart+ member<small>10¢/gal off (5¢ in Alabama) at Walmart, Murphy, Exxon, Mobil, CITGO; member pricing at Sam\'s.</small></div>' + sw('walmartPlus', S.walmartPlus) + '</div>' +
       '<div class="field"><div class="lbl">Club CITGO status<small>Stacks with Walmart+ at CITGO. Club 3¢, Premier 6¢ (12 fills of 8+ gal in a quarter).</small></div><select id="citgoTier">' +
       opt('none', 'Not a member', S.citgoTier) + opt('club', 'Club (3¢)', S.citgoTier) + opt('premier', 'Premier (6¢)', S.citgoTier) + '</select></div>' +
-      '<div class="field"><div class="lbl">CITGO bonus today<small>' + (today === 2 || today === 5 ? 'It\'s ' + (today === 2 ? 'Tuesday' : 'Friday') + ' — set this if the Club CITGO app shows today\'s bonus.' : 'Triple Tuesday / Friday Savings happen one day a month each; resets tomorrow.') + '</small></div><select id="citgoBonus">' +
-      opt('none', 'None', bonusToday) + opt('friday', 'Friday +2¢', bonusToday) + opt('tuesday', 'Triple Tuesday ×3', bonusToday) + '</select></div>' +
+      '<div class="field' + (S.citgoTier === 'none' ? ' hidden' : '') + '" id="citgoBonusRow"><div class="lbl">Monthly CITGO bonus used<small>Triple Tuesday (3× your reward) and Friday Savings (+2¢) apply on their own at CITGO on a Tuesday or Friday — once a month each, on your first fill that day. Tap one after you use it so it stops for the rest of the month.</small>' +
+        '<small class="keep citgo-today">' + citgoToday() + '</small></div>' +
+        '<div class="chips mini" id="citgoUsed"><button data-cu="tuesday" class="' + (used('tuesday') ? 'on' : '') + '">Tue</button><button data-cu="friday" class="' + (used('friday') ? 'on' : '') + '">Fri</button></div></div>' +
       '<div class="field"><div class="lbl">Sam\'s Club price<small>Google normally shows Sam\'s member price, which Walmart+ gets you.</small></div><select id="samsMode">' +
       opt('member', 'Use as member price', S.samsMode) + opt('minus10', 'Take 10¢ off too', S.samsMode) + '</select></div>' +
       '<div class="field"><div class="lbl">Card cash back %<small>Optional; shown as its own line in the breakdown.</small></div><input type="number" id="cashbackPct" min="0" max="10" step="0.5" value="' + (S.cashbackPct || 0) + '"></div></div>';
@@ -438,8 +439,7 @@
       '<div class="field"><div class="lbl">Walmart (walmart.com)<small>Walmart\'s own store pages. Updated daily by Walmart.</small></div>' + sw('walmartDirect', S.walmartDirect !== false) + '</div>' +
       '<div class="field"><div class="lbl">Murphy USA (murphyusa.com)<small>Murphy\'s own store-finder map. Updated through the day.</small></div>' + sw('murphyDirect', S.murphyDirect !== false) + '</div>' +
       '<div class="field"><div class="lbl">Site checks<small>If a site asks “are you human?”, open it and complete the check yourself.</small></div>' +
-      '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" data-verify="walmart">Walmart</button>' +
-      '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" data-verify="murphy">Murphy</button></div>' +
+      '<div class="btns"><button class="btn tonal sm" data-verify="walmart">Walmart</button><button class="btn tonal sm" data-verify="murphy">Murphy</button></div></div>' +
       '<p class="lead" style="font-size:12.5px;margin:4px 0 10px">Google fills in the other brands (needs the key above). Official prices replace Google\'s when both exist.</p></div>';
     h += '<div class="card"><h3>Prices</h3>' +
       '<div class="field"><div class="lbl">Show prices to the cent<small>Rounded up — $3.199 shows as $3.20. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
@@ -454,16 +454,15 @@
       '<div class="field"><div class="lbl">Show cities when a route is imported<small>Free lookup from OpenStreetMap using each stop\'s spot (sends those coordinates to OpenStreetMap). No Google lookups.</small></div>' + sw('osmPreview', S.osmPreview !== false) + '</div>' +
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
-      '<div class="field"><div class="lbl">Saved trip searches<small>Stations, speed limits and routes the app has saved.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div></div>';
+      '<div class="field"><div class="lbl">Saved lookups<small>Stations, prices, speed limits and routes found for recent searches, reused so the same route doesn\'t use Google lookups twice. Trip history is kept separately.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
+      '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
     h += '<div class="card"><h3>Debugging</h3>' +
       '<div class="field"><div class="lbl">Debug logging<small>Keeps a log on this phone you can share for troubleshooting. Your API key is never written to it.</small></div>' + sw('debug', !!S.debug) + '</div>' +
       '<div class="field"><div class="lbl">How much detail</div><select id="logLevel">' +
       [[1, 'Errors only'], [2, 'Errors + warnings'], [3, 'Steps'], [4, 'Details'], [5, 'Everything']].map(function (o) {
         return '<option value="' + o[0] + '"' + (S.logLevel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><div class="lbl">Log<small class="keep" id="logCount">' + (window.FLog ? FLog.entries().length : 0) + ' entries</small></div>' +
-      '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" id="sLogView">View</button>' +
-      '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" id="sLogShare">Share</button>' +
-      '<button class="btn tonal" style="width:auto;height:40px;padding:0 12px;margin:0" id="sLogClear">Clear</button></div></div>';
+      '<div class="btns"><button class="btn tonal sm" id="sLogView">View</button><button class="btn tonal sm" id="sLogShare">Share</button><button class="btn tonal sm" id="sLogClear">Clear</button></div></div></div>';
     h += '<button class="btn primary" id="sDone">' + (onboarding ? 'Save & find gas' : 'Done') + '</button>';
     h += '<button class="btn tonal" id="sDemo">' + (demo ? 'Turn off demo data' : 'Try with demo data') + '</button>';
     h += '<p class="lead" style="margin-top:16px;font-size:12.5px">Prices: Google Maps (crowd/partner-sourced, not guaranteed). Discount rules as published by Walmart and CITGO, Oct 2026 — the Walmart app\'s Gas Savings page is the final word on which locations participate.</p>';
@@ -472,6 +471,13 @@
     $('sDone').onclick = function () { closeSettings(true); };
     $('sLogView').onclick = function () { showLog(); };
     $('sLogShare').onclick = function () { shareLog(); };
+    $('histClear').onclick = function () { var o = KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0; KV.clear('trips'); $('histCount').textContent = histCount(); toast(n ? 'Cleared ' + n + ' saved trip' + (n === 1 ? '' : 's') + '.' : 'No saved trips.'); };
+    $('citgoTier').onchange = function () { $('citgoBonusRow').classList.toggle('hidden', this.value === 'none'); };
+    $('citgoUsed').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      b.classList.toggle('on'); S.citgoUsed = Object.assign({}, S.citgoUsed); S.citgoUsed[b.dataset.cu] = b.classList.contains('on') ? P.monthKey() : '';
+      document.querySelector('.citgo-today').textContent = citgoToday();
+    };
     $('kvClear').onclick = function () { var n = 0; ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find'].forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
     $('sLogClear').onclick = function () { if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); };
     pg.querySelectorAll('[data-verify]').forEach(function (bt) {
@@ -508,6 +514,13 @@
     };
   }
   window.__showLog = showLog;
+  function histCount() { var o = KV && KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0; return n ? n + ' saved trip' + (n === 1 ? '' : 's') + ' — reopen them with no lookups' : 'No saved trips yet'; }
+  function citgoToday() {
+    var d = new Date().getDay(), b = P.citgoBonus(S, new Date());
+    if (d !== 2 && d !== 5) return 'Not a bonus day today.';
+    var name = d === 2 ? 'Triple Tuesday' : 'Friday Savings';
+    return b === 'none' ? 'Today: ' + name + ' already used this month.' : 'Today: ' + name + ' is applied to CITGO prices.';
+  }
   function opt(v, label, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>'; }
   function fmtSha(s) { return String(s).replace(/(..)(?!$)/g, '$1:'); }
   function closeSettings(apply) {
@@ -516,7 +529,6 @@
     S.apiKey = $('apiKey').value.trim();
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.citgoTier = $('citgoTier').value;
-    S.citgoBonus = $('citgoBonus').value; S.citgoBonusDate = P.todayKey();
     S.samsMode = $('samsMode').value;
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));
     S.radiusMi = Math.min(25, Math.max(2, parseFloat($('radiusMi').value) || 8));
@@ -596,6 +608,14 @@
       if (sm.closest('.keep') || sm.dataset.qd || !sm.textContent.trim() || /&nbsp;/.test(sm.innerHTML) && !sm.textContent.trim()) return;
       var host = sm.parentElement;
       sm.dataset.qd = 1;
+      // a label over a text box: the (?) goes inside the box, on the right
+      var box = host.closest('.nf, .field.col'), ctl = box && box.querySelector('input:not([type=checkbox]):not([type=range]), textarea');
+      if (ctl && !ctl.closest('.in-q')) {
+        var wrap = document.createElement('span'); wrap.className = 'in-q' + (ctl.tagName === 'TEXTAREA' ? ' ta' : '');
+        ctl.parentNode.insertBefore(wrap, ctl); wrap.appendChild(ctl);
+        wrap.insertAdjacentHTML('beforeend', qBtn(sm.innerHTML));
+        sm.remove(); return;
+      }
       sm.insertAdjacentHTML('beforebegin', qBtn(sm.innerHTML));
       sm.remove();
       host.classList.add('has-q');
@@ -629,7 +649,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render };
 })();

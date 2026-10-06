@@ -32,11 +32,16 @@ assert.equal(P.compute(st('sams', "Sam's Club Gas", 2.699), 'regular', w({ samsM
 // CITGO: Walmart+ 10¢ + Club 3¢
 let c = P.compute(st('citgo', 'CITGO', 2.959), 'regular', S, now);
 assert.equal(c.final, 2.829); assert.equal(c.steps.length, 3);
-// Premier + Triple Tuesday (today only)
-assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoTier: 'premier', citgoBonus: 'tuesday', citgoBonusDate: tk }), now).final, 2.679);
-assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoTier: 'premier', citgoBonus: 'tuesday', citgoBonusDate: '2026-10-2' }), now).final, 2.799);
-// Club + Friday Savings (3+2)
-assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoBonus: 'friday', citgoBonusDate: tk }), now).final, 2.809);
+// Club CITGO monthly bonuses apply by day: Tue 2026-10-06 (Triple Tuesday), Fri 2026-10-09 (Friday Savings), Sat = none
+const tue = new Date(2026, 9, 6, 12), fri = new Date(2026, 9, 9, 12), sat = new Date(2026, 9, 3, 12);
+assert.equal(P.citgoBonus(S, tue), 'tuesday'); assert.equal(P.citgoBonus(S, fri), 'friday'); assert.equal(P.citgoBonus(S, sat), 'none');
+assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoTier: 'premier' }), tue).final, 2.679);    // 10 + 18
+assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoTier: 'premier' }), sat).final, 2.799);    // 10 + 6
+// used this month: back to the everyday reward; next month it's back
+assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoTier: 'premier', citgoUsed: { tuesday: '2026-10' } }), tue).final, 2.799);
+assert.equal(P.citgoBonus(w({ citgoUsed: { tuesday: '2026-10' } }), new Date(2026, 10, 3, 12)), 'tuesday');
+// Club + Friday Savings (3+2 = 5¢)
+assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', S, fri).final, 2.809);
 // Walmart+ off
 assert.equal(P.compute(st('mobil', 'Mobil', 3.099), 'regular', w({ walmartPlus: false }), now).final, 3.099);
 // 2% cash back on post-discount price: 2.999 * 0.98 = 2.939

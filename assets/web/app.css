@@ -488,3 +488,37 @@ b.good, .leg-sub.good { color: var(--save); }
 .nf > span.has-q { display: block; padding-top: .2em; }
 .nf > span.has-q .qi, .lbl.has-q .qi { margin-left: 4px; position: relative; top: -1px; }
 .qpop p { margin: 0 0 6px; } .qpop p:last-child { margin-bottom: 0; }
+
+/* (?) inside a text box, on the right */
+.in-q { position: relative; display: block; }
+.in-q > input, .in-q > textarea { padding-right: 40px !important; }
+.in-q > .qi { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); margin: 0; background: var(--surface-2); }
+.in-q.ta > .qi { top: 12px; transform: none; }
+.field.col .in-q textarea { width: 100%; }
+/* small inline buttons in settings rows */
+.page .field .btn.sm, .field .btn.sm { width: auto; margin: 0; height: 38px; padding: 0 14px; font-size: 14px; border-radius: 12px; flex: none; }
+.field .btns { display: flex; gap: 6px; flex: none; }
+.chips.mini { padding: 0; flex: none; flex-wrap: nowrap; gap: 6px; }
+.chips.mini button { padding: 7px 12px; }
+.lbl .citgo-today { color: var(--ink-2); font-size: 12.5px; display: block; }
+/* trip history */
+details.hist { padding-top: 10px; padding-bottom: 10px; }
+details.hist summary { list-style: none; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; cursor: pointer; }
+details.hist summary::-webkit-details-marker { display: none; }
+details.hist summary::before { content: '▸'; color: var(--accent); font-size: 13px; transition: transform .15s; }
+details.hist[open] summary::before { transform: rotate(90deg); }
+details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight: 600; background: var(--surface-2); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+.hist-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.hist-row { display: flex; align-items: stretch; gap: 6px; }
+.hist-open { flex: 1; min-width: 0; text-align: left; background: var(--surface-2); border-radius: 12px; padding: 9px 12px; color: var(--ink); }
+.hist-open b { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-open small { display: block; color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-del { flex: none; width: 40px; border-radius: 12px; background: var(--surface-2); color: var(--ink-2); font-size: 14px; }
+
+/* gas to leave with */
+.ideal { background: var(--surface-2); border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
+.ideal-h { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.ideal-big { font-size: 22px; font-weight: 800; margin-top: 2px; }
+.ideal-big small { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.ideal-sub { font-size: 13.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
+.ideal-sub b { color: var(--ink); } .ideal-sub b.good { color: var(--save); }

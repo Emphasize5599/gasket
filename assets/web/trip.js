@@ -559,6 +559,48 @@
    * reference price for every buffer so the totals compare fairly. Returns [{mi, ok, net, plan, opts}] in ascending mi,
    * with mark=true where lowering the buffer to that point saves money vs. the next higher buffer.
    */
+  /**
+   * How much gas to leave with. You can add gas before you go at a station by the start (price p0); with more in the
+   * tank you skip or shrink stops where gas costs more. Tries every start level from what you have now up to a full
+   * tank (whole gallons, then half-gallon steps around the best) and keeps the cheapest, counting your stop rule and
+   * time value. All plans value gas left at the end at the same refPrice, so totals compare fairly. Pass
+   * refPrice = min(typical, p0) to buy only what the trip uses (extra gas is then worth just what it cost).
+   * Returns { gal, addGal, dollars, nowDollars, saves, rows } — gal == the current amount when adding gas doesn't pay.
+   */
+  function idealStart(o, p0, refPrice) {
+    var cur = o.startGal, cap = o.capGal, rows = [];
+    if (!(p0 > 0) || !(cap > cur + 0.25)) return null;
+    var hrs = function (p) { return (o.timeValue || 0) * (p.totals.detourMin + p.stops.length * (o.stopMinutes || 0)) / 60; };
+    var tryG = function (g) {
+      g = Math.min(cap, Math.max(cur, g));
+      var hit = rows.filter(function (r) { return Math.abs(r.gal - g) < 1e-6; })[0]; if (hit) return hit;
+      var p = plan(Object.assign({}, o, { startGal: g, refPrice: refPrice, lite: true }));
+      var add = g - cur, extra = add > 0.05;
+      var row = { gal: g, addGal: add, ok: p.ok, plan: p };
+      if (p.ok) {
+        row.dollars = add * p0 + p.totals.net;
+        // what your rule says a stop costs (adding gas before you leave is a stop too), plus your time if you set a value
+        row.score = row.dollars + (p.stops.length + (extra ? 1 : 0)) * (o.stopPenalty || 0) + hrs(p) + (extra ? (o.timeValue || 0) * (o.stopMinutes || 0) / 60 : 0);
+      }
+      rows.push(row); return row;
+    };
+    var now = tryG(cur);
+    for (var g = Math.ceil(cur); g <= cap; g++) tryG(g);
+    tryG(cap);
+    // the least gas that's within a cent of the cheapest (more than you'll use is no better if leftover is valued at p0)
+    var best = function () {
+      var ok = rows.filter(function (r) { return r.ok; }); if (!ok.length) return null;
+      var lo = Math.min.apply(null, ok.map(function (r) { return r.score; }));
+      return ok.filter(function (r) { return r.score <= lo + 0.01; }).sort(function (a, b) { return a.gal - b.gal; })[0];
+    };
+    var b = best();
+    if (!b) return null;
+    [0.5, 0.25, 0.1].forEach(function (st) { tryG(b.gal - st); tryG(b.gal + st); b = best(); });
+    rows.sort(function (a, c) { return a.gal - c.gal; });
+    return { gal: b.gal, addGal: b.addGal, dollars: b.dollars, plan: b.plan, nowOk: now.ok, nowDollars: now.ok ? now.dollars : null,
+      saves: now.ok ? now.dollars - b.dollars : null, scoreGain: now.ok ? now.score - b.score : null, price: p0, rows: rows };
+  }
+
   function bufferSweep(o, list, refPrice) {
     var out = list.map(function (mi) {
       var oo = Object.assign({}, o, { bufferGal: mi * o.model.combGpm, arriveGal: mi * o.model.combGpm, refPrice: refPrice, lite: true });
@@ -679,6 +721,6 @@
 
   var api = { fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
-    optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks };
+    optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
 })(this);

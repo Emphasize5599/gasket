@@ -20,6 +20,7 @@ with sync_playwright() as p:
         pg.on('console', lambda m: m.type == 'error' and 'tile' not in m.text and 'ERR_' not in m.text and errors.append(m.text))
         pg.goto(URL); pg.evaluate('setInsets(44, 24, 0, 0)'); pg.wait_for_timeout(400)
         pg.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop'); pg.check('input[data-k=debug]', force=True); pg.select_option('#logLevel', '4'); pg.click('#sDone'); pg.wait_for_timeout(600)
+        pg.evaluate("window.__app.S.citgoUsed = { tuesday: window.__app.P.monthKey(), friday: window.__app.P.monthKey() }")  # CITGO day bonuses off: results don't depend on the weekday
         pg.evaluate(MOCKS)
         pg.click('#btnTrip'); pg.wait_for_timeout(300)
         pg.fill('#tLink', LINK); pg.wait_for_timeout(700)
@@ -111,6 +112,11 @@ with sync_playwright() as p:
         txt = ft(pg, '#tripSheet')
         print('  RESULT:', txt.replace('\n', ' | ')[:900])
         pg.screenshot(path=f'{OUT}/{name}-t2-result.png')
+        pg.wait_for_timeout(600)
+        idl = ft(pg, '#tsIdeal'); print('  ideal start:', idl.replace('\n', ' | '), '|', pg.evaluate("(r => r.ideal ? [r.ideal.gal, r.ideal.addGal, r.ideal.saves, r.ideal.st] : null)(window.__trip.state().result)"))
+        if 'gal' in idl:
+            pg.evaluate("document.getElementById('tsIdeal').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+            pg.screenshot(path=f'{OUT}/{name}-t2i-ideal.png')
         # cruising speed per leg: limits from the (mock) FHWA inventory, sliders start at $0
         pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
@@ -219,6 +225,7 @@ with sync_playwright() as p:
         assert 'your route + 1 other' in info, info
         pg.evaluate("window.__cheapI30 = true; window.__alongRoutes = {}"); pg.click('#tGo'); pg.wait_for_timeout(2500)
         assert pg.evaluate('window.__alongRoutes') == {'I-30': True, 'US-67': True}, pg.evaluate('window.__alongRoutes')
+        print('  compare:', pg.evaluate("JSON.stringify((window.__trip.state().result.routes||[]).map(e=>[e.k, e.res.plan.ok, e.res.plan.totals && e.res.plan.totals.net]))"), pg.evaluate("document.querySelector('#tripSheet') && document.querySelector('#tripSheet').innerText.slice(0,300)"))
         rb = ft(pg, '.routebox'); print('  route box:', rb.replace('\n', ' | '))
         assert 'Cheaper route: via I-30 W' in rb, rb
         pg.evaluate("document.querySelector('.routebox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
@@ -269,6 +276,24 @@ with sync_playwright() as p:
         pg.click('[data-why="0"]'); pg.wait_for_timeout(150)
         pg.click('#tsDone'); pg.wait_for_timeout(200)
         assert not pg.evaluate("document.body.classList.contains('trip-on')")
+        # trip history: reopening a saved trip uses no Google lookups at all (no route call, no station search)
+        pg.click('#btnTrip'); pg.wait_for_timeout(300)
+        assert pg.locator('#tHist').count() == 1, 'history card shown'
+        pg.click('#tHist summary'); pg.wait_for_timeout(150)
+        ht = ft(pg, '#tHist'); print('  history:', ht.replace('\n', ' | '))
+        assert 'Dallas' in ht and 'mi' in ht
+        pg.screenshot(path=f'{OUT}/{name}-h1-history.png')
+        pg.evaluate("window.__jobs = null; window.__routeBody = null; window.__gmapsUrls = []")
+        pg.click('[data-hist]'); pg.wait_for_timeout(1800)
+        assert pg.evaluate('window.__jobs') is None and pg.evaluate('window.__routeBody') is None and not pg.evaluate('window.__gmapsUrls'), 'no lookups'
+        sv = ft(pg, '.note.saved'); print('  reopened:', sv)
+        assert 'Saved trip' in sv and 'no lookups' in sv and pg.locator('#tripSheet .stop, #tripSheet .scard').count() >= 1
+        pg.click('#tsDone'); pg.wait_for_timeout(200)
+        # remove from history
+        pg.click('#btnTrip'); pg.wait_for_timeout(300); pg.click('#tHist summary'); n0 = pg.locator('[data-hdel]').count()
+        pg.click('[data-hdel]'); pg.wait_for_timeout(100)
+        assert pg.locator('[data-hdel]').count() == n0 - 1
+        pg.click('#tClose'); pg.wait_for_timeout(200)
         # typed addresses: "100 Main St" exists in two towns -> you pick; Dallas is unambiguous
         pg.click('#btnTrip'); pg.wait_for_timeout(300)
         pg.fill('#tLink', ''); pg.wait_for_timeout(500)

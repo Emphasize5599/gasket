@@ -207,4 +207,22 @@ const t0 = Date.now();
 p = T.plan({ model: m2, capGal: 15, bufferGal: 1.2, arriveGal: 1.2, startGal: 5, cands: many, stopPenalty: 1, stopMinutes: 8 });
 const ms = Date.now() - t0;
 assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
+// ---- ideal amount to start with: cheap gas at home ($2.60), only pricey gas on the way ($3.40) ----
+{
+  const oi = Object.assign({}, base, { startGal: 60 / 29, cands: [at(20, 3.40, 0.1, 'p1'), at(120, 3.45, 0.1, 'p2'), at(200, 3.40, 0.1, 'p3')] });
+  const ref = T.plan(oi).refPrice;
+  const id = T.idealStart(oi, 2.60, Math.min(ref, 2.60));
+  // the trip burns ~283/35 = 8.1 gal + 30 mi buffer; best: leave with enough to never stop (no pricier gas at all)
+  assert.ok(id.saves > 2, JSON.stringify({ g: id.gal, s: id.saves }));
+  assert.equal(id.plan.stops.length, 0, 'no stops once you leave with enough');
+  const need = m.galTo(totalMi) + 30 / 29;
+  assert.ok(id.gal >= need - 0.01 && id.gal <= need + 1.01, 'just enough to arrive with the buffer: ' + id.gal.toFixed(2) + ' vs ' + need.toFixed(2));
+  // gas on the way is cheaper than at home: leave with what you have
+  const oc = Object.assign({}, oi, { cands: [at(20, 2.40, 0.1, 'c1'), at(150, 2.45, 0.1, 'c2')] });
+  const ic = T.idealStart(oc, 2.90, Math.min(T.plan(oc).refPrice, 2.90));
+  assert.equal(ic.addGal, 0, 'nothing to add: ' + ic.gal);
+  // already a full tank: nothing to work out
+  assert.equal(T.idealStart(Object.assign({}, oi, { startGal: 12 }), 2.6, ref), null);
+  console.log('ideal start:', id.gal.toFixed(1), 'gal (add', id.addGal.toFixed(1) + ') saves $' + id.saves.toFixed(2), '| rows', id.rows.length);
+}
 console.log('trip tests passed (1,000-mile / 300-station plan in ' + ms + ' ms, ' + p.stops.length + ' stops, saves $' + p.savings.toFixed(2) + ')');
