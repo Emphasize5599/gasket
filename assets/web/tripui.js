@@ -96,19 +96,54 @@
     };
     panelDrag(pg);
   }
+  // Each step stays in the page once built (hidden while you're on another), so moving between steps is instant.
+  // Garage and Route are only rebuilt for a new trip; Stops when the route or plan changed; Departure every time (cheap).
+  var built = {}, scrolls = {}, shown = 0;
+  function stepEl(k) {
+    var e = $('tpS' + k);
+    if (!e) { e = document.createElement('div'); e.id = 'tpS' + k; e.className = 'tp-step hidden'; tpBody().appendChild(e); }
+    return e;
+  }
+  /** Forget the built steps (a new or reopened trip). */
+  function resetSteps() {
+    [1, 2, 3, 4].forEach(function (k) { var e = $('tpS' + k); if (e) e.remove(); });
+    built = {}; scrolls = {}; shown = 0;
+  }
   function renderStep() {
     if (window.__apiCount) window.__apiCount();
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);
     show(pg, true);
+    var full = step <= 2;   // nothing to see on the map yet: Garage and Route take the whole screen
+    pg.classList.toggle('full', full); document.body.classList.toggle('trip-full', full);
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
       var k = i + 1; return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + '"><b>' + k + '</b><span>' + n + '</span></button>';
     }).join('');
-    var b = tpBody(); b.innerHTML = stepHtml(step); b.scrollTop = 0;
-    bindStep(step);
     navRender();
-    if (model) { drawRoute(); if (!userMoved) fitRoute(false); } else { layer.clearLayers(); }
-    fitBtn(); sheetSize();
+    var b = tpBody();
+    if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
+    var e = stepEl(step), c = built[step];
+    var fresh = !c || step === 4 || (step === 3 && (c.model !== model || c.result !== result));
+    e.classList.remove('hidden'); shown = step;
+    if (fresh) {
+      e.innerHTML = stepHtml(step);
+      built[step] = { model: model, result: result };
+      bindStep(step);
+      b.scrollTop = 0;
+    } else {
+      b.scrollTop = scrolls[step] || 0;
+      if (step === 2) refitOptionMaps();
+    }
+    // the big map: drawn after this frame paints, and only when its route or stops changed
+    var k0 = step;
+    requestAnimationFrame(function () { setTimeout(function () {
+      if (step !== k0) return;
+      if (model && step >= 3) { drawRoute(); if (!userMoved) fitRoute(false); }
+      fitBtn(); sheetSize();
+    }, 0); });
+  }
+  function refitOptionMaps() {
+    Object.keys(rmaps).forEach(function (k) { var m = rmaps[k]; if (m._refit && document.body.contains(m.getContainer())) { m.invalidateSize(false); m._refit(); } });
   }
   function navRender() {
     var nav = $('tpNav');
@@ -228,10 +263,11 @@
   }
   var setOpen = false;
   function bindStep(k) {
-    if (k === 1) { Garage.render($('tGarage'), $('tSpeed'), function () { if (model) model = T.buildRoute(rawRoute, carModel()); result = null; }, call); return; }
+    if (k === 1) { Garage.render($('tGarage'), $('tSpeed'), function () { if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); } result = null; }, call); return; }
     if (k === 2) { bindRoute(); return; }
     if (k === 3) {
       bindSettings(); renderResults();
+      built[3].result = result;
       if (model && !result && !busy && parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '') findStops();
       return;
     }
@@ -732,6 +768,11 @@
     return JSON.stringify(r.stops.filter(function (x) { return x.ret; })) !== before;
   }
   function multiLeg(r) { return !!(r && r.stops && r.stops.length > 2); }
+  /** "North Little Rock → Dallas" as pieces that wrap as a whole: "North Little Rock →" then "Dallas" on the next line if it doesn't fit. */
+  function arrowHtml(text) {
+    var parts = String(text).split(' → ');
+    return '<span class="arws">' + parts.map(function (x, i) { return '<span class="arw">' + esc(x) + (i < parts.length - 1 ? ' →' : '') + '</span>'; }).join(' ') + '</span>';
+  }
   function legName(r, i) { return stopName(r.stops[i]) + ' → ' + stopName(r.stops[i + 1]); }
   function legBody(a, b) {
     var avoid = S.trip.avoid;
@@ -1033,7 +1074,7 @@
     if (legView) {
       h += '<div class="sub-h">Each leg is routed on its own — pick a route for each</div>';
       route.legs.forEach(function (L, i) {
-        h += '<div class="leg-pick"><div class="leg-pick-h"><span class="leg-n">' + (i + 1) + '</span>' + esc(legName(route, i)) + '</div>' +
+        h += '<div class="leg-pick"><div class="leg-pick-h"><span class="leg-n">' + (i + 1) + '</span>' + arrowHtml(legName(route, i)) + '</div>' +
           (L.alts.length > 1 ? '<div class="rmap" id="tRmap' + i + '"></div>' : '') + '<div class="alts-pick">' + L.alts.map(function (a, k) {
             var mi = (a.distanceMeters || 0) / 1609.344, sec = parseFloat(String(a.duration || '0'));
             return '<button data-leg="' + i + '" data-lk="' + k + '" class="' + (k === L.sel ? 'on' : '') + '"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b>' +
@@ -1103,13 +1144,14 @@
     var a = lines[0].pts[0], b = lines[0].pts[lines[0].pts.length - 1];
     var mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(rmap); };
     mk(a, 'A'); mk(b, 'B');
-    rmap.fitBounds(L.latLngBounds(all), { padding: [40, 40] });
-    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { padding: [40, 40] }); placeLabels(rmap, tips, sel, lines); } }, 60);
+    rmap.fitBounds(L.latLngBounds(all), { paddingTopLeft: [36, 58], paddingBottomRight: [36, 30] });
+    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { paddingTopLeft: [36, 58], paddingBottomRight: [36, 30] }); placeLabels(rmap, tips, sel, lines); } }, 60);
     rmap.on('zoomend moveend', function () { placeLabels(rmap, tips, sel, lines); });
-    var fb = document.createElement('button'); fb.className = 'rmap-fit'; fb.type = 'button'; fb.setAttribute('aria-label', 'Show every route');
-    fb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 15H3v4a2 2 0 0 0 2 2h4v-2H5v-4zM5 5h4V3H5a2 2 0 0 0-2 2v4h2V5zm14-2h-4v2h4v4h2V5a2 2 0 0 0-2-2zm0 16h-4v2h4a2 2 0 0 0 2-2v-4h-2v4z"/></svg>';
+    var fb = document.createElement('button'); fb.className = 'fab-fit rmap-fit'; fb.type = 'button'; fb.setAttribute('aria-label', 'Show every route');
+    fb.innerHTML = FIT_ICON + '<span>Route</span>';
+    rmap._refit = function () { rmap.fitBounds(L.latLngBounds(all), { paddingTopLeft: [36, 58], paddingBottomRight: [36, 30] }); };
     L.DomEvent.disableClickPropagation(fb);
-    fb.onclick = function (e) { e.preventDefault(); e.stopPropagation(); N.haptic && N.haptic(); rmap.fitBounds(L.latLngBounds(all), { padding: [40, 40] }); };
+    fb.onclick = function (e) { e.preventDefault(); e.stopPropagation(); N.haptic && N.haptic(); rmap.fitBounds(L.latLngBounds(all), { paddingTopLeft: [36, 58], paddingBottomRight: [36, 30] }); };
     el.appendChild(fb);
   }
   /** Candidate label spots on a route, best first: points far from the other routes (where it splits off), like Google Maps. */
@@ -1137,6 +1179,11 @@
       for (var i = 0; i < ln.pts.length; i += st) pts.push(m.latLngToContainerPoint(ln.pts[i]));
     });
     var DIRS = [['top', 0, -GAP], ['bottom', 0, GAP], ['right', GAP, 0], ['left', -GAP, 0]];
+    // keep labels out from under the Route button (top right)
+    var fbEl = m.getContainer().querySelector('.rmap-fit');
+    if (fbEl && fbEl.offsetWidth) placed.push({ x: size.x - fbEl.offsetWidth - 14, y: 0, w: fbEl.offsetWidth + 14, h: fbEl.offsetHeight + 12 });
+    var atEl = m.getContainer().querySelector('.leaflet-control-attribution');
+    if (atEl && atEl.offsetWidth) { var cr = m.getContainer().getBoundingClientRect(), ar = atEl.getBoundingClientRect(); placed.push({ x: ar.left - cr.left - 4, y: ar.top - cr.top - 4, w: ar.width + 8, h: ar.height + 8 }); }
     var hits = function (r, q) { return r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h; };
     tips.slice().sort(function (a, b) { return (b.k === sel) - (a.k === sel); }).forEach(function (t) {
       var el = t.tip.getElement && t.tip.getElement(); if (!el) return;
@@ -1873,11 +1920,12 @@
   function renderResults() {
     var el = $('tsResults'); if (!el) return;
     var r = result;
+    if (built[3]) { built[3].result = result; built[3].model = model; }
     if (!r) {
       el.innerHTML = model ? '<div class="card empty-res">' + (parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '' ? 'Stops appear here.' : 'Enter the miles left in your tank to plan stops.') + '</div>' : '';
       return;
     }
-    var p = r.plan, h = '<div class="res-head"><b>' + esc(tripTitle(route)) + '</b><span>' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + r.cands.length + ' stations</span></div>';
+    var p = r.plan, h = '<div class="res-head"><b>' + arrowHtml(tripTitle(route)) + '</b><span>' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + r.cands.length + ' stations</span></div>';
     if (!p.ok) {
       h += '<div class="msg err">No plan keeps you above a ' + r.bufMi + '-mile buffer. ' +
         (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your current range.') +
@@ -1927,7 +1975,7 @@
   }
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
-    var p = r.plan, h = '<div class="res-head"><b>' + esc(tripTitle(route)) + '</b><span>' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) +
+    var p = r.plan, h = '<div class="res-head"><b>' + arrowHtml(tripTitle(route)) + '</b><span>' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) +
       (p.ok ? ' · ' + p.totals.stops + ' fuel stop' + (p.totals.stops === 1 ? '' : 's') : '') + '</span></div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
     var t = p.totals, out = r.acc.legs[0];
@@ -1954,7 +2002,7 @@
     h += '<div class="actions"><button class="btn primary" id="tsExport"' + (one.tooMany ? ' disabled' : '') + '>' + ico + 'Open the whole trip in one link</button>' +
       (one.tooMany ? '<div class="sub-h center">' + one.waypoints + ' stops — Google Maps takes up to 9 in one link</div>' : '') +
       '<div class="leg-links"><div class="sub-h">One link per leg</div>' + legs.map(function (x) {
-        return '<button class="leg-link" data-legurl="' + x.leg + '"><span class="leg-n">' + (x.leg + 1) + '</span><span class="ll-t"><b>' + esc(legName(route, x.leg)) + '</b><small>' +
+        return '<button class="leg-link" data-legurl="' + x.leg + '"><span class="leg-n">' + (x.leg + 1) + '</span><span class="ll-t"><b>' + arrowHtml(legName(route, x.leg)) + '</b><small>' +
           Math.round(x.toMi - x.fromMi) + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small></span>' +
           '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>';
       }).join('') + '</div></div>';
@@ -2039,9 +2087,9 @@
     var bg = document.createElement('div'); bg.className = 'tpick-bg'; bg.id = 'tripPick';
     bg.innerHTML = '<div class="tpick" role="dialog" aria-label="Plan a trip"><div class="tpick-h">Plan a trip</div>' +
       '<button class="tpick-new" id="tpNew"><span class="plus">+</span><span><b>New trip</b><small>Start from scratch</small></span></button>' +
-      (cur ? '<button class="tpick-new cont" id="tpCont"><span class="plus">↺</span><span><b>Continue</b><small>' + esc(tripTitle(route)) + '</small></span></button>' : '') +
+      (cur ? '<button class="tpick-new cont" id="tpCont"><span class="plus">↺</span><span><b>Continue</b><small>' + arrowHtml(tripTitle(route)) + '</small></span></button>' : '') +
       (idx.length ? '<div class="tpick-sub">Recent trips <span>no lookups</span></div><div class="tpick-list">' + idx.map(function (x) {
-        return '<div class="hist-row"><button class="hist-open" data-hist="' + x.id + '"><b>' + esc(x.title) + '</b><small>' + x.mi + ' mi' +
+        return '<div class="hist-row"><button class="hist-open" data-hist="' + x.id + '"><b>' + arrowHtml(x.title) + '</b><small>' + x.mi + ' mi' +
           (x.via ? ' · via ' + esc(x.via) : '') + (x.n > 2 ? ' · ' + (x.n - 2) + ' stop' + (x.n > 3 ? 's' : '') : '') + ' · ' + dayText(x.t) + '</small></button>' +
           '<button class="hist-del" data-hdel="' + x.id + '" aria-label="Remove from history">✕</button></div>';
       }).join('') + '</div>' : '') + '</div>';
@@ -2065,7 +2113,7 @@
   /** A fresh trip: keep the car and your settings, forget the route. */
   function newTrip(link) {
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
-    routeBounds = null; userMoved = false; layer.clearLayers();
+    routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps();
     S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
     A.save();
     openTrip(Garage.need && Garage.need() ? 1 : link ? 2 : 1);
@@ -2081,6 +2129,7 @@
     S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
     rawRoute = alts[altSel]; result = null; parsing = null;
     replay = { id: id, t: o.t, stations: v.stations };
+    resetSteps();
     model = T.buildRoute(rawRoute, carModel());
     ensureLimits(model);
     LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
@@ -2148,7 +2197,11 @@
     var dz = dotSize(map.getZoom());
     dots.forEach(function (d) { d.setRadius(dz.r); d.setStyle({ weight: dz.w }); });
   });
+  var drawn = {};
   function drawRoute() {
+    var r0 = result, key = { model: model, result: r0, plan: r0 && r0.plan, top: r0 && r0.top, cands: r0 && r0.cands };
+    if (map.hasLayer(layer) && Object.keys(key).every(function (x) { return drawn[x] === key[x]; })) return;
+    drawn = key;
     layer.clearLayers();
     if (!map.hasLayer(layer)) layer.addTo(map);
     // long routes have 100,000+ points: draw one about every 1/20 mile (plenty at any zoom you'd use on a trip)
@@ -2191,6 +2244,7 @@
   // The map frames the route in the part of the screen the sheet doesn't cover, and re-frames it when the sheet grows
   // or shrinks — until you pan or zoom yourself; then a button brings the route back.
   var routeBounds = null, userMoved = false, fitting = false;
+  var FIT_ICON = '<svg viewBox="0 0 24 24"><path d="M5 15H3v4a2 2 0 0 0 2 2h4v-2H5v-4zM5 5h4V3H5a2 2 0 0 0-2 2v4h2V5zm14-2h-4v2h4v4h2V5a2 2 0 0 0-2-2zm0 16h-4v2h4a2 2 0 0 0 2-2v-4h-2v4zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>';
   function sheetCover() { var el = $('trip'); return el && !el.classList.contains('hidden') ? el.getBoundingClientRect().height : 0; }
   function fitRoute(animate) {
     if (!routeBounds || !document.body.classList.contains('trip-on')) return;
@@ -2202,11 +2256,11 @@
     var b = $('btnFit');
     if (!b) {
       b = document.createElement('button'); b.id = 'btnFit'; b.className = 'fab-fit hidden'; b.setAttribute('aria-label', 'Show the whole route');
-      b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 15H3v4a2 2 0 0 0 2 2h4v-2H5v-4zM5 5h4V3H5a2 2 0 0 0-2 2v4h2V5zm14-2h-4v2h4v4h2V5a2 2 0 0 0-2-2zm0 16h-4v2h4a2 2 0 0 0 2-2v-4h-2v4zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg><span>Route</span>';
+      b.innerHTML = FIT_ICON + '<span>Route</span>';
       document.body.appendChild(b);
       b.onclick = function () { N.haptic && N.haptic(); userMoved = false; fitBtn(); fitRoute(true); };
     }
-    var on = userMoved && routeBounds && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
+    var on = userMoved && routeBounds && step >= 3 && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
     b.classList.toggle('hidden', !on);
     if (on) b.style.bottom = (sheetCover() + 12) + 'px';
   }
@@ -2230,6 +2284,7 @@
     pg.style.setProperty('--panel-h', (h0 >= 0.2 && h0 <= 0.95 ? h0 * 100 : 58) + 'vh');
     var y0 = 0, start = 0, dragging = false;
     var down = function (e) {
+      if (pg.classList.contains('full')) return;
       if (e.target.closest('button') && !e.target.closest('.tp-grab')) return;
       dragging = true; y0 = e.clientY; start = pg.getBoundingClientRect().height;
       pg.classList.add('dragging'); pg.classList.remove('tall');
@@ -2261,8 +2316,8 @@
   function closePage() { show($('trip'), false); }
   function closeTrip() {
     collectSafe(); closePage(); closeQ();
-    layer.clearLayers(); if (map.hasLayer(layer)) map.removeLayer(layer);
-    document.body.classList.remove('trip-on'); routeBounds = null; fitBtn(); A.render();
+    layer.clearLayers(); drawn = {}; if (map.hasLayer(layer)) map.removeLayer(layer);
+    document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); A.render();
   }
   function endTrip() { closeTrip(); }
   function closeQ() { if (window.__closeQ) window.__closeQ(); }
