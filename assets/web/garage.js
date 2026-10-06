@@ -290,8 +290,8 @@
       (m ? '<b class="spd-pill">' + m.rec.speed + ' mph</b>' : '') + '</summary>';
     if (!m) { speedHost.innerHTML = h + '<div class="lead small keep">Look your car up from the EPA (Edit) to see this.</div></details>'; return; }
     var r = m.rec, row = r.rows[r.speed - m.min], f = mpgFn(c, m.cal), bal = SP.balanced(f, m.min, m.max);
-    h += '<div class="spd-top"><div class="spd-big">' + r.speed + '<span>mph</span></div><div class="spd-sub">about ' + row.mpg.toFixed(0) + ' mpg · ' + row.galPer100.toFixed(2) + ' gal per 100 mi<br>' +
-      (r.mode === 'time' ? 'where an hour saved costs about your $' + m.tv + '/hr' : 'past this, each 1% of time saved costs more than 1% more gas') + '</div></div>';
+    h += '<div class="spd-top"><div class="spd-big">' + r.speed + '<span>mph</span></div><div class="spd-sub">~' + row.mpg.toFixed(0) + ' mpg · ' + row.galPer100.toFixed(2) + ' gal/100 mi ' +
+      window.__app.qBtn(r.mode === 'time' ? 'The speed where each hour saved costs about your $' + m.tv + '/hr in extra gas.' : 'Past this speed, each 1% of time saved costs more than 1% more gas.') + '</div></div>';
     h += chartSvg(r.rows, m.min, m.max, { id: 'gChart', shadeTo: bal, sel: r.speed, points: m.cal.points });
     var tripMi = lastTripMi || 500;
     h += '<div class="spd-try"><div class="spd-try-h"><span>Try a speed for a <input type="number" inputmode="numeric" id="gTripMi" value="' + Math.round(tripMi) + '">-mile trip</span></div>' +
@@ -300,7 +300,7 @@
     h += '<div class="lead small">' + (m.cal.used ? 'Calibrated from ' + m.cal.used + ' of your entries (your ' + esc(shortName(c)) + ' runs ' + Math.abs(Math.round((m.cal.scale - 1) * 100)) + '% ' + (m.cal.scale >= 1 ? 'better' : 'worse') + ' than the average curve).'
       : 'Not calibrated yet — log mileage with the speed you held to fit this to your car.') +
       ' Curve: ' + esc((SP.TYPES[c.type] || SP.TYPES.car).label.toLowerCase()) + ', anchored at ' + (c.type === 'hybrid' ? '1.3 × ' : '') + 'EPA highway (' + c.epa.hwy + ' mpg) at 55 mph. Shaded: speeds where going 1% faster saves more time than it costs in gas.</div>';
-    h += '<details class="spd-set"><summary>Speed settings · gas ' + money(m.price) + (m.priceSrc === 'near' ? ' (cheapest near you)' : m.priceSrc === 'yours' ? ' (yours)' : ' (no prices loaded)') + '</summary><div class="grid2">' +
+    h += '<details class="spd-set"><summary>Speed settings · ' + money(m.price) + '/gal' + '</summary><div class="grid2">' +
       '<label class="nf"><span>Gas price ($/gal)<small>' + (m.near ? 'blank = cheapest near you: ' + money(m.near.price) + ' at ' + esc(m.near.name) : 'blank = cheapest on the map') + '</small></span><input type="number" inputmode="decimal" step="0.01" id="sPrice" value="' + esc(S.speed.price) + '"></label>' +
       '<label class="nf"><span>My time is worth ($/hr)<small>optional · 0 = balanced (US DOT uses ~$' + Math.round(DOT_TIME) + ' for road trips)</small></span><input type="number" inputmode="decimal" step="1" id="sTime" value="' + esc(S.trip.timeValue || 0) + '"></label>' +
       '<label class="nf"><span>Minimum speed (mph)</span><input type="number" inputmode="numeric" step="1" id="sMin" value="' + m.min + '"></label>' +
@@ -322,7 +322,7 @@
       var v = +$('gTry').value, mi = Math.max(1, parseFloat($('gTripMi').value) || 500), base = r.speed;
       var t = mi * (1 / base - 1 / v) * 60, gal = mi * (1 / f(v) - 1 / f(base)), cost = gal * m.price;
       moveSel($('gChart'), v, 100 / f(v));
-      $('gTryOut').innerHTML = v === base ? '<b>' + v + ' mph</b> — the recommended speed. Slide to see what going faster or slower costs over ' + fmtMi(mi) + '.'
+      $('gTryOut').innerHTML = v === base ? '<b>' + v + ' mph</b> — recommended. Slide to compare.'
         : '<b>' + v + ' mph</b> instead of ' + base + ': ' + (t > 0 ? '<b>' + fmtMin(t) + ' sooner</b> for <b class="cost">+' + money(cost) + '</b> in gas'
           : '<b>' + fmtMin(-t) + ' later</b>, <b class="good">saves ' + money(-cost) + '</b> in gas') + ' over ' + fmtMi(mi) + ' (at ' + money(m.price) + '/gal).';
     };
@@ -486,7 +486,7 @@
       g.items.forEach(function (i) {
         var r = roads[i];
         h += '<div class="leg" data-leg="' + i + '"><div class="spd-warn hidden" id="lgWarn' + i + '"></div><div class="leg-h"><span><b class="lim' + (r.posted && r.posted !== r.limit ? ' truck' : '') + '">' + r.limit + '</b> <small>' +
-          (r.posted && r.posted !== r.limit ? 'mph truck limit (' + r.posted + ' posted)' : 'mph limit') + ' · mile ' + Math.round(r.from) + '–' + Math.round(r.to) + ' · ' + fmtMi(r.mi) +
+          (r.posted && r.posted !== r.limit ? 'mph for trucks (' + r.posted + ' posted)' : 'mph') + (r.road.sections.length > 1 ? ' · mile ' + Math.round(r.from) + '–' + Math.round(r.to) : '') +
           (r.src !== 'hpms' ? ' · state max' : '') + '</small></span><b class="leg-sub" id="lgSub' + i + '"></b></div>' +
           '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + st.offsets[i] + '" id="lgR' + i + '" aria-label="Speed on ' + esc(r.name) + ' where the limit is ' + r.limit + '"><i class="gray" id="lgGray' + i + '"></i></div>' +
           '<div class="leg-out" id="lgOut' + i + '"></div></div>';
@@ -497,7 +497,7 @@
     el.innerHTML = h;
     function update(i, move) {
       var r = roads[i], x = cost(r, st.offsets[i]), out = $('lgOut' + i), sub = $('lgSub' + i), off = st.offsets[i];
-      if (out) out.textContent = off === 0 ? 'At the limit — ' + r.limit + ' mph' :
+      if (out) out.textContent = off === 0 ? '' :
         Math.round(x.avgSpeed) + ' mph (' + (off > 0 ? '+' : '−') + Math.abs(off) + ') · ' + (x.minSaved >= 0 ? fmtMin(x.minSaved) + ' sooner' : fmtMin(-x.minSaved) + ' later');
       if (sub) { sub.textContent = off === 0 ? '$0.00' : (x.cost >= 0 ? '+' : '−') + money(x.cost); sub.className = 'leg-sub' + (x.cost > 0.005 ? ' cost' : x.cost < -0.005 ? ' good' : ''); }
       moveMark($('tChart'), i, x.avgSpeed || r.limit);

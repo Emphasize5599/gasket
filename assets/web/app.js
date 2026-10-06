@@ -360,10 +360,10 @@
         h += '<div class="ln"><div class="k">' + esc(st.label) + (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</div><div class="a' + (st.amount < 0 ? ' neg' : '') + '">' +
           (st.kind === 'base' ? money(st.amount) : st.amount === 0 ? 'included' : money(st.amount, true)) + '</div></div>';
       });
-      h += '<div class="ln tot"><div class="k">You pay per gallon</div><div class="a">' + money(c.final) + '</div></div></div>';
+      var info = c.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + (S.walmartPlus ? '<p><b>How to get it:</b> ' + esc(br.howTo) + '</p>' : '') +
+        (s.extra ? '<p>Also sold here: ' + esc(s.extra.label) + ' — $' + P.fmt3(s.extra.price) + ' posted.</p>' : '');
+      h += '<div class="ln tot"><div class="k">You pay per gallon' + (info ? ' ' + qBtn(info) : '') + '</div><div class="a">' + money(c.final) + '</div></div></div>';
       if (saved > 0) h += '<span class="save-pill">Saves $' + (saved * 15).toFixed(2) + ' on 15 gal</span>';
-      c.notes.forEach(function (n) { h += '<div class="note">' + esc(n) + '</div>'; });
-      if (s.extra) h += '<div class="note">Also sold here: ' + esc(s.extra.label) + ' — $' + P.fmt3(s.extra.price) + ' posted.</div>';
     } else {
       h += '<div class="empty">No ' + P.GRADES[S.grade].label.toLowerCase() + ' price is published for this station (not on Google or the brand\'s site).</div>';
     }
@@ -374,11 +374,10 @@
       h += '<button data-g="' + g + '" class="' + (g === S.grade ? 'on' : '') + '"><div class="gl">' + P.GRADES[g].label + '</div><div class="gv">' + (cg ? priceHtml(cg.final) : '—') + '</div></button>';
     });
     h += '</div>';
-    if (S.walmartPlus) h += '<div class="note"><b>How to get it:</b> ' + esc(br.howTo) + '</div>';
     h += '<div class="actions"><button class="btn primary" id="dNav"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Directions in Google Maps</button>' +
       '<div class="btn-row"><button class="btn tonal" id="dOther">Other maps app</button><button class="btn tonal" id="dPlace">' + (s.wmStoreId ? 'Walmart store page' : 'Google listing') + '</button></div></div>';
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
-    $('btnLocate').classList.add('hidden');
+    $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden');
     $('listSheet').classList.add('hidden');
     $('dClose').onclick = closeDetail;
     $('dNav').onclick = function () { N.haptic(); N.navigate(s.lat, s.lng, String(s.id).indexOf('demo') === 0 ? '' : s.id, s.name); };
@@ -404,7 +403,7 @@
   }
   function closeDetail() {
     if ($('detail').classList.contains('hidden')) return false;
-    $('detail').classList.add('hidden'); $('listSheet').classList.remove('hidden'); $('btnLocate').classList.remove('hidden');
+    $('detail').classList.add('hidden'); $('listSheet').classList.remove('hidden'); $('btnLocate').classList.remove('hidden'); $('btnTrip').classList.remove('hidden');
     selectedId = null; render(); return true;
   }
 
@@ -418,9 +417,9 @@
     if (onboarding) h += '<p class="lead">Walmart and Murphy USA prices come straight from their own sites — no key needed. For Sam\'s, Exxon, Mobil and CITGO, add a free Google Places API key (optional), or try the demo first.</p>';
     h += '<div class="card"><h3>Google Places API key (optional)</h3>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
-      '<ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
+      '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
       '<li><a href="#" data-url="https://console.cloud.google.com/apis/credentials">Create an API key</a>, restrict it to <b>Places API (New)</b> and to Android apps:</li></ol>' +
-      '<div class="mono">package: ' + esc(N.packageName()) + '<br>SHA-1: ' + esc(fmtSha(N.certFingerprint())) + '</div>' +
+      '<div class="mono">package: ' + esc(N.packageName()) + '<br>SHA-1: ' + esc(fmtSha(N.certFingerprint())) + '</div></details>' +
       '<div class="field"><div class="lbl">API calls this month<small>Each refresh uses one call per brand (~6). Free tier: 1,000/month.</small><div class="meter"><i style="width:' + Math.min(100, cap ? calls / cap * 100 : 0) + '%"></i></div></div><b>' + calls + (cap ? '/' + cap : '') + '</b></div>' +
       '<div class="field"><div class="lbl">Monthly safety cap<small>Stops lookups past this count. If you and someone else share one key, split it (e.g. 450 each).</small></div><input type="number" id="monthlyCap" min="0" step="50" value="' + cap + '"></div></div>';
 
@@ -517,9 +516,9 @@
   function histCount() { var o = KV && KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0; return n ? n + ' saved trip' + (n === 1 ? '' : 's') + ' — reopen them with no lookups' : 'No saved trips yet'; }
   function citgoToday() {
     var d = new Date().getDay(), b = P.citgoBonus(S, new Date());
-    if (d !== 2 && d !== 5) return 'Not a bonus day today.';
+    if (d !== 2 && d !== 5) return '';
     var name = d === 2 ? 'Triple Tuesday' : 'Friday Savings';
-    return b === 'none' ? 'Today: ' + name + ' already used this month.' : 'Today: ' + name + ' is applied to CITGO prices.';
+    return b === 'none' ? 'Today: ' + name + ' already used.' : 'Today: ' + name + ' applies.';
   }
   function opt(v, label, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>'; }
   function fmtSha(s) { return String(s).replace(/(..)(?!$)/g, '$1:'); }
@@ -569,7 +568,7 @@
     var cap = bbox(c.lat, c.lng, 25);
     fetchAround(c.lat, c.lng, [Math.max(b.getSouth(), cap[0]), Math.max(b.getWest(), cap[1]), Math.min(b.getNorth(), cap[2]), Math.min(b.getEast(), cap[3])]);
   };
-  window.onBack = function () { var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
+  window.onBack = function () { if (document.querySelector('.qpop')) { window.__closeQ(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
     if ($('listSheet').classList.contains('open')) { setListOpen(false); return true; } return false; })(); };
 
@@ -609,7 +608,7 @@
       var host = sm.parentElement;
       sm.dataset.qd = 1;
       // a label over a text box: the (?) goes inside the box, on the right
-      var box = host.closest('.nf, .field.col'), ctl = box && box.querySelector('input:not([type=checkbox]):not([type=range]), textarea');
+      var box = host.closest('.nf, .field.col'), ctl = box && box.querySelector('input:not([type=checkbox]):not([type=range]):not([type=datetime-local]), textarea');
       if (ctl && !ctl.closest('.in-q')) {
         var wrap = document.createElement('span'); wrap.className = 'in-q' + (ctl.tagName === 'TEXTAREA' ? ' ta' : '');
         ctl.parentNode.insertBefore(wrap, ctl); wrap.appendChild(ctl);
@@ -630,21 +629,51 @@
       }
       html = '<p>' + html + '</p>';
       var okPrev = prev && !prev.matches('.kpis, .epa-tiles, .grid2, .grid3, .btn-row, .alts-pick, .rmap, .leaflet-container, input, select, textarea, .spd-chart, svg, .buf-track, .buf-scale, .actions, .chips, .stop, .scard, details, .leg, .road-g, .parse-load') && !prev.querySelector('input[type=range]');
-      if (okPrev && prev.children.length < 12 && !prev.classList.contains('keep') && !prev.matches('.lead, .msg, .note')) { prev.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); prev.classList.add('has-q'); el.remove(); }
-      else { el.outerHTML = '<div class="qline">' + qBtn(html) + '<span>' + (el.classList.contains('disclaimer') ? 'About these estimates' : 'Details') + '</span></div>'; }
+      if (prev && prev.matches('.lead.keep') && !prev.querySelector('.qi') && !prev.querySelector('input, button')) { prev.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); prev.classList.add('has-q'); el.remove(); return; }
+      if (okPrev && prev.children.length < 12 && !prev.classList.contains('keep') && !prev.matches('.lead, .msg, .note')) { prev.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); prev.classList.add('has-q'); el.remove(); return; }
+      // otherwise: the (?) on the section's heading, so there's no extra "Details" row
+      var hd = null;
+      for (var sib = el.previousElementSibling, n = 0; sib && n < 25 && !hd; sib = sib.previousElementSibling, n++) {
+        if (sib.matches('h3, .sub-h, .tb-h, .adj-h, .t-title, summary')) hd = sib;
+        else if (sib.querySelector) hd = sib.querySelector(':scope > h3, :scope > .tb-h, :scope > .adj-h, :scope .t-title');
+      }
+      if (!hd && el.parentElement) hd = el.parentElement.querySelector(':scope > h3, :scope > .tb-h, :scope > .sub-h, :scope > summary');
+      if (hd) {
+        var q0 = hd.querySelector(':scope > .qi');
+        if (q0) q0.dataset.q = encodeURIComponent(decodeURIComponent(q0.dataset.q) + html);
+        else { hd.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); hd.classList.add('has-q'); }
+        el.remove(); return;
+      }
+      el.outerHTML = '<div class="qline">' + qBtn(html) + '<span>' + (el.classList.contains('disclaimer') ? 'About these estimates' : 'Details') + '</span></div>';
     });
   }
+  // (?) opens a small floating card above everything (never pushes the layout around); tap anywhere or scroll to close
+  var qpop = null, qFrom = null;
+  function closeQ() { if (qpop) { qpop.remove(); qpop = null; } if (qFrom) { qFrom.classList.remove('on'); qFrom = null; } }
+  function openQ(b) {
+    closeQ();
+    qpop = document.createElement('div'); qpop.className = 'qpop'; qpop.setAttribute('role', 'dialog');
+    qpop.innerHTML = '<div class="qpop-in">' + decodeURIComponent(b.dataset.q || '') + '</div><i class="qpop-tail"></i>';
+    document.body.appendChild(qpop); qFrom = b; b.classList.add('on');
+    var r = b.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight, m = 12;
+    var w = Math.min(340, W - 2 * m); qpop.style.width = w + 'px';
+    var left = Math.max(m, Math.min(W - m - w, r.left + r.width / 2 - w / 2));
+    var ph = qpop.offsetHeight, below = r.bottom + 10 + ph <= H - m || r.top - 10 - ph < m;
+    var top = below ? r.bottom + 10 : r.top - 10 - ph;
+    qpop.style.left = left + 'px'; qpop.style.top = Math.max(m, top) + 'px';
+    qpop.classList.add(below ? 'below' : 'above');
+    qpop.querySelector('.qpop-tail').style.left = Math.max(14, Math.min(w - 14, r.left + r.width / 2 - left)) + 'px';
+  }
   document.addEventListener('click', function (e) {
-    var b = e.target.closest && e.target.closest('.qi'); if (!b) return;
+    var b = e.target.closest && e.target.closest('.qi');
+    if (!b) { if (qpop && !qpop.contains(e.target)) closeQ(); return; }
     e.preventDefault(); e.stopPropagation();
-    var host = b.closest('.grid2, .grid3') || b.closest('.field, .nf, .sub-h, .qline, h3, .tb-h, .leg-h, .lead, .msg, div, p') || b.parentElement;
-    var open = host.nextElementSibling && host.nextElementSibling.classList.contains('qpop') && host.nextElementSibling._from === b ? host.nextElementSibling : null;
-    document.querySelectorAll('.qpop').forEach(function (x) { if (x !== open) x.remove(); });
-    document.querySelectorAll('.qi.on').forEach(function (x) { if (x !== b) x.classList.remove('on'); });
-    if (open) { open.remove(); b.classList.remove('on'); return; }
-    var pop = document.createElement('div'); pop.className = 'qpop'; pop.innerHTML = decodeURIComponent(b.dataset.q); pop._from = b;
-    host.parentNode.insertBefore(pop, host.nextSibling); b.classList.add('on');
+    if (qFrom === b) { closeQ(); return; }
+    openQ(b);
   }, true);
+  document.addEventListener('scroll', function () { closeQ(); }, true);
+  window.addEventListener('resize', closeQ);
+  window.__closeQ = closeQ;
   new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) qify(n.parentElement || n); }); }); })
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);

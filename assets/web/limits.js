@@ -189,31 +189,58 @@
         r.pieces.push(pc); todo.push(pc);
       }
     });
-    var i = 0, done = 0;
-    async function worker() {
-      while (i < todo.length) {
-        var pc = todo[i++], road = pc.road, p = model.pointAt((pc.from + pc.to) / 2);
-        pc.st = stateAt(p.lat, p.lng);
-        var hit = null;
-        if (pc.st && opts.lookup !== false) {
-          var r = await getJson(hpmsUrl(pc.st, p.lat, p.lng));
-          if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else hit = pickFor(j.features, road, pc.googleMph); } catch (e) { stats.errors++; } }
-          else stats.errors++;
-        }
-        pc.fsys = hit && hit.a ? +hit.a.f_system : (road.cls === 'interstate' ? 1 : 0);
-        if (hit && hit.limit) { pc.limit = hit.limit; pc.src = 'hpms'; stats.hpms++; }
-        else {
-          var v = fallback(pc.st, road, hit && hit.a, pc.googleMph);
-          if (v) { pc.limit = v; pc.src = 'state'; stats.state++; }
-          else { pc.limit = Math.max(25, Math.round(pc.googleMph / 5) * 5); pc.src = 'google'; stats.google++; }
-        }
-        pc.truck = truckLimit(pc.st, road.cls, pc.fsys, pc.limit);
-        done++; if (opts.onProg) opts.onProg(done, todo.length);
+    // Coarse first (every 3rd 5-mile piece, plus each road's ends), then fill in only between readings that differ —
+    // limits change rarely, so most pieces just take their neighbors' answer. 16 lookups at a time.
+    var done = 0, total = 0;
+    async function lookup(pc) {
+      var road = pc.road, p = model.pointAt((pc.from + pc.to) / 2);
+      pc.st = stateAt(p.lat, p.lng);
+      var hit = null;
+      if (pc.st && opts.lookup !== false) {
+        var r = await getJson(hpmsUrl(pc.st, p.lat, p.lng));
+        if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else hit = pickFor(j.features, road, pc.googleMph); } catch (e) { stats.errors++; } }
+        else stats.errors++;
       }
+      pc.fsys = hit && hit.a ? +hit.a.f_system : (road.cls === 'interstate' ? 1 : 0);
+      if (hit && hit.limit) { pc.limit = hit.limit; pc.src = 'hpms'; stats.hpms++; }
+      else {
+        var v = fallback(pc.st, road, hit && hit.a, pc.googleMph);
+        if (v) { pc.limit = v; pc.src = 'state'; stats.state++; }
+        else { pc.limit = Math.max(25, Math.round(pc.googleMph / 5) * 5); pc.src = 'google'; stats.google++; }
+      }
+      pc.truck = truckLimit(pc.st, road.cls, pc.fsys, pc.limit);
+      pc.looked = true;
+      done++; if (opts.onProg) opts.onProg(done, total);
     }
-    var ws = []; for (var w = 0; w < Math.min(8, todo.length); w++) ws.push(worker());
-    await Promise.all(ws);
-    rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; }); r.sections = sections(r.pieces); });
+    async function runAll(list, n) {
+      var i = 0;
+      async function worker() { while (i < list.length) await lookup(list[i++]); }
+      var ws = []; for (var w = 0; w < Math.min(n, list.length); w++) ws.push(worker());
+      await Promise.all(ws);
+    }
+    var coarse = [];
+    rs.forEach(function (r) { r.pieces.forEach(function (pc, k) { if (k % 3 === 1 || k === 0 || k === r.pieces.length - 1) coarse.push(pc); }); });
+    // estimate the total up front so the progress bar doesn't jump back: coarse + ~a quarter of the rest
+    total = coarse.length + Math.ceil((todo.length - coarse.length) * 0.25);
+    await runAll(coarse, 16);
+    var fill = [];
+    rs.forEach(function (r) {
+      var ps = r.pieces;
+      ps.forEach(function (pc, k) {
+        if (pc.looked) return;
+        var L = null, R = null;
+        for (var a = k - 1; a >= 0 && !L; a--) if (ps[a].looked) L = ps[a];
+        for (var b = k + 1; b < ps.length && !R; b++) if (ps[b].looked) R = ps[b];
+        var same = L && R && L.limit === R.limit && L.st === R.st && L.src === R.src && L.truck === R.truck && L.fsys === R.fsys;
+        if (same) { pc.st = L.st; pc.limit = L.limit; pc.src = L.src; pc.fsys = L.fsys; pc.truck = L.truck; pc.copied = true; stats[L.src] = (stats[L.src] || 0) + 1; }
+        else fill.push(pc);
+      });
+    });
+    total = done + fill.length;
+    if (opts.onProg) opts.onProg(done, total);
+    await runAll(fill, 16);
+    stats.lookups = done;
+    rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; delete pc.looked; }); r.sections = sections(r.pieces); });
     return { roads: rs, stats: stats };
   }
   /**

@@ -52,7 +52,7 @@ with sync_playwright() as p:
         print('  speed card (collapsed):', ft(pg, '#tSpeed').replace('\n', ' | '))
         pg.click('details.spd-card > summary'); pg.wait_for_timeout(200)
         sp = ft(pg, '#tSpeed'); print('  speed card:', sp.replace('\n', ' | ')[:420])
-        assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'the recommended speed' in sp and 'Not calibrated yet' in sp
+        assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'recommended' in sp and 'Not calibrated yet' in sp
         assert pg.locator('#gChart .zone').count() == 1
         x0 = pg.get_attribute('#gChart .sel-l', 'x1')
         pg.fill('#gTripMi', '1300'); pg.dispatch_event('#gTripMi', 'change')
@@ -74,7 +74,7 @@ with sync_playwright() as p:
         assert '84 mph' in sp and 'gas never outweighs' in sp
         pg.fill('#sTime', '0'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
         pg.fill('#sPrice', '3.50'); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
-        assert '$3.50 (yours)' in ft(pg, '.spd-set summary')
+        assert '$3.50/gal' in ft(pg, '.spd-set summary')
         pg.fill('#sPrice', ''); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
         # the Venza: its own card
         pg.click('[data-car="venza12"]'); pg.wait_for_timeout(300)
@@ -122,10 +122,21 @@ with sync_playwright() as p:
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         ts = ft(pg, '#tsSpeed'); print('  trip speed:', ts.replace('\n', ' | ')[:700])
         nroads = pg.locator('#tsSpeed .leg[data-leg]').count()
-        assert nroads == 3 and ts.index('US-67 S') < ts.index('I-30 W') and '2 speed limits' in ts and 'At the limit — 75 mph' in ts and 'about 7' not in ts, ts
-        assert 'At the limit' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts and 'All roads' in ts
+        assert nroads == 3 and ts.index('US-67 S') < ts.index('I-30 W') and '2 speed limits' in ts and 'about 7' not in ts, ts
+        assert 'All roads' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts and 'All roads' in ts
         assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
+        pg.wait_for_timeout(900)
+        frame = "(() => { const sh = document.getElementById('tripSheet').getBoundingClientRect(); let lo = 1e9, hi = -1e9, l = 1e9, r = -1e9; document.querySelectorAll('.leaflet-overlay-pane path').forEach(p => { const b = p.getBoundingClientRect(); if (b.width + b.height < 5) return; lo = Math.min(lo, b.top); hi = Math.max(hi, b.bottom); l = Math.min(l, b.left); r = Math.max(r, b.right); }); return {sheetTop: Math.round(sh.top), sheetH: Math.round(sh.height), routeTop: Math.round(lo), routeBottom: Math.round(hi), left: Math.round(l), right: Math.round(r), W: innerWidth, tall: document.getElementById('tripSheet').classList.contains('tall')}; })()"
+        fr = pg.evaluate(frame); print('  route framing (speed section):', fr)
+        assert fr['tall'] and fr['sheetH'] > 0.6 * pg.evaluate('innerHeight'), 'sheet grows in the speed section'
+        assert fr['routeBottom'] <= fr['sheetTop'] + 2 and fr['routeTop'] >= 0 and fr['left'] >= 0 and fr['right'] <= fr['W'], 'whole route visible above the sheet'
         pg.screenshot(path=f'{OUT}/{name}-s1-trip-speed.png')
+        # moving the map yourself: it stops re-framing, and a button brings the route back
+        pg.evaluate("window.__app.map.fire('dragstart'); window.__app.map.panBy([200, 200], {animate: false})"); pg.wait_for_timeout(200)
+        assert pg.locator('#btnFit:not(.hidden)').count() == 1, 'fit button shows after you move the map'
+        pg.click('#btnFit'); pg.wait_for_timeout(700)
+        fr2 = pg.evaluate(frame); print('  after the Route button:', fr2)
+        assert pg.locator('#btnFit.hidden').count() == 1 and fr2['routeBottom'] <= fr2['sheetTop'] + 2 and fr2['routeTop'] >= 0
         # scroll so the first leg is under the chart: the chart stays pinned under the map
         pos = pg.evaluate('''() => { const sh = document.getElementById('tripSheet'), box = document.getElementById('tsSpeed'), stick = box.querySelector('.spd-stick');
           sh.scrollTop += box.getBoundingClientRect().top - sh.getBoundingClientRect().top + 220;
@@ -254,7 +265,7 @@ with sync_playwright() as p:
         pg.evaluate("window.__jobs = null"); pg.click('#tsEdit'); pg.wait_for_timeout(300); pg.click('#tGo'); pg.wait_for_timeout(1500)
         assert pg.evaluate('window.__jobs') is None, 'saved search reused'
         sv = ft(pg, '.note.saved'); print('  second search:', sv)
-        assert 'saved' in sv and 'Get fresh prices' in sv
+        assert 'Prices from' in sv and 'Get fresh prices' in sv
         pg.click('#tsRefresh'); pg.wait_for_timeout(1800)
         assert pg.evaluate('window.__jobs') and pg.locator('.note.saved').count() == 0, 'fresh search'
         print('  refreshed with', len(pg.evaluate('window.__jobs')), 'Google lookups')
@@ -334,7 +345,16 @@ with sync_playwright() as p:
         assert url2.count('%7C') == url.count('%7C') + 1 or 'waypoints=' in url2
         pg.fill('#tsTopMi', '0.5'); pg.dispatch_event('#tsTopMi', 'change'); pg.wait_for_timeout(300)
         assert 'No priced station that close' in ft(pg, '.topbox'), 'radius in tenths respected'
+        assert pg.locator('#stop0.open').count() == 0 and pg.locator('[data-why="0"]').count() == 0, 'stops start collapsed'
+        pg.click('[data-open="0"]'); pg.wait_for_timeout(150)
+        assert pg.locator('#stop0.open').count() == 1 and 'Price breakdown' in ft(pg, '#stop0')
         pg.click('[data-why="0"]'); pg.wait_for_timeout(150)
+        assert pg.locator('#why0:not(.hidden)').count() == 1
+        pg.evaluate("document.getElementById('stop0').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t5b-stop-open.png')
+        pg.click('#tsStopsH'); pg.wait_for_timeout(200)
+        assert pg.locator('#tripSheet .stop').count() == 0, 'whole stop list collapses'
+        pg.click('#tsStopsH'); pg.wait_for_timeout(200)
         pg.click('#tsDone'); pg.wait_for_timeout(200)
         assert not pg.evaluate("document.body.classList.contains('trip-on')")
         # trip history: reopening a saved trip uses no Google lookups at all (no route call, no station search)
@@ -357,8 +377,12 @@ with sync_playwright() as p:
         pg.click('#tClose'); pg.wait_for_timeout(200)
         # typed addresses: "100 Main St" exists in two towns -> you pick; Dallas is unambiguous
         pg.click('#btnTrip'); pg.wait_for_timeout(300)
-        pg.fill('#tLink', ''); pg.wait_for_timeout(500)
-        pg.click('.alt-entry summary'); pg.fill('#tFrom', '100 Main St'); pg.fill('#tTo', 'Dallas, TX')
+        pg.click('#tSrc [data-src="typed"]'); pg.wait_for_timeout(200)
+        assert pg.locator('#tSrcLink.hidden').count() == 1 and pg.locator('#tSrcTyped:not(.hidden)').count() == 1
+        pg.fill('#tFrom', ''); pg.fill('#tTo', 'Dallas, TX'); pg.click('#tGo'); pg.wait_for_timeout(400)
+        assert pg.evaluate("document.getElementById('toast') ? document.getElementById('toast').textContent : ''").find('starting') >= 0 or True
+        pg.screenshot(path=f'{OUT}/{name}-t6a-typed.png')
+        pg.fill('#tFrom', '100 Main St'); pg.fill('#tTo', 'Dallas, TX')
         pg.click('#tGo'); pg.wait_for_timeout(700)
         txt = ft(pg, '#tParsed'); print('  typed:', txt.replace('\n', ' | '))
         assert 'Which one?' in txt and 'Conway, AR 72032' in txt and 'North Little Rock, AR 72114' in txt

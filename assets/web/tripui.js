@@ -80,31 +80,36 @@
     var h = '<div class="t-head"><h1>Plan fuel stops <button type="button" class="qi" data-q="' + encodeURIComponent('Bring in a Google Maps route, and Fuel+ picks the stops that save money — counting detours — then sends the route back with the stops added.') + '">?</button></h1><button class="x" id="tClose" aria-label="Close">✕</button></div>';
 
     h += histCard();
+    var src = srcOf();
     h += '<div class="card"><h3>1 · Route</h3>' +
-      '<div class="field col"><div class="lbl">Google Maps directions link<span class="req" aria-label="required">*</span><small>Required: a link, or type where you\'re going below. In Google Maps: get directions → ⋮ → <b>Share directions</b> → Fuel+ Map. Or copy the link and paste it here.</small></div>' +
-      '<textarea id="tLink" rows="2" placeholder="https://maps.app.goo.gl/…" spellcheck="false">' + esc(t.link) + '</textarea></div>' +
+      '<div class="seg2" id="tSrc"><button data-src="link" class="' + (src === 'link' ? 'on' : '') + '">Maps link</button><button data-src="typed" class="' + (src === 'typed' ? 'on' : '') + '">Addresses</button></div>' +
+      '<div id="tSrcLink"' + (src === 'link' ? '' : ' class="hidden"') + '><div class="field col"><div class="lbl">Google Maps directions link<span class="req" aria-label="required">*</span><small>In Google Maps: get directions → ⋮ → <b>Share directions</b> → Fuel+ Map. Or paste the link here.</small></div>' +
+      '<textarea id="tLink" rows="2" placeholder="https://maps.app.goo.gl/…" spellcheck="false">' + esc(t.link) + '</textarea></div></div>' +
+      '<div id="tSrcTyped"' + (src === 'typed' ? '' : ' class="hidden"') + '>' +
+      '<div class="field col"><div class="lbl">From<span class="req" aria-label="required">*</span></div><span class="in-btn"><input type="text" id="tFrom" placeholder="Address or place" value="' + esc(t.from) + '"><button type="button" id="tHere" aria-label="Use my location"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg></button></span></div>' +
+      '<div class="field col"><div class="lbl">To<span class="req" aria-label="required">*</span></div><input type="text" id="tTo" placeholder="Address or place" value="' + esc(t.to) + '"></div></div>' +
       '<div id="tParsed"></div>' +
-      '<details class="alt-entry"' + (!t.link && (t.from || t.to) ? ' open' : '') + '><summary>…or type it</summary>' +
-      '<div class="field col"><div class="lbl">From</div><input type="text" id="tFrom" placeholder="Your location" value="' + esc(t.from) + '"></div>' +
-      '<div class="field col"><div class="lbl">To<span class="req" aria-label="required">*</span></div><input type="text" id="tTo" placeholder="City, address or place" value="' + esc(t.to) + '"></div></details>' +
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
-      '<div class="field"><div class="lbl">Round trip<small>Come back to where you started. The way back is its own leg, so you pick its roads too — the same as importing a round trip from Google Maps.</small></div>' + sw('tRound', !!t.returnTrip) + '</div></div>';
+      '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div></div>';
 
     h += '<div class="card" id="tGarage"></div><div class="card spd" id="tSpeed"></div>';
 
-    h += '<div class="card"><h3>3 · This trip</h3><div class="grid2">' +
-      num('tMiles', 'Miles left in tank now<span class="req" aria-label="required">*</span>', t.milesLeft, 1, 'from your dash') + num('tBuffer', 'Keep at least (miles)', t.bufferMi, 5, 'never go below') + '</div>' +
+    h += '<div class="card"><h3>3 · This trip</h3>' +
+      '<div class="field col"><div class="lbl">Leaving<small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Blank = now. Prices can change before you go.</small></div>' +
+      '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
+      '<div class="grid2">' +
+      num('tMiles', 'Miles left in tank<span class="req" aria-label="required">*</span>', t.milesLeft, 1, 'from your dash') + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') + '</div>' +
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">Fill up at each stop</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
-      '<div class="grid2">' + num('tMinSave', 'Only if it saves at least ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', '…and adds no more than (min)', t.maxDetourMin, 1, 'extra driving per stop') + '</div>' +
+      '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 1, 'extra driving per stop') + '</div>' +
       '<details class="alt-entry more"' + (t.timeValue > 0 ? ' open' : '') + '><summary>More options</summary>' +
       '<div class="grid2">' + num('tTime', 'Your time is worth ($/hr)', t.timeValue, 5, 'optional · 0 = off') + '<span class="lead small">Adds a cost for every minute of detour and stop time, on top of the rule above.</span></div></details>' +
-      '<div class="sub-h">When you get there</div>' +
+      '<div class="sub-h">When you get there <button type="button" class="qi" id="tArriveQ" aria-label="More info">?</button></div>' +
       '<div class="seg2" id="tArrive"><button data-a="buffer" class="' + (t.arrive !== 'full' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most gas</button></div>' +
-      '<div class="lead small keep" id="tArriveHelp"></div>' +
-      '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up station within (mi of destination)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
-      '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
+
+      '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up within (mi)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
+      '<div class="grid2">' + num('tTankPrice', 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
       '<span></span></div>' +
       '<div class="sub-h">Cruising speed</div>' +
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
@@ -113,20 +118,31 @@
       '<div class="field"><div class="lbl">Let the buffer and speed sliders adjust each other<small>On: a smaller buffer slows you down where needed, and faster speeds raise the buffer, so the tank never runs dry. Off: each slider just stops (grayed out) where the other one doesn\'t leave enough gas.</small></div>' + sw('tLinkSl', S.trip.linkSliders !== false) + '</div>' +
       '<div id="tLinkBox"' + (S.trip.linkSliders !== false ? '' : ' class="hidden"') + '><div class="sub-h">When a smaller buffer needs slower driving</div>' +
       '<div class="seg2" id="tSlowMode"><button data-sm="all" class="' + (S.trip.slowMode !== 'fastest' ? 'on' : '') + '">Slow all roads</button><button data-sm="fastest" class="' + (S.trip.slowMode === 'fastest' ? 'on' : '') + '">Fastest roads first</button></div>' +
-      '<div class="grid2">' + num('tMaxUnder', 'Go at most this far under the limit (mph)', S.trip.maxUnder != null ? S.trip.maxUnder : 5, 1, 'the slider never slows you more than this') + '<span></span></div></div>' +
+      '<div class="grid2">' + num('tMaxUnder', 'Max. under limit (mph)', S.trip.maxUnder != null ? S.trip.maxUnder : 5, 1, 'the slider never slows you more than this') + '<span></span></div></div>' +
       '<div class="sub-h">Other routes</div>' +
       '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
 
     h += '<div id="tRouteInfo"></div><button class="btn primary" id="tGo">Get route</button>' +
       '<p class="lead small keep" id="tCost"></p>' +
-      '<p class="lead small keep"><a href="#" id="tReport">Send a troubleshooting report</a> · <a href="#" id="tLog">Debug log</a></p>';
+      '';
     pg.innerHTML = h; show(pg, true); pg.scrollTop = 0;
 
     $('tClose').onclick = closeTrip;
     bindHist();
     $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; renderInfo(); readLink(); }, 400));
     ['tFrom', 'tTo'].forEach(function (id) { $(id).addEventListener('input', function () { route = null; model = null; replay = null; renderInfo(); renderStops(); }); });
+    $('tDepart').addEventListener('change', function () { collect(); });
+    $('tNow').onclick = function () { $('tDepart').value = ''; collect(); };
+    $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
+    $('tSrc').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
+      Array.prototype.forEach.call($('tSrc').children, function (x) { x.classList.toggle('on', x === b); });
+      S.trip.src = b.dataset.src; A.save();
+      $('tSrcLink').classList.toggle('hidden', S.trip.src !== 'link'); $('tSrcTyped').classList.toggle('hidden', S.trip.src !== 'typed');
+      route = null; model = null; replay = null; parsing = null; $('tParsed').innerHTML = ''; renderInfo();
+      if (S.trip.src === 'link' && $('tLink').value.trim()) readLink();
+    };
     $('tRound').onchange = function () {
       collect();
       if (route && syncReturn(route)) { model = null; replay = null; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
@@ -138,8 +154,8 @@
     };
     var arriveHelp = function () {
       var full = $('tArrive').querySelector('.on').dataset.a === 'full';
-      $('tArriveHelp').textContent = full ? 'Your last stop fills the tank, late in the trip and as cheaply as possible (the “must save” amount drops to $0.25 so a late cheap fill-up isn\'t skipped). You can add a top-up close to the destination afterward.'
-        : 'Arrive with at least your buffer; gas left over is counted at the typical price.';
+      $('tArriveQ').dataset.q = encodeURIComponent(full ? 'Your last stop fills the tank, late in the trip and as cheaply as possible (the “must save” amount drops to $0.25 so a late cheap fill-up isn\'t skipped). You can add a top-up close to the destination afterward.'
+        : 'Arrive with at least your buffer; gas left over is counted at the typical price.');
       show($('tTopBox'), full);
     };
     $('tArrive').onclick = function (e) {
@@ -168,16 +184,20 @@
       Array.prototype.forEach.call($('tMode').children, function (x) { x.classList.toggle('on', x === b); });
     };
     $('tGo').onclick = go;
-    $('tReport').onclick = function (e) { e.preventDefault(); collect(); shareReport(); };
-    $('tLog').onclick = function (e) { e.preventDefault(); if (window.__showLog) window.__showLog(); };
     $('tTime').addEventListener('change', function () { collect(); Garage.drawSpeed(); });
     Garage.render($('tGarage'), $('tSpeed'), function () { if (model) { model = T.buildRoute(rawRoute, carModel()); } renderInfo(); }, call);
     ['tMiles', 'tBuffer'].forEach(function (id) {
       $(id).addEventListener('input', debounce(function () { collect(); if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); } }, 300));
     });
     renderInfo(); costLine();
-    if (t.link && !route) readLink();
+    if (srcOf() === 'link' && t.link && !route) readLink();
   }
+  /** Where the route comes from: a Google Maps link, or addresses you type. */
+  function srcOf() { var t = S.trip; return t.src === 'typed' || t.src === 'link' ? t.src : (!t.link && (t.from || t.to) ? 'typed' : 'link'); }
+  /** When you're leaving: the saved time if it's still ahead, else now. */
+  function futureDepart() { var d = S.trip.depart ? new Date(S.trip.depart) : null; return d && !isNaN(d) && d.getTime() > Date.now() - 600e3 ? d : null; }
+  function departAt() { return futureDepart() || new Date(); }
+  function isHere(x) { return /^(my|your) (current )?location$/i.test(String(x || '').trim()); }
   function sw(id, on) { return '<label class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
   function num(id, label, v, step, hint) {
     return '<label class="nf"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><input type="number" inputmode="decimal" id="' + id + '" step="' + step + '" value="' + esc(v) + '"></label>';
@@ -191,6 +211,8 @@
     t.arrive = $('tArrive').querySelector('.on').dataset.a;
     t.topUpMi = Math.max(0, Math.round((parseFloat($('tTopMi').value) || 0) * 10) / 10);
     t.returnTrip = $('tRound').checked;
+    t.src = $('tSrc').querySelector('.on').dataset.src;
+    t.depart = $('tDepart').value || '';
     t.linkSliders = $('tLinkSl').checked;
     t.slowMode = $('tSlowMode').querySelector('.on').dataset.sm;
     t.maxUnder = Math.max(0, Math.min(10, parseInt($('tMaxUnder').value, 10) || 0));
@@ -203,7 +225,7 @@
   }
   function costLine() {
     var used = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
-    $('tCost').textContent = S.apiKey ? 'Google lookups this month: ' + used + (cap ? ' of ' + cap : '') + ' (Places) · ' + (N.routeCallsThisMonth ? N.routeCallsThisMonth() : 0) + ' routes.'
+    $('tCost').textContent = S.apiKey ? 'Google lookups this month: ' + used + (cap ? '/' + cap : '') + ' places · ' + (N.routeCallsThisMonth ? N.routeCallsThisMonth() : 0) + ' routes'
       : 'Add your Google API key in Settings — routes come from Google.';
   }
 
@@ -450,9 +472,7 @@
       h += '<div class="maps-opts"><div class="sub-h">Google Maps shows ' + r.mapsRoutes.length + ' routes — tap one</div><div class="rmap" id="tOptMap"></div>' +
         '<div class="opt-sel">via <b>' + esc(r.mapsRoutes[selK].via) + '</b> · ' + Math.round(r.mapsRoutes[selK].miles || 0).toLocaleString() + ' mi · ' + fmtDur((r.mapsRoutes[selK].minutes || 0) * 60) + '</div></div>';
     } else if (!multiLeg(r) && r.mapsRoutes && r.mapsRoutes.length > 1) {
-      h += '<div class="msg maps-opts">Google Maps shows ' + r.mapsRoutes.length + ' routes' + (picked && r.routeIndex != null ? ' — you picked <b>via ' + esc(picked.via) + '</b>' : '') + ':<ol>' + r.mapsRoutes.map(function (m) {
-        return '<li' + (m === picked && r.routeIndex != null ? ' class="on"' : '') + '>via ' + esc(m.via) + (m.miles ? ' · ' + Math.round(m.miles).toLocaleString() + ' mi' : '') + (m.minutes ? ' · ' + fmtDur(m.minutes * 60) : '') + '</li>';
-      }).join('') + '</ol>Pick one after <b>Get route</b>.</div>';
+      h += '<div class="msg maps-opts">' + r.mapsRoutes.length + ' routes in Google Maps' + (picked && r.routeIndex != null ? ' · you picked <b>via ' + esc(picked.via) + '</b>' : '') + '. Pick one after <b>Get route</b>.</div>';
     } else if (picked) h += '<div class="msg">Route you picked in Google Maps: <b>via ' + esc(picked.via) + '</b>' + (picked.miles ? ' · ' + Math.round(picked.miles) + ' mi' : '') + (picked.minutes ? ' · ' + fmtDur(picked.minutes * 60) : '') + '</div>';
     else if (r.routeIndex && !multiLeg(r)) h += '<div class="msg">Your link says you picked route option ' + (r.routeIndex + 1) + ' in Google Maps.</div>';
     if (multiLeg(r) && !model) h += '<div class="msg">' + (r.stops.length - 1) + ' legs. Each one is routed on its own, so you can pick its route after <b>Get route</b>.</div>';
@@ -561,8 +581,9 @@
   function typedRoute() {
     var from = $('tFrom').value.trim(), to = $('tTo').value.trim();
     if (!to) return null;
+    if (!from) return null;
     var mk = function (t) { return { address: t, label: t, short: T.shortLabel(t) }; };
-    return { stops: [from ? mk(from) : { current: true, label: 'Your location' }, mk(to)], avoid: {}, mode: 'drive' };
+    return { stops: [isHere(from) ? { current: true, label: 'Your location' } : mk(from), mk(to)], avoid: {}, mode: 'drive', typed: true };
   }
   function wp(s) {
     if (s.current) {
@@ -686,8 +707,9 @@
     LG.info('route', 'Get route pressed', { miles: S.trip.milesLeft, buffer: S.trip.bufferMi, car: Garage.car() });
     try {
       if (parsing) prog(0.05, 'Reading the link');
-      var r = (parsing ? await parsing.p : route) || (S.trip.link && !route ? await readLink() : null) || route || typedRoute();
-      if (!r) throw new Error('Paste a Google Maps directions link, or type where you\'re going.');
+      var r = srcOf() === 'typed' ? (route && route.typed ? route : typedRoute())
+        : (parsing ? await parsing.p : route) || (S.trip.link && !route ? await readLink() : null) || route;
+      if (!r) throw new Error(srcOf() === 'typed' ? 'Enter where you\'re starting and where you\'re going.' : 'Paste a Google Maps directions link.');
       route = r;
       prog(0.15, 'Checking addresses');
       if (!(await resolveStops(r, function (f) { prog(0.15 + f * 0.4, 'Checking addresses'); }))) {
@@ -921,7 +943,7 @@
       });
     } else if (alts.length > 1) {
       var pk = pickedRoute(route);
-      h += '<div class="sub-h">' + (pk ? 'You picked via ' + esc(pk.via) + ' in Google Maps' + (altSure ? ' — matched on the map' : ' — check the closest one') : 'Which route? Tap the one you want') + '</div>' +
+      h += '<div class="sub-h">' + (pk ? 'You picked via ' + esc(pk.via) + ' in Google Maps' + (altSure ? ' — matched on the map' : ' — check the closest one') : 'Pick a route') + '</div>' +
         '<div class="rmap" id="tRmap"></div><div class="alts-pick">' + alts.map(function (a, k) {
         var mi = (a.distanceMeters || 0) / 1609.344, sec = parseFloat(String(a.duration || '0'));
         return '<button data-alt="' + k + '" class="' + (k === altSel ? 'on' : '') + '"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b>' +
@@ -936,7 +958,7 @@
     if (startGal - need >= bufGal) h += '<div class="msg ok">No stop needed — you\'d arrive with about ' + Math.round(spare) + ' miles left.</div>';
     else {
       var range = Math.max(0, (startGal - bufGal) / model.combGpm);
-      h += '<div class="msg">You\'ll need gas within about ' + Math.round(range) + ' miles (keeping your ' + S.trip.bufferMi + '-mile buffer).</div>';
+      h += '<div class="msg">Gas needed within ~' + Math.round(range) + ' mi (keeping your ' + S.trip.bufferMi + '-mi buffer).</div>';
     }
     var nOther = altCompareList().length;
     h += '<div class="lead small">Finding stations uses ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') + (S.monthlyCap ? ' (' + Math.max(0, left) + ' left this month)' : '') : 'no Google lookups') +
@@ -978,7 +1000,7 @@
       line.on('click', function () { onPick(k); });
       var cands = labelSpots(lines, k), mid = cands[0];
       tips.push({ k: k, cands: cands, tip: null });
-      var tip = tips[tips.length - 1].tip = L.tooltip({ permanent: true, direction: 'center', className: 'rlabel' + (on ? ' on' : ''), interactive: true })
+      var tip = tips[tips.length - 1].tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'rlabel' + (on ? ' on' : ''), interactive: true })
         .setLatLng(mid).setContent('<div class="rl" data-opt="' + k + '"><b>' + esc(ln.time) + '</b><span>' + esc(ln.miles) + '</span></div>').addTo(rmap);
       all = all.concat(ln.pts);
     });
@@ -988,8 +1010,9 @@
     var a = lines[0].pts[0], b = lines[0].pts[lines[0].pts.length - 1];
     var mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(rmap); };
     mk(a, 'A'); mk(b, 'B');
-    rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] });
-    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] }); placeLabels(rmap, tips, sel); } }, 60);
+    rmap.fitBounds(L.latLngBounds(all), { padding: [40, 40] });
+    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { padding: [40, 40] }); placeLabels(rmap, tips, sel, lines); } }, 60);
+    rmap.on('zoomend moveend', function () { placeLabels(rmap, tips, sel, lines); });
   }
   /** Candidate label spots on a route, best first: points far from the other routes (where it splits off), like Google Maps. */
   function labelSpots(lines, k) {
@@ -1004,20 +1027,38 @@
     out.sort(function (a, b) { return b.d - a.d; });
     return out.length ? out.map(function (x) { return x.p; }) : [me[Math.floor(n / 2)]];
   }
-  /** Move labels so none overlap on screen: the chosen route's label first, then each at its best free spot. */
-  function placeLabels(m, tips, sel) {
-    var placed = [], size = m.getSize();
+  /**
+   * Route labels as speech bubbles beside their route (like Google Maps): the tail points at the route, and each bubble
+   * goes where it covers the least of any route line and no other bubble — so every option stays visible.
+   */
+  function placeLabels(m, tips, sel, lines) {
+    var size = m.getSize(), placed = [], GAP = 9, pts = [];
+    (lines || []).forEach(function (ln) {
+      if (!ln || !ln.pts) return;
+      var st = Math.max(1, Math.floor(ln.pts.length / 500));
+      for (var i = 0; i < ln.pts.length; i += st) pts.push(m.latLngToContainerPoint(ln.pts[i]));
+    });
+    var DIRS = [['top', 0, -GAP], ['bottom', 0, GAP], ['right', GAP, 0], ['left', -GAP, 0]];
+    var hits = function (r, q) { return r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h; };
     tips.slice().sort(function (a, b) { return (b.k === sel) - (a.k === sel); }).forEach(function (t) {
       var el = t.tip.getElement && t.tip.getElement(); if (!el) return;
-      var w = el.offsetWidth + 6, h = el.offsetHeight + 6, pick = null;
-      for (var c = 0; c < t.cands.length && !pick; c++) {
-        var pt = m.latLngToContainerPoint(t.cands[c]), r = { x: pt.x - w / 2, y: pt.y - h / 2, w: w, h: h };
-        if (r.x < 2 || r.y < 2 || r.x + w > size.x - 2 || r.y + h > size.y - 2) continue;
-        if (placed.some(function (q) { return r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h; })) continue;
-        pick = { c: t.cands[c], r: r };
-      }
-      if (!pick) { var pt0 = m.latLngToContainerPoint(t.cands[0]); pick = { c: t.cands[0], r: { x: pt0.x - w / 2, y: pt0.y - h / 2, w: w, h: h } }; }
-      t.tip.setLatLng(pick.c); placed.push(pick.r);
+      var w = el.offsetWidth, h = el.offsetHeight, best = null;
+      t.cands.slice(0, 30).forEach(function (c, ci) {
+        var pt = m.latLngToContainerPoint(c);
+        DIRS.forEach(function (d) {
+          var r = d[0] === 'top' ? { x: pt.x - w / 2, y: pt.y - GAP - h } : d[0] === 'bottom' ? { x: pt.x - w / 2, y: pt.y + GAP } :
+            d[0] === 'right' ? { x: pt.x + GAP, y: pt.y - h / 2 } : { x: pt.x - GAP - w, y: pt.y - h / 2 };
+          r.w = w; r.h = h;
+          if (r.x < 2 || r.y < 2 || r.x + w > size.x - 2 || r.y + h > size.y - 2) return;
+          if (placed.some(function (q) { return hits(r, q); })) return;
+          var cover = 0; for (var i = 0; i < pts.length; i++) { var p = pts[i]; if (p.x > r.x - 4 && p.x < r.x + w + 4 && p.y > r.y - 4 && p.y < r.y + h + 4) cover++; }
+          var score = cover * 10 + ci * 0.6 + (d[0] === 'top' || d[0] === 'bottom' ? 0 : 0.3);
+          if (!best || score < best.score) best = { score: score, c: c, d: d, r: r };
+        });
+      });
+      if (!best) best = { c: t.cands[0], d: DIRS[0], r: { x: -99, y: -99, w: 0, h: 0 } };
+      t.tip.options.direction = best.d[0]; t.tip.options.offset = L.point(best.d[1], best.d[2]);
+      t.tip.setLatLng(best.c); placed.push(best.r);
     });
   }
   function thinAlt(a) {
@@ -1168,7 +1209,7 @@
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
 
-    var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date();
+    var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date(), goD = departAt();
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];
       var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0;
@@ -1179,7 +1220,7 @@
         var prs = T.projectLegs(model, { lat: s.lat, lng: s.lng }, maxOff);
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi];
-          var c = P.compute(s, grade, S, nowD, new Date(nowD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // CITGO's day bonuses go by when you'll be there
+          var c = P.compute(s, grade, S, nowD, new Date(goD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // day-based bonuses go by when you'll be there
           if (!c) { if (!pi) unpriced++; break; }
           if (c.stale && !pi) stale++;
           var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
@@ -1487,7 +1528,7 @@
       var p0 = model.pts[0], best = null, now = new Date();
       (A.stations() || []).forEach(function (st) {
         if (!st || st.lat == null || P.haversineMi(p0.lat, p0.lng, st.lat, st.lng) > 5) return;
-        var c = P.compute(st, r.grade, S, now); if (c && (!best || c.final < best.price)) best = { name: P.BRANDS[st.brand] ? P.BRANDS[st.brand].name : st.name, price: c.final, mile: 0, id: st.id };
+        var c = P.compute(st, r.grade, S, now, departAt()); if (c && (!best || c.final < best.price)) best = { name: P.BRANDS[st.brand] ? P.BRANDS[st.brand].name : st.name, price: c.final, mile: 0, id: st.id };
       });
       return best;
     } catch (e) { return null; }
@@ -1560,7 +1601,9 @@
   function bufBox() {
     var r = result, sw = r.sweep;
     var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
-    if (!sw) return h + '<div class="lead small keep">Checking what other buffers would cost…</div></div>';
+    if (!sw) return h + '<div class="lead small keep">Checking other buffers…</div></div>';
+    // the buffer's limits depend on your speeds, which depend on the speed limits: wait for them
+    if (S.limitLookup !== false && (!model._lim || model._lim === 'loading')) return h + limBar(model, 'Waiting for speed limits') + '</div>';
     var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
     if (!base.ok) base = cur;
     var pos = function (mi) { return ((mi - min) / (max - min) * 100).toFixed(2); };
@@ -1760,7 +1803,7 @@
     var g = P.GRADES[r.grade].label.toLowerCase();
     var dest = route.stops[route.stops.length - 1], orig = route.stops[0];
     var h = '<div class="grab"><span></span></div><div class="t-head"><div><div class="t-title">' + esc(tripTitle(route)) + '</div>' +
-      '<div class="sub">' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + g + ' · ' + r.cands.length + ' priced stations along the way</div></div>' +
+      '<div class="sub">' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + r.cands.length + ' stations</div></div>' +
       '<button class="x" id="tsClose" aria-label="Close trip">✕</button></div>';
 
     if (!p.ok) {
@@ -1771,8 +1814,8 @@
     } else {
       var t = p.totals, out = r.acc.legs[0];
       h += '<div class="kpis"><div><b>' + money(out.cost) + '</b><span>trip cost</span></div>' +
-        '<div><b>' + money(out.spend) + '</b><span>at the pump · ' + out.bought.toFixed(1) + ' gal</span></div>' +
-        '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved vs. easiest</span></div></div>';
+        '<div><b>' + money(out.spend) + '</b><span>at the pump</span></div>' +
+        '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved</span></div></div>';
       h += routeBox();
       h += '<div class="lead small">Trip cost is the ' + out.burnGal.toFixed(1) + ' gal this drive burns: gas already in your tank at ' + priceText(r.startPrice) + '/gal' +
         (S.trip.tankPrice ? ' (what you said it cost)' : ' (typical on this route — set what you paid in Edit trip)') + ', plus what you buy at what you pay. ' +
@@ -1786,15 +1829,21 @@
       if (p.minStops != null && t.stops > p.minStops) h += '<div class="lead small">You only need ' + p.minStops + ' stop' + (p.minStops === 1 ? '' : 's') + '; the extra one pays for itself with cheaper gas.</div>';
       if (p.firstDip && p.stops.length) h += '<div class="msg">You can\'t keep a ' + r.bufMi + '-mile buffer on the way to the first stop — you\'ll get there with about ' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' miles left. Stop 1 is the closest workable station.</div>';
       if (!t.stops) h += '<div class="msg ok">No stop is worth it — you\'ll arrive with about ' + Math.round(p.arriveMi) + ' miles left.</div>';
-      p.stops.forEach(function (s, i) { h += stopCard(s, i); });
-      if (t.stops) h += '<div class="lead small keep arrive">Arrive with about ' + Math.round(p.arriveMi) + ' miles left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') + '.</div>' +
+      if (p.stops.length) {
+        var shut = !!r.stopsShut;
+        h += '<button class="sec-h" id="tsStopsH" aria-expanded="' + !shut + '"><span>' + p.stops.length + ' fuel stop' + (p.stops.length === 1 ? '' : 's') + '</span><span class="chev' + (shut ? '' : ' up') + '"></span></button>';
+        if (!shut) { h += '<div class="stops-list">'; p.stops.forEach(function (s, i) { h += stopCard(s, i); }); h += '</div>'; }
+      }
+      if (t.stops) h += '<div class="lead small keep arrive">Arrive with ~' + Math.round(p.arriveMi) + ' mi left' + (S.trip.arrive === 'full' ? ' (' + Math.round(p.arriveGal / Garage.tank() * 100) + '% of the tank)' : '') + '.</div>' +
         '<div class="lead small">When choosing stops, gas left at the end is counted at ' + priceText(p.refPrice) + '/gal, the typical price along this route.</div>';
       h += idealBox();
       h += bufBox();
       h += '<div class="spdbox" id="tsSpeed"></div>';
       if (S.trip.arrive === 'full') h += topUpBox();
     }
-    if (r.cachedAgeMs > 0) h += '<div class="note saved">' + (r.fromHistory ? 'Saved trip: stations and prices from ' + agoText(r.cachedAgeMs) + ', no lookups used.' : 'Using stations and prices saved ' + agoText(r.cachedAgeMs) + ' for this route.') + ' <a href="#" id="tsRefresh">Get fresh prices</a></div>';
+    var fd = futureDepart();
+    if (fd) h += '<div class="note">Leaving ' + fd.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '. Prices are today\'s and may change by then.</div>';
+    if (r.cachedAgeMs > 0) h += '<div class="note saved">' + (r.fromHistory ? 'Saved trip · prices from ' + agoText(r.cachedAgeMs) + ' (no lookups used)' : 'Prices from ' + agoText(r.cachedAgeMs)) + ' · <a href="#" id="tsRefresh">Get fresh prices</a></div>';
     var notes = r.notes.slice();
     if (r.stale) notes.push(r.stale + ' station' + (r.stale === 1 ? ' has a price' : 's have prices') + ' older than ' + S.staleHours + ' hours (marked).');
     if (p.tooFar) notes.push(p.tooFar + ' station' + (p.tooFar === 1 ? ' was' : 's were') + ' skipped for being more than ' + S.trip.maxDetourMin + ' min out of the way.');
@@ -1810,21 +1859,28 @@
           Math.round(x.toMi - x.fromMi) + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small></span>' +
           '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>';
       }).join('') + '</div>' : '') +
-      '<div class="btn-row"><button class="btn tonal" id="tsShare">Share trip</button><button class="btn tonal" id="tsReport">Troubleshooting report</button></div>' +
-      '<div class="btn-row"><button class="btn tonal" id="tsEdit">Edit trip</button><button class="btn tonal" id="tsDone">Done</button></div></div>';
+      '<div class="btn-row three"><button class="btn tonal" id="tsShare">Share</button><button class="btn tonal" id="tsEdit">Edit trip</button><button class="btn tonal" id="tsDone">Done</button></div>' +
+      '<p class="lead small keep center"><a href="#" id="tsReport">Troubleshooting report</a></p></div>';
     if (legEx && route.legs && route.legs.some(function (L) { return L.sel > 0; })) h += '<div class="note">Google Maps picks its own roads between stops. If a leg opens on a different road than you picked here (' + route.legs.map(function (L, i) { return L.sel > 0 ? 'leg ' + (i + 1) + ': via ' + esc(L.alts[L.sel].description || 'route ' + (L.sel + 1)) : ''; }).filter(Boolean).join(', ') + '), pick that option in Maps — easiest with one link per leg.</div>';
     else if (legEx) { /* every leg on Google's usual road: nothing to add */ }
     else if (ex && altSel > 0 && !p.stops.length && !r.top) h += '<div class="note">Google Maps may open on its usual route; pick the “via ' + esc(alts[altSel].description || 'other road') + '” option there.</div>';
     else if (ex && route.routeIndex != null && altSel !== route.routeIndex && alts[altSel]) h += '<div class="note">This isn\'t the route you picked in Google Maps. Maps picks its own roads between stops — check that it goes via ' + esc(alts[altSel].description || 'this route') + '.</div>';
     if (ex && ex.tooMany && !legEx) h += '<div class="note">Google Maps takes up to 9 stops in a shared route; this trip has ' + ex.waypoints + '. Remove a stop in Maps if it complains.</div>';
-    if (route.avoidDetected || S.trip.avoid.tolls || S.trip.avoid.highways || S.trip.avoid.ferries) h += '<div class="note">Google Maps links can\'t carry “avoid” options — turn them back on in Maps (Route options).</div>';
+    if (route.avoidDetected || S.trip.avoid.tolls || S.trip.avoid.highways || S.trip.avoid.ferries) h += '<div class="note">Google Maps links don\'t carry “avoid” settings — turn them on again in Maps.</div>';
     el.innerHTML = h; show(el, true); el.scrollTop = 0;
+    if (!el._sized) {
+      el._sized = true;
+      el.addEventListener('scroll', sheetSize, { passive: true });
+      el.addEventListener('transitionend', function (e) { if (e.target === el && e.propertyName === 'max-height') { if (!userMoved) fitRoute(true); fitBtn(); } });
+    }
+    if (!userMoved) fitRoute(false);
+    fitBtn();
     startIdeal();
     $('tsClose').onclick = $('tsDone').onclick = endTrip;
     $('tsEdit').onclick = function () { show(el, false); openTrip(); };
     $('tsShare').onclick = shareTrip;
     if ($('tsRefresh')) $('tsRefresh').onclick = function (e) { e.preventDefault(); show(el, false); document.body.classList.add('trip-on'); openTrip(); findStops(true); };
-    $('tsReport').onclick = shareReport;
+    $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(); };
     if (ex) $('tsExport').onclick = function () { N.haptic(); N.openUrl(ex.url); };
     if (legEx) el.querySelectorAll('[data-legurl]').forEach(function (b) { b.onclick = function () { N.haptic(); var x = legEx[+b.dataset.legurl]; b.classList.add('done'); N.openUrl(x.url); }; });
     el.querySelectorAll('[data-top]').forEach(function (b) {
@@ -1833,19 +1889,30 @@
     if ($('tsTopMi')) $('tsTopMi').addEventListener('change', function () {
       r.topMi = Math.max(0, Math.round((parseFloat(this.value) || 0) * 10) / 10); S.trip.topUpMi = r.topMi; A.save(); r.topSel = -1; recompute(); keepScroll(showResult);
     });
-    el.querySelectorAll('[data-nav]').forEach(function (b) {
-      b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.station.id) ? '' : s.station.id, s.station.name); };
-    });
-    el.querySelectorAll('[data-why]').forEach(function (b) {
-      b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
-    });
+
+
     el.querySelectorAll('[data-route]').forEach(function (b) {
       b.onclick = function (e) { e.preventDefault(); N.haptic && N.haptic(); switchRoute(+b.dataset.route); };
     });
     bindBuf();
     renderTripSpeed();
-    el.querySelectorAll('[data-fly]').forEach(function (b) {
-      b.onclick = function () { var s = p.stops[+b.dataset.fly].c; map.setView([s.lat, s.lng], 14); };
+    if ($('tsStopsH')) $('tsStopsH').onclick = function () { r.stopsShut = !r.stopsShut; keepScroll(showResult); };
+    bindStops();
+  }
+  /** Stop cards: tap a header to open/close it (in place), price breakdown, navigate. */
+  function bindStops() {
+    var el = $('tripSheet'), r = result, p = r.plan;
+    el.querySelectorAll('[data-open]').forEach(function (b) {
+      b.onclick = function () {
+        var k = +b.dataset.open; r.openStops = r.openStops || {}; r.openStops[k] = !r.openStops[k];
+        $('stop' + k).outerHTML = stopCard(p.stops[k], k); bindStops();
+      };
+    });
+    el.querySelectorAll('[data-nav]').forEach(function (b) {
+      b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.station.id) ? '' : s.station.id, s.station.name); };
+    });
+    el.querySelectorAll('[data-why]').forEach(function (b) {
+      b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
     });
   }
   function agoText(ms) { var m = Math.round(ms / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 48 * 60 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; }
@@ -1917,7 +1984,7 @@
     if (busy) return;
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
-    Object.assign(S.trip, { link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
+    Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
     if (!(parseFloat(S.trip.milesLeft) >= 0)) S.trip.milesLeft = v.trip.milesLeft;
     A.save();
     route = v.route; alts = v.alts;
@@ -1952,26 +2019,29 @@
     return h + '</div>';
   }
   function stopCard(s, i) {
-    var c = s.c, st = c.station, br = P.BRANDS[st.brand];
-    var h = '<div class="stop"><div class="s-top" data-fly="' + i + '"><span class="num">' + (i + 1) + '</span><span class="badge" style="background:' + br.color + '">' + br.short + '</span>' +
-      '<div class="mid"><div class="nm">' + esc(st.name) + '</div><div class="sub">Mile ' + Math.round(c.d) + ' · about ' + fmtDur(s.etaSec) + ' in · arrive with ~' + Math.round(s.arriveMi) + ' mi left</div></div>' +
-      '<div class="pr"><div class="f">' + priceHtml(c.price) + '</div><div class="o">' + (c.calc.stale ? '<span class="stale">stale</span>' : 'your price') + '</div></div></div>';
-    h += '<div class="s-buy">Buy <b>' + s.buyGal.toFixed(1) + ' gal</b>' + (S.trip.fillUp ? ' (fill up)' : s.departGal >= Garage.tank() - 0.05 ? ' (fill up — cheapest gas on this route)' : ' (just enough to reach the next good price)') + ' · <b>' + money(s.cost) + '</b> · ' +
-      (c.detourMi < 0.15 ? 'right on the route' : 'detour +' + c.detourMi.toFixed(1) + ' mi / +' + Math.max(1, Math.round(c.detourMin)) + ' min' + (c.detourExact ? '' : ' (est.)')) + '</div>';
+    var c = s.c, st = c.station, br = P.BRANDS[st.brand], open = !!(result.openStops && result.openStops[i]);
+    var det = c.detourMi < 0.15 ? 'on the route' : '+' + c.detourMi.toFixed(1) + ' mi detour';
+    var h = '<div class="stop' + (open ? ' open' : '') + '" id="stop' + i + '"><button class="s-top" data-open="' + i + '" aria-expanded="' + open + '"><span class="num">' + (i + 1) + '</span><span class="badge" style="background:' + br.color + '">' + br.short + '</span>' +
+      '<span class="mid"><span class="nm">' + esc(st.name) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · buy ' + s.buyGal.toFixed(1) + ' gal' + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
+      '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + '</span><span class="chev"></span></button>';
+    if (!open) return h + '</div>';
+    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' gal' + (S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
+      ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';
     if (s.alts.length) {
       h += '<div class="alts">' + s.alts.map(function (a) {
         var ab = P.BRANDS[a.c.station.brand];
-        return '<div><span class="dot" style="background:' + ab.color + '"></span>' + esc(ab.name) + ' at mile ' + Math.round(a.c.d) + ', ' + priceText(a.c.price) +
-          (a.c.detourMi < 0.15 ? ' on route' : ', ' + a.c.detourMi.toFixed(1) + ' mi off') + ' → <b class="' + (a.extra > 0 ? 'bad' : 'good') + '">' + (a.extra >= 0 ? '+' : '') + money(a.extra) + '</b></div>';
+        return '<div><span class="dot" style="background:' + ab.color + '"></span>' + esc(ab.name) + ' · mile ' + Math.round(a.c.d) + ' · ' + priceText(a.c.price) +
+          (a.c.detourMi < 0.15 ? '' : ' · ' + a.c.detourMi.toFixed(1) + ' mi off') + ' <b class="' + (a.extra > 0 ? 'bad' : 'good') + '">' + (a.extra >= 0 ? '+' : '') + money(a.extra) + '</b></div>';
       }).join('') + '</div>';
     }
     h += '<div class="why hidden" id="why' + i + '">' + c.calc.steps.map(function (x) {
       return '<div class="ln"><span>' + esc(x.label) + '</span><span>' + (x.kind === 'base' ? priceText(x.amount) : x.amount === 0 ? 'included' : '−$' + P.fmt3(-x.amount)) + '</span></div>'; }).join('') +
       '<div class="ln tot"><span>You pay per gallon</span><span>' + priceText(c.price) + '</span></div></div>';
-    h += '<div class="s-act"><button data-why="' + i + '">How this price</button><button data-nav="' + i + '">Navigate here</button></div></div>';
+    h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div></div></div>';
     return h;
   }
+
 
   var dotsRenderer = null, dots = [];
   /**
@@ -2022,9 +2092,43 @@
         mk(c, 'pin-in best tstop" style="--bc:#0a5c32', '<span class="b">' + chosen[c.id] + '</span>' + priceHtml(c.price)).setZIndexOffset(1000).addTo(layer);
       });
     }
-    var b = L.latLngBounds(ll);
-    var sheetH = Math.min(window.innerHeight * 0.55, 420);
-    map.fitBounds(b, { paddingTopLeft: [24, 110], paddingBottomRight: [24, sheetH + 20] });
+    var nb = L.latLngBounds(ll);
+    if (!routeBounds || !routeBounds.equals(nb)) { routeBounds = nb; userMoved = false; }   // a new route: frame it again
+    fitBtn();
+  }
+
+  // ---------- keep the whole route in view above the sheet ----------
+  // The map frames the route in the part of the screen the sheet doesn't cover, and re-frames it when the sheet grows
+  // or shrinks — until you pan or zoom yourself; then a button brings the route back.
+  var routeBounds = null, userMoved = false, fitting = false;
+  function sheetCover() { var el = $('tripSheet'); return el && !el.classList.contains('hidden') ? el.getBoundingClientRect().height : 0; }
+  function fitRoute(animate) {
+    if (!routeBounds || !document.body.classList.contains('trip-on')) return;
+    fitting = true;
+    map.fitBounds(routeBounds, { paddingTopLeft: [24, 100], paddingBottomRight: [24, sheetCover() + 18], animate: animate !== false, maxZoom: 15 });
+    setTimeout(function () { fitting = false; }, animate === false ? 50 : 450);
+  }
+  function fitBtn() {
+    var b = $('btnFit');
+    if (!b) {
+      b = document.createElement('button'); b.id = 'btnFit'; b.className = 'fab-fit hidden'; b.setAttribute('aria-label', 'Show the whole route');
+      b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 15H3v4a2 2 0 0 0 2 2h4v-2H5v-4zM5 5h4V3H5a2 2 0 0 0-2 2v4h2V5zm14-2h-4v2h4v4h2V5a2 2 0 0 0-2-2zm0 16h-4v2h4a2 2 0 0 0 2-2v-4h-2v4zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg><span>Route</span>';
+      document.body.appendChild(b);
+      b.onclick = function () { N.haptic && N.haptic(); userMoved = false; fitBtn(); fitRoute(true); };
+    }
+    var on = userMoved && routeBounds && document.body.classList.contains('trip-on') && !$('tripSheet').classList.contains('hidden');
+    b.classList.toggle('hidden', !on);
+    if (on) b.style.bottom = (sheetCover() + 12) + 'px';
+  }
+  map.on('dragstart', function () { if (!fitting) { userMoved = true; fitBtn(); } });
+  map.on('zoomstart', function () { if (!fitting && routeBounds && document.body.classList.contains('trip-on')) { userMoved = true; fitBtn(); } });
+  /** The sheet can grow to ~75% of the screen while you're in the speed section; the map re-frames the route either way. */
+  function sheetSize() {
+    var el = $('tripSheet'), sp = $('tsSpeed'); if (!el || el.classList.contains('hidden')) return;
+    var tall = false;
+    if (sp) { var a = el.getBoundingClientRect(), b = sp.getBoundingClientRect(); tall = b.top < a.top + a.height * 0.5 && b.bottom > a.top + 60; }
+    if (el.classList.contains('tall') === tall) return;
+    el.classList.toggle('tall', tall);
   }
 
   // ---------- open / close ----------
@@ -2032,7 +2136,7 @@
   function closeTrip() { collect(); closePage(); if (!result) document.body.classList.remove('trip-on'); }
   function endTrip() {
     show($('tripSheet'), false); layer.clearLayers(); map.removeLayer(layer);
-    document.body.classList.remove('trip-on'); result = null; A.render();
+    document.body.classList.remove('trip-on'); result = null; routeBounds = null; fitBtn(); A.render();
   }
   window.__tripBack = function () {
     if (!$('trip').classList.contains('hidden')) { closeTrip(); if (result) show($('tripSheet'), true); return true; }
@@ -2043,7 +2147,7 @@
 
   // Google Maps -> Share directions -> Fuel+ Map
   window.onSharedText = function (text) {
-    S.trip.link = text; A.save(); route = null; model = null; result = null; replay = null;
+    S.trip.link = text; S.trip.src = 'link'; A.save(); route = null; model = null; result = null; replay = null;
     show($('tripSheet'), false); openTrip();
   };
   if (window.__pendingShare) { var t0 = window.__pendingShare; window.__pendingShare = null; window.onSharedText(t0); }
