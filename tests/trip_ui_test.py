@@ -135,9 +135,9 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-s1b-pinned.png')
         pos = pg.evaluate('''() => { const sh = document.getElementById('tripSheet'), box = document.getElementById('tsSpeed'), stick = box.querySelector('.spd-stick');
           sh.scrollTop += box.getBoundingClientRect().bottom - sh.getBoundingClientRect().top - 60;
-          return [sh.getBoundingClientRect().top, stick.getBoundingClientRect().top, stick.getBoundingClientRect().bottom, box.getBoundingClientRect().bottom]; }''')
+          return [sh.getBoundingClientRect().top, stick.getBoundingClientRect().top, stick.getBoundingClientRect().bottom, box.getBoundingClientRect().bottom, sh.scrollTop + sh.clientHeight >= sh.scrollHeight - 2]; }''')
         pg.wait_for_timeout(150); print('  past the last leg (sheet top, chart top, chart bottom, box bottom):', [round(x) for x in pos])
-        assert pos[1] < pos[0] - 5 and 0 <= pos[3] - pos[2] < 20, 'chart scrolls away with the last leg'
+        assert (pos[4] and pos[2] <= pos[3] + 1) or (pos[1] < pos[0] - 5 and 0 <= pos[3] - pos[2] < 20), 'chart scrolls away with the last leg (or the sheet ends first)'
         x0 = pg.get_attribute('#tChart .sel-l', 'x1')
         pg.evaluate("() => { const r = document.getElementById('lgR1'); r.value = 6; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
         pg.evaluate("() => { const r = document.getElementById('lgR0'); r.value = -5; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(150)
@@ -241,7 +241,9 @@ with sync_playwright() as p:
         pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         bt = ft(pg, '#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
-        assert pg.locator('.buf-marks .bm').count() >= 1 and 'saves' in bt, bt
+        assert pg.locator('.buf-marks .bm.good').count() >= 1 and pg.locator('.buf-marks .bm.base').count() == 1 and 'saves' in bt, bt
+        labels = pg.evaluate("[...document.querySelectorAll('.buf-marks .bm')].map(b => b.className.replace('bm ', '') + ':' + b.textContent)"); print('  markers:', labels)
+        assert any(l.startswith('good') and '−$' in l for l in labels) and any(l.startswith('base') for l in labels)
         pg.screenshot(path=f'{OUT}/{name}-t2d-buffer-marks.png')
         mk = pg.evaluate("Math.max(...window.__trip.state().result.sweep.filter(x => x.mark && x.mi < 30).map(x => x.mi))")
         before = pg.evaluate('window.__trip.state().result.plan.totals.net')
@@ -256,7 +258,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-t3-result-bottom.png')
         pg.click('#tsExport'); url = pg.evaluate('window.__lastUrl'); print('  export:', url)
         assert url.startswith('https://www.google.com/maps/dir/?api=1') and 'waypoints=' in url
-        assert 'trip cost' in txt and 'round trip cost' in txt, 'trip + round trip cost shown'
+        assert 'trip cost' in txt and 'round trip cost' not in txt, 'no more drive-back estimate'
         # arrive with the most gas, then top up within 1.0 mi of the destination
         pg.click('#tsEdit'); pg.wait_for_timeout(300)
         pg.click('#tArrive [data-a="full"]'); pg.fill('#tTopMi', '1.0'); pg.fill('#tTankPrice', '3.10')
@@ -268,7 +270,6 @@ with sync_playwright() as p:
         pg.evaluate("document.querySelector('.topbox').scrollIntoView()"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t5-topup.png')
         print('  KPIs:', ' / '.join(pg.locator('#tripSheet .kpis').first.inner_text().split('\n')))
-        print('  ROUND:', pg.locator('.topbox').nth(1).inner_text().replace('\n', ' | '))
         pg.click('#tsExport'); url2 = pg.evaluate('window.__lastUrl'); print('  export with top-up:', url2)
         assert url2.count('%7C') == url.count('%7C') + 1 or 'waypoints=' in url2
         pg.fill('#tsTopMi', '0.5'); pg.dispatch_event('#tsTopMi', 'change'); pg.wait_for_timeout(300)
@@ -429,6 +430,22 @@ with sync_playwright() as p:
         pg.evaluate("document.querySelector('.leg-links').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-l2-leglinks.png')
         pg.click('#tsDone'); pg.wait_for_timeout(200)
+        # the Round trip switch on a one-way link: adds the way back as its own leg, just like importing a round trip
+        ONEWAY = ('https://www.google.com/maps/dir/North+Little+Rock,+AR+72114/Dallas,+TX/data=!4m14!4m13!1m5!1m1!1s0x1:0x2!2m2!1d-92.2671!2d34.7695'
+                  '!1m5!1m1!1s0x3:0x4!2m2!1d-96.797!2d32.7767!3e0')
+        pg.evaluate("window.__routeBodies = []; window.__mocks.link = {url: %s}; onSharedText('https://maps.app.goo.gl/OnEwAy1')" % json.dumps(ONEWAY))
+        pg.wait_for_timeout(900)
+        assert pg.locator('#tParsed .stops li').count() == 2, ft(pg, '#tParsed')
+        pg.check('#tRound', force=True); pg.dispatch_event('#tRound', 'change'); pg.wait_for_timeout(300)
+        txt = ft(pg, '#tParsed'); print('  round trip switch on:', txt.replace('\n', ' | '))
+        assert pg.locator('#tParsed .stops li').count() == 3 and 'Back to start' in txt and '2 legs' in txt, txt
+        pg.click('#tGo'); pg.wait_for_timeout(1500)
+        assert pg.locator('.leg-pick').count() == 2 and '636 mi' in ft(pg, '.rc-top'), ft(pg, '#tRouteInfo')
+        pg.evaluate("document.querySelector('#tRound').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-l3-roundswitch.png')
+        pg.uncheck('#tRound', force=True); pg.dispatch_event('#tRound', 'change'); pg.wait_for_timeout(300)
+        assert pg.locator('#tParsed .stops li').count() == 2 and pg.locator('.leg-pick').count() == 0, 'switch off: one way again'
+        pg.click('#tClose'); pg.wait_for_timeout(200)
         pg.evaluate("window.__gmapsAnswer = null")
         # debug log: on at level 4, records the trip steps, never the key
         lg = pg.evaluate('FLog.text()')

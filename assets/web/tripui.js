@@ -7,7 +7,7 @@
 
   // ---------- persistent inputs ----------
   S.trip = Object.assign({ link: '', from: '', to: '', milesLeft: '', bufferMi: 40, fillUp: false, minSave: 1, timeValue: 0,
-    arrive: 'buffer', topUpMi: 1.0, roundTrip: true, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
+    arrive: 'buffer', topUpMi: 1.0, returnTrip: false, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
 
   // ---------- native calls as promises ----------
@@ -88,7 +88,8 @@
       '<div class="field col"><div class="lbl">From</div><input type="text" id="tFrom" placeholder="Your location" value="' + esc(t.from) + '"></div>' +
       '<div class="field col"><div class="lbl">To</div><input type="text" id="tTo" placeholder="City, address or place" value="' + esc(t.to) + '"></div></details>' +
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
-        return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div></div>';
+        return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
+      '<div class="field"><div class="lbl">Round trip<small>Come back to where you started. The way back is its own leg, so you pick its roads too — the same as importing a round trip from Google Maps.</small></div>' + sw('tRound', !!t.returnTrip) + '</div></div>';
 
     h += '<div class="card" id="tGarage"></div><div class="card spd" id="tSpeed"></div>';
 
@@ -105,7 +106,6 @@
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up station within (mi of destination)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
       '<span></span></div>' +
-      '<div class="field"><div class="lbl">Estimate the round trip<small>the drive back on the same roads, at today\'s prices (skipped when the trip already ends where it starts)</small></div>' + sw('tRound', t.roundTrip) + '</div>' +
       '<div class="sub-h">Cruising speed</div>' +
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
       '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', (S.speed.rule && S.speed.rule.over) || 9, 1) + num('tRuleCap', '…but no faster than (mph)', (S.speed.rule && S.speed.rule.cap) || 70, 1) + '</div>' +
@@ -122,6 +122,11 @@
     bindHist();
     $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; renderInfo(); readLink(); }, 400));
     ['tFrom', 'tTo'].forEach(function (id) { $(id).addEventListener('input', function () { route = null; model = null; replay = null; renderInfo(); renderStops(); }); });
+    $('tRound').onchange = function () {
+      collect();
+      if (route && syncReturn(route)) { model = null; replay = null; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
+      renderStops(); renderInfo();
+    };
     $('tAvoid').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
       b.classList.toggle('on'); model = null; replay = null; renderInfo();
@@ -173,7 +178,7 @@
     t.fillUp = $('tMode').querySelector('.on').dataset.m === 'fill';
     t.arrive = $('tArrive').querySelector('.on').dataset.a;
     t.topUpMi = Math.max(0, Math.round((parseFloat($('tTopMi').value) || 0) * 10) / 10);
-    t.roundTrip = $('tRound').checked;
+    t.returnTrip = $('tRound').checked;
     t.altCompare = $('tAltCmp').checked; t.altMinSave = Math.max(0, parseFloat($('tAltSave').value) || 0);
     t.tankPrice = $('tTankPrice').value.trim();
     t.milesLeft = $('tMiles').value; t.bufferMi = Math.max(0, parseFloat($('tBuffer').value) || 0);
@@ -408,9 +413,10 @@
     var el = $('tParsed'); if (!el || parsing) return;
     if (!route) { el.innerHTML = ''; return; }
     var r = route;
+    if (syncReturn(r) && model) { model = null; renderInfo(); }
     var h = '<ol class="stops">' + r.stops.map(function (s, i) {
       var tag = i === 0 ? 'Start' : i === r.stops.length - 1 ? 'End' : 'Stop';
-      var line = '<li><span class="tag">' + tag + '</span><div class="st-a">' + esc(stopLine(s));
+      var line = '<li><span class="tag">' + tag + '</span><div class="st-a">' + (s.ret ? '<span class="ret">Back to start · </span>' : '') + esc(stopLine(s));
       if (s.lat != null || s.current) line += s.placeId || s.fromLink ? ' <span class="ok-mark" title="exact">✓</span>' : '';
       if (s.err) line += '<div class="msg err">' + esc(s.err) + '</div>';
       if (s.choices) {
@@ -560,11 +566,30 @@
   // Google Maps (and the Routes API) only offer route options for a trip from A to B. So with stops in between, each
   // leg is routed on its own — with all of its options — and the picks are joined into one trip for the fuel plan.
   /** Ends where it started (a round trip planned as legs): the "drive back" estimate would count the way home twice. */
-  function loopTrip() {
-    var a = route && route.stops[0], b = route && route.stops[route.stops.length - 1];
+  function loopTrip(r) {
+    r = r || route;
+    var a = r && r.stops[0], b = r && r.stops[r.stops.length - 1];
     if (!a || !b || a === b) return false;
     if (a.current || b.current) return !!(a.current && b.current);
     return a.lat != null && b.lat != null && T.hav(a, b) < 0.5;
+  }
+  /**
+   * The "Round trip" switch: adds the way back to the start as a last stop (marked ret), or takes it off. Not added when
+   * the trip already ends where it starts. Returns true when the stops changed.
+   */
+  function syncReturn(r) {
+    if (!r || !r.stops || r.stops.length < 2) return false;
+    var before = JSON.stringify(r.stops.filter(function (x) { return x.ret; }));
+    r.stops = r.stops.filter(function (x) { return !x.ret; });
+    if (S.trip.returnTrip && r.stops.length >= 2 && !loopTrip(r)) {
+      var a = r.stops[0], back = Object.assign({}, a, { ret: true, choices: null });
+      if (a.current) {
+        var me = A.me();
+        if (me) back = { ret: true, lat: me.lat, lng: me.lng, fromLink: true, address: me.lat.toFixed(6) + ',' + me.lng.toFixed(6), label: 'Your location', short: 'Your location' };
+      }
+      r.stops.push(back);
+    }
+    return JSON.stringify(r.stops.filter(function (x) { return x.ret; })) !== before;
   }
   function multiLeg(r) { return !!(r && r.stops && r.stops.length > 2); }
   function legName(r, i) { return stopName(r.stops[i]) + ' → ' + stopName(r.stops[i + 1]); }
@@ -588,6 +613,8 @@
     // same pick as before when this leg was routed already
     var sel = 0, want = prev && prev.alts && prev.alts[prev.sel] && prev.alts[prev.sel].description;
     if (want) cx.alts.forEach(function (a, k) { if (a.description === want) sel = k; });
+    // the way out of a Google Maps link made into a round trip: start on the route option picked in Maps
+    else if (i === 0 && r.mapsRoutes && r.routeIndex != null && r.stops.filter(function (x) { return !x.ret; }).length === 2) sel = Math.max(0, matchRoute(cx.alts, r.mapsRoutes[Math.min(r.routeIndex, r.mapsRoutes.length - 1)]).index);
     return { key: legKey(r, i), alts: cx.alts, sel: sel, mapsRoutes: sub.mapsRoutes };
   }
   /** Prefetch each leg's route options from Google Maps while you look over the trip (free; saved for 2 hours). */
@@ -654,6 +681,7 @@
         $('tParsed').scrollIntoView({ block: 'center' });
         throw new Error('Pick the right address for each stop marked “Which one?”.');
       }
+      syncReturn(r);
       if (multiLeg(r)) {
         // a stop in between: Google only offers route options trip by trip, so route each leg on its own and join them
         var nL = r.stops.length - 1, doneL = 0;
@@ -1361,49 +1389,84 @@
     sw.forEach(function (x) { if (!best || Math.abs(x.mi - mi) < Math.abs(best.mi - mi)) best = x; });
     return best;
   }
+  /**
+   * Markers on the buffer slider: gray = your usual buffer; green = where the trip gets cheaper than that, yellow =
+   * where it costs more. One marker per change in cost (at the buffer nearest your usual one that gets that cost),
+   * labeled with the difference, so a run of buffers that all cost the same shows once.
+   */
+  function bufMarks(sw, base) {
+    var out = [], runs = [], prev = null;
+    if (!base.ok) return out;
+    sw.forEach(function (x) {
+      if (!x.ok) { prev = null; return; }
+      var d = x.net - base.net, k = Math.abs(d) < 0.05 ? 0 : Math.round(d * 20);    // same cost to within 5¢ = one run
+      if (prev && prev.k === k && (prev.mi < base.mi) === (x.mi < base.mi)) prev.rows.push(x);
+      else { prev = { k: k, d: d, mi: x.mi, rows: [x] }; runs.push(prev); }
+    });
+    runs.forEach(function (run) {
+      if (!run.k) return;
+      var rows = run.rows, below = rows[0].mi < base.mi;
+      var x = below ? rows[rows.length - 1] : rows[0];          // the edge nearest your usual buffer
+      out.push({ mi: x.mi, d: run.d, kind: run.d < 0 ? 'good' : 'bad', row: x });
+    });
+    return out;
+  }
   function bufBox() {
     var r = result, sw = r.sweep;
     var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
     if (!sw) return h + '<div class="lead small keep">Checking what other buffers would cost…</div></div>';
-    var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi);
-    h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, cur) + '</span></div>';
-    h += '<div class="buf-track"><div class="buf-marks">' + sw.filter(function (x) { return x.mark; }).map(function (x) {
-      var d = cur.ok ? cur.net - x.net : null;
-      return '<span class="bm" style="left:' + ((x.mi - min) / (max - min) * 100).toFixed(2) + '%"><i></i>' + (d != null && d >= 0.05 ? '−' + money(d) : x.mi) + '</span>';
-    }).join('') + sw.filter(function (x) { return !x.ok; }).slice(0, 1).map(function (x) {
-      return '<span class="bno" style="left:' + ((x.mi - min) / (max - min) * 100).toFixed(2) + '%"></span>';
+    var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
+    if (!base.ok) base = cur;
+    var pos = function (mi) { return ((mi - min) / (max - min) * 100).toFixed(2); };
+    h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, base) + '</span></div>';
+    var mk = bufMarks(sw, base), lastL = -99, lastRow = 1;
+    h += '<div class="buf-track"><div class="buf-marks">';
+    // labels in two rows when markers are close, so they don't overlap
+    mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; }).forEach(function (m) {
+      var L = +pos(m.mi), row = L - lastL < 14 ? 1 - lastRow : 0;
+      lastL = L; lastRow = row;
+      var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
+      h += '<span class="bm ' + m.kind + (row ? ' r2' : '') + '" style="left:' + L + '%"' + (m.kind !== 'base' ? ' data-bm="' + m.mi + '"' : '') + '><em>' + lab + '</em><i></i></span>';
+    });
+    h += sw.filter(function (x) { return !x.ok; }).slice(0, 1).map(function (x) {
+      return '<span class="bno" style="left:' + pos(x.mi) + '%"></span>';
     }).join('') + '</div><input type="range" id="tsBuf" min="' + min + '" max="' + max + '" step="1" value="' + r.bufMi + '"></div>';
     h += '<div class="buf-scale"><span>' + min + ' mi</span><span>' + max + ' mi</span></div>';
-    var lower = sw.filter(function (x) { return x.mark && x.mi < r.bufMi && cur.ok && cur.net - x.net >= 0.05; });
-    var hint = lower.length ? lower[lower.length - 1] : null;
     if (!cur.ok) {
       var okRows = sw.filter(function (x) { return x.ok; });
       h += '<div class="lead small keep">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : 'No buffer works — check the miles left.') + '</div>';
-    } else if (hint) {
-      var hs = hint.plan.stops.filter(function (s) { return !cur.plan.stops.some(function (c) { return c.c.id === s.c.id; }); })[0];
-      h += '<div class="lead small keep">Marks show where a smaller buffer saves money. Down to ' + hint.mi + ' mi saves ' + money(cur.net - hint.net) +
-        (hs ? ' — it can reach ' + esc(hs.c.station.name) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ')' : '') + '.</div>';
-    } else h += '<div class="lead small">A smaller buffer wouldn\'t save anything on this trip.</div>';
+    } else {
+      var best = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d || b2.mi - a2.mi; })[0];
+      if (best) {
+        var hs = best.row.plan.stops.filter(function (s2) { return !base.plan.stops.some(function (c) { return c.c.id === s2.c.id; }); })[0];
+        h += '<div class="lead small keep">Cheapest: ' + best.mi + ' mi saves ' + money(-best.d) + ' vs. your usual ' + base.mi + ' mi' +
+          (hs ? ' — it reaches ' + esc(hs.c.station.name) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ')' : '') + '.</div>';
+      } else h += '<div class="lead small keep">No buffer makes this trip cheaper than your usual ' + base.mi + ' mi.</div>';
+      h += '<div class="lead small">Gray: your usual buffer. Green: buffers where the trip costs less than with it, and by how much. Yellow: where it costs more. Tap a marker to jump there.</div>';
+    }
     if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small keep">For this trip only — your usual buffer is ' + S.trip.bufferMi + ' mi. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer</a></div>';
     return h + '</div>';
   }
-  function bufText(x, cur) {
+  function bufText(x, base) {
     if (!x.ok) return 'can\'t keep this much — no priced station in reach';
     var dip = x.plan.firstDip ? ' · dips below it before the first stop' : '';
-    if (x === cur || !cur.ok) return x.plan.stops.length + ' stop' + (x.plan.stops.length === 1 ? '' : 's') + dip;
-    var d = x.net - cur.net;
-    return (Math.abs(d) < 0.05 ? 'same cost' : d < 0 ? 'saves ' + money(-d) : money(d) + ' more') + ' · ' + x.plan.stops.length + ' stop' + (x.plan.stops.length === 1 ? '' : 's') + dip;
+    var n = x.plan.stops.length + ' stop' + (x.plan.stops.length === 1 ? '' : 's') + dip;
+    if (x === base || !base.ok) return n + (x === base ? ' · your usual' : '');
+    var d = x.net - base.net;
+    return (Math.abs(d) < 0.05 ? 'same cost as usual' : d < 0 ? 'saves ' + money(-d) + ' vs. usual' : money(d) + ' more than usual') + ' · ' + n;
   }
   function bindBuf() {
     var inp = $('tsBuf'); if (!inp) return;
     Garage.guardRange(inp);
-    var r = result, cur = swRow(r.bufMi);
-    inp.oninput = function () { var x = swRow(+inp.value); $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, cur); };
+    var r = result, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
+    if (!base.ok) base = cur;
+    inp.oninput = function () { var x = swRow(+inp.value); $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, base); };
+    $('tsBufBox').querySelectorAll('[data-bm]').forEach(function (m) { m.onclick = function () { inp.value = m.dataset.bm; inp.onchange(); }; });
     inp.onchange = function () {
       var x = swRow(+inp.value);
       if (x.mi === r.bufMi) { inp.value = x.mi; return; }
       LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
-      if (!x.ok) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, cur); toastMsg('No plan can keep ' + x.mi + ' mi on this trip.'); return; }
+      if (!x.ok) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg('No plan can keep ' + x.mi + ' mi on this trip.'); return; }
       N.haptic && N.haptic();
       var fo = Object.assign({}, x.opts, { lite: false }); r.plan = T.plan(fo); r.opts = fo; r.bufMi = x.mi; r.topSel = -1;   // the slider's quick plan -> the full one
       recompute(); keepScroll(showResult);
@@ -1489,19 +1552,10 @@
     if (r.topSel >= r.tops.length) r.topSel = -1;
     var top = r.topSel >= 0 ? r.tops[r.topSel] : null;
     r.top = top;
-    if (!p.ok) { r.acc = null; r.back = null; return; }
+    if (!p.ok) { r.acc = null; return; }
     var outLeg = { stops: p.stops.map(function (s) { return { arriveGal: s.arriveGal, buyGal: s.buyGal, price: s.c.price }; }), arriveGal: p.arriveGal };
     if (top) { outLeg.stops.push({ arriveGal: top.arriveGal, buyGal: top.buyGal, price: top.c.price }); outLeg.arriveGal = top.endGal; }
     var legs = [outLeg];
-    r.back = null;
-    if (S.trip.roundTrip && !loopTrip()) {
-      var rm = T.reverseModel(model);
-      var bo = Object.assign({}, o, { model: rm, cands: T.mirror(r.cands, model.totalMi), startGal: outLeg.arriveGal, lastFull: false, refPrice: 0, stopPenalty: S.trip.minSave, detourPenalty: S.trip.minSave });   // typical price, recomputed for the drive back
-      var bp = T.plan(bo);
-      bp.stops && bp.stops.forEach(function (s) { s.c = Object.assign({}, s.c); });
-      r.back = { plan: bp, model: rm, startGal: outLeg.arriveGal };
-      if (bp.ok) legs.push({ stops: bp.stops.map(function (s) { return { arriveGal: s.arriveGal, buyGal: s.buyGal, price: s.c.price }; }), arriveGal: bp.arriveGal });
-    }
     var tp = parseFloat(S.trip.tankPrice);
     r.startPrice = tp > 0 ? tp : p.refPrice;
     r.acc = T.account(r.startGal, r.startPrice, legs);
@@ -1549,7 +1603,6 @@
       h += bufBox();
       h += '<div class="spdbox" id="tsSpeed"></div>';
       if (S.trip.arrive === 'full') h += topUpBox();
-      if (r.back) h += backBox();
     }
     if (r.cachedAgeMs > 0) h += '<div class="note saved">' + (r.fromHistory ? 'Saved trip: stations and prices from ' + agoText(r.cachedAgeMs) + ', no lookups used.' : 'Using stations and prices saved ' + agoText(r.cachedAgeMs) + ' for this route.') + ' <a href="#" id="tsRefresh">Get fresh prices</a></div>';
     var notes = r.notes.slice();
@@ -1677,7 +1730,8 @@
     Object.assign(S.trip, { link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
     if (!(parseFloat(S.trip.milesLeft) >= 0)) S.trip.milesLeft = v.trip.milesLeft;
     A.save();
-    route = v.route; alts = v.alts; altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
+    route = v.route; alts = v.alts;
+    S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
     rawRoute = alts[altSel]; result = null; parsing = null;
     replay = { id: id, t: o.t, stations: v.stations };
     model = T.buildRoute(rawRoute, carModel());
@@ -1705,20 +1759,6 @@
         '<button data-top="' + k + '">' + (on ? 'Added ✓' : 'Add') + '</button></div>';
     });
     if (r.top) h += '<div class="s-act"><button data-nav="top">Navigate to the top-up</button></div>';
-    return h + '</div>';
-  }
-  function backBox() {
-    var r = result, b = r.back, bp = b.plan, acc = r.acc;
-    var h = '<div class="topbox"><div class="tb-h">Round trip estimate</div>';
-    if (!bp.ok) {
-      return h + '<div class="lead small keep">Couldn\'t plan the drive back on these roads with your buffer (starting with ~' + Math.round(b.startGal / model.combGpm) + ' mi of gas).</div></div>';
-    }
-    var there = acc.legs[0], back = acc.legs[1];
-    h += '<div class="kpis two"><div><b>' + money(there.cost + back.cost) + '</b><span>round trip cost</span></div><div><b>' + money(there.spend + back.spend) + '</b><span>at the pump both ways</span></div></div>';
-    h += '<div class="lead small">There ' + money(there.cost) + ' + back ' + money(back.cost) + '. The drive back starts with what\'s left when you arrive (~' + Math.round(b.startGal / model.combGpm) + ' mi)' +
-      (bp.stops.length ? ' and stops at ' + bp.stops.map(function (s) {
-        return esc(P.BRANDS[s.c.station.brand].name) + ' ' + Math.round(s.c.d) + ' mi into the drive back (' + s.buyGal.toFixed(1) + ' gal, ' + priceText(s.c.price) + ')'; }).join(', ')
-        : ' — no stop needed') + '. Home with ~' + Math.round(bp.arriveMi) + ' mi left. Same roads in reverse at today\'s prices; plan it for real before you head back.</div>';
     return h + '</div>';
   }
   function stopCard(s, i) {

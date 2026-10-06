@@ -311,12 +311,20 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .buf-read { display: flex; gap: 10px; align-items: baseline; margin: 6px 0 2px; }
 .buf-read b { font-size: 1.25rem; }
 .buf-read span { color: var(--ink-2); font-size: .92rem; }
-.buf-track { position: relative; padding-top: 26px; }
+.buf-track { position: relative; padding-top: 40px; }
 .buf-track input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); height: 28px; }
-.buf-marks { position: absolute; left: 11px; right: 11px; top: 0; height: 40px; pointer-events: none; }
-.buf-marks .bm { position: absolute; transform: translateX(-50%); font-size: .72rem; font-weight: 700; color: var(--save); white-space: nowrap; top: 0; }
-.buf-marks .bm i { position: absolute; left: 50%; top: 17px; width: 3px; height: 22px; margin-left: -1.5px; border-radius: 2px; background: var(--save); }
-.buf-marks .bno { position: absolute; top: 26px; right: 0; height: 28px; background: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--warn) 35%, transparent) 4px 8px); border-radius: 6px; }
+.buf-marks { position: absolute; left: 11px; right: 11px; top: 0; height: 68px; pointer-events: none; }
+.buf-marks .bm { position: absolute; top: 0; width: 0; height: 68px; pointer-events: auto; }
+.buf-marks .bm em { position: absolute; left: 0; top: 0; transform: translateX(-50%); font-style: normal; font-size: .72rem; font-weight: 800; white-space: nowrap; padding: 1px 4px; border-radius: 6px; }
+.buf-marks .bm.r2 em { top: 16px; }
+.buf-marks .bm.good em { color: var(--save); background: var(--save-bg); }
+.buf-marks .bm.bad em { color: #8a6100; background: #fff3c4; }
+.buf-marks .bm.base em { color: var(--ink-2); font-weight: 700; }
+.buf-marks .bm i { position: absolute; left: -2px; top: 34px; width: 4px; height: 26px; border-radius: 2px; background: var(--ink-2); }
+.buf-marks .bm.good i { background: var(--save); }
+.buf-marks .bm.bad i { background: #e0a800; }
+.buf-marks .bm.base i { background: #9aa3b2; width: 6px; left: -3px; }
+.buf-marks .bno { position: absolute; top: 40px; right: 0; height: 28px; background: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--warn) 35%, transparent) 4px 8px); border-radius: 6px; }
 .buf-scale { display: flex; justify-content: space-between; color: var(--ink-2); font-size: .75rem; margin-top: 2px; }
 
 /* ---- garage ---- */
@@ -535,3 +543,8 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .leg-link small { display: block; font-size: 12.5px; color: var(--ink-2); }
 .leg-link svg { flex: none; width: 20px; height: 20px; fill: var(--accent); }
 .leg-link.done .leg-n { background: var(--save); }
+
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .buf-marks .bm.bad em { color: #ffd45c; background: rgba(224, 168, 0, .18); } }
+:root[data-theme="dark"] .buf-marks .bm.bad em { color: #ffd45c; background: rgba(224, 168, 0, .18); }
+.buf-marks .bm i { pointer-events: none; }
+.st-a .ret { color: var(--accent); font-weight: 700; }
