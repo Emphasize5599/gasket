@@ -17,9 +17,12 @@
   const brandAt = { Exxon: [[38, 3.299, 0.3], [150, 3.149, 0.4], [262, 3.259, 0.2], [317.4, 3.459, 0.2]], Mobil: [[60, 3.349, 0.2], [205, 3.199, 1.6]], CITGO: [[118, 3.059, 2.4], [240, 3.329, 0.3]], "Sam's Club Gas Station": [[176, 2.999, 3.2]] };
   window.__mocks = {
     route: (body) => {
-      window.__routeBody = body;
-      const main = { description: 'I-30 W', routeLabels: ['DEFAULT_ROUTE'], distanceMeters: total * 1609.344, duration: '17600s', polyline: { encodedPolyline: enc(lineI30) }, legs: [{ distanceMeters: total * 1609.344, steps }] };
-      const alt = Object.assign({}, main, { polyline: { encodedPolyline: enc(line) }, description: 'US-67 S and I-30 W', routeLabels: ['DEFAULT_ROUTE_ALTERNATE'], distanceMeters: (total + 12) * 1609.344, duration: '18300s' });
+      window.__routeBody = body; (window.__routeBodies = window.__routeBodies || []).push(body);
+      // Dallas -> North Little Rock (the way home on a round trip): same roads, driven the other way
+      const o = body.origin || {}, back = o.placeId === 'P-dallas' || (o.location && o.location.latLng.latitude < 34);
+      const L1 = back ? lineI30.slice().reverse() : lineI30, L2 = back ? line.slice().reverse() : line, st = back ? steps.slice().reverse() : steps;
+      const main = { description: back ? 'I-30 E' : 'I-30 W', routeLabels: ['DEFAULT_ROUTE'], distanceMeters: total * 1609.344, duration: '17600s', polyline: { encodedPolyline: enc(L1) }, legs: [{ distanceMeters: total * 1609.344, steps: st }] };
+      const alt = Object.assign({}, main, { polyline: { encodedPolyline: enc(L2) }, description: back ? 'I-30 E and US-67 N' : 'US-67 S and I-30 W', routeLabels: ['DEFAULT_ROUTE_ALTERNATE'], distanceMeters: (total + 12) * 1609.344, duration: '18300s' });
       return { routes: body.computeAlternativeRoutes ? [main, alt] : [main] };
     },
     find: (q, lat, lng, radius) => {

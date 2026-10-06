@@ -522,3 +522,16 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .ideal-big small { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
 .ideal-sub { font-size: 13.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
 .ideal-sub b { color: var(--ink); } .ideal-sub b.good { color: var(--save); }
+
+/* trips with stops in between: one route picker per leg, one link per leg */
+.leg-pick { margin: 8px 0 14px; }
+.leg-pick-h { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px; margin-bottom: 6px; }
+.leg-n { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 800; }
+.leg-links { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.leg-links .sub-h { margin: 2px 0 2px; }
+.leg-link { display: flex; align-items: center; gap: 10px; text-align: left; background: var(--surface-2); border-radius: 14px; padding: 10px 12px; color: var(--ink); width: 100%; }
+.leg-link .ll-t { flex: 1; min-width: 0; }
+.leg-link b { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leg-link small { display: block; font-size: 12.5px; color: var(--ink-2); }
+.leg-link svg { flex: none; width: 20px; height: 20px; fill: var(--accent); }
+.leg-link.done .leg-n { background: var(--save); }

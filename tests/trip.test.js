@@ -225,4 +225,31 @@ assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
   assert.equal(T.idealStart(Object.assign({}, oi, { startGal: 12 }), 2.6, ref), null);
   console.log('ideal start:', id.gal.toFixed(1), 'gal (add', id.addGal.toFixed(1) + ') saves $' + id.saves.toFixed(2), '| rows', id.rows.length);
 }
+// ---- trips with stops in between: each leg routed on its own, then joined ----
+{
+  const back = { distanceMeters: route.distanceMeters, duration: '15700s', polyline: { encodedPolyline: T.encodePolyline(line.slice().reverse()) }, legs: [{ steps: steps.slice() }] };
+  const out = Object.assign({}, route, { description: 'I-40 E' }); back.description = 'I-40 W';
+  const j = T.joinRoutes([out, back]);
+  const mj = T.buildRoute(j, car);
+  assert.ok(Math.abs(mj.totalMi - 2 * totalMi) < 0.05 && mj.legEnds.length === 2 && Math.abs(mj.legEnds[0] - totalMi) < 0.05, JSON.stringify(mj.legEnds));
+  assert.equal(j.duration, '31400s'); assert.equal(j.description, 'I-40 E / I-40 W');
+  assert.equal(T.decodePolyline(j.polyline.encodedPolyline).length, 2 * line.length - 1, 'shared end point kept once');
+  // a station by the road is passed twice on an out-and-back trip
+  const p40 = mj.pointAt(40);
+  const pr2 = T.projectLegs(mj, { lat: p40.lat + 0.005, lng: p40.lng }, 3);
+  assert.equal(pr2.length, 2); assert.ok(Math.abs(pr2[0].along - 40) < 1 && Math.abs(pr2[1].along - (2 * totalMi - 40)) < 1, JSON.stringify(pr2));
+  assert.equal(T.projectLegs(m, { lat: p40.lat, lng: p40.lng }, 3).length, 1, 'one-leg trips: once');
+  // the way back covers the same roads: its search pieces are skipped
+  const chs = T.chunks(mj, 125);
+  const skipped = chs.filter((c) => T.coveredBefore(mj, c)).length;
+  assert.ok(skipped >= chs.length / 2 - 1 && skipped < chs.length, skipped + ' of ' + chs.length);
+  // links: the whole trip, or one per leg with that leg's fuel stops
+  const rt = { stops: [{ address: 'Little Rock, AR', lat: 35, lng: -92 }, { address: 'Memphis, TN', lat: 35, lng: -87 }, { address: 'Little Rock, AR', lat: 35, lng: -92 }] };
+  const fs = [{ c: { d: 40, lat: 35, lng: -91.3, station: { id: 'gA', address: '1 A St, X, AR 72001' } } }, { c: { d: 400, lat: 35, lng: -89, station: { id: 'gB', address: '2 B St, Y, TN 38001' } } }];
+  const one = T.exportUrl(rt, fs, mj), per = T.exportLegs(rt, fs, mj);
+  assert.equal(one.waypoints, 3); assert.equal(per.length, 2);
+  assert.ok(/origin=Little%20Rock/.test(per[0].url) && /destination=Memphis/.test(per[0].url) && /waypoints=1%20A%20St/.test(per[0].url) && !/2%20B%20St/.test(per[0].url), per[0].url);
+  assert.ok(/origin=Memphis/.test(per[1].url) && /2%20B%20St/.test(per[1].url) && per[1].fuelStops === 1, per[1].url);
+  console.log('legs: joined', Math.round(mj.totalMi), 'mi; way-back pieces skipped', skipped, 'of', chs.length);
+}
 console.log('trip tests passed (1,000-mile / 300-station plan in ' + ms + ' ms, ' + p.stops.length + ' stops, saves $' + p.savings.toFixed(2) + ')');

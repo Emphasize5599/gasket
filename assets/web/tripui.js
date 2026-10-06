@@ -105,7 +105,7 @@
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up station within (mi of destination)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '<div class="grid2">' + num('tTankPrice', 'Gas in your tank cost ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
       '<span></span></div>' +
-      '<div class="field"><div class="lbl">Estimate the round trip<small>the drive back on the same roads, at today\'s prices</small></div>' + sw('tRound', t.roundTrip) + '</div>' +
+      '<div class="field"><div class="lbl">Estimate the round trip<small>the drive back on the same roads, at today\'s prices (skipped when the trip already ends where it starts)</small></div>' + sw('tRound', t.roundTrip) + '</div>' +
       '<div class="sub-h">Cruising speed</div>' +
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
       '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', (S.speed.rule && S.speed.rule.over) || 9, 1) + num('tRuleCap', '…but no faster than (mph)', (S.speed.rule && S.speed.rule.cap) || 70, 1) + '</div>' +
@@ -265,6 +265,7 @@
     clearInterval(scanCreep);
     parseBar(1);
     previewCities(parsed);
+    scanLegs(parsed);
     return parsed;
   }
 
@@ -377,8 +378,11 @@
   async function openInGoogleMaps(url) {
     var u = url.replace(/^https?:\/\/(maps\.google\.com|google\.com|www\.google\.com)\/maps\//, 'https://www.google.com/maps/');
     if (!/^https:\/\/www\.google\.com\/maps\/dir\//.test(u)) return null;
-    return site('gmaps', { url: u }, 40000);
+    var run = gmapsChain.then(function () { return site('gmaps', { url: u }, 40000); });
+    gmapsChain = run.catch(function () { });
+    return run;
   }
+  var gmapsChain = Promise.resolve();
   var parsing = null;      // {text, p, frac}
   function parseBar(f) {
     var el = $('tParsed'); if (!el || !parsing) return;
@@ -418,18 +422,19 @@
     }).join('') + '</ol>';
     if (r.mode && r.mode !== 'drive') h += '<div class="msg err">This link is for ' + esc(r.mode) + ' directions; fuel stops will use driving directions.</div>';
     if (r.avoidDetected) h += '<div class="msg">Route options from your link: ' + (['tolls', 'highways', 'ferries'].filter(function (k) { return r.avoid[k]; }).map(function (k) { return 'avoid ' + k; }).join(', ') || 'none') + '.</div>';
-    var picked = pickedRoute(r);
-    var withPts = r.mapsRoutes && r.mapsRoutes.length > 1 && r.mapsRoutes.every(function (m) { return m.pts && m.pts.length > 1; });
+    var picked = multiLeg(r) ? null : pickedRoute(r);
+    var withPts = !multiLeg(r) && r.mapsRoutes && r.mapsRoutes.length > 1 && r.mapsRoutes.every(function (m) { return m.pts && m.pts.length > 1; });
     if (withPts && !model) {
       var selK = r.routeIndex != null ? Math.min(r.routeIndex, r.mapsRoutes.length - 1) : 0;
       h += '<div class="maps-opts"><div class="sub-h">Google Maps shows ' + r.mapsRoutes.length + ' routes — tap one</div><div class="rmap" id="tOptMap"></div>' +
         '<div class="opt-sel">via <b>' + esc(r.mapsRoutes[selK].via) + '</b> · ' + Math.round(r.mapsRoutes[selK].miles || 0).toLocaleString() + ' mi · ' + fmtDur((r.mapsRoutes[selK].minutes || 0) * 60) + '</div></div>';
-    } else if (r.mapsRoutes && r.mapsRoutes.length > 1) {
+    } else if (!multiLeg(r) && r.mapsRoutes && r.mapsRoutes.length > 1) {
       h += '<div class="msg maps-opts">Google Maps shows ' + r.mapsRoutes.length + ' routes' + (picked && r.routeIndex != null ? ' — you picked <b>via ' + esc(picked.via) + '</b>' : '') + ':<ol>' + r.mapsRoutes.map(function (m) {
         return '<li' + (m === picked && r.routeIndex != null ? ' class="on"' : '') + '>via ' + esc(m.via) + (m.miles ? ' · ' + Math.round(m.miles).toLocaleString() + ' mi' : '') + (m.minutes ? ' · ' + fmtDur(m.minutes * 60) : '') + '</li>';
       }).join('') + '</ol>Pick one after <b>Get route</b>.</div>';
     } else if (picked) h += '<div class="msg">Route you picked in Google Maps: <b>via ' + esc(picked.via) + '</b>' + (picked.miles ? ' · ' + Math.round(picked.miles) + ' mi' : '') + (picked.minutes ? ' · ' + fmtDur(picked.minutes * 60) : '') + '</div>';
-    else if (r.routeIndex) h += '<div class="msg">Your link says you picked route option ' + (r.routeIndex + 1) + ' in Google Maps.</div>';
+    else if (r.routeIndex && !multiLeg(r)) h += '<div class="msg">Your link says you picked route option ' + (r.routeIndex + 1) + ' in Google Maps.</div>';
+    if (multiLeg(r) && !model) h += '<div class="msg">' + (r.stops.length - 1) + ' legs. Each one is routed on its own, so you can pick its route after <b>Get route</b>.</div>';
     if (r.note) h += '<div class="msg err">' + esc(r.note) + '</div>';
     el.innerHTML = h;
     if ($('tOptMap')) optionsMap($('tOptMap'), r.mapsRoutes.map(function (m) {
@@ -551,6 +556,82 @@
     return { address: s.address };
   }
 
+  // ---------- trips with stops in between ----------
+  // Google Maps (and the Routes API) only offer route options for a trip from A to B. So with stops in between, each
+  // leg is routed on its own — with all of its options — and the picks are joined into one trip for the fuel plan.
+  /** Ends where it started (a round trip planned as legs): the "drive back" estimate would count the way home twice. */
+  function loopTrip() {
+    var a = route && route.stops[0], b = route && route.stops[route.stops.length - 1];
+    if (!a || !b || a === b) return false;
+    if (a.current || b.current) return !!(a.current && b.current);
+    return a.lat != null && b.lat != null && T.hav(a, b) < 0.5;
+  }
+  function multiLeg(r) { return !!(r && r.stops && r.stops.length > 2); }
+  function legName(r, i) { return stopName(r.stops[i]) + ' → ' + stopName(r.stops[i + 1]); }
+  function legBody(a, b) {
+    var avoid = S.trip.avoid;
+    return { origin: wp(a), destination: wp(b), travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE', polylineQuality: 'HIGH_QUALITY', units: 'IMPERIAL',
+      computeAlternativeRoutes: true, routeModifiers: { avoidTolls: !!avoid.tolls, avoidHighways: !!avoid.highways, avoidFerries: !!avoid.ferries } };
+  }
+  function legKey(r, i) { return [r.stops[i], r.stops[i + 1]].map(function (st) { return st.current ? 'here' : st.lat != null ? st.lat.toFixed(4) + ',' + st.lng.toFixed(4) : st.address; }).join('>') + '|' + JSON.stringify(S.trip.avoid); }
+  async function routeLeg(r, i) {
+    var prev = r.legs && r.legs[i];
+    if (prev && prev.key !== legKey(r, i)) prev = null;
+    var sub = { stops: [r.stops[i], r.stops[i + 1]], avoid: r.avoid, mapsRoutes: prev && prev.mapsRoutes || null };
+    var body = legBody(sub.stops[0], sub.stops[1]);
+    var res = await routesCall(body);
+    if (res.error) throw new Error('Leg ' + (i + 1) + ' (' + legName(r, i) + '): ' + res.error);
+    var j = JSON.parse(res.body);
+    if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for leg ' + (i + 1) + ' (' + legName(r, i) + ').');
+    var cx = { alts: j.routes };
+    await allMapsRoutes(sub, body, cx);
+    // same pick as before when this leg was routed already
+    var sel = 0, want = prev && prev.alts && prev.alts[prev.sel] && prev.alts[prev.sel].description;
+    if (want) cx.alts.forEach(function (a, k) { if (a.description === want) sel = k; });
+    return { key: legKey(r, i), alts: cx.alts, sel: sel, mapsRoutes: sub.mapsRoutes };
+  }
+  /** Prefetch each leg's route options from Google Maps while you look over the trip (free; saved for 2 hours). */
+  function scanLegs(r) {
+    if (!multiLeg(r)) return;
+    r.stops.slice(0, -1).forEach(function (_, i) {
+      var sub = { stops: [r.stops[i], r.stops[i + 1]] };
+      if (sub.stops.some(function (s) { return s.current || s.lat == null; })) return;
+      mapsOptions(sub).then(function (mr) { r.legs = r.legs || []; r.legs[i] = Object.assign(r.legs[i] || {}, { key: legKey(r, i), mapsRoutes: mr }); }).catch(function () { });
+    });
+  }
+  /** The trip as picked (alts[0]) plus each single-leg swap, closest in time first (those are what "other routes" checks). */
+  function rebuildAlts() {
+    var cur = route.legs.map(function (L) { return L.sel; });
+    var combo = function (sel, desc, leg) {
+      var o = { _sel: sel, description: desc, distanceMeters: 0, duration: '0s' }, sec = 0, built = null;
+      route.legs.forEach(function (L, i) { var a = L.alts[sel[i]]; o.distanceMeters += a.distanceMeters || 0; sec += parseFloat(String(a.duration || '0')); });
+      o.duration = Math.round(sec) + 's';
+      if (leg != null) o._leg = leg;
+      var get = function () { return built || (built = T.joinRoutes(route.legs.map(function (L, i) { return L.alts[sel[i]]; }))); };
+      Object.defineProperty(o, 'polyline', { get: function () { return get().polyline; }, enumerable: true });
+      Object.defineProperty(o, 'legs', { get: function () { return get().legs; }, enumerable: true });
+      return o;
+    };
+    var main = combo(cur, route.legs.map(function (L) { return L.alts[L.sel].description || ''; }).filter(Boolean).join(' / '));
+    var others = [];
+    route.legs.forEach(function (L, i) {
+      L.alts.forEach(function (a, k) {
+        if (k === L.sel) return;
+        var s2 = cur.slice(); s2[i] = k;
+        others.push(combo(s2, (a.description || 'route ' + (k + 1)) + ' on leg ' + (i + 1), i));
+      });
+    });
+    var t0 = parseFloat(main.duration);
+    others.sort(function (x, y) { return Math.abs(parseFloat(x.duration) - t0) - Math.abs(parseFloat(y.duration) - t0); });
+    alts = [main].concat(others); altSel = 0; altSure = true;
+  }
+  function pickLeg(i, k) {
+    var L = route.legs[i]; if (!L || k === L.sel) return;
+    L.sel = k; rebuildAlts(); rawRoute = alts[0]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model);
+    LG.info('route', 'Leg ' + (i + 1) + ': picked via ' + (L.alts[k].description || k));
+    renderInfo();
+  }
+
   // ---------- step 1: route ----------
   async function go() {
     if (busy) return;
@@ -573,34 +654,49 @@
         $('tParsed').scrollIntoView({ block: 'center' });
         throw new Error('Pick the right address for each stop marked “Which one?”.');
       }
-      prog(0.6, 'Asking Google for the route');
-      var avoid = S.trip.avoid;
-      var body = {
-        origin: wp(r.stops[0]), destination: wp(r.stops[r.stops.length - 1]),
-        intermediates: r.stops.slice(1, -1).map(wp), travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE',
-        polylineQuality: 'HIGH_QUALITY', units: 'IMPERIAL',
-        routeModifiers: { avoidTolls: !!avoid.tolls, avoidHighways: !!avoid.highways, avoidFerries: !!avoid.ferries }
-      };
-      if (body.intermediates.length > 10) throw new Error('Google routes allow up to 10 stops in between.');
-      if (!body.intermediates.length) body.computeAlternativeRoutes = true;   // so you can pick the same one as in Google Maps
-      dbg.routeBody = body;
-      LG.debug('route', 'Routes request', body);
-      var res = await routesCall(body);
-      if (res.error) { LG.error('route', 'Routes failed', res.error); throw new Error(res.error); }
-      prog(0.9, 'Reading the route');
-      LG.trace('route', 'Routes answer', res.body);
-      var j = JSON.parse(res.body);
-      if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for that trip.');
-      alts = j.routes;
-      if (!body.intermediates.length) await allMapsRoutes(r, body);
-      var picked = pickedRoute(r);
-      altSure = false;
-      if (picked && alts.length > 1) { var mt = matchRoute(alts, picked); altSel = mt.index; altSure = mt.sure; }
-      else altSel = r.routeIndex != null && r.routeIndex < alts.length ? r.routeIndex : 0;
-      rawRoute = alts[altSel];
-      model = T.buildRoute(rawRoute, carModel());
-      ensureLimits(model);
-      LG.info('route', 'Route ready', { options: alts.map(function (a) { return a.description; }), picked: altSel, sure: altSure, miles: Math.round(model.totalMi) });
+      if (multiLeg(r)) {
+        // a stop in between: Google only offers route options trip by trip, so route each leg on its own and join them
+        var nL = r.stops.length - 1, doneL = 0;
+        prog(0.6, 'Routing each leg (0 of ' + nL + ')');
+        var legs = await Promise.all(r.stops.slice(0, -1).map(function (_, i) {
+          return routeLeg(r, i).then(function (x) { doneL++; prog(0.6 + 0.3 * doneL / nL, 'Routing each leg (' + doneL + ' of ' + nL + ')'); return x; });
+        }));
+        r.legs = legs;
+        rebuildAlts();
+        rawRoute = alts[0];
+        model = T.buildRoute(rawRoute, carModel());
+        ensureLimits(model);
+        LG.info('route', 'Route ready (' + nL + ' legs, each routed on its own)', { legs: legs.map(function (L) { return { options: L.alts.map(function (a) { return a.description; }), picked: L.sel }; }), miles: Math.round(model.totalMi) });
+      } else {
+        prog(0.6, 'Asking Google for the route');
+        var avoid = S.trip.avoid;
+        var body = {
+          origin: wp(r.stops[0]), destination: wp(r.stops[r.stops.length - 1]),
+          intermediates: r.stops.slice(1, -1).map(wp), travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE',
+          polylineQuality: 'HIGH_QUALITY', units: 'IMPERIAL',
+          routeModifiers: { avoidTolls: !!avoid.tolls, avoidHighways: !!avoid.highways, avoidFerries: !!avoid.ferries }
+        };
+        if (body.intermediates.length > 10) throw new Error('Google routes allow up to 10 stops in between.');
+        if (!body.intermediates.length) body.computeAlternativeRoutes = true;   // so you can pick the same one as in Google Maps
+        dbg.routeBody = body;
+        LG.debug('route', 'Routes request', body);
+        var res = await routesCall(body);
+        if (res.error) { LG.error('route', 'Routes failed', res.error); throw new Error(res.error); }
+        prog(0.9, 'Reading the route');
+        LG.trace('route', 'Routes answer', res.body);
+        var j = JSON.parse(res.body);
+        if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for that trip.');
+        alts = j.routes;
+        if (!body.intermediates.length) await allMapsRoutes(r, body);
+        var picked = pickedRoute(r);
+        altSure = false;
+        if (picked && alts.length > 1) { var mt = matchRoute(alts, picked); altSel = mt.index; altSure = mt.sure; }
+        else altSel = r.routeIndex != null && r.routeIndex < alts.length ? r.routeIndex : 0;
+        rawRoute = alts[altSel];
+        model = T.buildRoute(rawRoute, carModel());
+        ensureLimits(model);
+        LG.info('route', 'Route ready', { options: alts.map(function (a) { return a.description; }), picked: altSel, sure: altSure, miles: Math.round(model.totalMi) });
+      }
     } catch (e) {
       LG.error('route', e.message || String(e));
       toastMsg(e.message || String(e));
@@ -647,6 +743,7 @@
     }
     return n ? near / n : 0;
   }
+  var scanning = {};     // Google Maps route scans in progress, by address (so a leg is never scanned twice at once)
   async function mapsOptions(r) {
     if (r.mapsRoutes && r.mapsRoutes.length && r.mapsRoutes[0].pts) return r.mapsRoutes;
     if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current; })) return r.mapsRoutes || null;
@@ -656,8 +753,8 @@
     var o = A.KV.get('mapsopts', url, 2 * 3600e3), g;
     if (o) g = o.v;
     else {
-      g = await openInGoogleMaps(url);
-      if (g && g.routes && g.routes.length) A.KV.put('mapsopts', url, g);
+      if (!scanning[url]) scanning[url] = openInGoogleMaps(url).then(function (x) { if (x && x.routes && x.routes.length) A.KV.put('mapsopts', url, x); delete scanning[url]; return x; });
+      g = await scanning[url];
     }
     dbg.mapsOptionsPage = g && { href: g.href, title: g.title, error: g.error, routes: (g.routes || []).map(function (x) { return { via: x.via, miles: x.miles, minutes: x.minutes, pts: x.pts ? x.pts.length : 0 }; }) };
     LG.info('route', 'Google Maps route options', dbg.mapsOptionsPage);
@@ -678,14 +775,15 @@
     });
     return pts.length ? near / pts.length : 0;
   }
-  async function allMapsRoutes(r, body) {
+  async function allMapsRoutes(r, body, cx) {
+    cx = cx || { get alts() { return alts; }, set alts(v) { alts = v; } };
     var mr = await mapsOptions(r);
     if (!mr || !mr.length) return;
     var same = function (a, m) { return m.pts && m.pts.length > 5 ? onRoute(a, m.pts) >= 0.9 : sameAsMaps(a, m); };
-    var missing = mr.filter(function (m) { return !alts.some(function (a) { return same(a, m); }); });
+    var missing = mr.filter(function (m) { return !cx.alts.some(function (a) { return same(a, m); }); });
     dbg.mapsMissing = missing.map(function (m) { return m.via; });
     if (missing.length) {
-      LG.info('route', 'Google Maps shows ' + mr.length + ' routes; the Routes API returned ' + alts.length + '. Rebuilding: ' + missing.map(function (m) { return m.via; }).join(' / '));
+      LG.info('route', 'Google Maps shows ' + mr.length + ' routes; the Routes API returned ' + cx.alts.length + '. Rebuilding: ' + missing.map(function (m) { return m.via; }).join(' / '));
       prog(0.8, 'Getting the other Google Maps routes');
       var found = await Promise.all(missing.map(async function (m) {
         if (m.pts && m.pts.length > 5) {
@@ -699,17 +797,17 @@
           LG.debug('route', 'Rebuilt via ' + m.via, { ok: !!ok, error: res.error, miles: cand && Math.round(altMiles(cand)), mapsMiles: m.miles, onRoute: cand && Math.round(onRoute(cand, m.pts) * 100) / 100 });
           if (ok) return { m: m, a: cand };
         }
-        var c2 = await searchVia(m, body);
+        var c2 = await searchVia(m, body, cx);
         return c2 ? { m: m, a: c2 } : null;
       }));
-      found.forEach(function (f) { if (f) { f.a.description = f.m.via.replace(/^via\s+/i, ''); f.a.fromMaps = true; alts.push(f.a); } });
+      found.forEach(function (f) { if (f) { f.a.description = f.m.via.replace(/^via\s+/i, ''); f.a.fromMaps = true; cx.alts.push(f.a); } });
       LG.info('route', 'Rebuilt ' + found.filter(Boolean).length + ' of ' + missing.length + ' missing Google Maps route(s)');
     }
-    orderLikeMaps(mr, same);
+    orderLikeMaps(mr, same, cx);
   }
   /** Fallback when Maps' turn points aren't available: nudge a pass-through point to either side of the main route. */
-  async function searchVia(m, body) {
-    var base = T.buildRoute(alts[0], carModel()), L = base.totalMi, tries = 0, found = null;
+  async function searchVia(m, body, cx) {
+    var base = T.buildRoute(cx.alts[0], carModel()), L = base.totalMi, tries = 0, found = null;
     var plan = [[0.5, 60], [0.5, -60], [0.5, 130], [0.5, -130], [0.35, 90], [0.35, -90], [0.65, 90], [0.65, -90], [0.5, 220], [0.5, -220]];
     for (var t = 0; t < plan.length && !found; t++) {
       var f = plan[t][0], off = plan[t][1], d = f * L;
@@ -724,7 +822,7 @@
       if (res.error) { LG.warn('route', 'Pass-through route failed', res.error); continue; }
       var cand = (JSON.parse(res.body).routes || [])[0];
       if (!cand) continue;
-      var dup = alts.some(function (x) { return overlap(x, cand) > 0.9; });
+      var dup = cx.alts.some(function (x) { return overlap(x, cand) > 0.9; });
       LG.debug('route', 'Pass-through try ' + tries, { miles: Math.round(altMiles(cand)), dup: dup, target: m.via });
       if (!dup && sameAsMaps(cand, m)) found = cand;
     }
@@ -740,14 +838,14 @@
     return res;
   }
   /** Put the options in the same order as Google Maps (so “route option 2” means the same thing). */
-  function orderLikeMaps(mr, same) {
+  function orderLikeMaps(mr, same, cx) {
     same = same || sameAsMaps;
-    var left = alts.slice(), out = [];
+    var left = cx.alts.slice(), out = [];
     mr.forEach(function (m) {
       var k = -1; left.forEach(function (a, i) { if (k < 0 && same(a, m)) k = i; });
       if (k >= 0) { var a = left.splice(k, 1)[0]; a.description = m.via.replace(/^via\s+/i, ''); out.push(a); }   // name it the way Maps does
     });
-    alts = out.concat(left);
+    cx.alts = out.concat(left);
   }
   function official(k) { return (k === 'walmart' || k === 'murphy') && A.siteOn(k); }
   function googleBrands() {
@@ -767,7 +865,18 @@
     var spare = (startGal - need) / model.combGpm;
     var est = estLookups(), left = (Number(S.monthlyCap) || 0) - N.callsThisMonth();
     var h = '<div class="card route-card">';
-    if (alts.length > 1) {
+    var legView = multiLeg(route) && route.legs && route.legs.length === route.stops.length - 1 && route.legs.every(function (L) { return L.alts; });
+    if (legView) {
+      h += '<div class="sub-h">Each leg is routed on its own — pick a route for each</div>';
+      route.legs.forEach(function (L, i) {
+        h += '<div class="leg-pick"><div class="leg-pick-h"><span class="leg-n">' + (i + 1) + '</span>' + esc(legName(route, i)) + '</div>' +
+          (L.alts.length > 1 ? '<div class="rmap" id="tRmap' + i + '"></div>' : '') + '<div class="alts-pick">' + L.alts.map(function (a, k) {
+            var mi = (a.distanceMeters || 0) / 1609.344, sec = parseFloat(String(a.duration || '0'));
+            return '<button data-leg="' + i + '" data-lk="' + k + '" class="' + (k === L.sel ? 'on' : '') + '"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b>' +
+              '<span>' + Math.round(mi) + ' mi · ' + fmtDur(sec) + (L.alts.length === 1 ? ' · Google\'s only route' : '') + '</span></button>';
+          }).join('') + '</div></div>';
+      });
+    } else if (alts.length > 1) {
       var pk = pickedRoute(route);
       h += '<div class="sub-h">' + (pk ? 'You picked via ' + esc(pk.via) + ' in Google Maps' + (altSure ? ' — matched on the map' : ' — check the closest one') : 'Which route? Tap the one you want') + '</div>' +
         '<div class="rmap" id="tRmap"></div><div class="alts-pick">' + alts.map(function (a, k) {
@@ -792,19 +901,29 @@
     el.innerHTML = h;
     var pickAlt = function (k) { if (k === altSel) return; altSel = k; rawRoute = alts[altSel]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); renderInfo(); };
     el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
+    el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
+    if (legView) route.legs.forEach(function (L, i) {
+      if ($('tRmap' + i)) optionsMap($('tRmap' + i), L.alts.map(function (a) {
+        return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' };
+      }), L.sel, function (k) { pickLeg(i, k); });
+    });
     if ($('tRmap')) optionsMap($('tRmap'), alts.map(function (a) {
       return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' };
     }), altSel, pickAlt);
     $('tGo').textContent = startGal - need >= bufGal ? 'Look for a cheaper fill-up anyway' : 'Find the best stops';
   }
   // ---------- route options on a small map (like Google Maps) ----------
-  var rmap = null;
+  var rmaps = {};        // one small map per element (a trip with stops in between has one per leg)
   var ROUTE_GRAY = '#8a94a6';
   /** lines: [{pts: [[lat,lng],...], time, miles, via}]; sel: index; onPick(k). */
   function optionsMap(el, lines, sel, onPick) {
-    if (rmap) { try { rmap.remove(); } catch (e) { } rmap = null; }
+    var mid0 = el && el.id || '';
+    Object.keys(rmaps).forEach(function (k) {
+      var m0 = rmaps[k];
+      if (k === mid0 || !document.body.contains(m0.getContainer())) { try { m0.remove(); } catch (e) { } delete rmaps[k]; }
+    });
     if (!el || !lines.length) return;
-    rmap = L.map(el, { zoomControl: false, attributionControl: true, tap: false, scrollWheelZoom: false, zoomSnap: 0.25 });
+    var rmap = rmaps[mid0] = L.map(el, { zoomControl: false, attributionControl: true, tap: false, scrollWheelZoom: false, zoomSnap: 0.25 });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'osm-tiles', attribution: '© OpenStreetMap' }).addTo(rmap);
     var all = [], tips = [], order = lines.map(function (_, k) { return k; }).filter(function (k) { return k !== sel; }).concat([sel]);   // chosen one drawn on top
     order.forEach(function (k) {
@@ -827,7 +946,7 @@
     var mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(rmap); };
     mk(a, 'A'); mk(b, 'B');
     rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] });
-    setTimeout(function () { if (rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] }); placeLabels(rmap, tips, sel); } }, 60);
+    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap.fitBounds(L.latLngBounds(all), { padding: [18, 18] }); placeLabels(rmap, tips, sel); } }, 60);
   }
   /** Candidate label spots on a route, best first: points far from the other routes (where it splits off), like Google Maps. */
   function labelSpots(lines, k) {
@@ -905,11 +1024,12 @@
     };
     if (!replay) try {
       // --- Google, along each route ---
-      var jobs = [];
+      var jobs = [], skippedBack = 0;
       if (S.apiKey) {
         var gb = googleBrands();
         models.forEach(function (m, mi) {
           T.chunks(m, 125).forEach(function (ch, ci) {
+            if (T.coveredBefore(m, ch)) { skippedBack++; return; }   // the way back on roads already searched on the way out
             gb.forEach(function (b) { jobs.push({ q: P.BRANDS[b].query, polyline: ch.polyline, lat: ch.start.lat, lng: ch.start.lng, chunk: ci, fromMi: ch.fromMi, toMi: ch.toMi, m: mi }); });
           });
         });
@@ -927,7 +1047,7 @@
             // Google's road distance through the station minus the route's own distance for that piece = the detour.
             // (Travel times come from two different Google services, so minutes are derived from miles instead.)
             var mi = (sum.legs[0].distanceMeters + sum.legs[1].distanceMeters) / 1609.344 - (job.toMi - job.fromMi);
-            if (mi > -0.5 && mi < 30) { st.detourMi = Math.max(0, mi); st.detourExact = true; }
+            if (mi > -0.5 && mi < 30) { st.detourMi = Math.max(0, mi); st.detourExact = true; st.detourRange = [job.fromMi, job.toMi]; }
           }
           perModel[job.m].push(st);
         });
@@ -937,7 +1057,8 @@
       if (todo.length) weight.google = 0.55;
       if (A.siteOn('murphy')) weight.murphy = 0.15;
       if (A.siteOn('walmart')) weight.walmart = 0.3;
-      dbgSearch.googleLookups = todo.length; dbgSearch.googleSaved = done.length;
+      dbgSearch.googleLookups = todo.length; dbgSearch.googleSaved = done.length; dbgSearch.skippedWayBack = skippedBack;
+      if (skippedBack) LG.info('stations', skippedBack + ' search piece(s) on the way back skipped — same roads as the way out');
       LG.info('stations', 'Searching along ' + models.length + ' route(s)', { googleLookups: todo.length, saved: done.length, walmart: A.siteOn('walmart'), murphy: A.siteOn('murphy'), force: !maxAge });
       if (todo.length) {
         var send = todo.map(function (i) { return jobs[i]; });
@@ -1011,18 +1132,22 @@
       for (var si = 0; si < merged.length; si++) {
         if (si % 150 === 149) await new Promise(function (r) { setTimeout(r, 0); });   // let the screen breathe on big trips
         var s = merged[si];
-        var pr = T.project(model, { lat: s.lat, lng: s.lng });
-        if (pr.offset > maxOff) continue;
-        var c = P.compute(s, grade, S, nowD, new Date(nowD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // CITGO's day bonuses go by when you'll be there
-        if (!c) { unpriced++; continue; }
-        if (c.stale) stale++;
-        var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
-        // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently)
-        var exact = s.detourExact && s.detourMi <= est * 3 + 2;
-        var det = exact ? s.detourMi : est;
-        var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
-        cands.push({ id: s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
-          price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng });
+        // once per leg it's near: on a round trip over the same roads a station is passed going and coming back
+        var prs = T.projectLegs(model, { lat: s.lat, lng: s.lng }, maxOff);
+        for (var pi = 0; pi < prs.length; pi++) {
+          var pr = prs[pi];
+          var c = P.compute(s, grade, S, nowD, new Date(nowD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // CITGO's day bonuses go by when you'll be there
+          if (!c) { if (!pi) unpriced++; break; }
+          if (c.stale && !pi) stale++;
+          var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
+          // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently),
+          // and only on the stretch it was measured for (not on the way back)
+          var exact = s.detourExact && s.detourMi <= est * 3 + 2 && (!s.detourRange || (pr.along >= s.detourRange[0] - 1 && pr.along <= s.detourRange[1] + 1));
+          var det = exact ? s.detourMi : est;
+          var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
+          cands.push({ id: pr.leg ? s.id + '@' + pr.leg : s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
+            price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng, leg: pr.leg });
+        }
       }
       per.push({ cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade });
     }
@@ -1058,6 +1183,7 @@
     if (!e || e.error) return;
     LG.info('routes', 'Switched to via ' + (alts[k].description || k));
     altSel = k; rawRoute = alts[k]; model = e.model; result = e.res; result.routes = list;
+    if (alts[k]._sel && route.legs) route.legs.forEach(function (L, i) { L.sel = alts[k]._sel[i]; });   // that leg's pick changes too
     recompute(); startSweep(); showResult();
   }
   function routeBox() {
@@ -1368,7 +1494,7 @@
     if (top) { outLeg.stops.push({ arriveGal: top.arriveGal, buyGal: top.buyGal, price: top.c.price }); outLeg.arriveGal = top.endGal; }
     var legs = [outLeg];
     r.back = null;
-    if (S.trip.roundTrip) {
+    if (S.trip.roundTrip && !loopTrip()) {
       var rm = T.reverseModel(model);
       var bo = Object.assign({}, o, { model: rm, cands: T.mirror(r.cands, model.totalMi), startGal: outLeg.arriveGal, lastFull: false, refPrice: 0, stopPenalty: S.trip.minSave, detourPenalty: S.trip.minSave });   // typical price, recomputed for the drive back
       var bp = T.plan(bo);
@@ -1389,7 +1515,7 @@
     var r = result, p = r.plan, el = $('tripSheet');
     var g = P.GRADES[r.grade].label.toLowerCase();
     var dest = route.stops[route.stops.length - 1], orig = route.stops[0];
-    var h = '<div class="grab"><span></span></div><div class="t-head"><div><div class="t-title">' + esc(orig.current ? 'Your location' : (orig.short || orig.label)) + ' → ' + esc(dest.short || dest.label) + '</div>' +
+    var h = '<div class="grab"><span></span></div><div class="t-head"><div><div class="t-title">' + esc(tripTitle(route)) + '</div>' +
       '<div class="sub">' + Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + g + ' · ' + r.cands.length + ' priced stations along the way</div></div>' +
       '<button class="x" id="tsClose" aria-label="Close trip">✕</button></div>';
 
@@ -1431,13 +1557,23 @@
     if (p.tooFar) notes.push(p.tooFar + ' station' + (p.tooFar === 1 ? ' was' : 's were') + ' skipped for being more than ' + S.trip.maxDetourMin + ' min out of the way.');
     if (r.unpriced) notes.push(r.unpriced + ' brand station' + (r.unpriced === 1 ? '' : 's') + ' along the way had no ' + g + ' price and were skipped.');
     notes.forEach(function (n) { h += '<div class="note">' + esc(n) + '</div>'; });
-    var ex = p.ok ? T.exportUrl(route, p.stops.concat(r.top ? [{ c: r.top.c }] : []), model) : null;
-    h += '<div class="actions">' + (ex ? '<button class="btn primary" id="tsExport"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Open in Google Maps' + (p.stops.length ? ' with stops' : '') + '</button>' : '') +
+    var fuelStops = p.ok ? p.stops.concat(r.top ? [{ c: r.top.c }] : []) : [];
+    var ex = p.ok ? T.exportUrl(route, fuelStops, model) : null;
+    var legEx = ex && multiLeg(route) ? T.exportLegs(route, fuelStops, model) : null;
+    var oneBtn = legEx && ex.tooMany ? 'btn tonal' : 'btn primary';
+    h += '<div class="actions">' + (ex ? '<button class="' + oneBtn + '" id="tsExport"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>' + (legEx ? 'Open the whole trip in one link' : 'Open in Google Maps' + (p.stops.length ? ' with stops' : '')) + '</button>' : '') +
+      (legEx ? '<div class="leg-links"><div class="sub-h">' + (ex.tooMany ? 'Too many stops for one link — open a leg at a time' : 'Or open a leg at a time') + '</div>' + legEx.map(function (x) {
+        return '<button class="leg-link" data-legurl="' + x.leg + '"><span class="leg-n">' + (x.leg + 1) + '</span><span class="ll-t"><b>' + esc(legName(route, x.leg)) + '</b><small>' +
+          Math.round(x.toMi - x.fromMi) + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small></span>' +
+          '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>';
+      }).join('') + '</div>' : '') +
       '<div class="btn-row"><button class="btn tonal" id="tsShare">Share trip</button><button class="btn tonal" id="tsReport">Troubleshooting report</button></div>' +
       '<div class="btn-row"><button class="btn tonal" id="tsEdit">Edit trip</button><button class="btn tonal" id="tsDone">Done</button></div></div>';
-    if (ex && altSel > 0 && !p.stops.length && !r.top) h += '<div class="note">Google Maps may open on its usual route; pick the “via ' + esc(alts[altSel].description || 'other road') + '” option there.</div>';
+    if (legEx && route.legs && route.legs.some(function (L) { return L.sel > 0; })) h += '<div class="note">Google Maps picks its own roads between stops. If a leg opens on a different road than you picked here (' + route.legs.map(function (L, i) { return L.sel > 0 ? 'leg ' + (i + 1) + ': via ' + esc(L.alts[L.sel].description || 'route ' + (L.sel + 1)) : ''; }).filter(Boolean).join(', ') + '), pick that option in Maps — easiest with one link per leg.</div>';
+    else if (legEx) { /* every leg on Google's usual road: nothing to add */ }
+    else if (ex && altSel > 0 && !p.stops.length && !r.top) h += '<div class="note">Google Maps may open on its usual route; pick the “via ' + esc(alts[altSel].description || 'other road') + '” option there.</div>';
     else if (ex && route.routeIndex != null && altSel !== route.routeIndex && alts[altSel]) h += '<div class="note">This isn\'t the route you picked in Google Maps. Maps picks its own roads between stops — check that it goes via ' + esc(alts[altSel].description || 'this route') + '.</div>';
-    if (ex && ex.tooMany) h += '<div class="note">Google Maps takes up to 9 stops in a shared route; this trip has ' + ex.waypoints + '. Remove a stop in Maps if it complains.</div>';
+    if (ex && ex.tooMany && !legEx) h += '<div class="note">Google Maps takes up to 9 stops in a shared route; this trip has ' + ex.waypoints + '. Remove a stop in Maps if it complains.</div>';
     if (route.avoidDetected || S.trip.avoid.tolls || S.trip.avoid.highways || S.trip.avoid.ferries) h += '<div class="note">Google Maps links can\'t carry “avoid” options — turn them back on in Maps (Route options).</div>';
     el.innerHTML = h; show(el, true); el.scrollTop = 0;
     startIdeal();
@@ -1447,6 +1583,7 @@
     if ($('tsRefresh')) $('tsRefresh').onclick = function (e) { e.preventDefault(); show(el, false); document.body.classList.add('trip-on'); openTrip(); findStops(true); };
     $('tsReport').onclick = shareReport;
     if (ex) $('tsExport').onclick = function () { N.haptic(); N.openUrl(ex.url); };
+    if (legEx) el.querySelectorAll('[data-legurl]').forEach(function (b) { b.onclick = function () { N.haptic(); var x = legEx[+b.dataset.legurl]; b.classList.add('done'); N.openUrl(x.url); }; });
     el.querySelectorAll('[data-top]').forEach(function (b) {
       b.onclick = function () { var k = +b.dataset.top; r.topSel = r.topSel === k ? -1 : k; recompute(); keepScroll(showResult); };
     });
@@ -1454,7 +1591,7 @@
       r.topMi = Math.max(0, Math.round((parseFloat(this.value) || 0) * 10) / 10); S.trip.topUpMi = r.topMi; A.save(); r.topSel = -1; recompute(); keepScroll(showResult);
     });
     el.querySelectorAll('[data-nav]').forEach(function (b) {
-      b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.id) ? '' : s.id, s.station.name); };
+      b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.station.id) ? '' : s.station.id, s.station.name); };
     });
     el.querySelectorAll('[data-why]').forEach(function (b) {
       b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
@@ -1481,6 +1618,11 @@
     var h = 0; for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
     return 't' + (h >>> 0).toString(36);
   }
+  /** "North Little Rock → Dallas", or every stop for a trip with a few stops in between ("North Little Rock → Dallas → North Little Rock"). */
+  function tripTitle(r) {
+    var n = r.stops.map(stopName);
+    return n.length <= 4 ? n.join(' → ') : n[0] + ' → … → ' + n[n.length - 1];
+  }
   function stopName(st) { return st.current ? 'Your location' : (st.short || st.label || st.address || '?'); }
   function saveTrip(raw, ks) {
     if (!route || !raw) return;
@@ -1494,7 +1636,7 @@
       stations: { official: raw.official || [], google: google }
     });
     var idx = histIndex().filter(function (x) { return x.id !== id; });
-    idx.unshift({ id: id, t: now, title: stopName(route.stops[0]) + ' → ' + stopName(route.stops[route.stops.length - 1]),
+    idx.unshift({ id: id, t: now, title: tripTitle(route),
       mi: Math.round(model.totalMi), via: alts[altSel] && alts[altSel].description || '', n: route.stops.length });
     idx.slice(HIST_MAX).forEach(function (x) { A.KV.put('trips', 'trip|' + x.id, null); });
     A.KV.put('trips', 'index', idx.slice(0, HIST_MAX));

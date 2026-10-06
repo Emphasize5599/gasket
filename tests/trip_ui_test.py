@@ -399,6 +399,37 @@ with sync_playwright() as p:
         pg.click('#tGo'); pg.wait_for_timeout(700)
         assert pg.evaluate('window.__routeBody')['destination'], 'route from the imported trip'
         pg.click('#tClose'); pg.wait_for_timeout(200)
+        # a round trip as one link (North Little Rock -> Dallas -> North Little Rock): each leg routed on its own with its own options, joined for the plan
+        LOOP = ('https://www.google.com/maps/dir/North+Little+Rock,+AR+72114/Dallas,+TX/North+Little+Rock,+AR+72114/data=!4m20!4m19!1m5!1m1!1s0x1:0x2!2m2!1d-92.2671!2d34.7695'
+                '!1m5!1m1!1s0x3:0x4!2m2!1d-96.797!2d32.7767!1m5!1m1!1s0x1:0x2!2m2!1d-92.2671!2d34.7695!3e0')
+        pg.evaluate("window.__gmapsAnswer = {error: 'scan off'}; window.__routeBodies = []; window.__mocks.link = {url: %s}; onSharedText('https://maps.app.goo.gl/LoOp1')" % json.dumps(LOOP))
+        pg.wait_for_timeout(900)
+        txt = ft(pg, '#tParsed'); print('  round trip link:', txt.replace('\n', ' | '))
+        assert '2 legs' in txt, txt
+        pg.fill('#tMiles', '80'); pg.click('#tGo'); pg.wait_for_timeout(1500)
+        bodies = pg.evaluate('window.__routeBodies')
+        print('  leg requests:', [(b['origin'].get('location', b['origin']), b.get('computeAlternativeRoutes')) for b in bodies][:4])
+        assert len([b for b in bodies if b.get('computeAlternativeRoutes')]) == 2 and not any(b.get('intermediates') for b in bodies), 'one request per leg, with options'
+        assert pg.locator('.leg-pick').count() == 2 and pg.locator('.leg-pick').nth(1).locator('button').count() == 2 and pg.locator('#tRmap0 .rlabel').count() == 2 and pg.locator('#tRmap1').count() == 1
+        info = ft(pg, '#tRouteInfo'); print('  legs:', info.replace('\n', ' | ')[:400])
+        assert '636 mi' in ft(pg, '.rc-top'), ft(pg, '.rc-top')
+        pg.click('[data-leg="1"][data-lk="1"]'); pg.wait_for_timeout(300)
+        assert '648 mi' in ft(pg, '.rc-top') and 'I-30 E and US-67 N' in pg.locator('.leg-pick').nth(1).locator('button.on').inner_text(), ft(pg, '#tRouteInfo')
+        pg.evaluate("document.querySelector('.leg-pick').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-l1-legs.png')
+        pg.click('#tGo'); pg.wait_for_timeout(2200)
+        title = ft(pg, '.t-title'); print('  result:', title, '|', ft(pg, '#tripSheet .sub'))
+        assert title.count('→') == 2 and 'Dallas' in title
+        assert pg.evaluate('window.__trip.state().result.back') is None, 'no "drive back" on a trip that already comes back'
+        assert pg.locator('[data-legurl]').count() == 2 and 'whole trip' in ft(pg, '#tsExport')
+        pg.click('#tsExport'); one = pg.evaluate('window.__lastUrl')
+        pg.click('[data-legurl="1"]'); leg2 = pg.evaluate('window.__lastUrl'); print('  one link:', one[:160], '\n  leg 2 link:', leg2[:200])
+        assert 'origin=32.7767' in leg2 or 'origin=Dallas' in leg2, leg2
+        assert 'waypoints=' in one and leg2 != one
+        pg.evaluate("document.querySelector('.leg-links').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-l2-leglinks.png')
+        pg.click('#tsDone'); pg.wait_for_timeout(200)
+        pg.evaluate("window.__gmapsAnswer = null")
         # debug log: on at level 4, records the trip steps, never the key
         lg = pg.evaluate('FLog.text()')
         print('  log lines:', lg.count('\n'), '| areas:', sorted(set(e['a'] for e in pg.evaluate('FLog.entries()'))))

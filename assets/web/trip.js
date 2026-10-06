@@ -343,6 +343,46 @@
     return best;
   }
 
+  /** Each leg of a trip with stops in between as its own piece of route (miles stay trip miles). null for one leg. */
+  function legModels(model) {
+    if (model._legs !== undefined) return model._legs;
+    var ends = model.legEnds || [], out = null;
+    if (ends.length > 1) {
+      out = []; var a = 0;
+      ends.forEach(function (b, i) {
+        if (i === ends.length - 1) b = model.totalMi;
+        var pts = [], cum = [];
+        for (var k = 0; k < model.pts.length; k++) if (model.cum[k] >= a - 0.01 && model.cum[k] <= b + 0.01) { pts.push(model.pts[k]); cum.push(model.cum[k]); }
+        out.push({ pts: pts, cum: cum, from: a, to: b }); a = b;
+      });
+    }
+    try { Object.defineProperty(model, '_legs', { value: out, enumerable: false }); } catch (e) { model._legs = out; }
+    return out;
+  }
+  /**
+   * Where a station sits on the trip — once per leg it's near. A round trip on the same roads passes a station twice
+   * (out and back), so it's a candidate at both miles. [{along, offset, leg}] within maxOff miles.
+   */
+  function projectLegs(model, p, maxOff) {
+    var L = legModels(model);
+    if (!L) { var r = project(model, p); return r.offset <= maxOff ? [{ along: r.along, offset: r.offset, leg: 0 }] : []; }
+    var out = [];
+    L.forEach(function (sm, i) { if (sm.pts.length < 2) return; var r2 = project(sm, p); if (r2.offset <= maxOff) out.push({ along: r2.along, offset: r2.offset, leg: i }); });
+    return out;
+  }
+  /** Is this search piece on roads an earlier leg already covers (the way back on a round trip)? Then it needn't be searched again. */
+  function coveredBefore(model, ch) {
+    var L = legModels(model); if (!L) return false;
+    var n = 0, hit = 0;
+    for (var d = ch.fromMi; d <= ch.toMi; d += 5) {
+      // each point counts as covered only if it's on a later leg and an earlier leg runs right by it
+      var li = 0, p = model.pointAt(d); n++;
+      L.forEach(function (sm, i) { if (d >= sm.from) li = i; });
+      for (var j = 0; j < li; j++) if (L[j].pts.length > 1 && project(L[j], p).offset < 0.5) { hit++; break; }
+    }
+    return n > 0 && hit / n >= 0.9;
+  }
+
   /** Split the route into ~chunkMi pieces (with a little overlap) for along-route searches. */
   function chunks(model, chunkMi) {
     var out = [], n = Math.max(1, Math.ceil(model.totalMi / chunkMi)), size = model.totalMi / n;
@@ -719,7 +759,41 @@
     return { url: 'https://www.google.com/maps/dir/?' + q, waypoints: wps.length, tooMany: wps.length > 9 };
   }
 
-  var api = { fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
+  /**
+   * Several Routes API routes driven one after another (one per leg of a trip) as one route: points joined, miles,
+   * time and turn-by-turn steps added up. Each part keeps its own leg, so legEnds mark where each stop is.
+   */
+  function joinRoutes(list) {
+    var pts = [], legs = [], m = 0, sec = 0;
+    list.forEach(function (r) {
+      var p = decodePolyline(r.polyline.encodedPolyline);
+      if (pts.length && p.length && hav(pts[pts.length - 1], p[0]) < 0.05) p = p.slice(1);
+      pts = pts.concat(p);
+      m += r.distanceMeters || 0; sec += parseDur(r.duration);
+      (r.legs && r.legs.length ? r.legs : [{ distanceMeters: r.distanceMeters, duration: r.duration, steps: [] }]).forEach(function (l) { legs.push(l); });
+    });
+    return { distanceMeters: m, duration: Math.round(sec) + 's', polyline: { encodedPolyline: encodePolyline(pts) }, legs: legs,
+      description: list.map(function (r) { return r.description || ''; }).filter(Boolean).join(' / ') };
+  }
+  /**
+   * One Google Maps link per leg of a multi-stop trip, each with the fuel stops on that leg (Google Maps links take up
+   * to 9 stops in between, and Maps only offers route options per leg). planStops need .c.d (mile along the trip).
+   */
+  function exportLegs(route, planStops, model) {
+    var stops = route.stops, out = [], ends = model.legEnds || [];
+    for (var i = 0; i < stops.length - 1; i++) {
+      var a = i ? ends[i - 1] || 0 : -1, b = i < stops.length - 2 ? ends[i] : Infinity;
+      var mine = planStops.filter(function (p) { return p.c.d > a && p.c.d <= b; });
+      var sub = { stops: [stops[i], stops[i + 1]] };
+      var shifted = mine.map(function (p) { return { c: Object.assign({}, p.c, { d: p.c.d - Math.max(0, a) }) }; });
+      var ex = exportUrl(sub, shifted, { legEnds: [] });
+      out.push({ leg: i, from: stops[i], to: stops[i + 1], url: ex.url, waypoints: ex.waypoints, tooMany: ex.tooMany, fuelStops: mine.length,
+        fromMi: Math.max(0, a), toMi: b === Infinity ? model.totalMi : b });
+    }
+    return out;
+  }
+
+  var api = { projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
