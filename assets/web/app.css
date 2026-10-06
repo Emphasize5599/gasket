@@ -559,3 +559,12 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .lim.truck { background: #fff3c4; }
 /* required */
 .req { color: #e5484d; font-weight: 800; margin-left: 2px; }
+/* cruise speed adjustments: header with its (?), road filters and sorting */
+.adj-h { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; margin: 12px 0 6px; }
+.adj-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+.adj-tools .chips.mini { flex-wrap: wrap; }
+.adj-sort { display: flex; gap: 6px; margin-left: auto; }
+.adj-sort select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.adj-sort .dir { width: 34px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-weight: 800; color: var(--ink); }
+.adj-sort .dir:disabled { opacity: .4; }
+.buf-read b { white-space: nowrap; }

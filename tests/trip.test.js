@@ -278,4 +278,18 @@ assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
   assert.ok(T.slowDown({ secs, offsets: [12, 0], all: 0, mode: 'fastest', floor: 0, ruleOff: rule, ok: okT, failing: (o) => T.fuelCheck(tight, T.speedRates(secs, o, mpg, 25, 90), 283.5).bad }).offsets[0] === 0);
   console.log('speed vs. tank: +' + mx + ' max on the 75 road with 0.6 gal to spare; all-roads slow to +' + sa.all + ', fastest-first', JSON.stringify(sf.offsets));
 }
+// ---- stops planned at your speeds: reachable() agrees with the planner ----
+{
+  const mpg = (v) => 40 * Math.pow(0.986, v - 55);
+  const secs = [{ from: 0, to: totalMi, limit: 70 }];
+  const cs = [40, 80, 120, 160, 200, 240].map((d, k) => at(d, 3.0 + k * 0.01, 0.2, 'r' + d));
+  const o = Object.assign({}, base, { capGal: 2.6, startGal: 2.0, cands: cs, bufferGal: 30 / 29, arriveGal: 30 / 29 });
+  const fast = T.speedRates(secs, [15], mpg, 25, 90), slow = T.speedRates(secs, [0], mpg, 25, 90);
+  const pFast = T.plan(Object.assign({}, o, { model: T.withSpeeds(m, fast) }));
+  assert.equal(T.reachable(o, slow), T.plan(o).ok, 'at the limit: same answer');
+  assert.equal(T.reachable(o, fast), pFast.ok, 'at +15: same answer');
+  assert.ok(T.withSpeeds(m, fast).galTo(100) > m.galTo(100), 'faster burns more');
+  if (pFast.ok) pFast.stops.forEach((st) => assert.ok(st.arriveGal >= o.bufferGal - 0.11, 'every stop reached with the buffer, at +15'));
+  console.log('planned at speeds: at the limit ok=' + T.plan(o).ok + ', +15 ok=' + pFast.ok);
+}
 console.log('trip tests passed (1,000-mile / 300-station plan in ' + ms + ' ms, ' + p.stops.length + ' stops, saves $' + p.savings.toFixed(2) + ')');

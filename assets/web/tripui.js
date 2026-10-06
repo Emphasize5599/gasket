@@ -1324,88 +1324,130 @@
       });
       return Object.assign({}, r, { sections: secs });
     }) : [];
-    result.speedSecs = [];
-    roads.forEach(function (r) { r.sections.forEach(function (sec) { result.speedSecs.push({ from: sec.from, to: sec.to, limit: sec.limit }); }); });
     Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', loadingHtml: limBar(model, 'Looking up speed limits'), state: st, guard: speedGuard() });
-    if (result.sweep && result.speedSecs.length) refreshBufBox();      // the buffer's gray area depends on these speeds
+    // first time the speeds are known (speed limits just arrived, or your rule): plan the stops at those speeds
+    var cx0 = speedCx();
+    if (cx0 && result.planOffs == null) {
+      result.planOffs = cx0.offs.join(',');
+      if (cx0.offs.some(function (v) { return v; })) { replan(); return; }
+    }
+    if (result.sweep) refreshBufBox();      // the buffer's gray area depends on these speeds
   }
 
 
-  // ---------- buffer <-> cruising speed: the tank never runs dry ----------
-  // Driving faster burns gas the plan didn't count. On each stretch between fuel stops that extra has to fit in what
-  // you'd arrive with — so a small buffer caps your speeds, and fast speeds need a bigger buffer. With "let the sliders
-  // adjust each other" on, lowering the buffer slows you down (all roads, or the fastest roads first, down to your
-  // limit under the posted speed) and speeding up raises the buffer; with it off, the slider just stops at the edge.
+  // ---------- buffer <-> cruising speed ----------
+  // Stops are planned at the speeds you choose (extra gas for driving faster counted on every stretch), so you always
+  // arrive at a station — and at the end — with at least your buffer. Faster speeds or a bigger buffer both need the
+  // stations closer together, so each can rule out the other: with "let the sliders adjust each other" off, the
+  // slider stops at the gray; with it on, a bigger buffer slows you down (all roads, or the fastest roads first, down
+  // to your limit under the posted speed) and faster speeds lower the buffer.
   function linked() { return S.trip.linkSliders !== false; }
-  function floorOff() { return -Math.max(0, Math.min(10, +S.trip.maxUnder || 0)); }
+  function floorOff() { return -Math.max(0, Math.min(10, S.trip.maxUnder != null ? +S.trip.maxUnder : 5)); }
+  /** Every posted-limit section of the route's major roads, in order ("keep me as slow as the trucks" applied). */
+  function flatSecs(m) {
+    var lim = m && m._lim, out = [];
+    if (!lim || lim === 'loading' || !lim.roads) return out;
+    lim.roads.forEach(function (r) { (r.sections || []).forEach(function (sec) {
+      out.push({ from: sec.from, to: sec.to, limit: S.speed.truck && sec.truck ? Math.min(sec.limit, sec.truck) : sec.limit, cls: r.cls });
+    }); });
+    return out;
+  }
   function speedCx() {
-    var r = result; if (!r || !r.speedSecs || !r.speedSecs.length || !window.Garage || !Garage.speedFn) return null;
+    var r = result; if (!r || !window.Garage || !Garage.speedFn) return null;
+    var secs = flatSecs(model); if (!secs.length) return null;
     var sf = Garage.speedFn(); if (!sf) return null;
     var st = r.speedState = r.speedState || {}; st.offsets = st.offsets || {};
-    var offs = r.speedSecs.map(function (sc, i) { return st.offsets[i] != null ? st.offsets[i] : Garage.ruleOff(sc.limit); });
-    return { secs: r.speedSecs, st: st, offs: offs, f: sf.f, lo: sf.lo, hi: sf.hi };
+    var offs = secs.map(function (sc, i) { return st.offsets[i] != null ? st.offsets[i] : Garage.ruleOff(sc.limit); });
+    return { secs: secs, st: st, offs: offs, f: sf.f, lo: sf.lo, hi: sf.hi };
   }
-  function check(plan, cx, offs) { return T.fuelCheck(plan, T.speedRates(cx.secs, offs, cx.f, cx.lo, cx.hi), model.totalMi); }
-  function fitsAt(plan, cx, offs) { return check(plan, cx, offs).ok; }
-  function slowFor(plan, cx, offs) {
+  function ratesOf(cx, offs) { return T.speedRates(cx.secs, offs, cx.f, cx.lo, cx.hi); }
+  /** Plan options on the plain model at buffer mi (for the quick "is there any plan" check). */
+  function baseOpts(mi) {
+    var o = Object.assign({}, result.opts, { model: model });
+    if (mi != null) { o.bufferGal = mi * model.combGpm; o.arriveGal = mi * model.combGpm; }
+    return o;
+  }
+  function canDo(mi, cx, offs) { return T.reachable(baseOpts(mi), ratesOf(cx, offs)); }
+  /** The planner's own answer (a quick plan) — used to confirm before the app changes your speeds or buffer for you. */
+  function planOk(mi, cx, offs) {
+    var o = Object.assign(baseOpts(mi), { model: T.withSpeeds(model, ratesOf(cx, offs)), lite: true });
+    return T.plan(o).ok;
+  }
+  function smallestBuf() { var sw = result.sweep; return sw && sw.length ? sw[0].mi : 5; }
+  function slowFor(mi, cx, offs) {
     return T.slowDown({ secs: cx.secs, offsets: offs, all: cx.st.all || 0, mode: S.trip.slowMode === 'fastest' ? 'fastest' : 'all', floor: floorOff(), ruleOff: Garage.ruleOff,
-      ok: function (o) { return fitsAt(plan, cx, o); }, failing: function (o) { return check(plan, cx, o).bad; } });
+      ok: function (o) { return canDo(mi, cx, o) && planOk(mi, cx, o); },
+      failing: function () { return [{ a: 0, b: model.totalMi }]; } });
   }
-  /** Can the buffer go to this sweep row? (with linking: after slowing down as far as you allow) */
+  /** Can the buffer slider go to this row? (rows are planned at your speeds; linked: after slowing as far as you allow) */
   function bufOk(x, cx) {
-    if (!x || !x.ok) return false;
+    if (!x) return false;
+    if (x.ok) return true;
     cx = cx === undefined ? speedCx() : cx;
-    if (!cx || fitsAt(x.plan, cx, cx.offs)) return true;
-    return linked() ? !!slowFor(x.plan, cx, cx.offs) : false;
+    return !!(cx && linked() && slowFor(x.mi, cx, cx.offs));
   }
-  /** Speeds that work: at this buffer, or (linked) at some buffer on the slider. */
-  function speedOk(cx, offs) {
-    var r = result;
-    if (fitsAt(r.plan, cx, offs)) return true;
-    return linked() && !!(r.sweep || []).some(function (x) { return x.ok && fitsAt(x.plan, cx, offs); });
+  /** Highest offset that still has a plan — at this buffer, or (linked) at the smallest buffer. Binary search. */
+  function maxOffset(cx, set) {
+    var mi = linked() ? smallestBuf() : result.bufMi, lo = set(null), hi = 15;
+    if (!canDo(mi, cx, set(lo))) return lo;
+    while (lo < hi) { var mid = Math.ceil((lo + hi) / 2); if (canDo(mi, cx, set(mid))) lo = mid; else hi = mid - 1; }
+    return lo;
   }
-  function bufAt(mi) { return (result.sweep || []).filter(function (x) { return x.mi === mi; })[0]; }
   function speedGuard() {
     return {
       maxFor: function (i, offs) {
         var cx = speedCx(); if (!cx) return 15;
-        var o = offs.slice(), v = o[i];
-        while (v < 15) { o[i] = v + 1; if (!speedOk(cx, o)) break; v++; }
-        return v;
+        return maxOffset(cx, function (v) { if (v == null) return offs[i]; var o = offs.slice(); o[i] = v; return o; });
       },
       maxAll: function () {
         var cx = speedCx(); if (!cx) return 15;
-        var v = cx.st.all || 0;
-        while (v < 15) { var o = cx.secs.map(function (sc) { return Garage.ruleOff(sc.limit, v + 1); }); if (!speedOk(cx, o)) break; v++; }
-        return v;
+        var cur = cx.st.all || 0;
+        return maxOffset(cx, function (v) { if (v == null) return cur; return cx.secs.map(function (sc) { return Garage.ruleOff(sc.limit, v); }); });
       },
       notes: function (mx, road) { return speedNotes(mx, road); },
       release: function () {
-        // faster than this buffer allows: (linked) raise the buffer to the smallest one that keeps gas in the tank
-        var cx = speedCx(), r = result; if (!cx || fitsAt(r.plan, cx, cx.offs) || !linked()) { refreshBufBox(); return; }
-        var rows = (r.sweep || []).filter(function (x) { return x.ok && fitsAt(x.plan, cx, cx.offs); });
-        var up = rows.filter(function (x) { return x.mi >= r.bufMi; })[0] || rows[rows.length - 1];
-        if (!up) { refreshBufBox(); return; }
-        LG.info('plan', 'Faster speeds: buffer ' + r.bufMi + ' → ' + up.mi + ' mi to keep gas in the tank');
-        toastMsg('Buffer raised to ' + up.mi + ' mi so these speeds don\'t run you low.');
-        setBuffer(up);
+        // re-plan the stops at the new speeds; too fast for this buffer -> (linked) the largest smaller buffer that works
+        var cx = speedCx(), r = result; if (!cx) return;
+        if (canDo(r.bufMi, cx, cx.offs)) { replan(); return; }
+        if (!linked()) { replan(); return; }
+        var mis = []; for (var v = r.bufMi - 1; v >= smallestBuf(); v--) mis.push(v);
+        var to = mis.filter(function (v) { return canDo(v, cx, cx.offs) && planOk(v, cx, cx.offs); })[0];
+        if (to == null) { replan(); return; }
+        LG.info('plan', 'Faster speeds: buffer ' + r.bufMi + ' → ' + to + ' mi');
+        toastMsg('Buffer lowered to ' + to + ' mi — the stations are too far apart for a bigger one at these speeds.');
+        replan(to);
       }
     };
   }
-  /** Lowest buffer the current speeds allow, and the speed cap the current buffer sets — as warnings. */
+  /** Re-plan the stops at the current speeds (and buffer mi, if given): totals, buffer slider and all. */
+  function replan(mi) {
+    var r = result, cx = speedCx(); if (!r || !r.opts) return false;
+    var o = Object.assign({}, r.opts, { model: cx ? T.withSpeeds(model, ratesOf(cx, cx.offs)) : model, lite: false });
+    if (mi != null) { o.bufferGal = mi * model.combGpm; o.arriveGal = mi * model.combGpm; }
+    var p = T.plan(o);
+    if (!p.ok) { LG.warn('plan', 'No plan at these speeds', { buffer: mi != null ? mi : r.bufMi }); toastMsg('No plan works at those speeds with this buffer.'); return false; }
+    r.plan = p; r.opts = o; if (mi != null) r.bufMi = mi; r.topSel = -1; r.sweep = null; r.planOffs = cx ? cx.offs.join(',') : '';
+    recompute(); startSweep(); keepScroll(showResult);
+    return true;
+  }
+  /** The buffer the speeds allow, as warnings: "keeps this at N mi or less". */
   function bufLimits() {
     var r = result, cx = speedCx(), sw = r && r.sweep;
     if (!cx || !sw) return null;
-    var okRows = sw.filter(function (x) { return x.ok; }), allowed = sw.filter(function (x) { return bufOk(x, cx); });
-    var minOk = okRows.length ? okRows[0].mi : null, minAllowed = allowed.length ? allowed[0].mi : null;
-    return { minBuf: minAllowed != null && minOk != null && minAllowed > minOk ? minAllowed : null, cx: cx };
+    var any = cx.offs.some(function (v) { return v > 0; });
+    var allowed = sw.filter(function (x) { return bufOk(x, cx); });
+    var maxAllowed = allowed.length ? allowed[allowed.length - 1].mi : null;
+    // only blame the speeds when at the limits a bigger buffer would work
+    var atLim = cx.secs.map(function () { return 0; });
+    var maxAtLimit = null; sw.forEach(function (x) { if (canDo(x.mi, cx, atLim)) maxAtLimit = x.mi; });
+    return { maxBuf: any && maxAllowed != null && maxAtLimit != null && maxAllowed < maxAtLimit ? maxAllowed : null, cx: cx };
   }
-  function speedName(road) { return road ? road.name + ' (' + road.limit + ' mph)' : 'All roads'; }
   function offTxt(v) { return v === 0 ? 'at the limit' : (v > 0 ? '+' : '−') + Math.abs(v) + ' mph'; }
+  function capTxt(v) { return v === 0 ? 'at or below the limit' : 'at ' + offTxt(v) + ' or less'; }
   function speedNotes(mx, road) {
     var out = [], b = bufLimits();
-    if (b && b.minBuf != null) out.push('⚠ This speed keeps your buffer at ' + b.minBuf + ' mi or more' + (linked() ? ', even slowing down as far as you allow' : '') + '.');
-    if (mx < 15) out.push(linked() ? '⚠ Even a bigger buffer can\'t cover going faster than ' + offTxt(mx) + ' here — the stations are too far apart.' : '⚠ Your ' + result.bufMi + '-mi buffer keeps this at ' + offTxt(mx) + ' or less.');
+    if (b && b.maxBuf != null) out.push('⚠ This speed keeps your buffer at ' + b.maxBuf + ' mi or less' + (linked() ? ', even slowing other roads as far as you allow' : '') + '.');
+    if (mx < 15) out.push(linked() ? '⚠ Even the smallest buffer can\'t cover going faster than ' + offTxt(mx) + ' here — the stations are too far apart.' : '⚠ Your ' + result.bufMi + '-mi buffer keeps this ' + capTxt(mx) + '.');
     return out;
   }
   function refreshBufBox() { if ($('tsBufBox')) { var y = $('tripSheet').scrollTop; $('tsBufBox').outerHTML = bufBox(); bindBuf(); $('tripSheet').scrollTop = y; } }
@@ -1433,7 +1475,7 @@
       if (i < list.length) return setTimeout(next, 0);
       r.sweep = T.marks(rows); r.sweeping = false;
       LG.debug('plan', 'Buffer sweep in ' + (Date.now() - t0) + ' ms', rows.map(function (x) { return x.mi + ':' + (x.net == null ? '-' : x.net.toFixed(2)) + (x.mark ? '*' : ''); }).join(' '));
-      if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); if (linked() && r.speedSecs && $('tsSpeed')) renderTripSpeed(); }
+      if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); if (r.plan.ok && $('tsSpeed')) renderTripSpeed(); }
     }, 300);
   }
   // ---------- how much gas to leave with ----------
@@ -1523,22 +1565,27 @@
     if (!base.ok) base = cur;
     var pos = function (mi) { return ((mi - min) / (max - min) * 100).toFixed(2); };
     var bl = bufLimits(), warns = [];
-    if (bl && bl.minBuf != null) warns.push('⚠ Your cruising speeds keep this at ' + bl.minBuf + ' mi or more' + (linked() ? ', even slowing down as far as you allow (' + (-floorOff()) + ' under the limit)' : '') + '.');
+    if (bl && bl.maxBuf != null) warns.push('⚠ Your cruising speeds keep this at ' + bl.maxBuf + ' mi or less' + (linked() ? ', even slowing down as far as you allow (' + (-floorOff()) + ' under the limit)' : '') + '.');
     if (bl && !linked()) {
       var G0 = speedGuard(), st0 = bl.cx.st, at = st0.touched != null && st0.touched !== 'all' && bl.cx.secs[st0.touched] ? st0.touched : 'all';
       var mx0 = at === 'all' ? G0.maxAll() : G0.maxFor(at, bl.cx.offs);
-      if (mx0 < 15) warns.push('⚠ This buffer keeps ' + (at === 'all' ? 'All roads' : 'that road (' + bl.cx.secs[at].limit + ' mph limit)') + ' at ' + offTxt(mx0) + ' or less.');
+      if (mx0 < 15) warns.push('⚠ This buffer keeps ' + (at === 'all' ? 'All roads' : 'that road (' + bl.cx.secs[at].limit + ' mph limit)') + ' ' + capTxt(mx0) + '.');
     }
     if (warns.length) h += '<div class="spd-warn">' + warns.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div>';
     h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, base) + '</span></div>';
-    var mk = bufMarks(sw, base), lastL = -99, lastRow = 1;
+    var mk = bufMarks(sw, base), GAP = 17, rows = [[], []];
     h += '<div class="buf-track"><div class="buf-marks">';
-    // labels in two rows when markers are close, so they don't overlap
-    mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; }).forEach(function (m) {
-      var L = +pos(m.mi), row = L - lastL < 14 ? 1 - lastRow : 0;
-      lastL = L; lastRow = row;
+    // labels in two rows; where neither row has room the tick stays without a label.
+    // The usual buffer and the biggest saving are placed first, so they always get one.
+    var all = mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; });
+    var big = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d; })[0];
+    var free = function (row, L) { return rows[row].every(function (q) { return Math.abs(q - L) >= GAP; }); };
+    var order = all.filter(function (m) { return m.kind === 'base' || m === big; }).concat(all.filter(function (m) { return !(m.kind === 'base' || m === big); }));
+    order.forEach(function (m) { var L = +pos(m.mi); m.lr = free(0, L) ? 0 : free(1, L) ? 1 : -1; if (m.lr >= 0) rows[m.lr].push(L); });
+    all.forEach(function (m) {
+      var L = +pos(m.mi);
       var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
-      h += '<span class="bm ' + m.kind + (row ? ' r2' : '') + '" style="left:' + L + '%"' + (m.kind !== 'base' ? ' data-bm="' + m.mi + '"' : '') + '><em>' + lab + '</em><i></i></span>';
+      h += '<span class="bm ' + m.kind + (m.lr === 1 ? ' r2' : '') + '" style="left:' + L + '%"' + (m.kind !== 'base' ? ' data-bm="' + m.mi + '"' : '') + '>' + (m.lr >= 0 ? '<em>' + lab + '</em>' : '') + '<i></i></span>';
     });
     // gray: buffers you can't use (no plan keeps that much, or your speeds would run the tank dry)
     var cx = speedCx(), band = null, bands = [], memo = {};
@@ -1591,18 +1638,19 @@
       var x = swRow(+inp.value);
       if (x.mi === r.bufMi) { inp.value = x.mi; return; }
       LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
-      if (!bufOk(x)) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg(x.ok ? 'Your speeds need more buffer than ' + x.mi + ' mi.' : 'No plan can keep ' + x.mi + ' mi on this trip.'); return; }
+      if (!bufOk(x)) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg('No plan keeps ' + x.mi + ' mi at your speeds — the stations are too far apart.'); return; }
       N.haptic && N.haptic();
       var cx = speedCx();
-      if (cx && !fitsAt(x.plan, cx, cx.offs)) {
-        // linked: slow down just enough for the smaller buffer
-        var sd = slowFor(x.plan, cx, cx.offs);
+      if (!x.ok && cx) {
+        // linked: slow down just enough that a plan keeps this bigger buffer
+        var sd = slowFor(x.mi, cx, cx.offs);
         if (sd) {
           sd.offsets.forEach(function (v, i) { cx.st.offsets[i] = v; });
           cx.st.all = sd.all;
           var slowed = sd.offsets.filter(function (v, i) { return v !== cx.offs[i]; }).length;
           LG.info('plan', 'Smaller buffer: slowed ' + slowed + ' road section(s)', { mode: S.trip.slowMode || 'all', all: sd.all });
-          toastMsg(S.trip.slowMode === 'fastest' ? 'Slowed the fastest roads so a ' + x.mi + '-mi buffer still gets you there.' : 'All roads set to ' + offTxt(sd.all) + ' so a ' + x.mi + '-mi buffer still gets you there.');
+          toastMsg(S.trip.slowMode === 'fastest' ? 'Slowed the fastest roads so you keep a ' + x.mi + '-mi buffer.' : 'All roads set to ' + offTxt(sd.all) + ' so you keep a ' + x.mi + '-mi buffer.');
+          replan(x.mi); return;
         }
       }
       setBuffer(x);
@@ -1640,7 +1688,13 @@
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
     var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
-    var opts = makeOpts(model, cands, startGal);
+    var opts = makeOpts(model, cands, startGal), planOffs = null;
+    var secs0 = flatSecs(model), sf0 = secs0.length && Garage.speedFn ? Garage.speedFn() : null;
+    if (sf0) {
+      var offs0 = secs0.map(function (sc) { return Garage.ruleOff(sc.limit); });
+      planOffs = offs0.join(',');
+      if (offs0.some(function (v) { return v; })) opts.model = T.withSpeeds(model, T.speedRates(secs0, offs0, sf0.f, sf0.lo, sf0.hi));
+    }
     await breathe();
     var t0 = Date.now();
     var plan = T.plan(opts);
@@ -1649,7 +1703,7 @@
       stops: plan.ok ? plan.stops.map(function (s) { return { name: s.c.station.name, mile: Math.round(s.c.d), price: s.c.price, buy: Math.round(s.buyGal * 10) / 10, why: s.why }; }) : null });
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
-      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp };
+      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp, planOffs: planOffs };
     await breathe();
     var t1 = Date.now();
     recompute();

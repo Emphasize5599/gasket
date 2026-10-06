@@ -855,7 +855,44 @@
     return null;
   }
 
-  var api = { speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, slowDown: slowDown, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
+  /** The route as you'll drive it: gas used includes the extra for your cruising speeds (rates from speedRates). */
+  function withSpeeds(model, rates) {
+    if (!rates || !rates.some(function (r) { return r.rate; })) return model;
+    var m = Object.create(model);
+    m.galTo = function (d) { return model.galTo(d) + extraBetween(rates, 0, d); };
+    m.speedRates = rates;
+    return m;
+  }
+  /**
+   * Is there any fuel plan at all (plan.ok) for these options at these speeds? A quick check: hop to the farthest
+   * station you can reach with at least the buffer left (anything on the way to the first stop, like the planner),
+   * fill up, repeat; done when the end is in reach with arriveGal left. o: plan options on the plain (limit-speed) model.
+   */
+  function reachable(o, rates) {
+    var m = o.model, end = m.totalMi;
+    var G = function (d) { return m.galTo(d) + (rates ? extraBetween(rates, 0, d) : 0); };
+    var det = function (c) { return (c.detourMi || 0) * m.cityGpm / 2; };
+    var cs = o.cands.filter(function (c) {
+      return c.price > 0 && c.d >= 0 && c.d <= end && !(o.maxDetourMin != null && (c.detourMin || 0) > o.maxDetourMin);
+    }).sort(function (a, b) { return a.d - b.d; });
+    var pos = 0, gas = o.startGal, back = 0, first = true;
+    for (var hops = 0; hops <= cs.length + 1; hops++) {
+      var gp = G(pos);
+      if (gas - back - (G(end) - gp) - 0.2 >= o.arriveGal - 1e-9) return true;
+      var best = null;
+      for (var k = 0; k < cs.length; k++) {
+        var c = cs[k]; if (c.d <= pos) continue;
+        var used = back + G(c.d) - gp + det(c);
+        if (used > o.capGal + 1e-9) break;
+        if (gas - used - 0.2 >= (first ? 0 : o.bufferGal) - 1e-9) best = c;   // 0.2: the planner rounds to 0.1 gal
+      }
+      if (!best) return false;
+      pos = best.d; gas = o.capGal; back = det(best); first = false;
+    }
+    return false;
+  }
+
+  var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, slowDown: slowDown, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
