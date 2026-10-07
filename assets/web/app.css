@@ -302,9 +302,9 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .logtxt { font: 11.5px/1.4 ui-monospace, "Roboto Mono", monospace; white-space: pre-wrap; word-break: break-word; background: var(--surface); color: var(--ink);
   border-radius: 14px; padding: 12px; max-height: 62vh; overflow: auto; }
 
-#tGo { position: relative; overflow: hidden; }
-#tGo.busy { background: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); color: var(--ink); }
-#tGo .pfill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); transition: width .35s ease; opacity: .9; }
+.btn { position: relative; overflow: hidden; }
+.btn.busy { background: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); color: var(--ink); }
+.btn .pfill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); transition: width .35s ease; opacity: .9; }
 #tGo .plab { position: relative; z-index: 1; color: var(--ink); text-shadow: 0 0 6px var(--surface); font-weight: 700; }
 
 .bufbox, .routebox { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 12px 0; }
@@ -729,7 +729,17 @@ body.trip-full .top { z-index: 1000; }
 .tp-body .kpis b { white-space: nowrap; font-size: min(19px, 5vw); }
 .tp-body, .tp-body * { overflow-wrap: break-word; }
 /* narrow screens: name only the step you're on */
-@media (max-width: 560px) { .tp-steps { justify-content: space-between; } .tp-steps button:not(.on) span { display: none; } .tp-steps button { flex: 0 0 auto; } .tp-steps button.on { flex: 0 1 auto; padding: 0 12px 0 8px; } }
+/* step tabs: number over name, every tab outlined and labeled */
+.tp-steps { gap: 4px; }
+.tp-steps button { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 2px; height: 48px; padding: 4px 2px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 11px; font-weight: 600; color: var(--ink-2); }
+.tp-steps button b { width: 20px; height: 20px; font-size: 11px; }
+.tp-steps button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-steps button.on { border-color: var(--accent); color: var(--ink); box-shadow: none; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.tp-steps button.dim { opacity: .38; }
+.tp-steps .ls { display: none; }
+@media (max-width: 370px) { .tp-steps .lf { display: none; } .tp-steps .ls { display: inline; } }
+.tp-head { align-items: center; }
 /* one-column grids: the column is the screen's width, never the width of its longest line */
 .actions, .pick, .alts-pick { grid-template-columns: minmax(0, 1fr); }
 .leg-link b { white-space: normal; overflow: visible; }
@@ -756,7 +766,7 @@ details.g-obs[open] { padding-bottom: 12px; }
 .nlist .nl-a { flex: 1; min-width: 0; padding-top: 2px; overflow-wrap: anywhere; }
 .nlist .nl-a .pick, .nlist .nl-a .msg { margin-top: 8px; }
 /* Stops */
-.warns.top { margin: 4px 0 8px; }
+.warns.pre { margin: 4px 0 8px; }
 .sec-row { display: flex; align-items: center; gap: 8px; }
 .sec-row .sec-h { flex: 1; min-width: 0; }
 .sec-row .qi { flex: none; margin-top: 8px; }
@@ -788,3 +798,29 @@ details.g-obs[open] { padding-bottom: 12px; }
   box-shadow: 0 0 0 1px rgba(0,0,0,.05) inset; transition: opacity .15s ease; }
 .spdbox.exp { padding-bottom: 38vh; }
 .spdbox .leg.insel { background: color-mix(in srgb, #18a957 10%, transparent); border-radius: 12px; }
+
+/* Route: get routes / routes ready */
+#tRouteGo { margin: 14px 0 6px; }
+#tRouteGo > .btn { width: 100%; margin: 0; position: relative; overflow: hidden; }
+.rt-ready { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--save); }
+.rt-ready .btn { margin: 0 0 0 auto !important; width: auto !important; color: var(--ink); }
+.tp-nav .btn.dim { opacity: .4; }
+/* chosen stops on the big map: a price bubble that keeps off the roads (tail points at the station) */
+.leaflet-tooltip.stopbub { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 3px; border-radius: 999px; background: var(--save); color: #fff;
+  border: 2px solid var(--save); box-shadow: 0 2px 8px rgba(0,0,0,.28); font-weight: 700; font-size: 15px; letter-spacing: -.2px; white-space: nowrap; }
+:root[data-theme="dark"] .leaflet-tooltip.stopbub { color: #062614; }
+.leaflet-tooltip.stopbub .b { min-width: 24px; height: 24px; padding: 0 5px; border-radius: 999px; background: #0a5c32; color: #fff; font-size: 11px; display: grid; place-items: center; font-weight: 800; }
+.leaflet-tooltip.stopbub sup { font-size: 9.5px; margin-left: 1px; }
+.stopbub.leaflet-tooltip-top::before { border-top-color: var(--save); }
+.stopbub.leaflet-tooltip-bottom::before { border-bottom-color: var(--save); }
+.stopbub.leaflet-tooltip-left::before { border-left-color: var(--save); }
+.stopbub.leaflet-tooltip-right::before { border-right-color: var(--save); }
+/* gas tiles: numbered like the places */
+.gas-tiles { margin: 8px 0; }
+.gas-tiles .ideal { margin: 8px 0; }
+.ideal-h .nn.sm, .nn.sm { flex: none; width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; font-weight: 800; letter-spacing: 0; margin-right: 2px; }
+.warns.pre .note a { color: var(--accent); font-weight: 600; }
+/* Departure: label and (?) on one line, centered */
+.kpis > div > span { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 16px; }
+.kpis > div > span .qi { margin: 0; vertical-align: 0; flex: none; }
+.page.tpanel { overflow: clip; }   /* never scrolled as a whole (scrollIntoView could shift it under the top bar) */

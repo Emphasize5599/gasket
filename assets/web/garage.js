@@ -78,7 +78,7 @@
   var EPA_Q = {
     city: '<b>EPA city</b>: a lab test of stop-and-go driving — about 11 miles averaging 21 mph (top speed 56), with frequent stops and idling. Since 2008 it\'s adjusted for A/C, cold starts and harder acceleration.',
     hwy: '<b>EPA highway</b>: a lab test of rural and interstate driving — about 10 miles averaging 48 mph (top speed 60), no stops. Steady 70+ mph cruising uses more than this.',
-    comb: '<b>EPA combined</b>: 55% city and 45% highway. Trip plans start from these numbers, then use your logged mileage and the speeds on your route.'
+    comb: '<b>EPA combined</b>: 55% city and 45% highway. Trip plans start from these numbers, then use your logged mileage and the speeds on your route. Source: fueleconomy.gov.'
   };
   function draw0() {
     var c = car();
@@ -89,12 +89,11 @@
       '<button class="btn tonal sm" id="gEdit">' + (editing ? 'Done' : 'Edit') + '</button></div>';
     if (editing) h += editPanel(c);
     h += '</div>';
-    h += '<div class="card g-econ"><h3>Fuel economy</h3>';
+    h += '<div class="card g-econ"><h3>Fuel economy (MPG)</h3>';
     if (hasEpa(c)) {
       var tile = function (v, label, q) { return '<div><b>' + v + '</b><span>' + label + '</span>' + A.qBtn(q) + '</div>'; };
       h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city) + tile(c.epa.hwy, 'Highway', EPA_Q.hwy) +
-        tile(c.epa.comb || Math.round(harm(c.epa.city, c.epa.hwy)), 'Combined', EPA_Q.comb) + '</div>' +
-        '<div class="epa-src">mpg · fueleconomy.gov</div>';
+        tile(c.epa.comb || Math.round(harm(c.epa.city, c.epa.hwy)), 'Combined', EPA_Q.comb) + '</div>';
     } else h += '<div class="msg">No EPA numbers yet — tap Edit and look your car up.</div>';
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';

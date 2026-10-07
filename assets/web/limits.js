@@ -191,7 +191,14 @@
     });
     // Coarse first (every 3rd 5-mile piece, plus each road's ends), then fill in only between readings that differ —
     // limits change rarely, so most pieces just take their neighbors' answer. 16 lookups at a time.
-    var done = 0, total = 0;
+    // progress in two phases so the bar only moves forward: the coarse pass is the first 75%, the fill-in the rest
+    var done = 0, total = 0, phase = 0, base = 0, span = 0, shown = 0;
+    function prog() {
+      if (!opts.onProg) return;
+      var f = phase === 0 ? 0.75 * done / Math.max(1, span) : 0.75 + 0.25 * (done - base) / Math.max(1, span);
+      shown = Math.max(shown, Math.min(1, f));
+      opts.onProg(Math.round(shown * 1000), 1000);
+    }
     async function lookup(pc) {
       var road = pc.road, p = model.pointAt((pc.from + pc.to) / 2);
       pc.st = stateAt(p.lat, p.lng);
@@ -210,7 +217,7 @@
       }
       pc.truck = truckLimit(pc.st, road.cls, pc.fsys, pc.limit);
       pc.looked = true;
-      done++; if (opts.onProg) opts.onProg(done, total);
+      done++; prog();
     }
     async function runAll(list, n) {
       var i = 0;
@@ -222,6 +229,7 @@
     rs.forEach(function (r) { r.pieces.forEach(function (pc, k) { if (k % 3 === 1 || k === 0 || k === r.pieces.length - 1) coarse.push(pc); }); });
     // estimate the total up front so the progress bar doesn't jump back: coarse + ~a quarter of the rest
     total = coarse.length + Math.ceil((todo.length - coarse.length) * 0.25);
+    span = coarse.length;
     await runAll(coarse, 16);
     var fill = [];
     rs.forEach(function (r) {
@@ -237,7 +245,7 @@
       });
     });
     total = done + fill.length;
-    if (opts.onProg) opts.onProg(done, total);
+    phase = 1; base = done; span = fill.length; prog();
     await runAll(fill, 16);
     stats.lookups = done;
     rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; delete pc.looked; }); r.sections = sections(r.pieces); });
