@@ -73,25 +73,33 @@
     drawing = true;
     try { settle(host); draw0(); } finally { drawing = false; }
   }
+  // Three tiles: which car (and its details behind Edit), its fuel economy, and your own logged mileage (collapsed).
+  var obsOpen = false;
+  var EPA_Q = {
+    city: '<b>EPA city</b>: a lab test of stop-and-go driving — about 11 miles averaging 21 mph (top speed 56), with frequent stops and idling. Since 2008 it\'s adjusted for A/C, cold starts and harder acceleration.',
+    hwy: '<b>EPA highway</b>: a lab test of rural and interstate driving — about 10 miles averaging 48 mph (top speed 60), no stops. Steady 70+ mph cruising uses more than this.',
+    comb: '<b>EPA combined</b>: 55% city and 45% highway. Trip plans start from these numbers, then use your logged mileage and the speeds on your route.'
+  };
   function draw0() {
     var c = car();
-    var h = '<h3>Your car</h3><div class="chips cars" id="gCars">' + S.cars.map(function (x) {
+    var h = '<div class="card g-car"><h3>Your car</h3><div class="chips cars" id="gCars">' + S.cars.map(function (x) {
       return '<button data-car="' + esc(x.id) + '" class="' + (x.id === c.id ? 'on' : '') + '">' + esc(shortName(x)) + '</button>';
     }).join('') + '<button data-car="+">+ Add car</button></div>';
-    h += '<div class="g-head"><div><b>' + esc(c.name || 'New car') + '</b><span>' + esc((SP.TYPES[c.type] || SP.TYPES.car).label) + ' · ' +
-      esc((P.GRADES[grade()] || {}).label || grade()) + ' · ' + (c.tank ? c.tank + ' gal tank' : 'tank size not set') + '</span></div>' +
+    h += '<div class="g-head"><div><b>' + esc(c.name || 'New car') + '</b></div>' +
       '<button class="btn tonal sm" id="gEdit">' + (editing ? 'Done' : 'Edit') + '</button></div>';
-    if (hasEpa(c)) {
-      h += '<div class="epa-tiles"><div><b>' + c.epa.city + '</b><span>EPA city</span></div><div><b>' + c.epa.hwy + '</b><span>EPA highway</span></div>' +
-        '<div><b>' + (c.epa.comb || Math.round(harm(c.epa.city, c.epa.hwy))) + '</b><span>EPA combined</span></div></div>' +
-        '<details class="epa-note"><summary>How the EPA got these</summary><p>Lab tests on a dynamometer. <b>City</b>: stop-and-go, averaging 21 mph (top 56 mph). ' +
-        '<b>Highway</b>: averaging 48 mph (top 60 mph). Since 2008 the label is also adjusted with a faster, harder test (averaging 48 mph, up to 80 mph), ' +
-        'A/C on a hot day and a 20°F cold start — so it already reads lower than the raw lab runs, but steady 70+ mph cruising still uses more.</p>' +
-        '<p class="src">Source: fueleconomy.gov' + (c.epaId ? ' · vehicle ' + esc(c.epaId) : '') + '</p></details>';
-    } else h += '<div class="msg">No EPA numbers yet — tap Edit and look your car up.</div>';
     if (editing) h += editPanel(c);
-    h += obsPanel(c);
+    h += '</div>';
+    h += '<div class="card g-econ"><h3>Fuel economy</h3>';
+    if (hasEpa(c)) {
+      var tile = function (v, label, q) { return '<div><b>' + v + '</b><span>' + label + '</span>' + A.qBtn(q) + '</div>'; };
+      h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city) + tile(c.epa.hwy, 'Highway', EPA_Q.hwy) +
+        tile(c.epa.comb || Math.round(harm(c.epa.city, c.epa.hwy)), 'Combined', EPA_Q.comb) + '</div>' +
+        '<div class="epa-src">mpg · fueleconomy.gov</div>';
+    } else h += '<div class="msg">No EPA numbers yet — tap Edit and look your car up.</div>';
+    h += '</div>';
+    h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     host.innerHTML = h;
+    $('gObs').addEventListener('toggle', function () { obsOpen = this.open; });
     bind(c);
     drawSpeed();
   }
@@ -132,7 +140,7 @@
   }
   function obsPanel(c) {
     var hw = avg(c, 'highway'), ct = avg(c, 'city');
-    var h = '<div class="sub-h">Observed mileage<small>What your car really gets. Trip plans use these; blank = EPA.</small></div>' +
+    var h = '<div class="lead small keep">What your car really gets. Trip plans use these; blank = EPA.</div>' +
       '<div class="grid3">' +
       '<label class="nf"><span>City mpg</span><input type="number" inputmode="decimal" step="0.1" id="oCity" placeholder="' + esc(hasEpa(c) ? c.epa.city : '') + '" value="' + esc(c.obs.city || '') + '"></label>' +
       '<label class="nf"><span>Highway mpg</span><input type="number" inputmode="decimal" step="0.1" id="oHwy" placeholder="' + esc(hasEpa(c) ? c.epa.hwy : '') + '" value="' + esc(c.obs.hwy || '') + '"></label>' +
@@ -499,11 +507,11 @@
       else if (shown.length < groups.length) h += '<div class="lead small keep">' + (groups.length - shown.length) + ' road' + (groups.length - shown.length === 1 ? '' : 's') + ' hidden (All roads still sets them).</div>';
       shown.forEach(function (g) {
         var rr = g.road;
-        h += '<div class="road-g"><div class="road-h"><b class="rd rd-' + g.cls + '">' + esc(roads[g.items[0]].name) + '</b><small>mile ' + Math.round(rr.from) + '–' + Math.round(rr.to) + ' · ' + fmtMi(rr.mi) +
+        h += '<div class="road-g" data-mi="' + g.items.map(function (i) { return roads[i].from + ',' + roads[i].to; }).join(';') + '"><div class="road-h"><b class="rd rd-' + g.cls + '">' + esc(roads[g.items[0]].name) + '</b><small>mile ' + Math.round(rr.from) + '–' + Math.round(rr.to) + ' · ' + fmtMi(rr.mi) +
           (rr.sections.length > 1 ? ' · ' + rr.sections.length + ' speed limits' : '') + '</small></div>';
         g.items.forEach(function (i) {
           var r = roads[i];
-          h += '<div class="leg" data-leg="' + i + '"><div class="spd-warn hidden" id="lgWarn' + i + '"></div><div class="leg-h"><span><b class="lim' + (r.posted && r.posted !== r.limit ? ' truck' : '') + '">' + r.limit + '</b> <small>' +
+          h += '<div class="leg" data-leg="' + i + '" data-mi="' + r.from + ',' + r.to + '"><div class="spd-warn hidden" id="lgWarn' + i + '"></div><div class="leg-h"><span><b class="lim' + (r.posted && r.posted !== r.limit ? ' truck' : '') + '">' + r.limit + '</b> <small>' +
             (r.posted && r.posted !== r.limit ? 'mph for trucks (' + r.posted + ' posted)' : 'mph') + (r.road.sections.length > 1 ? ' · mile ' + Math.round(r.from) + '–' + Math.round(r.to) : '') +
             (r.src !== 'hpms' ? ' · state max' : '') + '</small></span><b class="leg-sub" id="lgSub' + i + '"></b></div>' +
             '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + st.offsets[i] + '" id="lgR' + i + '" aria-label="Speed on ' + esc(r.name) + ' where the limit is ' + r.limit + '"><i class="gray" id="lgGray' + i + '"></i></div>' +
