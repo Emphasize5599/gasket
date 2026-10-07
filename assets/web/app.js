@@ -41,6 +41,7 @@
       routeCallsThisMonth: function () { return 0; },
       placesFind: function (req, key, q, lat, lng, bias, radius) { setTimeout(function () { var m = window.__mocks && window.__mocks.find; window.onNativeResult(req, m ? { body: JSON.stringify(m(q, lat, lng, radius)) } : { error: 'No find mock' }); }, 50); },
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
+      fetchIcon: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.icon; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 20); },
       fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
@@ -98,6 +99,13 @@
   if (mq.addEventListener) mq.addEventListener('change', function () { applyTheme(); render(); });
   var meMarker = null, meCircle = null;
   var movedByUser = false;
+  // stations: a dot on each (one canvas, shared with the trip map) and a price bubble beside it where there's room
+  if (!map.getPane('tdots')) { var dpn = map.createPane('tdots'); dpn.style.zIndex = 590; }
+  var dotsRenderer = L.canvas({ padding: 0.3, pane: 'tdots', tolerance: 8 });
+  if (!map.getPane('tleaders')) { var lpn = map.createPane('tleaders'); lpn.style.zIndex = 585; lpn.style.pointerEvents = 'none'; }
+  var dotLayer = L.layerGroup().addTo(map), bubLayer = L.layerGroup().addTo(map), leadLayer = L.layerGroup(), bubs = {}, bubOrder = [], bubT = 0;
+  // the canvas is made once, now, so the first trip doesn't pay for it
+  setTimeout(function () { L.circleMarker([0, 0], { renderer: dotsRenderer, pane: 'tdots', radius: 0, opacity: 0, fillOpacity: 0, interactive: false }).addTo(map); }, 600);
   map.on('movestart', function (e) { if (e && e.originalEvent) movedByUser = true; });
   map.on('dragstart zoomstart', function () { movedByUser = true; });
   map.on('moveend', function () {
@@ -107,6 +115,7 @@
     $('btnArea').classList.toggle('hidden', !far);
   });
   map.on('click', function () { closeDetail(); setListOpen(false); });
+  map.on('zoomend moveend resize', function () { placeBubsSoon(); });
 
   // ---------- grade selector ----------
   function buildGrades() {
@@ -127,6 +136,30 @@
     var t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
     clearTimeout(toastT); toastT = setTimeout(function () { t.classList.add('hidden'); }, 3200);
   };
+  /**
+   * "Still working" over a map or any box: grayed out, with a progress bar and percentage. It only shows if the work
+   * takes longer than 0.75 s — a CSS delay, so it appears even while the screen is busy. h.set(frac or null, label); h.done().
+   */
+  function loader(host, label, opts) {
+    opts = opts || {};
+    var el = document.createElement('div');
+    el.className = 'ld-ov' + (opts.fixed ? ' fixed' : '') + (opts.now ? ' now' : '');
+    el.innerHTML = '<div class="ld-card"><div class="ld-lab"></div><div class="ld-row"><span class="ld-bar"><i></i></span><b class="ld-pct"></b></div></div>';
+    host.appendChild(el);
+    var h = {
+      el: el, live: true,
+      set: function (f, lab) {
+        if (!h.live) return h;
+        if (lab != null) el.querySelector('.ld-lab').textContent = lab;
+        if (f == null) { el.classList.add('ind'); el.querySelector('.ld-pct').textContent = ''; return h; }
+        var p = Math.max(0, Math.min(100, Math.round(f * 100)));
+        el.classList.remove('ind'); el.querySelector('.ld-bar i').style.transform = 'scaleX(' + (p / 100) + ')'; el.querySelector('.ld-pct').textContent = p + '%';
+        return h;
+      },
+      done: function () { if (!h.live) return; h.live = false; el.classList.add('out'); setTimeout(function () { el.remove(); }, 220); }
+    };
+    return h.set(opts.frac != null ? opts.frac : null, label || 'Loading');
+  }
   function ago(ts) {
     var m = Math.round((Date.now() - ts) / 60000);
     if (m < 1) return 'just now'; if (m < 60) return m + ' min ago';
@@ -284,35 +317,22 @@
   function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function shortAddr(a) { return String(a).split(',').slice(0, 2).join(','); }
 
+  function shown(x) { return x.c || !S.hideUnpriced || x.s.id === selectedId; }
   function render() {
-    var list = enriched();
+    syncMain();
+    var list = enriched().filter(shown);
     var priced = list.filter(function (x) { return x.c; }).sort(function (a, b) { return a.c.final - b.c.final; });
     var bestIds = {}, bestVal = priced.length ? priced[0].c.final : null;
     priced.forEach(function (x) { if (x.c.final <= bestVal + 0.0005 && !x.c.stale) bestIds[x.s.id] = 1; });
     var rank = {}; priced.forEach(function (x, i) { rank[x.s.id] = i; });
 
-    // markers
-    var keep = {};
-    list.forEach(function (x) {
-      var s = x.s, br = P.BRANDS[s.brand]; keep[s.id] = 1;
-      var cls = 'pin-in' + (x.c ? (bestIds[s.id] ? ' best' : '') + (x.c.stale ? ' stale' : '') : ' none') + (selectedId === s.id ? ' sel' : '');
-      var html = '<div class="' + cls + '" style="--bc:' + br.color + '"><span class="b">' + br.short + '</span>' +
-        '<span>' + (x.c ? priceHtml(x.c.final) : 'no price') + '</span></div>';
-      var icon = L.divIcon({ className: 'pin', html: html, iconSize: null });
-      var z = x.c ? 500 - (rank[s.id] || 0) : 0;
-      if (markers[s.id]) { markers[s.id].setIcon(icon); markers[s.id].setZIndexOffset(z); }
-      else {
-        markers[s.id] = L.marker([s.lat, s.lng], { icon: icon, zIndexOffset: z, riseOnHover: true }).addTo(map)
-          .on('click', function (e) { L.DomEvent.stopPropagation(e); N.haptic(); openDetail(s.id); });
-      }
-    });
-    Object.keys(markers).forEach(function (id) { if (!keep[id]) { map.removeLayer(markers[id]); delete markers[id]; } });
+    drawStations(list, bestIds, rank);
 
     // list sheet
     var gl = P.GRADES[S.grade].label.toLowerCase();
     if (priced.length) {
       var b = priced[0];
-      $('bestLine').innerHTML = 'Best ' + gl + ' <span class="big">' + priceHtml(b.c.final) + '</span><br><b>' + esc(P.BRANDS[b.s.brand].name) + '</b>' +
+      $('bestLine').innerHTML = 'Best ' + gl + ' <span class="big">' + priceHtml(b.c.final) + '</span><br><b>' + esc(P.displayName(b.s)) + '</b>' +
         (b.dist != null ? ' · ' + b.dist.toFixed(1) + ' mi' : '');
     } else {
       $('bestLine').innerHTML = stations.length ? 'No ' + gl + ' prices here yet' : (S.apiKey || demo ? 'No matching stations yet' : 'Walmart only — <b>add a Google key</b> for other brands');
@@ -322,9 +342,8 @@
       if (!a.c) return 1; if (!b.c) return -1; return a.c.final - b.c.final;
     });
     $('rows').innerHTML = rows.length ? rows.map(function (x) {
-      var br = P.BRANDS[x.s.brand];
-      return '<button class="row" data-id="' + esc(x.s.id) + '"><span class="badge" style="background:' + br.color + '">' + br.short + '</span>' +
-        '<span class="mid"><div class="nm">' + esc(x.s.name) + '</div><div class="sub">' + (x.dist != null ? x.dist.toFixed(1) + ' mi · ' : '') + esc(shortAddr(x.s.address)) +
+      return '<button class="row" data-id="' + esc(x.s.id) + '">' + badgeHtml(x.s.brand) +
+        '<span class="mid"><div class="nm">' + esc(P.displayName(x.s)) + '</div><div class="sub">' + (x.dist != null ? x.dist.toFixed(1) + ' mi · ' : '') + esc(shortAddr(x.s.address)) +
         (x.c && x.c.stale ? ' · <span style="color:var(--warn)">stale</span>' : '') + '</div></span>' +
         '<span class="pr">' + (x.c ? '<div class="f' + (bestIds[x.s.id] ? ' best' : '') + '">' + priceHtml(x.c.final) + '</div><div class="o">' + priceHtml(x.c.base) + '</div>' : '<div class="o" style="text-decoration:none">no price</div>') + '</span></button>';
     }).join('') : '<div class="empty">Stations will appear here.</div>';
@@ -353,6 +372,92 @@
   }
   function byId(id) { for (var i = 0; i < stations.length; i++) if (stations[i].id === id) return stations[i]; return null; }
 
+  // ---------- the main map: dots and price bubbles ----------
+  function mainOn() { return !document.body.classList.contains('trip-on'); }
+  /** Main-map stations show only when the trip planner isn't open (it draws its own). */
+  function syncMain() {
+    var on = mainOn();
+    [dotLayer, bubLayer].forEach(function (g) { if (on && !map.hasLayer(g)) g.addTo(map); if (!on && map.hasLayer(g)) map.removeLayer(g); });
+    if (on) placeBubsSoon();
+  }
+  function drawStations(list, bestIds, rank) {
+    var css = getComputedStyle(document.documentElement), ring = css.getPropertyValue('--surface').trim() || '#ffffff', acc = css.getPropertyValue('--accent').trim() || '#1a73e8';
+    dotLayer.clearLayers();
+    // drawn so the cheapest end up on top: no price first, then most to least expensive, the selected one last
+    var order = list.slice().sort(function (a, b) {
+      var sa = a.s.id === selectedId, sb = b.s.id === selectedId; if (sa !== sb) return sa ? 1 : -1;
+      if (!a.c || !b.c) return (a.c ? 1 : 0) - (b.c ? 1 : 0);
+      return b.c.final - a.c.final;
+    });
+    var keep = {};
+    order.forEach(function (x) {
+      var s = x.s, br = P.BRANDS[s.brand], sel = s.id === selectedId; keep[s.id] = 1;
+      L.circleMarker([s.lat, s.lng], { renderer: dotsRenderer, pane: 'tdots', radius: sel ? 8 : 6, color: sel ? acc : ring, weight: sel ? 3 : 2,
+        fillColor: br.color, fillOpacity: x.c ? 1 : 0.55, bubblingMouseEvents: false })
+        .on('click', function () { N.haptic(); openDetail(s.id); }).addTo(dotLayer);
+      var html = logoHtml(s.brand) + '<span class="pv">' + (x.c ? priceHtml(x.c.final) : 'no price') + '</span>';
+      var cls = { best: !!(x.c && bestIds[s.id]), stale: !!(x.c && x.c.stale), none: !x.c, sel: sel };
+      var b = bubs[s.id];
+      if (!b) {
+        b = bubs[s.id] = { tip: L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'mbub', interactive: true, opacity: 1 }).setLatLng([s.lat, s.lng]), html: null };
+        b.tip.setContent(html); b.html = html; bubLayer.addLayer(b.tip);
+        var el = b.tip.getElement();
+        if (el) { el.dataset.id = s.id; el.dataset.brand = s.brand; L.DomEvent.disableClickPropagation(el); el.addEventListener('click', function () { N.haptic(); openDetail(s.id); }); }
+      } else if (b.html !== html) { b.tip.setContent(html); b.html = html; }
+      var e2 = b.tip.getElement(); if (e2) Object.keys(cls).forEach(function (k) { e2.classList.toggle(k, cls[k]); });
+    });
+    Object.keys(bubs).forEach(function (id) { if (!keep[id]) { bubLayer.removeLayer(bubs[id].tip); delete bubs[id]; } });
+    // who gets a bubble first when they're crowded: the one you tapped, then cheapest to dearest, then no price
+    bubOrder = list.slice().sort(function (a, b) {
+      var sa = a.s.id === selectedId, sb = b.s.id === selectedId; if (sa !== sb) return sa ? -1 : 1;
+      if (!a.c || !b.c) return (b.c ? 1 : 0) - (a.c ? 1 : 0);
+      return (a.c.stale - b.c.stale) || a.c.final - b.c.final;
+    }).map(function (x) { return x.s.id; });
+    placeBubsSoon();
+  }
+  function placeBubsSoon() { clearTimeout(bubT); bubT = setTimeout(placeBubs, 40); }
+  function placeBubs() {
+    if (!mainOn() || !window.Labels) return;
+    var tips = bubOrder.filter(function (id) { return bubs[id]; }).map(function (id) { var b = bubs[id]; return { cands: [b.tip.getLatLng()], tip: b.tip, color: '#8a94a6' }; });
+    if (!bubLayer.hasLayer(leadLayer)) bubLayer.addLayer(leadLayer);
+    var sheet = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');
+    var obst = Labels.rectsOf(map, [document.querySelector('.top'), $('status'), $('btnArea'), $('wmCheck'), $('btnTrip'), $('btnLocate'), sheet, document.querySelector('.leaflet-control-attribution')], 6);
+    Labels.place(map, tips, { obst: obst, hide: true, rings: [0, 18], leaders: leadLayer, leaderPane: 'tleaders' });
+  }
+
+  // ---------- brand logos ----------
+  // Each brand's own icon (the favicon from its website), fetched once on this phone and kept; until then — or if
+  // it can't be fetched — the brand's letter on its color.
+  var LOGO = {}, LOGO_SITES = { walmart: 'www.walmart.com', murphy: 'www.murphyusa.com', sams: 'www.samsclub.com', exxon: 'www.exxon.com', mobil: 'www.mobil.com', citgo: 'www.citgo.com' };
+  function logoHtml(brand) {
+    var br = P.BRANDS[brand] || { color: '#777', short: '?' }, u = LOGO[brand];
+    return '<span class="lg' + (u ? ' img' : '') + '" style="--bc:' + br.color + '">' + (u ? '<img src="' + u + '" alt="">' : esc(br.short)) + '</span>';
+  }
+  function badgeHtml(brand, cls) {
+    var br = P.BRANDS[brand] || { color: '#777', short: '?' }, u = LOGO[brand];
+    return '<span class="badge' + (u ? ' logo' : '') + (cls ? ' ' + cls : '') + '" style="background:' + (u ? '#fff' : br.color) + '">' + (u ? '<img src="' + u + '" alt="">' : esc(br.short)) + '</span>';
+  }
+  function loadLogos() {
+    Object.keys(LOGO_SITES).forEach(function (b) { var o = KV.get('logos', b); if (o && o.v && o.v.img) LOGO[b] = o.v.img; });
+    if (!N.fetchIcon || !window.__trip || !window.__trip.call) return;
+    var ask = function (url) { return window.__trip.call('fetchIcon', url); };
+    var todo = Object.keys(LOGO_SITES).filter(function (b) { var o = KV.get('logos', b); return !(o && o.v && o.v.img) && !(o && o.v && o.v.fail && Date.now() - o.t < 864e5); });
+    (async function () {
+      var got = 0;
+      for (var i = 0; i < todo.length; i++) {
+        var b = todo[i], site = LOGO_SITES[b], img = null;
+        var urls = ['https://www.google.com/s2/favicons?domain=' + site.replace(/^www\./, '') + '&sz=128', 'https://' + site + '/apple-touch-icon.png', 'https://' + site + '/favicon.ico'];
+        for (var k = 0; k < urls.length && !img; k++) {
+          var r = await ask(urls[k]);
+          if (r && r.body && Math.max(r.w || 0, r.h || 0) >= 32) img = r.body;
+        }
+        if (img) { LOGO[b] = img; got++; }
+        KV.put('logos', b, img ? { img: img } : { fail: true });
+      }
+      if (got) { render(); if (selectedId) openDetail(selectedId); if (window.__trip && window.__trip.relogo) window.__trip.relogo(); if (window.FLog) FLog.info('app', 'Brand icons saved', got); }
+    })();
+  }
+
   // ---------- detail ----------
   function money(v, sign) {
     var a = Math.abs(v), s = '$' + P.fmt3(a);
@@ -365,8 +470,8 @@
     var c = P.compute(s, S.grade, S, new Date());
     var ref = me || lastFetch;
     var dist = ref ? P.haversineMi(ref.lat, ref.lng, s.lat, s.lng) : null;
-    var h = '<div class="grab"><span></span></div><div class="d-head"><span class="badge" style="background:' + br.color + '">' + br.short + '</span>' +
-      '<div style="min-width:0"><h2>' + esc(s.name) + '</h2><div class="sub">' + (dist != null ? dist.toFixed(1) + ' mi away · ' : '') + esc(shortAddr(s.address)) + '</div></div>' +
+    var h = '<div class="grab"><span></span></div><div class="d-head">' + badgeHtml(s.brand) +
+      '<div style="min-width:0"><h2>' + esc(P.displayName(s)) + '</h2><div class="sub">' + (dist != null ? dist.toFixed(1) + ' mi away · ' : '') + esc(shortAddr(s.address)) + '</div></div>' +
       '<button class="x" id="dClose" aria-label="Close">✕</button></div>';
     if (c) {
       var saved = c.base - c.final;
@@ -535,7 +640,7 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
-    CACHE_NS.concat(['trips']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trips', 'logos']).forEach(function (ns) { KV.clear(ns); });
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(''); } catch (e) { }
     if (window.FLog) FLog.clear();
@@ -655,7 +760,8 @@
       '<div class="field"><div class="lbl">Show prices to the cent<small>Rounded up — $3.199 shows as $3.20. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
     h += '<div class="card"><h3>Search</h3>' +
       '<div class="field"><div class="lbl">Search radius (miles)</div><input type="number" id="radiusMi" min="2" max="25" step="1" value="' + S.radiusMi + '"></div>' +
-      '<div class="field"><div class="lbl">Mark prices stale after (hours)</div><input type="number" id="staleHours" min="1" max="168" step="1" value="' + S.staleHours + '"></div>';
+      '<div class="field"><div class="lbl">Mark prices stale after (hours)</div><input type="number" id="staleHours" min="1" max="168" step="1" value="' + S.staleHours + '"></div>' +
+      '<div class="field"><div class="lbl">Hide stations with no price<small>Only on the map and in the list. Trips still count them: where no priced station is in reach (very rural stretches), a station with no posted price can be a stop, at an estimated price.</small></div>' + sw('hideUnpriced', !!S.hideUnpriced) + '</div>';
     Object.keys(P.BRANDS).forEach(function (k) {
       h += '<div class="field"><div class="lbl">' + esc(P.BRANDS[k].name) + '</div>' + sw('brand:' + k, S.brands[k]) + '</div>';
     });
@@ -825,6 +931,7 @@
   if (!S.apiKey && !S.setupDone) openSettings(true);
   N.locate();
   window.addEventListener('resize', sizeSheet);
+  setTimeout(function () { loadLogos(); }, 0);
   /** Saved answers (searches, speed limits, routes) in the app's private storage: {t: saved ms, v: value}. */
   var KV = {
     get: function (ns, key, maxAgeMs) {
@@ -916,5 +1023,6 @@
 
   window.__app = { bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
-    openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render };
+    openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
+    logoHtml: logoHtml, badgeHtml: badgeHtml, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; loadLogos(); } };
 })();

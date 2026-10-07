@@ -33,7 +33,8 @@
     apiKey: '',
     blacklist: [],               // CITGO stations where Walmart+ didn't work: [{id, name, address, brand, lat, lng, t}]
     dieselRisk: {},              // station id -> true: count Walmart+ on CITGO diesel here anyway (your own risk)
-    autoRefresh: false,          // search for prices when the app opens (uses Google lookups)
+    autoRefresh: false,
+    hideUnpriced: false,         // map and list only; trips still consider them (estimated) where nothing priced is in reach          // search for prices when the app opens (uses Google lookups)
     walmartPlus: true,
     samsMode: 'member',          // 'member' = Google's Sam's price is already member price; 'minus10' = take 10¢ more
     citgoTier: 'club',           // 'none' | 'club' | 'premier'
@@ -283,7 +284,24 @@
     return 2 * R * Math.asin(Math.sqrt(h));
   }
 
-  var api = { BRANDS: BRANDS, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
+  // words that only say what brand or kind of place it is ("Exxon", "Walmart Fuel Station", "Sam's Club Gas Station #4")
+  var GENERIC = /\b(walmart|wal-mart|murphy|usa|sam'?s|club|exxon|mobil|exxonmobil|citgo|fuel|gas|gasoline|station|stations|center|centre|petrol|food mart|mart|the|and|of|at|store|inc|llc|co|corp|supercenter|neighborhood market|\d+)\b/gi;
+  /**
+   * The name to show for a station: its own name when it has one ("Quick Stop", "Murphy Express", "Kum & Go"),
+   * otherwise the brand's (the logo already says which brand it is).
+   */
+  function displayName(st) {
+    if (!st) return '';
+    var br = BRANDS[st.brand] || { name: '' };
+    var own = function (n) {
+      n = String(n || '').trim(); if (!n) return '';
+      var rest = n.replace(/’/g, "'").replace(GENERIC, ' ').replace(/[#&'.,\-–—|()\/]+/g, ' ').replace(GENERIC, ' ').replace(/\s+/g, ' ').trim();
+      return /[a-z]{2}/i.test(rest) ? n : '';
+    };
+    return own(st.name) || own(st.altName) || br.name || st.name || '';
+  }
+
+  var api = { BRANDS: BRANDS, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
     compute: compute, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

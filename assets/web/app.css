@@ -860,3 +860,62 @@ details.g-obs[open] { padding-bottom: 12px; }
 .card .btns, .page .btns { display: flex; gap: 8px; }
 .bl-share { padding-bottom: 12px; }
 .btn.danger-sm { color: var(--warn); } .btn.danger-sm.armed { background: var(--warn); color: #fff; }
+/* ---------- 3.18: brand logos ---------- */
+.lg { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--bc); color: #fff; font-size: 10.5px; font-weight: 800; display: grid; place-items: center; overflow: hidden; letter-spacing: 0; }
+.lg.img { background: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.lg img, .badge img { width: 74%; height: 74%; object-fit: contain; display: block; }
+.badge.logo { box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+/* main map: price bubbles beside the station dots (same colors as before) */
+.leaflet-tooltip.mbub { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 3px; border-radius: 999px; background: var(--surface); color: var(--ink);
+  border: 2px solid var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,.28); font-weight: 700; font-size: 15px; letter-spacing: -.2px; white-space: nowrap; cursor: pointer; pointer-events: auto; }
+.leaflet-tooltip.mbub sup { font-size: 9.5px; margin-left: 1px; }
+.mbub.leaflet-tooltip-top::before { border-top-color: var(--surface); }
+.mbub.leaflet-tooltip-bottom::before { border-bottom-color: var(--surface); }
+.mbub.leaflet-tooltip-left::before { border-left-color: var(--surface); }
+.mbub.leaflet-tooltip-right::before { border-right-color: var(--surface); }
+.leaflet-tooltip.mbub.best { background: var(--save); border-color: var(--save); color: #fff; }
+:root[data-theme="dark"] .leaflet-tooltip.mbub.best { color: #062614; }
+.mbub.best.leaflet-tooltip-top::before { border-top-color: var(--save); }
+.mbub.best.leaflet-tooltip-bottom::before { border-bottom-color: var(--save); }
+.mbub.best.leaflet-tooltip-left::before { border-left-color: var(--save); }
+.mbub.best.leaflet-tooltip-right::before { border-right-color: var(--save); }
+.leaflet-tooltip.mbub.stale { opacity: .62 !important; }
+.leaflet-tooltip.mbub.none { color: var(--ink-2); font-weight: 600; font-size: 12.5px; }
+.leaflet-tooltip.mbub.sel { outline: 3px solid var(--accent); outline-offset: 1px; z-index: 5; }
+/* route stops: number, logo, price — or just the number when it's crowded */
+.leaflet-tooltip.stopbub .lg { width: 22px; height: 22px; }
+.leaflet-tooltip.stopbub.mini { padding: 3px; gap: 0; }
+/* ---------- "still working" overlay: shows only after 0.75 s (runs even while the screen is busy) ---------- */
+.ld-ov { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 58%, transparent);
+  opacity: 0; animation: ldIn .18s ease-out .75s forwards; will-change: opacity; pointer-events: none; }
+.ld-ov.now { animation-delay: 0s; }
+.ld-ov.fixed { position: fixed; z-index: 880; }
+.ld-ov.out { animation: none; opacity: 0; transition: opacity .18s ease; }
+@keyframes ldIn { to { opacity: 1; } }
+.ld-card { background: var(--surface); color: var(--ink); border-radius: 14px; padding: 10px 14px 11px; box-shadow: 0 4px 18px rgba(0,0,0,.25); width: min(260px, 80%); }
+.ld-lab { font-size: 13px; font-weight: 600; margin-bottom: 7px; overflow-wrap: anywhere; }
+.ld-row { display: flex; align-items: center; gap: 10px; }
+.ld-bar { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 14%, transparent); overflow: hidden; position: relative; }
+.ld-bar i { position: absolute; inset: 0; background: var(--accent); transform-origin: left; transform: scaleX(0); transition: transform .25s ease; }
+.ld-bar::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); animation: ldShim 1.1s linear infinite; will-change: transform; }
+.ld-ov.ind .ld-bar i { right: auto; width: 35%; transform: none; animation: ldShim 1.2s ease-in-out infinite; will-change: transform; }
+@keyframes ldShim { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.ld-pct { font-size: 12.5px; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+.ld-ov.ind .ld-pct { display: none; }
+/* the panel goes straight to 75% (no slide that a busy screen would freeze halfway) */
+.page.tpanel.snap { transition: none !important; }
+/* Plan a trip: each trip's places as a small numbered list */
+.nlist.sm { margin: 2px 0 0; }
+.nlist.sm li { gap: 8px; padding: 0 0 6px; font-size: 14px; line-height: 1.3; font-weight: 600; }
+.nlist.sm li:not(:last-child)::before { left: 8px; top: 18px; }
+.nlist.sm .nn { width: 18px; height: 18px; font-size: 10.5px; }
+.nlist.sm .nl-a { padding-top: 0; }
+.tpick-new .nlist.sm li { font-weight: 500; }
+.hist-open .nlist.sm { margin-bottom: 2px; }
+/* stops priced by estimate (no posted price) */
+.est-tag { display: inline-block; font-size: 11px; font-weight: 700; color: var(--warn); margin-left: 4px; }
+.alts .lg { display: inline-grid; width: 16px; height: 16px; font-size: 7.5px; margin-right: 6px; vertical-align: -3px; }
+.top-opt .lg { width: 24px; height: 24px; }
+.rt-ready .rt-saved { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.alts > div { position: relative; padding-left: 22px; }
+.alts > div > .lg { position: absolute; left: 0; top: 1px; margin: 0; }

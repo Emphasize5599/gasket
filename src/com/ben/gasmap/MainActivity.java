@@ -592,6 +592,9 @@ public class MainActivity extends Activity {
 
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com"};
 
+    // brand icons: Google's favicon service, or each brand's own site
+    private static final String[] ICON_HOSTS = {"www.google.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
+
     private String getJson(String url) throws Exception {
         if (!hostAllowed(url, JSON_HOSTS)) throw new Exception("Host not allowed");
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -773,6 +776,41 @@ public class MainActivity extends Activity {
                 public void run() {
                     JSONObject o = new JSONObject();
                     try { o.put("body", getJson(url)); } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        /** A brand's own icon (its website's favicon), shrunk to at most 96 px and handed back as a PNG data URL. */
+        @JavascriptInterface
+        public void fetchIcon(final int reqId, final String url) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        if (!hostAllowed(url, ICON_HOSTS)) throw new Exception("Host not allowed");
+                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                        c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setInstanceFollowRedirects(true);
+                        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) FuelPlusMap");
+                        if (c.getResponseCode() >= 400) throw new Exception("HTTP " + c.getResponseCode());
+                        InputStream is = c.getInputStream();
+                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                        byte[] buf = new byte[8192]; int n;
+                        while ((n = is.read(buf)) > 0) { bo.write(buf, 0, n); if (bo.size() > 600000) throw new Exception("too big"); }
+                        is.close();
+                        byte[] data = bo.toByteArray();
+                        android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length);
+                        if (bm == null) throw new Exception("not an image");
+                        int w = bm.getWidth(), h = bm.getHeight();
+                        if (Math.max(w, h) > 96) {
+                            float s = 96f / Math.max(w, h);
+                            bm = android.graphics.Bitmap.createScaledBitmap(bm, Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s)), true);
+                        }
+                        java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+                        bm.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, png);
+                        o.put("body", "data:image/png;base64," + android.util.Base64.encodeToString(png.toByteArray(), android.util.Base64.NO_WRAP));
+                        o.put("w", w); o.put("h", h);
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
                     reply(reqId, o);
                 }
             }).start();

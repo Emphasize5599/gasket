@@ -58,6 +58,7 @@
   var layer = L.layerGroup();
   var busy = false;
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
+  var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
 
   /** Progress inside the Next button: frac 0..1 and what it's doing. */
   function prog(frac, label) {
@@ -65,8 +66,19 @@
     var pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
     b.classList.add('busy');
     b.innerHTML = '<span class="pfill" style="width:' + pct + '%"></span><span class="plab">' + esc(label) + ' · ' + pct + '%</span>';
+    if (mapLd && mapLd.live) mapLd.set(frac, label);
   }
   function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; } routeGate(); }
+  /** Let the screen draw (a progress bar, a tapped button) before a stretch of heavy work. */
+  function paint() { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); }
+  // the big map, grayed out with a progress bar while the route and stops are drawn (shows only past 0.75 s)
+  var mapLd = null;
+  function mapLoading(label, frac) {
+    if (!mapLd || !mapLd.live) mapLd = A.loader(document.body, label, { fixed: true });
+    mapLd.el.style.top = '0'; mapLd.el.style.bottom = Math.round(sheetCover()) + 'px';
+    mapLd.set(frac == null ? null : frac, label);
+  }
+  function mapLoaded() { if (mapLd) { mapLd.done(); mapLd = null; } }
   var routing = false, freshRoutes = false;
   function show(el, on) { el.classList.toggle('hidden', !on); }
   function fmtDur(sec) { var m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? h + ' h ' + (m % 60) + ' min' : m + ' min'; }
@@ -82,7 +94,7 @@
   function openTrip(st) {
     A.closeDetail();
     if (st) step = st;
-    document.body.classList.add('trip-on');
+    document.body.classList.add('trip-on'); A.syncMain();
     renderStep();
   }
   function initPanel(pg) {
@@ -117,9 +129,15 @@
     if (!pg.classList.contains('tpanel')) initPanel(pg);
     show(pg, true);
     var full = step < ST_STOPS;   // nothing to see on the map yet: Garage, Route and Parameters take the whole screen
-    // coming down to the map: the list starts at 75% of the screen (drag it anywhere from there)
+    // coming down to the map: the list starts at 75% of the screen (drag it anywhere from there) — straight away, not
+    // as a slide a busy screen could freeze halfway
     if (!full && (!shown || shown < ST_STOPS)) pg.style.setProperty('--panel-h', '75vh');
+    if (!full && (pg.classList.contains('full') || !shown)) {
+      pg.classList.add('snap'); requestAnimationFrame(function () { requestAnimationFrame(function () { pg.classList.remove('snap'); }); });
+    }
     pg.classList.toggle('full', full); document.body.classList.toggle('trip-full', full);
+    if (!full && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
+    if (full) mapLoaded();
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
       var k = i + 1, sh = { Parameters: 'Params', Departure: 'Depart' }[n] || n;
       return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > 2 && !model ? ' dim' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
@@ -146,6 +164,7 @@
       if (step !== k0) return;
       if (model && step >= ST_STOPS) { drawRoute(); if (!userMoved) fitRoute(false); }
       fitBtn(); sheetSize();
+      if (model && step >= ST_STOPS && !busy) mapLoaded();
     }, 0); });
   }
   function refitOptionMaps() {
@@ -207,7 +226,8 @@
   function routeGate() {
     var el = $('tRouteGo');
     if (el && !(routing && $('tGetRoutes'))) {
-      el.innerHTML = model ? '<div class="rt-ready"><span class="okc">✓</span><span>' + (multiLeg(route) ? 'Routes ready' : alts.length > 1 ? alts.length + ' routes ready' : 'Route ready') + '</span><button type="button" class="btn tonal sm" id="tRefreshRoutes">Refresh routes</button></div>'
+      el.innerHTML = model ? '<div class="rt-ready"><span class="okc">✓</span><span>' + (multiLeg(route) ? 'Routes ready' : alts.length > 1 ? alts.length + ' routes ready' : 'Route ready') +
+        (route && route.reused ? '<small class="rt-saved">from your saved trip · no lookups</small>' : '') + '</span><button type="button" class="btn tonal sm" id="tRefreshRoutes">Refresh routes</button></div>'
         : '<button type="button" class="btn primary" id="tGetRoutes">Get routes</button>';
       if ($('tGetRoutes')) $('tGetRoutes').onclick = getRoutes;
       if ($('tRefreshRoutes')) $('tRefreshRoutes').onclick = refreshRoutes;
@@ -873,11 +893,16 @@
     others.sort(function (x, y) { return Math.abs(parseFloat(x.duration) - t0) - Math.abs(parseFloat(y.duration) - t0); });
     alts = [main].concat(others); altSel = 0; altSure = true;
   }
-  function pickLeg(i, k) {
-    var L = route.legs[i]; if (!L || k === L.sel) return;
-    L.sel = k; rebuildAlts(); rawRoute = alts[0]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model);
+  async function pickLeg(i, k) {
+    var L = route.legs[i]; if (!L || k === L.sel || picking || busy) return;
+    L.sel = k;
+    document.querySelectorAll('#tRouteInfo [data-leg="' + i + '"]').forEach(function (b) { b.classList.toggle('on', +b.dataset.lk === k); });
+    var rm = rmaps['tRmap' + i], ld = rm && rm._setSel ? (rm._setSel(k), A.loader(rm.getContainer(), 'Joining the legs')) : null;
+    picking = true;
+    await paint();
+    try { rebuildAlts(); rawRoute = alts[0]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); result = null; } finally { picking = false; if (ld) ld.done(); }
     LG.info('route', 'Leg ' + (i + 1) + ': picked via ' + (L.alts[k].description || k));
-    renderInfo();
+    renderInfo(true);
   }
 
   // ---------- step 1: route ----------
@@ -901,7 +926,32 @@
         throw new Error('Pick the right address for each stop marked “Which one?”.');
       }
       syncReturn(r);
-      if (multiLeg(r)) {
+      // the same places as a trip you saved (even from another link): its routes and stations, no lookups
+      var mt = !freshRoutes && similarTrip(r);
+      if (mt) {
+        var v = mt.v;
+        if (!r.mapsRoutes && v.route.mapsRoutes) r.mapsRoutes = v.route.mapsRoutes;
+        if (multiLeg(r)) {
+          if (v.route.legs && v.route.legs.length === r.stops.length - 1 && v.route.legs.every(function (L) { return L.alts && L.alts.length; })) {
+            r.legs = v.route.legs.map(function (L, i) { return { key: legKey(r, i), alts: L.alts, sel: Math.min(L.sel || 0, L.alts.length - 1), mapsRoutes: null }; });
+            rebuildAlts();
+          } else mt = null;
+        } else {
+          alts = v.alts; altSure = false;
+          var picked0 = pickedRoute(r);
+          if (picked0 && alts.length > 1) { var m0 = matchRoute(alts, picked0); altSel = m0.index; altSure = m0.sure; }
+          else altSel = r.routeIndex != null && r.routeIndex < alts.length ? r.routeIndex : Math.min(v.altSel || 0, alts.length - 1);
+        }
+        if (mt) {
+          prog(0.9, 'Reading your saved trip');
+          await paint();
+          r.histId = mt.id; r.reused = mt.t;
+          rawRoute = alts[altSel]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model);
+          replay = { id: mt.id, t: mt.t, stations: v.stations, alts: v.alts, partial: true };
+          LG.info('history', 'Same places as a saved trip — using its routes (no lookups)', { id: mt.id, saved: new Date(mt.t).toISOString(), options: alts.map(function (a) { return a.description; }), picked: altSel });
+        }
+      }
+      if (model) { /* reused */ } else if (multiLeg(r)) {
         // a stop in between: Google only offers route options trip by trip, so route each leg on its own and join them
         var nL = r.stops.length - 1, doneL = 0;
         prog(0.6, 'Routing each leg (0 of ' + nL + ')');
@@ -1104,9 +1154,11 @@
     altCompareList().forEach(function (k) { n += Math.max(1, Math.ceil((alts[k].distanceMeters || 0) / 1609.344 / 125)); });
     return n * googleBrands().length;
   }
-  function renderInfo() {
+  function renderInfo(keepMaps) {
     routeGate();
     var el = $('tRouteInfo'); if (!el) return;
+    var keepEls = {};
+    if (keepMaps) Object.keys(rmaps).forEach(function (id) { var c = rmaps[id].getContainer(); if (c && el.contains(c)) keepEls[id] = c; });
     if (!model) { el.innerHTML = ''; alts = []; return; }
     var need = model.galTo(model.totalMi);
     var est = estLookups(), left = (Number(S.monthlyCap) || 0) - N.callsThisMonth();
@@ -1134,17 +1186,33 @@
     var nOther = altCompareList().length;
     h += '<div class="lead small">Finding stations: ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') : 'no Google lookups') + '.</div></div>';
     el.innerHTML = h;
-    var pickAlt = function (k) { if (k === altSel) return; altSel = k; rawRoute = alts[altSel]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); renderInfo(); };
     el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
     el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
-    if (legView) route.legs.forEach(function (L, i) {
-      if ($('tRmap' + i)) optionsMap($('tRmap' + i), L.alts.map(function (a) {
-        return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' };
-      }), L.sel, function (k) { pickLeg(i, k); });
-    });
-    if ($('tRmap')) optionsMap($('tRmap'), alts.map(function (a) {
-      return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' };
-    }), altSel, pickAlt);
+    var lineOf = function (a) { return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' }; };
+    // a map whose options didn't change is moved over as it is (just re-highlighted); the rest are drawn
+    var todo = [];
+    var put = function (id, list, sel, onPick) {
+      var ph = $(id); if (!ph) return;
+      var m0 = rmaps[id];
+      if (keepEls[id] && m0 && m0._nLines === list.length && m0._alts === list[0]) { ph.replaceWith(keepEls[id]); m0._onPick = onPick; todo.push(function () { m0._setSel(sel); }); }
+      else todo.push(function () { var m = optionsMap($(id), list.map(lineOf), sel, onPick); if (m) m._alts = list[0]; });
+    };
+    if (legView) route.legs.forEach(function (L, i) { put('tRmap' + i, L.alts, L.sel, function (k) { pickLeg(i, k); }); });
+    put('tRmap', alts, altSel, pickAlt);
+    todo.forEach(function (f) { f(); });
+  }
+  /** A tap on a route option: highlighted at once; its route (long ones take a moment) is read right after. */
+  var picking = false;
+  async function pickAlt(k) {
+    if (k === altSel || picking || busy) return;
+    N.haptic && N.haptic();
+    altSel = k; rawRoute = alts[altSel];
+    document.querySelectorAll('#tRouteInfo [data-alt]').forEach(function (b) { b.classList.toggle('on', +b.dataset.alt === k); });
+    var rm = rmaps.tRmap, ld = rm && rm._setSel ? (rm._setSel(k), A.loader(rm.getContainer(), 'Loading this route')) : null;
+    picking = true;
+    await paint();
+    try { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); result = null; } finally { picking = false; if (ld) ld.done(); }
+    renderInfo(true);
   }
   // ---------- route options on a small map (like Google Maps) ----------
   var rmaps = {};        // one small map per element (a trip with stops in between has one per leg)
@@ -1159,23 +1227,38 @@
     if (!el || !lines.length) return;
     var rmap = rmaps[mid0] = L.map(el, { zoomControl: false, attributionControl: true, tap: false, scrollWheelZoom: false, zoomSnap: 0.25 });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'osm-tiles', attribution: '© OpenStreetMap' }).addTo(rmap);
-    var all = [], tips = [], order = lines.map(function (_, k) { return k; }).filter(function (k) { return k !== sel; }).concat([sel]);   // chosen one drawn on top
+    var all = [], tips = [], segs = {}, order = lines.map(function (_, k) { return k; }).filter(function (k) { return k !== sel; }).concat([sel]);   // chosen one drawn on top
+    rmap._onPick = onPick;
     order.forEach(function (k) {
       var ln = lines[k]; if (!ln || !ln.pts || ln.pts.length < 2) return;
       var on = k === sel;
-      L.polyline(ln.pts, { color: '#ffffff', weight: on ? 9 : 7, opacity: 0.95, interactive: false }).addTo(rmap);
+      var halo = L.polyline(ln.pts, { color: '#ffffff', weight: on ? 9 : 7, opacity: 0.95, interactive: false }).addTo(rmap);
       var line = L.polyline(ln.pts, { color: on ? '#1a73e8' : ROUTE_GRAY, weight: on ? 6 : 5, opacity: 1 }).addTo(rmap);
-      L.polyline(ln.pts, { color: '#000', weight: 22, opacity: 0.001 }).addTo(rmap).on('click', function () { onPick(k); });   // easier to tap
-      line.on('click', function () { onPick(k); });
+      var hit = L.polyline(ln.pts, { color: '#000', weight: 22, opacity: 0.001 }).addTo(rmap).on('click', function () { rmap._onPick(k); });   // easier to tap
+      line.on('click', function () { rmap._onPick(k); });
+      segs[k] = { halo: halo, line: line, hit: hit };
       var cands = labelSpots(lines, k), mid = cands[0];
       tips.push({ k: k, cands: cands, tip: null });
       var tip = tips[tips.length - 1].tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'rlabel' + (on ? ' on' : ''), interactive: true })
         .setLatLng(mid).setContent('<div class="rl" data-opt="' + k + '"><b>' + esc(ln.time) + '</b><span>' + esc(ln.miles) + '</span></div>').addTo(rmap);
       all = all.concat(ln.pts);
     });
+    rmap._nLines = lines.length;
+    /** Highlight another option in place (no redraw): blue and on top, the rest gray. */
+    rmap._setSel = function (k2) {
+      sel = k2;
+      Object.keys(segs).forEach(function (k) {
+        var on = +k === sel, sg = segs[k];
+        sg.halo.setStyle({ weight: on ? 9 : 7 }); sg.line.setStyle({ color: on ? '#1a73e8' : ROUTE_GRAY, weight: on ? 6 : 5 });
+      });
+      if (segs[sel]) { segs[sel].halo.bringToFront(); segs[sel].line.bringToFront(); }
+      Object.keys(segs).forEach(function (k) { segs[k].hit.bringToFront(); });
+      tips.forEach(function (t) { var e = t.tip.getElement(); if (e) e.classList.toggle('on', t.k === sel); });
+      placeLabels(rmap, tips, sel, lines);
+    };
     rmap.attributionControl.setPrefix(false);
     // tapping a time/miles label picks that route too
-    el.onclick = null; el.addEventListener('click', function (e) { var t = e.target.closest && e.target.closest('[data-opt]'); if (t) { e.stopPropagation(); onPick(+t.dataset.opt); } }, true);
+    el.onclick = null; el.addEventListener('click', function (e) { var t = e.target.closest && e.target.closest('[data-opt]'); if (t) { e.stopPropagation(); rmap._onPick(+t.dataset.opt); } }, true);
     var a = lines[0].pts[0], b = lines[0].pts[lines[0].pts.length - 1];
     var mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(rmap); };
     mk(a, 'A'); mk(b, 'B');
@@ -1192,6 +1275,7 @@
     L.DomEvent.disableClickPropagation(fb);
     fb.onclick = function (e) { e.preventDefault(); e.stopPropagation(); N.haptic && N.haptic(); rmap._refit(); };
     el.appendChild(fb);
+    return rmap;
   }
   /** Candidate label spots on a route, best first: points far from the other routes (where it splits off), like Google Maps. */
   function labelSpots(lines, k) {
@@ -1210,43 +1294,14 @@
    * Route labels as speech bubbles beside their route (like Google Maps): the tail points at the route, and each bubble
    * goes where it covers the least of any route line and no other bubble — so every option stays visible.
    */
-  function placeLabels(m, tips, sel, lines, obst) {
-    var size = m.getSize(), placed = (obst || []).slice(), GAP = 9, pts = [];
-    (lines || []).forEach(function (ln) {
-      if (!ln || !ln.pts) return;
-      var st = Math.max(1, Math.floor(ln.pts.length / 500));
-      for (var i = 0; i < ln.pts.length; i += st) pts.push(m.latLngToContainerPoint(ln.pts[i]));
-    });
-    var DIRS = [['top', 0, -GAP], ['bottom', 0, GAP], ['right', GAP, 0], ['left', -GAP, 0]];
-    // keep labels out from under the Route button (top right)
+  function placeLabels(m, tips, sel, lines, obst, extra) {
+    var size = m.getSize(), o = (obst || []).slice();
+    // keep labels out from under the Route button (top right) and the map credits
     var fbEl = m.getContainer().querySelector('.rmap-fit');
-    if (fbEl && fbEl.offsetWidth) placed.push({ x: size.x - fbEl.offsetWidth - 14, y: 0, w: fbEl.offsetWidth + 14, h: fbEl.offsetHeight + 12 });
-    var atEl = m.getContainer().querySelector('.leaflet-control-attribution');
-    if (atEl && atEl.offsetWidth) { var cr = m.getContainer().getBoundingClientRect(), ar = atEl.getBoundingClientRect(); placed.push({ x: ar.left - cr.left - 4, y: ar.top - cr.top - 4, w: ar.width + 8, h: ar.height + 8 }); }
-    var hits = function (r, q) { return r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h; };
-    tips.slice().sort(function (a, b) { return (b.k === sel) - (a.k === sel); }).forEach(function (t) {
-      var el = t.tip.getElement && t.tip.getElement(); if (!el) return;
-      var w = el.offsetWidth, h = el.offsetHeight, best = null;
-      t.cands.slice(0, 30).forEach(function (c, ci) {
-        var pt = m.latLngToContainerPoint(c);
-        DIRS.forEach(function (d) {
-          var r = d[0] === 'top' ? { x: pt.x - w / 2, y: pt.y - GAP - h } : d[0] === 'bottom' ? { x: pt.x - w / 2, y: pt.y + GAP } :
-            d[0] === 'right' ? { x: pt.x + GAP, y: pt.y - h / 2 } : { x: pt.x - GAP - w, y: pt.y - h / 2 };
-          r.w = w; r.h = h;
-          if (r.x < 2 || r.y < 2 || r.x + w > size.x - 2 || r.y + h > size.y - 2) return;
-          if (placed.some(function (q) { return hits(r, q); })) return;
-          var cover = 0; for (var i = 0; i < pts.length; i++) { var p = pts[i]; if (p.x > r.x - 4 && p.x < r.x + w + 4 && p.y > r.y - 4 && p.y < r.y + h + 4) cover++; }
-          var score = cover * 10 + ci * 0.6 + (d[0] === 'top' || d[0] === 'bottom' ? 0 : 0.3);
-          if (!best || score < best.score) best = { score: score, c: c, d: d, r: r };
-        });
-      });
-      // on the big map, a bubble with nowhere free to go (under the panel or the top bar) stays out of sight
-      if (!best && obst) { el.style.visibility = 'hidden'; return; }
-      el.style.visibility = '';
-      if (!best) best = { c: t.cands[0], d: DIRS[0], r: { x: -99, y: -99, w: 0, h: 0 } };
-      t.tip.options.direction = best.d[0]; t.tip.options.offset = L.point(best.d[1], best.d[2]);
-      t.tip.setLatLng(best.c); placed.push(best.r);
-    });
+    if (fbEl && fbEl.offsetWidth) o.push({ x: size.x - fbEl.offsetWidth - 14, y: 0, w: fbEl.offsetWidth + 14, h: fbEl.offsetHeight + 12 });
+    o = o.concat(Labels.rectsOf(m, [m.getContainer().querySelector('.leaflet-control-attribution')], 4));
+    var list = tips.slice().sort(function (a, b) { return (b.k === sel) - (a.k === sel); });
+    Labels.place(m, list, Object.assign({ lines: lines, obst: o, hide: !!obst }, extra || {}));
   }
   function thinAlt(a) {
     var pts = decoded(a), out = [], step = Math.max(1, Math.floor(pts.length / 1500));
@@ -1279,7 +1334,7 @@
     var j = JSON.parse(String(res.body).replace(/[\u0000-\u001f]/g, ' '));
     var list = (j.Locations || []).map(function (x) {
       var tags = (x.StoreAmenities || []).concat(x.FeaturedItems || []);
-      return [+x.Latitude, +x.Longitude, tags.some(function (a) { return a && /walmart/i.test(a.Name || a.Title || ''); }) ? 1 : 0];
+      return [+x.Latitude, +x.Longitude, tags.some(function (a) { return a && /walmart/i.test(a.Name || a.Title || ''); }) ? 1 : 0, String(x.DisplayName || x.LocationName || '').slice(0, 60)];
     });
     if (list.length >= 100 && depth < 3) {          // the finder caps its answer: split the square and ask again
       var mLat = (b[0] + b[1]) / 2, mLng = (b[2] + b[3]) / 2, out = [];
@@ -1314,6 +1369,7 @@
         var best = null, bd = 1e9;
         locs.forEach(function (l) { var d = P.haversineMi(s.lat, s.lng, l[0], l[1]); if (d < bd) { bd = d; best = l; } });
         var v = best && bd <= 0.2 ? !!best[2] : undefined;
+        if (best && bd <= 0.2 && best[3]) s.altName = best[3];   // the station's own name in ExxonMobil's finder
         if (v === false) not++;
         if (s.wplus !== v) { s.wplus = v; changed++; }
       });
@@ -1329,7 +1385,7 @@
       // a saved trip: the stations (with their prices) it found then — no lookups at all
       official = (replay.official || []).slice();
       perModel = (ks || []).map(function (k) {
-        var hit = (replay.google || []).filter(function (g) { return g.k === k; })[0];
+        var sg = altSig(alts[k]), hit = (replay.google || []).filter(function (g) { return g.sig ? g.sig === sg : g.k === k; })[0];
         if (hit) return hit.list.slice();
         // a route it didn't check then: every station it found, with Google's exact detours dropped (they were for another route)
         var all = []; (replay.google || []).forEach(function (g) { g.list.forEach(function (st) { var c = Object.assign({}, st); delete c.detourExact; delete c.detourMi; all.push(c); }); });
@@ -1461,7 +1517,17 @@
     var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date(), goD = departAt();
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];
-      var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0;
+      var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0, unp = [];
+      var mkCand = function (s, pr, price, calc, extra) {
+        var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
+        // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently),
+        // and only on the stretch it was measured for (not on the way back)
+        var exact = s.detourExact && s.detourMi <= est * 3 + 2 && (!s.detourRange || (pr.along >= s.detourRange[0] - 1 && pr.along <= s.detourRange[1] + 1));
+        var det = exact ? s.detourMi : est;
+        var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
+        return Object.assign({ id: pr.leg ? s.id + '@' + pr.leg : s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
+          price: price, calc: calc, station: s, lat: s.lat, lng: s.lng, leg: pr.leg }, extra || {});
+      };
       for (var si = 0; si < merged.length; si++) {
         if (si % 150 === 149) await new Promise(function (r) { setTimeout(r, 0); });   // let the screen breathe on big trips
         var s = merged[si];
@@ -1470,19 +1536,26 @@
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi];
           var c = P.compute(s, grade, S, nowD, new Date(goD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // day-based bonuses go by when you'll be there
-          if (!c) { if (!pi) unpriced++; break; }
+          if (!c) { if (!pi) { unpriced++; unp.push({ s: s, prs: prs }); } break; }
           if (c.stale && !pi) stale++;
-          var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
-          // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently),
-          // and only on the stretch it was measured for (not on the way back)
-          var exact = s.detourExact && s.detourMi <= est * 3 + 2 && (!s.detourRange || (pr.along >= s.detourRange[0] - 1 && pr.along <= s.detourRange[1] + 1));
-          var det = exact ? s.detourMi : est;
-          var detMin = det < 0.15 ? 0 : det / 25 * 60 + 1;   // side roads ~25 mph, plus getting off and back on
-          cands.push({ id: pr.leg ? s.id + '@' + pr.leg : s.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: detMin, detourExact: exact,
-            price: c.final, calc: c, station: s, lat: s.lat, lng: s.lng, leg: pr.leg });
+          cands.push(mkCand(s, pr, c.final, c));
         }
       }
-      per.push({ cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade });
+      // no posted price: kept aside at an estimated price (typical on this route + 10¢), and only planned in where no
+      // priced station is in reach (a $3 penalty per stop keeps them out otherwise)
+      var unpricedCands = [];
+      if (cands.length && unp.length) {
+        var ps = cands.map(function (c) { return c.price; }).sort(function (a, b) { return a - b; });
+        var estP = Math.round((ps[Math.floor(ps.length / 2)] + 0.10) * 1000) / 1000;
+        unp.forEach(function (u) {
+          u.prs.forEach(function (pr) {
+            unpricedCands.push(mkCand(u.s, pr, estP, { base: estP, final: estP, est: true, stale: false, updated: null,
+              steps: [{ label: 'No posted ' + P.GRADES[grade].label.toLowerCase() + ' price — estimated (typical on this route + 10¢)', kind: 'base', amount: estP }],
+              notes: ['No price is posted for this station. It\'s only a stop because nothing with a price is in reach here.'] }, { est: true, penalty: 3 }));
+          });
+        });
+      }
+      per.push({ cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, unpricedCands: unpricedCands });
     }
     LG.debug('stations', 'Matched stations to ' + models.length + ' route(s) in ' + (Date.now() - t0) + ' ms', per.map(function (x) { return x.cands.length; }));
     return { per: per, cachedAgeMs: saved ? oldest : 0, raw: { official: official, google: perModel } };
@@ -1589,7 +1662,7 @@
     var pts = [{ name: route.stops[0].current ? 'Start' : (route.stops[0].short || 'Start'), d: 0 }], avg = r.startPrice || p.refPrice, legs = [];
     var stops = p.stops.slice();
     var gal0 = r.startGal;
-    stops.forEach(function (s, i) { pts.push({ name: (i + 1) + ' · ' + s.c.station.name, d: s.c.d, s: s }); });
+    stops.forEach(function (s, i) { pts.push({ name: (i + 1) + ' · ' + P.displayName(s.c.station), d: s.c.d, s: s }); });
     var dest = route.stops[route.stops.length - 1];
     pts.push({ name: dest.short || dest.label || 'Destination', d: model.totalMi });
     for (var i = 0; i < pts.length - 1; i++) {
@@ -1787,7 +1860,7 @@
     var help = 'The gas to have in the tank when you set off, from your plan: if its first stop is by the start (within 5 miles), you buy that much before you go. Range is at this trip\'s mileage and your speeds.';
     return '<div class="ideal" id="tsIdeal"><div class="ideal-h"><span class="nn sm">1</span>Gas to leave with ' + A.qBtn(help) + '</div>' +
       '<div class="ideal-row"><div class="ideal-l"><div class="ideal-big">' + gal.toFixed(1) + ' gal</div><div class="ideal-sub">~' + Math.round(gal / gpm) + ' mi of range</div></div>' +
-      '<div class="ideal-r">' + (atStart ? 'Add <b>' + first.buyGal.toFixed(1) + ' gal</b><small>' + esc(first.c.station.name) + (first.c.d >= 0.5 ? ' · mile ' + first.c.d.toFixed(1) : '') + '</small>' : '<b>Nothing to add</b><small>leave with what you have</small>') + '</div></div></div>';
+      '<div class="ideal-r">' + (atStart ? 'Add <b>' + first.buyGal.toFixed(1) + ' gal</b><small>' + esc(P.displayName(first.c.station)) + (first.c.d >= 0.5 ? ' · mile ' + first.c.d.toFixed(1) : '') + '</small>' : '<b>Nothing to add</b><small>leave with what you have</small>') + '</div></div></div>';
   }
   /** Gas in the tank at mile d of the plan (after any stop before it), and the range it gives. */
   function gasAt(d) {
@@ -1963,6 +2036,7 @@
     busy = true;
     try { await findStops0(force); } catch (e) { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); result = null; }
     busy = false; progEnd();
+    if (step !== ST_STOPS || !result) mapLoaded();
     if (window.__apiCount) window.__apiCount();
     if (step === ST_STOPS && $('tsResults') && !result) renderResults();
   }
@@ -1976,14 +2050,25 @@
     var models = [model];
     others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
     var okModels = models.filter(Boolean), okKs = [altSel].concat(others).filter(function (k, i) { return models[i]; });
-    var rp = force === true ? null : replay;
+    var rp = force === true ? null : replay, rpSt = null;
+    if (rp) {
+      // which route each saved station list was for (older saves: worked out from the saved route options)
+      rpSt = { official: rp.stations.official, google: (rp.stations.google || []).map(function (g) { return Object.assign({}, g, { sig: g.sig || (rp.alts && rp.alts[g.k] ? altSig(rp.alts[g.k]) : '') }); }) };
+      if (rp.partial) {
+        var have = rpSt.google.map(function (g) { return g.sig; });
+        if (!okKs.every(function (k) { return have.indexOf(altSig(alts[k])) >= 0; })) {
+          LG.info('stations', 'A different route than the saved trip used — searching it'); rp = null; rpSt = null;
+        }
+      }
+    }
     if (rp) LG.info('stations', 'Using the stations saved with this trip (' + agoText(Date.now() - rp.t) + ') — no lookups');
-    var ga = await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force === true, rp && rp.stations, okKs);
+    var ga = await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force === true, rpSt, okKs);
     if (rp) ga.cachedAgeMs = Date.now() - rp.t;
     else { try { saveTrip(ga.raw, okKs); } catch (e) { LG.warn('history', 'Couldn\'t save the trip', String(e)); } }
     var g = ga.per[0];
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
+    if (step >= ST_STOPS) mapLoading('Choosing stops', 0.93);
     var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
     var opts = makeOpts(model, cands, startGal), planOffs = null;
     var secs0 = flatSecs(model), sf0 = secs0.length && Garage.speedFn ? Garage.speedFn() : null;
@@ -1992,16 +2077,26 @@
       planOffs = offs0.join(',');
       if (offs0.some(function (v) { return v; })) opts.model = T.withSpeeds(model, T.speedRates(secs0, offs0, sf0.f, sf0.lo, sf0.hi));
     }
-    await breathe();
+    await paint();
     var t0 = Date.now();
-    var plan = T.plan(opts);
+    var plan = T.plan(opts), estUsed = 0;
+    // nothing priced in reach somewhere (very rural): let stations with no posted price fill the gap, at an estimate
+    if ((!plan.ok || plan.firstDip) && g.unpricedCands && g.unpricedCands.length) {
+      var oEst = Object.assign({}, opts, { cands: cands.concat(g.unpricedCands) });
+      var pEst = T.plan(oEst);
+      if (pEst.ok && (!plan.ok || !pEst.firstDip)) {
+        plan = pEst; opts = oEst; cands = oEst.cands; estUsed = pEst.stops.filter(function (x) { return x.c.est; }).length;
+        LG.info('plan', 'Used ' + estUsed + ' station(s) with no posted price (nothing priced in reach)');
+      }
+    }
     LG.info('plan', plan.ok ? 'Planned ' + plan.stops.length + ' stop(s) in ' + (Date.now() - t0) + ' ms' : 'No workable plan', {
       candidates: cands.length, unpriced: unpriced, stale: stale, tooFar: plan.tooFar, reachMi: plan.reachMi,
       stops: plan.ok ? plan.stops.map(function (s) { return { name: s.c.station.name, mile: Math.round(s.c.d), price: s.c.price, buy: Math.round(s.buyGal * 10) / 10, why: s.why }; }) : null });
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
-      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp, planOffs: planOffs };
-    await breathe();
+      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp, planOffs: planOffs, estUsed: estUsed };
+    prog(0.97, 'Drawing the map');
+    await paint();
     var t1 = Date.now();
     recompute();
     LG.debug('plan', 'Top-ups, trip cost and drive back in ' + (Date.now() - t1) + ' ms');
@@ -2051,13 +2146,22 @@
   /** Redraw whatever step is showing with the current plan. */
   function showResult() {
     document.body.classList.add('trip-on');
-    if (step === ST_STOPS && $('tsResults')) { renderResults(); drawRoute(); fitBtn(); }
+    if (step === ST_STOPS && $('tsResults')) { renderResults(); drawSoon(); }
     else if (step === ST_DEPART) renderStep();
+  }
+  /** Draw the route and stops once the list is on screen (the map takes a moment on a long trip). */
+  function drawSoon() {
+    var r0 = result;
+    requestAnimationFrame(function () { setTimeout(function () {
+      if (result !== r0 || step !== ST_STOPS) return;
+      drawRoute(); fitBtn(); if (!busy) mapLoaded();
+    }, 0); });
   }
   function renderResults() {
     var el = $('tsResults'); if (!el) return;
     var r = result;
     if (built[ST_STOPS]) { built[ST_STOPS].result = result; built[ST_STOPS].model = model; }
+    if (!r && loadingTrip) { el.innerHTML = '<div class="card finding"><div class="ldspin"></div><span>Opening your trip…</span></div>'; return; }
     if (!r) {
       el.innerHTML = model ? '<div class="card empty-res">' + (parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '' ? 'Stops appear here.' : 'Enter the miles left in your tank in Parameters.') + '</div>' : '';
       return;
@@ -2067,6 +2171,7 @@
     var w = [];
     if (!p.ok) w.push({ err: 1, t: 'No plan keeps you above a ' + r.bufMi + '-mile buffer. ' + (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your range.') + ' Try a smaller buffer or check the miles left.' });
     if (p.ok && p.firstDip && p.stops.length) w.push({ t: 'You\'ll reach stop 1 below your ' + r.bufMi + '-mile buffer (~' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' mi left).' });
+    if (r.estUsed) w.push({ t: r.estUsed + ' stop' + (r.estUsed === 1 ? ' is at a station' : 's are at stations') + ' with no posted price — nothing priced is in reach there. Its price is an estimate (marked est.).' });
     if (r.stale) w.push({ t: r.stale + ' price' + (r.stale === 1 ? ' is' : 's are') + ' over ' + S.staleHours + ' hours old (marked).' });
     r.notes.forEach(function (n) { w.push({ t: n }); });
     var wm = $('wmCheck'); if (wm && !wm.classList.contains('hidden')) w.push({ t: $('wmCheckTitle').textContent + ' before its prices can load.', html: ' <a href="#" id="tsSiteCheck">Open</a>' });
@@ -2228,7 +2333,24 @@
   // reopened later with no Google lookups at all. Same stops = same entry, replaced by the newer search.
   var HIST_MAX = 25;
   function histIndex() { var o = A.KV.get('trips', 'index'); return (o && o.v) || []; }
+  /** One route option, recognizable again later: its length, time and name. */
+  function altSig(a) { return a ? Math.round((a.distanceMeters || 0) / 100) + '|' + Math.round(parseFloat(String(a.duration || '0')) / 60) + '|' + (a.description || '') : ''; }
+  /** A saved trip to the same places (each within ~1/4 mile), avoiding the same things — whatever link it came from. */
+  function similarTrip(r) {
+    if (!r || r.stops.some(function (s) { return s.current || s.lat == null; })) return null;
+    var idx = histIndex();
+    for (var i = 0; i < idx.length; i++) {
+      var o = A.KV.get('trips', 'trip|' + idx[i].id), v = o && o.v;
+      if (!v || !v.route || !v.alts || !v.alts.length || !v.stations || v.route.stops.length !== r.stops.length) continue;
+      var av = (v.trip && v.trip.avoid) || {};
+      if (['tolls', 'highways', 'ferries'].some(function (k) { return !!av[k] !== !!S.trip.avoid[k]; })) continue;
+      var same = v.route.stops.every(function (s, k) { var t = r.stops[k]; return !s.current && s.lat != null && !!s.ret === !!t.ret && P.haversineMi(s.lat, s.lng, t.lat, t.lng) <= 0.25; });
+      if (same) return { id: idx[i].id, t: o.t, v: v };
+    }
+    return null;
+  }
   function histId(r) {
+    if (r.histId) return r.histId;
     var key = r.stops.map(function (st) { return st.current ? 'here' : (st.lat != null ? st.lat.toFixed(3) + ',' + st.lng.toFixed(3) : norm(st.address || st.label)); }).join('|') +
       '|' + ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; }).join(',');
     var h = 0; for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
@@ -2243,7 +2365,7 @@
   function saveTrip(raw, ks) {
     if (!route || !raw) return;
     var id = histId(route), now = Date.now();
-    var google = (raw.google || []).map(function (list, i) { return { k: ks[i], list: list }; });
+    var google = (raw.google || []).map(function (list, i) { return { k: ks[i], sig: alts[ks[i]] ? altSig(alts[ks[i]]) : '', list: list }; });
     var keepStop = function (st) { var o = Object.assign({}, st); delete o.choices; return o; };
     A.KV.put('trips', 'trip|' + id, {
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
@@ -2253,7 +2375,7 @@
       stations: { official: raw.official || [], google: google }
     });
     var idx = histIndex().filter(function (x) { return x.id !== id; });
-    idx.unshift({ id: id, t: now, title: tripTitle(route),
+    idx.unshift({ id: id, t: now, title: tripTitle(route), pts: route.stops.map(stopName),
       mi: Math.round(model.totalMi), via: alts[altSel] && alts[altSel].description || '', n: route.stops.length });
     idx.slice(HIST_MAX).forEach(function (x) { A.KV.put('trips', 'trip|' + x.id, null); });
     A.KV.put('trips', 'index', idx.slice(0, HIST_MAX));
@@ -2271,9 +2393,9 @@
     var bg = document.createElement('div'); bg.className = 'tpick-bg'; bg.id = 'tripPick';
     bg.innerHTML = '<div class="tpick" role="dialog" aria-label="Plan a trip"><div class="tpick-h">Plan a trip</div>' +
       '<button class="tpick-new" id="tpNew"><span class="plus">+</span><span><b>New trip</b><small>Start from scratch</small></span></button>' +
-      (cur ? '<button class="tpick-new cont" id="tpCont"><span class="plus">↺</span><span><b>Continue</b><small>' + arrowHtml(tripTitle(route)) + '</small></span></button>' : '') +
+      (cur ? '<button class="tpick-new cont" id="tpCont"><span class="plus">↺</span><span><b>Continue</b>' + miniList(route.stops.map(stopName)) + '</span></button>' : '') +
       (idx.length ? '<div class="tpick-sub">Recent trips <span>no lookups</span></div><div class="tpick-list">' + idx.map(function (x) {
-        return '<div class="hist-row"><button class="hist-open" data-hist="' + x.id + '"><b>' + arrowHtml(x.title) + '</b><small>' + x.mi + ' mi' +
+        return '<div class="hist-row"><button class="hist-open" data-hist="' + x.id + '">' + miniList(histPts(x)) + '<small>' + x.mi + ' mi' +
           (x.via ? ' · via ' + esc(x.via) : '') + (x.n > 2 ? ' · ' + (x.n - 2) + ' stop' + (x.n > 3 ? 's' : '') : '') + ' · ' + dayText(x.t) + '</small></button>' +
           '<button class="hist-del" data-hdel="' + x.id + '" aria-label="Remove from history">✕</button></div>';
       }).join('') + '</div>' : '') + '</div>';
@@ -2292,6 +2414,16 @@
         var row = b.closest('.hist-row'); if (row) row.remove();
       };
     });
+  }
+  /** A trip's places as a small numbered list. */
+  function miniList(names) {
+    return '<ol class="nlist sm">' + names.map(function (n, i) { return '<li><span class="nn">' + (i + 1) + '</span><div class="nl-a">' + esc(n) + '</div></li>'; }).join('') + '</ol>';
+  }
+  function histPts(x) {
+    if (x.pts && x.pts.length) return x.pts;
+    var o = A.KV.get('trips', 'trip|' + x.id), v = o && o.v;   // saved before the list kept them
+    if (v && v.route && v.route.stops) return v.route.stops.map(stopName);
+    return String(x.title || '').split(' → ');
   }
   function closePicker() { var bg = $('tripPick'); if (!bg) return false; bg.remove(); return true; }
   /** A fresh trip: keep the car and your settings, forget the route. */
@@ -2312,13 +2444,19 @@
     route = v.route; alts = v.alts;
     S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
     rawRoute = alts[altSel]; result = null; parsing = null;
-    replay = { id: id, t: o.t, stations: v.stations };
-    resetSteps();
-    model = T.buildRoute(rawRoute, carModel());
-    ensureLimits(model);
+    replay = { id: id, t: o.t, stations: v.stations, alts: v.alts };
+    resetSteps(); routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {};
+    var needMiles = !(parseFloat(S.trip.milesLeft) >= 0) || S.trip.milesLeft === '';
+    // the panel comes up at once (75%, "Opening your trip…", the map grayed out); the long route is read right after
+    model = null; loadingTrip = true; busy = true;
+    if (!needMiles) openTrip(ST_STOPS);
+    await paint();
+    try { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); }
+    catch (e) { loadingTrip = false; busy = false; mapLoaded(); toastMsg('That saved trip couldn\'t be read.'); LG.error('history', String(e)); return; }
+    loadingTrip = false; busy = false;
     LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
-    if (!(parseFloat(S.trip.milesLeft) >= 0) || S.trip.milesLeft === '') { openTrip(ST_PARAMS); flag($('tMiles'), 'box', 'How many miles are left in your tank?'); return; }
-    openTrip(ST_STOPS);   // entering Stops plans it from the saved stations
+    if (needMiles) { openTrip(ST_PARAMS); flag($('tMiles'), 'box', 'How many miles are left in your tank?'); return; }
+    renderStep();   // entering Stops plans it from the saved stations
   }
   function priceText(v) { return '$' + P.fmt3(v); }
   function keepScroll(f) { var el = tpBody(); if (!el) return f(); var y = el.scrollTop; f(); el.scrollTop = y; }
@@ -2332,7 +2470,7 @@
     }
     r.tops.forEach(function (t, k) {
       var br = P.BRANDS[t.c.station.brand], on = r.topSel === k;
-      h += '<div class="top-opt' + (on ? ' on' : '') + '"><span class="dot" style="background:' + br.color + '"></span><div class="mid"><b>' + esc(t.c.station.name) + '</b> · ' + priceText(t.c.price) +
+      h += '<div class="top-opt' + (on ? ' on' : '') + '">' + A.logoHtml(t.c.station.brand) + '<div class="mid"><b>' + esc(P.displayName(t.c.station)) + '</b> · ' + priceText(t.c.price) +
         (last ? ' <span class="' + (t.extraPerGal > 0 ? 'bad' : 'good') + '">(' + (t.extraPerGal >= 0 ? '+' : '−') + '$' + P.fmt3(Math.abs(t.extraPerGal)) + '/gal vs. stop ' + r.plan.stops.length + ')</span>' : '') +
         '<div class="sub">' + t.toDestMi.toFixed(1) + ' mi from the destination · +' + t.buyGal.toFixed(1) + ' gal for ' + money(t.cost) + ' → arrive with ~' + Math.round(t.endMi) + ' mi</div></div>' +
         '<button data-top="' + k + '">' + (on ? 'Added ✓' : 'Add') + '</button></div>';
@@ -2343,9 +2481,9 @@
   function stopCard(s, i) {
     var c = s.c, st = c.station, br = P.BRANDS[st.brand], open = !!(result.openStops && result.openStops[i]);
     var det = c.detourMi < 0.15 ? 'on the route' : '+' + c.detourMi.toFixed(1) + ' mi detour';
-    var h = '<div class="stop' + (open ? ' open' : '') + '" id="stop' + i + '"><button class="s-top" data-open="' + i + '" aria-expanded="' + open + '"><span class="num">' + (i + 1) + '</span><span class="badge" style="background:' + br.color + '">' + br.short + '</span>' +
-      '<span class="mid"><span class="nm">' + esc(st.name) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · buy ' + s.buyGal.toFixed(1) + ' gal' + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
-      '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + '</span><span class="chev"></span></button>';
+    var h = '<div class="stop' + (open ? ' open' : '') + '" id="stop' + i + '"><button class="s-top" data-open="' + i + '" aria-expanded="' + open + '"><span class="num">' + (i + 1) + '</span>' + A.badgeHtml(st.brand) +
+      '<span class="mid"><span class="nm">' + esc(P.displayName(st)) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · buy ' + s.buyGal.toFixed(1) + ' gal' + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
+      '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + (c.est ? '<span class="o est-tag">est.</span>' : '') + '</span><span class="chev"></span></button>';
     if (!open) return h + '</div>';
     h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' gal' + (S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
       ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
@@ -2353,7 +2491,7 @@
     if (s.alts.length) {
       h += '<div class="alts">' + s.alts.map(function (a) {
         var ab = P.BRANDS[a.c.station.brand];
-        return '<div><span class="dot" style="background:' + ab.color + '"></span>' + esc(ab.name) + ' · mile ' + Math.round(a.c.d) + ' · ' + priceText(a.c.price) +
+        return '<div>' + A.logoHtml(a.c.station.brand) + esc(P.displayName(a.c.station)) + ' · mile ' + Math.round(a.c.d) + ' · ' + priceText(a.c.price) +
           (a.c.detourMi < 0.15 ? '' : ' · ' + a.c.detourMi.toFixed(1) + ' mi off') + ' <b class="' + (a.extra > 0 ? 'bad' : 'good') + '">' + (a.extra >= 0 ? '+' : '') + money(a.extra) + '</b></div>';
       }).join('') + '</div>';
     }
@@ -2382,7 +2520,7 @@
     var dz = dotSize(map.getZoom());
     dots.forEach(function (d) { d.setRadius(dz.r); d.setStyle({ weight: dz.w }); });
   });
-  var drawn = {}, stopTips = [], routeLL = null, selLL = null, pinT = 0;
+  var drawn = {}, stopTips = [], routeLL = null, selLL = null, pinT = 0, leaderLayer = L.layerGroup();
   /** Price bubbles placed like the route labels on the small maps: off the route (and the highlighted road), off each other, and out from under the panel and the top bar. */
   function placePins() {
     if (!stopTips.length || !map.hasLayer(layer)) return;
@@ -2390,7 +2528,9 @@
     if (selLL) { lines.push({ pts: selLL }); lines.push({ pts: selLL }); }   // the highlighted road counts double
     var sz = map.getSize(), cover = sheetCover();
     var bar = document.querySelector('.top .bar'), barB = bar ? bar.getBoundingClientRect().bottom + 6 : 76;
-    placeLabels(map, stopTips, -1, lines, [{ x: 0, y: sz.y - cover, w: sz.x, h: cover }, { x: 0, y: 0, w: sz.x, h: barB }]);
+    if (!layer.hasLayer(leaderLayer)) layer.addLayer(leaderLayer);
+    placeLabels(map, stopTips, -1, lines, [{ x: 0, y: sz.y - cover, w: sz.x, h: cover }, { x: 0, y: 0, w: sz.x, h: barB }],
+      { rings: [0, 22, 46], leaders: leaderLayer, leaderPane: 'tleaders' });
   }
   function placePinsSoon() { clearTimeout(pinT); pinT = setTimeout(placePins, 30); }
   map.on('zoomend moveend', placePinsSoon);
@@ -2413,7 +2553,7 @@
       if (result.plan.ok) result.plan.stops.forEach(function (s, i) { chosen[s.c.id] = i + 1; });
       // hundreds of stations on a long trip: drawn on one canvas, in a layer above the route line (like the pins)
       if (!map.getPane('tdots')) { var pn = map.createPane('tdots'); pn.style.zIndex = 590; }
-      var cv = dotsRenderer || (dotsRenderer = L.canvas({ padding: 0.3, pane: 'tdots' }));
+      var cv = A.dotsRenderer;
       var ring = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#ffffff';
       var dz = dotSize(map.getZoom());
       dots = [];
@@ -2422,7 +2562,7 @@
         var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 });
         dots.push(dot);
         dot
-          .bindPopup('<b>' + esc(c.station.name) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
+          .bindPopup('<b>' + esc(P.displayName(c.station)) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
             (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : '')).addTo(layer);
       });
       if (result.top) chosen[result.top.c.id] = 'T';
@@ -2431,15 +2571,20 @@
       result.cands.forEach(function (c) {
         if (!chosen[c.id]) return;
         L.circleMarker([c.lat, c.lng], { pane: 'tdots', renderer: cv, radius: 5, color: '#ffffff', weight: 2, fillColor: '#18a957', fillOpacity: 1, interactive: false }).addTo(layer);
+        var full = '<span class="b">' + chosen[c.id] + '</span>' + A.logoHtml(c.station.brand) + '<span class="pv">' + priceHtml(c.price) + '</span>', small = '<span class="b">' + chosen[c.id] + '</span>';
         var tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'stopbub', interactive: true, opacity: 1, pane: 'tooltipPane' })
-          .setLatLng([c.lat, c.lng]).setContent('<span class="b">' + chosen[c.id] + '</span>' + priceHtml(c.price));
+          .setLatLng([c.lat, c.lng]).setContent(full);
         layer.addLayer(tip);
         (function (which) {
           var te = tip.getElement(); if (!te) return;
           L.DomEvent.disableClickPropagation(te);
           te.addEventListener('click', function () { N.haptic && N.haptic(); openStopTile(which); });
         })(chosen[c.id]);
-        stopTips.push({ k: stopTips.length, cands: [L.latLng(c.lat, c.lng)], tip: tip });
+        (function (tip, full, small) {
+          var cur = false;
+          stopTips.push({ k: stopTips.length, cands: [L.latLng(c.lat, c.lng)], tip: tip, color: '#18a957',
+            compact: function (on) { if (on === cur) return; cur = on; tip.setContent(on ? small : full); var te = tip.getElement(); if (te) te.classList.toggle('mini', on); } });
+        })(tip, full, small);
       });
     }
     routeLL = ll;
@@ -2608,7 +2753,11 @@
   };
   if (window.__pendingShare) { var t0 = window.__pendingShare; window.__pendingShare = null; window.onSharedText(t0); }
 
-  window.__trip = { call: call, open: openTrip, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
+  window.__trip = { call: call, open: openTrip, relogo: function () {
+      drawn = {};
+      if (result && step === ST_STOPS && $('tsResults')) keepScroll(renderResults);
+      if (model && step >= ST_STOPS && map.hasLayer(layer)) drawRoute();
+    }, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
     state: function () { return { route: route, model: model, result: result, busy: busy, step: step }; } };
 })();

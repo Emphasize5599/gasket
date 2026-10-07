@@ -601,7 +601,10 @@
     if ($('lgSort')) $('lgSort').onchange = function () { V.sort = this.value; save(); tripSpeed(el, ctx); };
     if ($('lgDir')) $('lgDir').onclick = function () { V.dir = V.dir === 'desc' ? 'asc' : 'desc'; save(); tripSpeed(el, ctx); };
     activate(act);
-    total(); guards();
+    total();
+    // the grayed-out speeds take a moment to work out on a long trip: done just after the card is on screen
+    var gtok = el._gtok = {};
+    setTimeout(function () { if (el._gtok === gtok && el.isConnected) guards(); }, 120);
     lastTripMi = ctx.model.totalMi;
   }
   /** The part of each stretch that falls between route miles a and b. */

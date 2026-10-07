@@ -426,7 +426,7 @@
     // Extra time has to pay for itself: every stop must save at least stopPenalty, and leaving the road for a
     // station (more than ~1.5 min of detour) must save at least detourPenalty more than staying on the route.
     var stopCost = stopCostFn || function (c) {
-      return (o.stopPenalty || 0) + ((c.detourMin || 0) > 1.5 ? (o.detourPenalty || 0) : 0) +
+      return (o.stopPenalty || 0) + (c.penalty || 0) + ((c.detourMin || 0) > 1.5 ? (o.detourPenalty || 0) : 0) +
         (o.timeValue || 0) * ((c.detourMin || 0) + (o.stopMinutes || 0)) / 60;
     };
     var detGal = function (n) { return n.kind === 'stop' ? (n.c.detourMi || 0) * model.cityGpm : 0; };

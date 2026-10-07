@@ -541,6 +541,20 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__routeBody') is not None and pg.locator('#tRefreshRoutes').count() == 1, 'refresh asks Google again'
         pg.evaluate("window.__routeBody = null"); stops(pg, 1200)
         pg.click('#tClose'); pg.wait_for_timeout(200)
+        # the same trip from another link (a slightly different spot for North Little Rock): the saved routes and stations, no lookups
+        pg.click('#btnTrip'); pg.wait_for_timeout(400); pg.click('#tpNew'); pg.wait_for_timeout(300)
+        if step(pg) == 1: nxt(pg)
+        pg.fill('#tLink', LINK.replace('2d34.7695', '2d34.7700')); pg.wait_for_timeout(900)
+        pg.evaluate("window.__jobs = null; window.__routeBody = null")
+        getr(pg)
+        print('  same trip, other link:', ft(pg, '#tRouteGo').replace('\n', ' | '))
+        assert pg.evaluate('window.__routeBody') is None and pg.locator('.rt-saved').count() == 1, 'routes from the saved trip'
+        sel0 = pg.evaluate('window.__trip.state().result')
+        nxt(pg); assert step(pg) == 3; nxt(pg, 1200); assert step(pg) == 4; idle(pg)
+        sv2 = ft(pg, '.note.saved'); print('  stops:', sv2, '| google jobs:', pg.evaluate('window.__jobs') and len(pg.evaluate('window.__jobs')))
+        assert pg.evaluate('window.__jobs') is None and 'no lookups' in sv2, 'stations from the saved trip'
+        assert pg.evaluate("window.__app.KV.get('trips', 'index').v.length") == 1, 'still one saved trip'
+        pg.click('#tClose'); pg.wait_for_timeout(200)
         # remove from history
         pg.click('#btnTrip'); pg.wait_for_timeout(400); n0 = pg.locator('[data-hdel]').count()
         pg.screenshot(path=f'{OUT}/{name}-h0-picker.png'); wide(pg, 'picker')
