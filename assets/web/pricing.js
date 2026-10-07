@@ -217,11 +217,16 @@
         if (s.samsMode === 'minus10') add('Walmart+ discount', -0.10);
         else steps.push({ label: "Walmart+ → Sam's member price", amount: 0,
           note: "Google's Sam's Club price is normally the member price, which Walmart+ unlocks." });
+      } else if ((b === 'exxon' || b === 'mobil') && station.wplus === false) {
+        steps.push({ label: 'Walmart+ discount', amount: 0, note: "This station isn't in the Walmart+ program (ExxonMobil's station finder doesn't list it)." });
+        notes.push("Not a Walmart+ station: ExxonMobil's station finder lists it without Walmart+, so no 10¢ here.");
+      } else if (b === 'citgo') {
+        add('Walmart+ discount (not confirmed)' + (al ? ' — Alabama rate' : ''), -wpAmt);
+        notes.push('Walmart+ isn\'t confirmed at this CITGO. Most CITGOs take it, but CITGO doesn\'t publish which ones — check Gas Savings in the Walmart app before going out of your way.');
       } else {
         add('Walmart+ discount' + (al ? ' (Alabama rate)' : ''), -wpAmt);
       }
-      if (b === 'exxon' || b === 'mobil') notes.push("Doesn't stack with Exxon Mobil Rewards+ — no points earned on this fill.");
-      if (b === 'citgo') notes.push('Only at CITGO locations in the Walmart+ program — check Gas Savings in the Walmart app.');
+      if ((b === 'exxon' || b === 'mobil') && station.wplus !== false) notes.push("Doesn't stack with Exxon Mobil Rewards+ — no points earned on this fill." + (station.wplus === true ? ' Listed as a Walmart+ station by ExxonMobil.' : ''));
     }
 
     if (b === 'citgo' && s.citgoTier && s.citgoTier !== 'none') {

@@ -42,6 +42,14 @@ assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', w({ citgoTier: 'p
 assert.equal(P.citgoBonus(w({ citgoUsed: { tuesday: '2026-10' } }), new Date(2026, 10, 3, 12)), 'tuesday');
 // Club + Friday Savings (3+2 = 5¢)
 assert.equal(P.compute(st('citgo', 'CITGO', 2.959), 'regular', S, fri).final, 2.809);
+// an Exxon / Mobil that ExxonMobil's station finder lists without Walmart+: no 10¢
+const notWp = Object.assign(st('mobil', 'Mobil', 3.099), { wplus: false });
+c = P.compute(notWp, 'regular', S, now);
+assert.equal(c.final, 3.099); assert.ok(c.notes.some((n) => /Not a Walmart\+ station/.test(n)));
+assert.equal(P.compute(Object.assign(st('exxon', 'Exxon', 3.099), { wplus: true }), 'regular', S, now).final, 2.999);
+// CITGO: discount kept, but marked not confirmed
+c = P.compute(st('citgo', 'CITGO', 2.959), 'regular', S, sat);
+assert.ok(c.steps.some((x) => /not confirmed/.test(x.label)) && c.notes.some((n) => /isn't confirmed/.test(n)));
 // Walmart+ off
 assert.equal(P.compute(st('mobil', 'Mobil', 3.099), 'regular', w({ walmartPlus: false }), now).final, 3.099);
 // 2% cash back on post-discount price: 2.999 * 0.98 = 2.939

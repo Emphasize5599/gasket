@@ -198,6 +198,9 @@ with sync_playwright() as p:
         print('  notes:', pg.evaluate('JSON.stringify(window.__trip.state().result && window.__trip.state().result.notes)'), pg.evaluate('typeof window.__siteMock'))
         print('  google jobs:', len(pg.evaluate('window.__jobs')), '| walmart price ids:', pg.evaluate('window.__wmPriceIds'))
         assert pg.evaluate('window.__wmPriceIds') == ['777'], 'only on-route Walmart priced'
+        xo = pg.evaluate("(() => { const c = window.__trip.state().result.cands; const f = (n, mi) => c.filter(x => x.station.name === n && Math.abs(x.d - mi) < 8)[0]; const m = f('Mobil', 205), e = f('Exxon', 38); return { urls: (window.__xomUrls || []).length, mobil205: m && [m.price, m.station.wplus], exxon38: e && [e.price, e.station.wplus] }; })()")
+        print('  Walmart+ at Exxon/Mobil:', xo)
+        assert xo['urls'] >= 1 and xo['mobil205'] == [3.199, False] and xo['exxon38'][1] is True and abs(xo['exxon38'][0] - 3.199) < 0.001, 'not-in-program Mobil loses the 10c'
         txt = ft(pg, '.tp-step:not(.hidden)')
         print('  RESULT:', txt.replace('\n', ' | ')[:900])
         pg.screenshot(path=f'{OUT}/{name}-t2-result.png'); wide(pg, 'stops')

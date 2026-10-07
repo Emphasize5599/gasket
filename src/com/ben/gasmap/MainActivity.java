@@ -590,7 +590,7 @@ public class MainActivity extends Activity {
         throw new Exception("Couldn't open that link. In Google Maps use Share \u2192 Copy, then paste it here.");
     }
 
-    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov"};
+    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com"};
 
     private String getJson(String url) throws Exception {
         if (!hostAllowed(url, JSON_HOSTS)) throw new Exception("Host not allowed");

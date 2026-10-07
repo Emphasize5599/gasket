@@ -62,6 +62,20 @@
       });
       return { results, errors: [], calls: jobs.length };
     },
+    // ExxonMobil's station finder: every mock Exxon / Mobil, tagged Walmart+ except the Mobil at mile 205
+    xom: (url) => {
+      (window.__xomUrls = window.__xomUrls || []).push(url);
+      const q = (k) => +new URL(url).searchParams.get(k), la1 = q('Latitude1'), la2 = q('Latitude2'), lo1 = q('Longitude1'), lo2 = q('Longitude2');
+      const locs = [];
+      ['Exxon', 'Mobil'].forEach((b) => brandAt[b].forEach(([mi, , det]) => {
+        const p = at(mi), lat = p.lat + det / 69 / 2.6, lng = p.lng;
+        if (lat < la1 || lat > la2 || lng < lo1 || lng > lo2) return;
+        const wp = !(b === 'Mobil' && mi === 205);
+        locs.push({ LocationID: b + mi, DisplayName: b + ' ' + mi, Brand: b, Latitude: lat, Longitude: lng,
+          StoreAmenities: (wp ? [{ Name: 'Walmartplus', Title: 'Walmart+' }] : []).concat([{ Name: 'Carwash', Title: 'Carwash' }]), FeaturedItems: [] });
+      }));
+      return { Locations: locs, ShowServiceError: false };
+    },
     hpms: (url) => {
       (window.__hpms = window.__hpms || []).push(url);
       const st = (url.match(/HPMS_FULL_(\w\w)_/) || [])[1];

@@ -1263,6 +1263,66 @@
    * Answers already found for the same stretch are reused (saved searches) unless force, or older than staleHours.
    * pg(frac 0..1, label). Returns { per: [{cands, notes, unpriced, stale, grade}] per model, cachedAgeMs }.
    */
+  // ---------- which Exxon / Mobil stations take Walmart+ ----------
+  // ExxonMobil's own station finder tags each participating station "Walmart+" (free; no Google lookups). Stations
+  // are checked a half-degree square at a time (busy squares are split so nothing is cut off), and each square's
+  // answer is saved for a week. A station it lists without the tag loses the Walmart+ discount; one it can't match
+  // keeps it. CITGO has no such public list, so CITGO prices say the discount isn't confirmed.
+  var XOM_CELL = 0.5, XOM_DAYS = 7;
+  function xomUrl(b) {
+    return 'https://www.exxon.com/en/api/locator/Locations?Latitude1=' + b[0].toFixed(3) + '&Latitude2=' + b[1].toFixed(3) +
+      '&Longitude1=' + b[2].toFixed(3) + '&Longitude2=' + b[3].toFixed(3) + '&DataSource=RetailGasStations&Country=US&Customsort=False';
+  }
+  async function xomBox(b, depth) {
+    var res = await call('fetchJson', xomUrl(b));
+    if (res.error || !res.body) throw new Error(res.error || 'no answer');
+    var j = JSON.parse(String(res.body).replace(/[\u0000-\u001f]/g, ' '));
+    var list = (j.Locations || []).map(function (x) {
+      var tags = (x.StoreAmenities || []).concat(x.FeaturedItems || []);
+      return [+x.Latitude, +x.Longitude, tags.some(function (a) { return a && /walmart/i.test(a.Name || a.Title || ''); }) ? 1 : 0];
+    });
+    if (list.length >= 100 && depth < 3) {          // the finder caps its answer: split the square and ask again
+      var mLat = (b[0] + b[1]) / 2, mLng = (b[2] + b[3]) / 2, out = [];
+      var parts = await Promise.all([[b[0], mLat, b[2], mLng], [b[0], mLat, mLng, b[3]], [mLat, b[1], b[2], mLng], [mLat, b[1], mLng, b[3]]].map(function (q) { return xomBox(q, depth + 1); }));
+      parts.forEach(function (p) { out = out.concat(p); });
+      return out;
+    }
+    return list;
+  }
+  var xomPending = {};
+  function xomCell(k) {
+    var o = A.KV.get('xom', k, XOM_DAYS * 24 * 3600e3); if (o) return Promise.resolve(o.v);
+    if (xomPending[k]) return xomPending[k];
+    var ij = k.split(':').map(Number), m = 0.01;
+    var b = [ij[0] * XOM_CELL - m, (ij[0] + 1) * XOM_CELL + m, ij[1] * XOM_CELL - m, (ij[1] + 1) * XOM_CELL + m];
+    return (xomPending[k] = xomBox(b, 0).then(function (list) { A.KV.put('xom', k, list); delete xomPending[k]; return list; },
+      function (e) { delete xomPending[k]; LG.warn('stations', 'ExxonMobil station finder', String(e)); return null; }));
+  }
+  /** Mark each Exxon / Mobil station: wplus true (listed with Walmart+), false (listed without), or unknown. -> how many changed. */
+  async function xomCheck(list) {
+    if (S.xomCheck === false || !list || !list.length) return 0;
+    var cells = {};
+    list.forEach(function (s) {
+      if ((s.brand !== 'exxon' && s.brand !== 'mobil') || s.lat == null) return;
+      var k = Math.floor(s.lat / XOM_CELL) + ':' + Math.floor(s.lng / XOM_CELL);
+      (cells[k] = cells[k] || []).push(s);
+    });
+    var changed = 0, t0 = Date.now(), not = 0;
+    await Promise.all(Object.keys(cells).map(async function (k) {
+      var locs = await xomCell(k); if (!locs) return;
+      cells[k].forEach(function (s) {
+        var best = null, bd = 1e9;
+        locs.forEach(function (l) { var d = P.haversineMi(s.lat, s.lng, l[0], l[1]); if (d < bd) { bd = d; best = l; } });
+        var v = best && bd <= 0.2 ? !!best[2] : undefined;
+        if (v === false) not++;
+        if (s.wplus !== v) { s.wplus = v; changed++; }
+      });
+    }));
+    if (Object.keys(cells).length) LG.info('stations', 'Walmart+ at Exxon/Mobil checked', { squares: Object.keys(cells).length, notInProgram: not, ms: Date.now() - t0 });
+    return changed;
+  }
+  window.__xom = xomCheck;
+
   async function gatherAll(models, pg, dbgS, force, replay, ks) {
     var KV = A.KV, notes = [], official = [], perModel = models.map(function () { return []; });
     if (replay) {
@@ -1396,6 +1456,8 @@
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
 
+    // Exxon / Mobil stations that aren't in the Walmart+ program lose that discount
+    try { var allSt = official.slice(); perModel.forEach(function (l) { allSt = allSt.concat(l); }); await xomCheck(allSt); } catch (e) { LG.warn('stations', 'Walmart+ check', String(e)); }
     var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date(), goD = departAt();
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];

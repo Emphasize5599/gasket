@@ -40,7 +40,7 @@
       routeCallsThisMonth: function () { return 0; },
       placesFind: function (req, key, q, lat, lng, bias, radius) { setTimeout(function () { var m = window.__mocks && window.__mocks.find; window.onNativeResult(req, m ? { body: JSON.stringify(m(q, lat, lng, radius)) } : { error: 'No find mock' }); }, 50); },
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
-      fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
+      fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
       search: function (req) { setTimeout(function () { window.onSearchResult(req, { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
@@ -262,6 +262,12 @@
     movedByUser = false;
     render();
     if (errs.length) { status(errs[0], true); if (errs.length > 1) console.warn(errs); }
+    // which Exxon / Mobil stations take Walmart+ (free, from ExxonMobil's own station finder)
+    if (window.__xom && !demo) window.__xom(gStations).then(function (n) {
+      if (!n) return;
+      stations = P.mergeOfficial(gStations, allOfficial()).filter(function (s) { return S.brands[s.brand]; });
+      N.saveCache(JSON.stringify({ lastFetch: lastFetch, g: gStations, o: official })); render();
+    }, function () {});
   }
 
   // ---------- computing & rendering ----------
@@ -460,6 +466,7 @@
     h += '</div>';
     h += '<div class="card"><h3>Trip planner</h3>' +
       '<div class="field"><div class="lbl">Show cities when a route is imported<small>Free lookup from OpenStreetMap using each stop\'s spot (sends those coordinates to OpenStreetMap). No Google lookups.</small></div>' + sw('osmPreview', S.osmPreview !== false) + '</div>' +
+      '<div class="field"><div class="lbl">Check which Exxon and Mobil stations take Walmart+<small>Free, from ExxonMobil\'s own station finder (sends the map area or route area to exxon.com). Stations it lists without Walmart+ don\'t get the 10¢. No Google lookups.</small></div>' + sw('xomCheck', S.xomCheck !== false) + '</div>' +
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
