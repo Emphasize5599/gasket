@@ -839,7 +839,10 @@ details.g-obs[open] { padding-bottom: 12px; }
 .bl-risk { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; font-size: 13.5px; }
 .bl-risk input { margin-top: 2px; width: 18px; height: 18px; flex: none; }
 .bl-risk small { display: block; color: var(--ink-2); font-size: 12px; }
-.stop .bl-box { padding: 0 12px 12px; margin: 0; }
+.stop .bl-box { padding: 0; margin: 8px 0 0; }
+.stop .bl-box .bl-add { height: 40px; border-radius: 12px; font-size: 13.5px; font-weight: 600; margin: 0 !important; width: 100% !important; }
+.stop .bl-on { border-radius: 12px; padding: 8px 8px 8px 12px; font-size: 13px; }
+.stop .bl-on .btn { height: 34px; }
 .pg-head { display: flex; align-items: center; gap: 10px; }
 .pg-head h1 { margin: 8px 0; }
 .pg-head .x { margin-left: 0; }
@@ -856,3 +859,4 @@ details.g-obs[open] { padding-bottom: 12px; }
 #blPage { z-index: 1100; }
 .card .btns, .page .btns { display: flex; gap: 8px; }
 .bl-share { padding-bottom: 12px; }
+.btn.danger-sm { color: var(--warn); } .btn.danger-sm.armed { background: var(--warn); color: #fff; }

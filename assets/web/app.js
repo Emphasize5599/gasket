@@ -391,7 +391,7 @@
       h += '<button data-g="' + g + '" class="' + (g === S.grade ? 'on' : '') + '"><div class="gl">' + P.GRADES[g].label + '</div><div class="gv">' + (cg ? priceHtml(cg.final) : '—') + '</div></button>';
     });
     h += '</div>';
-    h += blButtons(s, 'd');
+    h += blButtons(s, 'd', S.grade);
     h += '<div class="actions"><button class="btn primary" id="dNav"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Directions in Google Maps</button>' +
       '<div class="btn-row"><button class="btn tonal" id="dOther">Other maps app</button><button class="btn tonal" id="dPlace">' + (s.wmStoreId ? 'Walmart store page' : 'Google listing') + '</button></div></div>';
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
@@ -466,12 +466,12 @@
   }
   window.undoToast = undoToast;
   /** Buttons for a station's details: mark / unmark a bad CITGO, and count Walmart+ on its diesel at your own risk. */
-  function blButtons(st, idp) {
+  function blButtons(st, idp, grade) {
     if (st.brand !== 'citgo') return '';
     var bad = BL.has(st), h = '<div class="bl-box">';
     if (bad) h += '<div class="bl-on"><span>On your bad CITGO list — no Walmart+ here.</span><button class="btn tonal sm" id="' + idp + 'BlRm">Remove</button></div>';
     else h += '<button class="btn tonal bl-add" id="' + idp + 'BlAdd">Didn\'t get Walmart+ here</button>';
-    if (!bad && st.prices && st.prices.diesel) {
+    if (!bad && grade === 'diesel' && st.prices && st.prices.diesel) {   // only when you're buying diesel
       var on = !!(S.dieselRisk && S.dieselRisk[st.id]);
       h += '<label class="bl-risk"><input type="checkbox" id="' + idp + 'BlRisk"' + (on ? ' checked' : '') + '><span>Count Walmart+ on diesel here <small>at your own risk — CITGO diesel pumps often can\'t take it</small></span></label>';
     }
@@ -492,11 +492,12 @@
       return '<div class="bl-row"><button class="bl-go" data-bl="' + i + '"><b>' + esc(e.name || 'CITGO') + '</b><small>' + esc(shortAddr(e.address || '')) + (e.t ? ' · added ' + new Date(e.t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '') + '</small></button>' +
         '<button class="x sm" data-blrm="' + i + '" aria-label="Remove from the list">✕</button></div>';
     }).join('') + '</div>' : '<div class="card empty-res">No bad stations yet. Mark one from a CITGO\'s details if Walmart+ doesn\'t work there.</div>';
-    h += '<div class="card"><h3>Share the list ' + qBtn('Export saves the list to Downloads/FuelPlus and opens the share sheet. Importing only adds stations you don\'t already have — it never removes or changes yours.') + '</h3><div class="btns wrap bl-share"><button class="btn tonal sm" id="blExp">Export list</button><button class="btn tonal sm" id="blImp">Import a list</button></div></div>';
+    h += '<div class="card"><h3>Share the list ' + qBtn('Export saves the list to Downloads/FuelPlus and opens the share sheet. Importing only adds stations you don\'t already have — it never removes or changes yours.') + '</h3><div class="btns wrap bl-share"><button class="btn tonal sm" id="blExp">Export list</button><button class="btn tonal sm" id="blImp">Import a list</button>' + (l.length ? '<button class="btn tonal sm danger-sm" id="blDel">Delete all</button>' : '') + '</div></div>';
     var pg = $('blPage'); pg.innerHTML = h;
     $('blBack').onclick = function () { pg.classList.add('hidden'); };
     $('blExp').onclick = function () { exportData('blacklist'); };
     $('blImp').onclick = function () { importData('blacklist'); };
+    if ($('blDel')) $('blDel').onclick = deleteBl;
     pg.querySelectorAll('[data-bl]').forEach(function (b) { b.onclick = function () { showBad(l[+b.dataset.bl]); }; });
     pg.querySelectorAll('[data-blrm]').forEach(function (b) { b.onclick = function () { BL.remove(l[+b.dataset.blrm]); }; });
   }
@@ -519,6 +520,27 @@
     $('dClose').onclick = function () { closeDetail(); if (badMarker) { map.removeLayer(badMarker); badMarker = null; } };
     $('dNav').onclick = function () { N.navigate(e.lat, e.lng, e.id || '', e.name || 'CITGO'); };
     $('dBlRm').onclick = function () { BL.remove(e); $('dClose').onclick(); };
+  }
+
+  var CACHE_NS = ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom'];
+  /** Empty the bad CITGO list (Undo puts it all back). */
+  function deleteBl() {
+    var was = BL.list().slice(); if (!was.length) { toast('Your bad CITGO list is already empty.'); return; }
+    S.blacklist = []; save(); BL.changed();
+    undoToast('Deleted ' + was.length + ' bad CITGO station' + (was.length === 1 ? '' : 's'), function () {
+      was.forEach(function (e) { if (!BL.list().some(function (y) { return BL.same(y, e); })) BL.list().push(e); }); save(); BL.changed();
+      if ($('blCount2')) $('blCount2').textContent = BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's');
+      if ($('blCount')) $('blCount').textContent = BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's');
+    });
+  }
+  /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
+  function eraseAll() {
+    CACHE_NS.concat(['trips']).forEach(function (ns) { KV.clear(ns); });
+    try { N.saveCache(''); } catch (e) { }
+    try { N.saveSettings(''); } catch (e) { }
+    if (window.FLog) FLog.clear();
+    if (window.__eraseNoReload) { window.__erased = true; return; }
+    location.reload();
   }
 
   // ---------- your data: export / import (imports only ever add) ----------
@@ -644,13 +666,15 @@
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
-      '<div class="field"><div class="lbl">Saved lookups<small>Stations, prices, speed limits and routes found for recent searches, reused so the same route doesn\'t use Google lookups twice. Trip history is kept separately.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
     h += '<div class="card"><h3>Bad CITGO stations</h3>' +
       '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
       '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/FuelPlus you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
-      '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div></div>';
+      '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div>' +
+      '<div class="field"><div class="lbl">Clear cache<small>Stations, prices, speed limits, routes and Walmart+ station checks saved from recent searches, so the same route doesn\'t use Google lookups twice. Your trips, cars and settings stay.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
+      '<div class="field"><div class="lbl">Delete bad CITGO list<small class="keep" id="blCount2">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blDelAll">Delete</button></div>' +
+      '<div class="field"><div class="lbl">Erase all data<small>Settings, API key, cars, mileage log, trips, the bad CITGO list and the cache — like a fresh install. This month\'s lookup count is kept so your safety cap still works.</small></div><button class="btn tonal sm danger-sm" id="eraseAll">Erase</button></div></div>';
     h += '<div class="card"><h3>Debugging</h3>' +
       '<div class="field"><div class="lbl">Debug logging<small>Keeps a log on this phone you can share for troubleshooting. Your API key is never written to it.</small></div>' + sw('debug', !!S.debug) + '</div>' +
       '<div class="field"><div class="lbl">How much detail</div><select id="logLevel">' +
@@ -678,7 +702,17 @@
       b.classList.toggle('on'); S.citgoUsed = Object.assign({}, S.citgoUsed); S.citgoUsed[b.dataset.cu] = b.classList.contains('on') ? P.monthKey() : '';
       document.querySelector('.citgo-today').textContent = citgoToday();
     };
-    $('kvClear').onclick = function () { var n = 0; ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find'].forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
+    $('kvClear').onclick = function () { var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
+    $('blDelAll').onclick = function () { deleteBl(); $('blCount2').textContent = '0 stations'; $('blCount').textContent = '0 stations'; };
+    $('eraseAll').onclick = function () {
+      var b = this;
+      if (!b.classList.contains('armed')) {       // two taps: the first one only asks
+        b.classList.add('armed'); b.textContent = 'Tap again to erase';
+        setTimeout(function () { b.classList.remove('armed'); b.textContent = 'Erase'; }, 4000);
+        return;
+      }
+      eraseAll();
+    };
     $('sLogClear').onclick = function () { if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); };
     pg.querySelectorAll('[data-verify]').forEach(function (bt) {
       bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };

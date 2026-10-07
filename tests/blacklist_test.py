@@ -29,6 +29,7 @@ with sync_playwright() as p:
         assert 'CITGO' in pg.inner_text('#detail h2')
         assert wplus(pg), 'CITGO gets the full Walmart+ 10c'
         assert pg.locator('#dBlAdd').count() == 1
+        assert pg.locator('#dBlRisk').count() == 0, 'no diesel checkbox when buying regular'
         pg.screenshot(path=f'{OUT}/{name}-b1-citgo.png')
         # mark it bad: undo bar for a few seconds, Undo puts it back
         pg.click('#dBlAdd'); pg.wait_for_timeout(200)
@@ -92,6 +93,21 @@ with sync_playwright() as p:
         pg.evaluate('(t) => { window.__mocks.pick = t; }', json.dumps(ad2)); pg.click('#imAll'); pg.wait_for_timeout(300)
         assert pg.evaluate("window.__app.S.cars.some(c => c.id === 'imported-car')") and pg.evaluate('window.__app.S.radiusMi') != 99 and pg.evaluate("window.__app.S.someNewSetting") == 'x'
         pg.screenshot(path=f'{OUT}/{name}-b5-settings.png')
+        # delete the whole list (Undo restores it), clear the cache, erase everything (two taps)
+        n0 = pg.evaluate('window.__app.S.blacklist.length')
+        pg.click('#blDelAll'); pg.wait_for_timeout(200)
+        assert pg.evaluate('window.__app.S.blacklist.length') == 0 and 'Deleted' in pg.inner_text('#undoBar')
+        pg.click('#undoBtn'); pg.wait_for_timeout(200)
+        assert pg.evaluate('window.__app.S.blacklist.length') == n0
+        pg.evaluate("window.__app.KV.put('xom', 'k', [1]); window.__app.KV.put('trips', 'index', [{id: 'x'}])")
+        pg.click('#kvClear'); pg.wait_for_timeout(200)
+        assert pg.evaluate("window.__app.KV.get('xom', 'k')") is None and pg.evaluate("window.__app.KV.get('trips', 'index')") is not None, 'cache only'
+        pg.evaluate('window.__eraseNoReload = true')
+        pg.click('#eraseAll'); pg.wait_for_timeout(150)
+        assert pg.evaluate('!window.__erased') and 'again' in pg.inner_text('#eraseAll'), 'first tap only asks'
+        pg.click('#eraseAll'); pg.wait_for_timeout(150)
+        assert pg.evaluate('window.__erased') and pg.evaluate("window.__app.KV.get('trips', 'index')") is None, 'erased'
+        pg.evaluate('window.__eraseNoReload = false; window.__erased = false')
         pg.click('#sDone'); pg.wait_for_timeout(300)
         # diesel at a CITGO: not counted, unless you take the risk
         pg.evaluate("window.__app.S.grade = 'diesel'; window.__app.S.blacklist = []")

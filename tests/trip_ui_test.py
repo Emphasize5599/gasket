@@ -214,6 +214,9 @@ with sync_playwright() as p:
             pg.evaluate('(i) => window.__trip.openStopTile(i + 1)', ci); pg.wait_for_timeout(500)
             sid = pg.evaluate('(i) => window.__trip.state().result.plan.stops[i].c.station.id', ci)
             assert pg.locator('#ts%dBlAdd' % ci).count() == 1
+            assert pg.locator('#ts%dBlRisk' % ci).count() == 0, 'no diesel checkbox on a regular-gas trip'
+            g = pg.evaluate("(i) => { const t = document.getElementById('stop' + i), a = t.querySelector('.s-act').getBoundingClientRect(), b = t.querySelector('.bl-add').getBoundingClientRect(); return [Math.round(a.left), Math.round(a.right), Math.round(b.left), Math.round(b.right), Math.round(b.top - a.bottom)]; }", ci)
+            print('  tile buttons (row L/R, bad-button L/R, gap):', g); assert abs(g[0] - g[2]) <= 1 and abs(g[1] - g[3]) <= 1 and 6 <= g[4] <= 12, g
             pg.screenshot(path=f'{OUT}/{name}-b7-citgo-tile.png')
             pg.click('#ts%dBlAdd' % ci); idle(pg, 900)
             assert pg.is_visible('#undoBar')

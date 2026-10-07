@@ -2361,7 +2361,7 @@
       return '<div class="ln"><span>' + esc(x.label) + '</span><span>' + (x.kind === 'base' ? priceText(x.amount) : x.kind === 'none' ? 'not counted' : x.amount === 0 ? 'included' : '−$' + P.fmt3(-x.amount)) + '</span></div>'; }).join('') +
       '<div class="ln tot"><span>You pay per gallon</span><span>' + priceText(c.price) + '</span></div></div>';
     h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div>';
-    if (A.bl) h += A.bl.buttons(st, 'ts' + i);
+    if (A.bl) h += A.bl.buttons(st, 'ts' + i, result.grade);
     h += '</div></div>';
     return h;
   }
