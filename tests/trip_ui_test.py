@@ -201,6 +201,27 @@ with sync_playwright() as p:
         xo = pg.evaluate("(() => { const c = window.__trip.state().result.cands; const f = (n, mi) => c.filter(x => x.station.name === n && Math.abs(x.d - mi) < 8)[0]; const m = f('Mobil', 205), e = f('Exxon', 38); return { urls: (window.__xomUrls || []).length, mobil205: m && [m.price, m.station.wplus], exxon38: e && [e.price, e.station.wplus] }; })()")
         print('  Walmart+ at Exxon/Mobil:', xo)
         assert xo['urls'] >= 1 and xo['mobil205'] == [3.199, False] and xo['exxon38'][1] is True and abs(xo['exxon38'][0] - 3.199) < 0.001, 'not-in-program Mobil loses the 10c'
+        # tapping a price bubble on the route opens that stop's tile in the fuel-stop list
+        pg.wait_for_timeout(600)
+        bub = pg.locator('.leaflet-tooltip.stopbub').first; bt = bub.inner_text()
+        bub.click(); pg.wait_for_timeout(500)
+        k = int(bt.strip().split()[0]) - 1
+        assert pg.locator('#stop%d.open' % k).count() == 1, 'bubble opened its tile'
+        # a CITGO stop: mark it bad from its tile, the plan is redone without its Walmart+ 10c; then undo
+        ci = pg.evaluate("window.__trip.state().result.plan.stops.findIndex(s => s.c.station.brand === 'citgo')")
+        print('  CITGO stop index:', ci)
+        if ci >= 0:
+            pg.evaluate('(i) => window.__trip.openStopTile(i + 1)', ci); pg.wait_for_timeout(500)
+            sid = pg.evaluate('(i) => window.__trip.state().result.plan.stops[i].c.station.id', ci)
+            assert pg.locator('#ts%dBlAdd' % ci).count() == 1
+            pg.screenshot(path=f'{OUT}/{name}-b7-citgo-tile.png')
+            pg.click('#ts%dBlAdd' % ci); idle(pg, 900)
+            assert pg.is_visible('#undoBar')
+            nc = pg.evaluate("(id) => window.__trip.state().result.cands.filter(c => c.station.id === id).map(c => c.calc.steps.some(x => x.amount === -0.1))", sid)
+            print('  after marking bad, 10c on that CITGO:', nc); assert nc and not any(nc)
+            pg.click('#undoBtn'); idle(pg, 900)
+            assert pg.evaluate('window.__app.S.blacklist.length') == 0
+
         txt = ft(pg, '.tp-step:not(.hidden)')
         print('  RESULT:', txt.replace('\n', ' | ')[:900])
         pg.screenshot(path=f'{OUT}/{name}-t2-result.png'); wide(pg, 'stops')

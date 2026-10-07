@@ -625,6 +625,34 @@ public class MainActivity extends Activity {
         handleShare(i);
     }
 
+    private static final int PICK_FILE = 4711;
+    private int pickReq = -1;
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != PICK_FILE || pickReq < 0) return;
+        final int reqId = pickReq; pickReq = -1;
+        final Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
+        new Thread(new Runnable() {
+            public void run() {
+                JSONObject o = new JSONObject();
+                try {
+                    if (uri == null) o.put("cancelled", true);
+                    else {
+                        InputStream is = getContentResolver().openInputStream(uri);
+                        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                        byte[] buf = new byte[8192]; int n, total = 0;
+                        while ((n = is.read(buf)) > 0) { total += n; if (total > 20 * 1024 * 1024) throw new Exception("File is too big"); bo.write(buf, 0, n); }
+                        is.close();
+                        o.put("body", bo.toString("UTF-8"));
+                    }
+                } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                reply(reqId, o);
+            }
+        }).start();
+    }
+
     public class Bridge {
         /** Debug log lives in a private file (only when you turn debug logging on). */
         @JavascriptInterface
@@ -673,6 +701,26 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return "error: " + e.getMessage();
             }
+        }
+
+        /** Opens the system file picker for a Fuel+ data file to import; the text comes back via onNativeResult. */
+        @JavascriptInterface
+        public void pickTextFile(final int reqId) {
+            main.post(new Runnable() {
+                public void run() {
+                    pickReq = reqId;
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("*/*");
+                    i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"application/json", "text/plain", "application/octet-stream"});
+                    try { startActivityForResult(i, PICK_FILE); }
+                    catch (Exception e) {
+                        JSONObject o = new JSONObject();
+                        try { o.put("error", "No file picker available"); } catch (Exception ignored) { }
+                        reply(reqId, o); pickReq = -1;
+                    }
+                }
+            });
         }
 
         @JavascriptInterface

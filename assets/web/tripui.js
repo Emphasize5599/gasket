@@ -2185,6 +2185,25 @@
     box.classList.remove('on'); setTimeout(function () { box.remove(); }, 200);
     return true;
   }
+  /** A price bubble on the route was tapped: open the fuel-stop list on that stop's tile (or the top-up). */
+  function openStopTile(which) {
+    if (!result || !result.plan.ok) return;
+    if (step !== ST_STOPS) { closeLegs(); collectSafe(); step = ST_STOPS; renderStep(); }
+    var r = result, k = which === 'T' ? -1 : +which - 1;
+    r.stopsShut = false; r.openStops = {}; if (k >= 0) r.openStops[k] = true;
+    renderResults();
+    setTimeout(function () {
+      var t = k >= 0 ? $('stop' + k) : document.querySelector('#tsResults .topbox');
+      if (t) { t.scrollIntoView({ block: 'start', behavior: 'smooth' }); t.classList.add('pulse'); setTimeout(function () { t.classList.remove('pulse'); }, 1900); }
+    }, 60);
+  }
+  /** Your bad-CITGO list (or a diesel own-risk choice) changed: plan again from the stations already found (no lookups). */
+  function blChanged() {
+    if (!result || !model) return;
+    var shut = result.stopsShut;
+    result = null;
+    findStops().then(function () { if (result && shut === false) { result.stopsShut = false; if (step === ST_STOPS) renderResults(); } });
+  }
   /** Stop cards: tap a header to open/close it (in place), price breakdown, navigate. */
   function bindStops() {
     var el = tpBody(), r = result, p = r.plan;
@@ -2197,6 +2216,7 @@
     el.querySelectorAll('[data-nav]').forEach(function (b) {
       b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.station.id) ? '' : s.station.id, s.station.name); };
     });
+    if (A.bl) p.stops.forEach(function (s, i) { if (r.openStops && r.openStops[i]) A.bl.bind(s.c.station, 'ts' + i); });
     el.querySelectorAll('[data-why]').forEach(function (b) {
       b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
     });
@@ -2338,9 +2358,11 @@
       }).join('') + '</div>';
     }
     h += '<div class="why hidden" id="why' + i + '">' + c.calc.steps.map(function (x) {
-      return '<div class="ln"><span>' + esc(x.label) + '</span><span>' + (x.kind === 'base' ? priceText(x.amount) : x.amount === 0 ? 'included' : '−$' + P.fmt3(-x.amount)) + '</span></div>'; }).join('') +
+      return '<div class="ln"><span>' + esc(x.label) + '</span><span>' + (x.kind === 'base' ? priceText(x.amount) : x.kind === 'none' ? 'not counted' : x.amount === 0 ? 'included' : '−$' + P.fmt3(-x.amount)) + '</span></div>'; }).join('') +
       '<div class="ln tot"><span>You pay per gallon</span><span>' + priceText(c.price) + '</span></div></div>';
-    h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div></div></div>';
+    h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div>';
+    if (A.bl) h += A.bl.buttons(st, 'ts' + i);
+    h += '</div></div>';
     return h;
   }
 
@@ -2409,9 +2431,14 @@
       result.cands.forEach(function (c) {
         if (!chosen[c.id]) return;
         L.circleMarker([c.lat, c.lng], { pane: 'tdots', renderer: cv, radius: 5, color: '#ffffff', weight: 2, fillColor: '#18a957', fillOpacity: 1, interactive: false }).addTo(layer);
-        var tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'stopbub', interactive: false, opacity: 1, pane: 'tooltipPane' })
+        var tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'stopbub', interactive: true, opacity: 1, pane: 'tooltipPane' })
           .setLatLng([c.lat, c.lng]).setContent('<span class="b">' + chosen[c.id] + '</span>' + priceHtml(c.price));
         layer.addLayer(tip);
+        (function (which) {
+          var te = tip.getElement(); if (!te) return;
+          L.DomEvent.disableClickPropagation(te);
+          te.addEventListener('click', function () { N.haptic && N.haptic(); openStopTile(which); });
+        })(chosen[c.id]);
         stopTips.push({ k: stopTips.length, cands: [L.latLng(c.lat, c.lng)], tip: tip });
       });
     }
@@ -2581,7 +2608,7 @@
   };
   if (window.__pendingShare) { var t0 = window.__pendingShare; window.__pendingShare = null; window.onSharedText(t0); }
 
-  window.__trip = { call: call, open: openTrip, guard: speedGuard, bufLimits: bufLimits, find: findStops,
+  window.__trip = { call: call, open: openTrip, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
     state: function () { return { route: route, model: model, result: result, busy: busy, step: step }; } };
 })();

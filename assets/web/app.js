@@ -14,6 +14,7 @@
       packageName: function () { return 'com.ben.gasmap'; },
       locate: function () { setTimeout(function () { window.onLocation(34.7695, -92.2671, 30); }, 300); },
       haptic: function () {}, setStatusBarDark: function () {},
+      pickTextFile: function (req) { setTimeout(function () { var m = window.__mocks && window.__mocks.pick; window.onNativeResult(req, m ? { body: m } : { cancelled: true }); }, 30); },
       openUrl: function (u) { window.__lastUrl = u; },
       navigate: function (lat, lng, id) { console.log('navigate', lat, lng, id); window.__lastNav = [lat, lng, id]; },
       openInOtherApp: function (lat, lng) { console.log('geo', lat, lng); },
@@ -50,6 +51,7 @@
   // ---------- state ----------
   var S = Object.assign({}, P.DEFAULTS);
   try { var saved = JSON.parse(N.loadSettings() || '{}'); S = Object.assign(S, saved); S.brands = Object.assign({}, P.DEFAULTS.brands, saved.brands || {}); } catch (e) {}
+  S.blacklist = (S.blacklist || []).slice(); S.dieselRisk = Object.assign({}, S.dieselRisk || {});
   function save() { N.saveSettings(JSON.stringify(S)); logSetup(); }
   // debug log: off unless turned on in Settings
   if (S.debug == null) S.debug = false;
@@ -373,7 +375,7 @@
       h += '<div class="bd">';
       c.steps.forEach(function (st) {
         h += '<div class="ln"><div class="k">' + esc(st.label) + (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</div><div class="a' + (st.amount < 0 ? ' neg' : '') + '">' +
-          (st.kind === 'base' ? money(st.amount) : st.amount === 0 ? 'included' : money(st.amount, true)) + '</div></div>';
+          (st.kind === 'base' ? money(st.amount) : st.kind === 'none' ? 'not counted' : st.amount === 0 ? 'included' : money(st.amount, true)) + '</div></div>';
       });
       var info = c.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + (S.walmartPlus ? '<p><b>How to get it:</b> ' + esc(br.howTo) + '</p>' : '') +
         (s.extra ? '<p>Also sold here: ' + esc(s.extra.label) + ' — $' + P.fmt3(s.extra.price) + ' posted.</p>' : '');
@@ -389,6 +391,7 @@
       h += '<button data-g="' + g + '" class="' + (g === S.grade ? 'on' : '') + '"><div class="gl">' + P.GRADES[g].label + '</div><div class="gv">' + (cg ? priceHtml(cg.final) : '—') + '</div></button>';
     });
     h += '</div>';
+    h += blButtons(s, 'd');
     h += '<div class="actions"><button class="btn primary" id="dNav"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Directions in Google Maps</button>' +
       '<div class="btn-row"><button class="btn tonal" id="dOther">Other maps app</button><button class="btn tonal" id="dPlace">' + (s.wmStoreId ? 'Walmart store page' : 'Google listing') + '</button></div></div>';
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
@@ -397,6 +400,7 @@
     $('dClose').onclick = closeDetail;
     $('dNav').onclick = function () { N.haptic(); N.navigate(s.lat, s.lng, String(s.id).indexOf('demo') === 0 ? '' : s.id, s.name); };
     $('dOther').onclick = function () { N.openInOtherApp(s.lat, s.lng, s.name); };
+    bindBl(s, 'd');
     $('dPlace').onclick = function () {
       N.openUrl(s.wmStoreId ? 'https://www.walmart.com/store/' + s.wmStoreId : (s.mapsUri || ('https://www.google.com/maps/search/?api=1&query=' + s.lat + ',' + s.lng)));
     };
@@ -421,6 +425,176 @@
     $('detail').classList.add('hidden'); $('listSheet').classList.remove('hidden'); $('btnLocate').classList.remove('hidden'); $('btnTrip').classList.remove('hidden');
     selectedId = null; render(); return true;
   }
+
+  // ---------- bad CITGO stations ----------
+  // CITGOs where Walmart+ didn't work for you: no 10¢ there from then on. Kept in settings, shown in Settings →
+  // Bad CITGO stations, and shareable (export / import; imports only ever add).
+  var BL = {
+    list: function () { return S.blacklist || (S.blacklist = []); },
+    has: function (st) { return P.isBad(st, S); },
+    same: function (a, b) { return (a.id && a.id === b.id) || (a.brand === b.brand && a.lat != null && b.lat != null && P.haversineMi(a.lat, a.lng, b.lat, b.lng) < 0.05); },
+    entryOf: function (st) { return { id: st.id, name: st.name, address: st.address || '', brand: st.brand, lat: st.lat, lng: st.lng, t: Date.now() }; },
+    add: function (st) {
+      if (BL.has(st)) return;
+      var e = BL.entryOf(st);
+      BL.list().push(e); save(); BL.changed();
+      undoToast('Added ' + st.name + ' to your bad CITGO list', function () { S.blacklist = BL.list().filter(function (x) { return x !== e; }); save(); BL.changed(); });
+    },
+    remove: function (st) {
+      var gone = BL.list().filter(function (x) { return BL.same(x, st); });
+      if (!gone.length) return;
+      S.blacklist = BL.list().filter(function (x) { return gone.indexOf(x) < 0; }); save(); BL.changed();
+      undoToast('Removed ' + (gone[0].name || 'station') + ' from your bad CITGO list', function () { gone.forEach(function (x) { BL.list().push(x); }); save(); BL.changed(); });
+    },
+    /** Count Walmart+ on CITGO diesel at this station anyway (your own risk). */
+    dieselRisk: function (st, on) { S.dieselRisk = Object.assign({}, S.dieselRisk); if (on) S.dieselRisk[st.id] = true; else delete S.dieselRisk[st.id]; save(); BL.changed(); },
+    changed: function () {
+      render();
+      if (selectedId && !$('detail').classList.contains('hidden')) openDetail(selectedId);
+      if (window.__trip && window.__trip.blChanged) window.__trip.blChanged();
+      if (!$('blPage').classList.contains('hidden')) drawBlPage();
+    }
+  };
+  /** A message with an Undo button for a few seconds. */
+  var undoT;
+  function undoToast(msg, undo) {
+    var u = $('undoBar');
+    u.innerHTML = '<span>' + esc(msg) + '</span><button id="undoBtn">Undo</button>';
+    u.classList.remove('hidden', 'gone'); clearTimeout(undoT);
+    $('undoBtn').onclick = function () { clearTimeout(undoT); u.classList.add('hidden'); N.haptic && N.haptic(); undo(); };
+    undoT = setTimeout(function () { u.classList.add('gone'); setTimeout(function () { u.classList.add('hidden'); }, 250); }, 5000);
+  }
+  window.undoToast = undoToast;
+  /** Buttons for a station's details: mark / unmark a bad CITGO, and count Walmart+ on its diesel at your own risk. */
+  function blButtons(st, idp) {
+    if (st.brand !== 'citgo') return '';
+    var bad = BL.has(st), h = '<div class="bl-box">';
+    if (bad) h += '<div class="bl-on"><span>On your bad CITGO list — no Walmart+ here.</span><button class="btn tonal sm" id="' + idp + 'BlRm">Remove</button></div>';
+    else h += '<button class="btn tonal bl-add" id="' + idp + 'BlAdd">Didn\'t get Walmart+ here</button>';
+    if (!bad && st.prices && st.prices.diesel) {
+      var on = !!(S.dieselRisk && S.dieselRisk[st.id]);
+      h += '<label class="bl-risk"><input type="checkbox" id="' + idp + 'BlRisk"' + (on ? ' checked' : '') + '><span>Count Walmart+ on diesel here <small>at your own risk — CITGO diesel pumps often can\'t take it</small></span></label>';
+    }
+    return h + '</div>';
+  }
+  function bindBl(st, idp) {
+    if ($(idp + 'BlAdd')) $(idp + 'BlAdd').onclick = function () { N.haptic && N.haptic(); BL.add(st); };
+    if ($(idp + 'BlRm')) $(idp + 'BlRm').onclick = function () { N.haptic && N.haptic(); BL.remove(st); };
+    if ($(idp + 'BlRisk')) $(idp + 'BlRisk').onchange = function () { BL.dieselRisk(st, this.checked); };
+  }
+  /** Settings → Bad CITGO stations: each one opens on the map; ✕ takes it off the list. */
+  function openBlPage() { drawBlPage(); $('blPage').classList.remove('hidden'); $('blPage').scrollTop = 0; }
+  function drawBlPage() {
+    var l = BL.list().slice().sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
+    var h = '<div class="pg-head"><button class="x" id="blBack" aria-label="Back">←</button><h1>Bad CITGO stations</h1></div>' +
+      '<p class="lead">CITGOs where Walmart+ didn\'t work. They don\'t get the 10¢ in prices or trip plans. Tap one to see it on the map.</p>';
+    h += l.length ? '<div class="card bl-list">' + l.map(function (e, i) {
+      return '<div class="bl-row"><button class="bl-go" data-bl="' + i + '"><b>' + esc(e.name || 'CITGO') + '</b><small>' + esc(shortAddr(e.address || '')) + (e.t ? ' · added ' + new Date(e.t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '') + '</small></button>' +
+        '<button class="x sm" data-blrm="' + i + '" aria-label="Remove from the list">✕</button></div>';
+    }).join('') + '</div>' : '<div class="card empty-res">No bad stations yet. Mark one from a CITGO\'s details if Walmart+ doesn\'t work there.</div>';
+    h += '<div class="card"><h3>Share the list ' + qBtn('Export saves the list to Downloads/FuelPlus and opens the share sheet. Importing only adds stations you don\'t already have — it never removes or changes yours.') + '</h3><div class="btns wrap bl-share"><button class="btn tonal sm" id="blExp">Export list</button><button class="btn tonal sm" id="blImp">Import a list</button></div></div>';
+    var pg = $('blPage'); pg.innerHTML = h;
+    $('blBack').onclick = function () { pg.classList.add('hidden'); };
+    $('blExp').onclick = function () { exportData('blacklist'); };
+    $('blImp').onclick = function () { importData('blacklist'); };
+    pg.querySelectorAll('[data-bl]').forEach(function (b) { b.onclick = function () { showBad(l[+b.dataset.bl]); }; });
+    pg.querySelectorAll('[data-blrm]').forEach(function (b) { b.onclick = function () { BL.remove(l[+b.dataset.blrm]); }; });
+  }
+  /** Close everything and show a bad station on the main map (its details if it's in the current results). */
+  var badMarker = null;
+  function showBad(e) {
+    $('blPage').classList.add('hidden'); closeSettings(false);
+    if (document.body.classList.contains('trip-on') && window.__trip && window.__trip.close) window.__trip.close();
+    map.setView([e.lat, e.lng], 15, { animate: false });
+    if (badMarker) { map.removeLayer(badMarker); badMarker = null; }
+    var hit = stations.filter(function (x) { return BL.same(e, x); })[0];
+    if (hit) { openDetail(hit.id); return; }
+    badMarker = L.marker([e.lat, e.lng], { icon: L.divIcon({ className: 'pin', html: '<div class="pin-in bad"><span class="b" style="background:' + P.BRANDS.citgo.color + '">C</span>✕ W+</div>', iconSize: null }) }).addTo(map);
+    var h = '<div class="grab"><span></span></div><div class="d-head"><span class="badge" style="background:' + P.BRANDS.citgo.color + '">C</span>' +
+      '<div style="min-width:0"><h2>' + esc(e.name || 'CITGO') + '</h2><div class="sub">' + esc(shortAddr(e.address || '')) + '</div></div><button class="x" id="dClose" aria-label="Close">✕</button></div>' +
+      '<div class="bl-box"><div class="bl-on"><span>On your bad CITGO list — no Walmart+ here.</span><button class="btn tonal sm" id="dBlRm">Remove</button></div></div>' +
+      '<div class="actions"><button class="btn primary" id="dNav">Directions in Google Maps</button></div>';
+    var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
+    $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); $('listSheet').classList.add('hidden');
+    $('dClose').onclick = function () { closeDetail(); if (badMarker) { map.removeLayer(badMarker); badMarker = null; } };
+    $('dNav').onclick = function () { N.navigate(e.lat, e.lng, e.id || '', e.name || 'CITGO'); };
+    $('dBlRm').onclick = function () { BL.remove(e); $('dClose').onclick(); };
+  }
+
+  // ---------- your data: export / import (imports only ever add) ----------
+  function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); }
+  function exportData(kind) {
+    var d = { fuelPlusData: 1, kind: kind, app: N.appVersion ? N.appVersion() : '', exported: new Date().toISOString(), blacklist: BL.list() };
+    if (kind === 'all') {
+      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.blacklist;   // the API key is never exported
+      d.settings = st;
+      var idx = (KV.get('trips', 'index') || {}).v || [];
+      d.trips = idx.map(function (x) { var o = KV.get('trips', 'trip|' + x.id); return o ? { entry: x, t: o.t, trip: o.v } : null; }).filter(Boolean);
+    }
+    var text = JSON.stringify(d), name = 'fuelplus-' + (kind === 'all' ? 'data' : 'bad-citgos') + '-' + stamp() + '.json';
+    var where = N.saveDownload ? N.saveDownload(name, 'application/json', text) : '';
+    if (kind !== 'all' || text.length < 300000) N.shareText('Fuel+ Map ' + (kind === 'all' ? 'data' : 'bad CITGO list'), text);
+    toast(where && !/^error/.test(where) ? 'Saved to ' + where : kind === 'all' ? 'Couldn\'t save the file' + (where ? ' (' + where.replace(/^error: /, '') + ')' : '') : 'Shared the list');
+  }
+  var pickN = 0, pickWait = {};
+  function importData(kind) {
+    if (!N.pickTextFile) { toast('Importing needs the app.'); return; }
+    var id = 'p' + (++pickN);
+    if (window.__trip && window.__trip.call) window.__trip.call('pickTextFile').then(function (res) { gotImport(kind, res); });
+  }
+  function gotImport(kind, res) {
+    if (!res || res.cancelled) return;
+    if (res.error) { toast('Couldn\'t read the file: ' + res.error); return; }
+    var d; try { d = JSON.parse(res.body); } catch (e) { toast('That isn\'t a Fuel+ data file.'); return; }
+    var r = mergeData(d, kind);
+    if (!r) { toast('That isn\'t a Fuel+ data file.'); return; }
+    save(); BL.changed();
+    var parts = [];
+    parts.push(r.bl + ' bad station' + (r.bl === 1 ? '' : 's') + ' added' + (r.blSkip ? ' (' + r.blSkip + ' already on your list)' : ''));
+    if (kind === 'all') {
+      if (r.cars) parts.push(r.cars + ' car' + (r.cars === 1 ? '' : 's'));
+      if (r.trips) parts.push(r.trips + ' saved trip' + (r.trips === 1 ? '' : 's'));
+      if (r.settings) parts.push(r.settings + ' setting' + (r.settings === 1 ? '' : 's') + ' you hadn\'t set');
+    }
+    toast('Imported: ' + parts.join(', ') + '.');
+    if (window.FLog) FLog.info('data', 'Imported ' + kind, r);
+  }
+  /** Add what's new from an exported file; never overwrite or remove anything. -> counts, or null if it isn't one. */
+  function mergeData(d, kind) {
+    if (!d || d.fuelPlusData !== 1) return null;
+    var r = { bl: 0, blSkip: 0, cars: 0, trips: 0, settings: 0 };
+    (Array.isArray(d.blacklist) ? d.blacklist : []).forEach(function (e) {
+      if (!e || e.lat == null || e.lng == null || typeof e.lat !== 'number' || typeof e.lng !== 'number') return;
+      var x = { id: String(e.id || ''), name: String(e.name || 'CITGO').slice(0, 120), address: String(e.address || '').slice(0, 200), brand: e.brand === 'citgo' ? 'citgo' : String(e.brand || 'citgo'), lat: e.lat, lng: e.lng, t: +e.t || Date.now() };
+      if (BL.list().some(function (y) { return BL.same(y, x); })) { r.blSkip++; return; }
+      BL.list().push(x); r.bl++;
+    });
+    if (kind !== 'all') return r;
+    var st = d.settings && typeof d.settings === 'object' ? d.settings : {};
+    // cars: ones you don't have (same id, or same year/make/model)
+    (Array.isArray(st.cars) ? st.cars : []).forEach(function (c) {
+      if (!c || !c.id) return;
+      var dup = (S.cars || []).some(function (y) { return y.id === c.id || (c.year && y.year === c.year && y.make === c.make && y.model === c.model); });
+      if (!dup) { (S.cars = S.cars || []).push(c); r.cars++; }
+    });
+    // diesel own-risk stations: add any you hadn't
+    Object.keys(st.dieselRisk || {}).forEach(function (k) { if (!S.dieselRisk[k]) { S.dieselRisk[k] = true; r.settings++; } });
+    // other settings: only ones you've never set
+    Object.keys(st).forEach(function (k) {
+      if (k === 'apiKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
+      if (S[k] === undefined) { S[k] = st[k]; r.settings++; }
+    });
+    // saved trips you don't have
+    var idx = (KV.get('trips', 'index') || {}).v || [];
+    (Array.isArray(d.trips) ? d.trips : []).forEach(function (x) {
+      if (!x || !x.entry || !x.entry.id || !x.trip) return;
+      if (idx.some(function (y) { return y.id === x.entry.id; })) return;
+      KV.put('trips', 'trip|' + x.entry.id, x.trip); idx.push(x.entry); r.trips++;
+    });
+    if (r.trips) { idx.sort(function (a, b) { return (b.t || 0) - (a.t || 0); }); KV.put('trips', 'index', idx); }
+    return r;
+  }
+  window.__data = { mergeData: mergeData, exportData: exportData, BL: BL };
 
   // ---------- settings ----------
   function sw(key, on) { return '<label class="switch"><input type="checkbox" data-k="' + key + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
@@ -472,6 +646,11 @@
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Saved lookups<small>Stations, prices, speed limits and routes found for recent searches, reused so the same route doesn\'t use Google lookups twice. Trip history is kept separately.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
+    h += '<div class="card"><h3>Bad CITGO stations</h3>' +
+      '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
+    h += '<div class="card"><h3>Your data</h3>' +
+      '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/FuelPlus you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
+      '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div></div>';
     h += '<div class="card"><h3>Debugging</h3>' +
       '<div class="field"><div class="lbl">Debug logging<small>Keeps a log on this phone you can share for troubleshooting. Your API key is never written to it.</small></div>' + sw('debug', !!S.debug) + '</div>' +
       '<div class="field"><div class="lbl">How much detail</div><select id="logLevel">' +
@@ -486,6 +665,11 @@
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
     $('sDone').onclick = function () { closeSettings(true); };
     $('sLogView').onclick = function () { showLog(); };
+    $('blOpen').onclick = openBlPage;
+    $('exAll').onclick = function () { exportData('all'); };
+    $('exBl').onclick = function () { exportData('blacklist'); };
+    $('imAll').onclick = function () { importData('all'); };
+    $('imBl').onclick = function () { importData('blacklist'); };
     $('sLogShare').onclick = function () { shareLog(); };
     $('histClear').onclick = function () { var o = KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0; KV.clear('trips'); $('histCount').textContent = histCount(); toast(n ? 'Cleared ' + n + ' saved trip' + (n === 1 ? '' : 's') + '.' : 'No saved trips.'); };
     $('citgoTier').onchange = function () { $('citgoBonusRow').classList.toggle('hidden', this.value === 'none'); };
@@ -586,6 +770,7 @@
     fetchAround(c.lat, c.lng, [Math.max(b.getSouth(), cap[0]), Math.max(b.getWest(), cap[1]), Math.min(b.getNorth(), cap[2]), Math.min(b.getEast(), cap[3])]);
   };
   window.onBack = function () { if (document.querySelector('.qpop')) { window.__closeQ(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
+    if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
     if ($('listSheet').classList.contains('open')) { setListOpen(false); return true; } return false; })(); };
 
@@ -695,7 +880,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render };
 })();

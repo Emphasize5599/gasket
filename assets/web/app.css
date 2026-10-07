@@ -823,3 +823,36 @@ details.g-obs[open] { padding-bottom: 12px; }
 .kpis > div > span { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 16px; }
 .kpis > div > span .qi { margin: 0; vertical-align: 0; flex: none; }
 .page.tpanel { overflow: clip; }   /* never scrolled as a whole (scrollIntoView could shift it under the top bar) */
+/* ---------- bad CITGO stations ---------- */
+.undo { position: fixed; z-index: 2100; left: 12px; right: 12px; bottom: calc(var(--sb) + 86px); display: flex; align-items: center; gap: 12px;
+  padding: 12px 12px 12px 16px; border-radius: 16px; background: var(--ink); color: var(--bg); box-shadow: var(--shadow); font-size: 14px;
+  transition: opacity .25s ease, transform .25s ease; }
+.undo.gone { opacity: 0; transform: translateY(10px); }
+.undo span { flex: 1; min-width: 0; }
+.undo button { flex: none; font-weight: 800; color: var(--accent); padding: 6px 10px; border-radius: 10px; }
+:root[data-theme="dark"] .undo button { color: #0b5fd9; }
+.bl-box { margin: 10px 0 4px; }
+.bl-box .bl-add { width: 100%; height: 44px; margin: 0; font-size: 14px; }
+.bl-on { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); font-size: 13.5px; }
+.bl-on span { flex: 1; min-width: 0; }
+.bl-on .btn { margin: 0 !important; width: auto !important; }
+.bl-risk { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; font-size: 13.5px; }
+.bl-risk input { margin-top: 2px; width: 18px; height: 18px; flex: none; }
+.bl-risk small { display: block; color: var(--ink-2); font-size: 12px; }
+.stop .bl-box { padding: 0 12px 12px; margin: 0; }
+.pg-head { display: flex; align-items: center; gap: 10px; }
+.pg-head h1 { margin: 8px 0; }
+.pg-head .x { margin-left: 0; }
+.bl-list { padding-top: 4px; padding-bottom: 4px; }
+.bl-row { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); }
+.bl-row:first-child { border-top: 0; }
+.bl-go { flex: 1; min-width: 0; text-align: left; padding: 12px 2px; }
+.bl-go b { display: block; }
+.bl-go small { display: block; color: var(--ink-2); font-size: 12.5px; }
+.btns.wrap { flex-wrap: wrap; }
+.pin-in.bad { background: var(--surface); color: var(--warn); border-color: var(--warn); }
+.pin-in.bad::after { border-top-color: var(--warn); }
+.leaflet-tooltip.stopbub { cursor: pointer; pointer-events: auto; }
+#blPage { z-index: 1100; }
+.card .btns, .page .btns { display: flex; gap: 8px; }
+.bl-share { padding-bottom: 12px; }

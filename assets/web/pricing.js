@@ -31,6 +31,8 @@
 
   var DEFAULTS = {
     apiKey: '',
+    blacklist: [],               // CITGO stations where Walmart+ didn't work: [{id, name, address, brand, lat, lng, t}]
+    dieselRisk: {},              // station id -> true: count Walmart+ on CITGO diesel here anyway (your own risk)
     autoRefresh: false,          // search for prices when the app opens (uses Google lookups)
     walmartPlus: true,
     samsMode: 'member',          // 'member' = Google's Sam's price is already member price; 'minus10' = take 10¢ more
@@ -193,6 +195,16 @@
   }
   function r3(x) { return Math.round(x * 1000) / 1000; }
 
+  /** Is this station on your bad-CITGO list? Same Google place, or the same brand within ~250 ft (lists shared between people). */
+  function isBad(station, s) {
+    var bl = s && s.blacklist; if (!bl || !bl.length) return false;
+    for (var i = 0; i < bl.length; i++) {
+      var e = bl[i];
+      if (e.id && e.id === station.id) return true;
+      if (e.brand === station.brand && e.lat != null && station.lat != null && haversineMi(e.lat, e.lng, station.lat, station.lng) < 0.05) return true;
+    }
+    return false;
+  }
   /** Returns {base, final, steps:[{label, amount, note}], notes:[], updated} or null if no price for grade. */
   /** at: when you'll be at the pump (for day-based rewards); defaults to now. */
   function compute(station, grade, s, now, at) {
@@ -218,11 +230,14 @@
         else steps.push({ label: "Walmart+ → Sam's member price", amount: 0,
           note: "Google's Sam's Club price is normally the member price, which Walmart+ unlocks." });
       } else if ((b === 'exxon' || b === 'mobil') && station.wplus === false) {
-        steps.push({ label: 'Walmart+ discount', amount: 0, note: "This station isn't in the Walmart+ program (ExxonMobil's station finder doesn't list it)." });
+        steps.push({ label: 'Walmart+ discount', amount: 0, kind: 'none', note: "This station isn't in the Walmart+ program (ExxonMobil's station finder doesn't list it)." });
         notes.push("Not a Walmart+ station: ExxonMobil's station finder lists it without Walmart+, so no 10¢ here.");
-      } else if (b === 'citgo') {
-        add('Walmart+ discount (not confirmed)' + (al ? ' — Alabama rate' : ''), -wpAmt);
-        notes.push('Walmart+ isn\'t confirmed at this CITGO. Most CITGOs take it, but CITGO doesn\'t publish which ones — check Gas Savings in the Walmart app before going out of your way.');
+      } else if (b === 'citgo' && isBad(station, s)) {
+        steps.push({ label: 'Walmart+ discount', amount: 0, kind: 'none', note: 'You marked this CITGO as not taking Walmart+ (Settings → Bad CITGO stations).' });
+        notes.push('On your bad CITGO list: Walmart+ didn\'t work here, so no 10¢.');
+      } else if (b === 'citgo' && grade === 'diesel' && !(s.dieselRisk && s.dieselRisk[station.id])) {
+        steps.push({ label: 'Walmart+ discount', amount: 0, kind: 'none', note: 'Not counted on CITGO diesel: diesel pumps often run on a separate checkout that Club CITGO (and Walmart+) can\'t use.' });
+        notes.push('Walmart+ may not work on diesel at this CITGO (separate diesel pumps). Not counted — you can count it anyway at your own risk.');
       } else {
         add('Walmart+ discount' + (al ? ' (Alabama rate)' : ''), -wpAmt);
       }
@@ -269,6 +284,6 @@
   }
 
   var api = { BRANDS: BRANDS, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
-    compute: compute, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
+    compute: compute, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

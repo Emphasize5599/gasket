@@ -47,9 +47,16 @@ const notWp = Object.assign(st('mobil', 'Mobil', 3.099), { wplus: false });
 c = P.compute(notWp, 'regular', S, now);
 assert.equal(c.final, 3.099); assert.ok(c.notes.some((n) => /Not a Walmart\+ station/.test(n)));
 assert.equal(P.compute(Object.assign(st('exxon', 'Exxon', 3.099), { wplus: true }), 'regular', S, now).final, 2.999);
-// CITGO: discount kept, but marked not confirmed
-c = P.compute(st('citgo', 'CITGO', 2.959), 'regular', S, sat);
-assert.ok(c.steps.some((x) => /not confirmed/.test(x.label)) && c.notes.some((n) => /isn't confirmed/.test(n)));
+// CITGO: the full Walmart+ discount, except on your bad list or (by default) on diesel
+assert.ok(P.compute(st('citgo', 'CITGO', 2.959), 'regular', S, sat).steps.some((x) => x.label === 'Walmart+ discount' && x.amount === -0.1));
+const bad = Object.assign(st('citgo', 'CITGO', 2.959), { id: 'bad1', lat: 35, lng: -92 });
+const SB = Object.assign({}, S, { blacklist: [{ id: 'bad1', brand: 'citgo', lat: 35, lng: -92 }] });
+c = P.compute(bad, 'regular', SB, sat); assert.ok(!c.steps.some((x) => x.amount === -0.1) && c.notes.some((n) => /bad CITGO list/.test(n)));
+const nearBad = Object.assign(st('citgo', 'CITGO', 2.959), { id: 'other-id', lat: 35.0003, lng: -92 });
+assert.ok(P.isBad(nearBad, SB), 'a shared list matches the same spot');
+const dsl = Object.assign(st('citgo', 'CITGO', 2.959), { id: 'd1' }); dsl.prices.diesel = dsl.prices.regular;
+c = P.compute(dsl, 'diesel', S, sat); assert.ok(!c.steps.some((x) => x.amount === -0.1) && c.notes.some((n) => /diesel/.test(n)));
+c = P.compute(dsl, 'diesel', Object.assign({}, S, { dieselRisk: { d1: true } }), sat); assert.ok(c.steps.some((x) => x.amount === -0.1), 'own-risk override');
 // Walmart+ off
 assert.equal(P.compute(st('mobil', 'Mobil', 3.099), 'regular', w({ walmartPlus: false }), now).final, 3.099);
 // 2% cash back on post-discount price: 2.999 * 0.98 = 2.939
