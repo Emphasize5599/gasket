@@ -737,7 +737,8 @@ body.trip-full .top { z-index: 1000; }
 .tp-steps button.on { border-color: var(--accent); color: var(--ink); box-shadow: none; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .tp-steps button.dim { opacity: .38; }
 .tp-steps .ls { display: none; }
-@media (max-width: 370px) { .tp-steps .lf { display: none; } .tp-steps .ls { display: inline; } }
+@media (max-width: 520px) { .tp-steps .lf { display: none; } .tp-steps .ls { display: inline; } }
+@media (max-width: 370px) { .tp-steps button:not(.on) span { display: none !important; } .tp-steps button.on { flex: 2 1 auto; } }
 .tp-head { align-items: center; }
 /* one-column grids: the column is the screen's width, never the width of its longest line */
 .actions, .pick, .alts-pick { grid-template-columns: minmax(0, 1fr); }
@@ -951,3 +952,8 @@ details.g-obs[open] { padding-bottom: 12px; }
 .spdbox.exp .adj-sort select { font-size: 12px; padding: 5px 4px; }
 .spdbox.exp .adj-sort .dir { width: 28px; }
 @media (max-width: 379px) { .spdbox.exp .adj-tools, .spdbox.exp .adj-tools .chips.mini { flex-wrap: wrap; } }
+/* Adjustments: a tip above the sliders */
+.tipbox { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 10px; padding: 10px 12px; border-radius: 14px;
+  background: color-mix(in srgb, var(--save) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--save) 40%, transparent); font-size: 13.5px; line-height: 1.4; color: var(--ink); }
+.tipbox svg { flex: none; width: 22px; height: 22px; fill: var(--save); margin-top: 1px; }
+.tipbox b { font-weight: 700; }

@@ -88,8 +88,10 @@
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
-  var STEPS = ['Garage', 'Route', 'Parameters', 'Stops', 'Departure'], step = 1;
-  var ST_PARAMS = 3, ST_STOPS = 4, ST_DEPART = 5;
+  var STEPS = ['Garage', 'Route', 'Parameters', 'Adjustments', 'Stops', 'Departure'], step = 1;
+  var ST_PARAMS = 3, ST_ADJ = 4, ST_STOPS = 5, ST_DEPART = 6;
+  /** Adjustments and Stops both show the plan (and the map). */
+  function onPlan(k) { return k === ST_ADJ || k === ST_STOPS; }
   function tpBody() { return $('tpBody'); }
   function openTrip(st) {
     A.closeDetail();
@@ -120,7 +122,7 @@
   }
   /** Forget the built steps (a new or reopened trip). */
   function resetSteps() {
-    [1, 2, 3, 4, 5].forEach(function (k) { var e = $('tpS' + k); if (e) e.remove(); });
+    [1, 2, 3, 4, 5, 6].forEach(function (k) { var e = $('tpS' + k); if (e) e.remove(); });
     built = {}; scrolls = {}; shown = 0;
   }
   function renderStep() {
@@ -128,10 +130,10 @@
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);
     show(pg, true);
-    var full = step < ST_STOPS;   // nothing to see on the map yet: Garage, Route and Parameters take the whole screen
+    var full = step < ST_ADJ;   // nothing to see on the map yet: Garage, Route and Parameters take the whole screen
     // coming down to the map: the list starts at 75% of the screen (drag it anywhere from there) — straight away, not
     // as a slide a busy screen could freeze halfway
-    if (!full && (!shown || shown < ST_STOPS)) pg.style.setProperty('--panel-h', '75vh');
+    if (!full && (!shown || shown < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
     if (step !== ST_DEPART && preDepartH != null) { if (!full && shown === ST_DEPART) pg.style.setProperty('--panel-h', preDepartH); preDepartH = null; }   // back from Departure: your height again
     if (!full && (pg.classList.contains('full') || !shown)) {
       pg.classList.add('snap'); requestAnimationFrame(function () { requestAnimationFrame(function () { pg.classList.remove('snap'); }); });
@@ -140,14 +142,14 @@
     if (!full && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
     if (full) mapLoaded();
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
-      var k = i + 1, sh = { Parameters: 'Params', Departure: 'Depart' }[n] || n;
+      var k = i + 1, sh = { Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
       return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > 2 && !model ? ' dim' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
     navRender();
     var b = tpBody();
     if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
     var e = stepEl(step), c = built[step];
-    var fresh = !c || step === ST_DEPART || (step === ST_STOPS && (c.model !== model || c.result !== result));
+    var fresh = !c || step === ST_DEPART || (onPlan(step) && (c.model !== model || c.result !== result));
     e.classList.remove('hidden'); shown = step;
     if (fresh) {
       e.innerHTML = stepHtml(step);
@@ -163,10 +165,10 @@
     roadSelSoon();
     requestAnimationFrame(function () { setTimeout(function () {
       if (step !== k0) return;
-      if (model && step >= ST_STOPS) { drawRoute(); if (!userMoved) fitRoute(false); }
+      if (model && step >= ST_ADJ) { drawRoute(); if (!userMoved) fitRoute(false); }
       fitBtn(); sheetSize();
       if (step === ST_DEPART) fitDepart();
-      if (model && step >= ST_STOPS && !busy) mapLoaded();
+      if (model && step >= ST_ADJ && !busy) mapLoaded();
     }, 0); });
   }
   /** Departure: the panel only as tall as its content, and the whole route centered above it again. */
@@ -226,7 +228,7 @@
       if (!(parseFloat(S.trip.milesLeft) >= 0) || S.trip.milesLeft === '') { flag($('tMiles'), 'box', 'How many miles are left in your tank?'); return false; }
       return true;
     }
-    if (k === ST_STOPS) {
+    if (onPlan(k)) {
       if (!result) { await findStops(); if (!result) return false; }
       if (!result.plan.ok) { flag($('tsBufBox') || $('tsResults'), 'pick', 'No plan works with this buffer — try a smaller one.'); return false; }
       return true;
@@ -335,6 +337,7 @@
       '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
     }
+    if (k === ST_ADJ) return '<div id="taResults"></div>';
     if (k === ST_STOPS) return '<div id="tsResults"></div>';
     return departureHtml();
   }
@@ -342,9 +345,9 @@
     if (k === 1) { Garage.render($('tGarage'), $('tSpeed'), function () { if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); } result = null; }, call); return; }
     if (k === 2) { bindRoute(); return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
-    if (k === ST_STOPS) {
+    if (onPlan(k)) {
       renderResults();
-      built[ST_STOPS].result = result;
+      built[k].result = result;
       if (model && !result && !busy && parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '') findStops();
       return;
     }
@@ -1939,6 +1942,8 @@
     });
     return out;
   }
+  /** Room between marker labels on a slider, in % of its width (a label is ~56 px wide). */
+  function markGap() { return Math.max(17, 5800 / Math.max(180, innerWidth - 100)); }
   function bufBox() {
     var r = result, sw = r.sweep;
     var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
@@ -1957,7 +1962,7 @@
     }
     if (warns.length) h += '<div class="spd-warn">' + warns.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div>';
     h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, base) + '</span></div>';
-    var mk = bufMarks(sw, base), GAP = 17, rows = [[], []];
+    var mk = bufMarks(sw, base), GAP = markGap(), rows = [[], []];
     h += '<div class="buf-track"><div class="buf-marks">';
     // labels in two rows; where neither row has room the tick stays without a label.
     // The usual buffer and the biggest saving are placed first, so they always get one.
@@ -2085,7 +2090,7 @@
     var n = sw.length, idx = function (v) { var k = 0; sw.forEach(function (x, i) { if (Math.abs(x.mi - v) < Math.abs(sw[k].mi - v)) k = i; }); return k; };
     var pos = function (v) { return (idx(v) / Math.max(1, n - 1) * 100).toFixed(2); };
     h += '<div class="buf-read"><b id="tsDetVal">' + minTxt(cur.mi) + '</b> <span id="tsDetCost">' + detText(cur, base) + '</span></div>';
-    var mk = bufMarks(sw, base), GAP = 17, rowsL = [[], []];
+    var mk = bufMarks(sw, base), GAP = markGap(), rowsL = [[], []];
     var all = mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; });
     var big = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d; })[0];
     var freeL = function (row, L) { return rowsL[row].every(function (q) { return Math.abs(q - L) >= GAP; }); };
@@ -2154,12 +2159,12 @@
     busy = true;
     try { await findStops0(force); } catch (e) { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); result = null; }
     busy = false; progEnd();
-    if (step !== ST_STOPS || !result) mapLoaded();
+    if (!onPlan(step) || !result) mapLoaded();
     if (window.__apiCount) window.__apiCount();
-    if (step === ST_STOPS && $('tsResults') && !result) renderResults();
+    if (onPlan(step) && !result) renderResults();
   }
   async function findStops0(force) {
-    if ($('tsResults') && step === ST_STOPS) $('tsResults').innerHTML = '<div class="card finding"><div class="ldspin"></div><span>Finding the best stops…</span></div>';
+    if (onPlan(step)) ['tsResults', 'taResults'].forEach(function (id) { if ($(id)) $(id).innerHTML = '<div class="card finding"><div class="ldspin"></div><span>Finding the best stops…</span></div>'; });
     prog(0.01, 'Finding stations');
     LG.info('stations', 'Find the best stops pressed', { miles: Math.round(model.totalMi), points: model.pts.length, force: force === true });
     await new Promise(function (r) { setTimeout(r, 30); });
@@ -2186,7 +2191,7 @@
     var g = ga.per[0];
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
-    if (step >= ST_STOPS) mapLoading('Choosing stops', 0.93);
+    if (step >= ST_ADJ) mapLoading('Choosing stops', 0.93);
     var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
     var opts = makeOpts(model, cands, startGal), planOffs = null;
     var secs0 = flatSecs(model), sf0 = secs0.length && Garage.speedFn ? Garage.speedFn() : null;
@@ -2240,7 +2245,7 @@
     progEnd();
     await breathe();
     var t2 = Date.now();
-    if (step >= ST_STOPS) showResult();
+    if (step >= ST_ADJ) showResult();
     LG.debug('plan', 'Results drawn in ' + (Date.now() - t2) + ' ms');
   }
   /** Top-ups, trip cost, and the drive back — cheap to redo when you change the top-up choice. */
@@ -2264,27 +2269,35 @@
   /** Redraw whatever step is showing with the current plan. */
   function showResult() {
     document.body.classList.add('trip-on');
-    if (step === ST_STOPS && $('tsResults')) { renderResults(); drawSoon(); }
+    if (onPlan(step) && ($('tsResults') || $('taResults'))) { renderResults(); drawSoon(); }
     else if (step === ST_DEPART) renderStep();
   }
   /** Draw the route and stops once the list is on screen (the map takes a moment on a long trip). */
   function drawSoon() {
     var r0 = result;
     requestAnimationFrame(function () { setTimeout(function () {
-      if (result !== r0 || step !== ST_STOPS) return;
+      if (result !== r0 || !onPlan(step)) return;
       drawRoute(); fitBtn(); if (!busy) mapLoaded();
     }, 0); });
   }
+  var BULB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>';
+  function tipBox() {
+    return '<div class="tipbox">' + BULB + '<div><b>Tip:</b> A <b>shorter buffer</b> gives you more range, so you can reach cheap stations right off the highway. ' +
+      'A <b>longer max detour</b> lets cheaper stations farther off the route count — when they save more than the extra miles cost.</div></div>';
+  }
   function renderResults() {
-    var el = $('tsResults'); if (!el) return;
+    var el = $('tsResults'), ea = $('taResults'); if (!el && !ea) return;
+    var put = function (sh, ah) { if (el) el.innerHTML = sh; if (ea) ea.innerHTML = ah == null ? sh : ah; };
     var r = result;
-    if (built[ST_STOPS]) { built[ST_STOPS].result = result; built[ST_STOPS].model = model; }
-    if (!r && loadingTrip) { el.innerHTML = '<div class="card finding"><div class="ldspin"></div><span>Opening your trip…</span></div>'; return; }
+    [ST_ADJ, ST_STOPS].forEach(function (k) { if (built[k]) { built[k].result = result; built[k].model = model; } });
+    if (!r && loadingTrip) { put('<div class="card finding"><div class="ldspin"></div><span>Opening your trip…</span></div>'); return; }
     if (!r) {
-      el.innerHTML = model ? '<div class="card empty-res">' + (parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '' ? 'Stops appear here.' : 'Enter the miles left in your tank in Parameters.') + '</div>' : '';
+      var need = parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '';
+      put(model ? '<div class="card empty-res">' + (need ? 'Stops appear here.' : 'Enter the miles left in your tank in Parameters.') + '</div>' : '',
+        model ? '<div class="card empty-res">' + (need ? 'Your adjustments appear here once the stops are planned.' : 'Enter the miles left in your tank in Parameters.') + '</div>' : '');
       return;
     }
-    var p = r.plan, h = '';
+    var p = r.plan, h = '', ah = tipBox();
     // warnings first: what could go wrong on this trip
     var w = [];
     if (!p.ok) w.push({ err: 1, t: 'No plan keeps you above a ' + r.bufMi + '-mile buffer. ' + (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your range.') + ' Try a smaller buffer or check the miles left.' });
@@ -2296,7 +2309,8 @@
     if (r.cachedAgeMs > 0) w.push({ t: r.fromHistory ? 'Saved trip · prices from ' + agoText(r.cachedAgeMs) + ' (no lookups used).' : 'Prices from ' + agoText(r.cachedAgeMs) + '.', html: ' <a href="#" id="tsRefresh">Get fresh prices</a>', cls: 'saved' });
     var warnHtml = w.length ? '<div class="warns pre">' + w.map(function (x) { return '<div class="' + (x.err ? 'msg err' : 'note') + (x.cls ? ' ' + x.cls : '') + '">' + esc(x.t) + (x.html || '') + '</div>'; }).join('') + '</div>' : '';
     if (!p.ok) {
-      h += warnHtml + routeBox() + bufBox();
+      h += warnHtml + routeBox();
+      ah += '<div class="warns pre"><div class="msg err">' + esc(w[0].t) + '</div></div>' + bufBox();
     } else {
       var t = p.totals;
       h += warnHtml;
@@ -2311,28 +2325,30 @@
       } else h += '<div class="msg ok">No stop needed — checked ' + r.cands.length.toLocaleString() + ' stations.</div>';
       h += routeBox();
       h += '<div class="gas-tiles">' + idealBox() + arriveBox() + '</div>';
-      h += bufBox();
-      h += detBox();
-      h += '<div class="spdbox" id="tsSpeed"></div>';
-      if (S.trip.arrive === 'full') h += topUpBox();
+      // Adjustments: the buffer, max. detour and speeds (and the optional top-up)
+      ah += bufBox();
+      ah += detBox();
+      ah += '<div class="spdbox" id="tsSpeed"></div>';
+      if (S.trip.arrive === 'full') ah += topUpBox();
     }
-    el.innerHTML = h;
+    put(h, ah);
+    var both = tpBody();
     if ($('tsRefresh')) $('tsRefresh').onclick = function (e) { e.preventDefault(); findStops(true); };
     if ($('tsSiteCheck')) $('tsSiteCheck').onclick = function (e) { e.preventDefault(); $('wmCheckGo').click(); };
-    el.querySelectorAll('[data-top]').forEach(function (b) {
+    both.querySelectorAll('[data-top]').forEach(function (b) {
       b.onclick = function () { var k = +b.dataset.top; r.topSel = r.topSel === k ? -1 : k; recompute(); keepScroll(showResult); };
     });
     if ($('tsTopMi')) $('tsTopMi').addEventListener('change', function () {
       r.topMi = Math.max(0, Math.round((parseFloat(this.value) || 0) * 10) / 10); S.trip.topUpMi = r.topMi; A.save(); r.topSel = -1; recompute(); keepScroll(showResult);
     });
-    el.querySelectorAll('[data-route]').forEach(function (b) {
+    both.querySelectorAll('[data-route]').forEach(function (b) {
       b.onclick = function (e) { e.preventDefault(); N.haptic && N.haptic(); switchRoute(+b.dataset.route); };
     });
     bindBuf(); bindDet();
     if (p.ok) { renderTripSpeed(); startDetSweep(); }
     if ($('tsStopsH')) $('tsStopsH').onclick = function () { r.stopsShut = r.stopsShut === false; keepScroll(showResult); };
     bindStops();
-    A.qify && A.qify(el);
+    if (A.qify) { if (el) A.qify(el); if (ea) A.qify(ea); }
     sheetSize();
   }
 
@@ -2426,7 +2442,7 @@
     if (!result || !model) return;
     var shut = result.stopsShut;
     result = null;
-    findStops().then(function () { if (result && shut === false) { result.stopsShut = false; if (step === ST_STOPS) renderResults(); } });
+    findStops().then(function () { if (result && shut === false) { result.stopsShut = false; if (onPlan(step)) renderResults(); } });
   }
   /** Stop cards: tap a header to open/close it (in place), price breakdown, navigate. */
   function bindStops() {
@@ -2745,7 +2761,7 @@
       document.body.appendChild(b);
       b.onclick = function () { N.haptic && N.haptic(); userMoved = false; fitBtn(); fitRoute(true); };
     }
-    var on = userMoved && routeBounds && step >= ST_STOPS && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
+    var on = userMoved && routeBounds && step >= ST_ADJ && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
     b.classList.toggle('hidden', !on);
     if (on) b.style.bottom = (sheetCover() + 12) + 'px';
   }
@@ -2773,7 +2789,7 @@
   // up beside the ✕), and the bottom buttons become Discard (back to the speeds you had when you came in) and
   // Save and continue.
   var inMode = false, sizedInMode = false, modeSnap = null;
-  function speedMode() { return step === ST_STOPS && inMode && !$('trip').classList.contains('hidden'); }
+  function speedMode() { return step === ST_ADJ && inMode && !$('trip').classList.contains('hidden'); }
   function snapSpeeds() {
     var st = result && result.speedState || {};
     return { offsets: JSON.parse(JSON.stringify(st.offsets || {})), all: st.all, bufMi: result ? result.bufMi : null };
@@ -2855,7 +2871,7 @@
   function roadSelSoon() { if (!selRaf) selRaf = requestAnimationFrame(function () { selRaf = 0; roadSel(); }); }
   function roadSel() {
     var pg = $('trip'), sp = $('tsSpeed'), band = $('spdSel');
-    var on = sp && sp.classList.contains('exp') && step === ST_STOPS && !pg.classList.contains('hidden') && sp.offsetParent;
+    var on = sp && sp.classList.contains('exp') && step === ST_ADJ && !pg.classList.contains('hidden') && sp.offsetParent;
     var tools = on && sp.querySelector('.adj-tools'), legs = on ? sp.querySelectorAll('.leg[data-mi]') : [];
     if (!on || !tools || !legs.length) { if (band) band.classList.add('hidden'); clearSel(); return; }
     if (!band) { band = document.createElement('div'); band.id = 'spdSel'; band.className = 'spd-sel'; pg.appendChild(band); }
@@ -2903,7 +2919,7 @@
     var had = selKey != null || selLayer.getLayers().length;
     selKey = null; selLayer.clearLayers(); selLL = null;
     var sp = $('tsSpeed'); if (sp) sp.querySelectorAll('.leg.insel').forEach(function (e) { e.classList.remove('insel'); });
-    if (had && step === ST_STOPS && !userMoved) fitRoute(true);
+    if (had && onPlan(step) && !userMoved) fitRoute(true);
   }
 
   // ---------- open / close ----------
@@ -2933,8 +2949,8 @@
 
   window.__trip = { call: call, open: openTrip, relogo: function () {
       drawn = {};
-      if (result && step === ST_STOPS && $('tsResults')) keepScroll(renderResults);
-      if (model && step >= ST_STOPS && map.hasLayer(layer)) drawRoute();
+      if (result && onPlan(step)) keepScroll(renderResults);
+      if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();
     }, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
     placeMs: function () { var t0 = performance.now(); placePins(); return Math.round(performance.now() - t0); },

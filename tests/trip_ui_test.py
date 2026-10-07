@@ -40,10 +40,10 @@ BIG = '''() => { const els = [...document.querySelectorAll('#trip .tp-head *, #t
 def stress(pg, label):
     # long place names and a 130% font size (Android's font-size setting scales WebView text): still no sideways scrolling
     pg.evaluate('''() => { const r = window.__trip.state().route; r.stops.forEach((s, i) => { s.short = ['500 Woodlane Street, Little Rock, Arkansas', '210 Capitol Ave, Hartford, Connecticut', '1600 Pennsylvania Avenue NW, Washington'][i % 3]; }); }''')
-    for k in [1, 2, 3, 4, 5]:
+    for k in [1, 2, 3, 4, 5, 6]:
         goto(pg, k); wide(pg, label + ' step %d long names' % k)
         pg.evaluate(BIG); pg.wait_for_timeout(150); wide(pg, label + ' step %d big text' % k)
-        if k == 5: pg.screenshot(path=f'{OUT}/{name}-z4-stress.png')
+        if k == 6: pg.screenshot(path=f'{OUT}/{name}-z4-stress.png')
 def wide(pg, label):
     o = pg.evaluate(OVER)
     if o: print('  TOO WIDE at', label, o); WIDE.append((label, o))
@@ -55,7 +55,8 @@ def getr(pg, t=700):
 def step(pg): return pg.evaluate('window.__trip.state().step')
 def goto(pg, k): pg.evaluate('(k) => window.__trip.step(k)', k); pg.wait_for_timeout(250)
 def settings(pg): goto(pg, 3)          # Parameters
-def stops(pg, t=900): goto(pg, 4); idle(pg, t)   # back to Stops: re-planned from the saved stations
+def stops(pg, t=900): goto(pg, 5); idle(pg, t)   # back to Stops: re-planned from the saved stations
+def adj(pg, t=600): goto(pg, 4); idle(pg, t)     # Adjustments: buffer, max. detour, speeds
 def mi(pg): return round(pg.evaluate('window.__trip.state().model.totalMi'))
 def replan(pg):
     idle(pg, 300); pg.evaluate('window.__trip.find()'); idle(pg, 400)
@@ -190,6 +191,13 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-p1-params.png'); wide(pg, 'parameters')
         # ---- Stops ----
         nxt(pg, 1500); assert step(pg) == 4; idle(pg)
+        # ---- Adjustments: a tip, then the buffer and max. detour sliders and the speeds ----
+        tip = ft(pg, '.tp-step:not(.hidden) .tipbox'); print('  tip:', tip)
+        assert 'shorter buffer' in tip and 'max detour' in tip and pg.locator('.tp-step:not(.hidden) .tipbox svg').count() == 1
+        assert pg.locator('.tp-step:not(.hidden) #tsBufBox').count() == 1 and pg.locator('.tp-step:not(.hidden) #tsSpeed').count() == 1 and pg.locator('.tp-step:not(.hidden) #tsStopsH').count() == 0
+        ah = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); assert abs(ah - 0.75) < 0.03, ah
+        pg.screenshot(path=f'{OUT}/{name}-a1-adjustments.png'); wide(pg, 'adjustments')
+        nxt(pg); assert step(pg) == 5
         ph = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  Stops panel height:', round(ph, 2))
         assert abs(ph - 0.75) < 0.03, 'Stops opens at 75% of the screen'
         assert pg.locator('.tp-step:not(.hidden) .res-head').count() == 0, 'no trip title on Stops'
@@ -241,7 +249,8 @@ with sync_playwright() as p:
         if 'gal' in idl:
             pg.evaluate("document.getElementById('tsIdeal').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
             pg.screenshot(path=f'{OUT}/{name}-t2i-ideal.png')
-        # cruising speed per leg: limits from the (mock) FHWA inventory, sliders start at $0
+        # cruising speed per leg (on Adjustments): limits from the (mock) FHWA inventory, sliders start at $0
+        adj(pg)
         pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
         assert pg.locator('#tsSpeed .leg[data-leg]').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0, 'road sliders start collapsed'
         assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") != 'sticky', 'not pinned while collapsed'
@@ -352,15 +361,15 @@ with sync_playwright() as p:
         if pg.locator('#trip.submode').count(): pg.click('#lgTog'); pg.wait_for_timeout(400)
         pg.wait_for_timeout(900)
         db = ft(pg, '#tsDetBox'); print('  detour slider:', db.replace('\n', ' | ')[:200]); assert pg.locator('#tsDetBox input[type=range]').count() == 1 and 'min' in db
-        nxt(pg); pg.wait_for_timeout(500)
-        dh = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  departure panel:', round(dh, 2), pg.evaluate("[document.getElementById('tpS5').offsetHeight, document.getElementById('tpBody').clientHeight, document.getElementById('trip').style.cssText]"))
+        nxt(pg); assert step(pg) == 5; nxt(pg); pg.wait_for_timeout(500)
+        dh = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  departure panel:', round(dh, 2), pg.evaluate("[document.getElementById('tpS6').offsetHeight, document.getElementById('tpBody').clientHeight, document.getElementById('trip').style.cssText]"))
         assert dh < 0.7, 'Departure: only as tall as it needs'
-        assert step(pg) == 5 and pg.locator('.kpis.four #tShare').count() == 1 and pg.locator('#tsDone, #tsEdit, #tsExport').count() == 0
+        assert step(pg) == 6 and pg.locator('.kpis.four #tShare').count() == 1 and pg.locator('#tsDone, #tsEdit, #tsExport').count() == 0
         dep = ft(pg, '.tp-step:not(.hidden)'); print('  departure:', dep.replace('\n', ' | ')[:500])
         assert pg.locator('.tp-step:not(.hidden) .nlist li').count() == 2 and 'trip cost' in dep and 'Trip cost is the' not in pg.inner_text('.tp-step:not(.hidden)')
         assert pg.locator('#tpNav #tOpen').count() == 1 and 'Google Maps' in ft(pg, '#tOpen')
         pg.screenshot(path=f'{OUT}/{name}-w4-departure.png')
-        ms = pg.evaluate('''() => { const t = []; for (const k of [4, 3, 2, 1, 2, 3, 4, 5]) { const a = performance.now(); window.__trip.step(k); t.push(Math.round(performance.now() - a)); } return t; }''')
+        ms = pg.evaluate('''() => { const t = []; for (const k of [5, 4, 3, 2, 1, 2, 3, 4, 5, 6]) { const a = performance.now(); window.__trip.step(k); t.push(Math.round(performance.now() - a)); } return t; }''')
         print('  step switch ms (4,3,2,1,2,3,4,5):', ms); pg.wait_for_timeout(300); wide(pg, 'departure')
         pg.evaluate("window.__shared = null"); pg.click('#tShare'); pg.wait_for_timeout(200)
         sh = pg.evaluate('window.__shared')
@@ -375,15 +384,15 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__saved'), 'saved to downloads'
         print('  report keys:', list(rj.keys()), 'candidates', len(rj['candidates']))
         SHARED_TRIP = shtxt
-        pg.click('#tBack'); pg.wait_for_timeout(300); assert step(pg) == 4
+        pg.click('#tBack'); pg.wait_for_timeout(300); assert step(pg) == 5
         # default speed rule: +9 over the limit but never above 74 -> 70 roads get +4, 75 roads stay at 75
         settings(pg)
-        setchk(pg, '#tRule', True); pg.fill('#tRuleOver', '9'); pg.fill('#tRuleCap', '74'); pg.dispatch_event('#tRuleCap', 'change'); stops(pg)
+        setchk(pg, '#tRule', True); pg.fill('#tRuleOver', '9'); pg.fill('#tRuleCap', '74'); pg.dispatch_event('#tRuleCap', 'change'); adj(pg)
         if not pg.locator('#tsSpeed.exp').count(): pg.click('#lgTog'); pg.wait_for_timeout(300)
         pg.wait_for_selector('#lgR2', timeout=5000)
         vals = [pg.input_value('#lgR%d' % i) for i in range(3)]; rl = ft(pg, '.leg.all .leg-h'); print('  rule +9 up to 74:', vals, '|', rl)
         assert vals == ['4', '4', '0'] and 'rule: +9, up to 74 mph' in rl and 'change rule' in rl and pg.locator('.rule-line').count() == 0 and ft(pg, '#lgTot').find('+$') >= 0
-        settings(pg); setchk(pg, '#tRule', False); stops(pg)
+        settings(pg); setchk(pg, '#tRule', False); adj(pg)
         # buffer <-> speed: stops are planned at your speeds, so every station (and the end) is reached with at least the buffer
         tank0 = pg.evaluate("(() => { const S = window.__app.S, c = S.cars.filter(c => c.id === S.carId)[0] || S.cars[0]; const t = c.tank; c.tank = 3; return t; })()")
         replan(pg)     # re-plan with a 3-gal tank: stations ~110 mi of range apart matter
@@ -414,7 +423,7 @@ with sync_playwright() as p:
         setchk(pg, '#tLinkSl', False); pg.fill('#tBuffer', '60'); pg.dispatch_event('#tBuffer', 'input'); pg.wait_for_timeout(200)
         pg.evaluate("document.getElementById('tLinkSl').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-c0-settings.png'); wide(pg, 'stop settings')
-        stops(pg, 1200)
+        adj(pg, 1200)
         if not pg.locator('#tsSpeed.exp').count(): pg.click('#lgTog'); pg.wait_for_timeout(300)
         pg.wait_for_selector('#lgAll', timeout=5000); pg.wait_for_timeout(800)
         buf0 = pg.evaluate('window.__trip.state().result.bufMi'); mx = pg.evaluate("window.__trip.guard().maxAll()")
@@ -443,18 +452,20 @@ with sync_playwright() as p:
         assert lims == sorted(lims, reverse=True), lims
         pg.select_option('#lgSort', 'route'); pg.wait_for_timeout(200)
         settings(pg); setchk(pg, '#tLinkSl', True); pg.fill('#tBuffer', '30'); pg.dispatch_event('#tBuffer', 'input')
-        stops(pg, 1200)
+        adj(pg, 1200)
         pg.evaluate("(() => { const r = window.__trip.state().result; r.speedState.offsets = {}; r.speedState.all = 0; })()")
         pg.evaluate("(t) => { const S = window.__app.S, c = S.cars.filter(c => c.id === S.carId)[0] || S.cars[0]; c.tank = t; }", tank0)
         replan(pg)
         # finding stops again on the same route reuses the saved search (no Google lookups); "Get fresh prices" searches again
         pg.evaluate("window.__jobs = null"); replan(pg)
         assert pg.evaluate('window.__jobs') is None, 'saved search reused'
+        stops(pg)
         sv = ft(pg, '.note.saved'); print('  second search:', sv)
         assert 'Prices from' in sv and 'Get fresh prices' in sv
         pg.click('#tsRefresh'); idle(pg, 600)
         assert pg.evaluate('window.__jobs') and pg.locator('.note.saved').count() == 0, 'fresh search'
         print('  refreshed with', len(pg.evaluate('window.__jobs')), 'Google lookups')
+        adj(pg)
         # buffer slider: checks other buffers in the background, marks where a smaller one saves money
         pg.wait_for_selector('#tsBuf', timeout=5000)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
@@ -487,11 +498,11 @@ with sync_playwright() as p:
         pg.click('.routebox [data-route="0"]'); pg.wait_for_timeout(400)
         after = ft(pg, '.tp-step:not(.hidden)'); print('  switched:', mi(pg), '|', [l for l in after.split('\n') if 'Also checked' in l])
         assert mi(pg) == 318 and 'via US-67 S and I-30 W' in after and 'Cheaper route' not in after
-        goto(pg, 5); dn = ft(pg, '.tp-step:not(.hidden) .warns'); print('  departure notes:', dn.replace('\n', ' | ')); assert 'avoid tolls' in dn and len(dn) < 200; goto(pg, 4)
+        goto(pg, 6); dn = ft(pg, '.tp-step:not(.hidden) .warns'); print('  departure notes:', dn.replace('\n', ' | ')); assert 'avoid tolls' in dn and len(dn) < 200; goto(pg, 4)
         pg.evaluate("window.__cheapI30 = false"); settings(pg); setchk(pg, '#tAltCmp', False)
         goto(pg, 2); pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(150); stops(pg)
         # with 140 mi in the tank a smaller buffer reaches cheaper gas: marks show up on the slider
-        settings(pg); pg.fill('#tMiles', '140'); stops(pg, 1200)
+        settings(pg); pg.fill('#tMiles', '140'); adj(pg, 1200)
         pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         bt = ft(pg, '#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
@@ -506,13 +517,13 @@ with sync_playwright() as p:
         assert after < before - 0.2
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t2e-buffer-slid.png')
-        settings(pg); pg.fill('#tMiles', '80'); stops(pg, 1200)
+        settings(pg); pg.fill('#tMiles', '80'); adj(pg, 1200)
         assert mi(pg) == 330
         pg.evaluate("document.getElementById('tpBody').scrollTop = 99999"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t3-result-bottom.png')
         if pg.locator('#trip.submode').count():   # at the speed-by-road sliders: Save and continue goes back to the stops
             pg.click('#tNext'); pg.wait_for_timeout(400); assert step(pg) == 4 and pg.locator('#trip.submode').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0
-        nxt(pg); txt = ft(pg, '.tp-step:not(.hidden)')
+        nxt(pg); assert step(pg) == 5; nxt(pg); txt = ft(pg, '.tp-step:not(.hidden)')
         pg.click('#tOpen'); url = pg.evaluate('window.__lastUrl'); print('  export:', url)
         assert url.startswith('https://www.google.com/maps/dir/?api=1') and 'waypoints=' in url
         assert 'trip cost' in txt and 'round trip cost' not in txt, 'no more drive-back estimate'
@@ -520,19 +531,20 @@ with sync_playwright() as p:
         settings(pg)
         pg.click('#tArrive [data-a="full"]'); pg.fill('#tTopMi', '1.0'); pg.fill('#tTankPrice', '3.10')
         pg.screenshot(path=f'{OUT}/{name}-t4-arrive-setup.png')
-        stops(pg, 1500)
+        adj(pg, 1500)
         pg.evaluate("document.querySelector('.topbox').scrollIntoView()"); pg.wait_for_timeout(150)
         print('  TOP-UP:', ft(pg, '.topbox').replace('\n', ' | '))
         pg.click('[data-top="0"]'); pg.wait_for_timeout(300)
         pg.evaluate("document.querySelector('.topbox').scrollIntoView()"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t5-topup.png')
-        nxt(pg)
+        nxt(pg); nxt(pg)
         print('  KPIs:', ' / '.join(pg.locator('.tp-step:not(.hidden) .kpis').first.inner_text().split('\n')))
         pg.click('#tOpen'); url2 = pg.evaluate('window.__lastUrl'); print('  export with top-up:', url2)
         assert url2.count('%7C') == url.count('%7C') + 1 or 'waypoints=' in url2
-        pg.click('#tBack'); pg.wait_for_timeout(300)
+        pg.click('#tBack'); pg.wait_for_timeout(300); adj(pg)
         pg.fill('#tsTopMi', '0.5'); pg.dispatch_event('#tsTopMi', 'change'); pg.wait_for_timeout(300)
         assert 'No priced station that close' in ft(pg, '.topbox'), 'radius in tenths respected'
+        stops(pg)
         assert pg.locator('.tp-step:not(.hidden) .stop').count() == 0, 'fuel stops start collapsed'
         pg.click('#tsStopsH'); pg.wait_for_timeout(200)
         assert pg.locator('#stop0.open').count() == 0 and pg.locator('[data-why="0"]').count() == 0, 'each stop starts collapsed'
@@ -553,7 +565,7 @@ with sync_playwright() as p:
         tb = pg.locator('#tpSteps [data-step="2"]').bounding_box(); x0, y0 = tb['x'] + tb['width'] / 2, tb['y'] + tb['height'] / 2
         pg.mouse.move(x0, y0); pg.mouse.down(); pg.mouse.move(x0, y0 + 120, steps=6); pg.mouse.up(); pg.wait_for_timeout(450)
         h2 = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height"); print('  dragged from the tabs:', round(h1), '->', round(h2), 'step', step(pg))
-        assert h2 < h1 - 80 and step(pg) == 4, 'tabs drag the panel'
+        assert h2 < h1 - 80 and step(pg) == 5, 'tabs drag the panel'
         h1 = h2
         pg.evaluate("document.getElementById('tpBody').scrollTop = 400"); pg.wait_for_timeout(400)
         assert abs(pg.evaluate("document.getElementById('trip').getBoundingClientRect().height") - h1) < 3, 'scrolling keeps your height'
@@ -569,7 +581,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-h1-history.png')
         pg.evaluate("window.__jobs = null; window.__routeBody = null; window.__gmapsUrls = []")
         pg.click('[data-hist]'); idle(pg, 1200)
-        assert step(pg) == 4 and pg.locator('#tripPick').count() == 0
+        assert step(pg) == 5 and pg.locator('#tripPick').count() == 0
         assert pg.evaluate('window.__jobs') is None and pg.evaluate('window.__routeBody') is None and not pg.evaluate('window.__gmapsUrls'), 'no lookups'
         sv = ft(pg, '.note.saved'); print('  reopened:', sv)
         assert 'Saved trip' in sv and 'no lookups' in sv and pg.locator('#tsStopsH').count() == 1
@@ -588,7 +600,7 @@ with sync_playwright() as p:
         print('  same trip, other link:', ft(pg, '#tRouteGo').replace('\n', ' | '))
         assert pg.evaluate('window.__routeBody') is None and pg.locator('.rt-saved').count() == 1, 'routes from the saved trip'
         sel0 = pg.evaluate('window.__trip.state().result')
-        nxt(pg); assert step(pg) == 3; nxt(pg, 1200); assert step(pg) == 4; idle(pg)
+        nxt(pg); assert step(pg) == 3; nxt(pg, 1200); assert step(pg) == 4; idle(pg); nxt(pg); assert step(pg) == 5
         sv2 = ft(pg, '.note.saved'); print('  stops:', sv2, '| google jobs:', pg.evaluate('window.__jobs') and len(pg.evaluate('window.__jobs')))
         assert pg.evaluate('window.__jobs') is None and 'no lookups' in sv2, 'stations from the saved trip'
         assert pg.evaluate("window.__app.KV.get('trips', 'index').v.length") == 1, 'still one saved trip'
@@ -731,18 +743,18 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-l1-legs.png'); wide(pg, 'legs')
         assert step(pg) == 2
         pg.evaluate("window.__app.S.trip.milesLeft = '80'")
-        nxt(pg, 600); assert step(pg) == 3; nxt(pg, 1200); assert step(pg) == 4; idle(pg)
+        nxt(pg, 600); assert step(pg) == 3; nxt(pg, 1200); assert step(pg) == 4; idle(pg); nxt(pg); assert step(pg) == 5
         arr = ft(pg, '.gas-tiles').lower(); print('  round trip tiles:', arr.replace('\n', ' | '))
         assert pg.locator('.gas-tiles .ideal').count() == 3 and 'gas at dallas' in arr and 'enough for the cheapest return trip' in arr and 'buffer' not in arr
         pg.evaluate("document.querySelector('.gas-tiles').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200); pg.screenshot(path=f'{OUT}/{name}-l1b-tiles.png')
         assert pg.evaluate('window.__trip.state().result.back') is None, 'no "drive back" on a trip that already comes back'
-        nxt(pg); assert step(pg) == 5
+        nxt(pg); assert step(pg) == 6
         assert [x.strip() for x in pg.locator('.tp-step:not(.hidden) .nlist .nn').all_inner_texts()] == ['1', '2', '3']
         pg.click('#tOpen'); one = pg.evaluate('window.__lastUrl'); pg.wait_for_timeout(200)
         assert pg.locator('#tLegs').count() == 0 and 'waypoints=' in one, 'up to 9 stops: one tap opens Maps'
         # over Google's 9-stop limit: the legs slide up from the button
         pg.evaluate("(() => { window.__exp0 = window.Trip.exportUrl; window.Trip.exportUrl = (r, st, m) => { const x = window.__exp0(r, st, m); if (r && r.stops.length > 2) x.tooMany = true; return x; }; })()")
-        goto(pg, 5); pg.evaluate("window.__lastUrl = null"); pg.click('#tOpen'); pg.wait_for_timeout(500)
+        goto(pg, 6); pg.evaluate("window.__lastUrl = null"); pg.click('#tOpen'); pg.wait_for_timeout(500)
         assert pg.evaluate('window.__lastUrl') is None and pg.locator('#tLegs.on [data-legurl]').count() == 2
         lp = ft(pg, '#tLegs'); print('  legs popup:', lp.replace('\n', ' | ')); assert "Over Google's limit of 9 stops. Use the individual links instead." in lp
         pg.screenshot(path=f'{OUT}/{name}-l2-leglinks.png'); wide(pg, 'leg links')
