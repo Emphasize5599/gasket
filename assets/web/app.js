@@ -33,6 +33,7 @@
       siteVerify: function (k) { window.__verifyOpened = k; },
       saveLog: function (t) { mem.log = t; }, loadLog: function () { return mem.log || ''; },
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },
+      saveAndShare: function (req, name, mime, t, subj) { window.__saved = { name: name, text: t }; window.__shared = { subject: subj, file: name }; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/FuelPlus/' + name }); }, 30); },
       saveDownload: function (name, mime, t) { window.__saved = { name: name, text: t }; return 'Downloads/FuelPlus/' + name; },
       appVersion: function () { return 'test'; },
       kvGet: function (ns, k) { var m = window.__kv = window.__kv || {}; return m[ns + '|' + k] || ''; },
@@ -456,7 +457,7 @@
     if (!bubLayer.hasLayer(leadLayer)) bubLayer.addLayer(leadLayer);
     var sheet = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');
     var obst = Labels.rectsOf(map, [document.querySelector('.top'), $('status'), $('btnArea'), $('wmCheck'), $('btnTrip'), $('btnLocate'), sheet, document.querySelector('.leaflet-control-attribution')], 6);
-    Labels.place(map, tips, { obst: obst, hide: true, routeFree: false, dists: [12, 28], angles: 8, leaders: leadLayer, leaderPane: 'tleaders' });
+    Labels.place(map, tips, { obst: obst, hide: true, routeFree: false, passes: 1, dists: [12, 28], angles: 8, leaders: leadLayer, leaderPane: 'tleaders' });
   }
 
   // ---------- brand logos ----------
@@ -500,7 +501,7 @@
       for (var i = 0; i < todo.length; i++) {
         var b = todo[i], site = LOGO_SITES[b], dom = site.replace(/^www\./, ''), img = null;
         var urls = ['https://www.google.com/s2/favicons?domain=' + dom + '&sz=128', 'https://icons.duckduckgo.com/ip3/' + dom + '.ico',
-          'https://' + site + '/apple-touch-icon.png', 'https://' + site + '/favicon.ico'];
+          'https://' + site + '/apple-touch-icon.png', 'https://' + site + '/favicon.ico', 'https://' + site + '/'];   // last: the icon the home page links to
         for (var k = 0; k < urls.length && !img; k++) {
           try {
             var r = await ask(urls[k]);
@@ -892,8 +893,19 @@
   }
   function shareLog() {
     if (!window.FLog || !FLog.entries().length) { toast(S.debug ? 'The log is empty.' : 'Turn on Debug logging first.'); return; }
-    N.shareText('Fuel+ Map debug log', logHeader() + FLog.text().slice(-300000));
+    shareFile('fuelplus-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + FLog.text().slice(-300000), 'Fuel+ Map debug log');
   }
+  /** Save a big text file and offer it to other apps as a file (in the background — the app never waits on it). */
+  function shareFile(name, mime, text, subject, btn) {
+    if (btn) { btn.disabled = true; btn.dataset.lbl = btn.dataset.lbl || btn.textContent; btn.textContent = 'Saving…'; }
+    var done = function (r) {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.lbl; }
+      if (r && r.error) toast('Couldn\'t save: ' + r.error); else if (r && r.path) toast('Saved to ' + r.path);
+    };
+    if (N.saveAndShare && window.__trip && window.__trip.call) return window.__trip.call('saveAndShare', name, mime, text, subject).then(done, function (e) { done({ error: String(e) }); });
+    N.shareText(subject, text.slice(0, 100000)); done(null);   // older app: text only
+  }
+  window.__shareFile = shareFile;
   function showLog() {
     var pg = $('logPage');
     if (!pg) { pg = document.createElement('section'); pg.id = 'logPage'; pg.className = 'page'; document.body.appendChild(pg); }

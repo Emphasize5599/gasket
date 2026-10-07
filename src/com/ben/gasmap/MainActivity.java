@@ -687,6 +687,48 @@ public class MainActivity extends Activity {
             });
         }
 
+        /**
+         * Saves a (possibly large) text file to Downloads/FuelPlus off the main thread, then offers it to other apps as a
+         * file — not as pasted text, which makes the share sheet crawl on big reports. Replies {path} or {error}.
+         */
+        @JavascriptInterface
+        public void saveAndShare(final int reqId, final String name, final String mime, final String text, final String subject) {
+            new Thread(new Runnable() {
+                public void run() {
+                    final JSONObject o = new JSONObject();
+                    Uri uri = null;
+                    try {
+                        android.content.ContentValues v = new android.content.ContentValues();
+                        v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
+                        v.put("mime_type", mime);
+                        v.put("relative_path", "Download/FuelPlus");
+                        uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
+                        if (uri == null) throw new Exception("couldn't create the file");
+                        OutputStream os = getContentResolver().openOutputStream(uri);
+                        os.write(text.getBytes("UTF-8"));
+                        os.close();
+                        o.put("path", "Downloads/FuelPlus/" + name);
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    final Uri u = uri;
+                    main.post(new Runnable() {
+                        public void run() {
+                            if (u != null && !o.has("error")) {
+                                Intent i = new Intent(Intent.ACTION_SEND);
+                                i.setType(mime);
+                                i.putExtra(Intent.EXTRA_SUBJECT, subject);
+                                i.putExtra(Intent.EXTRA_STREAM, u);
+                                i.setClipData(android.content.ClipData.newRawUri(subject, u));
+                                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                try { startActivity(Intent.createChooser(i, subject)); }
+                                catch (Exception e) { js("window.toast&&toast(" + q("No app can share that.") + ")"); }
+                            }
+                            reply(reqId, o);
+                        }
+                    });
+                }
+            }).start();
+        }
+
         /** Saves a file to Downloads/FuelPlus (no storage permission needed on Android 10+). Returns where, or an error. */
         @JavascriptInterface
         public String saveDownload(String name, String mime, String text) {
@@ -781,6 +823,21 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        private byte[] iconBytes(String url, String[] finalUrl) throws Exception {
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setInstanceFollowRedirects(true);
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36");
+            c.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/*,text/html;q=0.9,*/*;q=0.8");
+            if (c.getResponseCode() >= 400) throw new Exception("HTTP " + c.getResponseCode());
+            InputStream is = c.getInputStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192]; int n;
+            while ((n = is.read(buf)) > 0) { bo.write(buf, 0, n); if (bo.size() > 1500000) throw new Exception("too big"); }
+            is.close();
+            if (finalUrl != null) finalUrl[0] = c.getURL().toString();
+            return bo.toByteArray();
+        }
+
         /** A brand's own icon (its website's favicon), shrunk to at most 96 px and handed back as a PNG data URL. */
         @JavascriptInterface
         public void fetchIcon(final int reqId, final String url) {
@@ -789,16 +846,29 @@ public class MainActivity extends Activity {
                     JSONObject o = new JSONObject();
                     try {
                         if (!hostAllowed(url, ICON_HOSTS)) throw new Exception("Host not allowed");
-                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-                        c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setInstanceFollowRedirects(true);
-                        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36"); c.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/*,*/*;q=0.8");
-                        if (c.getResponseCode() >= 400) throw new Exception("HTTP " + c.getResponseCode());
-                        InputStream is = c.getInputStream();
-                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-                        byte[] buf = new byte[8192]; int n;
-                        while ((n = is.read(buf)) > 0) { bo.write(buf, 0, n); if (bo.size() > 600000) throw new Exception("too big"); }
-                        is.close();
-                        byte[] data = bo.toByteArray();
+                        String[] fin = new String[1];
+                        byte[] data = iconBytes(url, fin);
+                        // a web page (the brand's home page): use the icon it links to — the biggest one it lists
+                        String head = new String(data, 0, Math.min(data.length, 200000), "UTF-8");
+                        if (head.trim().startsWith("<") && head.toLowerCase(Locale.US).contains("<html")) {
+                            String best = null; int bestSz = -1;
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("<link\\b[^>]*>", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(head);
+                            while (m.find()) {
+                                String tag = m.group();
+                                java.util.regex.Matcher rel = java.util.regex.Pattern.compile("rel\\s*=\\s*[\"']([^\"']+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(tag);
+                                java.util.regex.Matcher href = java.util.regex.Pattern.compile("href\\s*=\\s*[\"']([^\"']+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(tag);
+                                if (!rel.find() || !href.find() || !rel.group(1).toLowerCase(Locale.US).contains("icon")) continue;
+                                if (href.group(1).toLowerCase(Locale.US).endsWith(".svg")) continue;
+                                int sz = rel.group(1).toLowerCase(Locale.US).contains("apple") ? 180 : 32;
+                                java.util.regex.Matcher sm = java.util.regex.Pattern.compile("sizes\\s*=\\s*[\"'](\\d+)").matcher(tag);
+                                if (sm.find()) sz = Integer.parseInt(sm.group(1));
+                                if (sz > bestSz) { bestSz = sz; best = href.group(1).replace("&amp;", "&"); }
+                            }
+                            if (best == null) throw new Exception("no icon on the page");
+                            String abs = new URL(new URL(fin[0]), best).toString();
+                            if (!abs.startsWith("https://")) throw new Exception("icon not https");
+                            data = iconBytes(abs, fin);
+                        }
                         android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length);
                         if (bm == null) throw new Exception("not an image");
                         int w = bm.getWidth(), h = bm.getHeight();

@@ -927,3 +927,11 @@ details.g-obs[open] { padding-bottom: 12px; }
 .list.open .rows { max-height: var(--rows-h, 52vh); }
 .list.dragging .rows { transition: none; }
 #listGrab { touch-action: none; cursor: grab; }
+/* adjusting speed by road: exactly 75% of the screen */
+.page.tpanel.tall { height: 75vh; }
+.tp-nav .btn.arrow svg { width: 26px; height: 26px; fill: currentColor; margin: 0; }
+/* easier to grab: taller handles with a bigger bar */
+.tp-grab { height: 34px; margin-bottom: -6px; }
+.tp-grab span { width: 52px; height: 5px; }
+#listGrab { height: 34px; }
+#listGrab span { width: 52px; height: 5px; }

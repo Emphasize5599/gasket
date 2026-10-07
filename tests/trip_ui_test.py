@@ -326,6 +326,12 @@ with sync_playwright() as p:
         assert any('%' in (x or '') for x in seen), seen
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(300)
         assert pg.locator('#trip.tall').count() == 1
+        th = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight")
+        print('  speed by road: panel', round(th, 3), '| back is an arrow:', pg.locator('#tBack.arrow').count())
+        assert abs(th - 0.75) < 0.01 and pg.locator('#tBack.arrow svg').count() == 1, 'adjusting speeds: 75% and an arrow'
+        pg.click('#tBack'); pg.wait_for_timeout(400)
+        assert step(pg) == 4 and pg.locator('#trip.tall').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0 and pg.locator('#tBack.arrow').count() == 0 and pg.inner_text('#tBack') == 'Back', 'arrow leaves speed by road'
+        pg.click('#lgTog'); pg.wait_for_timeout(300); pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(300)
         pg.click('#lgTog'); pg.wait_for_timeout(400)
         assert pg.locator('#trip.tall').count() == 0, 'speed by road closed: back to your height'
         pg.click('#lgTog'); pg.wait_for_timeout(300)
@@ -341,8 +347,9 @@ with sync_playwright() as p:
         shtxt = sh['text'] if isinstance(sh, dict) else str(sh)
         print('  shared trip:', shtxt[:300].replace('\n', ' | '))
         assert 'Open in Google Maps: https://www.google.com/maps/dir/' in shtxt and '-----FUEL+ TRIP-----' in shtxt, shtxt
-        pg.evaluate("window.__shared = null; window.__saved = null"); pg.click('#tsReport'); pg.wait_for_timeout(200)
-        rep = pg.evaluate('window.__shared'); rtxt = rep['text'] if isinstance(rep, dict) else str(rep)
+        pg.evaluate("window.__shared = null; window.__saved = null"); pg.click('#tsReport'); pg.wait_for_timeout(400)
+        rep = pg.evaluate('window.__shared'); assert rep and rep.get('file', '').endswith('.json'), 'shared as a file'
+        rtxt = pg.evaluate('window.__saved.text')
         rj = json.loads(rtxt)
         assert rj['fuelPlusReport'] == 1 and rj['plan']['stops'] and 'apiKey' not in rj['settings'] and 'AIza' not in rtxt, list(rj.keys())
         assert pg.evaluate('window.__saved'), 'saved to downloads'

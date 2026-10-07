@@ -174,10 +174,10 @@
     var nav = $('tpNav');
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
-    if ($('tBack')) $('tBack').onclick = function () { closeLegs(); collectSafe(); step--; renderStep(); };
+    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; } closeLegs(); collectSafe(); step--; renderStep(); };
     if ($('tNext')) $('tNext').onclick = function () { advance(step + 1); };
     if ($('tOpen')) $('tOpen').onclick = openMaps;
-    routeGate();
+    routeGate(); backMode();
   }
   /** Go forward to step `to`, one step at a time, stopping at the first requirement that isn't met. */
   async function advance(to) {
@@ -609,13 +609,19 @@
     };
     return JSON.stringify(rep, null, 1);
   }
-  function shareReport() {
-    var text = report();
-    if (text.length > 400000) text = text.slice(0, 400000) + '\n…(trimmed)';
-    var where = N.saveDownload ? N.saveDownload('fuelplus-report-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json', 'application/json', text) : '';
-    N.shareText('Fuel+ Map troubleshooting report', text);
-    if (where && !/^error/.test(where)) toastMsg('Also saved to ' + where);
-    LG.info('share', 'Troubleshooting report shared', { chars: text.length, saved: where });
+  /** The troubleshooting report: built after the button shows it's working, then saved and shared as a file in the background. */
+  async function shareReport(e) {
+    var btn = e && e.target && e.target.closest ? e.target.closest('a, button') : null;
+    if (btn && btn.dataset.busy) return;
+    if (btn) { btn.dataset.busy = 1; btn.dataset.lbl0 = btn.textContent; btn.textContent = 'Preparing the report…'; }
+    await paint();
+    try {
+      var text = report();
+      if (text.length > 1500000) text = text.slice(0, 1500000) + '\n…(trimmed)';
+      LG.info('share', 'Troubleshooting report shared', { chars: text.length });
+      await window.__shareFile('fuelplus-report-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json', 'application/json', text, 'Fuel+ Map troubleshooting report');
+    } catch (x) { toastMsg('Couldn\'t make the report: ' + (x.message || x)); }
+    if (btn) { delete btn.dataset.busy; btn.textContent = btn.dataset.lbl0; }
   }
   window.__tripReport = report;
 
@@ -2255,7 +2261,7 @@
     return h;
   }
   function bindDeparture() {
-    if ($('tsReport')) $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(); };
+    if ($('tsReport')) $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(e); };
     if ($('tShare')) $('tShare').onclick = shareTrip;
     var b = $('tOpen'); if (b) b.disabled = !(result && result.plan.ok);
   }
@@ -2528,12 +2534,17 @@
     var lines = [{ pts: routeLL || [] }];
     if (selLL) { lines.push({ pts: selLL }); lines.push({ pts: selLL }); }   // the highlighted road counts double
     var sz = map.getSize(), cover = sheetCover();
-    var bar = document.querySelector('.top .bar'), barB = bar ? bar.getBoundingClientRect().bottom + 6 : 76;
+    // only what's actually on screen up top (the lookup counter, the settings button, the phone's status bar) —
+    // not the whole width of the bar, so bubbles can use the space between them
+    var st = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--st')) || 0;
+    var tops = Labels.rectsOf(map, Array.prototype.filter.call(document.querySelectorAll('.top .bar > *, #btnArea, #status'), function (e) { return getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'; }), 6);
     if (!layer.hasLayer(leaderLayer)) layer.addLayer(leaderLayer);
-    placeLabels(map, stopTips, -1, lines, [{ x: 0, y: sz.y - cover, w: sz.x, h: cover }, { x: 0, y: 0, w: sz.x, h: barB }],
+    placeLabels(map, stopTips, -1, lines, [{ x: 0, y: sz.y - cover, w: sz.x, h: cover }, { x: 0, y: 0, w: sz.x, h: st + 4 }].concat(tops),
       { leaders: leaderLayer, leaderPane: 'tleaders' });
   }
   function placePinsSoon() { clearTimeout(pinT); pinT = setTimeout(placePins, 30); }
+  // the bubbles keep out from under the panel: placed again whenever it changes size (drag, speed by road, …)
+  if (window.ResizeObserver) { var roT = 0; new ResizeObserver(function () { clearTimeout(roT); roT = setTimeout(placePinsSoon, 120); }).observe($('trip')); }
   map.on('zoomend moveend', placePinsSoon);
   function drawRoute() {
     var r0 = result, key = { model: model, result: r0, plan: r0 && r0.plan, top: r0 && r0.top, cands: r0 && r0.cands };
@@ -2605,7 +2616,7 @@
     var el = $('trip'); if (!el || el.classList.contains('hidden')) return 0;
     if (el.classList.contains('full')) return innerHeight;
     var v = el.style.getPropertyValue('--panel-h').trim(), px = /vh$/.test(v) ? parseFloat(v) * innerHeight / 100 : parseFloat(v);
-    if (el.classList.contains('tall')) px = Math.max(px || 0, 0.75 * innerHeight);
+    if (el.classList.contains('tall')) px = 0.75 * innerHeight;
     return px > 0 ? Math.min(px, innerHeight) : el.getBoundingClientRect().height;
   }
   function fitRoute(animate) {
@@ -2636,10 +2647,25 @@
     var el = $('trip'), sp = $('tsSpeed'), body = tpBody(); if (!el || el.classList.contains('hidden') || !body) return;
     var tall = false;
     if (sp && sp.classList.contains('exp')) { var a = body.getBoundingClientRect(), b = sp.getBoundingClientRect(); tall = b.top < a.bottom - 40 && b.bottom > a.top + 40; }
+    else sizedInMode = false;
+    inMode = tall; if (sizedInMode) tall = false;   // you dragged the panel while adjusting: your height wins until you leave
+    backMode();
     if (el.classList.contains('tall') === tall) return;
     el.classList.toggle('tall', tall);
-    setTimeout(function () { if (!userMoved) fitRoute(true); fitBtn(); }, 260);
+    backMode();
+    setTimeout(function () { if (!userMoved) fitRoute(true); fitBtn(); placePinsSoon(); }, 260);
   }
+  /** Adjusting speed by road (the panel at 75%): Back becomes an arrow that leaves that mode; then it's Back again. */
+  var ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>';
+  var inMode = false, sizedInMode = false;
+  function speedMode() { return step === ST_STOPS && inMode && !$('trip').classList.contains('hidden'); }
+  function backMode() {
+    var b = $('tBack'); if (!b) return;
+    var on = speedMode(); if (b._arrow === on) return;
+    b._arrow = on; b.classList.toggle('arrow', on);
+    b.innerHTML = on ? ARROW : 'Back'; b.setAttribute('aria-label', on ? 'Leave speed by road' : 'Back');
+  }
+  function leaveSpeedMode() { var t = $('lgTog'); if (t && $('tsSpeed') && $('tsSpeed').classList.contains('exp')) { N.haptic && N.haptic(); t.click(); } sheetSize(); }
   function panelDrag(pg) {
     var vh = function () { return window.innerHeight; };
     pg.style.setProperty('--panel-h', '75vh');
@@ -2661,7 +2687,8 @@
       if (!dragging) return; dragging = false; pg.classList.remove('dragging');
       var f = pg.getBoundingClientRect().height / vh();
       pg.style.setProperty('--panel-h', (f * 100) + 'vh');
-      if (!userMoved) fitRoute(true); fitBtn(); sheetSize();
+      sheetSize(); if (inMode) { sizedInMode = true; sheetSize(); }   // dragged while adjusting speeds: your height wins
+      if (!userMoved) fitRoute(true); fitBtn();
     };
     [$('tpGrab'), pg.querySelector('.tp-head')].forEach(function (h) {
       h.addEventListener('pointerdown', down); h.addEventListener('pointermove', move);
@@ -2743,7 +2770,7 @@
   window.__tripBack = function () {
     if (closePicker()) return true;
     if (closeLegs()) return true;
-    if (!$('trip').classList.contains('hidden')) { if (step > 1) { collectSafe(); step--; renderStep(); } else closeTrip(); return true; }
+    if (!$('trip').classList.contains('hidden')) { if (speedMode()) { leaveSpeedMode(); return true; } if (step > 1) { collectSafe(); step--; renderStep(); } else closeTrip(); return true; }
     return false;
   };
   $('btnTrip').onclick = function () { N.haptic(); tripPicker(); };

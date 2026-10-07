@@ -91,9 +91,11 @@ with sync_playwright() as p:
     t0 = mark(pg); pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(2500); res['pick route'] = worst(pg, t0, 'pick another route')
     t0 = mark(pg); pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(2500); res['pick back'] = worst(pg, t0, 'pick route 1 again')
     pg.click('#tNext'); pg.wait_for_timeout(600)
-    pg.fill('#tMiles', '200')
+    pg.fill('#tMiles', os.environ.get('MILES', '200')); pg.fill('#tBuffer', os.environ.get('BUF', '40'))
     t0 = mark(pg); pg.click('#tNext'); idle(pg, 3000); res['stops'] = worst(pg, t0, 'enter Stops (find stops)')
     pg.screenshot(path=f'{OUT}/perf-stops.png')
+    pc = pg.evaluate('window.__trip.pins()'); print('  pins: over route', pc['overRoute'], 'crossings', pc['crossings'], 'short', sum(1 for x in pc['pins'] if x['mini']), 'of', len(pc['pins']))
+    assert pc['overRoute'] == 0 and pc['crossings'] == 0
     n = pg.evaluate('window.__trip.state().result.cands.length'); print('  candidates:', n)
     t0 = mark(pg); pg.click('#tClose'); pg.wait_for_timeout(800); res['close'] = worst(pg, t0, 'close the trip (main map)')
     pg.click('#btnTrip'); pg.wait_for_timeout(500)
