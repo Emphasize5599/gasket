@@ -593,7 +593,7 @@ public class MainActivity extends Activity {
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com"};
 
     // brand icons: Google's favicon service, or each brand's own site
-    private static final String[] ICON_HOSTS = {"www.google.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
+    private static final String[] ICON_HOSTS = {"www.google.com", "icons.duckduckgo.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
 
     private String getJson(String url) throws Exception {
         if (!hostAllowed(url, JSON_HOSTS)) throw new Exception("Host not allowed");
@@ -791,7 +791,7 @@ public class MainActivity extends Activity {
                         if (!hostAllowed(url, ICON_HOSTS)) throw new Exception("Host not allowed");
                         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
                         c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setInstanceFollowRedirects(true);
-                        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) FuelPlusMap");
+                        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36"); c.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/*,*/*;q=0.8");
                         if (c.getResponseCode() >= 400) throw new Exception("HTTP " + c.getResponseCode());
                         InputStream is = c.getInputStream();
                         java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();

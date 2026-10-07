@@ -82,6 +82,14 @@ with sync_playwright() as p:
         n2 = pg.evaluate("[document.querySelectorAll('#rows .row').length, document.querySelectorAll('.mbub').length]")
         print('  no-price station shown / hidden (rows, bubbles):', n1, n2); assert n1[2] and n2[0] == n1[0] - 1 and n2[1] == n1[1] - 1
         pg.evaluate("window.__app.S.hideUnpriced = false; window.__app.render()")
+        # drag the list handle up, then back down
+        g = pg.locator('#listGrab').bounding_box(); x, y = g['x'] + g['width'] / 2, g['y'] + g['height'] / 2
+        pg.mouse.move(x, y); pg.mouse.down(); pg.mouse.move(x, y - 150, steps=6); pg.mouse.move(x, y - 300, steps=6); pg.mouse.up(); pg.wait_for_timeout(450)
+        hUp = pg.evaluate("document.getElementById('rows').getBoundingClientRect().height"); op = pg.evaluate("document.getElementById('listSheet').classList.contains('open')")
+        g = pg.locator('#listGrab').bounding_box(); x, y = g['x'] + g['width'] / 2, g['y'] + g['height'] / 2
+        pg.mouse.move(x, y); pg.mouse.down(); pg.mouse.move(x, y + 200, steps=6); pg.mouse.move(x, y + 420, steps=6); pg.mouse.up(); pg.wait_for_timeout(450)
+        cl = pg.evaluate("document.getElementById('listSheet').classList.contains('open')")
+        print('  list dragged up to', round(hUp), 'open', op, '| dragged down: open', cl); assert op and 250 < hUp < 340 and not cl
         pg.click('#bestLine')
         pg.wait_for_timeout(500)
         pg.screenshot(path=f'{OUT}/{name}-3-list.png')

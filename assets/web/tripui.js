@@ -1238,7 +1238,7 @@
       line.on('click', function () { rmap._onPick(k); });
       segs[k] = { halo: halo, line: line, hit: hit };
       var cands = labelSpots(lines, k), mid = cands[0];
-      tips.push({ k: k, cands: cands, tip: null });
+      tips.push({ k: k, cands: cands, tip: null, color: on ? '#1a73e8' : ROUTE_GRAY });
       var tip = tips[tips.length - 1].tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'rlabel' + (on ? ' on' : ''), interactive: true })
         .setLatLng(mid).setContent('<div class="rl" data-opt="' + k + '"><b>' + esc(ln.time) + '</b><span>' + esc(ln.miles) + '</span></div>').addTo(rmap);
       all = all.concat(ln.pts);
@@ -1253,8 +1253,8 @@
       });
       if (segs[sel]) { segs[sel].halo.bringToFront(); segs[sel].line.bringToFront(); }
       Object.keys(segs).forEach(function (k) { segs[k].hit.bringToFront(); });
-      tips.forEach(function (t) { var e = t.tip.getElement(); if (e) e.classList.toggle('on', t.k === sel); });
-      placeLabels(rmap, tips, sel, lines);
+      tips.forEach(function (t) { var e = t.tip.getElement(); if (e) e.classList.toggle('on', t.k === sel); t.color = t.k === sel ? '#1a73e8' : ROUTE_GRAY; });
+      placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders });
     };
     rmap.attributionControl.setPrefix(false);
     // tapping a time/miles label picks that route too
@@ -1263,8 +1263,9 @@
     var mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(rmap); };
     mk(a, 'A'); mk(b, 'B');
     rmap.fitBounds(L.latLngBounds(all), { paddingTopLeft: [36, 58], paddingBottomRight: [36, 30] });
-    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap._refit(); placeLabels(rmap, tips, sel, lines); } }, 60);
-    rmap.on('zoomend moveend', function () { placeLabels(rmap, tips, sel, lines); });
+    rmap._leaders = L.layerGroup().addTo(rmap);
+    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap._refit(); placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders }); } }, 60);
+    rmap.on('zoomend moveend', function () { placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders }); });
     var fb = document.createElement('button'); fb.className = 'fab-fit rmap-fit'; fb.type = 'button'; fb.setAttribute('aria-label', 'Show every route');
     fb.innerHTML = FIT_ICON + '<span>Route</span>'; fb.classList.add('hidden');
     // like the big map: the button shows once you move this map yourself, and goes away when it has re-centered
@@ -2530,7 +2531,7 @@
     var bar = document.querySelector('.top .bar'), barB = bar ? bar.getBoundingClientRect().bottom + 6 : 76;
     if (!layer.hasLayer(leaderLayer)) layer.addLayer(leaderLayer);
     placeLabels(map, stopTips, -1, lines, [{ x: 0, y: sz.y - cover, w: sz.x, h: cover }, { x: 0, y: 0, w: sz.x, h: barB }],
-      { rings: [0, 22, 46], leaders: leaderLayer, leaderPane: 'tleaders' });
+      { leaders: leaderLayer, leaderPane: 'tleaders' });
   }
   function placePinsSoon() { clearTimeout(pinT); pinT = setTimeout(placePins, 30); }
   map.on('zoomend moveend', placePinsSoon);
@@ -2759,5 +2760,17 @@
       if (model && step >= ST_STOPS && map.hasLayer(layer)) drawRoute();
     }, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
+    /** For tests: each stop bubble's box, its line (if any) and whether it's the short form; plus how many cover the route. */
+    pins: function () {
+      var cr = map.getContainer().getBoundingClientRect(), out = stopTips.map(function (t) {
+        var e = t.tip.getElement(), r = e.getBoundingClientRect();
+        return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height, mini: e.classList.contains('mini'), shown: e.style.visibility !== 'hidden' };
+      });
+      var leads = []; leaderLayer.eachLayer(function (l) { var ll = l.getLatLngs(); leads.push(ll.map(function (p) { var q = map.latLngToContainerPoint(p); return { x: q.x, y: q.y }; })); });
+      var pts = (routeLL || []).map(function (p) { return map.latLngToContainerPoint(p); }), over = 0, cross = 0;
+      out.forEach(function (r) { if (!r.shown) return; for (var i = 1; i < pts.length; i++) if (Labels._segRect(pts[i - 1], pts[i], r, 0)) { over++; break; } });
+      for (var i = 0; i < leads.length; i++) for (var j = i + 1; j < leads.length; j++) if (Labels._segX(leads[i][0], leads[i][1], leads[j][0], leads[j][1])) cross++;
+      return { pins: out, leads: leads.length, overRoute: over, crossings: cross };
+    },
     state: function () { return { route: route, model: model, result: result, busy: busy, step: step }; } };
 })();

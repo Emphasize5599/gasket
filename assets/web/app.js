@@ -362,8 +362,42 @@
     Array.prototype.forEach.call($('sort').children, function (x) { x.classList.toggle('on', x === b); });
     setListOpen(true); render();
   });
-  function setListOpen(open) { $('listSheet').classList.toggle('open', open); setTimeout(sizeSheet, 300); }
-  $('listGrab').onclick = $('bestLine').onclick = function () { setListOpen(!$('listSheet').classList.contains('open')); };
+  function setListOpen(open) { $('listSheet').classList.toggle('open', open); setTimeout(function () { sizeSheet(); placeBubsSoon(); }, 300); }
+  var listDragged = false;
+  $('listGrab').onclick = $('bestLine').onclick = function () { if (listDragged) { listDragged = false; return; } setListOpen(!$('listSheet').classList.contains('open')); };
+  // drag the list's handle (or its header) up and down; let go anywhere — near the bottom it closes
+  (function () {
+    var sh = $('listSheet'), rows = $('rows'), y0 = 0, h0 = 0, on = false, moved = false;
+    var down = function (e) {
+      if (e.button > 0 || (e.target.closest('button') && !e.target.closest('#listGrab')) || e.target.closest('#sort')) return;
+      on = true; moved = false; y0 = e.clientY; h0 = sh.classList.contains('open') ? rows.getBoundingClientRect().height : 0;
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { }
+    };
+    var move = function (e) {
+      if (!on) return;
+      var dy = e.clientY - y0;
+      if (!moved && Math.abs(dy) < 6) return;
+      if (!moved) { moved = true; sh.classList.add('dragging'); sh.classList.add('open'); }
+      rows.style.maxHeight = Math.max(0, Math.min(innerHeight * 0.75, h0 - dy)) + 'px';
+      sizeSheet(); e.preventDefault();
+    };
+    var up = function () {
+      if (!on) return; on = false;
+      if (!moved) return;
+      listDragged = true; setTimeout(function () { listDragged = false; }, 350);
+      var h = rows.getBoundingClientRect().height;
+      sh.classList.remove('dragging'); rows.style.maxHeight = '';
+      if (h < 70) { sh.style.removeProperty('--rows-h'); setListOpen(false); }
+      else { sh.style.setProperty('--rows-h', Math.round(h) + 'px'); setListOpen(true); }
+      placeBubsSoon();
+    };
+    [$('listGrab'), sh.querySelector('.list-head')].forEach(function (el) {
+      if (!el) return;
+      el.style.touchAction = 'none';
+      el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    });
+  })();
   function sizeSheet() {
     var vis = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');
     var h = vis.getBoundingClientRect().height;
@@ -422,40 +456,64 @@
     if (!bubLayer.hasLayer(leadLayer)) bubLayer.addLayer(leadLayer);
     var sheet = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');
     var obst = Labels.rectsOf(map, [document.querySelector('.top'), $('status'), $('btnArea'), $('wmCheck'), $('btnTrip'), $('btnLocate'), sheet, document.querySelector('.leaflet-control-attribution')], 6);
-    Labels.place(map, tips, { obst: obst, hide: true, rings: [0, 18], leaders: leadLayer, leaderPane: 'tleaders' });
+    Labels.place(map, tips, { obst: obst, hide: true, routeFree: false, dists: [12, 28], angles: 8, leaders: leadLayer, leaderPane: 'tleaders' });
   }
 
   // ---------- brand logos ----------
   // Each brand's own icon (the favicon from its website), fetched once on this phone and kept; until then — or if
   // it can't be fetched — the brand's letter on its color.
   var LOGO = {}, LOGO_SITES = { walmart: 'www.walmart.com', murphy: 'www.murphyusa.com', sams: 'www.samsclub.com', exxon: 'www.exxon.com', mobil: 'www.mobil.com', citgo: 'www.citgo.com' };
+  // an icon that won't draw (a bad download) quietly falls back to the letter
+  var IMG_ERR = ' onerror="this.parentNode.classList.add(\'bad\')"';
   function logoHtml(brand) {
     var br = P.BRANDS[brand] || { color: '#777', short: '?' }, u = LOGO[brand];
-    return '<span class="lg' + (u ? ' img' : '') + '" style="--bc:' + br.color + '">' + (u ? '<img src="' + u + '" alt="">' : esc(br.short)) + '</span>';
+    return '<span class="lg' + (u ? ' img' : '') + '" style="--bc:' + br.color + '">' + (u ? '<img src="' + u + '" alt=""' + IMG_ERR + '><i>' + esc(br.short) + '</i>' : esc(br.short)) + '</span>';
   }
   function badgeHtml(brand, cls) {
     var br = P.BRANDS[brand] || { color: '#777', short: '?' }, u = LOGO[brand];
-    return '<span class="badge' + (u ? ' logo' : '') + (cls ? ' ' + cls : '') + '" style="background:' + (u ? '#fff' : br.color) + '">' + (u ? '<img src="' + u + '" alt="">' : esc(br.short)) + '</span>';
+    return '<span class="badge' + (u ? ' logo' : '') + (cls ? ' ' + cls : '') + '" style="--bc:' + br.color + ';background:' + (u ? '#fff' : br.color) + '">' + (u ? '<img src="' + u + '" alt=""' + IMG_ERR + '><i>' + esc(br.short) + '</i>' : esc(br.short)) + '</span>';
   }
-  function loadLogos() {
-    Object.keys(LOGO_SITES).forEach(function (b) { var o = KV.get('logos', b); if (o && o.v && o.v.img) LOGO[b] = o.v.img; });
-    if (!N.fetchIcon || !window.__trip || !window.__trip.call) return;
-    var ask = function (url) { return window.__trip.call('fetchIcon', url); };
-    var todo = Object.keys(LOGO_SITES).filter(function (b) { var o = KV.get('logos', b); return !(o && o.v && o.v.img) && !(o && o.v && o.v.fail && Date.now() - o.t < 864e5); });
+  /**
+   * Brand icons: kept on this phone once found. Any that are missing are looked up on the internet each time the app
+   * starts (Google's and DuckDuckGo's icon services, then the brand's own site) — one at a time, each with its own
+   * time limit, so a failure never holds anything else up; the letters stay until an icon arrives.
+   */
+  var logoRun = false;
+  function loadLogos(tries) {
+    try { Object.keys(LOGO_SITES).forEach(function (b) { var o = KV.get('logos', b); if (o && o.v && o.v.img) LOGO[b] = o.v.img; }); } catch (e) { }
+    if (!N.fetchIcon || logoRun) return;
+    if (!window.__trip || !window.__trip.call) { if ((tries || 0) < 40) setTimeout(function () { loadLogos((tries || 0) + 1); }, 250); return; }
+    var todo = Object.keys(LOGO_SITES).filter(function (b) { return !LOGO[b]; });
+    if (!todo.length) return;
+    logoRun = true;
+    var ask = function (url) {
+      return Promise.race([
+        window.__trip.call('fetchIcon', url).catch(function (e) { return { error: String(e) }; }),
+        new Promise(function (r) { setTimeout(function () { r({ error: 'timed out' }); }, 15000); })
+      ]);
+    };
+    var check = function (src) {   // does it actually draw as an image?
+      return new Promise(function (r) { var im = new Image(); im.onload = function () { r(im.naturalWidth >= 16); }; im.onerror = function () { r(false); }; im.src = src; setTimeout(function () { r(false); }, 5000); });
+    };
     (async function () {
-      var got = 0;
+      var got = 0, fails = [];
       for (var i = 0; i < todo.length; i++) {
-        var b = todo[i], site = LOGO_SITES[b], img = null;
-        var urls = ['https://www.google.com/s2/favicons?domain=' + site.replace(/^www\./, '') + '&sz=128', 'https://' + site + '/apple-touch-icon.png', 'https://' + site + '/favicon.ico'];
+        var b = todo[i], site = LOGO_SITES[b], dom = site.replace(/^www\./, ''), img = null;
+        var urls = ['https://www.google.com/s2/favicons?domain=' + dom + '&sz=128', 'https://icons.duckduckgo.com/ip3/' + dom + '.ico',
+          'https://' + site + '/apple-touch-icon.png', 'https://' + site + '/favicon.ico'];
         for (var k = 0; k < urls.length && !img; k++) {
-          var r = await ask(urls[k]);
-          if (r && r.body && Math.max(r.w || 0, r.h || 0) >= 32) img = r.body;
+          try {
+            var r = await ask(urls[k]);
+            if (r && r.body && /^data:image\//.test(r.body) && Math.max(r.w || 0, r.h || 0) >= 24 && await check(r.body)) img = r.body;
+            else fails.push(b + ': ' + (r && (r.error || (r.w + 'x' + r.h))) + ' (' + urls[k].split('/')[2] + ')');
+          } catch (e) { fails.push(b + ': ' + e); }
         }
-        if (img) { LOGO[b] = img; got++; }
-        KV.put('logos', b, img ? { img: img } : { fail: true });
+        if (img) { LOGO[b] = img; got++; try { KV.put('logos', b, { img: img }); } catch (e) { } }
       }
-      if (got) { render(); if (selectedId) openDetail(selectedId); if (window.__trip && window.__trip.relogo) window.__trip.relogo(); if (window.FLog) FLog.info('app', 'Brand icons saved', got); }
-    })();
+      logoRun = false;
+      if (window.FLog) { if (got) FLog.info('app', 'Brand icons saved', got); if (fails.length) FLog.debug('app', 'Brand icon lookups that failed', fails); }
+      if (got) try { render(); if (selectedId) openDetail(selectedId); if (window.__trip && window.__trip.relogo) window.__trip.relogo(); } catch (e) { }
+    })().catch(function () { logoRun = false; });
   }
 
   // ---------- detail ----------
@@ -1024,5 +1082,5 @@
   window.__app = { bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
 })();

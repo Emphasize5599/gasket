@@ -201,8 +201,11 @@ with sync_playwright() as p:
         xo = pg.evaluate("(() => { const c = window.__trip.state().result.cands; const f = (n, mi) => c.filter(x => x.station.name === n && Math.abs(x.d - mi) < 8)[0]; const m = f('Mobil', 205), e = f('Exxon', 38); return { urls: (window.__xomUrls || []).length, mobil205: m && [m.price, m.station.wplus], exxon38: e && [e.price, e.station.wplus] }; })()")
         print('  Walmart+ at Exxon/Mobil:', xo)
         assert xo['urls'] >= 1 and xo['mobil205'] == [3.199, False] and xo['exxon38'][1] is True and abs(xo['exxon38'][0] - 3.199) < 0.001, 'not-in-program Mobil loses the 10c'
-        # tapping a price bubble on the route opens that stop's tile in the fuel-stop list
+        # price bubbles: never on the route, lines never cross, full size whenever it fits
         pg.wait_for_timeout(600)
+        pc = pg.evaluate('window.__trip.pins()'); print('  pins:', {k: pc[k] for k in ['leads', 'overRoute', 'crossings']}, [(round(p['x']), round(p['y']), p['mini']) for p in pc['pins']])
+        assert pc['overRoute'] == 0 and pc['crossings'] == 0 and all(p['shown'] for p in pc['pins']), pc
+        # tapping a price bubble on the route opens that stop's tile in the fuel-stop list
         bub = pg.locator('.leaflet-tooltip.stopbub').first; bt = bub.inner_text()
         bub.click(); pg.wait_for_timeout(500)
         k = int(bt.strip().split()[0]) - 1

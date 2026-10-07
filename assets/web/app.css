@@ -41,7 +41,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .leaflet-container { background: var(--bg); font: inherit; }
 .leaflet-control-attribution { font-size: 10px; background: color-mix(in srgb, var(--surface) 75%, transparent) !important; color: var(--ink-2); }
 .leaflet-control-attribution a { color: var(--ink-2); }
-.leaflet-bottom.leaflet-right { bottom: calc(var(--sb) + 92px); }
+#map .leaflet-bottom.leaflet-right { bottom: calc(var(--sb) + 92px); }
 
 /* ---------- top bar ---------- */
 .top { position: fixed; z-index: 800; left: 0; right: 0; top: 0; padding: calc(var(--st) + 8px) 12px 0; pointer-events: none; }
@@ -919,3 +919,11 @@ details.g-obs[open] { padding-bottom: 12px; }
 .rt-ready .rt-saved { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .alts > div { position: relative; padding-left: 22px; }
 .alts > div > .lg { position: absolute; left: 0; top: 1px; margin: 0; }
+.lg > i, .badge > i { display: none; font-style: normal; }
+.lg.bad > img, .badge.bad > img { display: none; }
+.lg.bad > i, .badge.bad > i { display: inline; }
+.lg.img.bad { background: var(--bc); box-shadow: none; }
+.badge.logo.bad { background: var(--bc) !important; }
+.list.open .rows { max-height: var(--rows-h, 52vh); }
+.list.dragging .rows { transition: none; }
+#listGrab { touch-action: none; cursor: grab; }
