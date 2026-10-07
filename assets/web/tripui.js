@@ -687,7 +687,8 @@
       return x;
     });
     if (r.mode && r.mode !== 'drive') h += '<div class="msg err">This link is for ' + esc(r.mode) + ' directions; fuel stops will use driving directions.</div>';
-    var withPts = !multiLeg(r) && r.mapsRoutes && r.mapsRoutes.length > 1 && r.mapsRoutes.every(function (m) { return m.pts && m.pts.length > 1; });
+    // route options are picked after Get routes (one picker, with Google's own routes) — none before it
+    var withPts = false;
     if (withPts && !model) {
       var selK = r.routeIndex != null ? Math.min(r.routeIndex, r.mapsRoutes.length - 1) : 0;
       h += '<div class="maps-opts"><div class="sub-h">Pick a route</div><div class="rmap" id="tOptMap"></div>' +
@@ -1715,7 +1716,7 @@
     }) : [];
     Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', loadingHtml: limBar(model, 'Looking up speed limits'), state: st, guard: speedGuard(),
       onEditRule: function () { collectSafe(); step = ST_PARAMS; renderStep(); setTimeout(function () { var f = $('tRule') && $('tRule').closest('.field'); if (f) { f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.classList.add('pulse'); setTimeout(function () { f.classList.remove('pulse'); }, 1900); } }, 60); },
-      onToggle: function () { sheetSize(); roadSelSoon(); } });
+      onToggle: function (open) { sheetSize(); if (open) tpBody().scrollTop = 0; roadSelSoon(); } });
     if (!el._selObs) { el._selObs = new MutationObserver(roadSelSoon); el._selObs.observe(el, { childList: true }); }
     roadSelSoon();
     // first time the speeds are known (speed limits just arrived, or your rule): plan the stops at those speeds
@@ -1990,16 +1991,8 @@
     if (!cur.ok) {
       var okRows = sw.filter(function (x) { return x.ok; });
       h += '<div class="lead small keep">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : 'No buffer works — check the miles left.') + '</div>';
-    } else {
-      var best = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d || b2.mi - a2.mi; })[0];
-      if (best) {
-        var hs = best.row.plan.stops.filter(function (s2) { return !base.plan.stops.some(function (c) { return c.c.id === s2.c.id; }); })[0];
-        h += '<div class="lead small keep">Cheapest: ' + best.mi + ' mi saves ' + money(-best.d) + ' vs. your usual ' + base.mi + ' mi' +
-          (hs ? ' — it reaches ' + esc(hs.c.station.name) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ')' : '') + '.</div>';
-      } else h += '<div class="lead small keep">No buffer makes this trip cheaper than your usual ' + base.mi + ' mi.</div>';
-      h += '<div class="lead small">Gray: your usual buffer. Green: buffers where the trip costs less than with it, and by how much. Yellow: where it costs more. Tap a marker to jump there.</div>';
     }
-    if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small keep">For this trip only — your usual buffer is ' + S.trip.bufferMi + ' mi. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer</a></div>';
+    if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small keep usual-l">Your buffer is different than usual. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer.</a></div>';
     return h + '</div>';
   }
   function bufText(x, base) {
@@ -2110,14 +2103,7 @@
     }).join('');
     h += '</div><input type="range" id="tsDet" min="0" max="' + (n - 1) + '" step="1" value="' + idx(cur.mi) + '" aria-label="Max. detour per stop"></div>';
     h += '<div class="buf-scale"><span>' + minTxt(sw[0].mi) + '</span><span>' + minTxt(sw[n - 1].mi) + '</span></div>';
-    var best = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d || a2.mi - b2.mi; })[0];
-    if (best && base.ok) {
-      var hs = best.row.plan.stops.filter(function (s2) { return !base.plan.stops.some(function (c) { return c.c.id === s2.c.id; }); })[0];
-      h += '<div class="lead small keep">Cheapest: ' + minTxt(best.mi) + ' saves ' + money(-best.d) + ' vs. your usual ' + minTxt(base.mi) +
-        (hs ? ' — it picks up ' + esc(P.displayName(hs.c.station)) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ', ' + Math.round(hs.c.detourMin) + ' min out of the way)' : '') + '.</div>';
-    } else h += '<div class="lead small keep">No other limit makes this trip cheaper than your usual ' + minTxt(base.mi) + '.</div>';
-    h += '<div class="lead small">The most extra driving time a stop may add. Green: limits where the trip costs less than with your usual one, and by how much (your time value counted, if you set one). Yellow: where it costs more. Tap a marker to jump there.</div>';
-    if (Math.abs(cur.mi - S.trip.maxDetourMin) > 0.01) h += '<div class="lead small keep">For this trip only — your usual limit is ' + minTxt(S.trip.maxDetourMin) + '. <a href="#" id="tsDetKeep">Make ' + minTxt(cur.mi) + ' my usual</a></div>';
+    if (Math.abs(cur.mi - S.trip.maxDetourMin) > 0.01) h += '<div class="lead small keep usual-l">Your max detour is different than usual. <a href="#" id="tsDetKeep">Make ' + minTxt(cur.mi) + ' my usual max detour.</a></div>';
     return h + '</div>';
   }
   function bindDet() {
@@ -2708,10 +2694,21 @@
       if (result.top) chosen[result.top.c.id] = 'T';
       // the chosen stops: a dot on the station and a price bubble beside it that moves out of the way of the roads
       stopTips = [];
+      // one bubble per station: a station you stop at twice (going and coming back) shows both numbers, "3, 6"
+      var groups = [], byStation = {};
       result.cands.forEach(function (c) {
         if (!chosen[c.id]) return;
+        var key = c.station.id, g = byStation[key];
+        if (!g) { g = byStation[key] = { c: c, nums: [], prices: [] }; groups.push(g); }
+        g.nums.push(chosen[c.id]); g.prices.push(c.price);
+      });
+      groups.forEach(function (g) {
+        var c = g.c;
+        g.nums.sort(function (a, b) { return (a === 'T' ? 99 : a) - (b === 'T' ? 99 : b); });
+        var label = g.nums.join(', '), lo = Math.min.apply(null, g.prices), hi = Math.max.apply(null, g.prices);
         L.circleMarker([c.lat, c.lng], { pane: 'tdots', renderer: cv, radius: 5, color: '#ffffff', weight: 2, fillColor: '#18a957', fillOpacity: 1, interactive: false }).addTo(layer);
-        var full = '<span class="b">' + chosen[c.id] + '</span>' + A.logoHtml(c.station.brand) + '<span class="pv">' + priceHtml(c.price) + '</span>', small = '<span class="b">' + chosen[c.id] + '</span>';
+        var pv = priceHtml(lo) + (hi - lo > 0.0005 ? '–' + priceHtml(hi) : '');
+        var full = '<span class="b">' + label + '</span>' + A.logoHtml(c.station.brand) + '<span class="pv">' + pv + '</span>', small = '<span class="b">' + label + '</span>';
         var tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'stopbub', interactive: true, opacity: 1, pane: 'tooltipPane' })
           .setLatLng([c.lat, c.lng]).setContent(full);
         layer.addLayer(tip);
@@ -2719,7 +2716,7 @@
           var te = tip.getElement(); if (!te) return;
           L.DomEvent.disableClickPropagation(te);
           te.addEventListener('click', function () { N.haptic && N.haptic(); openStopTile(which); });
-        })(chosen[c.id]);
+        })(g.nums[0]);
         (function (tip, full, small) {
           var cur = false;
           stopTips.push({ k: stopTips.length, cands: [L.latLng(c.lat, c.lng)], tip: tip, color: '#18a957',
@@ -2774,7 +2771,8 @@
   function sheetSize() {
     var el = $('trip'), sp = $('tsSpeed'), body = tpBody(); if (!el || el.classList.contains('hidden') || !body) return;
     var tall = false;
-    if (sp && sp.classList.contains('exp')) { var a = body.getBoundingClientRect(), b = sp.getBoundingClientRect(); tall = b.top < a.bottom - 40 && b.bottom > a.top + 40; }
+    // the per-road sliders are a submenu: open = in it (everything else on Adjustments steps aside)
+    if (sp && sp.classList.contains('exp') && step === ST_ADJ) tall = true;
     else sizedInMode = false;
     inMode = tall; if (sizedInMode) tall = false;   // you dragged the panel while adjusting: your height wins until you leave
     backMode();
@@ -2800,8 +2798,8 @@
     if (!on && !inMode) modeSnap = null;
     if (pg) pg.classList.toggle('submode', on);
     var b = $('tBack'), n = $('tNext');
-    if (b && b._sub !== on) { b._sub = on; b.textContent = on ? 'Discard' : 'Back'; b.classList.toggle('discard', on); }
-    if (n && !n.classList.contains('busy') && n._sub !== on) { n._sub = on; n.textContent = on ? 'Save and continue' : 'Next'; }
+    if (b && b._sub !== on) { b._sub = on; b.textContent = on ? 'Discard adjustments' : 'Back'; b.classList.toggle('discard', on); }
+    if (n && !n.classList.contains('busy') && n._sub !== on) { n._sub = on; n.textContent = on ? 'Save adjustments' : 'Next'; }
   }
   /** Save and continue: keep the speeds and close the per-road sliders. */
   function leaveSpeedMode() {

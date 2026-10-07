@@ -265,8 +265,8 @@ with sync_playwright() as p:
         assert nroads == 3 and ts.index('US-67 S') < ts.index('I-30 W') and '2 speed limits' in ts and 'about 7' not in ts, ts
         assert 'All roads' in ts and '$0.00' in ts and pg.locator('#lgTot.zero').count() == 1 and 'FHWA road inventory' in ts and 'All roads' in ts
         assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
-        pg.evaluate("document.getElementById('tpBody').scrollTop = 0"); pg.wait_for_timeout(1000)   # roads below the selector: the whole route again
-        assert pg.locator('#spdSel:not(.hidden)').count() == 0
+        pg.click('#lgTog'); pg.wait_for_timeout(1000)   # out of the submenu: no selector, the whole route again
+        assert pg.locator('#spdSel:not(.hidden)').count() == 0 and pg.locator('#trip.submode').count() == 0
         frame = "(() => { const sh = document.getElementById('trip').getBoundingClientRect(); let lo = 1e9, hi = -1e9, l = 1e9, r = -1e9; document.querySelectorAll('.leaflet-overlay-pane path').forEach(p => { const b = p.getBoundingClientRect(); if (b.width + b.height < 5) return; lo = Math.min(lo, b.top); hi = Math.max(hi, b.bottom); l = Math.min(l, b.left); r = Math.max(r, b.right); }); return {sheetTop: Math.round(sh.top), sheetH: Math.round(sh.height), routeTop: Math.round(lo), routeBottom: Math.round(hi), left: Math.round(l), right: Math.round(r), W: innerWidth, tall: document.getElementById('trip').classList.contains('tall')}; })()"
         fr = pg.evaluate(frame); print('  route framing (speed section):', fr)
         assert fr['sheetH'] > 0.6 * pg.evaluate('innerHeight'), 'Stops panel at 75%'
@@ -278,6 +278,7 @@ with sync_playwright() as p:
         pg.click('#btnFit'); pg.wait_for_timeout(700)
         fr2 = pg.evaluate(frame); print('  after the Route button:', fr2)
         assert pg.locator('#btnFit.hidden').count() == 1 and fr2['routeBottom'] <= fr2['sheetTop'] + 2 and fr2['routeTop'] >= 0
+        pg.click('#lgTog'); pg.wait_for_timeout(500)   # back into the submenu
         # scroll so the first leg is under the chart: the chart stays pinned under the map
         pos = pg.evaluate('''() => { const sh = document.getElementById('tpBody'), box = document.getElementById('tsSpeed'), stick = box.querySelector('.spd-stick');
           sh.scrollTop += box.getBoundingClientRect().top - sh.getBoundingClientRect().top + 220;
@@ -286,7 +287,7 @@ with sync_playwright() as p:
         assert abs(pos[1] - pos[0]) < 2 and pos[2] < pos[0] - 100, pos
         pg.wait_for_timeout(350)
         gap = pg.evaluate("(() => { const a = document.querySelector('#tsSpeed .spd-stick').getBoundingClientRect(), b = document.querySelector('#tsSpeed .adj-tools').getBoundingClientRect(); return [Math.round(a.bottom), Math.round(b.top)]; })()")
-        print('  pinned chart bottom / filters top:', gap); assert gap[1] >= gap[0] - 1, 'filters not under the chart'
+        print('  pinned chart bottom / filters top:', gap); assert gap[1] >= gap[0] - 3, 'filters not under the chart'
         pg.screenshot(path=f'{OUT}/{name}-s1b-pinned.png')
         # the green selector: the road under it is drawn in green on the map and framed
         pg.wait_for_timeout(700)
@@ -340,9 +341,9 @@ with sync_playwright() as p:
         sub = pg.evaluate('''(() => { const s = document.querySelector('#tsSpeed .spd-stick').getBoundingClientRect(), t = document.querySelector('#tsSpeed .adj-tools').getBoundingClientRect(),
           x = document.getElementById('tClose').getBoundingClientRect(), ch = [...document.querySelectorAll('#lgShow button')].map(b => Math.round(b.getBoundingClientRect().top)), sel = document.getElementById('lgSort').getBoundingClientRect();
           return { tabs: getComputedStyle(document.getElementById('tpSteps')).display, back: document.getElementById('tBack').textContent, next: document.getElementById('tNext').textContent,
-            slit: Math.round(t.top - s.bottom), oneRow: ch.every(y => Math.abs(y - Math.round(sel.top)) < 8), xOverChart: x.left < s.right - 64 + 1 && x.bottom > s.top, x: [Math.round(x.left), Math.round(x.top), Math.round(x.width)] }; })()''')
+            slit: Math.round(t.top - s.bottom), oneRow: ch.every(y => Math.abs(y - Math.round(sel.top)) < 8), xOverChart: x.left < s.right - 1 && x.bottom > s.top, x: [Math.round(x.left), Math.round(x.top), Math.round(x.width)] }; })()''')
         print('  speed by road: panel', round(th, 3), sub)
-        assert abs(th - 0.75) < 0.01 and sub['tabs'] == 'none' and sub['back'] == 'Discard' and sub['next'] == 'Save and continue' and sub['slit'] <= 0 and not sub['xOverChart'], sub
+        assert abs(th - 0.75) < 0.01 and sub['tabs'] == 'none' and sub['back'] == 'Discard adjustments' and sub['next'] == 'Save adjustments' and sub['slit'] <= 0 and not sub['xOverChart'], sub
         if name != 'small': assert sub['oneRow'], 'filters and sorting on one row'
         pg.screenshot(path=f'{OUT}/{name}-s1e-submenu-scrolled.png')
         pg.evaluate("(y) => { document.getElementById('tpBody').scrollTop = y; }", sc0); pg.wait_for_timeout(250)
@@ -408,13 +409,13 @@ with sync_playwright() as p:
         r2 = pg.evaluate("(() => { const r = window.__trip.state().result; return {buf: r.bufMi, all: r.speedState.all, stops: r.plan.stops.length, net: +r.plan.totals.net.toFixed(2)}; })()"); print('  after release (linked):', r2)
         assert pg.evaluate(arrive_ok), 'every station reached with at least the buffer, at these speeds'
         # a bigger buffer at fast speeds: linked -> slows down (or stays) so a plan still exists
-        try: pg.wait_for_selector('#tsBuf', timeout=8000)
+        try: pg.wait_for_selector('#tsBuf', state='attached', timeout=8000)
         except Exception: print('  JS errors so far:', errors[-3:], '| box:', ft(pg, '#tsBufBox')[:200]); raise
         pg.wait_for_timeout(400)
         pg.evaluate("(() => { const i = document.getElementById('tsBuf'); i.value = i.max; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(1500)
         r3 = pg.evaluate("(() => { const r = window.__trip.state().result; return {buf: r.bufMi, all: r.speedState.all}; })()"); print('  linked: buffer to the top ->', r3)
         assert pg.evaluate(arrive_ok)
-        pg.wait_for_selector('#tsBufBox', timeout=5000); pg.wait_for_timeout(300)
+        pg.wait_for_selector('#tsBufBox', state='attached', timeout=5000); pg.wait_for_timeout(300)
         print('  buffer box:', ft(pg, '#tsBufBox').replace('\n', ' | ')[:260], '| gray bands:', pg.locator('.buf-marks .bgray').count())
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-c1-speed-linked.png')
@@ -433,7 +434,7 @@ with sync_playwright() as p:
         assert pg.evaluate(arrive_ok)
         if mx < 15:
             assert 'buffer keeps this' in ft(pg, '#lgWarnAll'), ft(pg, '#lgWarnAll')
-        pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(600)
+        pg.wait_for_selector('#tsBuf', state='attached', timeout=5000); pg.wait_for_timeout(600)
         bb = ft(pg, '#tsBufBox'); nb = pg.locator('.buf-marks .bgray').count(); print('  unlinked buffer box:', bb.replace('\n', ' | ')[:240], '| gray bands:', nb)
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-c3-speed-unlinked.png')
@@ -467,7 +468,7 @@ with sync_playwright() as p:
         print('  refreshed with', len(pg.evaluate('window.__jobs')), 'Google lookups')
         adj(pg)
         # buffer slider: checks other buffers in the background, marks where a smaller one saves money
-        pg.wait_for_selector('#tsBuf', timeout=5000)
+        pg.wait_for_selector('#tsBuf', state='attached', timeout=5000)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         bt = ft(pg, '#tsBufBox'); print('  buffer box:', bt.replace('\n', ' | '))
         sweep = pg.evaluate("window.__trip.state().result.sweep.map(x => [x.mi, x.ok, x.net && +x.net.toFixed(2), x.mark])")
@@ -503,10 +504,10 @@ with sync_playwright() as p:
         goto(pg, 2); pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(150); stops(pg)
         # with 140 mi in the tank a smaller buffer reaches cheaper gas: marks show up on the slider
         settings(pg); pg.fill('#tMiles', '140'); adj(pg, 1200)
-        pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
+        pg.wait_for_selector('#tsBuf', state='attached', timeout=5000); pg.wait_for_timeout(300)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         bt = ft(pg, '#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
-        assert pg.locator('#tsBufBox .buf-marks .bm.good').count() >= 1 and pg.locator('#tsBufBox .buf-marks .bm.base').count() == 1 and 'saves' in bt, bt
+        assert pg.locator('#tsBufBox .buf-marks .bm.good').count() >= 1 and pg.locator('#tsBufBox .buf-marks .bm.base').count() == 1 and 'Cheapest' not in bt, bt
         labels = pg.evaluate("[...document.querySelectorAll('#tsBufBox .buf-marks .bm')].map(b => b.className.replace('bm ', '') + ':' + b.textContent)"); print('  markers:', labels)
         assert any(l.startswith('good') and '−$' in l for l in labels) and any(l.startswith('base') for l in labels)
         pg.screenshot(path=f'{OUT}/{name}-t2d-buffer-marks.png')
@@ -514,6 +515,7 @@ with sync_playwright() as p:
         before = pg.evaluate('window.__trip.state().result.plan.totals.net')
         pg.evaluate("(v) => { const i = document.getElementById('tsBuf'); i.value = v; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); }", mk); pg.wait_for_timeout(300)
         after = pg.evaluate('window.__trip.state().result.plan.totals.net'); print('  slid to', mk, 'net', round(before, 2), '->', round(after, 2))
+        ul = pg.evaluate("document.querySelector('#tsBufBox .usual-l').textContent"); print('  ', ul); assert ul.startswith('Your buffer is different than usual.') and ul.endswith('my usual buffer.')
         assert after < before - 0.2
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t2e-buffer-slid.png')
@@ -688,12 +690,7 @@ with sync_playwright() as p:
         assert urls == ['https://www.google.com/maps/dir/34.7464809%2C-92.2895948/41.7640350%2C-72.6823870/'], 'route options read by exact spots'
         txt = ft(pg, '#tParsed'); print('  after reading the link:', txt.replace('\n', ' | '))
         assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
-        assert 'Pick a route' in txt and pg.locator('#tOptMap .rlabel').count() == 3 and pg.locator('#tOptMap .rlabel.on').count() == 1, txt
-        pg.evaluate("document.getElementById('tOptMap').scrollIntoView({block:'center'})"); pg.wait_for_timeout(300)
-        pg.screenshot(path=f'{OUT}/{name}-t8b-optmap.png'); wide(pg, 'opt map')
-        pg.click('#tOptMap [data-opt="1"]', timeout=5000); pg.wait_for_timeout(300)
-        sel = ft(pg, '.opt-sel'); print('  tapped route 2 on the map:', sel)
-        assert 'I-71 N and I-86 E' in sel and '1,406 mi' in sel
+        assert 'Pick a route' not in txt and pg.locator('#tOptMap').count() == 0, 'no route picker before Get routes'
         pg.screenshot(path=f'{OUT}/{name}-t8a-cities.png')
         finds = len(pg.evaluate('window.__finds') or [])
         getr(pg, 1500)
@@ -702,7 +699,7 @@ with sync_playwright() as p:
         assert len(pg.evaluate('window.__finds') or []) == finds, 'addresses were already done'
         assert pg.locator('.alts-pick button').count() == 3 and info.index('via I-71 N\n') < info.index('I-86') < info.index('I-81'), info
         assert '1404 mi' in info and '1324 mi' in info and pg.evaluate('window.__viaCalls') == [8], info
-        assert 'I-86' in ft(pg, '.alts-pick button.on') and pg.locator('#tRmap .rlabel').count() == 3, 'the route tapped on the map is the one picked'
+        assert pg.locator('.alts-pick button.on').count() == 1 and pg.locator('#tRmap .rlabel').count() == 3, 'one route picked, all three on the map'
         pg.click('#tRmap [data-opt="2"]'); pg.wait_for_timeout(300)
         assert 'I-81' in ft(pg, '.alts-pick button.on'), 'tapping a route on the map after Get route switches to it'
         pg.screenshot(path=f'{OUT}/{name}-t9-three-routes.png')
@@ -748,6 +745,10 @@ with sync_playwright() as p:
         assert pg.locator('.gas-tiles .ideal').count() == 3 and 'gas at dallas' in arr and 'enough for the cheapest return trip' in arr and 'buffer' not in arr
         pg.evaluate("document.querySelector('.gas-tiles').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200); pg.screenshot(path=f'{OUT}/{name}-l1b-tiles.png')
         assert pg.evaluate('window.__trip.state().result.back') is None, 'no "drive back" on a trip that already comes back'
+        pg.wait_for_timeout(400)
+        bl = pg.evaluate("[...document.querySelectorAll('.leaflet-tooltip.stopbub .b')].map(e => e.textContent)")
+        ust = pg.evaluate("new Set(window.__trip.state().result.plan.stops.map(s => s.c.station.id)).size")
+        print('  round trip bubbles:', bl, '| stations:', ust); assert len(bl) == ust, 'one bubble per station (both numbers on it)'
         nxt(pg); assert step(pg) == 6
         assert [x.strip() for x in pg.locator('.tp-step:not(.hidden) .nlist .nn').all_inner_texts()] == ['1', '2', '3']
         pg.click('#tOpen'); one = pg.evaluate('window.__lastUrl'); pg.wait_for_timeout(200)

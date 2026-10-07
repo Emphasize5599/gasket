@@ -483,8 +483,12 @@
       '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div></div>';
     // the per-road sliders: collapsed until you open them; the chart, total and filters stay pinned only while open
     var nRoads = 0; (function () { var last = -1; roads.forEach(function (r) { if (r.ri !== last) { nRoads++; last = r.ri; } }); })();
-    h += '<div class="road-tog"><button type="button" class="sec-h" id="lgTog" aria-expanded="' + !!V.open + '"><span>Speed by road <small>' + nRoads + ' road' + (nRoads === 1 ? '' : 's') + '</small></span><span class="chev' + (V.open ? ' up' : '') + '"></span></button>' +
-      '<button type="button" class="qi" aria-label="How these sliders work" data-q="' + encodeURIComponent(helpHtml) + '">?</button></div>';
+    // the way into the per-road sliders (a submenu): the name, its (?), how many roads, and an arrow on the right
+    var GO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg>';
+    h += '<div class="road-tog ent' + (V.open ? ' open' : '') + '"><button type="button" class="sec-h" id="lgTog" aria-expanded="' + !!V.open + '"><span>Adjust speed by road</span></button>' +
+      '<button type="button" class="qi" aria-label="How these sliders work" data-q="' + encodeURIComponent(helpHtml) + '">?</button>' +
+      '<span class="ent-n">' + nRoads + ' road' + (nRoads === 1 ? '' : 's') + '</span>' +
+      '<button type="button" class="ent-go" id="lgGo" aria-label="' + (V.open ? 'Leave speed by road' : 'Adjust speed by road') + '">' + GO + '</button></div>';
     if (V.open) {
       // which roads to show, and in what order
       h += '<div class="adj-tools"><div class="chips mini" id="lgShow">' + ['interstate', 'us', 'state', 'county'].map(function (k) {
@@ -590,6 +594,7 @@
     }
     if ($('lgRuleEdit')) $('lgRuleEdit').onclick = function (e) { e.preventDefault(); if (ctx.onEditRule) ctx.onEditRule(); };
     $('lgTog').onclick = function () { V.open = !V.open; save(); tripSpeed(el, ctx); if (ctx.onToggle) ctx.onToggle(V.open); };
+    $('lgGo').onclick = function () { $('lgTog').click(); };
     el.classList.toggle('exp', !!V.open);
     // the pinned filters sit right under the pinned chart: measure it once it's laid out (and again as the sheet changes)
     var stick = el.querySelector('.spd-stick');

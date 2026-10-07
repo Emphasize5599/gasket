@@ -1041,7 +1041,7 @@
         var qb = prev.querySelector('.qi'); qb.dataset.q = encodeURIComponent(decodeURIComponent(qb.dataset.q) + '<p>' + html + '</p>'); el.remove(); return;
       }
       html = '<p>' + html + '</p>';
-      var okPrev = prev && !prev.matches('.kpis, .epa-tiles, .grid2, .grid3, .btn-row, .alts-pick, .rmap, .leaflet-container, input, select, textarea, .spd-chart, svg, .buf-track, .buf-scale, .actions, .chips, .stop, .scard, details, .leg, .road-g, .parse-load') && !prev.querySelector('input[type=range]');
+      var okPrev = prev && !prev.matches('.kpis, .epa-tiles, .grid2, .grid3, .btn-row, .alts-pick, .rmap, .leaflet-container, input, select, textarea, .spd-chart, svg, .buf-track, .buf-scale, .actions, .chips, .stop, .scard, details, .leg, .road-g, .road-tog, .parse-load') && !prev.querySelector('input[type=range]');
       if (prev && prev.matches('.lead.keep') && !prev.querySelector('.qi') && !prev.querySelector('input, button')) { prev.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); prev.classList.add('has-q'); el.remove(); return; }
       if (okPrev && prev.children.length < 12 && !prev.classList.contains('keep') && !prev.matches('.lead, .msg, .note')) { prev.insertAdjacentHTML('beforeend', ' ' + qBtn(html)); prev.classList.add('has-q'); el.remove(); return; }
       // otherwise: the (?) on the section's heading, so there's no extra "Details" row

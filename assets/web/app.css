@@ -939,7 +939,6 @@ details.g-obs[open] { padding-bottom: 12px; }
 /* ---------- speed by road as a submenu ---------- */
 .page.tpanel.submode .tp-steps { display: none; }
 .page.tpanel.submode .tp-head { position: absolute; top: 28px; right: 0; z-index: 6; padding-bottom: 0; }
-.page.tpanel.submode #tsSpeed .spd-stick { padding-right: 64px; }
 .page.tpanel.submode #tsSpeed .spd-stick .tb-h { min-height: 34px; display: flex; align-items: center; }
 .tp-nav .btn.discard { color: var(--warn); }
 /* the filters sit flush under the pinned chart: no slit where the list could show through */
@@ -957,3 +956,21 @@ details.g-obs[open] { padding-bottom: 12px; }
   background: color-mix(in srgb, var(--save) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--save) 40%, transparent); font-size: 13.5px; line-height: 1.4; color: var(--ink); }
 .tipbox svg { flex: none; width: 22px; height: 22px; fill: var(--save); margin-top: 1px; }
 .tipbox b { font-weight: 700; }
+/* "Adjust speed by road": an entry into a submenu */
+.road-tog.ent { gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
+.road-tog.ent .sec-h { flex: none; width: auto; padding: 10px 2px; }
+.road-tog.ent .qi { margin-left: 2px; }
+.road-tog.ent .ent-n { margin-left: auto; color: var(--ink-2); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.road-tog.ent .ent-go { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); }
+.road-tog.ent .ent-go svg { width: 22px; height: 22px; fill: currentColor; transition: transform .15s; }
+.road-tog.ent.open .ent-go svg { transform: rotate(90deg); }
+/* in the submenu only the speed tile: everything else on Adjustments steps aside */
+.page.tpanel.submode #taResults > :not(#tsSpeed) { display: none !important; }
+.page.tpanel.submode #tsSpeed .spd-stick { padding-right: 16px; margin-right: 44px; border-top-right-radius: 18px; }
+.page.tpanel.submode #tsSpeed .spd-stick::after { content: ''; position: absolute; top: -2px; bottom: 0; left: 100%; width: 90px; background: var(--bg); }
+.road-tog.ent .sec-h { flex: 0 1 auto; min-width: 0; text-align: left; white-space: normal; }
+.road-tog.ent .ent-n { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.road-tog.ent .qi { flex: none; }
+.page.tpanel.submode .tp-nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.page.tpanel.submode .tp-nav .btn { font-size: 15px; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+@media (max-width: 380px) { .page.tpanel.submode .tp-nav .btn { white-space: normal; font-size: 14px; line-height: 1.15; } }
