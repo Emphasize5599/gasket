@@ -79,9 +79,10 @@
   function place(m, tips, o) {
     o = o || {};
     var size = m.getSize(), obst = (o.obst || []).slice();
-    var grid = lineGrid(m, o.lines, size), dists = o.dists || [16, 34, 60, 95], nA = o.angles || 16, ANG = [];
+    var grid = lineGrid(m, o.lines, size), dists = o.dists || [10, 22, 36, 54, 76, 100, 130], nA = o.angles || 24, ANG = [];
     for (var a = 0; a < nA; a++) { var th = -Math.PI / 2 + a * 2 * Math.PI / nA; ANG.push([Math.cos(th), Math.sin(th)]); }
     if (o.leaders) o.leaders.clearLayers();
+    var SEP = o.sep != null ? o.sep : 18;   // bubbles keep this much room from each other when they can
     // each bubble's size, full and short (measured once)
     var items = [];
     tips.forEach(function (t, i) {
@@ -91,70 +92,112 @@
       if (t.compact) { t.compact(true); it.mw = el.offsetWidth; it.mh = el.offsetHeight; t.compact(false); }
       items.push(it);
     });
-    // one pass: bubbles in this order, each takes its best free spot
-    var run = function (order) {
-      var placed = obst.slice(), lead = [], out = [];
-      var free = function (r, pt, end, owner, soft) {
-        if (r.x < 2 || r.y < 2 || r.x + r.w > size.x - 2 || r.y + r.h > size.y - 2) return -1;
-        for (var q = 0; q < placed.length; q++) if (hits(r, placed[q])) return -1;
-        for (var k = 0; k < lead.length; k++) if (lead[k].owner !== owner && segRect(lead[k].a, lead[k].b, r, 2)) return -1;
-        if (end) {
-          for (k = 0; k < lead.length; k++) if (lead[k].owner !== owner && segX(pt, end, lead[k].a, lead[k].b)) return -1;
-          for (q = 0; q < placed.length; q++) if (segRect(pt, end, placed[q], 1)) return -1;
-        }
-        var cv = grid.cover(r, 3, soft ? 1e9 : 1);
-        return !soft && cv ? -1 : cv;
-      };
-      var search = function (t, w, h, soft) {
-        var best = null;
-        t.cands.slice(0, o.maxCands || 30).forEach(function (c, ci) {
-          var pt = m.latLngToContainerPoint(c);
-          if (pt.x < -40 || pt.y < -40 || pt.x > size.x + 40 || pt.y > size.y + 40) return;
-          var take = function (score, b) { if (!best || score < best.score) { b.score = score; best = b; } };
-          DIRS.forEach(function (d) {   // right beside it, with a tail (Leaflet adds 6 px on the tail side)
-            var tg = GAP + TAIL;
-            var r = d[0] === 'top' ? { x: pt.x - w / 2, y: pt.y - tg - h } : d[0] === 'bottom' ? { x: pt.x - w / 2, y: pt.y + tg } :
-              d[0] === 'right' ? { x: pt.x + tg, y: pt.y - h / 2 } : { x: pt.x - tg - w, y: pt.y - h / 2 };
-            r.w = w; r.h = h;
-            var cv = free(r, null, null, t, soft); if (cv < 0) return;
-            take(cv * 10 + ci * 0.6 + (d[2] ? 0 : 0.3), { c: c, pt: pt, r: r, dir: d[0], off: [d[1] * GAP, d[2] * GAP] });
-          });
-          if (best && !best.end && best.score < 1 && ci === 0) return;   // can't beat a clean tail spot
-          dists.forEach(function (dist) {   // farther out, at any angle, joined by a line
-            ANG.forEach(function (u, ai) {
-              var rr = reach(w, h, u[0], u[1]), cx = pt.x + u[0] * (dist + rr), cy = pt.y + u[1] * (dist + rr);
-              var r = { x: cx - w / 2, y: cy - h / 2, w: w, h: h }, end = { x: pt.x + u[0] * (dist + 1), y: pt.y + u[1] * (dist + 1) };
-              var cv = free(r, pt, end, t, soft); if (cv < 0) return;
-              take(cv * 10 + ci * 0.6 + 2 + dist * 0.06 + (ai % 4 ? 0.15 : 0), { c: c, pt: pt, r: r, dir: 'center', off: [cx - pt.x, cy - pt.y], end: end });
-            });
+    /** What's already on the map, from a list of decisions (minus the ones skipped). */
+    var envOf = function (decs, skip) {
+      var placed = obst.slice(), lead = [];
+      decs.forEach(function (d) {
+        if (!d.b || (skip && skip.indexOf(d) >= 0)) return;
+        placed.push({ x: d.b.r.x, y: d.b.r.y, w: d.b.r.w, h: d.b.r.h, bub: true });
+        if (d.b.end) lead.push({ a: d.b.pt, b: d.b.end, owner: d.it.t });
+      });
+      return { placed: placed, lead: lead };
+    };
+    var free = function (env, r, pt, end, owner, soft) {
+      var placed = env.placed, lead = env.lead;
+      if (r.x < 2 || r.y < 2 || r.x + r.w > size.x - 2 || r.y + r.h > size.y - 2) return -1;
+      for (var q = 0; q < placed.length; q++) if (hits(r, placed[q])) return -1;
+      for (var k = 0; k < lead.length; k++) if (lead[k].owner !== owner && segRect(lead[k].a, lead[k].b, r, 2)) return -1;
+      if (end) {
+        for (k = 0; k < lead.length; k++) if (lead[k].owner !== owner && segX(pt, end, lead[k].a, lead[k].b)) return -1;
+        for (q = 0; q < placed.length; q++) if (segRect(pt, end, placed[q], 1)) return -1;
+      }
+      var cv = grid.cover(r, 3, soft ? 1e9 : 1);
+      return !soft && cv ? -1 : cv;
+    };
+    // closer than SEP to another bubble costs a little: they spread out when there's room
+    var crowd = function (env, r) {
+      var c = 0;
+      env.placed.forEach(function (q) {
+        if (!q.bub) return;
+        var gx = Math.max(q.x - (r.x + r.w), r.x - (q.x + q.w), 0), gy = Math.max(q.y - (r.y + r.h), r.y - (q.y + q.h), 0), g = Math.max(gx, gy);
+        if (g < SEP) c += (SEP - g) * 0.12;
+      });
+      return c;
+    };
+    var search = function (env, t, w, h, soft) {
+      var best = null;
+      t.cands.slice(0, o.maxCands || 30).forEach(function (c, ci) {
+        var pt = m.latLngToContainerPoint(c);
+        if (pt.x < -40 || pt.y < -40 || pt.x > size.x + 40 || pt.y > size.y + 40) return;
+        var take = function (score, b) { if (!best || score < best.score) { b.score = score; best = b; } };
+        DIRS.forEach(function (d) {   // right beside it, with a tail (Leaflet adds 6 px on the tail side)
+          var tg = GAP + TAIL;
+          var r = d[0] === 'top' ? { x: pt.x - w / 2, y: pt.y - tg - h } : d[0] === 'bottom' ? { x: pt.x - w / 2, y: pt.y + tg } :
+            d[0] === 'right' ? { x: pt.x + tg, y: pt.y - h / 2 } : { x: pt.x - tg - w, y: pt.y - h / 2 };
+          r.w = w; r.h = h;
+          var cv = free(env, r, null, null, t, soft); if (cv < 0) return;
+          take(cv * 10 + ci * 0.6 + (d[2] ? 0 : 0.3) + crowd(env, r), { c: c, pt: pt, r: r, dir: d[0], off: [d[1] * GAP, d[2] * GAP] });
+        });
+        if (best && !best.end && best.score < 0.5 && ci === 0) return;   // a clean, roomy tail spot can't be beaten
+        dists.forEach(function (dist) {   // farther out, at any angle, joined by a line
+          ANG.forEach(function (u) {
+            var rr = reach(w, h, u[0], u[1]), cx = pt.x + u[0] * (dist + rr), cy = pt.y + u[1] * (dist + rr);
+            var r = { x: cx - w / 2, y: cy - h / 2, w: w, h: h }, end = { x: pt.x + u[0] * (dist + 1), y: pt.y + u[1] * (dist + 1) };
+            var cv = free(env, r, pt, end, t, soft); if (cv < 0) return;
+            take(cv * 10 + ci * 0.6 + 1.2 + dist * 0.035 + crowd(env, r), { c: c, pt: pt, r: r, dir: 'center', off: [cx - pt.x, cy - pt.y], end: end });
           });
         });
-        return best;
-      };
-      var bad = 0, cost = 0;
-      order.forEach(function (it) {
-        var t = it.t, b = search(t, it.fw, it.fh, false), kind = 'full';
-        if (!b && t.compact) { b = search(t, it.mw, it.mh, false); kind = 'mini'; }      // only when nothing full-size fits anywhere
-        if (!b && o.routeFree !== false) { b = search(t, t.compact ? it.mw : it.fw, t.compact ? it.mh : it.fh, true); kind = t.compact ? 'mini' : 'full'; if (b) bad += 3; }   // last resort: over a route
-        if (!b) { out.push({ it: it, hide: true }); bad += 5; return; }
-        if (kind === 'mini') bad += 1;
-        cost += b.score;
-        placed.push(b.r);
-        if (b.end) lead.push({ a: b.pt, b: b.end, owner: t });
-        out.push({ it: it, b: b, kind: kind });
       });
-      return { out: out, q: bad * 1000 + cost };
+      return best;
+    };
+    var choose = function (env, it) {
+      var t = it.t, b = search(env, t, it.fw, it.fh, false);
+      if (b) return { it: it, b: b, kind: 'full' };
+      if (t.compact && (b = search(env, t, it.mw, it.mh, false))) return { it: it, b: b, kind: 'mini' };   // only when nothing full-size fits
+      if (o.routeFree !== false) {
+        if ((b = search(env, t, it.fw, it.fh, true))) return { it: it, b: b, kind: 'full', soft: true };          // last resort: over a route
+        if (t.compact && (b = search(env, t, it.mw, it.mh, true))) return { it: it, b: b, kind: 'mini', soft: true };
+      }
+      return { it: it, hide: true };
+    };
+    var quality = function (decs) {
+      var q = 0; decs.forEach(function (d) { q += d.hide ? 5000 : (d.soft ? 3000 : 0) + (d.kind === 'mini' ? 1000 : 0) + d.b.score; }); return q;
+    };
+    var run = function (order) {
+      var decs = [];
+      order.forEach(function (it) { decs.push(choose(envOf(decs), it)); });
+      return decs;
     };
     // a few passes: whoever had to shrink (or had no room) goes first next time; the best pass wins
     var order = items.slice(), best = null;
     for (var pass = 0; pass < (o.passes || 4); pass++) {
-      var res = run(order);
-      if (!best || res.q < best.q) best = res;
-      var stuck = res.out.filter(function (x) { return x.hide || x.kind === 'mini'; }).map(function (x) { return x.it; });
+      var decs = run(order), q = quality(decs);
+      if (!best || q < best.q) best = { decs: decs, q: q };
+      var stuck = decs.filter(function (d) { return d.hide || d.soft || d.kind === 'mini'; }).map(function (d) { return d.it; });
       if (!stuck.length) break;
       order = stuck.concat(order.filter(function (x) { return stuck.indexOf(x) < 0; }));
     }
-    (best ? best.out : []).forEach(function (x) {
+    // then make room: a bubble that had to shrink tries again at full size while one neighbor at a time moves aside
+    if (best && o.repair !== false) {
+      var D = best.decs;
+      D.forEach(function (d) {
+        if (!(d.hide || d.soft || d.kind === 'mini')) return;
+        var p0 = m.latLngToContainerPoint(d.it.t.cands[0]);
+        var near = D.filter(function (n) { return n !== d && n.b; }).sort(function (x, y) { return x.b.pt.distanceTo(p0) - y.b.pt.distanceTo(p0); }).slice(0, 6);
+        for (var k = 0; k < near.length; k++) {
+          var n = near[k];
+          var bd = search(envOf(D, [d, n]), d.it.t, d.it.fw, d.it.fh, false); if (!bd) continue;
+          var trial = { it: d.it, b: bd, kind: 'full' }, D2 = D.map(function (x) { return x === d ? trial : x; });
+          var env2 = envOf(D2, [n]);
+          var bn = search(env2, n.it.t, n.it.fw, n.it.fh, false), kn = 'full';
+          if (!bn && n.kind === 'mini') { bn = search(env2, n.it.t, n.it.mw, n.it.mh, false); kn = 'mini'; }
+          if (!bn) continue;
+          d.b = bd; d.kind = 'full'; d.soft = false; d.hide = false; n.b = bn; n.kind = kn;
+          break;
+        }
+      });
+    }
+    (best ? best.decs : []).forEach(function (x) {
       var t = x.it.t, el = x.it.el;
       if (x.hide && o.hide !== false) { el.style.visibility = 'hidden'; t.shown = false; return; }
       var b = x.b || { c: t.cands[0], dir: 'top', off: [0, -GAP] };

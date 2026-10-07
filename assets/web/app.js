@@ -457,7 +457,7 @@
     if (!bubLayer.hasLayer(leadLayer)) bubLayer.addLayer(leadLayer);
     var sheet = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');
     var obst = Labels.rectsOf(map, [document.querySelector('.top'), $('status'), $('btnArea'), $('wmCheck'), $('btnTrip'), $('btnLocate'), sheet, document.querySelector('.leaflet-control-attribution')], 6);
-    Labels.place(map, tips, { obst: obst, hide: true, routeFree: false, passes: 1, dists: [12, 28], angles: 8, leaders: leadLayer, leaderPane: 'tleaders' });
+    Labels.place(map, tips, { obst: obst, hide: true, routeFree: false, passes: 1, repair: false, sep: 6, dists: [12, 28], angles: 8, leaders: leadLayer, leaderPane: 'tleaders' });
   }
 
   // ---------- brand logos ----------

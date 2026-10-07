@@ -489,7 +489,7 @@
       // which roads to show, and in what order
       h += '<div class="adj-tools"><div class="chips mini" id="lgShow">' + ['interstate', 'us', 'state', 'county'].map(function (k) {
         return '<button data-cls="' + k + '" class="' + (V.hide[k] ? '' : 'on') + '">' + { interstate: 'Interstates', us: 'U.S.', state: 'State', county: 'County' }[k] + '</button>'; }).join('') + '</div>' +
-        '<div class="adj-sort"><select id="lgSort" aria-label="Sort roads"><option value="route"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' selected') + '>Route order</option><option value="type"' + (V.sort === 'type' ? ' selected' : '') + '>Road type</option><option value="limit"' + (V.sort === 'limit' ? ' selected' : '') + '>Speed limit</option></select>' +
+        '<div class="adj-sort"><select id="lgSort" aria-label="Sort roads"><option value="route"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' selected') + '>Route</option><option value="type"' + (V.sort === 'type' ? ' selected' : '') + '>Type</option><option value="limit"' + (V.sort === 'limit' ? ' selected' : '') + '>Limit</option></select>' +
         '<button type="button" id="lgDir" class="dir" aria-label="' + (V.dir === 'desc' ? 'Descending' : 'Ascending') + '"' + (V.sort === 'type' || V.sort === 'limit' ? '' : ' disabled') + '>' + (V.dir === 'desc' ? '↓' : '↑') + '</button></div></div>';
       // road groups (each major road with its speed-limit sections), filtered and sorted as you chose
       var RANK = { interstate: 0, us: 1, state: 2, county: 3 };
@@ -593,8 +593,9 @@
     el.classList.toggle('exp', !!V.open);
     // the pinned filters sit right under the pinned chart: measure it once it's laid out (and again as the sheet changes)
     var stick = el.querySelector('.spd-stick');
-    var measure = function () { if (stick && stick.isConnected) el.style.setProperty('--stick-h', Math.ceil(stick.getBoundingClientRect().height) + 'px'); };
+    var measure = function () { if (stick && stick.isConnected) el.style.setProperty('--stick-h', Math.floor(stick.getBoundingClientRect().height) + 'px'); };
     measure(); requestAnimationFrame(measure); setTimeout(measure, 300);
+    if (stick && window.ResizeObserver) new ResizeObserver(measure).observe(stick);   // e.g. narrower in the speed-by-road submenu
     if (!el._measure) { el._measure = true; window.addEventListener('resize', function () { var s0 = el.querySelector('.spd-stick'); if (s0) el.style.setProperty('--stick-h', Math.ceil(s0.getBoundingClientRect().height) + 'px'); }); }
     el.querySelectorAll('input[type=range]').forEach(guardRange);
     if ($('lgShow')) $('lgShow').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; V.hide[b.dataset.cls] = !V.hide[b.dataset.cls]; save(); tripSpeed(el, ctx); };

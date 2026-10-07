@@ -935,3 +935,19 @@ details.g-obs[open] { padding-bottom: 12px; }
 .tp-grab span { width: 52px; height: 5px; }
 #listGrab { height: 34px; }
 #listGrab span { width: 52px; height: 5px; }
+/* ---------- speed by road as a submenu ---------- */
+.page.tpanel.submode .tp-steps { display: none; }
+.page.tpanel.submode .tp-head { position: absolute; top: 28px; right: 0; z-index: 6; padding-bottom: 0; }
+.page.tpanel.submode #tsSpeed .spd-stick { padding-right: 64px; }
+.page.tpanel.submode #tsSpeed .spd-stick .tb-h { min-height: 34px; display: flex; align-items: center; }
+.tp-nav .btn.discard { color: var(--warn); }
+/* the filters sit flush under the pinned chart: no slit where the list could show through */
+.spdbox.exp .adj-tools { top: calc(var(--stick-h, 0px) - 1px); box-shadow: 0 -3px 0 var(--surface), 0 6px 8px -8px rgba(0,0,0,.4); }
+/* filters and sorting on one row */
+.spdbox.exp .adj-tools { flex-wrap: nowrap; gap: 6px; }
+.spdbox.exp .adj-tools .chips.mini { flex-wrap: nowrap; gap: 4px; flex: 0 1 auto; }
+.spdbox.exp .adj-tools .chips.mini button { padding: 5px 8px; font-size: 12px; white-space: nowrap; }
+.spdbox.exp .adj-sort { gap: 4px; flex: none; }
+.spdbox.exp .adj-sort select { font-size: 12px; padding: 5px 4px; }
+.spdbox.exp .adj-sort .dir { width: 28px; }
+@media (max-width: 379px) { .spdbox.exp .adj-tools, .spdbox.exp .adj-tools .chips.mini { flex-wrap: wrap; } }

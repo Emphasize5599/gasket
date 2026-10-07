@@ -327,15 +327,35 @@ with sync_playwright() as p:
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(300)
         assert pg.locator('#trip.tall').count() == 1
         th = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight")
-        print('  speed by road: panel', round(th, 3), '| back is an arrow:', pg.locator('#tBack.arrow').count())
-        assert abs(th - 0.75) < 0.01 and pg.locator('#tBack.arrow svg').count() == 1, 'adjusting speeds: 75% and an arrow'
-        pg.click('#tBack'); pg.wait_for_timeout(400)
-        assert step(pg) == 4 and pg.locator('#trip.tall').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0 and pg.locator('#tBack.arrow').count() == 0 and pg.inner_text('#tBack') == 'Back', 'arrow leaves speed by road'
+        sc0 = pg.evaluate("(() => { const b = document.getElementById('tpBody'), y = b.scrollTop; const sb = document.querySelector('#tsSpeed .spd-stick').getBoundingClientRect(), tb = document.querySelector('#tsSpeed .adj-tools').getBoundingClientRect(); b.scrollTop = y + Math.max(0, tb.top - sb.bottom) + 40; return y; })()"); pg.wait_for_timeout(250)
+        sub = pg.evaluate('''(() => { const s = document.querySelector('#tsSpeed .spd-stick').getBoundingClientRect(), t = document.querySelector('#tsSpeed .adj-tools').getBoundingClientRect(),
+          x = document.getElementById('tClose').getBoundingClientRect(), ch = [...document.querySelectorAll('#lgShow button')].map(b => Math.round(b.getBoundingClientRect().top)), sel = document.getElementById('lgSort').getBoundingClientRect();
+          return { tabs: getComputedStyle(document.getElementById('tpSteps')).display, back: document.getElementById('tBack').textContent, next: document.getElementById('tNext').textContent,
+            slit: Math.round(t.top - s.bottom), oneRow: ch.every(y => Math.abs(y - Math.round(sel.top)) < 8), xOverChart: x.left < s.right - 64 + 1 && x.bottom > s.top, x: [Math.round(x.left), Math.round(x.top), Math.round(x.width)] }; })()''')
+        print('  speed by road: panel', round(th, 3), sub)
+        assert abs(th - 0.75) < 0.01 and sub['tabs'] == 'none' and sub['back'] == 'Discard' and sub['next'] == 'Save and continue' and sub['slit'] <= 0 and not sub['xOverChart'], sub
+        if name != 'small': assert sub['oneRow'], 'filters and sorting on one row'
+        pg.screenshot(path=f'{OUT}/{name}-s1e-submenu-scrolled.png')
+        pg.evaluate("(y) => { document.getElementById('tpBody').scrollTop = y; }", sc0); pg.wait_for_timeout(250)
+        pg.screenshot(path=f'{OUT}/{name}-s1d-submenu.png')
+        # change a road's speed, then Discard puts it back
+        off0 = pg.evaluate("JSON.stringify(window.__trip.state().result.speedState.offsets)")
+        pg.evaluate("(() => { const r = document.querySelector('#tsSpeed .leg[data-mi] input[type=range]'); r.value = +r.value + 3; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(600)
+        assert pg.evaluate("JSON.stringify(window.__trip.state().result.speedState.offsets)") != off0, 'speed changed'
+        pg.click('#tBack'); pg.wait_for_timeout(600)
+        assert step(pg) == 4 and pg.evaluate("JSON.stringify(window.__trip.state().result.speedState.offsets)") == off0 and pg.locator('#tsSpeed.exp').count() == 0, 'Discard restores the speeds'
+        assert pg.inner_text('#tBack') == 'Back' and pg.evaluate("getComputedStyle(document.getElementById('tpSteps')).display") != 'none', 'out of the submenu'
         pg.click('#lgTog'); pg.wait_for_timeout(300); pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(300)
         pg.click('#lgTog'); pg.wait_for_timeout(400)
         assert pg.locator('#trip.tall').count() == 0, 'speed by road closed: back to your height'
         pg.click('#lgTog'); pg.wait_for_timeout(300)
-        nxt(pg); assert step(pg) == 5 and pg.locator('.kpis.four #tShare').count() == 1 and pg.locator('#tsDone, #tsEdit, #tsExport').count() == 0
+        if pg.locator('#trip.submode').count(): pg.click('#lgTog'); pg.wait_for_timeout(400)
+        pg.wait_for_timeout(900)
+        db = ft(pg, '#tsDetBox'); print('  detour slider:', db.replace('\n', ' | ')[:200]); assert pg.locator('#tsDetBox input[type=range]').count() == 1 and 'min' in db
+        nxt(pg); pg.wait_for_timeout(500)
+        dh = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  departure panel:', round(dh, 2), pg.evaluate("[document.getElementById('tpS5').offsetHeight, document.getElementById('tpBody').clientHeight, document.getElementById('trip').style.cssText]"))
+        assert dh < 0.7, 'Departure: only as tall as it needs'
+        assert step(pg) == 5 and pg.locator('.kpis.four #tShare').count() == 1 and pg.locator('#tsDone, #tsEdit, #tsExport').count() == 0
         dep = ft(pg, '.tp-step:not(.hidden)'); print('  departure:', dep.replace('\n', ' | ')[:500])
         assert pg.locator('.tp-step:not(.hidden) .nlist li').count() == 2 and 'trip cost' in dep and 'Trip cost is the' not in pg.inner_text('.tp-step:not(.hidden)')
         assert pg.locator('#tpNav #tOpen').count() == 1 and 'Google Maps' in ft(pg, '#tOpen')
@@ -475,8 +495,8 @@ with sync_playwright() as p:
         pg.wait_for_selector('#tsBuf', timeout=5000); pg.wait_for_timeout(300)
         pg.evaluate("document.getElementById('tsBufBox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(200)
         bt = ft(pg, '#tsBufBox'); print('  140 mi buffer box:', bt.replace('\n', ' | '))
-        assert pg.locator('.buf-marks .bm.good').count() >= 1 and pg.locator('.buf-marks .bm.base').count() == 1 and 'saves' in bt, bt
-        labels = pg.evaluate("[...document.querySelectorAll('.buf-marks .bm')].map(b => b.className.replace('bm ', '') + ':' + b.textContent)"); print('  markers:', labels)
+        assert pg.locator('#tsBufBox .buf-marks .bm.good').count() >= 1 and pg.locator('#tsBufBox .buf-marks .bm.base').count() == 1 and 'saves' in bt, bt
+        labels = pg.evaluate("[...document.querySelectorAll('#tsBufBox .buf-marks .bm')].map(b => b.className.replace('bm ', '') + ':' + b.textContent)"); print('  markers:', labels)
         assert any(l.startswith('good') and '−$' in l for l in labels) and any(l.startswith('base') for l in labels)
         pg.screenshot(path=f'{OUT}/{name}-t2d-buffer-marks.png')
         mk = pg.evaluate("Math.max(...window.__trip.state().result.sweep.filter(x => x.mark && x.mi < 30).map(x => x.mi))")
@@ -490,6 +510,8 @@ with sync_playwright() as p:
         assert mi(pg) == 330
         pg.evaluate("document.getElementById('tpBody').scrollTop = 99999"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-t3-result-bottom.png')
+        if pg.locator('#trip.submode').count():   # at the speed-by-road sliders: Save and continue goes back to the stops
+            pg.click('#tNext'); pg.wait_for_timeout(400); assert step(pg) == 4 and pg.locator('#trip.submode').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0
         nxt(pg); txt = ft(pg, '.tp-step:not(.hidden)')
         pg.click('#tOpen'); url = pg.evaluate('window.__lastUrl'); print('  export:', url)
         assert url.startswith('https://www.google.com/maps/dir/?api=1') and 'waypoints=' in url
@@ -525,8 +547,14 @@ with sync_playwright() as p:
         # drag the panel: it stays at the height you leave it (no growing as you scroll)
         g = pg.locator('#tpGrab').bounding_box(); h0 = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height")
         pg.mouse.move(g['x'] + g['width'] / 2, g['y'] + 8); pg.mouse.down(); pg.mouse.move(g['x'] + g['width'] / 2, g['y'] - 200, steps=6); pg.mouse.up(); pg.wait_for_timeout(400)
-        h1 = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height"); print('  dragged panel:', round(h0), '->', round(h1))
+        h1 = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height"); print('  dragged panel:', round(h0), '->', round(h1), pg.evaluate("document.getElementById('trip').className"), g)
         assert h1 > h0 + 150
+        # drag from the step tabs too (a drag there doesn't pick a tab)
+        tb = pg.locator('#tpSteps [data-step="2"]').bounding_box(); x0, y0 = tb['x'] + tb['width'] / 2, tb['y'] + tb['height'] / 2
+        pg.mouse.move(x0, y0); pg.mouse.down(); pg.mouse.move(x0, y0 + 120, steps=6); pg.mouse.up(); pg.wait_for_timeout(450)
+        h2 = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height"); print('  dragged from the tabs:', round(h1), '->', round(h2), 'step', step(pg))
+        assert h2 < h1 - 80 and step(pg) == 4, 'tabs drag the panel'
+        h1 = h2
         pg.evaluate("document.getElementById('tpBody').scrollTop = 400"); pg.wait_for_timeout(400)
         assert abs(pg.evaluate("document.getElementById('trip').getBoundingClientRect().height") - h1) < 3, 'scrolling keeps your height'
         pg.screenshot(path=f'{OUT}/{name}-w5-dragged.png')

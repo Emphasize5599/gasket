@@ -94,6 +94,7 @@ with sync_playwright() as p:
     pg.fill('#tMiles', os.environ.get('MILES', '200')); pg.fill('#tBuffer', os.environ.get('BUF', '40'))
     t0 = mark(pg); pg.click('#tNext'); idle(pg, 3000); res['stops'] = worst(pg, t0, 'enter Stops (find stops)')
     pg.screenshot(path=f'{OUT}/perf-stops.png')
+    print('  placing the stop bubbles:', pg.evaluate('window.__trip.placeMs()'), 'ms (CPU x4)')
     pc = pg.evaluate('window.__trip.pins()'); print('  pins: over route', pc['overRoute'], 'crossings', pc['crossings'], 'short', sum(1 for x in pc['pins'] if x['mini']), 'of', len(pc['pins']))
     assert pc['overRoute'] == 0 and pc['crossings'] == 0
     n = pg.evaluate('window.__trip.state().result.cands.length'); print('  candidates:', n)

@@ -68,7 +68,7 @@
     b.innerHTML = '<span class="pfill" style="width:' + pct + '%"></span><span class="plab">' + esc(label) + ' · ' + pct + '%</span>';
     if (mapLd && mapLd.live) mapLd.set(frac, label);
   }
-  function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; } routeGate(); }
+  function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; b._sub = null; } routeGate(); if (typeof backMode === 'function') backMode(); }
   /** Let the screen draw (a progress bar, a tapped button) before a stretch of heavy work. */
   function paint() { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); }
   // the big map, grayed out with a progress bar while the route and stops are drawn (shows only past 0.75 s)
@@ -132,6 +132,7 @@
     // coming down to the map: the list starts at 75% of the screen (drag it anywhere from there) — straight away, not
     // as a slide a busy screen could freeze halfway
     if (!full && (!shown || shown < ST_STOPS)) pg.style.setProperty('--panel-h', '75vh');
+    if (step !== ST_DEPART && preDepartH != null) { if (!full && shown === ST_DEPART) pg.style.setProperty('--panel-h', preDepartH); preDepartH = null; }   // back from Departure: your height again
     if (!full && (pg.classList.contains('full') || !shown)) {
       pg.classList.add('snap'); requestAnimationFrame(function () { requestAnimationFrame(function () { pg.classList.remove('snap'); }); });
     }
@@ -164,8 +165,21 @@
       if (step !== k0) return;
       if (model && step >= ST_STOPS) { drawRoute(); if (!userMoved) fitRoute(false); }
       fitBtn(); sheetSize();
+      if (step === ST_DEPART) fitDepart();
       if (model && step >= ST_STOPS && !busy) mapLoaded();
     }, 0); });
+  }
+  /** Departure: the panel only as tall as its content, and the whole route centered above it again. */
+  var preDepartH = null;
+  function fitDepart() {
+    var pg = $('trip'), body = tpBody(), e = $('tpS' + ST_DEPART); if (!pg || !e || !body || pg.classList.contains('full')) return;
+    var cs = getComputedStyle(body), pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    var need = pg.getBoundingClientRect().height - body.clientHeight + e.offsetHeight + pad + 4;
+    var h = Math.max(innerHeight * 0.25, Math.min(need, innerHeight * 0.94));
+    if (preDepartH == null) preDepartH = pg.style.getPropertyValue('--panel-h') || '75vh';
+    pg.style.setProperty('--panel-h', (h / innerHeight * 100).toFixed(2) + 'vh');
+    userMoved = false;
+    setTimeout(function () { if (step !== ST_DEPART) return; fitRoute(true); fitBtn(); placePinsSoon(); }, 260);
   }
   function refitOptionMaps() {
     Object.keys(rmaps).forEach(function (k) { var m = rmaps[k]; if (m._refit && document.body.contains(m.getContainer())) { m.invalidateSize(false); m._refit(); } });
@@ -174,8 +188,8 @@
     var nav = $('tpNav');
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
-    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; } closeLegs(); collectSafe(); step--; renderStep(); };
-    if ($('tNext')) $('tNext').onclick = function () { advance(step + 1); };
+    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } closeLegs(); collectSafe(); step--; renderStep(); };
+    if ($('tNext')) $('tNext').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
     if ($('tOpen')) $('tOpen').onclick = openMaps;
     routeGate(); backMode();
   }
@@ -205,7 +219,7 @@
       }
       var pick = document.querySelector('#tParsed .pick button');
       if (pick) { flag(document.querySelector('#tParsed .pick'), 'pick', 'Pick the right address.'); return false; }
-      if (!model) { flag($('tGetRoutes'), 'pick', 'Get routes first.'); return false; }
+      if (!model) { flag($('tGetRoutes'), 'pick'); return false; }   // the flashing button says it
       return true;
     }
     if (k === ST_PARAMS) {
@@ -1260,7 +1274,7 @@
       if (segs[sel]) { segs[sel].halo.bringToFront(); segs[sel].line.bringToFront(); }
       Object.keys(segs).forEach(function (k) { segs[k].hit.bringToFront(); });
       tips.forEach(function (t) { var e = t.tip.getElement(); if (e) e.classList.toggle('on', t.k === sel); t.color = t.k === sel ? '#1a73e8' : ROUTE_GRAY; });
-      placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders });
+      placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders, maxCands: 12, angles: 16, dists: [10, 24, 44, 70] });
     };
     rmap.attributionControl.setPrefix(false);
     // tapping a time/miles label picks that route too
@@ -1270,8 +1284,8 @@
     mk(a, 'A'); mk(b, 'B');
     rmap.fitBounds(L.latLngBounds(all), { paddingTopLeft: [36, 58], paddingBottomRight: [36, 30] });
     rmap._leaders = L.layerGroup().addTo(rmap);
-    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap._refit(); placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders }); } }, 60);
-    rmap.on('zoomend moveend', function () { placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders }); });
+    setTimeout(function () { if (rmaps[mid0] === rmap) { rmap.invalidateSize(); rmap._refit(); placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders, maxCands: 12, angles: 16, dists: [10, 24, 44, 70] }); } }, 60);
+    rmap.on('zoomend moveend', function () { placeLabels(rmap, tips, sel, lines, null, { leaders: rmap._leaders, maxCands: 12, angles: 16, dists: [10, 24, 44, 70] }); });
     var fb = document.createElement('button'); fb.className = 'fab-fit rmap-fit'; fb.type = 'button'; fb.setAttribute('aria-label', 'Show every route');
     fb.innerHTML = FIT_ICON + '<span>Route</span>'; fb.classList.add('hidden');
     // like the big map: the button shows once you move this map yourself, and goes away when it has re-centered
@@ -1802,7 +1816,7 @@
     if (mi != null) { o.bufferGal = mi * model.combGpm; o.arriveGal = mi * model.combGpm; }
     var p = T.plan(o);
     if (!p.ok) { LG.warn('plan', 'No plan at these speeds', { buffer: mi != null ? mi : r.bufMi }); toastMsg('No plan works at those speeds with this buffer.'); return false; }
-    r.plan = p; r.opts = o; if (mi != null) r.bufMi = mi; r.topSel = -1; r.sweep = null; r.planOffs = cx ? cx.offs.join(',') : '';
+    r.plan = p; r.opts = o; if (mi != null) r.bufMi = mi; r.topSel = -1; r.sweep = null; r.dsweep = null; r.planOffs = cx ? cx.offs.join(',') : '';
     recompute(); startSweep(); keepScroll(showResult);
     return true;
   }
@@ -1830,7 +1844,7 @@
   /** Switch the trip to this buffer (the slider's quick plan -> the full one). */
   function setBuffer(x) {
     var r = result;
-    var fo = Object.assign({}, x.opts, { lite: false }); r.plan = T.plan(fo); r.opts = fo; r.bufMi = x.mi; r.topSel = -1;
+    var fo = Object.assign({}, x.opts, { lite: false }); r.plan = T.plan(fo); r.opts = fo; r.bufMi = x.mi; r.topSel = -1; r.dsweep = null;
     recompute(); keepScroll(showResult);
   }
 
@@ -2028,6 +2042,103 @@
     if ($('tsBufKeep')) $('tsBufKeep').onclick = function (e) { e.preventDefault(); S.trip.bufferMi = r.bufMi; A.save(); keepScroll(showResult); };
   }
 
+  // ---------- max. detour slider ----------
+  // Like the buffer slider, for the "Max. extra time" per stop: the same trip re-planned at each limit, with markers
+  // where a longer (or shorter) limit makes the trip cheaper — e.g. a station that's only a few minutes farther out on
+  // the way back. For this trip only, unless you make it your usual.
+  var DET_STEPS = [2, 3, 4, 5, 6, 7.5, 10, 12.5, 15, 20, 25, 30];
+  function detMinOf(r) { return r.opts && r.opts.maxDetourMin != null ? +r.opts.maxDetourMin : +S.trip.maxDetourMin; }
+  function startDetSweep() {
+    var r = result; if (!r || !r.opts || !r.plan || !r.plan.ok || r.dsweep || r.dsweeping || !r.opts.refPrice) return;
+    r.dsweeping = true;
+    var list = DET_STEPS.slice();
+    [+S.trip.maxDetourMin, detMinOf(r)].forEach(function (v) { if (v > 0 && list.indexOf(v) < 0) list.push(v); });
+    list.sort(function (a, b) { return a - b; });
+    var rows = [], i = 0, tv = function (p) { return (r.opts.timeValue || 0) * (p.totals.detourMin + p.stops.length * (r.opts.stopMinutes || 0)) / 60; };
+    setTimeout(function next() {
+      if (result !== r) { r.dsweeping = false; return; }
+      var end = Date.now() + 40;
+      while (i < list.length && Date.now() < end) {
+        var m = list[i++], p = T.plan(Object.assign({}, r.opts, { maxDetourMin: m, lite: true }));
+        rows.push({ mi: m, ok: p.ok, net: p.ok ? p.totals.net + tv(p) : null, plan: p });
+      }
+      if (i < list.length) return setTimeout(next, 0);
+      r.dsweep = rows; r.dsweeping = false;
+      if (result === r && $('tsDetBox')) keepScroll(function () { $('tsDetBox').outerHTML = detBox(); bindDet(); });
+    }, 450);
+  }
+  function detRow(v) { var best = null; (result.dsweep || []).forEach(function (x) { if (!best || Math.abs(x.mi - v) < Math.abs(best.mi - v)) best = x; }); return best; }
+  function minTxt(v) { return (Math.round(v * 10) / 10) + ' min'; }
+  function detText(x, base) {
+    if (!x.ok) return 'no plan works with this limit';
+    var n = x.plan.stops.length + ' stop' + (x.plan.stops.length === 1 ? '' : 's');
+    if (x === base || !base.ok) return n + (x === base ? ' · your usual' : '');
+    var d = x.net - base.net;
+    return (Math.abs(d) < 0.05 ? 'same cost as usual' : d < 0 ? 'saves ' + money(-d) + ' vs. usual' : money(d) + ' more than usual') + ' · ' + n;
+  }
+  function detBox() {
+    var r = result, sw = r.dsweep;
+    var h = '<div class="bufbox detbox" id="tsDetBox"><div class="tb-h">Max. detour for this trip</div>';
+    if (!sw) return h + '<div class="lead small keep">Checking other limits…</div></div>';
+    var cur = detRow(detMinOf(r)), base = detRow(+S.trip.maxDetourMin);
+    if (!base || !base.ok) base = cur;
+    var n = sw.length, idx = function (v) { var k = 0; sw.forEach(function (x, i) { if (Math.abs(x.mi - v) < Math.abs(sw[k].mi - v)) k = i; }); return k; };
+    var pos = function (v) { return (idx(v) / Math.max(1, n - 1) * 100).toFixed(2); };
+    h += '<div class="buf-read"><b id="tsDetVal">' + minTxt(cur.mi) + '</b> <span id="tsDetCost">' + detText(cur, base) + '</span></div>';
+    var mk = bufMarks(sw, base), GAP = 17, rowsL = [[], []];
+    var all = mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; });
+    var big = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d; })[0];
+    var freeL = function (row, L) { return rowsL[row].every(function (q) { return Math.abs(q - L) >= GAP; }); };
+    all.filter(function (m) { return m.kind === 'base' || m === big; }).concat(all.filter(function (m) { return !(m.kind === 'base' || m === big); }))
+      .forEach(function (m) { var L = +pos(m.mi); m.lr = freeL(0, L) ? 0 : freeL(1, L) ? 1 : -1; if (m.lr >= 0) rowsL[m.lr].push(L); });
+    h += '<div class="buf-track"><div class="buf-marks">';
+    all.forEach(function (m) {
+      var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
+      h += '<span class="bm ' + m.kind + (m.lr === 1 ? ' r2' : '') + '" style="left:' + pos(m.mi) + '%"' + (m.kind !== 'base' ? ' data-dm="' + m.mi + '"' : '') + '>' + (m.lr >= 0 ? '<em>' + lab + '</em>' : '') + '<i></i></span>';
+    });
+    // gray: limits with no workable plan
+    var bands = [], band = null;
+    sw.forEach(function (x, i) { if (!x.ok && !band) { band = { a: i, b: i }; bands.push(band); } else if (!x.ok) band.b = i; else band = null; });
+    h += bands.map(function (bd) {
+      var a = Math.max(0, (bd.a - 0.5) / Math.max(1, n - 1) * 100), b2 = Math.min(100, (bd.b + 0.5) / Math.max(1, n - 1) * 100);
+      return '<span class="bgray" style="left:' + a.toFixed(2) + '%;width:' + (b2 - a).toFixed(2) + '%"></span>';
+    }).join('');
+    h += '</div><input type="range" id="tsDet" min="0" max="' + (n - 1) + '" step="1" value="' + idx(cur.mi) + '" aria-label="Max. detour per stop"></div>';
+    h += '<div class="buf-scale"><span>' + minTxt(sw[0].mi) + '</span><span>' + minTxt(sw[n - 1].mi) + '</span></div>';
+    var best = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d || a2.mi - b2.mi; })[0];
+    if (best && base.ok) {
+      var hs = best.row.plan.stops.filter(function (s2) { return !base.plan.stops.some(function (c) { return c.c.id === s2.c.id; }); })[0];
+      h += '<div class="lead small keep">Cheapest: ' + minTxt(best.mi) + ' saves ' + money(-best.d) + ' vs. your usual ' + minTxt(base.mi) +
+        (hs ? ' — it picks up ' + esc(P.displayName(hs.c.station)) + ' at mile ' + Math.round(hs.c.d) + ' (' + priceText(hs.c.price) + ', ' + Math.round(hs.c.detourMin) + ' min out of the way)' : '') + '.</div>';
+    } else h += '<div class="lead small keep">No other limit makes this trip cheaper than your usual ' + minTxt(base.mi) + '.</div>';
+    h += '<div class="lead small">The most extra driving time a stop may add. Green: limits where the trip costs less than with your usual one, and by how much (your time value counted, if you set one). Yellow: where it costs more. Tap a marker to jump there.</div>';
+    if (Math.abs(cur.mi - S.trip.maxDetourMin) > 0.01) h += '<div class="lead small keep">For this trip only — your usual limit is ' + minTxt(S.trip.maxDetourMin) + '. <a href="#" id="tsDetKeep">Make ' + minTxt(cur.mi) + ' my usual</a></div>';
+    return h + '</div>';
+  }
+  function bindDet() {
+    var inp = $('tsDet'); if (!inp) return;
+    if (Garage.guardRange) Garage.guardRange(inp);
+    var r = result, sw = r.dsweep, base = detRow(+S.trip.maxDetourMin) || detRow(detMinOf(r)), last = +inp.value;
+    if (!base.ok) base = detRow(detMinOf(r));
+    inp.oninput = function () {
+      var x = sw[+inp.value];
+      if (!x.ok) { inp.value = last; x = sw[last]; } else last = +inp.value;
+      $('tsDetVal').textContent = minTxt(x.mi); $('tsDetCost').textContent = detText(x, base);
+    };
+    inp.onchange = function () {
+      var x = sw[+inp.value]; if (!x || !x.ok || Math.abs(x.mi - detMinOf(r)) < 0.01) return;
+      N.haptic && N.haptic();
+      LG.info('plan', 'Max. detour slider: ' + detMinOf(r) + ' → ' + x.mi + ' min', { net: x.net });
+      var fo = Object.assign({}, r.opts, { maxDetourMin: x.mi, lite: false });
+      r.plan = T.plan(fo); r.opts = fo; r.topSel = -1; r.sweep = null;
+      recompute(); startSweep(); keepScroll(showResult);
+    };
+    $('tsDetBox').querySelectorAll('[data-dm]').forEach(function (m) {
+      m.onclick = function () { var k = 0; sw.forEach(function (x, i) { if (Math.abs(x.mi - +m.dataset.dm) < 0.01) k = i; }); inp.value = k; inp.oninput(); inp.onchange(); };
+    });
+    if ($('tsDetKeep')) $('tsDetKeep').onclick = function (e) { e.preventDefault(); S.trip.maxDetourMin = detMinOf(r); A.save(); keepScroll(showResult); };
+  }
+
   function makeOpts(model, cands, startGal) {
     return { model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: S.trip.bufferMi * model.combGpm,
       arriveGal: S.trip.bufferMi * model.combGpm, fillUp: S.trip.fillUp,
@@ -2201,6 +2312,7 @@
       h += routeBox();
       h += '<div class="gas-tiles">' + idealBox() + arriveBox() + '</div>';
       h += bufBox();
+      h += detBox();
       h += '<div class="spdbox" id="tsSpeed"></div>';
       if (S.trip.arrive === 'full') h += topUpBox();
     }
@@ -2216,8 +2328,8 @@
     el.querySelectorAll('[data-route]').forEach(function (b) {
       b.onclick = function (e) { e.preventDefault(); N.haptic && N.haptic(); switchRoute(+b.dataset.route); };
     });
-    bindBuf();
-    if (p.ok) renderTripSpeed();
+    bindBuf(); bindDet();
+    if (p.ok) { renderTripSpeed(); startDetSweep(); }
     if ($('tsStopsH')) $('tsStopsH').onclick = function () { r.stopsShut = r.stopsShut === false; keepScroll(showResult); };
     bindStops();
     A.qify && A.qify(el);
@@ -2656,43 +2768,81 @@
     setTimeout(function () { if (!userMoved) fitRoute(true); fitBtn(); placePinsSoon(); }, 260);
   }
   /** Adjusting speed by road (the panel at 75%): Back becomes an arrow that leaves that mode; then it's Back again. */
-  var ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>';
-  var inMode = false, sizedInMode = false;
+  // ---------- adjusting speed by road: a submenu ----------
+  // While the per-road sliders are open and on screen, the panel sits at 75%, the step tabs make way (the chart moves
+  // up beside the ✕), and the bottom buttons become Discard (back to the speeds you had when you came in) and
+  // Save and continue.
+  var inMode = false, sizedInMode = false, modeSnap = null;
   function speedMode() { return step === ST_STOPS && inMode && !$('trip').classList.contains('hidden'); }
-  function backMode() {
-    var b = $('tBack'); if (!b) return;
-    var on = speedMode(); if (b._arrow === on) return;
-    b._arrow = on; b.classList.toggle('arrow', on);
-    b.innerHTML = on ? ARROW : 'Back'; b.setAttribute('aria-label', on ? 'Leave speed by road' : 'Back');
+  function snapSpeeds() {
+    var st = result && result.speedState || {};
+    return { offsets: JSON.parse(JSON.stringify(st.offsets || {})), all: st.all, bufMi: result ? result.bufMi : null };
   }
-  function leaveSpeedMode() { var t = $('lgTog'); if (t && $('tsSpeed') && $('tsSpeed').classList.contains('exp')) { N.haptic && N.haptic(); t.click(); } sheetSize(); }
+  function backMode() {
+    var on = speedMode(), pg = $('trip');
+    if (on && !modeSnap) modeSnap = snapSpeeds();
+    if (!on && !inMode) modeSnap = null;
+    if (pg) pg.classList.toggle('submode', on);
+    var b = $('tBack'), n = $('tNext');
+    if (b && b._sub !== on) { b._sub = on; b.textContent = on ? 'Discard' : 'Back'; b.classList.toggle('discard', on); }
+    if (n && !n.classList.contains('busy') && n._sub !== on) { n._sub = on; n.textContent = on ? 'Save and continue' : 'Next'; }
+  }
+  /** Save and continue: keep the speeds and close the per-road sliders. */
+  function leaveSpeedMode() {
+    var t = $('lgTog'); if (t && $('tsSpeed') && $('tsSpeed').classList.contains('exp')) { N.haptic && N.haptic(); t.click(); }
+    modeSnap = null; sheetSize(); backMode();
+  }
+  /** Discard: back to the speeds (and buffer) you had when you opened the per-road sliders. */
+  function discardSpeedMode() {
+    var snap = modeSnap, r = result;
+    if (snap && r) {
+      var st = r.speedState = r.speedState || {};
+      var changed = JSON.stringify(st.offsets || {}) !== JSON.stringify(snap.offsets) || st.all !== snap.all || r.bufMi !== snap.bufMi;
+      st.offsets = snap.offsets; st.all = snap.all;
+      if (changed) {
+        LG.info('speed', 'Speed changes discarded');
+        S.speed.view = S.speed.view || {}; S.speed.view.open = false; A.save();
+        modeSnap = null; replan(snap.bufMi); sheetSize(); backMode(); toastMsg('Speed changes discarded.'); return;
+      }
+    }
+    leaveSpeedMode();
+  }
   function panelDrag(pg) {
     var vh = function () { return window.innerHeight; };
     pg.style.setProperty('--panel-h', '75vh');
-    var y0 = 0, start = 0, dragging = false;
+    // drag from the handle, or from the step tabs under it (a drag there moves the panel; a tap still picks the tab)
+    var y0 = 0, start = 0, dragging = false, pending = false, src = null, pid = 0, ate = false;
     var down = function (e) {
-      if (pg.classList.contains('full')) return;
-      if (e.target.closest('button') && !e.target.closest('.tp-grab')) return;
-      dragging = true; y0 = e.clientY; start = pg.getBoundingClientRect().height;
-      pg.classList.add('dragging'); pg.classList.remove('tall');
-      try { e.target.setPointerCapture(e.pointerId); } catch (x) { }
+      if (pg.classList.contains('full') || e.button > 0) return;
+      var b = e.target.closest('button');
+      if (b && !b.closest('.tp-grab') && !b.closest('#tpSteps')) return;      // the ✕ is just a button
+      pending = true; dragging = false; y0 = e.clientY; start = pg.getBoundingClientRect().height; src = e.currentTarget; pid = e.pointerId;
+      // follow the finger anywhere until it lifts (it soon leaves the handle)
+      document.addEventListener('pointermove', move, true); document.addEventListener('pointerup', up, true); document.addEventListener('pointercancel', up, true);
+    };
+    var begin = function () {
+      dragging = true; pg.classList.add('dragging'); pg.classList.remove('tall');
     };
     var move = function (e) {
-      if (!dragging) return;
+      if (!pending) return;
+      if (!dragging) { if (Math.abs(e.clientY - y0) < 8) return; begin(); }
       var h = Math.max(vh() * 0.2, Math.min(vh() * 0.94, start + (y0 - e.clientY)));
       pg.style.setProperty('--panel-h', h + 'px');
       e.preventDefault();
     };
     var up = function () {
+      document.removeEventListener('pointermove', move, true); document.removeEventListener('pointerup', up, true); document.removeEventListener('pointercancel', up, true);
+      pending = false;
       if (!dragging) return; dragging = false; pg.classList.remove('dragging');
+      ate = true; setTimeout(function () { ate = false; }, 350);   // the tap that ends a drag doesn't also pick a tab
       var f = pg.getBoundingClientRect().height / vh();
       pg.style.setProperty('--panel-h', (f * 100) + 'vh');
       sheetSize(); if (inMode) { sizedInMode = true; sheetSize(); }   // dragged while adjusting speeds: your height wins
       if (!userMoved) fitRoute(true); fitBtn();
     };
+    pg.addEventListener('click', function (e) { if (ate && e.target.closest('#tpSteps')) { e.stopPropagation(); e.preventDefault(); ate = false; } }, true);
     [$('tpGrab'), pg.querySelector('.tp-head')].forEach(function (h) {
-      h.addEventListener('pointerdown', down); h.addEventListener('pointermove', move);
-      h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+      h.addEventListener('pointerdown', down);
     });
     $('tpBody').addEventListener('scroll', sheetSize, { passive: true });
     $('tpBody').addEventListener('scroll', roadSelSoon, { passive: true });
@@ -2787,6 +2937,7 @@
       if (model && step >= ST_STOPS && map.hasLayer(layer)) drawRoute();
     }, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
+    placeMs: function () { var t0 = performance.now(); placePins(); return Math.round(performance.now() - t0); },
     /** For tests: each stop bubble's box, its line (if any) and whether it's the short form; plus how many cover the route. */
     pins: function () {
       var cr = map.getContainer().getBoundingClientRect(), out = stopTips.map(function (t) {
