@@ -162,8 +162,9 @@
       movedByUser = false;
       map.setView([lat, lng], zoomForRadius(S.radiusMi));
       var fresh = lastFetch && (Date.now() - lastFetch.ts < 30 * 60000) && P.haversineMi(lat, lng, lastFetch.lat, lastFetch.lng) < 3;
-      if (!fresh && (S.apiKey || demo || Object.keys(SITES).some(siteOn))) fetchAround(lat, lng);
-      else render();
+      // prices on opening only if you turned that on (each search uses Google lookups); otherwise the last prices stay up
+      if (!fresh && S.autoRefresh && (S.apiKey || demo || Object.keys(SITES).some(siteOn))) fetchAround(lat, lng);
+      else { render(); if (!fresh && !demo) status(lastFetch ? 'Prices from ' + ago(lastFetch.ts) + ' · tap ↻ for fresh ones' : 'Tap ↻ to get prices nearby'); }
     } else render();
   };
   window.onLocationError = function (msg) { status(msg, true); };
@@ -460,6 +461,7 @@
     h += '<div class="card"><h3>Trip planner</h3>' +
       '<div class="field"><div class="lbl">Show cities when a route is imported<small>Free lookup from OpenStreetMap using each stop\'s spot (sends those coordinates to OpenStreetMap). No Google lookups.</small></div>' + sw('osmPreview', S.osmPreview !== false) + '</div>' +
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
+      '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Saved lookups<small>Stations, prices, speed limits and routes found for recent searches, reused so the same route doesn\'t use Google lookups twice. Trip history is kept separately.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';

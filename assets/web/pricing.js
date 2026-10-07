@@ -31,6 +31,7 @@
 
   var DEFAULTS = {
     apiKey: '',
+    autoRefresh: false,          // search for prices when the app opens (uses Google lookups)
     walmartPlus: true,
     samsMode: 'member',          // 'member' = Google's Sam's price is already member price; 'minus10' = take 10¢ more
     citgoTier: 'club',           // 'none' | 'club' | 'premier'

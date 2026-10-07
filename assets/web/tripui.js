@@ -1905,7 +1905,7 @@
     if (step === ST_STOPS && $('tsResults') && !result) renderResults();
   }
   async function findStops0(force) {
-    if ($('tsResults') && step === ST_STOPS) $('tsResults').innerHTML = '<div class="card finding"><div class="spin"></div><span>Finding the best stops…</span></div>';
+    if ($('tsResults') && step === ST_STOPS) $('tsResults').innerHTML = '<div class="card finding"><div class="ldspin"></div><span>Finding the best stops…</span></div>';
     prog(0.01, 'Finding stations');
     LG.info('stations', 'Find the best stops pressed', { miles: Math.round(model.totalMi), points: model.pts.length, force: force === true });
     await new Promise(function (r) { setTimeout(r, 30); });

@@ -661,8 +661,7 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .warns .note { margin: 6px 2px; }
 .empty-res { color: var(--ink-2); font-size: 14px; text-align: center; padding: 18px 12px; }
 .finding { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--ink-2); padding: 18px; }
-.spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.ldspin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 details.set-more > summary { font-weight: 700; cursor: pointer; padding: 2px 0; }
 details.set-more[open] > summary { margin-bottom: 8px; }
 

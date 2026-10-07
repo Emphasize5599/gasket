@@ -16,6 +16,7 @@ with sync_playwright() as p:
         pg.evaluate('setInsets(44, 24, 0, 0)')
         pg.wait_for_timeout(600)
         pg.screenshot(path=f'{OUT}/{name}-0-onboarding.png')
+        assert pg.locator('input[data-k=autoRefresh]').count() == 1 and not pg.is_checked('input[data-k=autoRefresh]') and pg.evaluate('window.__app.S.autoRefresh') is False, 'no price search on opening by default'
         pg.click('#sDone')   # no Google key: Walmart-only mode (mocked walmart.com answer)
         pg.wait_for_timeout(900)
         pg.screenshot(path=f'{OUT}/{name}-0b-walmart-only.png')
@@ -33,6 +34,11 @@ with sync_playwright() as p:
         assert pg.is_visible('#wmCheck'), 'verify banner'
         assert 'Walmart' in pg.inner_text('#wmCheckTitle')
         pg.click('#wmCheckGo'); assert pg.evaluate('window.__verifyOpened') == 'walmart'
+        # the refresh button spins (icon only), keeping its size and look
+        pg.evaluate("document.getElementById('btnRefresh').classList.add('spin')")
+        rb = pg.evaluate("(() => { const b = document.getElementById('btnRefresh'), cs = getComputedStyle(b), sv = getComputedStyle(b.querySelector('svg')); return [Math.round(b.getBoundingClientRect().width), cs.borderTopWidth, cs.animationName, sv.animationName]; })()")
+        print('  refresh spinning:', rb); assert rb[0] >= 36 and rb[1] == '0px' and rb[2] == 'none' and rb[3] == 'spin', rb
+        pg.evaluate("document.getElementById('btnRefresh').classList.remove('spin')")
         pg.evaluate("window.__wmMock=null")
         pg.click('#btnSettings'); pg.wait_for_timeout(200)
         pg.click('#sDemo')
