@@ -33,6 +33,7 @@
         }, 150);
       },
       siteVerify: function (k) { window.__verifyOpened = k; },
+      siteRead: function (req, key, args) { window.__siteRead = (window.__siteRead || []).concat([{ key: key, url: JSON.parse(args).url }]); setTimeout(function () { var m = window.__mocks && window.__mocks.siteRead; window.onNativeResult(req, m ? m(key, JSON.parse(args)) : { error: 'No Native bridge' }); }, 80); },
       siteShow: function (req, key, args) { window.__siteShown = { key: key, url: JSON.parse(args).url }; setTimeout(function () { var m = window.__mocks && window.__mocks.siteShow; window.onNativeResult(req, m ? m(key, JSON.parse(args)) : { closed: true }); }, 60); },
       saveLog: function (t) { mem.log = t; }, loadLog: function () { return mem.log || ''; },
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },

@@ -103,7 +103,7 @@ with sync_playwright() as p:
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
         pg.click('#gInfo summary'); pg.wait_for_timeout(200)
         tiles = ft(pg, '.ac-tiles'); print('  tiles:', tiles.replace('\n', ' | '))
-        assert '1.5-liter 4-cylinder' in tiles and 'Turbocharged' in tiles and 'no fixed gears' in tiles and 'Front-wheel drive' in tiles
+        assert '1.5-liter 4-cylinder' in tiles and 'Turbocharger' in tiles and 'no fixed gears (CVT)' in tiles and 'Front-wheel drive' in tiles
         assert pg.locator('.ac-tiles .ac-dd, #gEngine, #gDrive').count() == 0, 'a VIN says exactly what the car is: tiles, no menus'
         pg.click('#gFeats summary'); pg.wait_for_timeout(150)
         assert pg.is_checked('[data-feat="DOHC"]') and pg.is_checked('[data-feat="Direct injection"]') and 'from your VIN' in ft(pg, '#gFeats')
@@ -137,7 +137,9 @@ with sync_playwright() as p:
         ev = pg.evaluate('window.Garage.car()'); print('  EV:', ev['power'], ev['epa'], ev['tank'], ev.get('plug'))
         assert ev['power'] == 'ev' and abs(ev['epa']['city'] - 3.98) < 0.02 and ev['tank'] == 92 and ev['plug'] == 'NACS'
         econ = ft(pg, '.g-econ').replace('MI/KWH', 'mi/kWh'); print('  EV econ:', econ.replace('\n', ' | '))
-        assert 'mi/kWh' in econ and '25 / 27 / 26 kWh per 100 mi' in econ and '353 mi range' in econ and '80%' in econ
+        assert 'mi/kWh' in econ and '25 / 27 / 26 kWh per 100 mi' in econ and '353 mi range' in econ
+        rng = pg.evaluate("(() => { const t = document.querySelector('.epa-tiles .rng'); return t ? { v: +t.querySelector('b').textContent, q: decodeURIComponent(t.querySelector('.qi').dataset.q) } : null; })()")
+        print('  range tile:', rng['v'], rng['q'][:120]); assert rng and rng['v'] > 200 and 'highway' in rng['q'] and '80%' in rng['q'], 'range at highway mileage, with the 80% note in its (?)'
         assert 'Usable battery (kWh)' in ft(pg, '.g-edit') and pg.locator('#gDcKw').count() == 1 and pg.locator('#gType').count() == 0
         pg.fill('#gDcKw', '250'); pg.dispatch_event('#gDcKw', 'change'); pg.wait_for_timeout(100)
         assert 'Not worked out for EVs' in pg.text_content('#tSpeed')

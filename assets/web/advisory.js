@@ -47,7 +47,35 @@
   /** The VIN check, if it's for this car's current VIN. */
   function vinCheck(c) { c = c || car(); return c.vin && c.recallCheck && c.recallCheck.vin === c.vin ? c.recallCheck : null; }
 
-  // ---------- reading NHTSA's VIN page (opened visibly; the reader only reads what the page shows) ----------
+  // ---------- reading NHTSA's VIN page: in the background like the price sites (siteRead), or shown to you (siteShow).
+  // The page does its own checks as in any browser; nothing is ever solved or got around. ----------
+  var AUTO_DAYS = 7, AUTO_RETRY_H = 6, autoBusy = {};
+  /** Check the VIN by itself when there's no check from the last week (and no failed try in the last few hours). */
+  function autoCheck(c) {
+    if (!c || !c.vin || !call || !N.siteRead || autoBusy[c.id]) return;
+    var chk = vinCheck(c); if (chk && days(chk.t) < AUTO_DAYS) return;
+    var tried = c.recallAuto; if (tried && tried.vin === c.vin && Date.now() - tried.t < AUTO_RETRY_H * 3600e3) return;
+    var vin = c.vin, done = false;
+    autoBusy[c.id] = true; c.recallAuto = { vin: vin, t: Date.now() }; save();
+    var finish = function (r) {
+      if (done) return; done = true; autoBusy[c.id] = false;
+      if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
+        c.recallAuto = { vin: vin, t: Date.now(), failed: true }; save();
+        LG.info('car', 'Automatic VIN recall check got no answer', r && (r.error || (r.blocked ? 'blocked' : '')) || 'timeout');
+      } else record(c, vin, r, true);
+      if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }
+    };
+    setTimeout(function () { finish(null); }, 150000);
+    call('siteRead', 'nhtsa', JSON.stringify({ url: VIN_PAGE + encodeURIComponent(vin) })).then(finish);
+    if (host && host.isConnected && car() === c) draw();
+  }
+  function record(c, vin, r, quiet) {
+    c.recallCheck = { t: Date.now(), vin: vin, open: +r.open || 0, campaigns: (r.campaigns || []).slice(0, 30), items: (r.items || []).slice(0, 30) };
+    c.recallAuto = { vin: vin, t: Date.now() };
+    LG.info('car', 'VIN recall check' + (quiet ? ' (automatic)' : '') + ': ' + c.recallCheck.open + ' open');
+    save(); changed();
+  }
+  // ---------- shown to you (the button) ----------
   var pendingCheck = null;
   function checkVin(c) {
     if (!c.vin) return;
@@ -61,21 +89,19 @@
     var c = (S.cars || []).filter(function (x) { return x.id === p.carId; })[0];
     if (!c || c.vin !== p.vin) return;
     if (r.error) { A.toast && A.toast(r.error); LG.warn('car', 'VIN recall check', r.error); return; }
-    c.recallCheck = { t: Date.now(), vin: p.vin, open: +r.open || 0, campaigns: (r.campaigns || []).slice(0, 30), items: (r.items || []).slice(0, 30) };
-    LG.info('car', 'VIN recall check: ' + c.recallCheck.open + ' open');
+    record(c, p.vin, r, false);
     A.toast && A.toast(c.recallCheck.open ? c.recallCheck.open + ' open recall' + (c.recallCheck.open === 1 ? '' : 's') + ' found. Tap Done to come back.' : 'No open recalls. Tap Done to come back.');
-    save(); if (car() === c) draw();
-    changed();
+    if (car() === c) draw();
   }
 
   // ---------- features that trade engine life for mileage ----------
   var ADVICE = [
-    { feat: 'Cylinder deactivation', title: 'Cylinder shut-off',
+    { feat: 'Cylinder deactivation', title: 'Cylinder shut-off (cylinder deactivation)',
       what: 'When you cruise gently, the engine switches off some of its cylinders to save a little gas.',
       why: 'On several engines it\'s been linked to burning oil and worn valve parts over time, which can mean costly repairs.',
       how: 'Most cars have no switch for it. Driving in Sport mode, or Tow/Haul mode on a truck, usually keeps every cylinder working. A mechanic can also fit a small plug-in device that turns it off for good. Ask them about your warranty first.',
       q: '<b>Cylinder shut-off</b> (cylinder deactivation; brand names include Active Fuel Management, Dynamic Fuel Management, Multi-Displacement System and Variable Cylinder Management). It saves roughly 5–10% of gas in light cruising. Turning it off costs that back. Engines with it switch cylinders on and off thousands of times a trip, and several have had problems with oil use and the parts that open the valves (lifters). Whether yours does depends on the engine. Turning it off is a way to play it safe.' },
-    { feat: 'Start-stop', title: 'Engine stop at red lights', skip: function (c) { return c.power === 'hybrid' || c.power === 'phev'; },
+    { feat: 'Start-stop', title: 'Engine stop at red lights (start-stop)', skip: function (c) { return c.power === 'hybrid' || c.power === 'phev'; },
       what: 'The engine turns itself off when you stop and restarts when you lift off the brake.',
       why: 'That means many more engine starts: more wear on the starter, the battery and the engine\'s bearings. Its battery is also a special, more expensive kind.',
       how: 'Most cars have a button for it, often an "A" inside a circling arrow. Press it after you start the car. On many cars you have to press it every drive. A mechanic or a plug-in device can make it stay off.',
@@ -105,7 +131,7 @@
   }
 
   // ---------- page ----------
-  function render(el, nativeCall) { host = el; call = nativeCall || call; draw(); }
+  function render(el, nativeCall) { host = el; call = nativeCall || call; autoCheck(car()); draw(); }
   var onChange = function () {};
   function changed() { syncDot(); onChange(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }
   /** The dot on the Advisory step tab: something worth a look. */
@@ -141,9 +167,12 @@
         else if ((chk.items || []).length) h += chk.items.map(function (t) { return '<div class="rc"><p>' + esc(t) + '</p></div>'; }).join('');
       } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '.' + (stale ? ' New recalls come out all the time, so it\'s worth checking again.' : '') + '</small></div>';
       h += '<div class="btns wrap"><button class="btn tonal sm" id="advCheck">' + (stale ? 'Check again' : 'Check again at NHTSA') + '</button></div>';
+    } else if (c.vin && autoBusy[c.id]) {
+      h += '<div class="adv-state"><b><span class="ldspin sm" aria-hidden="true"></span> Checking your VIN with NHTSA…</b><small>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) + '. Finding out which are still open on yours.' : 'Finding out whether any recalls are open on your car.') + '</small></div>';
     } else if (c.vin) {
+      var failed = c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed;
       h += '<div class="adv-state"><b>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'See if your car has open recalls') + '</b>' +
-        '<small>' + (n ? 'Yours may already be fixed. ' : '') + 'NHTSA can tell from your VIN which recalls are still open on your car. Its page opens here, and Gasket reads the answer.</small></div>' +
+        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? 'NHTSA didn\'t answer the automatic check. Open its page to see which recalls are still open on your car.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
         '<div class="btns wrap"><button class="btn primary sm" id="advCheck">Check my car at NHTSA</button></div>';
     } else {
       h += '<div class="adv-state"><b>' + (R && R.error && !list ? 'Couldn\'t reach NHTSA right now' : n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'No recalls on record for the ' + esc(nm)) + '</b>' +
@@ -186,7 +215,8 @@
   /** Load the recalls on record for the car (NHTSA's free API, never Google) so the step dot and Departure know about
    * them before Advisory is opened. */
   function prefetch() { var c = car(); if (!c || !call) return; var R = c.recalls, key = recallKey(c);
-    if (key && (!R || R.key !== key || days(R.t) > 7)) fetchRecalls(c); else syncDot(); }
+    if (key && (!R || R.key !== key || days(R.t) > 7)) fetchRecalls(c); else syncDot();
+    autoCheck(c); }
   function init(nativeCall) { call = nativeCall || call; prefetch(); }
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
 

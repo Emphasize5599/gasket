@@ -255,6 +255,7 @@ public class MainActivity extends Activity {
         final List<String> queue = new ArrayList<String>();
 
         int showReq = -1;   // set while the page is shown to the user by siteShow
+        int readReq = -1;   // set while a page is read in the background by siteRead (answered once)
 
         SiteWorker(String key, String home, String origin) { this(key, home, origin, false); }
 
@@ -292,7 +293,11 @@ public class MainActivity extends Activity {
                         return;
                     }
                     if (blocked) {
-                        js("window.onSiteBlocked&&onSiteBlocked(" + q(SiteWorker.this.key) + ")");
+                        if (readReq >= 0) {
+                            // a background read hit a check (a CAPTCHA page, Access Denied): never get past it, just say so
+                            js("window.onNativeResult&&onNativeResult(" + readReq + ",{blocked:true})");
+                            readReq = -1;
+                        } else js("window.onSiteBlocked&&onSiteBlocked(" + q(SiteWorker.this.key) + ")");
                         queue.clear();
                     } else if (ready) {
                         for (String call : queue) view.evaluateJavascript(call, null);
@@ -333,6 +338,8 @@ public class MainActivity extends Activity {
         /** Called by the worker script; payload is data only and is parsed with JSON.parse on the app side. */
         @JavascriptInterface
         public void result(int reqId, String json) {
+            SiteWorker w = workers.get(key);
+            if (w != null && w.readReq == reqId) w.readReq = -1;   // a background read is answered once
             js("window.onSiteResult&&onSiteResult(" + q(key) + "," + reqId + ",JSON.parse(" + q(json) + "))");
         }
     }
@@ -1291,6 +1298,26 @@ public class MainActivity extends Activity {
                         if (!url.startsWith("https://www.google.com/maps/dir/")) return;
                         w.loadAndRun(url, call);
                     } else w.run(call);
+                }
+            });
+        }
+
+        /** Read NHTSA's recall lookup for a VIN in the background, the way the price sites are read. The page does its own
+         *  checks as in any browser; if it shows one (blocked), the reply says so and nothing more is tried. */
+        @JavascriptInterface
+        public void siteRead(final int reqId, final String key, final String argsJson) {
+            main.post(new Runnable() {
+                public void run() {
+                    SiteWorker w = workers.get(key);
+                    String script = w != null ? asset(key + "_worker.js") : "";
+                    String url;
+                    try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
+                    if (w == null || script.length() == 0 || !url.startsWith("https://www.nhtsa.gov/recalls?vymm=") || verifying == w) {
+                        js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
+                        return;
+                    }
+                    w.readReq = reqId;
+                    w.loadAndRun(url, "(" + script + ")(" + reqId + "," + argsJson + ")");
                 }
             });
         }

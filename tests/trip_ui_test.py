@@ -88,7 +88,7 @@ with sync_playwright() as p:
         assert order.index('tSpeed') < order.index('g-econ') < order.index('gObs') < order.index('gInfo'), 'speed above fuel economy; details last'
         assert pg.locator('.epa-tiles input').count() == 0 and pg.locator('#gTank').count() == 0, 'EPA not editable; tank only after Edit'
         assert pg.locator('.g-car').count() == 1 and pg.locator('.g-econ').count() == 1 and pg.locator('.epa-note').count() == 0
-        assert pg.locator('.epa-tiles .qi').count() == 3, 'a (?) in each of city / highway / combined'
+        assert pg.locator('.epa-tiles .qi').count() == 4 and pg.locator('.epa-tiles .rng').count() == 1, 'a (?) in each of city / highway / combined / range'
         pg.click('.epa-tiles > div:first-child .qi'); pg.wait_for_timeout(150)
         qp = pg.evaluate("document.querySelector('.qpop') ? document.querySelector('.qpop').innerText : ''"); print('  city (?):', qp[:90])
         assert '21 mph' in qp; pg.evaluate('window.__closeQ && window.__closeQ()')
@@ -112,7 +112,7 @@ with sync_playwright() as p:
         print('  speed card (collapsed):', ft(pg, '#tSpeed').replace('\n', ' | '))
         pg.click('details.spd-card > summary'); pg.wait_for_timeout(200)
         sp = ft(pg, '#tSpeed'); print('  speed card:', sp.replace('\n', ' | ')[:420])
-        assert 'best cruising speed · 2016 corolla' in sp.lower() and '70mph' in sp and 'recommended' in sp and 'Not calibrated yet' in sp
+        assert pg.evaluate("document.querySelector('.spd-card summary .h3').textContent") == 'Best cruising speed' and 'corolla' not in sp.lower().split('\n')[0] and '70mph' in sp and 'recommended' in sp and 'Not calibrated yet' in sp
         assert pg.locator('#gChart .zone').count() == 1
         x0 = pg.get_attribute('#gChart .sel-l', 'x1')
         pg.fill('#gTripMi', '1300'); pg.dispatch_event('#gTripMi', 'change')
@@ -139,7 +139,7 @@ with sync_playwright() as p:
         # the Venza: its own card
         pg.click('[data-car="venza12"]'); pg.wait_for_timeout(300)
         sp = ft(pg, '#tSpeed'); print('  Venza:', sp.split('\n')[0:3])
-        assert 'venza' in sp.lower() and '65 mph' in sp and 'Venza' in ft(pg, '.carchip.on')
+        assert '65 mph' in sp and 'Venza' in ft(pg, '.carchip.on') and 'venza' not in sp.lower().split('\n')[0]   # the car's name is in Your car, not repeated here
         pg.screenshot(path=f'{OUT}/{name}-g3-venza.png')
         # add a car from the EPA (the trip tests below use it)
         pg.click('[data-car="+"]'); pg.wait_for_timeout(400)

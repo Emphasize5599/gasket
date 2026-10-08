@@ -75,7 +75,7 @@ with sync_playwright() as p:
         pick(pg, 'corolla20')
         pg.wait_for_function("window.Garage.car().variants && window.Garage.car().variants.list.length === 1", timeout=5000); pg.wait_for_timeout(200)
         tiles = ft(pg, '.ac-tiles'); print('  Corolla Hybrid tiles:', tiles.replace('\n', ' | '))
-        assert '1.8-liter 4-cylinder' in tiles and 'Hybrid automatic' in tiles and 'Hybrid (gas + electric)' in tiles and pg.locator('.ac-tiles .ac-dd').count() == 0
+        assert '1.8-liter 4-cylinder' in tiles and 'Hybrid automatic (eCVT)' in tiles and 'Hybrid (gas + electric)' in tiles and pg.locator('.ac-tiles .ac-dd').count() == 0
         # features: collapsed, alphabetical, plain words, a (?) on each
         assert pg.locator('#gFeats[open]').count() == 0, 'Features collapsed at first'
         pg.click('#gFeats summary'); pg.wait_for_timeout(150)
@@ -84,8 +84,11 @@ with sync_playwright() as p:
         assert labels == sorted(labels, key=str.lower), 'alphabetical'
         assert pg.locator('.ac-f .qi').count() == len(labels), 'a (?) for every feature'
         assert 'Regenerative braking' in labels and 'Heat pump for cabin heat' in labels, 'hybrid: the electric ones too'
-        for acr in ['DOHC', 'SOHC', 'OHV', 'GDI', 'CVT', 'AWD', 'FWD', 'VVT']:
-            assert acr not in ft(pg, '#gInfo').replace('(?)', ''), 'plain words: ' + acr
+        # plain words first; a technical term or abbreviation only in parentheses after them
+        bare = pg.evaluate('''(t) => { t = t.replace(/\\([^)]*\\)/g, ''); return ['DOHC', 'SOHC', 'OHV', 'GDI', 'CVT', 'AWD', 'FWD', '4WD', 'VVT', 'turbo ', 'Turbo '].filter(a => t.indexOf(a) >= 0); }''', ft(pg, '#gInfo'))
+        assert not bare, 'abbreviations outside parentheses: ' + str(bare)
+        cams = [i for i, l in enumerate(labels) if l.startswith('Camshafts')]
+        assert len(cams) == 3 and cams == list(range(cams[0], cams[0] + 3)), 'camshaft layouts sit together: ' + str(labels)
         # the (?) explains the technical term
         q = '.ac-f:has([data-feat="DOHC"]) .qi'; pg.evaluate("(s) => document.querySelector(s).scrollIntoView({ block: 'center' })", q); pg.wait_for_timeout(300)
         pg.click(q); pg.wait_for_timeout(200); assert 'dual overhead cam' in ft(pg, '.qpop'); pg.evaluate('window.__closeQ && window.__closeQ()')

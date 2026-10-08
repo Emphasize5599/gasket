@@ -93,6 +93,21 @@ with sync_playwright() as p:
         # a new VIN: the old check doesn't count
         pg.evaluate("() => { window.Garage.car().vin = 'JTDEBRBE0LJ000002'; window.dispatchEvent(new Event('garagechange')); }"); pg.wait_for_timeout(200)
         assert 'Check my car at NHTSA' in ft(pg, '#advCheck')
+        # ---- the VIN is checked by itself in the background (siteRead), at most weekly ----
+        pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = (key, args) => ({ open: 1, campaigns: ['22V200000'], items: [] }); }''')
+        pg.evaluate("() => { window.Garage.car().vin = 'JTDEBRBE0LJ000003'; window.dispatchEvent(new Event('garagechange')); }")
+        pg.wait_for_function("window.Garage.car().recallCheck && window.Garage.car().recallCheck.vin === 'JTDEBRBE0LJ000003'", timeout=5000); pg.wait_for_timeout(200)
+        reads = pg.evaluate('window.__siteRead'); print('  automatic:', reads)
+        assert len(reads) == 1 and reads[0]['key'] == 'nhtsa' and reads[0]['url'].endswith('vymm=JTDEBRBE0LJ000003')
+        assert '1 open recall on your car' in ft(pg, '#advRecall'), 'read without a tap'
+        pg.evaluate("() => window.dispatchEvent(new Event('garagechange'))"); pg.wait_for_timeout(300)
+        assert len(pg.evaluate('window.__siteRead')) == 1, 'not again within a week'
+        # no answer (a blocked page): said in one line, and the button opens the page
+        pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = () => ({ blocked: true }); window.Garage.car().vin = 'JTDEBRBE0LJ000004'; window.dispatchEvent(new Event('garagechange')); }''')
+        pg.wait_for_function("window.Garage.car().recallAuto && window.Garage.car().recallAuto.failed", timeout=5000); pg.wait_for_timeout(200)
+        assert "didn't answer the automatic check" in ft(pg, '#advRecall') and 'Check my car at NHTSA' in ft(pg, '#advCheck')
+        pg.evaluate("() => window.dispatchEvent(new Event('garagechange'))"); pg.wait_for_timeout(300)
+        assert len(pg.evaluate('window.__siteRead')) == 1, 'a failed try waits a few hours'
         # ---- engine-friendly advice on a car with both features ----
         pg.evaluate('''() => { const S = window.__app.S, c = S.cars.find(x => x.id === 'venza12'); S.carId = c.id;
           c.info = Object.assign({}, c.info, { features: (c.info.features || []).concat(['Cylinder deactivation', 'Start-stop']) }); window.dispatchEvent(new Event('garagechange')); }''')

@@ -41,21 +41,21 @@
       q: 'Flaps behind the front grille that close at highway speed so air slips around the car instead of through it, and open when the engine needs cooling. They save a little fuel at speed. You can often see them through the lower grille.' },
     { key: 'Atkinson cycle', label: 'Atkinson-cycle engine', for: 'engine',
       q: 'An engine that holds its intake valves open a little longer, trading some power for efficiency. Common in hybrids, where the electric motor makes up the power.' },
-    { key: 'Cylinder deactivation', label: 'Cylinder shut-off', for: 'engine',
+    { key: 'Cylinder deactivation', label: 'Cylinder shut-off (cylinder deactivation)', for: 'engine',
       q: 'When cruising gently, the engine switches off some cylinders to save gas (cylinder deactivation; names include Active Fuel Management, Dynamic Fuel Management, Multi-Displacement System, Variable Cylinder Management). See Advisory for why you might turn it off.' },
-    { key: 'Direct injection', label: 'Direct fuel injection', for: 'engine',
+    { key: 'Direct injection', label: 'Direct fuel injection (GDI)', for: 'engine',
       q: 'Fuel is sprayed straight into each cylinder. It\'s efficient and powerful. Over many miles, carbon can build up on the intake valves, because fuel no longer washes over them. Engines that also have port injection avoid most of that. (Gasoline direct injection.)' },
     { key: 'Port injection', label: 'Port fuel injection', for: 'engine',
       q: 'Fuel is sprayed into the intake just before each cylinder, where it also keeps the intake valves clean. Some engines have both port and direct injection (dual injection).' },
-    { key: 'DOHC', label: 'Two camshafts per cylinder bank', for: 'engine', one: 'cam',
+    { key: 'DOHC', label: 'Camshafts: two per cylinder row (DOHC)', for: 'engine', one: 'cam',
       q: 'The parts that open the valves (camshafts) sit on top of the engine, two per row of cylinders: one for the intake valves and one for the exhaust. Most modern engines are built this way (dual overhead cam).' },
-    { key: 'SOHC', label: 'One camshaft per cylinder bank', for: 'engine', one: 'cam',
+    { key: 'SOHC', label: 'Camshafts: one per cylinder row (SOHC)', for: 'engine', one: 'cam',
       q: 'One camshaft on top of each row of cylinders opens both the intake and exhaust valves (single overhead cam).' },
-    { key: 'Pushrod', label: 'Pushrod engine', for: 'engine', one: 'cam',
+    { key: 'Pushrod', label: 'Camshafts: one, low in the engine (pushrod, OHV)', for: 'engine', one: 'cam',
       q: 'The camshaft sits low in the engine and opens the valves through long rods. It\'s compact and simple, and common in American V8s (overhead valve).' },
     { key: 'Variable valve timing', label: 'Variable valve timing', for: 'engine',
       q: 'The engine changes when its valves open as it runs, for better power and economy across speeds. Nearly every engine since the 2000s has it.' },
-    { key: 'Start-stop', label: 'Engine stop at red lights', for: 'engine',
+    { key: 'Start-stop', label: 'Engine stop at red lights (start-stop)', for: 'engine',
       q: 'The engine shuts off when the car stops and restarts when you go (automatic start-stop). In a hybrid the engine stopping is part of normal hybrid driving. See Advisory about turning it off on a regular gas car.' },
     { key: 'Regenerative braking', label: 'Regenerative braking', for: 'electric',
       q: 'When you slow down, the electric motor works as a generator and puts energy back in the battery instead of wasting it as brake heat. Your brake pads also last much longer.' },
@@ -71,12 +71,12 @@
   }
   // plain words for the tiles (the stored values stay the same codes)
   var POWER_PLAIN = { gas: 'Gas engine', hybrid: 'Hybrid (gas + electric)', phev: 'Plug-in hybrid', ev: 'Fully electric', h2: 'Hydrogen fuel cell' };
-  var ASP_PLAIN = { na: 'No turbo (natural)', turbo: 'Turbocharged', twinturbo: 'Two turbochargers', super: 'Supercharged', both: 'Turbo and supercharger' };
-  var DRIVE_PLAIN = { fwd: 'Front-wheel drive', rwd: 'Rear-wheel drive', awd: 'All-wheel drive', aawd: 'All-wheel drive (when needed)', '4wd': 'Four-wheel drive (part-time)', '4wdf': 'Four-wheel drive (full-time)' };
+  var ASP_PLAIN = { na: 'No turbocharger (naturally aspirated)', turbo: 'Turbocharger', twinturbo: 'Two turbochargers (twin-turbo)', super: 'Supercharger', both: 'Turbocharger and supercharger' };
+  var DRIVE_PLAIN = { fwd: 'Front-wheel drive (FWD)', rwd: 'Rear-wheel drive (RWD)', awd: 'All-wheel drive (AWD)', aawd: 'All-wheel drive when needed (AWD)', '4wd': 'Part-time four-wheel drive (4WD)', '4wdf': 'Full-time four-wheel drive (4WD)' };
   function transPlain(i) {
     var n = +i.transN || 0;
-    return { auto: 'Automatic' + (n ? ', ' + n + ' speeds' : ''), manual: 'Manual' + (n ? ', ' + n + ' speeds' : ''), cvt: 'Automatic, no fixed gears', ecvt: 'Hybrid automatic',
-      dct: 'Dual-clutch automatic' + (n ? ', ' + n + ' speeds' : ''), amt: 'Automated manual' + (n ? ', ' + n + ' speeds' : ''), single: 'Single speed' }[i.trans] || '';
+    return { auto: 'Automatic' + (n ? ', ' + n + ' speeds' : ''), manual: 'Manual' + (n ? ', ' + n + ' speeds' : ''), cvt: 'Automatic, no fixed gears (CVT)', ecvt: 'Hybrid automatic (eCVT)',
+      dct: 'Dual-clutch automatic' + (n ? ', ' + n + ' speeds' : '') + ' (DCT)', amt: 'Automated manual' + (n ? ', ' + n + ' speeds' : ''), single: 'Single speed' }[i.trans] || '';
   }
   /** "1.8L Inline 4 Cyl (2ZR-FXE)" -> "1.8-liter 4-cylinder" (+ the engine code for the (?)). */
   function enginePlain(c) {
@@ -103,6 +103,15 @@
     if (c.adapter && p === 'CCS') out = out.concat(['TESLA']);
     if (c.adapter && p === 'NACS') out = out.concat(['J1772COMBO']);
     return out;
+  }
+  /** Miles on a full tank / charge at highway mileage (yours if you've logged it, else the EPA's). */
+  function rangeHwy(c) { c = c || car(); return obsHwy(c) > 0 && +c.tank > 0 ? obsHwy(c) * +c.tank : 0; }
+  function rangeTile(c) {
+    var r = rangeHwy(c), U = units(c), mine = +c.obs.hwy > 0;
+    if (!(r > 0)) return '';
+    var q = '<b>Range</b>: how far a full ' + (kind(c) === 'ev' ? 'charge' : 'tank') + ' goes on the highway: ' + fmtPer(obsHwy(c)) + ' ' + U.per + ' (' + (mine ? 'your highway mileage' : 'EPA highway') + ') × ' + r2(+c.tank) + ' ' + U.unit +
+      (c.tankSrc ? ' (' + esc(c.tankSrc) + ')' : '') + '. City driving and high speeds go less far.' + (kind(c) === 'ev' ? ' Trip plans charge to 80%, so a stop is planned before that.' : '');
+    return '<div class="rng"><b>' + Math.round(r) + '</b><span>Range, mi</span>' + A.qBtn(q) + '</div>';
   }
   /** Miles on a full tank / charge, from your mileage (or the EPA's) and the tank size. */
   function rangeMi(c) { c = c || car(); var m = obsHwy(c) && obsCity(c) ? harm(obsCity(c), obsHwy(c)) : 0; return m > 0 && +c.tank > 0 ? m * +c.tank : (c.epa && +c.epa.range) || 0; }
@@ -203,10 +212,9 @@
     if (hasEpa(c)) {
       var tile = function (v, label, q) { return '<div><b>' + fmtPer(v) + '</b><span>' + label + '</span>' + A.qBtn(q + (EPA_Q[k] || '')) + '</div>'; };
       h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city) + tile(c.epa.hwy, 'Highway', EPA_Q.hwy) +
-        tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb) + '</div>';
+        tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb) + rangeTile(c) + '</div>';
       if (k === 'ev' && c.epa.kwh) h += '<div class="lead small keep">EPA: ' + c.epa.kwh.city + ' / ' + c.epa.kwh.hwy + ' / ' + c.epa.kwh.comb + ' kWh per 100 mi' + (c.epa.range ? ' · ' + c.epa.range + ' mi range' : '') + '</div>';
     } else h += '<div class="msg">No EPA numbers yet — tap Edit and look your car up' + (k === 'gas' ? '' : ', or enter your own under Observed') + '.</div>';
-    if (+c.tank > 0 && hasEpa(c)) h += '<div class="lead small keep">About ' + Math.round(rangeMi(c)) + ' mi on a full ' + (k === 'ev' ? 'charge' : 'tank') + ' (' + r2(+c.tank) + ' ' + U.unit + ')' + (k === 'ev' ? ' · trips charge to 80%' : '') + '.</div>';
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
@@ -343,7 +351,7 @@
   var TILE_Q = {
     power: 'What makes the car go: a <b>gas engine</b>; a <b>hybrid</b>, with a gas engine and an electric motor that share the work and charge themselves; a <b>plug-in hybrid</b>, which also charges from the wall; <b>fully electric</b>; or a <b>hydrogen fuel cell</b>, which makes electricity from hydrogen.',
     engine: 'The engine\'s size is the total space inside its cylinders, in liters. Bigger engines and more cylinders usually mean more power and more fuel used.',
-    asp: 'How air gets into the engine. <b>No turbo</b>: the engine breathes on its own. A <b>turbocharger</b> uses exhaust to push in extra air, so a small engine makes big-engine power; a <b>supercharger</b> does the same, driven by the engine.',
+    asp: 'How air gets into the engine. With <b>no turbocharger</b>, the engine breathes on its own. A <b>turbocharger</b> uses exhaust to push in extra air, so a small engine makes big-engine power; a <b>supercharger</b> does the same, driven by the engine.',
     trans: 'How the engine\'s power reaches the wheels. An <b>automatic</b> shifts gears for you. One with <b>no fixed gears</b> changes smoothly instead (a continuously variable transmission). A <b>hybrid automatic</b> blends the engine and motor (power-split). <b>Dual-clutch</b> automatics shift very quickly.',
     drive: 'Which wheels the engine turns. <b>Front-wheel drive</b> is the most efficient. <b>All-wheel</b> and <b>four-wheel drive</b> help on snow, mud and dirt but use a little more fuel. Part-time four-wheel drive should only be on for loose or slippery ground.'
   };
@@ -363,7 +371,7 @@
       tile('power', 'Powertrain', POWER_PLAIN[c.power] || '', TILE_Q.power) +
       tile('engine', k === 'ev' ? 'Motor' : k === 'h2' ? 'Fuel cell' : 'Engine', en.text, TILE_Q.engine + (en.code ? ' Engine code: <b>' + esc(en.code) + '</b>.' : ''), V.engine) +
       (gasLike ? tile('asp', 'Air intake', ASP_PLAIN[i.asp] || '', TILE_Q.asp, V.asp, miss('asp', ASP_PLAIN)) : '') +
-      tile('trans', 'Transmission', transPlain(i), TILE_Q.trans, V.trans, i.trans ? '' : miss('trans', { auto: 'Automatic', manual: 'Manual', cvt: 'Automatic, no fixed gears', ecvt: 'Hybrid automatic', dct: 'Dual-clutch automatic', amt: 'Automated manual', single: 'Single speed' })) +
+      tile('trans', 'Transmission', transPlain(i), TILE_Q.trans, V.trans, i.trans ? '' : miss('trans', { auto: 'Automatic', manual: 'Manual', cvt: 'Automatic, no fixed gears (CVT)', ecvt: 'Hybrid automatic (eCVT)', dct: 'Dual-clutch automatic (DCT)', amt: 'Automated manual', single: 'Single speed' })) +
       tile('drive', 'Drivetrain', DRIVE_PLAIN[i.drive] || '', TILE_Q.drive, V.drive, miss('drive', DRIVE_PLAIN)) +
       '</div>';
     if (verOpen && list.length > 1 && !c.vin) {
@@ -379,7 +387,7 @@
       '<div class="grid2"><label class="nf"><span>Powertrain</span><select id="gPower">' + opts(POWER_PLAIN, c.power || 'gas') + '</select></label>' +
       '<label class="nf wide"><span>' + (k === 'ev' ? 'Motor(s)' : k === 'h2' ? 'Fuel cell / motor' : 'Engine') + '<small>' + (k === 'ev' ? 'e.g. Dual motor, 250 kW' : k === 'h2' ? 'e.g. 128 kW fuel cell, 134 kW motor' : 'e.g. 2.0L 4-cylinder, 6.0L V8') + '</small></span><input type="text" id="gEngine" maxlength="60" value="' + esc(i.engine || '') + '"></label></div>' +
       '<div class="grid2">' + (gasLike || c.power === 'hybrid' || c.power === 'phev' ? '<label class="nf"><span>Air intake</span><select id="gAsp">' + opts(ASP_PLAIN, i.asp, '—') + '</select></label>' : '') +
-      '<label class="nf"><span>Transmission</span><select id="gTrans">' + opts({ auto: 'Automatic', manual: 'Manual', cvt: 'Automatic, no fixed gears', ecvt: 'Hybrid automatic', dct: 'Dual-clutch automatic', amt: 'Automated manual', single: 'Single speed' }, i.trans, '—') + '</select></label>' +
+      '<label class="nf"><span>Transmission</span><select id="gTrans">' + opts({ auto: 'Automatic', manual: 'Manual', cvt: 'Automatic, no fixed gears (CVT)', ecvt: 'Hybrid automatic (eCVT)', dct: 'Dual-clutch automatic (DCT)', amt: 'Automated manual', single: 'Single speed' }, i.trans, '—') + '</select></label>' +
       (/^(auto|manual|dct|amt)$/.test(i.trans || '') ? '<label class="nf"><span>Speeds</span><input type="number" inputmode="numeric" min="2" max="12" step="1" id="gTransN" value="' + esc(i.transN || '') + '"></label>' : '') +
       '<label class="nf"><span>Drivetrain</span><select id="gDrive">' + opts(DRIVE_PLAIN, i.drive, '—') + '</select></label></div>';
   }
@@ -398,7 +406,7 @@
     var i = c.info || {}, k = kind(c);
     var fuel = k === 'ev' ? '' : k === 'h2' ? '' :
       '<label class="nf"><span>Gas you buy<small>' + esc(c.epa && c.epa.fuel ? 'EPA: ' + c.epa.fuel : '&nbsp;') + '</small></span><select id="gGrade">' + Object.keys(P.GRADES).map(function (g) { return '<option value="' + g + '"' + ((c.grade || 'regular') === g ? ' selected' : '') + '>' + P.GRADES[g].label + (g === 'diesel' ? '' : ' gasoline') + '</option>'; }).join('') + '</select></label>';
-    var h = '<div class="lead small keep">Everything about your ' + esc(shortName(c)) + '. Tap <b>?</b> on anything to learn what it means.</div>';
+    var h = '';
     h += isCustom(c) ? customPanel(c) : tilesPanel(c);
     if (fuel) h += '<div class="grid2">' + fuel + '</div>';
     h += featPanel(c);
@@ -795,7 +803,7 @@
     if (curCard) spdOpen = curCard.open;
     if (curSet) setOpen = curSet.open;
     var wasOpen = spdOpen;
-    var h = '<details class="spd-card"' + (wasOpen ? ' open' : '') + '><summary><span class="h3">Best cruising speed · ' + esc(shortName(c)) + '</span>' +
+    var h = '<details class="spd-card"' + (wasOpen ? ' open' : '') + '><summary><span class="h3">Best cruising speed</span>' +
       (m ? '<b class="spd-pill">' + m.rec.speed + ' mph</b>' : '') + '</summary>';
     if (!m) {
       speedHost.innerHTML = h + '<div class="lead small keep">' + (kind(c) === 'gas' ? 'Look your car up from the EPA (Edit) to see this.' :
@@ -1117,6 +1125,6 @@
     return out;
   }
 
-  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, shortName: shortName, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
+  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
     need: need, ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();
