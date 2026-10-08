@@ -24,11 +24,19 @@ $PassFile = Join-Path $Dir 'gasket-release.password.dpapi'
 $Alias = 'gasket'
 
 if (Test-Path -LiteralPath $Ks) {
+    if (-not (Test-Path -LiteralPath $PassFile)) {
+        throw "There's a keystore at $Ks but no password backup next to it, so it's most likely left over from a run that failed and can't be used. If you never pasted its values anywhere, delete it and run this again."
+    }
     throw "There's already a keystore at $Ks. This script never overwrites one; move it away first if you really mean to make a new key."
 }
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
+# Built under temporary names and moved into place only once everything worked, so a failure leaves nothing behind.
+$stamp = [guid]::NewGuid().ToString('N')
+$KsTmp = Join-Path $Dir ".gasket-release.$stamp.jks"
+$PassTmp = Join-Path $Dir ".gasket-release.$stamp.dpapi"
 $tempJava = $null
+$done = $false
 function Find-Keytool {
     $cmd = Get-Command keytool -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -39,6 +47,18 @@ function Find-Keytool {
         }
     }
     return $null
+}
+
+# keytool writes its progress to stderr. Windows PowerShell 5.1 turns those lines into errors, and
+# $ErrorActionPreference = 'Stop' would then abort, so run it with 'Continue' and judge it by its exit code.
+function Invoke-Keytool([string[]]$KtArgs) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $keytool @KtArgs 2>&1 | ForEach-Object { "$_" }
+        return @{ Code = $LASTEXITCODE; Out = @($out) }
+    }
+    finally { $ErrorActionPreference = $old }
 }
 
 function Wait-Enter([string]$what) {
@@ -70,18 +90,22 @@ try {
     $pass = [Convert]::ToBase64String($bytes) -replace '[+/=]', ''
     $env:GASKET_NEW_KS_PASS = $pass
 
-    Write-Host "Creating the key (RSA 4096) in $Ks ..."
-    & $keytool -genkeypair -keystore $Ks -storetype PKCS12 -alias $Alias -keyalg RSA -keysize 4096 -validity 10000 `
-        -dname 'CN=Gasket' -storepass:env GASKET_NEW_KS_PASS -keypass:env GASKET_NEW_KS_PASS 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Ks)) { throw 'keytool could not create the keystore.' }
+    Write-Host "Creating the key (RSA 4096). This takes a few seconds..."
+    $r = Invoke-Keytool @('-genkeypair', '-keystore', $KsTmp, '-storetype', 'PKCS12', '-alias', $Alias, '-keyalg', 'RSA',
+        '-keysize', '4096', '-validity', '10000', '-dname', 'CN=Gasket',
+        '-storepass:env', 'GASKET_NEW_KS_PASS', '-keypass:env', 'GASKET_NEW_KS_PASS')
+    if ($r.Code -ne 0 -or -not (Test-Path -LiteralPath $KsTmp)) { throw ('keytool could not create the keystore: ' + ($r.Out -join ' ')) }
 
-    $list = & $keytool -list -v -keystore $Ks -storepass:env GASKET_NEW_KS_PASS -alias $Alias 2>&1
-    if ($LASTEXITCODE -ne 0) { throw 'The new keystore could not be read back.' }
-    $sha1 = ($list | Select-String -Pattern 'SHA1:\s*(\S+)' | Select-Object -First 1).Matches[0].Groups[1].Value
-    $sha256 = ($list | Select-String -Pattern 'SHA256:\s*(\S+)' | Select-Object -First 1).Matches[0].Groups[1].Value
+    $r = Invoke-Keytool @('-list', '-v', '-keystore', $KsTmp, '-storepass:env', 'GASKET_NEW_KS_PASS', '-alias', $Alias)
+    if ($r.Code -ne 0) { throw ('The new keystore could not be read back: ' + ($r.Out -join ' ')) }
+    $sha1 = ($r.Out | Select-String -Pattern 'SHA1:\s*(\S+)' | Select-Object -First 1).Matches[0].Groups[1].Value
+    $sha256 = ($r.Out | Select-String -Pattern 'SHA256:\s*(\S+)' | Select-Object -First 1).Matches[0].Groups[1].Value
 
     # backup of the password that only this Windows account can decrypt
-    ConvertTo-SecureString -String $pass -AsPlainText -Force | ConvertFrom-SecureString | Set-Content -LiteralPath $PassFile
+    ConvertTo-SecureString -String $pass -AsPlainText -Force | ConvertFrom-SecureString | Set-Content -LiteralPath $PassTmp
+    Move-Item -LiteralPath $PassTmp -Destination $PassFile -Force
+    Move-Item -LiteralPath $KsTmp -Destination $Ks
+    $done = $true
 
     Write-Host ''
     Write-Host 'Key created. Now give the cloud sessions the two values, one at a time.'
@@ -107,5 +131,8 @@ try {
 finally {
     Remove-Item Env:GASKET_NEW_KS_PASS -ErrorAction SilentlyContinue
     $pass = $null
+    if (-not $done) {
+        foreach ($f in @($KsTmp, $PassTmp)) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
+    }
     if ($tempJava -and (Test-Path -LiteralPath $tempJava)) { Remove-Item -LiteralPath $tempJava -Recurse -Force -ErrorAction SilentlyContinue }
 }
