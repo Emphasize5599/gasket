@@ -644,6 +644,10 @@
   function drawSpeed0() {
     settle(speedHost);
     var m = speedModel(), c = car();
+    // 'toggle' fires a task later, so a redraw right after a tap would read a stale flag: take what's on screen
+    var curCard = speedHost.querySelector('details.spd-card'), curSet = speedHost.querySelector('.spd-set');
+    if (curCard) spdOpen = curCard.open;
+    if (curSet) setOpen = curSet.open;
     var wasOpen = spdOpen;
     var h = '<details class="spd-card"' + (wasOpen ? ' open' : '') + '><summary><span class="h3">Best cruising speed · ' + esc(shortName(c)) + '</span>' +
       (m ? '<b class="spd-pill">' + m.rec.speed + ' mph</b>' : '') + '</summary>';
