@@ -8,7 +8,7 @@ fail=0
 for t in tests/*.test.js; do
   if node "$t" >/dev/null 2>&1; then echo "PASS $t"; else echo "FAIL $t"; fail=1; fi
 done
-for t in ui blacklist est garage perf trip_ui; do
+for t in ui blacklist est garage restore perf trip_ui; do
   log="$SHOTS/$t.log"; mkdir -p "$SHOTS/$t"
   if python3 "tests/${t}_test.py" "$SHOTS/$t" >"$log" 2>&1; then echo "PASS tests/${t}_test.py"; else echo "FAIL tests/${t}_test.py (see $log)"; fail=1; fi
 done

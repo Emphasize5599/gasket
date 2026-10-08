@@ -656,7 +656,7 @@ public class MainActivity extends Activity {
         android.content.ContentValues v = new android.content.ContentValues();
         v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
         v.put("mime_type", "application/json");
-        v.put("relative_path", "Download/FuelPlus");
+        v.put("relative_path", "Download/Gasket");
         Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
         if (uri == null) throw new Exception("couldn't create the file");
         OutputStream os = getContentResolver().openOutputStream(uri);
@@ -699,12 +699,13 @@ public class MainActivity extends Activity {
         w.endObject();
         w.close();
         JSONObject o = new JSONObject();
-        o.put("path", "Downloads/FuelPlus/" + name); o.put("prefs", nPrefs); o.put("kv", nKv);
+        o.put("path", "Downloads/Gasket/" + name); o.put("prefs", nPrefs); o.put("kv", nKv);
         return o;
     }
 
     /**
-     * Replace this install's data with a backup. Lookup counts never go down: for each month the higher of the backup's
+     * Replace this install's data with a backup. Backups from Fuel+ Map (fromPackage com.ben.gasmap) restore as-is:
+     * same format, same files/kv/<namespace>/<sha1> layout. Lookup counts never go down: for each month the higher of the backup's
      * and this install's count is kept, so a restore can't hand you a fresh monthly cap.
      */
     private JSONObject readBackup(Uri uri) throws Exception {
@@ -920,7 +921,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        /** Full backup (with API keys, caches, history and lookup counts) to Downloads/FuelPlus. Replies {path, prefs, kv} or {error}. */
+        /** Full backup (with API keys, caches, history and lookup counts) to Downloads/Gasket. Replies {path, prefs, kv} or {error}. */
         @JavascriptInterface
         public void backupAll(final int reqId, final String name) {
             new Thread(new Runnable() {

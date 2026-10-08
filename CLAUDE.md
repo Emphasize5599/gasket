@@ -22,7 +22,8 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 - Keep Google API use low: there's a monthly cap (default 900), answers are cached, and nothing searches automatically on open.
 - No Play-services APIs. The target phones are Pixels on GrapheneOS.
 - Test data uses generic public places (state capitols, "100 Main St", "Testville"), never real personal addresses, coordinates or share links.
-- Keep compatibility: imports accept old Fuel+ exports (`fuelPlusData`) and old shared trips (`-----FUEL+ TRIP-----`).
+- Keep compatibility: Restore full backup accepts Fuel+ 0.0.47 backups (`fromPackage` `com.ben.gasmap`, same `files/kv/<namespace>/<sha1>` layout); imports accept old Fuel+ exports (`fuelPlusData`) and old shared trips (`-----FUEL+ TRIP-----`).
+- A restore, and the restart right after it, never use Google lookups; restored lookup counts keep the higher number.
 
 ## Versioning and commits
 - `versionName` is always `0.0.<versionCode>` (see `VERSIONING.md`). Each bump gets a `CHANGELOG.md` entry.

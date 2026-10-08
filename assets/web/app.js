@@ -7,6 +7,8 @@
   // ---------- native bridge (with a browser stand-in for testing) ----------
   var N = window.Native || (function () {
     var mem = {};
+    // a restored backup survives the restart, as it does in the app's storage
+    try { var rs = sessionStorage.getItem('standinRestored'); if (rs) { mem = JSON.parse(rs); sessionStorage.removeItem('standinRestored'); } } catch (e) { }
     return {
       loadSettings: function () { return mem.s || ''; }, saveSettings: function (j) { mem.s = j; },
       loadCache: function () { return mem.c || ''; }, saveCache: function (j) { mem.c = j; },
@@ -35,7 +37,7 @@
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },
       saveAndShare: function (req, name, mime, t, subj) { window.__saved = { name: name, text: t }; window.__shared = { subject: subj, file: name }; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/Gasket/' + name }); }, 30); },
       backupAll: function (req, name) { window.__backupName = name; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/Gasket/' + name, prefs: 5, kv: 42 }); }, 30); },
-      pickAndRestore: function (req) { setTimeout(function () { window.onNativeResult(req, window.__restoreMock || { cancelled: true }); }, 30); },
+      pickAndRestore: function (req) { setTimeout(function () { window.onNativeResult(req, window.__mocks && window.__mocks.restoreFile ? standinRestore(window.__mocks.restoreFile) : window.__restoreMock || { cancelled: true }); }, 30); },
       saveDownload: function (name, mime, t) { window.__saved = { name: name, text: t }; return 'Downloads/Gasket/' + name; },
       appVersion: function () { return 'test'; },
       kvGet: function (ns, k) { var m = window.__kv = window.__kv || {}; return m[ns + '|' + k] || ''; },
@@ -48,8 +50,17 @@
       fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
-      search: function (req) { setTimeout(function () { window.onSearchResult(req, { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
+      search: function (req) { window.__searchCalls = (window.__searchCalls || 0) + 1; setTimeout(function () { window.onSearchResult(req, { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
     };
+    /** What MainActivity.readBackup does, for the browser: settings and the map cache from a full-backup file (any app's). */
+    function standinRestore(text) {
+      var d; try { d = JSON.parse(text); } catch (e) { return { error: 'That isn\'t a full backup file.' }; }
+      if (!d || d.fullBackup !== 1 || !d.prefs) return { error: 'That isn\'t a full backup file.' };
+      var p = d.prefs, kv = 0; Object.keys(d.kv || {}).forEach(function (ns) { kv += Object.keys(d.kv[ns]).length; });
+      mem = { s: p.settings ? p.settings.v : '', c: p.cache ? p.cache.v : '' };
+      try { sessionStorage.setItem('standinRestored', JSON.stringify(mem)); } catch (e) { }
+      return { prefs: Object.keys(p).length, kv: kv, from: d.fromPackage || '' };
+    }
   })();
 
   // ---------- state ----------
@@ -72,6 +83,9 @@
   var me = null;            // {lat,lng,acc}
   var stations = [];        // normalised
   var lastFetch = null;     // {ts, lat, lng, demo}
+  // the first start after restoring a full backup: show the restored prices, don't search (no Google lookups)
+  var justRestored = location.hash === '#restored';
+  if (justRestored) try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
   var reqId = 0, pending = 0;
   var sortBy = 'price';
   var selectedId = null;
@@ -201,7 +215,7 @@
       map.setView([lat, lng], zoomForRadius(S.radiusMi));
       var fresh = lastFetch && (Date.now() - lastFetch.ts < 30 * 60000) && P.haversineMi(lat, lng, lastFetch.lat, lastFetch.lng) < 3;
       // prices on opening only if you turned that on (each search uses Google lookups); otherwise the last prices stay up
-      if (!fresh && S.autoRefresh && (S.apiKey || demo || Object.keys(SITES).some(siteOn))) fetchAround(lat, lng);
+      if (!fresh && S.autoRefresh && !justRestored && (S.apiKey || demo || Object.keys(SITES).some(siteOn))) fetchAround(lat, lng);
       else { render(); if (!fresh && !demo) status(lastFetch ? 'Prices from ' + ago(lastFetch.ts) + ' · tap ↻ for fresh ones' : 'Tap ↻ to get prices nearby'); }
     } else render();
   };
@@ -755,7 +769,7 @@
   function fullBackup(btn) {
     if (!N.backupAll || !window.__trip) { toast('This needs the app.'); return; }
     btn.disabled = true; var lbl = btn.textContent; btn.textContent = 'Saving…';
-    window.__trip.call('backupAll', 'fuelplus-full-backup-' + stamp() + '.json').then(function (r) {
+    window.__trip.call('backupAll', 'gasket-full-backup-' + stamp() + '.json').then(function (r) {
       btn.disabled = false; btn.textContent = lbl;
       if (!r || r.error) { toast('Couldn\'t save the backup' + (r && r.error ? ': ' + r.error : '') + '.'); return; }
       toast('Saved to ' + r.path + ' (' + r.kv + ' saved items).');
@@ -772,7 +786,8 @@
         if (r.error) { toast('Couldn\'t restore: ' + r.error); return; }
         window.__restoring = true;                    // nothing may write the old settings back over the restored ones
         toast('Restored ' + r.prefs + ' settings and ' + r.kv + ' saved items. Restarting…');
-        setTimeout(function () { location.reload(); }, 900);
+        // '#restored' tells the restarted page not to search on opening, so a restore never uses Google lookups
+        setTimeout(function () { location.hash = 'restored'; location.reload(); }, 900);
       });
     });
   }
