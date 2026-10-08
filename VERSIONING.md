@@ -19,6 +19,8 @@ Never reset or reuse a versionCode (Android refuses to install a lower code over
 
 ## History
 
+0.0.47 is the last Fuel+ Map build (`com.ben.gasmap`, old key): a migration build that adds Full backup / Restore. Gasket (`com.bensanzone.fuelmap`) starts at 0.0.48.
+
 Builds before the switch were named `2.0`–`3.25` (versionCodes 11–46). They are renumbered in `CHANGELOG.md` as `0.0.11`–`0.0.46`, with the old name in brackets. versionCodes 1–10 existed but their names and source were not kept.
 
 ## Beta (later)

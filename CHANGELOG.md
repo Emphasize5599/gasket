@@ -4,14 +4,17 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
-## Unreleased
-- **Renamed to Gasket.** The application ID is now `com.bensanzone.fuelmap` (was `com.ben.gasmap`), so Gasket installs as a separate app next to Fuel+ Map. To bring your data over, use Settings → Your data → Export in Fuel+ Map, then Import in Gasket.
+## 0.0.48 - 2026-10-08
+The first Gasket build.
+- **Renamed to Gasket.** The application ID is now `com.bensanzone.fuelmap` (was `com.ben.gasmap`), so Gasket installs as a separate app next to Fuel+ Map, and it's signed with a new key.
+- **Moving from Fuel+ Map:** in Fuel+ 0.0.47 use Settings → Your data → Save full backup, then in Gasket use Restore full backup and pick the file from `Download/FuelPlus`. Everything comes over, including API keys, cars, trips, saved searches and this month's lookup counts (the higher count is kept). The restore, and the restart after it, use no Google lookups.
+- New full backups are saved to `Downloads/Gasket` as `gasket-full-backup-….json`.
 - Exports, logs and reports save to `Downloads/Gasket` with `gasket-…` file names. Data files exported by Fuel+ Map and trips it shared (`-----FUEL+ TRIP-----`) still import.
 - The APK is now `Gasket.apk`. `build.sh` stops with a clear message if `KS_PASS` or the keystore is missing, and no longer creates a new signing key on its own.
 - Version names follow `0.0.<versionCode>` (see `VERSIONING.md`).
 - Fixed: the "Speed settings" panel on the cruising-speed card could snap shut when you changed a value right after opening it.
 
-## 0.0.47 - 2026-10-08
+## 0.0.47 [Fuel+ Map] - 2026-10-08
 - Still Fuel+ Map (`com.ben.gasmap`, old signing key) so it installs over 0.0.46: a migration build.
 - Settings → Your data → Full backup: save and restore everything (settings including API keys, cars, trips, every saved search and price, bad CITGO list, debug log, this month's Google lookup counts). Restoring replaces everything; lookup counts keep the higher number so the monthly cap still holds. Uses no lookups.
 - Versioning switched to `0.0.<versionCode>`.
