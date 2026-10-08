@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.49 - 2026-10-08
+- **Licenses & credits:** Settings → About lists the open-source code Gasket includes (Leaflet, the U.S. state outlines) with their full license texts, credits every data source, and shows Gasket's own license.
+- **Google Maps credit:** a small "Google Maps" label wherever Google's stations, prices or routes appear: the station list, a station's details, the map's credit line and the trip planner. Demo data doesn't get it.
+- `COMPLIANCE.md` lists the services' terms-of-use questions to settle before a public beta.
+
 ## 0.0.48 - 2026-10-08
 The first Gasket build.
 - **Renamed to Gasket.** The application ID is now `com.bensanzone.fuelmap` (was `com.ben.gasmap`), so Gasket installs as a separate app next to Fuel+ Map, and it's signed with a new key.
