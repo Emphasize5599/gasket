@@ -8,15 +8,24 @@ JAR=$SDK/platforms/android-23/android.jar
 OUT=build
 APK=Gasket.apk
 
-# signing: the keystore and its password never live in the repo. Point KEYSTORE at the .jks
-# (default keystore/release.jks, gitignored) and export KS_PASS before building.
+# signing: the keystore and its password never live in the repo (see SIGNING.md). The password comes from KS_PASS.
+# The keystore is KEYSTORE=/path/to.jks, else keystore/release.jks (gitignored), else GASKET_KEYSTORE_B64 (the
+# keystore as base64, how cloud sessions get it from their environment settings), written to a private temp file.
 KS=${KEYSTORE:-keystore/release.jks}
 if [ -z "${KS_PASS:-}" ]; then
-  echo "build.sh: KS_PASS is not set. Export the keystore password in KS_PASS and run again." >&2
+  echo "build.sh: KS_PASS is not set. Export the keystore password in KS_PASS and run again (see SIGNING.md)." >&2
   exit 1
 fi
+if [ -z "${KEYSTORE:-}" ] && [ ! -f "$KS" ] && [ -n "${GASKET_KEYSTORE_B64:-}" ]; then
+  KS=$(mktemp "${TMPDIR:-/tmp}/gasket-ks.XXXXXX")   # created readable by this user only
+  trap 'rm -f "$KS"' EXIT
+  if ! printf '%s' "$GASKET_KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$KS" 2>/dev/null || [ ! -s "$KS" ]; then
+    echo "build.sh: GASKET_KEYSTORE_B64 isn't a base64 keystore. Paste it again from tools/new-signing-key.ps1." >&2
+    exit 1
+  fi
+fi
 if [ ! -f "$KS" ]; then
-  echo "build.sh: no keystore at $KS. Set KEYSTORE=/path/to/release.jks (a new key would change the app's signing identity, so none is made here)." >&2
+  echo "build.sh: no keystore at $KS. Set KEYSTORE=/path/to/release.jks or GASKET_KEYSTORE_B64 (see SIGNING.md). A new key would change the app's signing identity, so none is made here." >&2
   exit 1
 fi
 

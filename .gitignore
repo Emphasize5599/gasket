@@ -10,6 +10,7 @@ keystore/
 *.jks
 *.keystore
 *.p12
+*.dpapi
 .env*
 local.properties
 google-services.json

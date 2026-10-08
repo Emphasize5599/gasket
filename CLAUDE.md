@@ -12,7 +12,7 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 - All tests: `tests/run_all.sh [screenshot-dir]`. That's the Node unit tests plus the Playwright UI tests, about 8 minutes.
 - One Node test: `node tests/trip.test.js`. One UI test: `python3 tests/ui_test.py /tmp/shots`. The UI tests use the browser at `$CHROME`; the session-start hook sets it in cloud sessions.
 - Syntax check: `node --check assets/web/app.js`, `python3 -m py_compile tests/ui_test.py`. The `assets/*_worker.js` files are bare anonymous functions that the Java side wraps before injecting, so check those wrapped in parentheses.
-- Build: `KS_PASS=… KEYSTORE=/path/to/release.jks ./build.sh`. It fails if either is missing and never generates a key. The keystore and its password never go in the repo, logs or commits.
+- Build a signed APK: `./build.sh`. Cloud sessions sign with `KS_PASS` and `GASKET_KEYSTORE_B64` from the environment settings; elsewhere, set `KEYSTORE=/path/to.jks`. It fails if either is missing and never generates a key. See `SIGNING.md`. Never print, log or commit `KS_PASS`, `GASKET_KEYSTORE_B64` or the keystore, and don't dump the environment (`env`, `printenv`).
 
 ## Rules (from the owner; keep them)
 - No user price reporting. If no source has a price, show the station without one.
