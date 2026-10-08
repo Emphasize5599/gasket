@@ -1,0 +1,38 @@
+# Pushing a version tag (v0.0.<versionCode>) creates a GitHub Release for it: the notes come from CHANGELOG.md, and the
+# only downloads are the source code archives GitHub attaches to every release. No APK is built or uploaded.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the app version
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          if ! grep -q "android:versionName=\"$ver\"" AndroidManifest.xml; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match android:versionName in AndroidManifest.xml"
+            exit 1
+          fi
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="$ver" 'index($0, "## " v " ") == 1 || $0 == "## " v { p = 1; next } p && /^## / { exit } p' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no entry for $ver"
+            exit 1
+          fi
+
+      - name: Create the release (source code only, marked pre-release while in alpha)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "Gasket ${GITHUB_REF_NAME#v}" --notes-file notes.md --prerelease --verify-tag

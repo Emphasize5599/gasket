@@ -17,6 +17,12 @@ To bump: in `AndroidManifest.xml` add 1 to `android:versionCode` and set `androi
 
 Never reset or reuse a versionCode (Android refuses to install a lower code over a higher one).
 
+## Releasing a version
+
+1. Bump the version and add its `CHANGELOG.md` entry, then commit as `chore(release): 0.0.<code>`.
+2. Push to `main`.
+3. Tag that commit `v0.0.<code>` and push the tag. `.github/workflows/release.yml` then creates the GitHub Release: the notes are the version's CHANGELOG entry, it's marked pre-release while Gasket is in alpha, and the only downloads are GitHub's source code archives. APKs are never uploaded; they're built with `./build.sh` and shared directly.
+
 ## History
 
 0.0.47 is the last Fuel+ Map build (`com.ben.gasmap`, old key): a migration build that adds Full backup / Restore. Gasket (`com.bensanzone.fuelmap`) starts at 0.0.48.
