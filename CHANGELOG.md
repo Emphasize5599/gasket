@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.53 - 2026-10-08
+- **Tires** have their own card in the Garage:
+  - **Size:** your trim's factory size is looked up at Tire Rack (for example 195/65R15 for a 2020 Corolla Hybrid LE). If a trim came with several sizes you pick yours, and you can always type it from the sticker inside the driver's door.
+  - **Type → brand → model:** chosen from the tires Tire Rack sells in that size. Picking one fills in its wear rating (treadwear, traction, temperature) and the maker's mileage warranty. "Other…" lets you type anything.
+  - **Tread left:** measure it with the coin tests explained in the (?), or let Gasket estimate it from the miles on the tires, their expected life, and whether they're rotated regularly.
+- **Advisory** gets a Tires card when there's something worth knowing: worn tread (a red dot when it's time to replace them), skipped rotations, or a low wet-traction grade.
+
 ## 0.0.52 - 2026-10-08
 - **Your VIN is checked for open recalls by itself**, in the background like the price sites, when you add a VIN and then about once a week. If NHTSA doesn't answer, Advisory says so in one line and the "Check my car at NHTSA" button opens its page for you.
 - **Range tile** next to City / Highway / Combined: how far a full tank or charge goes at highway mileage (yours if you've logged it). The math is in its (?). It replaces the "About … mi on a full tank" line.
