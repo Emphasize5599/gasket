@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.50 - 2026-10-08
+- **New Advisory step**, right after Garage: things worth knowing about your car before you drive. Its tab shows a red dot when something needs a look.
+- **Safety recalls moved here from the Garage.** It lists every recall on record for your year, make and model. With a VIN, "Check my car at NHTSA" opens NHTSA's own recall page with your VIN filled in. Gasket reads its answer ("N unrepaired recalls") and remembers it, shows any open recalls with what they fix, and suggests checking again after three months. The page is always shown to you. Gasket never runs it hidden and never gets past its checks for you.
+- **Worth turning off:** if your car has cylinder shut-off or engine stop at red lights, Advisory explains what each does, why it can wear the engine, and how to turn it off. Mark each one "I've turned it off" or "Keep it on". Hybrids aren't told to turn off engine stop.
+- Departure now mentions open recalls from your VIN check, or recalls on record that haven't been checked yet.
+- Removed the stolen-car (NICB) check; its site needs a CAPTCHA.
+
 ## 0.0.49 - 2026-10-08
 - **Licenses & credits:** Settings → About lists the open-source code Gasket includes (Leaflet, the U.S. state outlines) with their full license texts, credits every data source, and shows Gasket's own license.
 - **Google Maps credit:** a small "Google Maps" label wherever Google's stations, prices or routes appear: the station list, a station's details, the map's credit line and the trip planner. Demo data doesn't get it.
