@@ -1,4 +1,4 @@
-package com.ben.gasmap;
+package com.bensanzone.fuelmap;
 
 import android.Manifest;
 import android.app.Activity;
@@ -64,7 +64,7 @@ import java.util.Locale;
 public class MainActivity extends Activity {
 
     private static final int REQ_LOC = 42;
-    private static final String PREFS = "gasmap";
+    private static final String PREFS = "gasket";
     private static final String PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.location,places.formattedAddress,"
@@ -214,13 +214,25 @@ public class MainActivity extends Activity {
 
     // ---------------- OpenStreetMap tiles (identified, cached; OSM tile policy) ----------------
 
+    private volatile String ua;
+
+    /** How the app names itself to OpenStreetMap and other services (their usage policies ask apps to identify themselves). */
+    private String userAgent() {
+        if (ua == null) {
+            String v = "?";
+            try { v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+            ua = "Gasket/" + v + " (personal Android app; " + getPackageName() + ")";
+        }
+        return ua;
+    }
+
     private WebResourceResponse fetchTile(String u) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
             c.setUseCaches(true);
             c.setConnectTimeout(10000);
             c.setReadTimeout(15000);
-            c.setRequestProperty("User-Agent", "FuelPlusMap/1.2 (Android; personal use; com.ben.gasmap)");
+            c.setRequestProperty("User-Agent", userAgent());
             int st = c.getResponseCode();
             if (st != 200) return null;
             Map<String, String> h = new HashMap<String, String>();
@@ -256,7 +268,7 @@ public class MainActivity extends Activity {
             }
             CookieManager.getInstance().setAcceptCookie(true);
             CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
-            view.addJavascriptInterface(new SiteBridge(key), "FuelPlusSite");
+            view.addJavascriptInterface(new SiteBridge(key), "GasketSite");
             view.setWebChromeClient(new WebChromeClient());
             view.setWebViewClient(new WebViewClient() {
                 @Override
@@ -605,7 +617,7 @@ public class MainActivity extends Activity {
         c.setReadTimeout(20000);
         c.setRequestProperty("Accept", "application/json");
         // OpenStreetMap's usage policy asks apps to identify themselves
-        c.setRequestProperty("User-Agent", "FuelPlusMap/2.0 (personal Android app; com.ben.gasmap)");
+        c.setRequestProperty("User-Agent", userAgent());
         int st = c.getResponseCode();
         String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
         if (st >= 400) throw new Exception("HTTP " + st);
@@ -691,7 +703,7 @@ public class MainActivity extends Activity {
         }
 
         /**
-         * Saves a (possibly large) text file to Downloads/FuelPlus off the main thread, then offers it to other apps as a
+         * Saves a (possibly large) text file to Downloads/Gasket off the main thread, then offers it to other apps as a
          * file — not as pasted text, which makes the share sheet crawl on big reports. Replies {path} or {error}.
          */
         @JavascriptInterface
@@ -704,13 +716,13 @@ public class MainActivity extends Activity {
                         android.content.ContentValues v = new android.content.ContentValues();
                         v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
                         v.put("mime_type", mime);
-                        v.put("relative_path", "Download/FuelPlus");
+                        v.put("relative_path", "Download/Gasket");
                         uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
                         if (uri == null) throw new Exception("couldn't create the file");
                         OutputStream os = getContentResolver().openOutputStream(uri);
                         os.write(text.getBytes("UTF-8"));
                         os.close();
-                        o.put("path", "Downloads/FuelPlus/" + name);
+                        o.put("path", "Downloads/Gasket/" + name);
                     } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
                     final Uri u = uri;
                     main.post(new Runnable() {
@@ -732,26 +744,26 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        /** Saves a file to Downloads/FuelPlus (no storage permission needed on Android 10+). Returns where, or an error. */
+        /** Saves a file to Downloads/Gasket (no storage permission needed on Android 10+). Returns where, or an error. */
         @JavascriptInterface
         public String saveDownload(String name, String mime, String text) {
             try {
                 android.content.ContentValues v = new android.content.ContentValues();
                 v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
                 v.put("mime_type", mime);
-                v.put("relative_path", "Download/FuelPlus");
+                v.put("relative_path", "Download/Gasket");
                 Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
                 if (uri == null) return "error: couldn't create the file";
                 OutputStream os = getContentResolver().openOutputStream(uri);
                 os.write(text.getBytes("UTF-8"));
                 os.close();
-                return "Downloads/FuelPlus/" + name;
+                return "Downloads/Gasket/" + name;
             } catch (Exception e) {
                 return "error: " + e.getMessage();
             }
         }
 
-        /** Opens the system file picker for a Fuel+ data file to import; the text comes back via onNativeResult. */
+        /** Opens the system file picker for a Gasket data file to import (old Fuel+ exports work too); the text comes back via onNativeResult. */
         @JavascriptInterface
         public void pickTextFile(final int reqId) {
             main.post(new Runnable() {

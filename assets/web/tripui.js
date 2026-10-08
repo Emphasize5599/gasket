@@ -1,4 +1,4 @@
-/* Fuel+ Map — trip planner screens. Import a Google Maps route, find priced stations along it,
+/* Gasket — trip planner screens. Import a Google Maps route, find priced stations along it,
  * pick the stops that actually save money, and send the route (with stops) back to Google Maps. */
 (function () {
   'use strict';
@@ -301,7 +301,7 @@
       var src = srcOf();
       return '<div class="card">' +
       '<div class="seg2" id="tSrc"><button data-src="link" class="' + (src === 'link' ? 'on' : '') + '">Maps link</button><button data-src="typed" class="' + (src === 'typed' ? 'on' : '') + '">Addresses</button></div>' +
-      '<div id="tSrcLink"' + (src === 'link' ? '' : ' class="hidden"') + '><div class="field col"><div class="lbl">Google Maps directions link<span class="req" aria-label="required">*</span><small>In Google Maps: get directions → ⋮ → <b>Share directions</b> → Fuel+ Map. Or paste the link here.</small></div>' +
+      '<div id="tSrcLink"' + (src === 'link' ? '' : ' class="hidden"') + '><div class="field col"><div class="lbl">Google Maps directions link<span class="req" aria-label="required">*</span><small>In Google Maps: get directions → ⋮ → <b>Share directions</b> → Gasket. Or paste the link here.</small></div>' +
       '<textarea id="tLink" rows="2" placeholder="https://maps.app.goo.gl/…" spellcheck="false">' + esc(t.link) + '</textarea></div></div>' +
       '<div id="tSrcTyped"' + (src === 'typed' ? '' : ' class="hidden"') + '>' +
       '<div class="field col"><div class="lbl">From<span class="req" aria-label="required">*</span></div><span class="in-btn"><input type="text" id="tFrom" placeholder="Address or place" value="' + esc(t.from) + '"><button type="button" id="tHere" aria-label="Use my location"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg></button></span></div>' +
@@ -478,7 +478,7 @@
   }
   async function readLink0(text, job) {
     var shared = importTrip(text);
-    if (shared) { LG.info('link', 'Imported a shared Fuel+ trip', { stops: shared.stops.length }); previewCities(shared); return shared; }
+    if (shared) { LG.info('link', 'Imported a shared trip', { stops: shared.stops.length }); previewCities(shared); return shared; }
     dbg = { linkText: text.slice(0, 2000), at: new Date().toISOString() };
     var url = T.extractUrl(text);
     LG.info('link', 'Reading link', url);
@@ -545,12 +545,16 @@
 
   // ---------- making sure every stop is the right place ----------
   // ---------- shared trips (import) ----------
-  var TRIP_START = '-----FUEL+ TRIP-----', TRIP_END = '-----END FUEL+ TRIP-----';
+  var TRIP_START = '-----GASKET TRIP-----', TRIP_END = '-----END GASKET TRIP-----';
+  // markers trips are read with: ours, then the ones Fuel+ Map shared trips used
+  var TRIP_MARKS = [[TRIP_START, TRIP_END], ['-----FUEL+ TRIP-----', '-----END FUEL+ TRIP-----']];
   function importTrip(text) {
-    var a = text.indexOf(TRIP_START), b = text.indexOf(TRIP_END);
-    if (a < 0 || b < a) return null;
+    var m = TRIP_MARKS.filter(function (k) { return text.indexOf(k[0]) >= 0; })[0];
+    if (!m) return null;
+    var a = text.indexOf(m[0]), b = text.indexOf(m[1]);
+    if (b < a) return null;
     try {
-      var j = JSON.parse(text.slice(a + TRIP_START.length, b).trim());
+      var j = JSON.parse(text.slice(a + m[0].length, b).trim());
       if (!j || !j.stops || j.stops.length < 2) return null;
       var r = { stops: j.stops.map(function (s) { return Object.assign({}, s, { short: s.short || T.shortLabel(s.address || s.label || '') }); }),
         avoid: j.avoid || { tolls: false, highways: false, ferries: false }, avoidDetected: !!j.avoidDetected, mode: 'drive',
@@ -595,7 +599,7 @@
   function shareTrip() {
     var r = result, p = r && r.plan;
     var o = route.stops[0], d = route.stops[route.stops.length - 1];
-    var L = ['Fuel+ trip: ' + stopLine(o) + ' → ' + stopLine(d), Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + gradeLabel(r.grade).toLowerCase()];
+    var L = ['Gasket trip: ' + stopLine(o) + ' → ' + stopLine(d), Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + gradeLabel(r.grade).toLowerCase()];
     if (p && p.ok) {
       p.stops.forEach(function (s, i) {
         L.push((i + 1) + '. ' + s.c.station.name + ' — ' + (s.c.station.address || '') + ' — mile ' + Math.round(s.c.d) + ' — ' + priceText(s.c.price) + '/' + UN() + ' — buy ' + s.buyGal.toFixed(1) + ' ' + UN() + ' (' + money2(s.cost) + ')');
@@ -606,8 +610,8 @@
       var ex = T.exportUrl(route, p.stops.concat(r.top ? [{ c: r.top.c }] : []), model);
       L.push('', 'Open in Google Maps: ' + ex.url);
     }
-    L.push('', 'To plan this trip in Fuel+ Map, paste this whole message into the trip link box:', tripBlock());
-    N.shareText('Fuel+ trip', L.join('\n'));
+    L.push('', 'To plan this trip in Gasket, paste this whole message into the trip link box:', tripBlock());
+    N.shareText('Gasket trip', L.join('\n'));
     LG.info('share', 'Shared trip summary');
   }
   function report() {
@@ -615,7 +619,7 @@
     delete safeSettings.apiKey; safeSettings.hasApiKey = !!S.apiKey;
     var r = result;
     var rep = {
-      fuelPlusReport: 1, app: N.appVersion ? N.appVersion() : '', time: new Date().toString(), userAgent: navigator.userAgent,
+      gasketReport: 1, app: N.appVersion ? N.appVersion() : '', time: new Date().toString(), userAgent: navigator.userAgent,
       settings: safeSettings, lookups: { placesThisMonth: N.callsThisMonth(), routesThisMonth: N.routeCallsThisMonth ? N.routeCallsThisMonth() : null },
       link: dbg,
       stops: route && route.stops, routeOptionsFromGoogleMaps: route && route.mapsRoutes, routeIndex: route && route.routeIndex,
@@ -649,7 +653,7 @@
       var text = report();
       if (text.length > 1500000) text = text.slice(0, 1500000) + '\n…(trimmed)';
       LG.info('share', 'Troubleshooting report shared', { chars: text.length });
-      await window.__shareFile('fuelplus-report-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json', 'application/json', text, 'Fuel+ Map troubleshooting report');
+      await window.__shareFile('gasket-report-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json', 'application/json', text, 'Gasket troubleshooting report');
     } catch (x) { toastMsg('Couldn\'t make the report: ' + (x.message || x)); }
     if (btn) { delete btn.dataset.busy; btn.textContent = btn.dataset.lbl0; }
   }
@@ -3025,7 +3029,7 @@
   };
   $('btnTrip').onclick = function () { N.haptic(); tripPicker(); };
 
-  // Google Maps -> Share directions -> Fuel+ Map
+  // Google Maps -> Share directions -> Gasket
   window.onSharedText = function (text) {
     closePicker(); newTrip(text);
   };

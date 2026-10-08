@@ -55,7 +55,7 @@ with sync_playwright() as p:
         # export the list; then remove it; import it back; import again = skipped
         pg.evaluate('window.__saved = null'); pg.click('#blExp'); pg.wait_for_timeout(200)
         sv = pg.evaluate('window.__saved'); data = json.loads(sv['text'])
-        assert sv['name'].startswith('fuelplus-bad-citgos') and data['fuelPlusData'] == 1 and len(data['blacklist']) == 1 and 'apiKey' not in sv['text']
+        assert sv['name'].startswith('gasket-bad-citgos') and data['gasketData'] == 1 and 'fuelPlusData' not in data and len(data['blacklist']) == 1 and 'apiKey' not in sv['text']
         pg.click('[data-blrm="0"]'); pg.wait_for_timeout(250)
         assert pg.locator('#cfm').count() == 1 and pg.evaluate('window.__app.S.blacklist.length') == 1, 'asks before removing'
         pg.click('#cfmYes'); pg.wait_for_timeout(250)
@@ -69,6 +69,13 @@ with sync_playwright() as p:
         dup = dict(data); dup['blacklist'] = [dict(data['blacklist'][0], id='someone-elses-id', lat=data['blacklist'][0]['lat'] + 0.0002)]
         pg.evaluate('(t) => { window.__mocks.pick = t; }', json.dumps(dup)); pg.click('#blImp'); pg.wait_for_timeout(300)
         assert pg.locator('.bl-row').count() == 1, 'same station, other id: skipped'
+        # a file exported by Fuel+ Map (before the rename) is still accepted
+        old = dict(data); del old['gasketData']; old['fuelPlusData'] = 1
+        pg.evaluate('(t) => { window.__mocks.pick = t; }', json.dumps(old)); pg.click('#blImp'); pg.wait_for_timeout(300)
+        assert '0 bad stations added (1 already on your list)' in pg.inner_text('#toast'), 'old Fuel+ export read: ' + pg.inner_text('#toast')
+        not_ours = dict(data); del not_ours['gasketData']
+        pg.evaluate('(t) => { window.__mocks.pick = t; }', json.dumps(not_ours)); pg.click('#blImp'); pg.wait_for_timeout(300)
+        assert "isn't a Gasket data file" in pg.inner_text('#toast'), pg.inner_text('#toast')
         # tap it: the station on the main map
         pg.click('.bl-go'); pg.wait_for_timeout(500)
         assert pg.locator('#blPage.hidden').count() == 1 and pg.locator('#settings.hidden').count() == 1 and pg.is_visible('#detail')

@@ -382,12 +382,12 @@ with sync_playwright() as p:
         sh = pg.evaluate('window.__shared')
         shtxt = sh['text'] if isinstance(sh, dict) else str(sh)
         print('  shared trip:', shtxt[:300].replace('\n', ' | '))
-        assert 'Open in Google Maps: https://www.google.com/maps/dir/' in shtxt and '-----FUEL+ TRIP-----' in shtxt, shtxt
+        assert 'Open in Google Maps: https://www.google.com/maps/dir/' in shtxt and '-----GASKET TRIP-----' in shtxt and 'FUEL+' not in shtxt, shtxt
         pg.evaluate("window.__shared = null; window.__saved = null"); pg.click('#tsReport'); pg.wait_for_timeout(400)
         rep = pg.evaluate('window.__shared'); assert rep and rep.get('file', '').endswith('.json'), 'shared as a file'
         rtxt = pg.evaluate('window.__saved.text')
         rj = json.loads(rtxt)
-        assert rj['fuelPlusReport'] == 1 and rj['plan']['stops'] and 'apiKey' not in rj['settings'] and 'AIza' not in rtxt, list(rj.keys())
+        assert rj['gasketReport'] == 1 and rj['plan']['stops'] and 'apiKey' not in rj['settings'] and 'AIza' not in rtxt, list(rj.keys())
         assert pg.evaluate('window.__saved'), 'saved to downloads'
         print('  report keys:', list(rj.keys()), 'candidates', len(rj['candidates']))
         SHARED_TRIP = shtxt
@@ -733,13 +733,21 @@ with sync_playwright() as p:
         assert body['destination']['location']['latLng'] == {'latitude': 41.7640350, 'longitude': -72.6823870}, body
         pg.screenshot(path=f'{OUT}/{name}-t8-reallink.png')
         pg.click('#tClose'); pg.wait_for_timeout(200)
-        # pasting a shared Fuel+ trip restores the route, no Google lookups or link opening
+        # pasting a shared trip restores the route, no Google lookups or link opening
         pg.evaluate("window.__finds = null; window.__gmapsUrl = null; window.__mocks.link = {error: 'should not be used'}; onSharedText(%s)" % json.dumps(SHARED_TRIP))
         pg.wait_for_timeout(600)
         txt = ft(pg, '#tParsed'); print('  imported shared trip:', txt.replace('\n', ' | '))
         assert 'Dallas' in txt and 'error' not in txt.lower(), txt
         getr(pg)
         assert pg.evaluate('window.__routeBody')['destination'], 'route from the imported trip'
+        pg.click('#tClose'); pg.wait_for_timeout(200)
+        # a trip shared by Fuel+ Map (before the rename) still imports
+        OLD_TRIP = SHARED_TRIP.replace('-----GASKET TRIP-----', '-----FUEL+ TRIP-----').replace('-----END GASKET TRIP-----', '-----END FUEL+ TRIP-----')
+        assert 'GASKET' not in OLD_TRIP
+        pg.evaluate("window.__mocks.link = {error: 'should not be used'}; onSharedText(%s)" % json.dumps(OLD_TRIP))
+        pg.wait_for_timeout(600)
+        txt = ft(pg, '#tParsed'); print('  imported old Fuel+ trip:', txt.replace('\n', ' | '))
+        assert 'Dallas' in txt and 'error' not in txt.lower(), txt
         pg.click('#tClose'); pg.wait_for_timeout(200)
         # a round trip as one link (North Little Rock -> Dallas -> North Little Rock): each leg routed on its own with its own options, joined for the plan
         LOOP = ('https://www.google.com/maps/dir/North+Little+Rock,+AR+72114/Dallas,+TX/North+Little+Rock,+AR+72114/data=!4m20!4m19!1m5!1m1!1s0x1:0x2!2m2!1d-92.2671!2d34.7695'

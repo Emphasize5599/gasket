@@ -4,7 +4,7 @@
 // options ("via I-57 and S Main St", miles, minutes) in the same order as the route number in the link (!5i).
 // We wait for that, then hand back the rewritten link plus the route options. Data only; nothing is clicked.
 async function (reqId, args) {
-  const send = (o) => FuelPlusSite.result(reqId, JSON.stringify(o));
+  const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const count = (s, re) => (s.match(re) || []).length;
   function routes() {

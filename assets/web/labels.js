@@ -1,4 +1,4 @@
-/* Fuel+ Map — speech bubbles on a map (route labels, price bubbles) that point at their spot without covering each
+/* Gasket — speech bubbles on a map (route labels, price bubbles) that point at their spot without covering each
  * other, the route, the controls, or the panel. Shared by the main map, the trip map and the small route-option maps.
  *
  * Each bubble first tries to sit right beside its spot with a tail (above, below, right, left). If there's no room

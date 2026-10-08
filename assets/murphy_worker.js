@@ -4,9 +4,9 @@
 //   POST /api/store  {latitude, longitude, range (miles), pageSize}
 // which returns nearby Murphy USA / Murphy Express stores, each with every grade's price and update time.
 // args: {lat, lng, radiusMi, max}  or, for trips, {points:[{lat,lng}], radiusMi, max}
-// Reports back through FuelPlusSite.result(reqId, json).
+// Reports back through GasketSite.result(reqId, json).
 async function (reqId, args) {
-  const send = (o) => FuelPlusSite.result(reqId, JSON.stringify(o));
+  const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   async function near(lat, lng) {
     const body = { pageSize: args.max || 25, range: Math.max(5, Math.min(50, Math.ceil(args.radiusMi))), latitude: lat, longitude: lng };
@@ -36,7 +36,7 @@ async function (reqId, args) {
         stores.push({ id: s.id, storeNumber: s.storeNumber, chainName: s.chainName, address: s.address, city: s.city, state: s.state, zip: s.zip,
           latitude: s.latitude, longitude: s.longitude, closeDate: s.closeDate, gasPrices: s.gasPrices || [], at: p.key });
       });
-      done++; if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, done, points.length);
+      done++; if (GasketSite.progress) GasketSite.progress(reqId, done, points.length);
     };
     for (let i = 0; i < points.length; i += 4) {
       await Promise.all(points.slice(i, i + 4).map(one));

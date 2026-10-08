@@ -4,10 +4,10 @@
 // Modes:  default  {lat,lng,radiusMi,max}  -> stores near one spot, with prices
 //         'nodes'  {points:[{lat,lng}],radiusMi} -> fuel-station stores near each point (no prices; for trips)
 //         'prices' {nodes:[...]}            -> prices for those stores (the app picks the ones near your route)
-// Reports back through FuelPlusSite.result(reqId, json). If Walmart shows a "Robot or human?" check,
+// Reports back through GasketSite.result(reqId, json). If Walmart shows a "Robot or human?" check,
 // it reports {blocked:true} and the app asks you to complete the check yourself.
 async function (reqId, args) {
-  const send = (o) => FuelPlusSite.result(reqId, JSON.stringify(o));
+  const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const isBlocked = (t) => /Robot or human|px-captcha|Access Denied/i.test(t);
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const H = {
@@ -46,7 +46,7 @@ async function (reqId, args) {
         const f = init.initialDataFuelSubgraph && init.initialDataFuelSubgraph.data && init.initialDataFuelSubgraph.data.storeFuelPrices;
         stores.push({ id: n.id, name: n.displayName || n.name, address: n.address, geo: n.geoPoint || n.geo, fuel: f || null });
       } catch (e) { /* skip this store */ }
-      finally { done++; if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, done, list.length); }
+      finally { done++; if (GasketSite.progress) GasketSite.progress(reqId, done, list.length); }
     };
     for (let i = 0; i < list.length && !blocked; i += 3) {     // three store pages at a time
       await Promise.all(list.slice(i, i + 3).map(one));
@@ -63,7 +63,7 @@ async function (reqId, args) {
       const one = async (p) => {
         const nodes = await nearby(p.lat, p.lng, args.radiusMi || 25);
         nodes.filter(hasFuel).forEach((n) => { if (!seen[n.id]) { seen[n.id] = 1; out.push({ id: n.id, displayName: n.displayName, address: n.address, geoPoint: n.geoPoint }); } });
-        done++; if (FuelPlusSite.progress) FuelPlusSite.progress(reqId, done, pts.length);
+        done++; if (GasketSite.progress) GasketSite.progress(reqId, done, pts.length);
       };
       for (let i = 0; i < pts.length; i += 3) {
         await Promise.all(pts.slice(i, i + 3).map(one));

@@ -1,4 +1,4 @@
-/* Fuel+ Map — UI logic. Talks to the Android shell through window.Native. */
+/* Gasket — UI logic. Talks to the Android shell through window.Native. */
 (function () {
   'use strict';
   var P = window.Pricing;
@@ -11,7 +11,7 @@
       loadSettings: function () { return mem.s || ''; }, saveSettings: function (j) { mem.s = j; },
       loadCache: function () { return mem.c || ''; }, saveCache: function (j) { mem.c = j; },
       callsThisMonth: function () { return 0; }, certFingerprint: function () { return 'BROWSER-TEST'; },
-      packageName: function () { return 'com.ben.gasmap'; },
+      packageName: function () { return 'com.bensanzone.fuelmap'; },
       locate: function () { setTimeout(function () { window.onLocation(34.7695, -92.2671, 30); }, 300); },
       haptic: function () {}, setStatusBarDark: function () {},
       pickTextFile: function (req) { setTimeout(function () { var m = window.__mocks && window.__mocks.pick; window.onNativeResult(req, m ? { body: m } : { cancelled: true }); }, 30); },
@@ -33,8 +33,8 @@
       siteVerify: function (k) { window.__verifyOpened = k; },
       saveLog: function (t) { mem.log = t; }, loadLog: function () { return mem.log || ''; },
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },
-      saveAndShare: function (req, name, mime, t, subj) { window.__saved = { name: name, text: t }; window.__shared = { subject: subj, file: name }; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/FuelPlus/' + name }); }, 30); },
-      saveDownload: function (name, mime, t) { window.__saved = { name: name, text: t }; return 'Downloads/FuelPlus/' + name; },
+      saveAndShare: function (req, name, mime, t, subj) { window.__saved = { name: name, text: t }; window.__shared = { subject: subj, file: name }; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/Gasket/' + name }); }, 30); },
+      saveDownload: function (name, mime, t) { window.__saved = { name: name, text: t }; return 'Downloads/Gasket/' + name; },
       appVersion: function () { return 'test'; },
       kvGet: function (ns, k) { var m = window.__kv = window.__kv || {}; return m[ns + '|' + k] || ''; },
       kvPut: function (ns, k, v) { var m = window.__kv = window.__kv || {}; m[ns + '|' + k] = v; },
@@ -65,7 +65,7 @@
     FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
   }
   logSetup();
-  if (window.FLog) FLog.info('app', 'Started Fuel+ Map ' + (N.appVersion ? N.appVersion() : ''));
+  if (window.FLog) FLog.info('app', 'Started Gasket ' + (N.appVersion ? N.appVersion() : ''));
 
   var me = null;            // {lat,lng,acc}
   var stations = [];        // normalised
@@ -656,7 +656,7 @@
       return '<div class="bl-row"><button class="bl-go" data-bl="' + i + '"><b>' + esc(e.name || 'CITGO') + '</b><small>' + esc(shortAddr(e.address || '')) + (e.t ? ' · added ' + new Date(e.t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '') + '</small></button>' +
         '<button class="x sm" data-blrm="' + i + '" aria-label="Remove from the list">✕</button></div>';
     }).join('') + '</div>' : '<div class="card empty-res">No bad stations yet. Mark one from a CITGO\'s details if Walmart+ doesn\'t work there.</div>';
-    h += '<div class="card"><h3>Share the list ' + qBtn('Export saves the list to Downloads/FuelPlus and opens the share sheet. Importing only adds stations you don\'t already have — it never removes or changes yours.') + '</h3><div class="btns wrap bl-share"><button class="btn tonal sm" id="blExp">Export list</button><button class="btn tonal sm" id="blImp">Import a list</button>' + (l.length ? '<button class="btn tonal sm danger-sm" id="blDel">Delete all</button>' : '') + '</div></div>';
+    h += '<div class="card"><h3>Share the list ' + qBtn('Export saves the list to Downloads/Gasket and opens the share sheet. Importing only adds stations you don\'t already have — it never removes or changes yours.') + '</h3><div class="btns wrap bl-share"><button class="btn tonal sm" id="blExp">Export list</button><button class="btn tonal sm" id="blImp">Import a list</button>' + (l.length ? '<button class="btn tonal sm danger-sm" id="blDel">Delete all</button>' : '') + '</div></div>';
     var pg = $('blPage'); pg.innerHTML = h;
     $('blBack').onclick = function () { pg.classList.add('hidden'); };
     $('blExp').onclick = function () { exportData('blacklist'); };
@@ -737,16 +737,16 @@
   // ---------- your data: export / import (imports only ever add) ----------
   function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); }
   function exportData(kind) {
-    var d = { fuelPlusData: 1, kind: kind, app: N.appVersion ? N.appVersion() : '', exported: new Date().toISOString(), blacklist: BL.list() };
+    var d = { gasketData: 1, kind: kind, app: N.appVersion ? N.appVersion() : '', exported: new Date().toISOString(), blacklist: BL.list() };
     if (kind === 'all') {
       var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.nrelKey; delete st.blacklist;   // API keys are never exported
       d.settings = st;
       var idx = (KV.get('trips', 'index') || {}).v || [];
       d.trips = idx.map(function (x) { var o = KV.get('trips', 'trip|' + x.id); return o ? { entry: x, t: o.t, trip: o.v } : null; }).filter(Boolean);
     }
-    var text = JSON.stringify(d), name = 'fuelplus-' + (kind === 'all' ? 'data' : 'bad-citgos') + '-' + stamp() + '.json';
+    var text = JSON.stringify(d), name = 'gasket-' + (kind === 'all' ? 'data' : 'bad-citgos') + '-' + stamp() + '.json';
     var where = N.saveDownload ? N.saveDownload(name, 'application/json', text) : '';
-    if (kind !== 'all' || text.length < 300000) N.shareText('Fuel+ Map ' + (kind === 'all' ? 'data' : 'bad CITGO list'), text);
+    if (kind !== 'all' || text.length < 300000) N.shareText('Gasket ' + (kind === 'all' ? 'data' : 'bad CITGO list'), text);
     toast(where && !/^error/.test(where) ? 'Saved to ' + where : kind === 'all' ? 'Couldn\'t save the file' + (where ? ' (' + where.replace(/^error: /, '') + ')' : '') : 'Shared the list');
   }
   var pickN = 0, pickWait = {};
@@ -758,9 +758,9 @@
   function gotImport(kind, res) {
     if (!res || res.cancelled) return;
     if (res.error) { toast('Couldn\'t read the file: ' + res.error); return; }
-    var d; try { d = JSON.parse(res.body); } catch (e) { toast('That isn\'t a Fuel+ data file.'); return; }
+    var d; try { d = JSON.parse(res.body); } catch (e) { toast('That isn\'t a Gasket data file.'); return; }
     var r = mergeData(d, kind);
-    if (!r) { toast('That isn\'t a Fuel+ data file.'); return; }
+    if (!r) { toast('That isn\'t a Gasket data file.'); return; }
     save(); BL.changed();
     var parts = [];
     parts.push(r.bl + ' bad station' + (r.bl === 1 ? '' : 's') + ' added' + (r.blSkip ? ' (' + r.blSkip + ' already on your list)' : ''));
@@ -774,7 +774,7 @@
   }
   /** Add what's new from an exported file; never overwrite or remove anything. -> counts, or null if it isn't one. */
   function mergeData(d, kind) {
-    if (!d || d.fuelPlusData !== 1) return null;
+    if (!d || (d.gasketData !== 1 && d.fuelPlusData !== 1)) return null;   // fuelPlusData: exports from Fuel+ Map
     var r = { bl: 0, blSkip: 0, cars: 0, trips: 0, settings: 0 };
     (Array.isArray(d.blacklist) ? d.blacklist : []).forEach(function (e) {
       if (!e || e.lat == null || e.lng == null || typeof e.lat !== 'number' || typeof e.lng !== 'number') return;
@@ -815,7 +815,7 @@
     var calls = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
     var mk = P.monthKey();
     var used = function (k) { return (S.citgoUsed || {})[k] === mk; };
-    var h = '<h1>' + (onboarding ? 'Set up Fuel+ Map' : 'Settings') + '</h1>';
+    var h = '<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>';
     if (onboarding) h += '<p class="lead">Walmart and Murphy USA prices come straight from their own sites — no key needed. For Sam\'s, Exxon, Mobil and CITGO, add a free Google Places API key (optional), or try the demo first.</p>';
     h += '<div class="card"><h3>Google Places API key (optional)</h3>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
@@ -868,7 +868,7 @@
     h += '<div class="card"><h3>Bad CITGO stations</h3>' +
       '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
-      '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/FuelPlus you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
+      '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/Gasket you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
       '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div>' +
       '<div class="field"><div class="lbl">Clear cache<small>Stations, prices, speed limits, routes and Walmart+ station checks saved from recent searches, so the same route doesn\'t use Google lookups twice. Your trips, cars and settings stay.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
       '<div class="field"><div class="lbl">Delete bad CITGO list<small class="keep" id="blCount2">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blDelAll">Delete</button></div>' +
@@ -938,11 +938,11 @@
     };
   }
   function logHeader() {
-    return 'Fuel+ Map ' + (N.appVersion ? N.appVersion() : '') + ' debug log · ' + new Date().toString() + ' · level ' + S.logLevel + '\n';
+    return 'Gasket ' + (N.appVersion ? N.appVersion() : '') + ' debug log · ' + new Date().toString() + ' · level ' + S.logLevel + '\n';
   }
   function shareLog() {
     if (!window.FLog || !FLog.entries().length) { toast(S.debug ? 'The log is empty.' : 'Turn on Debug logging first.'); return; }
-    shareFile('fuelplus-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + FLog.text().slice(-300000), 'Fuel+ Map debug log');
+    shareFile('gasket-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + FLog.text().slice(-300000), 'Gasket debug log');
   }
   /** Save a big text file and offer it to other apps as a file (in the background — the app never waits on it). */
   function shareFile(name, mime, text, subject, btn) {
@@ -968,7 +968,7 @@
     $('lgClose').onclick = function () { pg.classList.add('hidden'); };
     $('lgShare').onclick = shareLog;
     $('lgSave').onclick = function () {
-      var where = N.saveDownload('fuelplus-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + (txt || ''));
+      var where = N.saveDownload('gasket-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + (txt || ''));
       toast(/^error/.test(where) ? 'Couldn\'t save: ' + where : 'Saved to ' + where);
     };
   }
