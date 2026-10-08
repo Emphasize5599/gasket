@@ -33,6 +33,7 @@
         }, 150);
       },
       siteVerify: function (k) { window.__verifyOpened = k; },
+      siteShow: function (req, key, args) { window.__siteShown = { key: key, url: JSON.parse(args).url }; setTimeout(function () { var m = window.__mocks && window.__mocks.siteShow; window.onNativeResult(req, m ? m(key, JSON.parse(args)) : { closed: true }); }, 60); },
       saveLog: function (t) { mem.log = t; }, loadLog: function () { return mem.log || ''; },
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },
       saveAndShare: function (req, name, mime, t, subj) { window.__saved = { name: name, text: t }; window.__shared = { subject: subj, file: name }; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/Gasket/' + name }); }, 30); },
@@ -268,6 +269,7 @@
     sourceDone();
   };
   window.onSiteResult = function (key, id, res) {
+    if (key === 'nhtsa') { window.onNativeResult && window.onNativeResult(id, res); return; }   // a page shown with siteShow (Advisory)
     if (window.__tripSite && window.__tripSite(key, id, res)) return;
     if (id !== reqId || !sitePending[key]) return;
     sitePending[key] = false;

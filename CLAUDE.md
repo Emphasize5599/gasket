@@ -5,7 +5,8 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 ## Layout
 - `src/com/bensanzone/fuelmap/MainActivity.java`: the only Java class. It hosts a WebView and exposes the `Native` JS bridge, plus `GasketSite` for the hidden site WebViews.
 - `assets/web/`: the whole UI, in plain HTML/CSS/JS with no framework or bundler. `trip.js` is pure logic and also runs in Node. `app.js` contains a browser stand-in for `Native`, so the UI runs in desktop Chrome.
-- `assets/*_worker.js`: scripts injected into hidden walmart.com, murphyusa.com and Google Maps pages.
+- `assets/*_worker.js`: scripts injected into hidden walmart.com, murphyusa.com and Google Maps pages. `nhtsa_worker.js` is different: it only reads NHTSA's recall page while that page is shown to the user (`Native.siteShow`), and must never run hidden.
+- Trip steps: Garage, Advisory (`advisory.js`: recalls, engine advice), Route, Parameters, Adjustments, Stops, Departure. Use the `ST_*` constants in `tripui.js`, never bare step numbers.
 - `build.sh`: a Gradle-free build (aapt → javac → dx → zipalign → apksigner) that writes `Gasket.apk`.
 
 ## Commands

@@ -86,7 +86,7 @@ with sync_playwright() as p:
     pg.evaluate(MOCKS); pg.evaluate(BIG); pg.evaluate(LT)
     cdp = pg.context.new_cdp_session(pg); PROF['cdp'] = cdp; cdp.send('Profiler.enable'); cdp.send('Emulation.setCPUThrottlingRate', {'rate': float(os.environ.get('CPU', '4'))})
     pg.click('#btnTrip'); pg.wait_for_timeout(500)
-    pg.click('#tNext'); pg.wait_for_timeout(600)
+    pg.click('#tNext'); pg.wait_for_timeout(600); pg.click('#tNext'); pg.wait_for_timeout(600)   # Garage -> Advisory -> Route
     pg.fill('#tLink', LINK); pg.wait_for_timeout(1500)
     t0 = mark(pg); pg.click('#tGetRoutes'); idle(pg, 2000); res['get routes'] = worst(pg, t0, 'get routes')
     t0 = mark(pg); pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(2500); res['pick route'] = worst(pg, t0, 'pick another route')

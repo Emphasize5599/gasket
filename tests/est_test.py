@@ -21,7 +21,7 @@ with sync_playwright() as p:
     # every Google station without a price except the ones past mile 150; no Walmart / Murphy
     pg.evaluate('''(() => { const al = window.__mocks.along; window.__mocks.along = (jobs) => { const r = al(jobs); r.results.forEach(x => x.places.forEach(pl => { if (+pl.id.replace(/\\D/g, '') < 150) pl.fuelOptions = { fuelPrices: [] }; })); return r; };
       window.__siteMock = () => ({ stores: [], nodes: [] }); })(); 0''')
-    pg.click('#btnTrip'); pg.wait_for_timeout(400); pg.click('#tNext'); pg.wait_for_timeout(500)
+    pg.click('#btnTrip'); pg.wait_for_timeout(400); pg.click('#tNext'); pg.wait_for_timeout(500); pg.click('#tNext'); pg.wait_for_timeout(500)   # Garage -> Advisory -> Route
     pg.fill('#tLink', LINK); pg.wait_for_timeout(800)
     pg.click('#tGetRoutes'); idle(pg)
     pg.click('#tNext'); pg.wait_for_timeout(400)

@@ -1,4 +1,4 @@
-"""Garage (3.25): car buttons with x, delete confirmations, VIN decode + EPA match, recalls, the details tile, EV and
+"""Garage (3.25): car buttons with x, delete confirmations, VIN decode + EPA match, the details tile, EV and
 hydrogen cars (units, planning with chargers), and the EV & hydrogen map panel (hydrogen coverage shading)."""
 import sys, os, json
 from playwright.sync_api import sync_playwright
@@ -108,13 +108,8 @@ with sync_playwright() as p:
         pg.click('#gFeat [data-feat="Start-stop"]'); pg.wait_for_timeout(100)
         assert 'Start-stop' in pg.evaluate("window.Garage.car().info.features")
         pg.screenshot(path=f'{OUT}/{name}-gr2-info.png', full_page=True); wide(pg, 'info')
-        # recalls: a warning card with the NHTSA and NICB checks
-        rc = ft(pg, '#gRecall'); print('  recalls:', rc.replace('\n', ' | ')[:240])
-        assert '2 safety recalls' in rc and 'free' in rc and pg.locator('#gRecall.warn').count() == 1 and 'not to drive' in rc
-        pg.click('#rcVin'); assert 'nhtsa.gov/recalls?vin=1HGCV1F3XMA000001' in pg.evaluate('window.__lastUrl')
-        pg.click('#rcNicb'); assert 'nicb.org/vincheck' in pg.evaluate('window.__lastUrl')
-        pg.evaluate("document.getElementById('gRecall').scrollIntoView()"); pg.wait_for_timeout(100)
-        pg.screenshot(path=f'{OUT}/{name}-gr3-recalls.png')
+        # recalls live in Advisory now (tests/advisory_test.py); the Garage is about the car itself
+        assert pg.locator('#gRecall, #rcNicb').count() == 0, 'no recall card in the Garage'
         # trim is optional and shows on the button
         if pg.locator('#gTrim').count() == 0: pg.click('#gEdit'); pg.wait_for_timeout(150)
         pg.fill('#gTrim', 'Sport'); pg.dispatch_event('#gTrim', 'change'); pg.wait_for_timeout(200)
@@ -172,14 +167,14 @@ with sync_playwright() as p:
         # ---- a trip in the EV: chargers along the route, kWh, charging time ----
         pg.click('#btnTrip'); pg.wait_for_timeout(400)
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
-        assert step(pg) == 1; nxt(pg, 300)
+        assert step(pg) == 1; nxt(pg, 300); assert step(pg) == 2; nxt(pg, 300)   # Garage -> Advisory -> Route
         pg.fill('#tLink', LINK); pg.wait_for_timeout(700)
         pg.click('#tGetRoutes'); idle(pg, 700)
         nxt(pg, 300)
-        assert step(pg) == 3 and 'Miles of range left' in ft(pg, '#tpS3') and 'Charge to 80% each stop' in ft(pg, '#tpS3')
+        assert step(pg) == 4 and 'Miles of range left' in ft(pg, '#tpS4') and 'Charge to 80% each stop' in ft(pg, '#tpS4')
         pg.fill('#tMiles', '120'); pg.fill('#tBuffer', '20')
         nxt(pg, 1500); nxt(pg, 1200)
-        assert step(pg) == 5
+        assert step(pg) == 6
         rr = [x for x in pg.evaluate('window.__afdc') if 'nearby-route' in x]; print('  along route:', len(rr), rr[0].split('?')[1][:160] if rr else '')
         assert rr and 'LINESTRING' in rr[0].replace('%20', ' ').replace('%28', '(') and 'ev_connector_type=TESLA' in rr[0]
         pg.wait_for_timeout(300)
@@ -193,14 +188,14 @@ with sync_playwright() as p:
         assert 'kWh' in sc and 'min charging' in sc and 'gal' not in sc
         notes = ft(pg, '#tsResults'); assert '$20/hr' in notes
         pg.screenshot(path=f'{OUT}/{name}-ev1-stops.png'); wide(pg, 'ev stops')
-        nxt(pg, 500); assert step(pg) == 6
-        dep = ft(pg, '#tpS6'); print('  depart:', dep.replace('\n', ' | ')[:200]); assert 'charging' in dep and 'charging stop' in dep
+        nxt(pg, 500); assert step(pg) == 7
+        dep = ft(pg, '#tpS7'); print('  depart:', dep.replace('\n', ' | ')[:200]); assert 'charging' in dep and 'charging stop' in dep
         pg.screenshot(path=f'{OUT}/{name}-ev2-depart.png'); wide(pg, 'ev depart')
         # the VIN'd Accord has recalls: Departure says so
         acc = pg.evaluate("window.__app.S.cars.find(c => /Accord/.test(c.model)).id")
         pg.evaluate("(id) => { window.__app.S.carId = id; }", acc)
-        pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); pg.evaluate('window.__trip.step(5)'); idle(pg, 1500); pg.evaluate('window.__trip.step(6)'); pg.wait_for_timeout(400)
-        assert 'safety recall' in ft(pg, '#tpS6')
+        pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); pg.evaluate('window.__trip.step(6)'); idle(pg, 1500); pg.evaluate('window.__trip.step(7)'); pg.wait_for_timeout(400)
+        assert 'safety recall' in ft(pg, '#tpS7')
         # Settings: General → Ask before deleting; the station-finder key is never exported
         pg.click('#tClose'); pg.wait_for_timeout(200); pg.click('#btnSettings'); pg.wait_for_timeout(300)
         assert pg.locator('input[data-k=confirmDeletes]:checked').count() == 1

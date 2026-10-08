@@ -1,5 +1,5 @@
 /* Your cars: EPA numbers (read-only), observed mileage (+ a log with typical speed), tank / battery size, what the car
- * is (powertrain, engine, transmission, drivetrain, tires), safety recalls, and the best-cruising-speed card.
+ * is (powertrain, engine, transmission, drivetrain, tires), and the best-cruising-speed card. Recalls and engine advice are in Advisory (advisory.js).
  * Gas, hybrid, plug-in hybrid, electric and hydrogen fuel-cell cars: an EV's "tank" is its usable battery (kWh) and its
  * mileage is mi/kWh; a fuel-cell car's is its hydrogen tank (kg) and mi/kg. The trip planner works in those units.
  * Loaded after tripui.js; the trip setup page calls Garage.render(...). */
@@ -9,7 +9,6 @@
   var LG = window.FLog || { info: function () {}, debug: function () {}, warn: function () {} };
   var EPA = 'https://www.fueleconomy.gov/ws/rest/vehicle/';
   var VPIC = 'https://vpic.nhtsa.dot.gov/api/vehicles/';
-  var RECALLS = 'https://api.nhtsa.gov/recalls/recallsByVehicle';
 
   // Tank sizes we could confirm from manufacturer spec sheets (no free API publishes tank capacity —
   // fueleconomy.gov and NHTSA's vPIC don't have it). Anything else: type it from the owner's manual.
@@ -125,7 +124,7 @@
     drawing = true;
     try { settle(host); draw0(); } finally { drawing = false; }
   }
-  // Your car (the buttons; details behind Edit), recalls, best cruising speed, fuel economy, observed mileage, about this car.
+  // Your car (the buttons; details behind Edit), best cruising speed, fuel economy, observed mileage, about this car.
   var obsOpen = false, infoOpen = false;
   var EPA_Q = {
     city: '<b>EPA city</b>: a lab test of stop-and-go driving — about 11 miles averaging 21 mph (top speed 56), with frequent stops and idling. Since 2008 it\'s adjusted for A/C, cold starts and harder acceleration.',
@@ -142,7 +141,6 @@
     }).join('') + '<button data-car="+">+ Add car</button></div>';
     if (editing) h += editPanel(c);
     h += '</div>';
-    h += '<div class="card g-recall hidden" id="gRecall"></div>';
     h += '<div class="card spd" id="tSpeed"></div>';
     h += '<div class="card g-econ"><h3>' + U.econ + '</h3>';
     if (hasEpa(c)) {
@@ -161,7 +159,6 @@
     $('gInfo').addEventListener('toggle', function () { infoOpen = this.open; });
     bind(c);
     drawSpeed();
-    drawRecalls(c);
   }
   /**
    * What the trip planner still needs from the car, top to bottom: the EPA lookup (or your own city + highway mileage),
@@ -197,7 +194,7 @@
       h += '<div class="vin-row"><label class="nf"><span>VIN<small>17 characters — on your insurance card, registration, or the driver-side dashboard (through the windshield)</small></span>' +
         '<input type="text" id="gVin" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(c.vin || '') + '"></label>' +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>' +
-        '<p class="lead small keep">Decoded free by NHTSA (vpic.nhtsa.dot.gov), then matched to the EPA\'s mileage. Fills in the details below and checks for recalls.</p>';
+        '<p class="lead small keep">Decoded free by NHTSA (vpic.nhtsa.dot.gov), then matched to the EPA\'s mileage. Fills in the details below, and Advisory can then check it for open recalls.</p>';
     } else if (how === 'plate') {
       h += '<div class="msg plate-msg"><b>Plate lookup isn\'t available.</b> There\'s no free public source that turns a license plate into a VIN — every plate-to-VIN service is a paid business (state registration records are restricted by the federal Driver\'s Privacy Protection Act). Your VIN is on your insurance card, your registration, and the driver-side dashboard. <a href="#" id="gToVin">Enter the VIN instead</a></div>';
     }
@@ -538,71 +535,6 @@
       md.value = m.value; await md.onchange.call(md);
       if (!hasEpa(c) || $('eOpt') && $('eOpt').value === '') say(esc(lead) + ' Pick the engine / transmission below for its mileage.');
     } catch (e) { say(esc(lead) + ' Couldn\'t reach fueleconomy.gov — pick the car below or enter your own mileage.'); }
-  }
-
-  // ---------- recalls (NHTSA) ----------
-  var recallBusy = {};
-  function recallKey(c) { return c.year && c.make && c.model ? c.year + '|' + String(c.make).toLowerCase() + '|' + String(c.vpicModel || c.model).toLowerCase() : ''; }
-  function nhtsaModels(c) {
-    var m = String(c.vpicModel || c.model || '').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '').trim(), out = [m];
-    var first = m.split(/\s+/)[0]; if (first && first !== m) out.push(first);
-    return out;
-  }
-  async function fetchRecalls(c) {
-    var key = recallKey(c); if (!key || recallBusy[c.id]) return;
-    recallBusy[c.id] = true;
-    try {
-      var list = [], tried = nhtsaModels(c);
-      for (var i = 0; i < tried.length && !list.length; i++) {
-        var r = await call('fetchJson', RECALLS + '?make=' + encodeURIComponent(c.make) + '&model=' + encodeURIComponent(tried[i]) + '&modelYear=' + c.year);
-        if (r.error) throw new Error(r.error);
-        list = (JSON.parse(r.body).results || []);
-      }
-      c.recalls = { t: Date.now(), key: key, list: list.map(function (x) {
-        return { id: x.NHTSACampaignNumber, date: x.ReportReceivedDate, comp: x.Component, sum: x.Summary, cons: x.Consequence, fix: x.Remedy, park: !!x.parkIt, out: !!x.parkOutSide, ota: !!x.overTheAirUpdate };
-      }) };
-      LG.info('car', 'Recalls for ' + shortName(c) + ': ' + list.length);
-      save();
-    } catch (e) { LG.warn('car', 'Recall check', String(e.message || e)); c.recalls = c.recalls && c.recalls.key === key ? c.recalls : { t: Date.now(), key: key, list: null, error: true }; }
-    recallBusy[c.id] = false;
-    if (car() === c) drawRecalls(c);
-  }
-  function recallCount(c) { c = c || car(); return c.recalls && c.recalls.list && c.recalls.key === recallKey(c) ? c.recalls.list.length : 0; }
-  function nhtsaUrl(c) { return 'https://www.nhtsa.gov/recalls' + (c.vin ? '?vin=' + encodeURIComponent(c.vin) : ''); }
-  function drawRecalls(c) {
-    var el = $('gRecall'); if (!el) return;
-    var key = recallKey(c);
-    if (!key) { el.classList.add('hidden'); return; }
-    var R = c.recalls;
-    if (!R || R.key !== key || Date.now() - R.t > 7 * 864e5 || (R.error && Date.now() - R.t > 3600e3)) {
-      if (!R || R.key !== key) { el.classList.add('hidden'); }
-      fetchRecalls(c);
-      if (!R || R.key !== key) return;
-    }
-    el.classList.remove('hidden');
-    var n = R.list ? R.list.length : 0, name = c.year + ' ' + c.make + ' ' + String(c.vpicModel || c.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '');
-    var acts = '<div class="btns wrap rc-acts"><button class="btn tonal sm" id="rcVin">' + (c.vin ? 'Check my VIN at NHTSA' : 'Check a VIN at NHTSA') + '</button><button class="btn tonal sm" id="rcNicb">Theft & salvage check (NICB)</button></div>';
-    var h;
-    if (R.error && !R.list) h = '<h3>Safety recalls</h3><div class="lead small keep">Couldn\'t reach NHTSA to check recalls right now.</div>' + acts;
-    else if (!n) h = '<h3>Safety recalls</h3><div class="lead small keep">None on record for the ' + esc(name) + ' (NHTSA). Checked ' + esc(A.ago(new Date(R.t))) + '.</div>' + acts;
-    else {
-      var park = R.list.some(function (x) { return x.park || x.out; });
-      h = '<div class="rc-head"><span class="rc-ic" aria-hidden="true">!</span><div><b>' + n + ' safety recall' + (n === 1 ? '' : 's') + ' for the ' + esc(name) + '</b>' +
-        '<small>Recall repairs are free at any ' + esc(c.make) + ' dealer. Some recall problems — like a car that loses power or shifts unexpectedly on the highway — are most dangerous on a road trip, so get yours checked before you go.' +
-        (park ? ' <b>One of these says not to drive (or park outside) until it\'s fixed.</b>' : '') + '</small></div></div>' +
-        '<details class="rc-list"><summary>See the recalls</summary>' + R.list.map(function (x) {
-          return '<div class="rc"><b>' + esc(x.comp || 'Recall') + '</b><small>' + esc(x.id || '') + (x.date ? ' · ' + esc(x.date) : '') + (x.park ? ' · <em>do not drive</em>' : x.out ? ' · <em>park outside</em>' : '') + (x.ota ? ' · fixed over the air' : '') + '</small>' +
-            '<p>' + esc(x.sum || '') + '</p>' + (x.cons ? '<p><i>Risk:</i> ' + esc(x.cons) + '</p>' : '') + (x.fix ? '<p><i>Fix:</i> ' + esc(x.fix) + '</p>' : '') + '</div>';
-        }).join('') + '</details>' +
-        '<div class="lead small keep">These are for every ' + esc(name) + ' — yours may already be fixed. A VIN check shows only the open ones.</div>' + acts;
-    }
-    el.className = 'card g-recall' + (n ? ' warn' : '');
-    el.innerHTML = h;
-    $('rcVin').onclick = function () { N.openUrl(nhtsaUrl(c)); };
-    $('rcNicb').onclick = function () {
-      if (c.vin && N.copyText) { N.copyText(c.vin); A.toast && A.toast('VIN copied — paste it on the NICB page.'); }
-      N.openUrl('https://www.nicb.org/vincheck');
-    };
   }
 
   // ---------- best cruising speed ----------
@@ -971,6 +903,6 @@
     return out;
   }
 
-  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, shortName: shortName, recallCount: recallCount, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
+  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, shortName: shortName, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
     need: need, ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

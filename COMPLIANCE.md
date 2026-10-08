@@ -12,6 +12,6 @@ The items below are the services' **terms of use**, not licenses. They are fine 
 | 4 | walmart.com, murphyusa.com (`walmart_worker.js`, `murphy_worker.js`) | Their site terms generally forbid automated collection. | Reads prices from their store pages in hidden windows; bot checks are shown to the user, never bypassed. | Ask each company for permission or an official feed, or show their prices only on the user's request. |
 | 5 | ExxonMobil station finder | Site terms. | Checks which Exxon/Mobil stations take Walmart+. | As in 4. |
 | 6 | Tire Rack (planned, Garage tires) | Site terms. | Will read the factory tire size and tire list for the user's car. | As in 4; or let the user type the size and tire. |
-| 7 | NHTSA recall lookup by VIN (planned, Advisory) | Protected by reCAPTCHA. | Will open NHTSA's page visibly for the user and read its result; never automated or hidden. | None needed while it stays user-initiated and visible. |
+| 7 | NHTSA recall lookup by VIN (Advisory) | Protected by reCAPTCHA. | Opens NHTSA's page visibly for the user (`siteShow`) and reads its answer. Never automated or hidden. | None needed while it stays user-initiated and visible. |
 
 Public U.S. government data (EPA fueleconomy.gov, NHTSA vPIC and recalls, FHWA, DOE/NREL) is in the public domain or free to use with credit, and it's credited in `THIRD_PARTY_NOTICES.md`.

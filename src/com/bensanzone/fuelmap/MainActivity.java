@@ -154,6 +154,8 @@ public class MainActivity extends Activity {
         workers.put("walmart", new SiteWorker("walmart", "https://www.walmart.com/store-finder", "https://www.walmart.com/"));
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
+        // NHTSA's recall lookup by VIN: only ever shown to the user (siteShow), never run hidden
+        workers.put("nhtsa", new SiteWorker("nhtsa", "https://www.nhtsa.gov/recalls", "https://www.nhtsa.gov/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps")) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -252,6 +254,8 @@ public class MainActivity extends Activity {
         boolean ready = false;
         final List<String> queue = new ArrayList<String>();
 
+        int showReq = -1;   // set while the page is shown to the user by siteShow
+
         SiteWorker(String key, String home, String origin) { this(key, home, origin, false); }
 
         SiteWorker(String key, String home, String origin, boolean desktop) {
@@ -277,6 +281,12 @@ public class MainActivity extends Activity {
                     boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || title.contains("robot") || title.contains("access denied")
                             || title.contains("captcha") || title.contains("unusual traffic");
                     ready = !blocked && url.startsWith(SiteWorker.this.origin);
+                    if (verifying == SiteWorker.this && showReq >= 0) {
+                        // a page the user is looking at (siteShow): run its reader on every load (the page may reload itself);
+                        // the app takes the first answer, and Done clears it
+                        if (url.startsWith(SiteWorker.this.origin)) for (String call : queue) view.evaluateJavascript(call, null);
+                        return;
+                    }
                     if (verifying == SiteWorker.this) {
                         if (ready) js("window.toast&&toast(" + q("Check passed. Tap Done.") + ")");
                         return;
@@ -336,7 +346,28 @@ public class MainActivity extends Activity {
         wmDone.bringToFront();
     }
 
+    /** Show a site's page to the user, with the Done button, and run a reader script on it once it has loaded. */
+    private void startShow(SiteWorker w, int reqId, String url, String call) {
+        verifying = w;
+        w.showReq = reqId;
+        w.queue.clear();
+        w.queue.add(call);
+        w.view.loadUrl(url);
+        wmDone.setText("Done \u2014 back to Gasket");
+        web.setVisibility(View.INVISIBLE);
+        wmDone.setVisibility(View.VISIBLE);
+        w.view.bringToFront();
+        wmDone.bringToFront();
+    }
+
     private void endVerify() {
+        if (verifying != null && verifying.showReq >= 0) {
+            // closed before (or after) the page answered: the app's call ends either way
+            js("window.onNativeResult&&onNativeResult(" + verifying.showReq + ",{closed:true})");
+            verifying.showReq = -1;
+            verifying.queue.clear();
+            wmDone.setText("Done \u2014 back to the map");
+        }
         String key = verifying != null ? verifying.key : "";
         verifying = null;
         wmDone.setVisibility(View.GONE);
@@ -1260,6 +1291,26 @@ public class MainActivity extends Activity {
                         if (!url.startsWith("https://www.google.com/maps/dir/")) return;
                         w.loadAndRun(url, call);
                     } else w.run(call);
+                }
+            });
+        }
+
+        /** Open a page for the user to see (NHTSA's recall lookup for a VIN) and read its answer; replies via onSiteResult. */
+        @JavascriptInterface
+        public void siteShow(final int reqId, final String key, final String argsJson) {
+            main.post(new Runnable() {
+                public void run() {
+                    SiteWorker w = workers.get(key);
+                    String script = w != null ? asset(key + "_worker.js") : "";
+                    String url;
+                    try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
+                    // only NHTSA's recall page may be opened this way
+                    if (w == null || script.length() == 0 || !url.startsWith("https://www.nhtsa.gov/recalls?vymm=")) {
+                        js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
+                        return;
+                    }
+                    if (verifying != null) endVerify();
+                    startShow(w, reqId, url, "(" + script + ")(" + reqId + "," + argsJson + ")");
                 }
             });
         }

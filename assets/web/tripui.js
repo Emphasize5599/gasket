@@ -93,8 +93,8 @@
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
-  var STEPS = ['Garage', 'Route', 'Parameters', 'Adjustments', 'Stops', 'Departure'], step = 1;
-  var ST_PARAMS = 3, ST_ADJ = 4, ST_STOPS = 5, ST_DEPART = 6;
+  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Adjustments', 'Stops', 'Departure'], step = 1;
+  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_PARAMS = 4, ST_ADJ = 5, ST_STOPS = 6, ST_DEPART = 7;
   /** Adjustments and Stops both show the plan (and the map). */
   function onPlan(k) { return k === ST_ADJ || k === ST_STOPS; }
   function tpBody() { return $('tpBody'); }
@@ -102,6 +102,7 @@
     A.closeDetail();
     if (st) step = st;
     document.body.classList.add('trip-on'); A.syncMain(); A.syncMapGAttr();
+    if (window.Advisory) Advisory.init(call);
     renderStep();
   }
   function initPanel(pg) {
@@ -127,7 +128,7 @@
   }
   /** Forget the built steps (a new or reopened trip). */
   function resetSteps() {
-    [1, 2, 3, 4, 5, 6].forEach(function (k) { var e = $('tpS' + k); if (e) e.remove(); });
+    STEPS.forEach(function (n, i) { var e = $('tpS' + (i + 1)); if (e) e.remove(); });
     built = {}; scrolls = {}; shown = 0;
   }
   function renderStep() {
@@ -147,8 +148,9 @@
     if (!full && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
     if (full) mapLoaded();
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
-      var k = i + 1, sh = { Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
-      return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > 2 && !model ? ' dim' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
+      var k = i + 1, sh = { Advisory: 'Advice', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
+      var attn = k === ST_ADVISORY && window.Advisory && Advisory.attention() > 0;   // something worth a look
+      return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > ST_ROUTE && !model ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
     navRender();
     var b = tpBody();
@@ -163,7 +165,7 @@
       b.scrollTop = 0;
     } else {
       b.scrollTop = scrolls[step] || 0;
-      if (step === 2) refitOptionMaps();
+      if (step === ST_ROUTE) refitOptionMaps();
     }
     // the big map: drawn after this frame paints, and only when its route or stops changed
     var k0 = step;
@@ -213,12 +215,12 @@
   }
   /** Is this step done? If not, point at the first thing missing (top to bottom) and say what's needed. */
   async function ready(k) {
-    if (k === 1) {
+    if (k === ST_GARAGE) {
       var g = Garage.need && Garage.need();
       if (g) { flag(g.el, g.kind, g.msg); return false; }
       return true;
     }
-    if (k === 2) {
+    if (k === ST_ROUTE) {
       if (srcOf() === 'link') { if (!S.trip.link) { flag($('tLink'), 'box', 'Paste a Google Maps directions link.'); return false; } }
       else {
         if (!S.trip.from) { flag($('tFrom'), 'box', 'Where are you starting?'); return false; }
@@ -253,8 +255,8 @@
       if ($('tGetRoutes')) $('tGetRoutes').onclick = getRoutes;
       if ($('tRefreshRoutes')) $('tRefreshRoutes').onclick = refreshRoutes;
     }
-    var n = $('tNext'); if (n) n.classList.toggle('dim', step === 2 && !model);
-    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > 2 && !model); });
+    var n = $('tNext'); if (n) n.classList.toggle('dim', step === ST_ROUTE && !model);
+    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > ST_ROUTE && !model); });
   }
   async function getRoutes() {
     if (busy) return;
@@ -296,8 +298,9 @@
   }
   function stepHtml(k) {
     var t = S.trip;
-    if (k === 1) return '<div id="tGarage"></div>';
-    if (k === 2) {
+    if (k === ST_GARAGE) return '<div id="tGarage"></div>';
+    if (k === ST_ADVISORY) return '<div id="tAdvisory"></div>';
+    if (k === ST_ROUTE) {
       var src = srcOf();
       return '<div class="card">' +
       '<div class="seg2" id="tSrc"><button data-src="link" class="' + (src === 'link' ? 'on' : '') + '">Maps link</button><button data-src="typed" class="' + (src === 'typed' ? 'on' : '') + '">Addresses</button></div>' +
@@ -348,7 +351,8 @@
     return departureHtml();
   }
   function bindStep(k) {
-    if (k === 1) {
+    if (k === ST_ADVISORY) { Advisory.render($('tAdvisory'), call); return; }
+    if (k === ST_GARAGE) {
       Garage.render($('tGarage'), null, function () {
         if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); }
         result = null;
@@ -356,7 +360,7 @@
       }, call);
       return;
     }
-    if (k === 2) { bindRoute(); return; }
+    if (k === ST_ROUTE) { bindRoute(); return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
     if (onPlan(k)) {
       renderResults();
@@ -2446,8 +2450,8 @@
     else if (!multiLeg(route) && altSel > 0 && alts[altSel]) w.push('In Google Maps, pick the route via ' + (alts[altSel].description || 'route ' + (altSel + 1)) + '.');
     var av = ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; });
     if (av.length) w.push('Turn “avoid ' + av.join('” and “avoid ') + '” back on in Google Maps.');
-    var nr = Garage.recallCount ? Garage.recallCount() : 0;
-    if (nr) w.push('Your ' + Garage.shortName(Garage.car()) + ' has ' + nr + ' safety recall' + (nr === 1 ? '' : 's') + ' on record — if they\'re not fixed yet, a dealer fixes them free. Worth checking before a long drive (Garage).');
+    var rn = window.Advisory ? Advisory.departureNote() : '';
+    if (rn) w.push(rn);
     if (KIND() === 'h2') w.push('Hydrogen stations go offline often — check each one\'s live status before you count on it.');
     h += '<div class="warns">' + w.map(function (x) { return '<div class="note">' + esc(x) + '</div>'; }).join('') + '</div>';
     h += '<p class="lead small keep center"><a href="#" id="tsReport">Troubleshooting report</a></p>';
@@ -2636,7 +2640,7 @@
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
     S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
     A.save();
-    openTrip(Garage.need && Garage.need() ? 1 : link ? 2 : 1);
+    openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
   }
   async function openSaved(id) {
     if (busy) return;
@@ -2653,7 +2657,7 @@
     resetSteps(); routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {};
     // starts at the Garage (which car this time?); the route and the stops are ready behind it
     model = null; loadingTrip = true; busy = true;
-    openTrip(1);
+    openTrip(ST_GARAGE);
     await paint();
     try { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); }
     catch (e) { loadingTrip = false; busy = false; mapLoaded(); toastMsg('That saved trip couldn\'t be read.'); LG.error('history', String(e)); return; }
