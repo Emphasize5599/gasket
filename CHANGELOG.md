@@ -4,9 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
-## Unreleased
-- Versioning switched to `0.0.<versionCode>`; versionName is now `0.0.46` (versionCode unchanged).
-- Rebrand to Gasket / `com.bensanzone.fuelmap` is planned but not done yet.
+## 0.0.47 - 2026-10-08
+- **Renamed to Gasket.** The application ID is now `com.bensanzone.fuelmap` (was `com.ben.gasmap`), so Gasket installs as a separate app next to Fuel+ Map. To bring your data over, use Settings → Your data → Export in Fuel+ Map, then Import in Gasket.
+- Exports, logs and reports save to `Downloads/Gasket` with `gasket-…` file names. Data files exported by Fuel+ Map and trips it shared (`-----FUEL+ TRIP-----`) still import.
+- The APK is now `Gasket.apk`. `build.sh` stops with a clear message if `KS_PASS` or the keystore is missing, and no longer creates a new signing key on its own.
+- Version names follow `0.0.<versionCode>` (see `VERSIONING.md`).
+- Fixed: the "Speed settings" panel on the cruising-speed card could snap shut when you changed a value right after opening it.
 
 ## 0.0.46 [3.25] - 2026-10-08
 - EV and hydrogen basics: ⚡ map panel (fetch every hydrogen station, shade areas out of a fuel-cell car's reach, find DC fast chargers); EV/H₂ trips use chargers or hydrogen stations from the DOE station finder; EV plans charge to 80% and count charging time.
