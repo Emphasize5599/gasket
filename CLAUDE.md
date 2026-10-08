@@ -28,5 +28,5 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 ## Versioning and commits
 - `versionName` is always `0.0.<versionCode>` (see `VERSIONING.md`). Each bump gets a `CHANGELOG.md` entry.
 - Use conventional commits (`feat:`, `fix:`, `chore:`, `test:`, `build:`, `docs:`, `refactor:`).
-- `main` is the default branch. A version is released by pushing the tag `v0.0.<code>` on its release commit; the Release workflow publishes source code only (see `VERSIONING.md`). Never attach an APK to a release.
+- `main` is the default branch. Pushing a new version to `main` releases it: the Release workflow tags it `v0.0.<code>` and publishes source code only (see `VERSIONING.md`). Don't push tags yourself. Never attach an APK to a release.
 - Licensed under the Source First License 1.1 (`LICENSE.md`). Third-party code keeps its own licenses (`THIRD_PARTY_NOTICES.md`).

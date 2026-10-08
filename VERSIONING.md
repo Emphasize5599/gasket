@@ -20,8 +20,7 @@ Never reset or reuse a versionCode (Android refuses to install a lower code over
 ## Releasing a version
 
 1. Bump the version and add its `CHANGELOG.md` entry, then commit as `chore(release): 0.0.<code>`.
-2. Push to `main`.
-3. Tag that commit `v0.0.<code>` and push the tag. `.github/workflows/release.yml` then creates the GitHub Release: the notes are the version's CHANGELOG entry, it's marked pre-release while Gasket is in alpha, and the only downloads are GitHub's source code archives. APKs are never uploaded; they're built with `./build.sh` and shared directly.
+2. Push to `main`. `.github/workflows/release.yml` sees a version with no release yet, tags the commit `v0.0.<code>` and creates the GitHub Release: the notes are the version's CHANGELOG entry, it's marked pre-release while Gasket is in alpha, and the only downloads are GitHub's source code archives. APKs are never uploaded; they're built with `./build.sh` and shared directly.
 
 ## History
 

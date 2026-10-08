@@ -1,13 +1,21 @@
-# Pushing a version tag (v0.0.<versionCode>) creates a GitHub Release for it: the notes come from CHANGELOG.md, and the
-# only downloads are the source code archives GitHub attaches to every release. No APK is built or uploaded.
+# A new version pushed to main is released automatically: when android:versionName in AndroidManifest.xml has no
+# GitHub Release yet, this tags the pushed commit v<versionName> and creates the release. The notes come from
+# CHANGELOG.md, and the only downloads are the source code archives GitHub attaches to every release.
+# No APK is built or uploaded.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: [AndroidManifest.xml, .github/workflows/release.yml]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -15,24 +23,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check the tag matches the app version
+      - name: Read the version
+        id: v
         run: |
-          ver="${GITHUB_REF_NAME#v}"
-          if ! grep -q "android:versionName=\"$ver\"" AndroidManifest.xml; then
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match android:versionName in AndroidManifest.xml"
-            exit 1
+          ver=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' AndroidManifest.xml | head -1)
+          if [ -z "$ver" ]; then echo "::error::No android:versionName in AndroidManifest.xml"; exit 1; fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already released
+        id: seen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+            echo "v${{ steps.v.outputs.version }} is already released."
+            echo "done=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Release notes from CHANGELOG.md
+        if: steps.seen.outputs.done != 'true'
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          ver="${{ steps.v.outputs.version }}"
           awk -v v="$ver" 'index($0, "## " v " ") == 1 || $0 == "## " v { p = 1; next } p && /^## / { exit } p' CHANGELOG.md > notes.md
           if [ ! -s notes.md ]; then
             echo "::error::CHANGELOG.md has no entry for $ver"
             exit 1
           fi
 
-      - name: Create the release (source code only, marked pre-release while in alpha)
+      - name: Tag and release (source code only, marked pre-release while in alpha)
+        if: steps.seen.outputs.done != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "Gasket ${GITHUB_REF_NAME#v}" --notes-file notes.md --prerelease --verify-tag
+        run: |
+          ver="${{ steps.v.outputs.version }}"
+          gh release create "v$ver" --target "$GITHUB_SHA" --title "Gasket $ver" --notes-file notes.md --prerelease
