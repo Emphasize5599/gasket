@@ -34,6 +34,8 @@
       saveLog: function (t) { mem.log = t; }, loadLog: function () { return mem.log || ''; },
       shareText: function (subj, t) { window.__shared = { subject: subj, text: t }; },
       saveAndShare: function (req, name, mime, t, subj) { window.__saved = { name: name, text: t }; window.__shared = { subject: subj, file: name }; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/FuelPlus/' + name }); }, 30); },
+      backupAll: function (req, name) { window.__backupName = name; setTimeout(function () { window.onNativeResult(req, { path: 'Downloads/FuelPlus/' + name, prefs: 5, kv: 42 }); }, 30); },
+      pickAndRestore: function (req) { setTimeout(function () { window.onNativeResult(req, window.__restoreMock || { cancelled: true }); }, 30); },
       saveDownload: function (name, mime, t) { window.__saved = { name: name, text: t }; return 'Downloads/FuelPlus/' + name; },
       appVersion: function () { return 'test'; },
       kvGet: function (ns, k) { var m = window.__kv = window.__kv || {}; return m[ns + '|' + k] || ''; },
@@ -54,7 +56,7 @@
   var S = Object.assign({}, P.DEFAULTS);
   try { var saved = JSON.parse(N.loadSettings() || '{}'); S = Object.assign(S, saved); S.brands = Object.assign({}, P.DEFAULTS.brands, saved.brands || {}); } catch (e) {}
   S.blacklist = (S.blacklist || []).slice(); S.dieselRisk = Object.assign({}, S.dieselRisk || {});
-  function save() { N.saveSettings(JSON.stringify(S)); logSetup(); }
+  function save() { if (window.__restoring) return; N.saveSettings(JSON.stringify(S)); logSetup(); }   // a restore in progress owns the settings
   // debug log: off unless turned on in Settings
   if (S.debug == null) S.debug = false;
   if (!S.logLevel) S.logLevel = 3;
@@ -749,6 +751,31 @@
     if (kind !== 'all' || text.length < 300000) N.shareText('Fuel+ Map ' + (kind === 'all' ? 'data' : 'bad CITGO list'), text);
     toast(where && !/^error/.test(where) ? 'Saved to ' + where : kind === 'all' ? 'Couldn\'t save the file' + (where ? ' (' + where.replace(/^error: /, '') + ')' : '') : 'Shared the list');
   }
+  /** Full backup: the native side writes every setting, saved answer, trip and lookup count straight to a file. */
+  function fullBackup(btn) {
+    if (!N.backupAll || !window.__trip) { toast('This needs the app.'); return; }
+    btn.disabled = true; var lbl = btn.textContent; btn.textContent = 'Saving…';
+    window.__trip.call('backupAll', 'fuelplus-full-backup-' + stamp() + '.json').then(function (r) {
+      btn.disabled = false; btn.textContent = lbl;
+      if (!r || r.error) { toast('Couldn\'t save the backup' + (r && r.error ? ': ' + r.error : '') + '.'); return; }
+      toast('Saved to ' + r.path + ' (' + r.kv + ' saved items).');
+      if (window.FLog) FLog.info('data', 'Full backup saved', { prefs: r.prefs, kv: r.kv });
+    });
+  }
+  /** Restore a full backup: replaces everything, then restarts the page so it all loads from the restored data. */
+  function fullRestore(btn) {
+    if (!N.pickAndRestore || !window.__trip) { toast('This needs the app.'); return; }
+    confirmDel({ title: 'Replace everything with a backup?', body: 'All settings, cars, trips and saved searches in this app are replaced by the backup you pick. This month\'s lookup counts keep the higher number.', action: 'Pick backup' }).then(function (ok) {
+      if (!ok) return;
+      window.__trip.call('pickAndRestore').then(function (r) {
+        if (!r || r.cancelled) return;
+        if (r.error) { toast('Couldn\'t restore: ' + r.error); return; }
+        window.__restoring = true;                    // nothing may write the old settings back over the restored ones
+        toast('Restored ' + r.prefs + ' settings and ' + r.kv + ' saved items. Restarting…');
+        setTimeout(function () { location.reload(); }, 900);
+      });
+    });
+  }
   var pickN = 0, pickWait = {};
   function importData(kind) {
     if (!N.pickTextFile) { toast('Importing needs the app.'); return; }
@@ -870,6 +897,8 @@
     h += '<div class="card"><h3>Your data</h3>' +
       '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/FuelPlus you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
       '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div>' +
+      '<div class="field col"><div class="lbl">Full backup (moving to a new install)<small class="keep">Everything, exactly as it is: settings <b>including your API keys</b>, cars, trips, all saved searches and prices, the bad CITGO list, the debug log and this month\'s Google lookup counts. Restoring replaces everything in the app, and lookup counts never go down, so your monthly cap still holds. Uses no lookups. Keep the file private — it has your keys.</small></div>' +
+        '<div class="btns wrap"><button class="btn tonal sm" id="bkSave">Save full backup</button><button class="btn tonal sm" id="bkRestore">Restore full backup</button></div></div>' +
       '<div class="field"><div class="lbl">Clear cache<small>Stations, prices, speed limits, routes and Walmart+ station checks saved from recent searches, so the same route doesn\'t use Google lookups twice. Your trips, cars and settings stay.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
       '<div class="field"><div class="lbl">Delete bad CITGO list<small class="keep" id="blCount2">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blDelAll">Delete</button></div>' +
       '<div class="field"><div class="lbl">Erase all data<small>Settings, API key, cars, mileage log, trips, the bad CITGO list and the cache — like a fresh install. This month\'s lookup count is kept so your safety cap still works.</small></div><button class="btn tonal sm danger-sm" id="eraseAll">Erase</button></div></div>';
@@ -892,6 +921,8 @@
     $('exBl').onclick = function () { exportData('blacklist'); };
     $('imAll').onclick = function () { importData('all'); };
     $('imBl').onclick = function () { importData('blacklist'); };
+    $('bkSave').onclick = function () { fullBackup(this); };
+    $('bkRestore').onclick = function () { fullRestore(this); };
     $('sLogShare').onclick = function () { shareLog(); };
     $('histClear').onclick = function () {
       var o = KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0;

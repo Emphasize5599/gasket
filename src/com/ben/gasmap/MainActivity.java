@@ -631,12 +631,169 @@ public class MainActivity extends Activity {
         handleShare(i);
     }
 
-    private static final int PICK_FILE = 4711;
-    private int pickReq = -1;
+    private static final int PICK_FILE = 4711, RESTORE_FILE = 4712;
+    private int pickReq = -1, restoreReq = -1;
+
+    // ---------------- full backup / restore (moving to a new install) ----------------
+    // Everything the app keeps: every preference (settings incl. API keys, the map's last results, this month's lookup
+    // counts), every saved answer and trip in files/kv/, and the debug log. Streamed, so big caches never sit in the WebView.
+    private static final String[] BACKUP_FILES = {"debug-log.json"};
+    private static final String COUNTER = "^[a-z]*calls_\\d{4}-\\d{2}$";
+
+    private JSONObject writeBackup(String name) throws Exception {
+        android.content.ContentValues v = new android.content.ContentValues();
+        v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
+        v.put("mime_type", "application/json");
+        v.put("relative_path", "Download/FuelPlus");
+        Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
+        if (uri == null) throw new Exception("couldn't create the file");
+        OutputStream os = getContentResolver().openOutputStream(uri);
+        android.util.JsonWriter w = new android.util.JsonWriter(new java.io.BufferedWriter(new java.io.OutputStreamWriter(os, "UTF-8"), 65536));
+        int nPrefs = 0, nKv = 0;
+        w.beginObject();
+        w.name("fullBackup").value(1);
+        w.name("fromPackage").value(getPackageName());
+        String ver = "?"; try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+        w.name("appVersion").value(ver);
+        w.name("created").value(System.currentTimeMillis());
+        w.name("prefs").beginObject();
+        for (Map.Entry<String, ?> e : prefs().getAll().entrySet()) {
+            Object x = e.getValue(); if (x == null) continue;
+            w.name(e.getKey()).beginObject();
+            if (x instanceof Integer) { w.name("t").value("i"); w.name("v").value((Integer) x); }
+            else if (x instanceof Long) { w.name("t").value("l"); w.name("v").value((Long) x); }
+            else if (x instanceof Boolean) { w.name("t").value("b"); w.name("v").value((Boolean) x); }
+            else if (x instanceof Float) { w.name("t").value("f"); w.name("v").value(((Float) x).doubleValue()); }
+            else { w.name("t").value("s"); w.name("v").value(String.valueOf(x)); }
+            w.endObject(); nPrefs++;
+        }
+        w.endObject();
+        w.name("kv").beginObject();
+        File[] nss = new File(getFilesDir(), "kv").listFiles();
+        if (nss != null) for (File ns : nss) {
+            if (!ns.isDirectory()) continue;
+            w.name(ns.getName()).beginObject();
+            File[] fs = ns.listFiles();
+            if (fs != null) for (File f : fs) { if (!f.isFile()) continue; w.name(f.getName()).value(readAll(new java.io.FileInputStream(f))); nKv++; }
+            w.endObject();
+        }
+        w.endObject();
+        w.name("files").beginObject();
+        for (String fn : BACKUP_FILES) {
+            File f = new File(getFilesDir(), fn);
+            if (f.isFile()) w.name(fn).value(readAll(new java.io.FileInputStream(f)));
+        }
+        w.endObject();
+        w.endObject();
+        w.close();
+        JSONObject o = new JSONObject();
+        o.put("path", "Downloads/FuelPlus/" + name); o.put("prefs", nPrefs); o.put("kv", nKv);
+        return o;
+    }
+
+    /**
+     * Replace this install's data with a backup. Lookup counts never go down: for each month the higher of the backup's
+     * and this install's count is kept, so a restore can't hand you a fresh monthly cap.
+     */
+    private JSONObject readBackup(Uri uri) throws Exception {
+        android.util.JsonReader r = new android.util.JsonReader(new java.io.BufferedReader(new java.io.InputStreamReader(getContentResolver().openInputStream(uri), "UTF-8"), 65536));
+        SharedPreferences p = prefs();
+        Map<String, Object> before = new HashMap<String, Object>(p.getAll());
+        java.util.Set<String> set = new java.util.HashSet<String>();
+        SharedPreferences.Editor ed = null;
+        boolean ok = false; int nPrefs = 0, nKv = 0; String from = "";
+        r.beginObject();
+        while (r.hasNext()) {
+            String k = r.nextName();
+            if ("fullBackup".equals(k)) { ok = r.nextInt() == 1; }
+            else if ("fromPackage".equals(k)) { from = r.nextString(); }
+            else if ("prefs".equals(k)) {
+                if (!ok) throw new Exception("That isn't a full backup file.");
+                ed = p.edit(); ed.clear();
+                r.beginObject();
+                while (r.hasNext()) {
+                    String key = r.nextName(), t = "s", sv = null;
+                    r.beginObject();
+                    while (r.hasNext()) {
+                        String f = r.nextName();
+                        if ("t".equals(f)) t = r.nextString();
+                        else if ("v".equals(f)) sv = r.peek() == android.util.JsonToken.BOOLEAN ? String.valueOf(r.nextBoolean()) : r.nextString();
+                        else r.skipValue();
+                    }
+                    r.endObject();
+                    if (sv == null) continue;
+                    if ("i".equals(t)) {
+                        int iv = (int) Double.parseDouble(sv);
+                        if (key.matches(COUNTER) && before.get(key) instanceof Integer) iv = Math.max(iv, (Integer) before.get(key));
+                        ed.putInt(key, iv);
+                    }
+                    else if ("l".equals(t)) ed.putLong(key, (long) Double.parseDouble(sv));
+                    else if ("b".equals(t)) ed.putBoolean(key, Boolean.parseBoolean(sv));
+                    else if ("f".equals(t)) ed.putFloat(key, (float) Double.parseDouble(sv));
+                    else ed.putString(key, sv);
+                    set.add(key); nPrefs++;
+                }
+                r.endObject();
+                for (Map.Entry<String, Object> e : before.entrySet())       // counts the backup doesn't have stay as they are
+                    if (!set.contains(e.getKey()) && e.getKey().matches(COUNTER) && e.getValue() instanceof Integer) ed.putInt(e.getKey(), (Integer) e.getValue());
+            }
+            else if ("kv".equals(k)) {
+                if (!ok) throw new Exception("That isn't a full backup file.");
+                File root = new File(getFilesDir(), "kv");
+                r.beginObject();
+                while (r.hasNext()) {
+                    String ns = r.nextName().replaceAll("[^a-z0-9_-]", "_");
+                    File dir = new File(root, ns);
+                    if (!dir.exists()) dir.mkdirs();
+                    File[] old = dir.listFiles(); if (old != null) for (File f : old) f.delete();
+                    r.beginObject();
+                    while (r.hasNext()) {
+                        String fn = r.nextName().replaceAll("[^a-f0-9]", ""), body = r.nextString();
+                        if (fn.isEmpty()) continue;
+                        java.io.FileOutputStream o = new java.io.FileOutputStream(new File(dir, fn));
+                        o.write(body.getBytes("UTF-8")); o.close(); nKv++;
+                    }
+                    r.endObject();
+                }
+                r.endObject();
+            }
+            else if ("files".equals(k)) {
+                r.beginObject();
+                while (r.hasNext()) {
+                    String fn = r.nextName(), body = r.nextString();
+                    if (java.util.Arrays.asList(BACKUP_FILES).contains(fn)) {
+                        java.io.FileOutputStream o = openFileOutput(fn, MODE_PRIVATE);
+                        o.write(body.getBytes("UTF-8")); o.close();
+                    }
+                }
+                r.endObject();
+            }
+            else r.skipValue();
+        }
+        r.endObject(); r.close();
+        if (!ok || ed == null) throw new Exception("That isn't a full backup file.");
+        ed.commit();
+        JSONObject o = new JSONObject();
+        o.put("prefs", nPrefs); o.put("kv", nKv); o.put("from", from);
+        return o;
+    }
 
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == RESTORE_FILE && restoreReq >= 0) {
+            final int rq = restoreReq; restoreReq = -1;
+            final Uri ru = result == RESULT_OK && data != null ? data.getData() : null;
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o;
+                    try { if (ru == null) { o = new JSONObject(); o.put("cancelled", true); } else o = readBackup(ru); }
+                    catch (Exception e) { o = new JSONObject(); try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(rq, o);
+                }
+            }).start();
+            return;
+        }
         if (request != PICK_FILE || pickReq < 0) return;
         final int reqId = pickReq; pickReq = -1;
         final Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
@@ -749,6 +906,38 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return "error: " + e.getMessage();
             }
+        }
+
+        /** Full backup (with API keys, caches, history and lookup counts) to Downloads/FuelPlus. Replies {path, prefs, kv} or {error}. */
+        @JavascriptInterface
+        public void backupAll(final int reqId, final String name) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o;
+                    try { o = writeBackup(name); }
+                    catch (Exception e) { o = new JSONObject(); try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        /** Pick a full backup and replace this install's data with it. Replies {prefs, kv, from}, {cancelled} or {error}. */
+        @JavascriptInterface
+        public void pickAndRestore(final int reqId) {
+            main.post(new Runnable() {
+                public void run() {
+                    restoreReq = reqId;
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("*/*");
+                    try { startActivityForResult(i, RESTORE_FILE); }
+                    catch (Exception e) {
+                        JSONObject o = new JSONObject();
+                        try { o.put("error", "No file picker available"); } catch (Exception ignored) { }
+                        reply(reqId, o); restoreReq = -1;
+                    }
+                }
+            });
         }
 
         /** Opens the system file picker for a Fuel+ data file to import; the text comes back via onNativeResult. */

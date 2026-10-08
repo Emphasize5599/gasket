@@ -5,8 +5,12 @@ The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
 ## Unreleased
-- Versioning switched to `0.0.<versionCode>`; versionName is now `0.0.46` (versionCode unchanged).
 - Rebrand to Gasket / `com.bensanzone.fuelmap` is planned but not done yet.
+
+## 0.0.47 - 2026-10-08
+- Still Fuel+ Map (`com.ben.gasmap`, old signing key) so it installs over 0.0.46: a migration build.
+- Settings → Your data → Full backup: save and restore everything (settings including API keys, cars, trips, every saved search and price, bad CITGO list, debug log, this month's Google lookup counts). Restoring replaces everything; lookup counts keep the higher number so the monthly cap still holds. Uses no lookups.
+- Versioning switched to `0.0.<versionCode>`.
 
 ## 0.0.46 [3.25] - 2026-10-08
 - EV and hydrogen basics: ⚡ map panel (fetch every hydrogen station, shade areas out of a fuel-cell car's reach, find DC fast chargers); EV/H₂ trips use chargers or hydrogen stations from the DOE station finder; EV plans charge to 80% and count charging time.
