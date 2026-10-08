@@ -365,6 +365,8 @@ with sync_playwright() as p:
         nxt(pg); assert step(pg) == 5; nxt(pg); pg.wait_for_timeout(500)
         dh = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  departure panel:', round(dh, 2), pg.evaluate("[document.getElementById('tpS6').offsetHeight, document.getElementById('tpBody').clientHeight, document.getElementById('trip').style.cssText]"))
         assert dh < 0.7, 'Departure: only as tall as it needs'
+        df = ft(pg, '.dep-facts'); print('  departure tiles:', df.replace('\n', ' | '))
+        assert pg.locator('.dep-facts > div').count() == 3 and 'miles' in df and 'driving' in df and 'fuel stop' in df and pg.locator('.dep-sum').count() == 0
         assert step(pg) == 6 and pg.locator('.kpis.four #tShare').count() == 1 and pg.locator('#tsDone, #tsEdit, #tsExport').count() == 0
         dep = ft(pg, '.tp-step:not(.hidden)'); print('  departure:', dep.replace('\n', ' | ')[:500])
         assert pg.locator('.tp-step:not(.hidden) .nlist li').count() == 2 and 'trip cost' in dep and 'Trip cost is the' not in pg.inner_text('.tp-step:not(.hidden)')
@@ -572,8 +574,10 @@ with sync_playwright() as p:
         pg.evaluate("document.getElementById('tpBody').scrollTop = 400"); pg.wait_for_timeout(400)
         assert abs(pg.evaluate("document.getElementById('trip').getBoundingClientRect().height") - h1) < 3, 'scrolling keeps your height'
         pg.screenshot(path=f'{OUT}/{name}-w5-dragged.png')
+        pg.evaluate("window.__app.S.speed.view = Object.assign(window.__app.S.speed.view || {}, { open: true })")   # left inside speed by road
         pg.click('#tClose'); pg.wait_for_timeout(200)
         assert not pg.evaluate("document.body.classList.contains('trip-on')")
+        assert not pg.evaluate("!!window.__app.S.speed.view.open"), 'closing the trip leaves the speed-by-road submenu'
         # trip history: reopening a saved trip uses no Google lookups at all (no route call, no station search)
         pg.click('#btnTrip'); pg.wait_for_timeout(400)
         assert pg.locator('#tripPick').count() == 1, 'Trip asks: new or saved'
@@ -762,7 +766,7 @@ with sync_playwright() as p:
         pg.click('[data-legurl="1"]'); leg2 = pg.evaluate('window.__lastUrl'); print('  one link:', one[:160], '\n  leg 2 link:', leg2[:200])
         assert 'origin=32.7767' in leg2 or 'origin=Dallas' in leg2, leg2
         assert leg2 != one and pg.locator('#tLegs [data-legurl="1"].done').count() == 1
-        pg.click('.tp-step:not(.hidden) .dep-sum'); pg.wait_for_timeout(300); assert pg.locator('#tLegs').count() == 0, 'tap outside closes it'
+        pg.click('.tp-step:not(.hidden) .dep-facts'); pg.wait_for_timeout(300); assert pg.locator('#tLegs').count() == 0, 'tap outside closes it'
         pg.evaluate("window.Trip.exportUrl = window.__exp0; 0")
         stress(pg, 'legs')
         pg.click('#tClose'); pg.wait_for_timeout(200)

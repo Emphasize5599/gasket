@@ -2349,8 +2349,11 @@
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
     var p = r.plan;
-    var h = '<div class="card dep-route">' + numList(route.stops) +
-      '<div class="dep-sum">' + Math.round(model.totalMi).toLocaleString() + ' mi · ' + fmtDur(model.durationSec) + (p.ok ? ' · ' + p.totals.stops + ' fuel stop' + (p.totals.stops === 1 ? '' : 's') : '') + '</div></div>';
+    var h = '<div class="card dep-route">' + numList(route.stops) + '</div>' +
+      // the trip at a glance, as tiles between the places and the costs
+      '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
+      '<div><b>' + fmtDur(model.durationSec) + '</b><span>driving</span></div>' +
+      (p.ok ? '<div><b>' + p.totals.stops + '</b><span>fuel stop' + (p.totals.stops === 1 ? '' : 's') + '</span></div>' : '') + '</div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
     var t = p.totals, out = r.acc.legs[0];
     var costQ = 'The ' + out.burnGal.toFixed(1) + ' gal this drive burns: what\'s already in your tank at ' + priceText(r.startPrice) + '/gal' +
@@ -2549,6 +2552,7 @@
   function closePicker() { var bg = $('tripPick'); if (!bg) return false; bg.remove(); return true; }
   /** A fresh trip: keep the car and your settings, forget the route. */
   function newTrip(link) {
+    resetAdjust();
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
     S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
@@ -2557,6 +2561,7 @@
   }
   async function openSaved(id) {
     if (busy) return;
+    resetAdjust();
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
@@ -2924,7 +2929,14 @@
   // The ✕ closes the planner; the trip stays in history (it was saved when its stations were found) and can be
   // continued from the Trip button until a new one is started.
   function closePage() { show($('trip'), false); }
+  /** A trip opened, started or closed: Adjustments starts fresh (not inside speed by road, scrolled to the top). */
+  function resetAdjust() {
+    if (S.speed && S.speed.view && S.speed.view.open) { S.speed.view.open = false; A.save(); }
+    inMode = false; sizedInMode = false; modeSnap = null;
+    var pg = $('trip'); if (pg) pg.classList.remove('submode', 'tall');
+  }
   function closeTrip() {
+    resetAdjust();
     closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ();
     layer.clearLayers(); drawn = {}; if (map.hasLayer(layer)) map.removeLayer(layer);
     document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); A.render();

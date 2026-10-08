@@ -974,3 +974,5 @@ details.g-obs[open] { padding-bottom: 12px; }
 .page.tpanel.submode .tp-nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .page.tpanel.submode .tp-nav .btn { font-size: 15px; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
 @media (max-width: 380px) { .page.tpanel.submode .tp-nav .btn { white-space: normal; font-size: 14px; line-height: 1.15; } }
+.kpis.dep-facts { margin: 10px 0 0; }
+.kpis.dep-facts b { font-size: 17px; white-space: nowrap; }
