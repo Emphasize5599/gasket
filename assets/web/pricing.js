@@ -34,7 +34,11 @@
     blacklist: [],               // CITGO stations where Walmart+ didn't work: [{id, name, address, brand, lat, lng, t}]
     dieselRisk: {},              // station id -> true: count Walmart+ on CITGO diesel here anyway (your own risk)
     autoRefresh: false,
-    hideUnpriced: false,         // map and list only; trips still consider them (estimated) where nothing priced is in reach          // search for prices when the app opens (uses Google lookups)
+    hideUnpriced: false,         // map and list only; trips still consider them (estimated) where nothing priced is in reach
+    confirmDeletes: true,        // ask before deleting anything (Settings → General)
+    nrelKey: '',                 // your own free key for the DOE station finder (blank = the shared DEMO_KEY); never logged or exported
+    evPrice: 0.48,               // $/kWh you expect at DC fast chargers (the station finder rarely has prices)
+    h2Price: 36,                 // $/kg you expect for hydrogen
     walmartPlus: true,
     samsMode: 'member',          // 'member' = Google's Sam's price is already member price; 'minus10' = take 10¢ more
     citgoTier: 'club',           // 'none' | 'club' | 'premier'
@@ -292,6 +296,7 @@
    */
   function displayName(st) {
     if (!st) return '';
+    if (ALT[st.brand]) return st.name || ALT[st.brand].name;   // chargers and hydrogen stations: their own name
     var br = BRANDS[st.brand] || { name: '' };
     var own = function (n) {
       n = String(n || '').trim(); if (!n) return '';
@@ -301,7 +306,15 @@
     return own(st.name) || own(st.altName) || br.name || st.name || '';
   }
 
-  var api = { BRANDS: BRANDS, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
+  // not gas brands: EV chargers and hydrogen stations (DOE station finder), only for EV / fuel-cell cars
+  var ALT = {
+    ev: { name: 'EV charger', short: '⚡', color: '#12a150' },
+    h2: { name: 'Hydrogen', short: 'H₂', color: '#0e7fc0' }
+  };
+  /** A gas brand, a charger / hydrogen station, or a plain gray stand-in — never undefined. */
+  function brand(b) { return BRANDS[b] || ALT[b] || { name: '', short: '?', color: '#777' }; }
+
+  var api = { BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
     compute: compute, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

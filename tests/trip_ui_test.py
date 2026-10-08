@@ -78,9 +78,13 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-w1-garage.png'); wide(pg, 'garage')
         # EPA lookup
         # ---- garage: your two cars are there, EPA numbers read-only, the rest behind Edit ----
-        chips = ft(pg, '#gCars'); head = ft(pg, '.g-head'); tiles = ft(pg, '.epa-tiles')
-        print('  cars:', chips.replace('\n', ' | '), '||', head.replace('\n', ' | '), '||', tiles.replace('\n', ' '))
-        assert '2020 Corolla Hybrid' in chips and '2012 Venza' in chips and 'Corolla Hybrid' in head and 'gal tank' not in head and 'Hybrid' not in head and '54' in tiles and '50' in tiles
+        chips = ft(pg, '#gCars'); tiles = ft(pg, '.epa-tiles')
+        print('  cars:', chips.replace('\n', ' | '), '||', tiles.replace('\n', ' '))
+        assert '2020 Corolla Hybrid LE' in chips and '2012 Venza XLE' in chips and '54' in tiles and '50' in tiles
+        assert pg.locator('.g-head').count() == 0 and pg.locator('#gCars .carchip .cx').count() == 2, 'just the car buttons, each with a small x'
+        order = pg.evaluate("[...document.querySelectorAll('#tGarage > .card')].map(e => e.id || e.className.split(' ')[1])")
+        print('  garage order:', order)
+        assert order.index('tSpeed') < order.index('g-econ') < order.index('gObs') < order.index('gInfo'), 'speed above fuel economy; details last'
         assert pg.locator('.epa-tiles input').count() == 0 and pg.locator('#gTank').count() == 0, 'EPA not editable; tank only after Edit'
         assert pg.locator('.g-car').count() == 1 and pg.locator('.g-econ').count() == 1 and pg.locator('.epa-note').count() == 0
         assert pg.locator('.epa-tiles .qi').count() == 3, 'a (?) in each of city / highway / combined'
@@ -134,7 +138,7 @@ with sync_playwright() as p:
         # the Venza: its own card
         pg.click('[data-car="venza12"]'); pg.wait_for_timeout(300)
         sp = ft(pg, '#tSpeed'); print('  Venza:', sp.split('\n')[0:3])
-        assert 'venza' in sp.lower() and '65 mph' in sp and 'Venza' in ft(pg, '.g-head')
+        assert 'venza' in sp.lower() and '65 mph' in sp and 'Venza' in ft(pg, '.carchip.on')
         pg.screenshot(path=f'{OUT}/{name}-g3-venza.png')
         # add a car from the EPA (the trip tests below use it)
         pg.click('[data-car="+"]'); pg.wait_for_timeout(400)
@@ -144,8 +148,8 @@ with sync_playwright() as p:
         pg.select_option('#eYear', '2021'); pg.wait_for_timeout(200)
         pg.select_option('#eMake', 'Honda'); pg.wait_for_timeout(200)
         pg.select_option('#eModel', 'Accord'); pg.wait_for_timeout(600)
-        print('  car:', ft(pg, '.g-head').replace('\n', ' | '), '|', ft(pg, '.epa-tiles').replace('\n', ' '), '|', ft(pg, '#eMsg'))
-        assert 'Accord' in ft(pg, '.g-head') and '30' in ft(pg, '.epa-tiles') and "doesn't publish it" in ft(pg, '#eMsg')
+        print('  car:', ft(pg, '.carchip.on').replace('\n', ' | '), '|', ft(pg, '.epa-tiles').replace('\n', ' '), '|', ft(pg, '#eMsg'))
+        assert 'Accord' in ft(pg, '.carchip.on') and '30' in ft(pg, '.epa-tiles') and "doesn't publish it" in ft(pg, '#eMsg')
         pg.click('#tNext'); pg.wait_for_timeout(250)
         assert step(pg) == 1 and pg.locator('#gTank.need').count() == 1, 'Next outlines the empty tank box'
         pg.screenshot(path=f'{OUT}/{name}-w3-need-box.png')
@@ -587,11 +591,20 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-h1-history.png')
         pg.evaluate("window.__jobs = null; window.__routeBody = null; window.__gmapsUrls = []")
         pg.click('[data-hist]'); idle(pg, 1200)
-        assert step(pg) == 5 and pg.locator('#tripPick').count() == 0
+        assert step(pg) == 1 and pg.locator('#tripPick').count() == 0, 'a saved trip opens at the Garage'
+        assert pg.evaluate('!!window.__trip.state().model'), 'its route is ready behind the Garage'
+        stops(pg, 1200)
         assert pg.evaluate('window.__jobs') is None and pg.evaluate('window.__routeBody') is None and not pg.evaluate('window.__gmapsUrls'), 'no lookups'
         sv = ft(pg, '.note.saved'); print('  reopened:', sv)
         assert 'Saved trip' in sv and 'no lookups' in sv and pg.locator('#tsStopsH').count() == 1
         goto(pg, 2); assert pg.locator('#tRefreshRoutes').count() == 1 and pg.locator('#tNext.dim').count() == 0, 'saved trip: routes remembered'
+        if pg.locator('.alts-pick [data-alt="1"]').count():
+            pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(500)
+            hid = pg.evaluate("window.__app.KV.get('trips', 'index').v[0].id")
+            assert pg.evaluate("(id) => window.__app.KV.get('trips', 'trip|' + id).v.altSel", hid) == 1, 'the route you pick is remembered'
+            pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(500)
+            assert pg.evaluate("(id) => window.__app.KV.get('trips', 'trip|' + id).v.altSel", hid) == 0
+            print('  route pick remembered on the saved trip')
         assert pg.evaluate('window.__routeBody') is None
         pg.click('#tRefreshRoutes'); pg.wait_for_timeout(600); pg.wait_for_function("!window.__trip.state().busy", timeout=15000)
         assert pg.evaluate('window.__routeBody') is not None and pg.locator('#tRefreshRoutes').count() == 1, 'refresh asks Google again'
@@ -614,7 +627,12 @@ with sync_playwright() as p:
         # remove from history
         pg.click('#btnTrip'); pg.wait_for_timeout(400); n0 = pg.locator('[data-hdel]').count()
         pg.screenshot(path=f'{OUT}/{name}-h0-picker.png'); wide(pg, 'picker')
-        pg.click('[data-hdel]'); pg.wait_for_timeout(100)
+        pg.click('[data-hdel]'); pg.wait_for_timeout(250)
+        assert pg.locator('#cfm').count() == 1 and pg.locator('[data-hdel]').count() == n0, 'asks first'
+        print('  confirm:', ft(pg, '#cfm').replace('\n', ' | ')); pg.screenshot(path=f'{OUT}/{name}-h2-confirm.png')
+        pg.click('#cfmNo'); pg.wait_for_timeout(250)
+        assert pg.locator('#cfm').count() == 0 and pg.locator('[data-hdel]').count() == n0, 'Cancel keeps it'
+        pg.click('[data-hdel]'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(250)
         assert pg.locator('[data-hdel]').count() == n0 - 1
         # typed addresses: "100 Main St" exists in two towns -> you pick; Dallas is unambiguous
         pg.click('#tpNew'); pg.wait_for_timeout(300)

@@ -43,7 +43,7 @@
       placesFind: function (req, key, q, lat, lng, bias, radius) { setTimeout(function () { var m = window.__mocks && window.__mocks.find; window.onNativeResult(req, m ? { body: JSON.stringify(m(q, lat, lng, radius)) } : { error: 'No find mock' }); }, 50); },
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
       fetchIcon: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.icon; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 20); },
-      fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
+      fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
       search: function (req) { setTimeout(function () { window.onSearchResult(req, { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
@@ -62,7 +62,7 @@
   function logSetup() {
     if (P.setCents) P.setCents(S.roundCents);
     if (!window.FLog) return;
-    FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey]);
+    FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
   }
   logSetup();
   if (window.FLog) FLog.info('app', 'Started Fuel+ Map ' + (N.appVersion ? N.appVersion() : ''));
@@ -426,7 +426,7 @@
     });
     var keep = {};
     order.forEach(function (x) {
-      var s = x.s, br = P.BRANDS[s.brand], sel = s.id === selectedId; keep[s.id] = 1;
+      var s = x.s, br = P.brand(s.brand), sel = s.id === selectedId; keep[s.id] = 1;
       L.circleMarker([s.lat, s.lng], { renderer: dotsRenderer, pane: 'tdots', radius: sel ? 8 : 6, color: sel ? acc : ring, weight: sel ? 3 : 2,
         fillColor: br.color, fillOpacity: x.c ? 1 : 0.55, bubblingMouseEvents: false })
         .on('click', function () { N.haptic(); openDetail(s.id); }).addTo(dotLayer);
@@ -456,7 +456,7 @@
     var tips = bubOrder.filter(function (id) { return bubs[id]; }).map(function (id) { var b = bubs[id]; return { cands: [b.tip.getLatLng()], tip: b.tip, color: '#8a94a6' }; });
     if (!bubLayer.hasLayer(leadLayer)) bubLayer.addLayer(leadLayer);
     var sheet = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');
-    var obst = Labels.rectsOf(map, [document.querySelector('.top'), $('status'), $('btnArea'), $('wmCheck'), $('btnTrip'), $('btnLocate'), sheet, document.querySelector('.leaflet-control-attribution')], 6);
+    var obst = Labels.rectsOf(map, [document.querySelector('.top'), $('status'), $('btnArea'), $('wmCheck'), $('btnTrip'), $('btnLocate'), $('btnAlt'), $('afLegend'), sheet, document.querySelector('.leaflet-control-attribution')].filter(Boolean), 6);
     Labels.place(map, tips, { obst: obst, hide: true, routeFree: false, passes: 1, repair: false, sep: 6, dists: [12, 28], angles: 8, leaders: leadLayer, leaderPane: 'tleaders' });
   }
 
@@ -467,11 +467,11 @@
   // an icon that won't draw (a bad download) quietly falls back to the letter
   var IMG_ERR = ' onerror="this.parentNode.classList.add(\'bad\')"';
   function logoHtml(brand) {
-    var br = P.BRANDS[brand] || { color: '#777', short: '?' }, u = LOGO[brand];
+    var br = P.brand(brand), u = LOGO[brand];
     return '<span class="lg' + (u ? ' img' : '') + '" style="--bc:' + br.color + '">' + (u ? '<img src="' + u + '" alt=""' + IMG_ERR + '><i>' + esc(br.short) + '</i>' : esc(br.short)) + '</span>';
   }
   function badgeHtml(brand, cls) {
-    var br = P.BRANDS[brand] || { color: '#777', short: '?' }, u = LOGO[brand];
+    var br = P.brand(brand), u = LOGO[brand];
     return '<span class="badge' + (u ? ' logo' : '') + (cls ? ' ' + cls : '') + '" style="--bc:' + br.color + ';background:' + (u ? '#fff' : br.color) + '">' + (u ? '<img src="' + u + '" alt=""' + IMG_ERR + '><i>' + esc(br.short) + '</i>' : esc(br.short)) + '</span>';
   }
   /**
@@ -525,7 +525,7 @@
   function openDetail(id) {
     var s = byId(id); if (!s) return;
     selectedId = id;
-    var br = P.BRANDS[s.brand];
+    var br = P.brand(s.brand);
     var c = P.compute(s, S.grade, S, new Date());
     var ref = me || lastFetch;
     var dist = ref ? P.haversineMi(ref.lat, ref.lng, s.lat, s.lng) : null;
@@ -559,7 +559,7 @@
     h += '<div class="actions"><button class="btn primary" id="dNav"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Directions in Google Maps</button>' +
       '<div class="btn-row"><button class="btn tonal" id="dOther">Other maps app</button><button class="btn tonal" id="dPlace">' + (s.wmStoreId ? 'Walmart store page' : 'Google listing') + '</button></div></div>';
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
-    $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden');
+    $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); if ($('btnAlt')) $('btnAlt').classList.add('hidden');
     $('listSheet').classList.add('hidden');
     $('dClose').onclick = closeDetail;
     $('dNav').onclick = function () { N.haptic(); N.navigate(s.lat, s.lng, String(s.id).indexOf('demo') === 0 ? '' : s.id, s.name); };
@@ -586,7 +586,7 @@
   }
   function closeDetail() {
     if ($('detail').classList.contains('hidden')) return false;
-    $('detail').classList.add('hidden'); $('listSheet').classList.remove('hidden'); $('btnLocate').classList.remove('hidden'); $('btnTrip').classList.remove('hidden');
+    $('detail').classList.add('hidden'); $('listSheet').classList.remove('hidden'); $('btnLocate').classList.remove('hidden'); $('btnTrip').classList.remove('hidden'); if ($('btnAlt')) $('btnAlt').classList.remove('hidden');
     selectedId = null; render(); return true;
   }
 
@@ -643,7 +643,7 @@
   }
   function bindBl(st, idp) {
     if ($(idp + 'BlAdd')) $(idp + 'BlAdd').onclick = function () { N.haptic && N.haptic(); BL.add(st); };
-    if ($(idp + 'BlRm')) $(idp + 'BlRm').onclick = function () { N.haptic && N.haptic(); BL.remove(st); };
+    if ($(idp + 'BlRm')) $(idp + 'BlRm').onclick = function () { N.haptic && N.haptic(); confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(st.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(st); }); };
     if ($(idp + 'BlRisk')) $(idp + 'BlRisk').onchange = function () { BL.dieselRisk(st, this.checked); };
   }
   /** Settings → Bad CITGO stations: each one opens on the map; ✕ takes it off the list. */
@@ -661,9 +661,9 @@
     $('blBack').onclick = function () { pg.classList.add('hidden'); };
     $('blExp').onclick = function () { exportData('blacklist'); };
     $('blImp').onclick = function () { importData('blacklist'); };
-    if ($('blDel')) $('blDel').onclick = deleteBl;
+    if ($('blDel')) $('blDel').onclick = function () { askDeleteBl(); };
     pg.querySelectorAll('[data-bl]').forEach(function (b) { b.onclick = function () { showBad(l[+b.dataset.bl]); }; });
-    pg.querySelectorAll('[data-blrm]').forEach(function (b) { b.onclick = function () { BL.remove(l[+b.dataset.blrm]); }; });
+    pg.querySelectorAll('[data-blrm]').forEach(function (b) { b.onclick = function () { var e = l[+b.dataset.blrm]; confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(e); }); }; });
   }
   /** Close everything and show a bad station on the main map (its details if it's in the current results). */
   var badMarker = null;
@@ -680,13 +680,40 @@
       '<div class="bl-box"><div class="bl-on"><span>On your bad CITGO list — no Walmart+ here.</span><button class="btn tonal sm" id="dBlRm">Remove</button></div></div>' +
       '<div class="actions"><button class="btn primary" id="dNav">Directions in Google Maps</button></div>';
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
-    $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); $('listSheet').classList.add('hidden');
+    $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); if ($('btnAlt')) $('btnAlt').classList.add('hidden'); $('listSheet').classList.add('hidden');
     $('dClose').onclick = function () { closeDetail(); if (badMarker) { map.removeLayer(badMarker); badMarker = null; } };
     $('dNav').onclick = function () { N.navigate(e.lat, e.lng, e.id || '', e.name || 'CITGO'); };
-    $('dBlRm').onclick = function () { BL.remove(e); $('dClose').onclick(); };
+    $('dBlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) { BL.remove(e); $('dClose').onclick(); } }); };
   }
 
-  var CACHE_NS = ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom'];
+  var CACHE_NS = ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin'];
+  function askDeleteBl() {
+    var n = BL.list().length; if (!n) { deleteBl(); return Promise.resolve(false); }
+    return confirmDel({ title: 'Delete your bad CITGO list?', body: 'All ' + n + ' station' + (n === 1 ? '' : 's') + ' will get the Walmart+ discount again.', action: 'Delete' })
+      .then(function (ok) { if (ok) deleteBl(); return ok; });
+  }
+  /**
+   * Ask before deleting anything (Settings → General → Ask before deleting). o: {title, body (html), action}.
+   * -> Promise<true to go ahead>. Off: always true at once.
+   */
+  function confirmDel(o) {
+    if (S.confirmDeletes === false) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      var old = $('cfm'); if (old) old.remove();
+      var bg = document.createElement('div'); bg.className = 'cfm-bg'; bg.id = 'cfm';
+      bg.innerHTML = '<div class="cfm" role="alertdialog" aria-modal="true" aria-labelledby="cfmT"><div class="cfm-t" id="cfmT">' + esc(o.title || 'Delete?') + '</div>' +
+        (o.body ? '<div class="cfm-b">' + o.body + '</div>' : '') +
+        '<div class="cfm-btns"><button class="btn tonal" id="cfmNo">Cancel</button><button class="btn cfm-go" id="cfmYes">' + esc(o.action || 'Delete') + '</button></div>' +
+        '<div class="cfm-hint">Turn these off in Settings → General.</div></div>';
+      document.body.appendChild(bg);
+      requestAnimationFrame(function () { bg.classList.add('on'); });
+      var done = function (v) { window.__cfmClose = null; bg.classList.remove('on'); setTimeout(function () { bg.remove(); }, 160); resolve(v); };
+      window.__cfmClose = function () { done(false); };
+      bg.onclick = function (e) { if (e.target === bg) done(false); };
+      $('cfmNo').onclick = function () { done(false); };
+      $('cfmYes').onclick = function () { N.haptic && N.haptic(); done(true); };
+    });
+  }
   /** Empty the bad CITGO list (Undo puts it all back). */
   function deleteBl() {
     var was = BL.list().slice(); if (!was.length) { toast('Your bad CITGO list is already empty.'); return; }
@@ -712,7 +739,7 @@
   function exportData(kind) {
     var d = { fuelPlusData: 1, kind: kind, app: N.appVersion ? N.appVersion() : '', exported: new Date().toISOString(), blacklist: BL.list() };
     if (kind === 'all') {
-      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.blacklist;   // the API key is never exported
+      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.nrelKey; delete st.blacklist;   // API keys are never exported
       d.settings = st;
       var idx = (KV.get('trips', 'index') || {}).v || [];
       d.trips = idx.map(function (x) { var o = KV.get('trips', 'trip|' + x.id); return o ? { entry: x, t: o.t, trip: o.v } : null; }).filter(Boolean);
@@ -767,7 +794,7 @@
     Object.keys(st.dieselRisk || {}).forEach(function (k) { if (!S.dieselRisk[k]) { S.dieselRisk[k] = true; r.settings++; } });
     // other settings: only ones you've never set
     Object.keys(st).forEach(function (k) {
-      if (k === 'apiKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
+      if (k === 'apiKey' || k === 'nrelKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
       if (S[k] === undefined) { S[k] = st[k]; r.settings++; }
     });
     // saved trips you don't have
@@ -798,6 +825,8 @@
       '<div class="field"><div class="lbl">API calls this month<small>Each refresh uses one call per brand (~6). Free tier: 1,000/month.</small><div class="meter"><i style="width:' + Math.min(100, cap ? calls / cap * 100 : 0) + '%"></i></div></div><b>' + calls + (cap ? '/' + cap : '') + '</b></div>' +
       '<div class="field"><div class="lbl">Monthly safety cap<small>Stops lookups past this count. If you and someone else share one key, split it (e.g. 450 each).</small></div><input type="number" id="monthlyCap" min="0" step="50" value="' + cap + '"></div></div>';
 
+    h += '<div class="card"><h3>General</h3>' +
+      '<div class="field"><div class="lbl">Ask before deleting<small>A confirmation before anything is deleted or removed — cars, mileage entries, saved trips, lists, the cache.</small></div>' + sw('confirmDeletes', S.confirmDeletes !== false) + '</div></div>';
     h += '<div class="card"><h3>Discounts</h3>' +
       '<div class="field"><div class="lbl">Walmart+ member<small>10¢/gal off (5¢ in Alabama) at Walmart, Murphy, Exxon, Mobil, CITGO; member pricing at Sam\'s.</small></div>' + sw('walmartPlus', S.walmartPlus) + '</div>' +
       '<div class="field"><div class="lbl">Club CITGO status<small>Stacks with Walmart+ at CITGO. Club 3¢, Premier 6¢ (12 fills of 8+ gal in a quarter).</small></div><select id="citgoTier">' +
@@ -832,6 +861,10 @@
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
+    h += '<div class="card"><h3>EV & hydrogen</h3>' +
+      '<div class="field col"><div class="lbl">Station finder key (optional)<small>EV chargers and hydrogen stations come from the U.S. Department of Energy\'s free station finder. Blank uses the shared DEMO_KEY (about 30 lookups an hour). A free key of your own: <a href="#" data-url="https://developer.nlr.gov/signup/">sign up</a>. Never logged or exported.</small></div><input type="password" id="nrelKey" placeholder="DEMO_KEY" autocomplete="off" spellcheck="false" value="' + esc(S.nrelKey || '') + '"></div>' +
+      '<div class="field"><div class="lbl">Fast-charging price ($/kWh)<small>What you expect to pay at DC fast chargers — most don\'t publish prices to the finder. Typical: $0.40–0.60.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
+      '<div class="field"><div class="lbl">Hydrogen price ($/kg)<small>What you expect to pay. California stations have been around $30–36.</small></div><input type="number" id="h2Price" min="0" max="100" step="0.5" value="' + (S.h2Price || 36) + '"></div></div>';
     h += '<div class="card"><h3>Bad CITGO stations</h3>' +
       '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
@@ -860,17 +893,31 @@
     $('imAll').onclick = function () { importData('all'); };
     $('imBl').onclick = function () { importData('blacklist'); };
     $('sLogShare').onclick = function () { shareLog(); };
-    $('histClear').onclick = function () { var o = KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0; KV.clear('trips'); $('histCount').textContent = histCount(); toast(n ? 'Cleared ' + n + ' saved trip' + (n === 1 ? '' : 's') + '.' : 'No saved trips.'); };
+    $('histClear').onclick = function () {
+      var o = KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0;
+      if (!n) { toast('No saved trips.'); return; }
+      confirmDel({ title: 'Clear your trip history?', body: 'Deletes ' + n + ' saved trip' + (n === 1 ? '' : 's') + '. Reopening one later would need new lookups.', action: 'Clear' }).then(function (ok) {
+        if (!ok) return; KV.clear('trips'); $('histCount').textContent = histCount(); toast('Cleared ' + n + ' saved trip' + (n === 1 ? '' : 's') + '.');
+      });
+    };
     $('citgoTier').onchange = function () { $('citgoBonusRow').classList.toggle('hidden', this.value === 'none'); };
     $('citgoUsed').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
       b.classList.toggle('on'); S.citgoUsed = Object.assign({}, S.citgoUsed); S.citgoUsed[b.dataset.cu] = b.classList.contains('on') ? P.monthKey() : '';
       document.querySelector('.citgo-today').textContent = citgoToday();
     };
-    $('kvClear').onclick = function () { var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.'); };
-    $('blDelAll').onclick = function () { deleteBl(); $('blCount2').textContent = '0 stations'; $('blCount').textContent = '0 stations'; };
+    $('kvClear').onclick = function () {
+      confirmDel({ title: 'Clear the cache?', body: 'Stations, prices, speed limits and routes saved from recent searches. Searching the same places again will use lookups. Your trips, cars and settings stay.', action: 'Clear' }).then(function (ok) {
+        if (!ok) return; var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.');
+      });
+    };
+    $('blDelAll').onclick = function () { askDeleteBl().then(function (ok) { if (ok) { $('blCount2').textContent = '0 stations'; $('blCount').textContent = '0 stations'; } }); };
     $('eraseAll').onclick = function () {
       var b = this;
+      if (S.confirmDeletes !== false) {
+        confirmDel({ title: 'Erase all your data?', body: 'Settings, API keys, cars, mileage log, trips, the bad CITGO list and the cache — like a fresh install. This can\'t be undone.', action: 'Erase everything' }).then(function (ok) { if (ok) eraseAll(); });
+        return;
+      }
       if (!b.classList.contains('armed')) {       // two taps: the first one only asks
         b.classList.add('armed'); b.textContent = 'Tap again to erase';
         setTimeout(function () { b.classList.remove('armed'); b.textContent = 'Erase'; }, 4000);
@@ -878,7 +925,9 @@
       }
       eraseAll();
     };
-    $('sLogClear').onclick = function () { if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); };
+    $('sLogClear').onclick = function () {
+      confirmDel({ title: 'Clear the debug log?', action: 'Clear' }).then(function (ok) { if (!ok) return; if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); });
+    };
     pg.querySelectorAll('[data-verify]').forEach(function (bt) {
       bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };
     });
@@ -944,6 +993,9 @@
     S.radiusMi = Math.min(25, Math.max(2, parseFloat($('radiusMi').value) || 8));
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
     S.logLevel = parseInt($('logLevel').value, 10) || 3;
+    S.nrelKey = $('nrelKey').value.trim();
+    S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);
+    S.h2Price = Math.max(0, parseFloat($('h2Price').value) || 36);
     pg.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
       var k = cb.dataset.k;
       if (k.indexOf('brand:') === 0) S.brands[k.slice(6)] = cb.checked; else S[k] = cb.checked;
@@ -979,7 +1031,7 @@
     var cap = bbox(c.lat, c.lng, 25);
     fetchAround(c.lat, c.lng, [Math.max(b.getSouth(), cap[0]), Math.max(b.getWest(), cap[1]), Math.min(b.getNorth(), cap[2]), Math.min(b.getEast(), cap[3])]);
   };
-  window.onBack = function () { if (document.querySelector('.qpop')) { window.__closeQ(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
+  window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (document.querySelector('.qpop')) { window.__closeQ(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
     if ($('listSheet').classList.contains('open')) { setListOpen(false); return true; } return false; })(); };
@@ -1094,5 +1146,5 @@
   window.__app = { bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
 })();

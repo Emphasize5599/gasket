@@ -410,8 +410,10 @@
    * cost overrides for the baseline: priceFn(c), stopCostFn(c)
    */
   function optimize(o, priceFn, stopCostFn) {
-    var STEP = 0.1, model = o.model;
-    var LV = Math.max(1, Math.round(o.capGal / STEP));
+    // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
+    // (EVs: 80% — charging slows to a crawl above it), though you may start the trip above it.
+    var STEP = o.step || 0.1, model = o.model;
+    var LV = Math.max(1, Math.round(o.capGal / STEP)), FL = o.fillCap ? Math.max(1, Math.min(LV, Math.round(o.fillCap / STEP))) : LV;
     var cands = o.cands.slice().sort(function (a, b) { return a.d - b.d; });
     var nodes = [{ kind: 'origin', d: 0 }].concat(cands.map(function (c) { return { kind: 'stop', d: c.d, c: c }; }))
       .concat([{ kind: 'dest', d: model.totalMi }]);
@@ -422,7 +424,8 @@
     // o.firstDip: no plan keeps the buffer on the way to the first station (you're already low), so let that
     // first hop dip toward empty instead of failing outright. plan() retries with it only when it has to.
     var firstMin = o.firstDip ? 0 : buf;
-    var price = priceFn || function (c) { return c.price; };
+    // c.timeCost: what the time to put one unit in costs you here (EV charging: slower chargers cost more of your time)
+    var price = priceFn || function (c) { return c.price + (c.timeCost || 0); };
     // Extra time has to pay for itself: every stop must save at least stopPenalty, and leaving the road for a
     // station (more than ~1.5 min of detour) must save at least detourPenalty more than staying on the route.
     var stopCost = stopCostFn || function (c) {
@@ -443,11 +446,13 @@
         var p = price(nodes[i].c), runBest = INF, runF = -1;
         if (o.fillUp) {
           for (var f = 0; f <= LV; f++) if (row[f] < INF) {
-            var v = row[f] + (LV - f) * STEP * p;
-            if (v < best[LV]) { best[LV] = v; from[LV] = f; }
+            if (f > FL) { if (row[f] < best[f]) { best[f] = row[f]; from[f] = f; } continue; }   // already above the fill cap
+            var v = row[f] + (FL - f) * STEP * p;
+            if (v < best[FL]) { best[FL] = v; from[FL] = f; }
           }
         } else {
           for (var g = 0; g <= LV; g++) {
+            if (g > FL) { if (row[g] < INF) { best[g] = row[g]; from[g] = g; } continue; }   // above the fill cap: no buying
             // min over f<=g of row[f] - f*STEP*p, then + g*STEP*p
             if (row[g] < INF && row[g] - g * STEP * p < runBest) { runBest = row[g] - g * STEP * p; runF = g; }
             if (runF >= 0) { best[g] = runBest + g * STEP * p; from[g] = runF; }
@@ -472,7 +477,7 @@
         if (o.lastFull && nodes[j].kind === 'dest' && nodes[i].kind === 'stop') add -= (o.stopPenalty || 0);
         var dj = dp[j], pj = par[j];
         var gLo = burn + minA;
-        if (o.lastFull && nodes[j].kind === 'dest' && nodes[i].kind === 'stop') gLo = LV;   // last stop fills the tank
+        if (o.lastFull && nodes[j].kind === 'dest' && nodes[i].kind === 'stop') gLo = FL;   // last stop fills the tank
         for (g = gLo; g <= LV; g++) {
           if (best[g] >= INF) continue;
           var f2 = g - burn, val = best[g] + add - f2 * credit;
@@ -691,11 +696,11 @@
       var burnIn = model.galTo(c.d) - model.galTo(fromD) + (fromDet + (c.detourMi || 0)) / 2 * model.cityGpm;
       var arrive = fromGal - burnIn;
       if (arrive < 0) return;
-      var buy = Math.max(0, o.capGal - arrive);
+      var top = o.fillCap || o.capGal, buy = Math.max(0, top - arrive);
       var burnOut = model.galTo(L) - model.galTo(c.d) + (c.detourMi || 0) / 2 * model.cityGpm;
       var extraPerGal = last ? c.price - last.c.price : 0;
       out.push({ c: c, toDestMi: toDest, arriveGal: arrive, buyGal: buy, cost: buy * c.price, extraPerGal: extraPerGal,
-        endGal: o.capGal - burnOut, endMi: (o.capGal - burnOut) / model.combGpm });
+        endGal: top - burnOut, endMi: (top - burnOut) / model.combGpm });
     });
     out.sort(function (a, b) { return a.toDestMi - b.toDestMi || a.cost - b.cost; });
     return out;
@@ -878,16 +883,16 @@
     var pos = 0, gas = o.startGal, back = 0, first = true;
     for (var hops = 0; hops <= cs.length + 1; hops++) {
       var gp = G(pos);
-      if (gas - back - (G(end) - gp) - 0.2 >= o.arriveGal - 1e-9) return true;
+      if (gas - back - (G(end) - gp) - 2 * (o.step || 0.1) >= o.arriveGal - 1e-9) return true;
       var best = null;
       for (var k = 0; k < cs.length; k++) {
         var c = cs[k]; if (c.d <= pos) continue;
         var used = back + G(c.d) - gp + det(c);
         if (used > o.capGal + 1e-9) break;
-        if (gas - used - 0.2 >= (first ? 0 : o.bufferGal) - 1e-9) best = c;   // 0.2: the planner rounds to 0.1 gal
+        if (gas - used - 2 * (o.step || 0.1) >= (first ? 0 : o.bufferGal) - 1e-9) best = c;   // the planner rounds to its grain
       }
       if (!best) return false;
-      pos = best.d; gas = o.capGal; back = det(best); first = false;
+      pos = best.d; gas = o.fillCap || o.capGal; back = det(best); first = false;
     }
     return false;
   }

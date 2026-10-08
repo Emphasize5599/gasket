@@ -56,7 +56,9 @@ with sync_playwright() as p:
         pg.evaluate('window.__saved = null'); pg.click('#blExp'); pg.wait_for_timeout(200)
         sv = pg.evaluate('window.__saved'); data = json.loads(sv['text'])
         assert sv['name'].startswith('fuelplus-bad-citgos') and data['fuelPlusData'] == 1 and len(data['blacklist']) == 1 and 'apiKey' not in sv['text']
-        pg.click('[data-blrm="0"]'); pg.wait_for_timeout(200)
+        pg.click('[data-blrm="0"]'); pg.wait_for_timeout(250)
+        assert pg.locator('#cfm').count() == 1 and pg.evaluate('window.__app.S.blacklist.length') == 1, 'asks before removing'
+        pg.click('#cfmYes'); pg.wait_for_timeout(250)
         assert pg.locator('.bl-row').count() == 0 and pg.evaluate('window.__app.S.blacklist.length') == 0
         pg.evaluate('(t) => { window.__mocks = window.__mocks || {}; window.__mocks.pick = t; }', sv['text'])
         pg.click('#blImp'); pg.wait_for_timeout(300)
@@ -74,7 +76,7 @@ with sync_playwright() as p:
         c = pg.evaluate("window.__app.map.getCenter()"); e0 = data['blacklist'][0]
         assert abs(c['lat'] - e0['lat']) < 0.01 and abs(c['lng'] - e0['lng']) < 0.01
         pg.screenshot(path=f'{OUT}/{name}-b4-onmap.png')
-        pg.click('#dBlRm'); pg.wait_for_timeout(300)
+        pg.click('#dBlRm'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(300)
         assert pg.evaluate('window.__app.S.blacklist.length') == 0 and 'Removed' in pg.inner_text('#undoBar')
         pg.click('#undoBtn'); pg.wait_for_timeout(200)
         assert pg.evaluate('window.__app.S.blacklist.length') == 1, 'undo a removal too'
@@ -95,16 +97,24 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-b5-settings.png')
         # delete the whole list (Undo restores it), clear the cache, erase everything (two taps)
         n0 = pg.evaluate('window.__app.S.blacklist.length')
-        pg.click('#blDelAll'); pg.wait_for_timeout(200)
+        pg.click('#blDelAll'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(250)
         assert pg.evaluate('window.__app.S.blacklist.length') == 0 and 'Deleted' in pg.inner_text('#undoBar')
         pg.click('#undoBtn'); pg.wait_for_timeout(200)
         assert pg.evaluate('window.__app.S.blacklist.length') == n0
         pg.evaluate("window.__app.KV.put('xom', 'k', [1]); window.__app.KV.put('trips', 'index', [{id: 'x'}])")
-        pg.click('#kvClear'); pg.wait_for_timeout(200)
+        pg.click('#kvClear'); pg.wait_for_timeout(250)
+        assert pg.evaluate("window.__app.KV.get('xom', 'k')") is not None, 'nothing cleared before you say so'
+        pg.click('#cfmYes'); pg.wait_for_timeout(250)
         assert pg.evaluate("window.__app.KV.get('xom', 'k')") is None and pg.evaluate("window.__app.KV.get('trips', 'index')") is not None, 'cache only'
         pg.evaluate('window.__eraseNoReload = true')
+        pg.click('#eraseAll'); pg.wait_for_timeout(250)
+        print(name, 'erase asks:', pg.inner_text('#cfm').replace('\n', ' | ')); pg.screenshot(path=f'{OUT}/{name}-b6-erase.png')
+        assert pg.evaluate('!window.__erased') and pg.locator('#cfm').count() == 1
+        pg.click('#cfmNo'); pg.wait_for_timeout(250); assert pg.evaluate('!window.__erased'), 'Cancel erases nothing'
+        # confirmations off (Settings → General): erase falls back to its two taps
+        pg.evaluate("document.querySelector('input[data-k=confirmDeletes]').click(); window.__app.S.confirmDeletes = false")
         pg.click('#eraseAll'); pg.wait_for_timeout(150)
-        assert pg.evaluate('!window.__erased') and 'again' in pg.inner_text('#eraseAll'), 'first tap only asks'
+        assert pg.evaluate('!window.__erased') and pg.locator('#cfm').count() == 0 and 'again' in pg.inner_text('#eraseAll'), 'first tap only asks'
         pg.click('#eraseAll'); pg.wait_for_timeout(150)
         assert pg.evaluate('window.__erased') and pg.evaluate("window.__app.KV.get('trips', 'index')") is None, 'erased'
         pg.evaluate('window.__eraseNoReload = false; window.__erased = false')

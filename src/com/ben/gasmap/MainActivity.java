@@ -590,7 +590,10 @@ public class MainActivity extends Activity {
         throw new Exception("Couldn't open that link. In Google Maps use Share \u2192 Copy, then paste it here.");
     }
 
-    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com"};
+    // EPA mileage, OpenStreetMap places, FHWA speed limits, ExxonMobil's station finder, the DOE station finder (EV chargers,
+    // hydrogen), and NHTSA (VIN decoding, recalls)
+    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com",
+            "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov"};
 
     // brand icons: Google's favicon service, or each brand's own site
     private static final String[] ICON_HOSTS = {"www.google.com", "icons.duckduckgo.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
@@ -1084,6 +1087,19 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setStatusBarDark(final boolean darkUi) {
             main.post(new Runnable() { public void run() { applyBarIconColors(); } });
+        }
+
+        /** Put text on the clipboard (e.g. your VIN before opening a site that asks for it). */
+        @JavascriptInterface
+        public void copyText(final String text) {
+            main.post(new Runnable() {
+                public void run() {
+                    try {
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("VIN", text));
+                    } catch (Exception ignored) { }
+                }
+            });
         }
 
         @JavascriptInterface

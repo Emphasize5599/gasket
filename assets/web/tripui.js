@@ -84,6 +84,11 @@
   function fmtDur(sec) { var m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? h + ' h ' + (m % 60) + ' min' : m + ' min'; }
   function money(v) { return (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2); }
   function gradeOf() { return window.Garage ? Garage.grade() : (S.grade || 'regular'); }
+  // units of the car you're planning with: gal, kWh (EV) or kg (hydrogen)
+  function UN() { return window.Garage && Garage.unit ? Garage.unit() : 'gal'; }
+  function KIND() { return window.Garage && Garage.kind ? Garage.kind() : 'gas'; }
+  function FW() { return { gas: 'Gas', ev: 'Charge', h2: 'Hydrogen' }[KIND()]; }
+  function gradeLabel(g) { return P.GRADES[g] ? P.GRADES[g].label : g === 'electric' ? 'Electric' : g === 'hydrogen' ? 'Hydrogen' : String(g || ''); }
 
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
@@ -291,7 +296,7 @@
   }
   function stepHtml(k) {
     var t = S.trip;
-    if (k === 1) return '<div id="tGarage"></div><div class="card spd" id="tSpeed"></div>';
+    if (k === 1) return '<div id="tGarage"></div>';
     if (k === 2) {
       var src = srcOf();
       return '<div class="card">' +
@@ -311,19 +316,20 @@
         '<div id="tRouteInfo"></div>';
     }
     if (k === ST_PARAMS) {
-      return '<div class="card"><h3>Your tank</h3><div class="grid2">' +
-        num('tMiles', 'Miles left in tank<span class="req" aria-label="required">*</span>', t.milesLeft, 1, 'from your dash') + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') + '</div></div>' +
-        '<div class="card"><h3>Fuel stops</h3>' +
-      '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">Fill up at each stop</button></div>' +
+      var kd = KIND();
+      return '<div class="card"><h3>' + (kd === 'ev' ? 'Your battery' : 'Your tank') + '</h3><div class="grid2">' +
+        num('tMiles', (kd === 'ev' ? 'Miles of range left' : 'Miles left in tank') + '<span class="req" aria-label="required">*</span>', t.milesLeft, 1, 'from your dash') + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') + '</div></div>' +
+        '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
+      '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
       '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 1, 'extra driving per stop') + '</div>' +
       '<details class="alt-entry more"' + (t.timeValue > 0 ? ' open' : '') + '><summary>More options</summary>' +
       '<div class="grid2">' + num('tTime', 'Your time is worth ($/hr)', t.timeValue, 5, 'optional · 0 = off') + '<span class="lead small">Adds a cost for every minute of detour and stop time, on top of the rule above.</span></div></details>' +
       '<div class="sub-h">When you get there <button type="button" class="qi" id="tArriveQ" aria-label="More info">?</button></div>' +
-      '<div class="seg2" id="tArrive"><button data-a="buffer" class="' + (t.arrive !== 'full' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most gas</button></div>' +
+      '<div class="seg2" id="tArrive"><button data-a="buffer" class="' + (t.arrive !== 'full' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
 
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up within (mi)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
-      '<div class="grid2">' + num('tTankPrice', 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, 'blank = typical price on the route') +
+      '<div class="grid2">' + num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, kd === 'ev' ? 'e.g. home charging · blank = your fast-charging price' : 'blank = typical price on the route') +
       '<span></span></div>' +
       '</div><div class="card"><h3>Cruising speed</h3>' +
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
@@ -342,7 +348,14 @@
     return departureHtml();
   }
   function bindStep(k) {
-    if (k === 1) { Garage.render($('tGarage'), $('tSpeed'), function () { if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); } result = null; }, call); return; }
+    if (k === 1) {
+      Garage.render($('tGarage'), null, function () {
+        if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); }
+        result = null;
+        var e3 = $('tpS' + ST_PARAMS); if (e3 && step !== ST_PARAMS) { e3.remove(); delete built[ST_PARAMS]; }   // its labels follow the car (gal / kWh / kg)
+      }, call);
+      return;
+    }
     if (k === 2) { bindRoute(); return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
     if (onPlan(k)) {
@@ -582,12 +595,12 @@
   function shareTrip() {
     var r = result, p = r && r.plan;
     var o = route.stops[0], d = route.stops[route.stops.length - 1];
-    var L = ['Fuel+ trip: ' + stopLine(o) + ' → ' + stopLine(d), Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + P.GRADES[r.grade].label.toLowerCase()];
+    var L = ['Fuel+ trip: ' + stopLine(o) + ' → ' + stopLine(d), Math.round(model.totalMi) + ' mi · ' + fmtDur(model.durationSec) + ' · ' + gradeLabel(r.grade).toLowerCase()];
     if (p && p.ok) {
       p.stops.forEach(function (s, i) {
-        L.push((i + 1) + '. ' + s.c.station.name + ' — ' + (s.c.station.address || '') + ' — mile ' + Math.round(s.c.d) + ' — ' + priceText(s.c.price) + '/gal — buy ' + s.buyGal.toFixed(1) + ' gal (' + money2(s.cost) + ')');
+        L.push((i + 1) + '. ' + s.c.station.name + ' — ' + (s.c.station.address || '') + ' — mile ' + Math.round(s.c.d) + ' — ' + priceText(s.c.price) + '/' + UN() + ' — buy ' + s.buyGal.toFixed(1) + ' ' + UN() + ' (' + money2(s.cost) + ')');
       });
-      if (r.top) L.push('Top-up: ' + r.top.c.station.name + ' — ' + priceText(r.top.c.price) + ' — ' + r.top.buyGal.toFixed(1) + ' gal');
+      if (r.top) L.push('Top-up: ' + r.top.c.station.name + ' — ' + priceText(r.top.c.price) + ' — ' + r.top.buyGal.toFixed(1) + ' ' + UN());
       if (r.acc) L.push('Trip cost ' + money2(r.acc.legs[0].cost) + ' · at the pump ' + money2(r.acc.legs[0].spend) + (p.savings > 0.005 ? ' · saves ' + money2(p.savings) + ' vs. easiest stops' : ''));
       if (r.acc && r.acc.legs[1]) L.push('Round trip estimate ' + money2(r.acc.legs[0].cost + r.acc.legs[1].cost));
       var ex = T.exportUrl(route, p.stops.concat(r.top ? [{ c: r.top.c }] : []), model);
@@ -926,6 +939,7 @@
     await paint();
     try { rebuildAlts(); rawRoute = alts[0]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); result = null; } finally { picking = false; if (ld) ld.done(); }
     LG.info('route', 'Leg ' + (i + 1) + ': picked via ' + (L.alts[k].description || k));
+    rememberSel();
     renderInfo(true);
   }
 
@@ -1173,7 +1187,7 @@
     return Object.keys(P.BRANDS).filter(function (k) { return S.brands[k] && !official(k); });
   }
   function estLookups() {
-    if (!model || !S.apiKey) return 0;
+    if (!model || !S.apiKey || KIND() !== 'gas') return 0;
     var n = T.chunks(model, 125).length;
     altCompareList().forEach(function (k) { n += Math.max(1, Math.ceil((alts[k].distanceMeters || 0) / 1609.344 / 125)); });
     return n * googleBrands().length;
@@ -1236,7 +1250,20 @@
     picking = true;
     await paint();
     try { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); result = null; } finally { picking = false; if (ld) ld.done(); }
+    rememberSel();
     renderInfo(true);
+  }
+  /** A saved trip keeps the route(s) you picked last, so reopening it comes back to them. */
+  function rememberSel() {
+    try {
+      if (!route) return;
+      var id = histId(route), o = A.KV.get('trips', 'trip|' + id); if (!o || !o.v || !o.v.alts) return;
+      var v = o.v; v.savedT = v.savedT || o.t;
+      if (route.legs && v.route && v.route.legs) v.route.legs = route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; });
+      if (alts.length === v.alts.length) { v.altSel = altSel; v.altSure = altSure; }
+      if (route.legs) v.alts = alts;
+      A.KV.put('trips', 'trip|' + id, v);
+    } catch (e) { LG.warn('history', 'Couldn\'t remember the route pick', String(e)); }
   }
   // ---------- route options on a small map (like Google Maps) ----------
   var rmaps = {};        // one small map per element (a trip with stops in between has one per leg)
@@ -1404,7 +1431,44 @@
   }
   window.__xom = xomCheck;
 
+  /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
+  function chargeMin(p) { return p.stops.reduce(function (a, s) { return a + (s.c.kw ? s.buyGal / s.c.kw * 60 : 0); }, 0); }
+  async function gatherAlt(models, pg, dbgS) {
+    var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? 2 : 8;
+    var price = kd === 'ev' ? (+S.evPrice || 0.48) : (+S.h2Price || 36), tv = kd === 'ev' ? (+S.trip.timeValue > 0 ? +S.trip.timeValue : 20) : 0;
+    var notes = [], per = [], raw = [];
+    dbgS.started = new Date().toISOString(); dbgS.kind = kd;
+    for (var mi = 0; mi < models.length; mi++) {
+      var list = [], m = models[mi];
+      try { list = await AltFuel.alongRoute(m, kd, plugs, corridor, function (f) { pg((mi + f) / models.length, kd === 'ev' ? 'Finding fast chargers' : 'Finding hydrogen stations'); }); }
+      catch (e) { if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
+      raw.push(list);
+      var cands = [];
+      for (var si = 0; si < list.length; si++) {
+        var st = list[si], prs = T.projectLegs(m, { lat: st.lat, lng: st.lng }, corridor + 1);
+        for (var pi = 0; pi < prs.length; pi++) {
+          var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = kd === 'ev' ? AltFuel.avgKw(st, c) : 0;
+          cands.push({ id: pr.leg ? st.id + '@' + pr.leg : st.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: det < 0.15 ? 0 : det / 25 * 60 + 1, detourExact: false,
+            price: price, kw: kw, timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
+            calc: { base: price, final: price, est: false, stale: false, updated: null, notes: [],
+              steps: [{ label: (kd === 'ev' ? 'Your fast-charging price' : 'Your hydrogen price') + ' (Settings → EV & hydrogen)', kind: 'base', amount: price }] } });
+        }
+      }
+      if (kd === 'ev') {      // chargers a few miles apart are near-twins: keep the fastest in each 3-mile stretch
+        var bins = {};
+        cands.forEach(function (x) { var b = (x.leg || 0) + ':' + Math.floor(x.d / 3); if (!bins[b] || x.kw > bins[b].kw || (x.kw === bins[b].kw && x.detourMi < bins[b].detourMi)) bins[b] = x; });
+        cands = Object.keys(bins).map(function (b) { return bins[b]; });
+      }
+      per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [] });
+    }
+    if (kd === 'ev' && !(+S.trip.timeValue > 0)) notes.push('Charging time is counted at $20/hr so faster chargers win ties — set what your time is worth in Parameters → More options.');
+    if (kd === 'ev') notes.push('Prices are your estimate (Settings → EV & hydrogen); most chargers don\'t publish theirs to the station finder.');
+    dbgS.stations = raw.map(function (l) { return l.length; });
+    pg(1, 'Choosing stops');
+    return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
+  }
   async function gatherAll(models, pg, dbgS, force, replay, ks) {
+    if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS);
     var KV = A.KV, notes = [], official = [], perModel = models.map(function () { return []; });
     if (replay) {
       // a saved trip: the stations (with their prices) it found then — no lookups at all
@@ -1882,10 +1946,10 @@
     var m = r.opts.model || model, gpm = m.galTo(m.totalMi) / m.totalMi || model.combGpm;
     var first = p.stops[0], atStart = first && first.c.d <= 5;
     var gal = r.startGal + (atStart ? first.buyGal : 0);
-    var help = 'The gas to have in the tank when you set off, from your plan: if its first stop is by the start (within 5 miles), you buy that much before you go. Range is at this trip\'s mileage and your speeds.';
-    return '<div class="ideal" id="tsIdeal"><div class="ideal-h"><span class="nn sm">1</span>Gas to leave with ' + A.qBtn(help) + '</div>' +
-      '<div class="ideal-row"><div class="ideal-l"><div class="ideal-big">' + gal.toFixed(1) + ' gal</div><div class="ideal-sub">~' + Math.round(gal / gpm) + ' mi of range</div></div>' +
-      '<div class="ideal-r">' + (atStart ? 'Add <b>' + first.buyGal.toFixed(1) + ' gal</b><small>' + esc(P.displayName(first.c.station)) + (first.c.d >= 0.5 ? ' · mile ' + first.c.d.toFixed(1) : '') + '</small>' : '<b>Nothing to add</b><small>leave with what you have</small>') + '</div></div></div>';
+    var help = 'The ' + FW().toLowerCase() + ' to have when you set off, from your plan: if its first stop is by the start (within 5 miles), you ' + (KIND() === 'ev' ? 'charge' : 'buy') + ' that much before you go. Range is at this trip\'s mileage and your speeds.';
+    return '<div class="ideal" id="tsIdeal"><div class="ideal-h"><span class="nn sm">1</span>' + FW() + ' to leave with ' + A.qBtn(help) + '</div>' +
+      '<div class="ideal-row"><div class="ideal-l"><div class="ideal-big">' + gal.toFixed(1) + ' ' + UN() + '</div><div class="ideal-sub">~' + Math.round(gal / gpm) + ' mi of range</div></div>' +
+      '<div class="ideal-r">' + (atStart ? 'Add <b>' + first.buyGal.toFixed(1) + ' ' + UN() + '</b><small>' + esc(P.displayName(first.c.station)) + (first.c.d >= 0.5 ? ' · mile ' + first.c.d.toFixed(1) : '') + '</small>' : '<b>Nothing to add</b><small>leave with what you have</small>') + '</div></div></div>';
   }
   /** Gas in the tank at mile d of the plan (after any stop before it), and the range it gives. */
   function gasAt(d) {
@@ -1904,15 +1968,15 @@
     ends.forEach(function (d, i) {
       var gal = gasAt(d), last = i === ends.length - 1;
       var why = loop && last ? 'Enough for the cheapest return trip' : 'Enough to reach the next fuel stop';
-      h += tile(i + 2, 'Gas at ' + stopName(route.stops[i + 1]), gal, why);
+      h += tile(i + 2, FW() + ' at ' + stopName(route.stops[i + 1]), gal, why);
     });
     var galEnd = r.top ? r.top.endGal : p.arriveGal, miEnd = galEnd / gpm;
     var endWhy = loop ? '' : miEnd >= model.totalMi ? 'Enough for the drive back' : '';
-    h += tile(route.stops.length, 'Gas when you arrive', galEnd, endWhy);
+    h += tile(route.stops.length, FW() + ' when you arrive', galEnd, endWhy);
     return h;
     function tile(n, title, gal, ok) {
       return '<div class="ideal arr" data-n="' + n + '"><div class="ideal-h"><span class="nn sm">' + n + '</span>' + esc(title) + '</div>' +
-        '<div class="ideal-row"><div class="ideal-l"><div class="ideal-big">' + Math.max(0, gal).toFixed(1) + ' gal</div><div class="ideal-sub">~' + Math.round(Math.max(0, gal) / gpm) + ' mi of range</div></div></div>' +
+        '<div class="ideal-row"><div class="ideal-l"><div class="ideal-big">' + Math.max(0, gal).toFixed(1) + ' ' + UN() + '</div><div class="ideal-sub">~' + Math.round(Math.max(0, gal) / gpm) + ' mi of range</div></div></div>' +
         (ok ? '<div class="ok-line"><span class="okc">✓</span>' + ok + '</div>' : '') + '</div>';
     }
   }
@@ -2131,12 +2195,14 @@
   }
 
   function makeOpts(model, cands, startGal) {
-    return { model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: S.trip.bufferMi * model.combGpm,
+    var kd = KIND(), cap = Garage.tank();
+    return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * 0.8 : null,
+      model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: S.trip.bufferMi * model.combGpm,
       arriveGal: S.trip.bufferMi * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
       stopPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
       detourPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
-      maxDetourMin: S.trip.maxDetourMin, timeValue: S.trip.timeValue, stopMinutes: 8,
+      maxDetourMin: S.trip.maxDetourMin, timeValue: S.trip.timeValue, stopMinutes: kd === 'ev' ? 5 : kd === 'h2' ? 10 : 8,
       lastFull: S.trip.arrive === 'full' };
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
@@ -2160,6 +2226,7 @@
     others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
     var okModels = models.filter(Boolean), okKs = [altSel].concat(others).filter(function (k, i) { return models[i]; });
     var rp = force === true ? null : replay, rpSt = null;
+    if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null;   // saved for another kind of car (or EV stations: the finder's own cache covers them)
     if (rp) {
       // which route each saved station list was for (older saves: worked out from the saved route options)
       rpSt = { official: rp.stations.official, google: (rp.stations.google || []).map(function (g) { return Object.assign({}, g, { sig: g.sig || (rp.alts && rp.alts[g.k] ? altSig(rp.alts[g.k]) : '') }); }) };
@@ -2302,7 +2369,7 @@
       h += warnHtml;
       var whyN = r.cands.length + ' priced station' + (r.cands.length === 1 ? '' : 's') + ' along your route' +
         (p.tooFar ? '; ' + p.tooFar + ' more were over ' + S.trip.maxDetourMin + ' min out of the way' : '') +
-        (r.unpriced ? '; ' + r.unpriced + ' had no ' + P.GRADES[r.grade].label.toLowerCase() + ' price' : '') + '. Tap a stop for the cheaper stations it was weighed against.';
+        (r.unpriced ? '; ' + r.unpriced + ' had no ' + gradeLabel(r.grade).toLowerCase() + ' price' : '') + '. Tap a stop for the cheaper stations it was weighed against.';
       if (p.stops.length) {
         var shut = r.stopsShut !== false;
         h += '<div class="sec-row"><button class="sec-h" id="tsStopsH" aria-expanded="' + !shut + '"><span>' + p.stops.length + ' fuel stop' + (p.stops.length === 1 ? '' : 's') +
@@ -2353,16 +2420,17 @@
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
       '<div><b>' + fmtDur(model.durationSec) + '</b><span>driving</span></div>' +
-      (p.ok ? '<div><b>' + p.totals.stops + '</b><span>fuel stop' + (p.totals.stops === 1 ? '' : 's') + '</span></div>' : '') + '</div>';
+      (p.ok ? '<div><b>' + p.totals.stops + '</b><span>' + (KIND() === 'ev' ? 'charging' : 'fuel') + ' stop' + (p.totals.stops === 1 ? '' : 's') + '</span></div>' : '') +
+      (p.ok && KIND() === 'ev' ? '<div><b>' + fmtDur(chargeMin(p) * 60) + '</b><span>charging</span></div>' : '') + '</div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
     var t = p.totals, out = r.acc.legs[0];
-    var costQ = 'The ' + out.burnGal.toFixed(1) + ' gal this drive burns: what\'s already in your tank at ' + priceText(r.startPrice) + '/gal' +
+    var costQ = 'The ' + out.burnGal.toFixed(1) + ' ' + UN() + ' this drive uses: what\'s already in your ' + (KIND() === 'ev' ? 'battery' : 'tank') + ' at ' + priceText(r.startPrice) + '/' + UN() +
       (S.trip.tankPrice ? ' (what you said it cost)' : ' (typical on this route; set yours in Parameters)') + ', plus what you buy at what you pay.';
     var saveQ = 'Compared with filling up at the typical price on this route.' +
       (p.easy && p.savings > 0.005 ? ' The easiest plan (fewest stops, closest to the road) would be ' + money(p.easy.totals.net) + ' net vs. ' + money(t.net) + ' for this one' + (t.detourMin - p.easy.totals.detourMin > 0.5 ? ', which adds ' + Math.round(t.detourMin - p.easy.totals.detourMin) + ' min of detours' : '') + '.' : '') +
       (p.minStops != null && t.stops > p.minStops ? ' You only need ' + p.minStops + ' stop' + (p.minStops === 1 ? '' : 's') + '; the extra one pays for itself with cheaper gas.' : '');
     h += '<div class="kpis four"><div><b>' + money(out.cost) + '</b><span>trip cost ' + A.qBtn(costQ) + '</span></div>' +
-      '<div><b>' + money(out.spend) + '</b><span>at the pump</span></div>' +
+      '<div><b>' + money(out.spend) + '</b><span>' + (KIND() === 'ev' ? 'at chargers' : 'at the pump') + '</span></div>' +
       '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved ' + A.qBtn(saveQ) + '</span></div>' +
       '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>';
     // only what to watch out for, briefly
@@ -2373,6 +2441,9 @@
     else if (!multiLeg(route) && altSel > 0 && alts[altSel]) w.push('In Google Maps, pick the route via ' + (alts[altSel].description || 'route ' + (altSel + 1)) + '.');
     var av = ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; });
     if (av.length) w.push('Turn “avoid ' + av.join('” and “avoid ') + '” back on in Google Maps.');
+    var nr = Garage.recallCount ? Garage.recallCount() : 0;
+    if (nr) w.push('Your ' + Garage.shortName(Garage.car()) + ' has ' + nr + ' safety recall' + (nr === 1 ? '' : 's') + ' on record — if they\'re not fixed yet, a dealer fixes them free. Worth checking before a long drive (Garage).');
+    if (KIND() === 'h2') w.push('Hydrogen stations go offline often — check each one\'s live status before you count on it.');
     h += '<div class="warns">' + w.map(function (x) { return '<div class="note">' + esc(x) + '</div>'; }).join('') + '</div>';
     h += '<p class="lead small keep center"><a href="#" id="tsReport">Troubleshooting report</a></p>';
     return h;
@@ -2496,7 +2567,7 @@
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
       trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, avoid: S.trip.avoid, milesLeft: S.trip.milesLeft },
-      stations: { official: raw.official || [], google: google }
+      stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
     var idx = histIndex().filter(function (x) { return x.id !== id; });
     idx.unshift({ id: id, t: now, title: tripTitle(route), pts: route.stops.map(stopName),
@@ -2532,10 +2603,13 @@
     bg.querySelectorAll('[data-hist]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); close(); openSaved(b.dataset.hist); }; });
     bg.querySelectorAll('[data-hdel]').forEach(function (b) {
       b.onclick = function () {
-        var id = b.dataset.hdel;
-        A.KV.put('trips', 'index', histIndex().filter(function (x) { return x.id !== id; }));
-        A.KV.put('trips', 'trip|' + id, null);
-        var row = b.closest('.hist-row'); if (row) row.remove();
+        var id = b.dataset.hdel, x = histIndex().filter(function (y) { return y.id === id; })[0];
+        A.confirmDel({ title: 'Remove this trip?', body: x ? esc(x.title || '') : '', action: 'Remove' }).then(function (ok) {
+          if (!ok) return;
+          A.KV.put('trips', 'index', histIndex().filter(function (x) { return x.id !== id; }));
+          A.KV.put('trips', 'trip|' + id, null);
+          var row = b.closest('.hist-row'); if (row) row.remove();
+        });
       };
     });
   }
@@ -2570,19 +2644,17 @@
     route = v.route; alts = v.alts;
     S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
     rawRoute = alts[altSel]; result = null; parsing = null;
-    replay = { id: id, t: o.t, stations: v.stations, alts: v.alts };
+    replay = { id: id, t: v.savedT || o.t, stations: v.stations, alts: v.alts };
     resetSteps(); routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {};
-    var needMiles = !(parseFloat(S.trip.milesLeft) >= 0) || S.trip.milesLeft === '';
-    // the panel comes up at once (75%, "Opening your trip…", the map grayed out); the long route is read right after
+    // starts at the Garage (which car this time?); the route and the stops are ready behind it
     model = null; loadingTrip = true; busy = true;
-    if (!needMiles) openTrip(ST_STOPS);
+    openTrip(1);
     await paint();
     try { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); }
     catch (e) { loadingTrip = false; busy = false; mapLoaded(); toastMsg('That saved trip couldn\'t be read.'); LG.error('history', String(e)); return; }
     loadingTrip = false; busy = false;
     LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
-    if (needMiles) { openTrip(ST_PARAMS); flag($('tMiles'), 'box', 'How many miles are left in your tank?'); return; }
-    renderStep();   // entering Stops plans it from the saved stations
+    renderStep();   // Next goes on from the Garage; entering Stops plans it from the saved stations
   }
   function priceText(v) { return '$' + P.fmt3(v); }
   function keepScroll(f) { var el = tpBody(); if (!el) return f(); var y = el.scrollTop; f(); el.scrollTop = y; }
@@ -2595,7 +2667,7 @@
       return h;
     }
     r.tops.forEach(function (t, k) {
-      var br = P.BRANDS[t.c.station.brand], on = r.topSel === k;
+      var br = P.brand(t.c.station.brand), on = r.topSel === k;
       h += '<div class="top-opt' + (on ? ' on' : '') + '">' + A.logoHtml(t.c.station.brand) + '<div class="mid"><b>' + esc(P.displayName(t.c.station)) + '</b> · ' + priceText(t.c.price) +
         (last ? ' <span class="' + (t.extraPerGal > 0 ? 'bad' : 'good') + '">(' + (t.extraPerGal >= 0 ? '+' : '−') + '$' + P.fmt3(Math.abs(t.extraPerGal)) + '/gal vs. stop ' + r.plan.stops.length + ')</span>' : '') +
         '<div class="sub">' + t.toDestMi.toFixed(1) + ' mi from the destination · +' + t.buyGal.toFixed(1) + ' gal for ' + money(t.cost) + ' → arrive with ~' + Math.round(t.endMi) + ' mi</div></div>' +
@@ -2605,25 +2677,27 @@
     return h + '</div>';
   }
   function stopCard(s, i) {
-    var c = s.c, st = c.station, br = P.BRANDS[st.brand], open = !!(result.openStops && result.openStops[i]);
+    var c = s.c, st = c.station, br = P.brand(st.brand), open = !!(result.openStops && result.openStops[i]);
     var det = c.detourMi < 0.15 ? 'on the route' : '+' + c.detourMi.toFixed(1) + ' mi detour';
     var h = '<div class="stop' + (open ? ' open' : '') + '" id="stop' + i + '"><button class="s-top" data-open="' + i + '" aria-expanded="' + open + '"><span class="num">' + (i + 1) + '</span>' + A.badgeHtml(st.brand) +
-      '<span class="mid"><span class="nm">' + esc(P.displayName(st)) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · buy ' + s.buyGal.toFixed(1) + ' gal' + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
+      '<span class="mid"><span class="nm">' + esc(P.displayName(st)) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · ' + (KIND() === 'ev' ? 'add ' : 'buy ') + s.buyGal.toFixed(1) + ' ' + UN() + (c.kw ? ' · ' + Math.max(1, Math.round(s.buyGal / c.kw * 60)) + ' min' : '') + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
       '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + (c.est ? '<span class="o est-tag">est.</span>' : '') + '</span><span class="chev"></span></button>';
     if (!open) return h + '</div>';
-    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' gal' + (S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
+    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' ' + UN() + (KIND() === 'ev' ? (s.departGal >= Garage.tank() * 0.8 - 0.3 ? ' (to 80%)' : '') : S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') +
+      (c.kw ? ' · <b>~' + Math.max(1, Math.round(s.buyGal / c.kw * 60)) + ' min charging</b> at ~' + Math.round(c.kw) + ' kW average' : '') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
       ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';
     if (s.alts.length) {
       h += '<div class="alts">' + s.alts.map(function (a) {
-        var ab = P.BRANDS[a.c.station.brand];
+        var ab = P.brand(a.c.station.brand);
         return '<div>' + A.logoHtml(a.c.station.brand) + esc(P.displayName(a.c.station)) + ' · mile ' + Math.round(a.c.d) + ' · ' + priceText(a.c.price) +
           (a.c.detourMi < 0.15 ? '' : ' · ' + a.c.detourMi.toFixed(1) + ' mi off') + ' <b class="' + (a.extra > 0 ? 'bad' : 'good') + '">' + (a.extra >= 0 ? '+' : '') + money(a.extra) + '</b></div>';
       }).join('') + '</div>';
     }
     h += '<div class="why hidden" id="why' + i + '">' + c.calc.steps.map(function (x) {
       return '<div class="ln"><span>' + esc(x.label) + '</span><span>' + (x.kind === 'base' ? priceText(x.amount) : x.kind === 'none' ? 'not counted' : x.amount === 0 ? 'included' : '−$' + P.fmt3(-x.amount)) + '</span></div>'; }).join('') +
-      '<div class="ln tot"><span>You pay per gallon</span><span>' + priceText(c.price) + '</span></div></div>';
+      '<div class="ln tot"><span>You pay per ' + { gal: 'gallon', kWh: 'kWh', kg: 'kg' }[UN()] + '</span><span>' + priceText(c.price) + '</span></div>' +
+      (st.network || st.dc || st.pricing || st.hours ? '<div class="af-info">' + [st.network, st.dc ? st.dc + ' fast port' + (st.dc === 1 ? '' : 's') + ' · ' + (st.kwEst ? '~' : '') + st.kw + ' kW' + (st.kwEst ? ' (typical for the network)' : '') : '', st.plugs && st.plugs.length && window.AltFuel ? st.plugs.map(AltFuel.plugName).join(', ') : '', st.pricing ? 'Posted price: ' + st.pricing : '', st.hours].filter(Boolean).map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>' : '') + '</div>';
     h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div>';
     if (A.bl) h += A.bl.buttons(st, 'ts' + i, result.grade);
     h += '</div></div>';
@@ -2690,7 +2764,7 @@
       dots = [];
       result.cands.forEach(function (c) {
         if (chosen[c.id]) return;
-        var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.BRANDS[c.station.brand].color, fillOpacity: 1 });
+        var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.brand(c.station.brand).color, fillOpacity: 1 });
         dots.push(dot);
         dot
           .bindPopup('<b>' + esc(P.displayName(c.station)) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
