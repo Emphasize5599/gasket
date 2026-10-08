@@ -77,7 +77,7 @@ def idle(pg, t=900):
     pg.wait_for_timeout(t); pg.wait_for_function("!window.__trip.state().busy", timeout=120000); pg.wait_for_timeout(400)
 res = {}
 with sync_playwright() as p:
-    b = p.chromium.launch(executable_path='/opt/google/chrome/chrome', args=['--no-sandbox'])
+    b = p.chromium.launch(executable_path=os.environ.get('CHROME', '/opt/google/chrome/chrome'), args=['--no-sandbox'])
     pg = b.new_page(viewport={'width': 412, 'height': 915}, device_scale_factor=2.6, is_mobile=True, has_touch=True)
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto(URL); pg.evaluate('setInsets(44, 24, 0, 0)'); pg.wait_for_timeout(400)

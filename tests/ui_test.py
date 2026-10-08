@@ -7,7 +7,7 @@ URL = 'file://' + os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 
 errors = []
 
 with sync_playwright() as p:
-    b = p.chromium.launch(executable_path='/opt/google/chrome/chrome', args=['--no-sandbox'])
+    b = p.chromium.launch(executable_path=os.environ.get('CHROME', '/opt/google/chrome/chrome'), args=['--no-sandbox'])
     for name, w, h, scheme in [('pixel10pro', 412, 915, 'dark'), ('pixel8pro', 448, 998, 'light')]:
         pg = b.new_page(viewport={'width': w, 'height': h}, device_scale_factor=2.6, color_scheme=scheme, is_mobile=True, has_touch=True)
         pg.on('pageerror', lambda e: errors.append(str(e)))
