@@ -1092,3 +1092,28 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 /* the dot on the Advisory step tab when something needs a look */
 .tp-steps button.attn b { position: relative; }
 .tp-steps button.attn b::after { content: ''; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--surface); }
+
+/* About this car: read-only tiles (a ▾ only where your version could differ), versions, features checklist */
+.ac-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.ac-tile { background: var(--surface-2, rgba(127,127,127,.08)); border-radius: 14px; padding: 8px 10px 9px; min-width: 0; }
+.ac-k { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: none; }
+.ac-k .qi { transform: scale(.85); }
+.ac-v { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; margin-top: 2px; font-size: 14.5px; font-weight: 700; color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; text-align: left; background: none; border: 0; padding: 0; font-family: inherit; }
+.ac-dd { cursor: pointer; color: var(--accent); }
+.ac-dd i { font-style: normal; font-size: 13px; flex: none; }
+.ac-none { color: var(--ink-2); font-weight: 500; }
+.ac-set { width: 100%; margin-top: 4px; min-width: 0; max-width: 100%; }
+.ac-vers { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.ac-vers button { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; overflow-wrap: anywhere; }
+.ac-vers button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
+.ac-src { margin-top: 2px; }
+.ac-feats { margin: 10px 0 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+.ac-feats > summary { cursor: pointer; font-weight: 700; padding: 6px 0; list-style-position: inside; }
+.ac-feats > summary small { margin-left: 8px; font-weight: 500; color: var(--ink-2); font-size: 12.5px; }
+.ac-flist { display: flex; flex-direction: column; }
+.ac-f { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); padding: 4px 0; min-width: 0; }
+.ac-f:first-child { border-top: 0; }
+.ac-f label { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 40px; min-width: 0; cursor: pointer; }
+.ac-f input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+.ac-f span { font-size: 14.5px; overflow-wrap: anywhere; min-width: 0; }
+.ac-f span small { display: block; font-size: 11.5px; color: var(--save); font-weight: 600; }

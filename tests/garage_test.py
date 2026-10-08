@@ -102,11 +102,26 @@ with sync_playwright() as p:
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
         pg.click('#gInfo summary'); pg.wait_for_timeout(200)
-        assert pg.input_value('#gEngine').startswith('1.5L') and pg.input_value('#gDrive') == 'fwd' and pg.locator('#gFeat button.on').count() >= 2
+        tiles = ft(pg, '.ac-tiles'); print('  tiles:', tiles.replace('\n', ' | '))
+        assert '1.5-liter 4-cylinder' in tiles and 'Turbocharged' in tiles and 'no fixed gears' in tiles and 'Front-wheel drive' in tiles
+        assert pg.locator('.ac-tiles .ac-dd, #gEngine, #gDrive').count() == 0, 'a VIN says exactly what the car is: tiles, no menus'
+        pg.click('#gFeats summary'); pg.wait_for_timeout(150)
+        assert pg.is_checked('[data-feat="DOHC"]') and pg.is_checked('[data-feat="Direct injection"]') and 'from your VIN' in ft(pg, '#gFeats')
         pg.select_option('#gTireT', 'allseason'); pg.fill('#gTire', 'Michelin Primacy 225/50R17'); pg.dispatch_event('#gTire', 'change'); pg.wait_for_timeout(150)
         assert pg.evaluate("window.Garage.car().info.tire") == 'Michelin Primacy 225/50R17'
-        pg.click('#gFeat [data-feat="Start-stop"]'); pg.wait_for_timeout(100)
-        assert 'Start-stop' in pg.evaluate("window.Garage.car().info.features")
+        pg.check('[data-feat="Start-stop"]'); pg.wait_for_timeout(150)
+        assert 'Start-stop' in pg.evaluate("window.Garage.car().info.features") and pg.evaluate("window.Garage.car().info.featSrc['Start-stop']") == 'user'
+        # a confirmed feature asks before it's unchecked
+        pg.click('[data-feat="DOHC"]'); pg.wait_for_timeout(250)
+        assert pg.locator('#cfm').count() == 1 and 'VIN record' in ft(pg, '#cfm'), 'asks first'
+        pg.click('#cfmNo'); pg.wait_for_timeout(250)
+        assert pg.is_checked('[data-feat="DOHC"]') and 'DOHC' in pg.evaluate("window.Garage.car().info.features"), 'cancel keeps it'
+        # one camshaft layout: picking the other one asks too, then swaps them
+        pg.click('[data-feat="SOHC"]'); pg.wait_for_timeout(250); assert pg.locator('#cfm').count() == 1 and 'only one' in ft(pg, '#cfm')
+        pg.click('#cfmYes'); pg.wait_for_timeout(300)
+        fe = pg.evaluate("window.Garage.car().info.features"); assert 'SOHC' in fe and 'DOHC' not in fe, fe
+        pg.click('[data-feat="Pushrod"]'); pg.wait_for_timeout(250)
+        fe = pg.evaluate("window.Garage.car().info.features"); assert 'Pushrod' in fe and 'SOHC' not in fe and pg.locator('#cfm').count() == 0, 'no question when nothing confirmed is replaced'
         pg.screenshot(path=f'{OUT}/{name}-gr2-info.png', full_page=True); wide(pg, 'info')
         # recalls live in Advisory now (tests/advisory_test.py); the Garage is about the car itself
         assert pg.locator('#gRecall, #rcNicb').count() == 0, 'no recall card in the Garage'

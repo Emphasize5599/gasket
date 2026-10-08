@@ -764,14 +764,14 @@
    * -> Promise<true to go ahead>. Off: always true at once.
    */
   function confirmDel(o) {
-    if (S.confirmDeletes === false) return Promise.resolve(true);
+    if (S.confirmDeletes === false && !o.always) return Promise.resolve(true);   // always: a question that isn't about deleting
     return new Promise(function (resolve) {
       var old = $('cfm'); if (old) old.remove();
       var bg = document.createElement('div'); bg.className = 'cfm-bg'; bg.id = 'cfm';
       bg.innerHTML = '<div class="cfm" role="alertdialog" aria-modal="true" aria-labelledby="cfmT"><div class="cfm-t" id="cfmT">' + esc(o.title || 'Delete?') + '</div>' +
         (o.body ? '<div class="cfm-b">' + o.body + '</div>' : '') +
         '<div class="cfm-btns"><button class="btn tonal" id="cfmNo">Cancel</button><button class="btn cfm-go" id="cfmYes">' + esc(o.action || 'Delete') + '</button></div>' +
-        '<div class="cfm-hint">Turn these off in Settings → General.</div></div>';
+        (o.always ? '' : '<div class="cfm-hint">Turn these off in Settings → General.</div>') + '</div>';
       document.body.appendChild(bg);
       requestAnimationFrame(function () { bg.classList.add('on'); });
       var done = function (v) { window.__cfmClose = null; bg.classList.remove('on'); setTimeout(function () { bg.remove(); }, 160); resolve(v); };
