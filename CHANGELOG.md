@@ -1,0 +1,141 @@
+# Changelog
+
+Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `VERSIONING.md`).
+The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
+Dates are when each build's source was archived (America/Chicago).
+
+## Unreleased
+- Versioning switched to `0.0.<versionCode>`; versionName is now `0.0.46` (versionCode unchanged).
+- Rebrand to Gasket / `com.bensanzone.fuelmap` is planned but not done yet.
+
+## 0.0.46 [3.25] - 2026-10-08
+- EV and hydrogen basics: ⚡ map panel (fetch every hydrogen station, shade areas out of a fuel-cell car's reach, find DC fast chargers); EV/H₂ trips use chargers or hydrogen stations from the DOE station finder; EV plans charge to 80% and count charging time.
+- Garage rework: car chips with ✕, optional trim, units follow the car (gal / kWh / kg), cruising-speed card above fuel economy, new "About this car" tile.
+- VIN lookup (NHTSA vPIC) with automatic EPA match; NHTSA recall card with NHTSA/NICB check buttons; plate lookup explained as unavailable.
+- Confirmation before every delete (Settings → General → Ask before deleting).
+- Saved trips open on Garage and remember route picks.
+
+## 0.0.45 [3.24] - 2026-10-07
+- Departure shows miles / driving time / fuel stops as tiles.
+- Adjustments always starts fresh (speed-by-road submenu resets on open, new trip and close).
+
+## 0.0.44 [3.23] - 2026-10-07
+- Removed the route picker shown before "Get routes" and the "Cheapest…" slider blurbs.
+- "Make X my usual buffer / max detour" links; "Adjust speed by road" submenu entry with Discard/Save adjustments.
+- One map bubble per station stopped at more than once ("1, 3").
+
+## 0.0.43 [3.22] - 2026-10-07
+- New Adjustments step (Garage, Route, Parameters, Adjustments, Stops, Departure) holding the buffer, max-detour and speed sliders, with a green tip box.
+- Short step labels on narrow screens.
+
+## 0.0.42 [3.21] - 2026-10-07
+- Max-detour slider; speed-by-road submenu with Discard / Save and continue.
+- Drag the trip panel from the step tabs; Departure panel fits its content and re-centers the route.
+- Better bubble spacing (24 angles, spacing cost, repair pass).
+
+## 0.0.41 [3.20] - 2026-10-07
+- Bubbles avoid only the visible top controls and re-place when the panel resizes; multi-pass placement.
+- Speed by road holds the panel at 75%; bigger drag handles.
+- Troubleshooting report and log shared as a file (native saveAndShare), fixing the hang.
+- Logos from the brand's home-page icon link as a further fallback.
+
+## 0.0.40 [3.19] - 2026-10-07
+- Price bubbles with diagonal leader lines at any angle; lines never cross; bubbles never on the route.
+- Logo fallbacks (DuckDuckGo, site icons, retry each start); draggable main list.
+
+## 0.0.39 [3.18] - 2026-10-07
+- Main map: canvas station dots and placed price bubbles (labels.js); brand logos via native fetchIcon; stations' own names.
+- "Hide stations with no price" (trips still use them at an estimate where nothing priced is in reach).
+- Numbered trip lists; loaders after 0.75 s; faster route switching and reopening; reuse of a saved trip for a similar link.
+
+## 0.0.38 [3.17] - 2026-10-07
+- Stop-tile button layout fix; diesel own-risk checkbox only on diesel.
+- Settings: Clear cache, Delete bad CITGO list (Undo), Erase all data (two taps).
+
+## 0.0.37 [3.16] - 2026-10-07
+- Bad CITGO list (Undo, settings page, map pins); Walmart+ not counted on CITGO diesel unless you take the risk.
+- Export / import of your data (adds only); tappable trip price bubbles.
+
+## 0.0.36 [3.15] - 2026-10-07
+- Checks which Exxon/Mobil stations take Walmart+ via ExxonMobil's station finder; CITGO discount marked unconfirmed.
+
+## 0.0.35 [3.14] - 2026-10-06
+- No automatic price search on app open (new setting, off by default); refresh-spinner style fix.
+
+## 0.0.34 [3.13] - 2026-10-06
+- Explicit "Get routes" / "Refresh routes"; later steps dimmed until routes load.
+- Chosen stops shown with price bubbles on the big map; numbered gas tiles per place; forward-only speed-limit progress.
+
+## 0.0.33 [3.12] - 2026-10-06
+- Five steps (new Parameters step); settings re-plan on entering Stops.
+- Garage split into three tiles; numbered place lists; speed-by-road road highlight band; single "Open in Google Maps" button with per-leg links above 9 stops.
+
+## 0.0.32 [3.11] - 2026-10-06
+- Layout fixes for long names and large text (no sideways scrolling).
+
+## 0.0.31 [3.10] - 2026-10-06
+- Faster step switching (steps kept built); Android sideways-scroll fixes; overflow tests.
+
+## 0.0.30 [3.9] - 2026-10-06
+- Trip planner becomes a 4-step panel (Garage, Route, Stops, Departure) with Back/Next checks.
+- Trip button picker (new / continue / recent trips); monthly Google lookup counter in the top bar.
+
+## 0.0.29 [3.8] - 2026-10-06
+- "Gas to leave with" read straight from the plan; collapsible speed-by-road with pinned chart and filters.
+
+## 0.0.28 [3.7] - 2026-10-06
+- Floating (?) popovers; Maps link / Addresses toggle; "Leaving" date/time; collapsible stop cards; route framing button; fewer speed-limit lookups.
+
+## 0.0.27 [3.6] - 2026-10-06
+- Stops planned at your cruising speeds; buffer and speed sliders limit each other; road filters and sorting.
+
+## 0.0.26 [3.5] - 2026-10-06
+- Truck speed limits from state law; linked buffer and speed sliders; required-field markers.
+
+## 0.0.25 [3.4] - 2026-10-06
+- "Round trip" switch adds a real return leg; redesigned buffer markers.
+
+## 0.0.24 [3.3] - 2026-10-06
+- Trips with stops in between routed one leg at a time with a route pick per leg; round trips count stations both ways and skip re-searching the way back; one Maps link per leg.
+
+## 0.0.23 [3.2] - 2026-10-06
+- Club CITGO day bonuses applied automatically; "Gas to leave with"; trip history (25 trips, reopened with no lookups).
+
+## 0.0.22 [3.1] - 2026-10-05
+- Explanations moved behind (?) buttons; station dots shrink as you zoom out.
+
+## 0.0.21 [3.0] - 2026-10-05
+- Default "+N over the limit, capped" speed rule; prices to the cent option; touch-safe sliders.
+
+## 0.0.20 [2.9] - 2026-10-05
+- Route options on a small map; one speed slider per posted-limit section.
+
+## 0.0.19 [2.8] - 2026-10-05
+- Performance for very long routes (spatial grid, lite plans, canvas dots).
+
+## 0.0.18 [2.7] - 2026-10-05
+- Speed sliders per major road (from route instructions) plus an "All roads" slider.
+
+## 0.0.17 [2.6] - 2026-10-05
+- Parallel lookups; native key/value store for saved answers; exact rebuild of Google Maps' route options.
+
+## 0.0.16 [2.5] - 2026-10-05
+- Fixes to route-option matching (thousands separators, longer waits, looser same-route test).
+
+## 0.0.15 [2.4] - 2026-10-05
+- Reproduces every route option Google Maps shows; pinned trip-speed chart and total.
+
+## 0.0.14 [2.3] - 2026-10-05
+- Per-leg cruising-speed sliders using posted limits (FHWA HPMS, state maximums as fallback).
+
+## 0.0.13 [2.2] - 2026-10-05
+- Garage with several cars, fill-up log and the best-cruising-speed card.
+
+## 0.0.12 [2.1] - 2026-10-05
+- Buffer slider with background re-planning; optional check of Google's other routes.
+
+## 0.0.11 [2.0] - 2026-10-05
+- Oldest archived build: price map (Walmart, Murphy USA, Sam's Club, Exxon, Mobil, CITGO) with Walmart+/Club CITGO discounts, and a trip fuel-stop planner from a Google Maps link.
+
+## 0.0.1 – 0.0.10
+- Built between 2026-10-03 and 2026-10-05; no source or notes survive. Old version names unknown.
