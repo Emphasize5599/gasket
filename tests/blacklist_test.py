@@ -80,8 +80,10 @@ with sync_playwright() as p:
         pg.click('.bl-go'); pg.wait_for_timeout(500)
         assert pg.locator('#blPage.hidden').count() == 1 and pg.locator('#settings.hidden').count() == 1 and pg.is_visible('#detail')
         assert pg.locator('#dBlRm').count() == 1, 'remove from the map'
-        c = pg.evaluate("window.__app.map.getCenter()"); e0 = data['blacklist'][0]
-        assert abs(c['lat'] - e0['lat']) < 0.01 and abs(c['lng'] - e0['lng']) < 0.01
+        # on screen, not necessarily centred: a station in the results opens its details, which pans the map clear of the sheet
+        e0 = data['blacklist'][0]
+        seen = pg.evaluate("(e) => { const m = window.__app.map, p = m.latLngToContainerPoint([e.lat, e.lng]), d = document.getElementById('detail').getBoundingClientRect(); return { inView: m.getBounds().contains([e.lat, e.lng]), y: p.y, sheetTop: d.top, zoom: m.getZoom() }; }", e0)
+        assert seen['inView'] and seen['y'] < seen['sheetTop'] and seen['zoom'] >= 14, (seen, e0)
         pg.screenshot(path=f'{OUT}/{name}-b4-onmap.png')
         pg.click('#dBlRm'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(300)
         assert pg.evaluate('window.__app.S.blacklist.length') == 0 and 'Removed' in pg.inner_text('#undoBar')
