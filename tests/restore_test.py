@@ -2,6 +2,7 @@
 searches nothing (no Google lookups) even when the restored settings say to search on opening."""
 import sys, os, json, time
 from playwright.sync_api import sync_playwright
+import fastwait  # noqa: F401  (waits end once the page settles; SLOW_WAITS=1 for fixed sleeps)
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '.'
 URL = 'file://' + os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'web', 'index.html'))
@@ -25,7 +26,7 @@ FUEL_PLUS_BACKUP = json.dumps({
 
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=os.environ.get('CHROME', '/opt/google/chrome/chrome'), args=['--no-sandbox'])
-    for name, w, h, scheme in [('pixel10pro', 412, 915, 'dark'), ('pixel8pro', 448, 998, 'light')]:
+    for name, w, h, scheme in fastwait.viewports([('pixel10pro', 412, 915, 'dark'), ('pixel8pro', 448, 998, 'light')]):
         pg = b.new_page(viewport={'width': w, 'height': h}, device_scale_factor=2.6, color_scheme=scheme, is_mobile=True, has_touch=True)
         pg.on('pageerror', lambda e: errors.append(str(e)))
         pg.on('console', lambda m: m.type == 'error' and 'tile' not in m.text and 'ERR_' not in m.text and errors.append(m.text))
@@ -52,7 +53,8 @@ with sync_playwright() as p:
             assert 'Restored 4 settings and 3 saved items' in toast, toast
             assert pg.evaluate('window.__restoring') is True
             pg.evaluate("window.__app.S.radiusMi = 3; window.__app.save && window.__app.save()")   # nothing writes the old settings back
-        pg.wait_for_timeout(1500)
+        # the first location fix is when "get prices when the app opens" would search: wait for it, then a bit more
+        pg.wait_for_selector('#btnLocate.live', timeout=5000); pg.wait_for_timeout(800)
         # after the restart: the restored settings and prices are there, and nothing was searched
         S = pg.evaluate('window.__app.S')
         assert S['apiKey'] == KEY and S['autoRefresh'] is True and S['radiusMi'] == 10, {k: S.get(k) for k in ('autoRefresh', 'radiusMi')}
@@ -60,7 +62,7 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__searchCalls || 0') == 0, 'no search (Google lookups) on the first start after a restore'
         assert 'restored' not in pg.evaluate('location.hash'), 'the restart marker is cleared'
         st = pg.inner_text('#status'); print('  status after restart:', st)
-        assert 'tap ↻' in st, st
+        assert '1 h ago' in st and 'earch' not in st, st      # the restored prices, no search running
         pg.screenshot(path=f'{OUT}/{name}-restored.png')
         assert KEY not in json.dumps(pg.evaluate('window.FLog ? FLog.entries() : []')), 'the API key never reaches the log'
         pg.close()

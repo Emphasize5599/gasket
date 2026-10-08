@@ -9,7 +9,8 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 - `build.sh`: a Gradle-free build (aapt → javac → dx → zipalign → apksigner) that writes `Gasket.apk`.
 
 ## Commands
-- All tests: `tests/run_all.sh [screenshot-dir]`. That's the Node unit tests plus the Playwright UI tests, about 8 minutes.
+- All tests: `tests/run_all.sh [screenshot-dir] [test names…]`. It runs every Node test and every UI test once per phone size in parallel (`JOBS`, default: CPUs), about 1.5–2 minutes. Pass names to run only some, e.g. `tests/run_all.sh /tmp/shots trip_ui restore`. `NO_SCREENSHOTS=1` skips the PNGs for quick runs.
+- The UI tests import `tests/fastwait.py`: `wait_for_timeout(ms)` returns once the page has settled (no timers, animation frames or CSS animations due within the window) instead of sleeping the full time. If a test looks timing-dependent, rerun it with `SLOW_WAITS=1`, and in new tests wait for the condition you mean (`wait_for_selector`, a flag) rather than a fixed time. `VIEWPORT_INDEX=0|1` runs one phone size.
 - One Node test: `node tests/trip.test.js`. One UI test: `python3 tests/ui_test.py /tmp/shots`. The UI tests use the browser at `$CHROME`; the session-start hook sets it in cloud sessions.
 - Syntax check: `node --check assets/web/app.js`, `python3 -m py_compile tests/ui_test.py`. The `assets/*_worker.js` files are bare anonymous functions that the Java side wraps before injecting, so check those wrapped in parentheses.
 - Build a signed APK: `./build.sh`. Cloud sessions sign with `KS_PASS` and `GASKET_KEYSTORE_B64` from the environment settings; elsewhere, set `KEYSTORE=/path/to.jks`. It fails if either is missing and never generates a key. See `SIGNING.md`. Never print, log or commit `KS_PASS`, `GASKET_KEYSTORE_B64` or the keystore, and don't dump the environment (`env`, `printenv`).
