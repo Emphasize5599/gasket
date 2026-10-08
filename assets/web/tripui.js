@@ -101,7 +101,7 @@
   function openTrip(st) {
     A.closeDetail();
     if (st) step = st;
-    document.body.classList.add('trip-on'); A.syncMain();
+    document.body.classList.add('trip-on'); A.syncMain(); A.syncMapGAttr();
     renderStep();
   }
   function initPanel(pg) {
@@ -1226,7 +1226,7 @@
     }
     h += limBar(model, 'Speed limits', true);
     var nOther = altCompareList().length;
-    h += '<div class="lead small">Finding stations: ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') : 'no Google lookups') + '.</div></div>';
+    h += A.gAttr('in-card') + '<div class="lead small">Finding stations: ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') : 'no Google lookups') + '.</div></div>';
     el.innerHTML = h;
     el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
     el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
@@ -2382,6 +2382,7 @@
       } else h += '<div class="msg ok">No stop needed — checked ' + r.cands.length.toLocaleString() + ' stations.</div>';
       h += routeBox();
       h += '<div class="gas-tiles">' + idealBox() + arriveBox() + '</div>';
+      h += A.gAttr();                                   // the route, and most stations, come from Google
       // Adjustments: the buffer, max. detour and speeds (and the optional top-up)
       ah += bufBox();
       ah += detBox();

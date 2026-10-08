@@ -57,4 +57,13 @@ THIS SOFTWARE.
 
 ## Map data and online services
 
-Map tiles and place names come from OpenStreetMap, © OpenStreetMap contributors, available under the Open Database License (https://www.openstreetmap.org/copyright). The app also queries Google, fueleconomy.gov, FHWA, NHTSA, the DOE station finder, ExxonMobil, Walmart and Murphy USA at run time. None of their data is bundled in this repository, and each service's own terms apply to its use.
+None of this data is bundled in the repository. The app fetches it while it runs, and each source's own terms apply.
+
+- **OpenStreetMap:** map tiles and place names (Nominatim). © OpenStreetMap contributors. The data is available under the Open Database License: https://www.openstreetmap.org/copyright
+- **Google Maps:** station names, places and prices (Places API), and driving routes (Routes API). Google Maps Platform Terms of Service: https://cloud.google.com/maps-platform/terms. The app shows a "Google Maps" credit wherever this content appears.
+- **U.S. Environmental Protection Agency:** fuel economy data from fueleconomy.gov.
+- **National Highway Traffic Safety Administration:** VIN decoding (vPIC) and safety recalls.
+- **Federal Highway Administration:** posted speed limits (Highway Performance Monitoring System, via geo.dot.gov).
+- **U.S. Department of Energy:** electric-charging and hydrogen station locations from the Alternative Fuels Data Center, via the National Renewable Energy Laboratory's developer network.
+- **Station operators' own websites:** prices and station details from walmart.com and murphyusa.com, and the ExxonMobil station finder.
+- **Brand logos:** fetched from each brand's own website or icon services at run time. The logos are trademarks of their owners.

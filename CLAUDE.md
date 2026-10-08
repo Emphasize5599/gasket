@@ -30,4 +30,5 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 - `versionName` is always `0.0.<versionCode>` (see `VERSIONING.md`). Each bump gets a `CHANGELOG.md` entry.
 - Use conventional commits (`feat:`, `fix:`, `chore:`, `test:`, `build:`, `docs:`, `refactor:`).
 - `main` is the default branch. Pushing a new version to `main` releases it: the Release workflow tags it `v0.0.<code>` and publishes source code only (see `VERSIONING.md`). Don't push tags yourself. Never attach an APK to a release.
-- Licensed under the Source First License 1.1 (`LICENSE.md`). Third-party code keeps its own licenses (`THIRD_PARTY_NOTICES.md`).
+- Licensed under the Source First License 1.1 (`LICENSE.md`). Third-party code keeps its own licenses (`THIRD_PARTY_NOTICES.md`). After editing either file run `node tools/gen-legal.js` (the app shows them from `assets/web/legal.js`; `tests/legal.test.js` fails when it's stale). A new bundled library or data source needs an entry there.
+- Wherever Google Places/Routes content shows, add the "Google Maps" credit (`window.__app.gAttr()`). Open terms-of-service questions are in `COMPLIANCE.md`.

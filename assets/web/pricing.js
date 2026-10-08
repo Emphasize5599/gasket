@@ -111,7 +111,8 @@
     return {
       id: place.id, brand: brand, name: name, address: place.formattedAddress || '',
       state: stateOf(place), lat: place.location.latitude, lng: place.location.longitude,
-      mapsUri: place.googleMapsUri || '', prices: prices, source: 'Google'
+      mapsUri: place.googleMapsUri || '', prices: prices, source: 'Google',
+      google: !/^demo/.test(place.id)          // Google Places content: shown with a "Google Maps" credit (demo stations are made up)
     };
   }
 

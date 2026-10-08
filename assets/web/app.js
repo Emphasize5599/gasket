@@ -50,7 +50,7 @@
       fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
-      search: function (req) { window.__searchCalls = (window.__searchCalls || 0) + 1; setTimeout(function () { window.onSearchResult(req, { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
+      search: function (req, key, queries, lat1, lng1, lat2, lng2) { window.__searchCalls = (window.__searchCalls || 0) + 1; setTimeout(function () { var m = window.__mocks && window.__mocks.search; window.onSearchResult(req, m ? m(JSON.parse(queries), [lat1, lng1, lat2, lng2]) : { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
     };
     /** What MainActivity.readBackup does, for the browser: settings and the map cache from a full-backup file (any app's). */
     function standinRestore(text) {
@@ -363,7 +363,8 @@
         '<span class="mid"><div class="nm">' + esc(P.displayName(x.s)) + '</div><div class="sub">' + (x.dist != null ? x.dist.toFixed(1) + ' mi · ' : '') + esc(shortAddr(x.s.address)) +
         (x.c && x.c.stale ? ' · <span style="color:var(--warn)">stale</span>' : '') + '</div></span>' +
         '<span class="pr">' + (x.c ? '<div class="f' + (bestIds[x.s.id] ? ' best' : '') + '">' + priceHtml(x.c.final) + '</div><div class="o">' + priceHtml(x.c.base) + '</div>' : '<div class="o" style="text-decoration:none">no price</div>') + '</span></button>';
-    }).join('') : '<div class="empty">Stations will appear here.</div>';
+    }).join('') + (rows.some(function (x) { return x.s.google; }) ? gAttr() : '') : '<div class="empty">Stations will appear here.</div>';
+    syncMapGAttr();
     refreshStatus();
     sizeSheet();
   }
@@ -574,6 +575,7 @@
     h += blButtons(s, 'd', S.grade);
     h += '<div class="actions"><button class="btn primary" id="dNav"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Directions in Google Maps</button>' +
       '<div class="btn-row"><button class="btn tonal" id="dOther">Other maps app</button><button class="btn tonal" id="dPlace">' + (s.wmStoreId ? 'Walmart store page' : 'Google listing') + '</button></div></div>';
+    if (s.google) h += gAttr('in-detail');
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
     $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); if ($('btnAlt')) $('btnAlt').classList.add('hidden');
     $('listSheet').classList.add('hidden');
@@ -681,6 +683,53 @@
     pg.querySelectorAll('[data-bl]').forEach(function (b) { b.onclick = function () { showBad(l[+b.dataset.bl]); }; });
     pg.querySelectorAll('[data-blrm]').forEach(function (b) { b.onclick = function () { var e = l[+b.dataset.blrm]; confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(e); }); }; });
   }
+  // ---------- Google Maps credit: Google's terms want it wherever its Places or Routes content shows ----------
+  function gAttr(extra) { return '<div class="gattr' + (extra ? ' ' + extra : '') + '" role="note" aria-label="Google Maps">Google Maps</div>'; }
+  var mapGAttr = false;
+  /** On the map's own credit line while Google stations, or a trip (its route comes from Google), are on the map. */
+  function syncMapGAttr() {
+    var on = document.body.classList.contains('trip-on') || stations.some(function (s) { return s.google; });
+    if (on === mapGAttr || !map.attributionControl) return;
+    var a = '<span class="gattr in-map">Google Maps</span>';
+    if (on) map.attributionControl.addAttribution(a); else map.attributionControl.removeAttribution(a);
+    mapGAttr = on;
+  }
+
+  // ---------- licenses & credits (Settings -> About) ----------
+  /** Just enough Markdown for LICENSE.md and THIRD_PARTY_NOTICES.md: headings, paragraphs, lists, **bold**, code blocks, links. */
+  function mdHtml(md) {
+    var out = [], para = [], list = [], code = null;
+    var inline = function (t) {
+      return esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/(https?:\/\/[^\s<)]+[^\s<).,])/g, '<a href="#" data-url="$1">$1</a>');
+    };
+    var flush = function () {
+      if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; }
+      if (list.length) { out.push('<ul>' + list.map(function (x) { return '<li>' + inline(x) + '</li>'; }).join('') + '</ul>'); list = []; }
+    };
+    String(md || '').split('\n').forEach(function (ln) {
+      if (code !== null) { if (/^```/.test(ln)) { out.push('<pre class="lic-pre">' + esc(code.join('\n')) + '</pre>'); code = null; } else code.push(ln); return; }
+      if (/^```/.test(ln)) { flush(); code = []; return; }
+      var m = /^(#{1,3})\s+(.*)$/.exec(ln);
+      if (m) { flush(); out.push('<h' + (m[1].length + 1) + '>' + inline(m[2]) + '</h' + (m[1].length + 1) + '>'); return; }
+      if (/^- /.test(ln)) { if (para.length) flush(); list.push(ln.slice(2)); return; }
+      if (!ln.trim()) { flush(); return; }
+      if (list.length) list[list.length - 1] += ' ' + ln.trim(); else para.push(ln.trim());
+    });
+    flush();
+    return out.join('');
+  }
+  function openLicPage() {
+    var L = window.LEGAL || {};
+    var h = '<div class="pg-head"><button class="x" id="licBack" aria-label="Back">←</button><h1>Licenses & credits</h1></div>' +
+      '<p class="lead">Gasket ' + esc(N.appVersion ? N.appVersion() : '') + '. The open-source code it includes and the data it uses, with their licenses.</p>' +
+      '<div class="card lic-doc">' + mdHtml(L.notices) + '</div>' +
+      '<div class="card lic-doc">' + mdHtml(L.license) + '</div>';
+    var pg = $('licPage'); pg.innerHTML = h; pg.classList.remove('hidden'); pg.scrollTop = 0;
+    $('licBack').onclick = function () { pg.classList.add('hidden'); };
+    pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
+  }
+
   /** Close everything and show a bad station on the main map (its details if it's in the current results). */
   var badMarker = null;
   function showBad(e) {
@@ -924,6 +973,8 @@
         return '<option value="' + o[0] + '"' + (S.logLevel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><div class="lbl">Log<small class="keep" id="logCount">' + (window.FLog ? FLog.entries().length : 0) + ' entries</small></div>' +
       '<div class="btns"><button class="btn tonal sm" id="sLogView">View</button><button class="btn tonal sm" id="sLogShare">Share</button><button class="btn tonal sm" id="sLogClear">Clear</button></div></div></div>';
+    h += '<div class="card"><h3>About</h3><div class="field"><div class="lbl">Gasket ' + esc(N.appVersion ? N.appVersion() : '') + '<small>The code this app includes and the data it uses, with their licenses.</small></div>' +
+      '<button class="btn tonal sm" id="licOpen">Licenses & credits</button></div></div>';
     h += '<button class="btn primary" id="sDone">' + (onboarding ? 'Save & find gas' : 'Done') + '</button>';
     h += '<button class="btn tonal" id="sDemo">' + (demo ? 'Turn off demo data' : 'Try with demo data') + '</button>';
     h += '<p class="lead" style="margin-top:16px;font-size:12.5px">Prices: Google Maps (crowd/partner-sourced, not guaranteed). Discount rules as published by Walmart and CITGO, Oct 2026 — the Walmart app\'s Gas Savings page is the final word on which locations participate.</p>';
@@ -932,6 +983,7 @@
     $('sDone').onclick = function () { closeSettings(true); };
     $('sLogView').onclick = function () { showLog(); };
     $('blOpen').onclick = openBlPage;
+    $('licOpen').onclick = openLicPage;
     $('exAll').onclick = function () { exportData('all'); };
     $('exBl').onclick = function () { exportData('blacklist'); };
     $('imAll').onclick = function () { importData('all'); };
@@ -1079,6 +1131,7 @@
   };
   window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (document.querySelector('.qpop')) { window.__closeQ(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }
+    if (!$('licPage').classList.contains('hidden')) { $('licPage').classList.add('hidden'); return true; }
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
     if ($('listSheet').classList.contains('open')) { setListOpen(false); return true; } return false; })(); };
 
@@ -1189,7 +1242,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
