@@ -1118,3 +1118,11 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 .ac-f span { font-size: 14.5px; overflow-wrap: anywhere; min-width: 0; }
 .ac-f span small { display: block; font-size: 11.5px; color: var(--save); font-weight: 600; }
 .ldspin.sm { display: inline-block; width: 13px; height: 13px; border-width: 2px; vertical-align: -2px; margin-right: 4px; }
+.adv-tires.warn { background: var(--danger-bg); }
+.tz-out { margin: 8px 0 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2, rgba(127,127,127,.08)); }
+.tz-out b { display: block; font-size: 16px; }
+.tz-out small { display: block; font-size: 13px; color: var(--ink-2); margin-top: 3px; line-height: 1.4; }
+.tz-out.good b { color: var(--save); } .tz-out.low b, .tz-out.worn b { color: var(--danger); } .tz-out.ok b { color: var(--warn); }
+.tz-pick select, .tz-pick input { min-width: 0; max-width: 100%; }
+.tz-src { margin-top: -4px; }
+.tz-pick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }

@@ -152,6 +152,8 @@
     if (c.id === 'venza12' && !c.epaId && /venza 2wd/i.test(c.model || '')) c.epaId = '32199';
     if (!c.info.src) c.info.src = {};
     if (!c.info.featSrc) c.info.featSrc = {};
+    // 0.0.53: the tire fields moved to their own card
+    if (!c.tires && (c.info.tireType || c.info.tire)) c.tires = { type: TIRES[c.info.tireType] || '', model: c.info.tire || '', tread: { mode: 'miles', miles: '', rotated: '' } };
   });
   S.speed = Object.assign({ min: 55, max: 84, price: '' }, S.speed || {});
 
@@ -191,7 +193,7 @@
     try { settle(host); draw0(); } finally { drawing = false; }
   }
   // Your car (the buttons; details behind Edit), best cruising speed, fuel economy, observed mileage, about this car.
-  var obsOpen = false, infoOpen = false;
+  var obsOpen = false, infoOpen = false, tiresOpen = false;
   var EPA_Q = {
     city: '<b>EPA city</b>: a lab test of stop-and-go driving — about 11 miles averaging 21 mph (top speed 56), with frequent stops and idling. Since 2008 it\'s adjusted for A/C, cold starts and harder acceleration.',
     hwy: '<b>EPA highway</b>: a lab test of rural and interstate driving — about 10 miles averaging 48 mph (top speed 60), no stops. Steady 70+ mph cruising uses more than this.',
@@ -218,12 +220,15 @@
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
+    h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + esc(window.Tires ? Tires.summary(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
     host.innerHTML = h;
     restoreEMsg();
     speedHost = $('tSpeed');
     $('gObs').addEventListener('toggle', function () { obsOpen = this.open; });
     if ($('tEpa')) $('tEpa').addEventListener('toggle', function () { epaStay = this.open ? c.id : null; });
     $('gInfo').addEventListener('toggle', function () { infoOpen = this.open; });
+    $('gTires').addEventListener('toggle', function () { tiresOpen = this.open; });
+    if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.textContent = Tires.summary(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
     drawSpeed();
   }
@@ -410,8 +415,6 @@
     h += isCustom(c) ? customPanel(c) : tilesPanel(c);
     if (fuel) h += '<div class="grid2">' + fuel + '</div>';
     h += featPanel(c);
-    h += '<div class="grid2"><label class="nf"><span>Tires</span><select id="gTireT">' + opts(TIRES, i.tireType, '—') + '</select></label>' +
-      '<label class="nf"><span>Exact tire<small>optional</small></span><input type="text" id="gTire" maxlength="60" placeholder="e.g. Ecopia EP422 195/65R15" value="' + esc(i.tire || '') + '"></label></div>';
     if (c.vin) h += '<div class="lead small keep">VIN ' + esc(c.vin) + '</div>';
     return h;
   }
@@ -489,7 +492,7 @@
     // about this car
     var info = c.info = c.info || {};
     var setI = function (id, k2, num) { var el = $(id); if (el) el.onchange = function () { var v = this.value.trim(); info[k2] = num ? (parseInt(v, 10) || '') : v; save(); if (id === 'gTrans') draw(); else updInfoLine(c); }; };
-    setI('gEngine', 'engine'); setI('gAsp', 'asp'); setI('gTrans', 'trans'); setI('gTransN', 'transN', true); setI('gDrive', 'drive'); setI('gTireT', 'tireType'); setI('gTire', 'tire');
+    setI('gEngine', 'engine'); setI('gAsp', 'asp'); setI('gTrans', 'trans'); setI('gTransN', 'transN', true); setI('gDrive', 'drive'); 
     if ($('gGrade')) $('gGrade').onchange = function () { c.grade = this.value; changed(); };
     if ($('gPower')) $('gPower').onchange = function () {
       var was = kind(c); c.power = this.value;

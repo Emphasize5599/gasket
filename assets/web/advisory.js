@@ -120,6 +120,7 @@
     if (chk) { if (chk.open > 0) n++; else if (days(chk.t) > RECHECK_DAYS) n++; }
     else if (c.vin && list && list.length) n++;
     n += adviceFor(c).filter(function (a) { return !choice(c, a); }).length;
+    n += tireAdvice(c).filter(function (x) { return x.level === 'warn'; }).length;   // worn tires
     return n;
   }
   /** One line for the Departure step, or ''. */
@@ -142,7 +143,7 @@
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
     var h = '<p class="lead small keep adv-lead">Things worth knowing about your ' + esc(G().shortName(c)) + ' before you drive.</p>';
-    h += recallCard(c) + adviceCards(c);
+    h += recallCard(c) + tireCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);
     syncDot();
@@ -187,6 +188,12 @@
   function recallItem(x) {
     return '<div class="rc"><b>' + esc(x.comp || 'Recall') + '</b><small>' + esc(x.id || '') + (x.date ? ' · ' + esc(x.date) : '') + (x.park ? ' · <em>do not drive</em>' : x.out ? ' · <em>park outside</em>' : '') + (x.ota ? ' · fixed over the air' : '') + '</small>' +
       '<p>' + esc(x.sum || '') + '</p>' + (x.cons ? '<p><i>Risk:</i> ' + esc(x.cons) + '</p>' : '') + (x.fix ? '<p><i>Fix:</i> ' + esc(x.fix) + '</p>' : '') + '</div>';
+  }
+  function tireAdvice(c) { return window.Tires ? Tires.advice(c) : []; }
+  function tireCard(c) {
+    var l = tireAdvice(c); if (!l.length) return '';
+    return '<div class="card adv-card adv-tires' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advTires"><h3>Tires</h3>' +
+      l.map(function (x) { return '<div class="adv-item"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p></div>'; }).join('') + '</div>';
   }
   function adviceCards(c) {
     var l = adviceFor(c);

@@ -107,8 +107,7 @@ with sync_playwright() as p:
         assert pg.locator('.ac-tiles .ac-dd, #gEngine, #gDrive').count() == 0, 'a VIN says exactly what the car is: tiles, no menus'
         pg.click('#gFeats summary'); pg.wait_for_timeout(150)
         assert pg.is_checked('[data-feat="DOHC"]') and pg.is_checked('[data-feat="Direct injection"]') and 'from your VIN' in ft(pg, '#gFeats')
-        pg.select_option('#gTireT', 'allseason'); pg.fill('#gTire', 'Michelin Primacy 225/50R17'); pg.dispatch_event('#gTire', 'change'); pg.wait_for_timeout(150)
-        assert pg.evaluate("window.Garage.car().info.tire") == 'Michelin Primacy 225/50R17'
+        assert pg.locator('#gTireT, #gTire').count() == 0 and pg.locator('#gTires').count() == 1, 'tires have their own card (tests/tires_test.py)'
         pg.check('[data-feat="Start-stop"]'); pg.wait_for_timeout(150)
         assert 'Start-stop' in pg.evaluate("window.Garage.car().info.features") and pg.evaluate("window.Garage.car().info.featSrc['Start-stop']") == 'user'
         # a confirmed feature asks before it's unchecked

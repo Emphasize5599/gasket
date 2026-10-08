@@ -270,7 +270,7 @@
     sourceDone();
   };
   window.onSiteResult = function (key, id, res) {
-    if (key === 'nhtsa') { window.onNativeResult && window.onNativeResult(id, res); return; }   // a page shown with siteShow (Advisory)
+    if (key === 'nhtsa' || key === 'tirerack') { window.onNativeResult && window.onNativeResult(id, res); return; }   // read with siteRead / siteShow
     if (window.__tripSite && window.__tripSite(key, id, res)) return;
     if (id !== reqId || !sitePending[key]) return;
     sitePending[key] = false;
