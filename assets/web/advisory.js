@@ -157,6 +157,7 @@
     var R = c.recalls;
     if (!R || R.key !== key || days(R.t) > 7 || (R.error && Date.now() - R.t > 3600e3)) fetchRecalls(c);
     var list = onRecord(c), chk = vinCheck(c), nm = name(c);
+    rateAll(list);
     var q = A.qBtn('<b>Safety recalls</b> are problems a car maker must fix for free, at any of its dealers, for as long as you own the car. The list here is every recall on record for the ' + esc(nm) + ' from the National Highway Traffic Safety Administration. ' +
       'Checking your VIN shows which are still open on <i>your</i> car. Already-fixed recalls don\'t show up there, nor do recalls more than 15 years old or from some small manufacturers.');
     var h = '<div class="card adv-card adv-recall' + (chk && chk.open > 0 ? ' warn' : chk && !chk.open ? ' ok' : '') + '" id="advRecall"><h3>Safety recalls ' + q + '</h3>';
@@ -167,7 +168,7 @@
       if (chk.open > 0) {
         h += '<div class="adv-state bad"><b>' + chk.open + ' open recall' + (chk.open === 1 ? '' : 's') + ' on your car</b><small>Any ' + esc(c.make) + ' dealer fixes ' + (chk.open === 1 ? 'it' : 'them') + ' for free. Call one to book it, ideally before a long drive. Checked ' + esc(when) + '.</small></div>';
         var open = (list || []).filter(function (x) { return (chk.campaigns || []).indexOf(x.id) >= 0; });
-        if (open.length) h += open.map(recallItem).join('');
+        if (open.length) h += bySeverity(open).map(recallItem).join('');
         else if ((chk.items || []).length) h += chk.items.map(function (t) { return '<div class="rc"><p>' + esc(t) + '</p></div>'; }).join('');
       } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '. Gasket checks again every week.</small></div>';
       // no button: the VIN is checked again by itself in the background (weekly), so this is always fresh
@@ -186,14 +187,41 @@
         '<small>' + (n ? 'These are for every ' + esc(nm) + '. ' : '') + 'Add your VIN in the Garage (Edit) to see whether any are still open on your car.</small></div>';
     }
     if (n && !(chk && chk.open > 0)) {
-      h += '<details class="rc-list" id="advList"' + (listOpen ? ' open' : '') + '><summary>' + (chk ? 'All ' + n + ' recalls on record for this model' : 'See the recalls') + '</summary>' + list.map(recallItem).join('') + '</details>';
+      h += '<details class="rc-list" id="advList"' + (listOpen ? ' open' : '') + '><summary>' + (chk ? 'All ' + n + ' recalls on record for this model' : 'See the recalls') + '</summary>' + bySeverity(list).map(recallItem).join('') + '</details>';
     }
     if (park && !(chk && !chk.open)) h += '<div class="lead small keep"><b>One of these says not to drive the car, or to park it outside, until it\'s fixed.</b></div>';
     return h + '</div>';
   }
+  // ---------- how serious a recall is: rated on the phone by a small AI model (severity.js) ----------
+  function severity(x) { return window.Severity ? Severity.get(x) : null; }   // null: not rated yet
+  /** Rate what isn't rated yet (the model loads the first time), then draw again. */
+  function rateAll(list) { if (window.Severity && list && list.length) Severity.rate(list, function () { if (host && host.isConnected) draw(); }); }
+  var SEV_NAME = { 3: 'Serious', 2: 'Moderate', 1: 'Minor' };
+  /** "POWER TRAIN:AXLE ASSEMBLY:HUB" -> "Power train › Axle assembly › Hub". */
+  function compPlain(s) { return String(s || 'Recall').split(':').map(function (p) { p = p.trim().toLowerCase(); return p.charAt(0).toUpperCase() + p.slice(1); }).join(' › '); }
+  /** NHTSA's "25/03/2021" (day / month / year) -> "Mar 25, 2021". */
+  function dmy(s) { var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '').trim()); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null; }
+  function datePlain(s) { var d = dmy(s); return d && !isNaN(d) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : String(s || ''); }
+  function firstSentence(s) { s = String(s || '').replace(/\s+/g, ' ').trim(); var m = /^(.{20,140}?[.!?])\s/.exec(s + ' '); return m ? m[1] : s.slice(0, 140) + (s.length > 140 ? '…' : ''); }
+  /** One recall as a tile: how serious, what part, one line; tap it for what's wrong, the risk, the fix and when it began. */
   function recallItem(x) {
-    return '<div class="rc"><b>' + esc(x.comp || 'Recall') + '</b><small>' + esc(x.id || '') + (x.date ? ' · ' + esc(x.date) : '') + (x.park ? ' · <em>do not drive</em>' : x.out ? ' · <em>park outside</em>' : '') + (x.ota ? ' · fixed over the air' : '') + '</small>' +
-      '<p>' + esc(x.sum || '') + '</p>' + (x.cons ? '<p><i>Risk:</i> ' + esc(x.cons) + '</p>' : '') + (x.fix ? '<p><i>Fix:</i> ' + esc(x.fix) + '</p>' : '') + '</div>';
+    var key = x.id || x.comp || '', sec = function (title, body) {
+      var k = key + '|' + title;
+      return body ? '<details class="rc-sec" data-open="' + esc(k) + '"' + (rcOpen[k] ? ' open' : '') + '><summary>' + title + '</summary><p>' + esc(body) + '</p></details>' : '';
+    };
+    var sv = severity(x), lv = sv ? sv.level : 0;
+    var why = !sv ? 'Being rated on your phone…' : sv.fact ? sv.near : 'Rated ' + SEV_NAME[lv].toLowerCase() + ' by the small AI model on your phone. It reads most like: “' + sv.near + '”';
+    return '<details class="rc-tile sev' + lv + '" data-open="' + esc(key) + '"' + (rcOpen[key] ? ' open' : '') + '><summary><span class="rc-sev">' + (sv ? SEV_NAME[lv] : 'Rating…') + '</span><span class="rc-t"><b>' + esc(compPlain(x.comp)) + '</b>' +
+      '<small>' + esc(firstSentence(x.cons || x.sum)) + '</small></span></summary>' +
+      '<div class="rc-why">' + esc(why) + (x.ota ? ' Fixed over the air.' : '') + '</div>' +
+      sec('What\'s wrong', x.sum) + sec('The risk', x.cons) + sec('The fix', x.fix) +
+      sec('When it began', ((x.date ? 'Reported to NHTSA ' + datePlain(x.date) + '.' : '') + (x.id ? ' NHTSA campaign ' + x.id + '.' : '')).trim()) + '</details>';
+  }
+  var rcOpen = {};   // which recall tiles and sections you've opened (kept when Advisory redraws)
+  /** Most serious first, then newest. */
+  function bySeverity(list) {
+    var lv = function (x) { var s = severity(x); return s ? s.level : 0; };
+    return list.slice().sort(function (a, b) { return lv(b) - lv(a) || ((dmy(b.date) || 0) - (dmy(a.date) || 0)); });
   }
   function tireAdvice(c) { return window.Tires ? Tires.advice(c) : []; }
   function tireCard(c) {
@@ -217,6 +245,7 @@
   function bind(c) {
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
     if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; });
+    host.querySelectorAll('details[data-open]').forEach(function (d) { d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
     host.querySelectorAll('[data-adv]').forEach(function (b) {
       b.onclick = function () {
         var a = adviceFor(c)[+b.dataset.adv]; if (!a) return;
@@ -234,5 +263,5 @@
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
 
   window.Advisory = { init: init, render: render, attention: attention, departureNote: departureNote, onRecord: onRecord, vinCheck: vinCheck, ADVICE: ADVICE, adviceFor: adviceFor,
-    onChange: function (f) { onChange = f; } };
+    severity: severity, onChange: function (f) { onChange = f; } };
 })();

@@ -55,6 +55,16 @@ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ```
 
+## The recall-rating model (downloaded on first use, not bundled)
+
+Advisory rates how serious a recall is on the phone. The first time it's needed, the app downloads these and keeps them on the phone (about 46 MB):
+
+- **Transformers.js 3.7.1** (Hugging Face), from cdn.jsdelivr.net. Apache License 2.0. https://github.com/huggingface/transformers.js
+- **ONNX Runtime Web** (Microsoft), the runtime Transformers.js ships with. MIT License. https://github.com/microsoft/onnxruntime
+- **all-MiniLM-L6-v2** (sentence-transformers; the quantized ONNX copy by Xenova), from huggingface.co. Apache License 2.0. https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+
+The recall text is rated on the phone; it isn't sent anywhere.
+
 ## Map data and online services
 
 None of this data is bundled in the repository. The app fetches it while it runs, and each source's own terms apply.

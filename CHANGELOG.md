@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.66 - 2026-10-09
+- **Recalls you can read.** Each recall is its own tile, most serious first: how serious it is, the part, and one line. Tap it for "What's wrong", "The risk", "The fix" and "When it began", each folded on its own.
+- **A small AI model on your phone rates each recall** serious, moderate or minor, and says which kind of problem it reads most like. A loose axle hub that can cause a crash without warning comes out serious; a trunk latch, minor. The model (about 46 MB with its runtime) downloads once, the first time it's needed; recall text never leaves the phone.
+- The tank size's ↻ is its own button next to the box.
+- Bug fixes.
+
 ## 0.0.65 - 2026-10-09
 - **Tank size looks itself up.** When a gas or hybrid car has no tank size, Gasket asks Brave Search's AI answer in the background and fills in the box, marked as Brave's answer so you know to check it. If that fails, the box has a ↻ to try again and a "Search Brave yourself" link that opens the page for you. Typing it in always works.
 - Bug fixes.

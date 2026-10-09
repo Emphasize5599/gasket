@@ -31,7 +31,7 @@ Before you leave, it checks the car too: open safety recalls on your VIN, tire t
 Paste or share a Google Maps directions link and Gasket works through seven steps:
 
 1. **Garage**: your cars, with EPA mileage, range, the best cruising speed for the car, and the mileage you actually get.
-2. **Advisory**: open safety recalls for your VIN (checked at NHTSA), engine features worth turning off, and tire wear.
+2. **Advisory**: open safety recalls for your VIN (checked at NHTSA), each rated serious, moderate or minor by a small AI model that runs on the phone; engine features worth turning off; and tire wear.
 3. **Route**: the stops and route options from your link.
 4. **Parameters**: how much gas you have now, how much you want when you arrive, and how fast you'll drive.
 5. **Adjustments**: how far you'll leave the route for gas and how much buffer to keep in the tank.

@@ -1193,3 +1193,28 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 .spd-ov { flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
 .spd-ov button { padding: 4px 10px; font-size: 12px; }
 .tk-fail { display: block; margin-top: 6px; color: var(--ink-2); font-size: 12.5px; }
+.tank-row { padding-top: 0; }
+.tank-row .tk-find { width: 44px; padding: 0; display: grid; place-items: center; }
+.tank-row .tk-find svg { width: 22px; height: 22px; fill: currentColor; }
+.grid2.g-top { align-items: start; }
+
+/* ---------- recalls: a tile each (how serious, what part, one line); tap for the sections ---------- */
+.rc-tile { border: 1px solid var(--line); border-left: 4px solid var(--ink-2); border-radius: 14px; margin: 8px 0; background: var(--surface-2); overflow: hidden; }
+.rc-tile.sev3 { border-left-color: #e5484d; }
+.rc-tile.sev2 { border-left-color: #f5a524; }
+.rc-tile.sev1 { border-left-color: #8b95a5; }
+.rc-tile.sev0 { border-left-color: var(--line); }
+.sev0 .rc-sev { background: var(--surface); color: var(--ink-2); }
+.rc-tile > summary { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer; list-style: none; }
+.rc-tile > summary::-webkit-details-marker { display: none; }
+.rc-sev { flex: none; font-size: 11px; font-weight: 800; letter-spacing: .03em; padding: 2px 8px; border-radius: 999px; margin-top: 2px; }
+.sev3 .rc-sev { background: rgba(229, 72, 77, .16); color: #e5484d; }
+.sev2 .rc-sev { background: rgba(245, 165, 36, .18); color: #c77d00; }
+.sev1 .rc-sev { background: color-mix(in srgb, var(--ink-2) 18%, transparent); color: var(--ink-2); }
+.rc-t { min-width: 0; overflow-wrap: anywhere; }
+.rc-t b { display: block; font-size: 14px; }
+.rc-t small { display: block; color: var(--ink-2); font-size: 12.5px; margin-top: 2px; line-height: 1.35; }
+.rc-why { padding: 0 12px 8px; font-size: 12.5px; color: var(--ink-2); }
+.rc-sec { margin: 0 10px 8px; border-radius: 10px; background: var(--surface); }
+.rc-sec > summary { padding: 9px 12px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.rc-sec p { margin: 0; padding: 0 12px 10px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }

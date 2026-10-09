@@ -124,6 +124,7 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
                 String u = req.getUrl().toString();
                 if (u.startsWith("https://tile.openstreetmap.org/")) return fetchTile(u);
+                for (String p : AI_FILES) if (u.startsWith(p) && "GET".equals(req.getMethod())) return aiFile(u);
                 return null;
             }
 
@@ -230,6 +231,48 @@ public class MainActivity extends Activity {
             ua = "Gasket/" + v + " (personal Android app; " + getPackageName() + ")";
         }
         return ua;
+    }
+
+    // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
+    /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
+    private static final String[] AI_FILES = { "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/",
+            "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/" };
+
+    private WebResourceResponse aiFile(String u) {
+        try {
+            File dir = new File(getFilesDir(), "ai");
+            dir.mkdirs();
+            byte[] dg = MessageDigest.getInstance("SHA-1").digest(u.getBytes("UTF-8"));
+            StringBuilder hx = new StringBuilder(); for (byte x : dg) hx.append(String.format("%02x", x & 0xff));
+            File f = new File(dir, hx.toString());
+            if (!f.exists() || f.length() == 0) {
+                java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(u).openConnection();
+                c.setConnectTimeout(15000); c.setReadTimeout(60000);
+                int code = c.getResponseCode(), hops = 0;
+                while ((code == 301 || code == 302 || code == 303 || code == 307 || code == 308) && hops++ < 5) {   // Hugging Face hands off to its file host
+                    java.net.URL next = new java.net.URL(c.getURL(), c.getHeaderField("Location"));
+                    c.disconnect();
+                    if (!"https".equals(next.getProtocol())) return null;
+                    c = (java.net.HttpURLConnection) next.openConnection(); c.setConnectTimeout(15000); c.setReadTimeout(60000);
+                    code = c.getResponseCode();
+                }
+                if (code != 200) { c.disconnect(); return null; }
+                File tmp = new File(dir, f.getName() + ".part");
+                InputStream in = c.getInputStream(); java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+                byte[] buf = new byte[65536]; int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.close(); in.close(); c.disconnect();
+                if (!tmp.renameTo(f)) return null;
+            }
+            String path = u.replaceAll("[?#].*$", "");
+            String mime = path.endsWith(".wasm") ? "application/wasm" : path.endsWith(".js") || path.endsWith(".mjs") ? "text/javascript"
+                    : path.endsWith(".json") ? "application/json" : "application/octet-stream";
+            Map<String, String> h = new HashMap<String, String>();
+            h.put("Access-Control-Allow-Origin", "*");
+            return new WebResourceResponse(mime, mime.startsWith("text") || mime.endsWith("json") ? "UTF-8" : null, 200, "OK", h, new java.io.FileInputStream(f));
+        } catch (Exception e) {
+            return null;   // the page tries the network itself
+        }
     }
 
     private WebResourceResponse fetchTile(String u) {

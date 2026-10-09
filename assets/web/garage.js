@@ -305,11 +305,11 @@
       '<div class="epa-msg" id="eMsg"></div></details>';
     if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
     h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
-    h += '<div class="grid2"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
-      (k === 'gas' && tankKey(c) ? '<span class="in-btn"><input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">' +
-        '<button type="button" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button></span>' +
-        (tankBusy[c.id] ? A.ldBar('Asking Brave Search') : c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '')
-        : '<input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">') + '</label>';
+    var tankFindable = k === 'gas' && !!tankKey(c);
+    h += '<div class="grid2 g-top"><div class="tank-cell"><div class="vin-row tank-row"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
+      '<input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '"></label>' +
+      (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</div>' +
+      (tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '') + '</div>';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
@@ -656,9 +656,9 @@
     } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true); }
   }
   /** Show the car you have in the year / make / model pickers (after a VIN lookup, or opening them later). */
-  var presetting = false;
+  var presetting = false, presetAgain = false;
   async function epaPreset(c) {
-    if (presetting) return;
+    if (presetting) { presetAgain = true; return; }   // a redraw replaced the pickers mid-way: fill the new ones after
     presetting = true;
     try {
       await epaYears(c);
@@ -670,7 +670,7 @@
         return true;
       };
       if (await set('eYear', c.year) && await set('eMake', c.make) && await set('eModel', c.model)) await set('eOpt', c.epaId);
-    } catch (e) { } finally { presetting = false; }
+    } catch (e) { } finally { presetting = false; if (presetAgain) { presetAgain = false; if ($('tEpa') && $('tEpa').open) epaPreset(c); } }
   }
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {

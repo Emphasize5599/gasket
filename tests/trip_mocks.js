@@ -27,6 +27,8 @@
   for (let k = 0; k < 12; k++) steps.push({ distanceMeters: total / 12 * 1609.344, staticDuration: Math.round(total / 12 / (k === 0 || k === 11 ? 35 : 66) * 3600) + 's', navigationInstruction: { maneuver: 'STRAIGHT', instructions: instr[k] } });
   const brandAt = { Exxon: [[38, 3.299, 0.3], [150, 3.149, 0.4], [262, 3.259, 0.2], [317.4, 3.459, 0.2]], Mobil: [[60, 3.349, 0.2], [205, 3.199, 1.6]], CITGO: [[118, 3.059, 2.4], [240, 3.329, 0.3]], "Sam's Club Gas Station": [[176, 2.999, 3.2]] };
   window.__mocks = {
+    // the recall-rating model (severity.js) is never downloaded in tests: a stand-in that rates by a few words
+    severity: (t) => /crash|fire|lose drive power/i.test(t) ? { level: 3, near: 'The vehicle can crash without warning.' } : /stall|camera/i.test(t) ? { level: 2, near: 'The engine may stall while driving, increasing the risk of a crash.' } : { level: 1, near: 'A warning light may come on unnecessarily.' },
     route: (body) => {
       window.__routeBody = body; (window.__routeBodies = window.__routeBodies || []).push(body);
       // Dallas -> North Little Rock (the way home on a round trip): same roads, driven the other way

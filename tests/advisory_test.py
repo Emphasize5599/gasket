@@ -58,7 +58,18 @@ with sync_playwright() as p:
         rc = ft(pg, '#advRecall'); print('  recalls, no VIN:', rc.replace('\n', ' | ')[:200])
         assert '2 recalls on record' in rc and 'Add your VIN' in rc and 'Corolla' in rc
         pg.click('#advList summary'); pg.wait_for_timeout(150)
-        assert 'The car may lose drive power.' in ft(pg, '#advList') and 'Software update.' in ft(pg, '#advList')
+        # a tile each, most serious first: how serious (and why), the part, one line; tap for the sections
+        tiles = pg.locator('#advList .rc-tile')
+        assert tiles.count() == 2 and 'sev3' in tiles.nth(0).get_attribute('class') and 'Power train' in tiles.nth(0).inner_text() and 'Serious' in tiles.nth(0).inner_text(), tiles.nth(0).inner_text()
+        assert 'sev1' in tiles.nth(1).get_attribute('class') and 'Minor' in tiles.nth(1).inner_text()
+        assert 'Software update.' not in ft(pg, '#advList'), 'details stay folded until you tap'
+        tiles.nth(0).locator('summary').first.click(); pg.wait_for_timeout(150)
+        t0 = tiles.nth(0).inner_text(); print('  tile:', t0.replace('\n', ' | '))
+        assert 'Rated serious by the small AI model' in t0 and all(x in t0 for x in ["What's wrong", 'The risk', 'The fix', 'When it began'])
+        tiles.nth(0).locator('.rc-sec:has-text("The fix") summary').click(); pg.wait_for_timeout(150); tiles.nth(0).locator('.rc-sec:has-text("When it began") summary').click()
+        pg.wait_for_function("(() => { const t = document.querySelector('#advList .rc-tile'); return t && t.innerText.includes('Software update.') && t.innerText.includes('22V200000'); })()", timeout=3000)
+        t0 = pg.evaluate("document.querySelector('#advList .rc-tile').innerText"); assert 'Software update.' in t0 and 'Jun 5, 2022' in t0 and '22V200000' in t0, t0
+        pg.screenshot(path=f'{OUT}/{name}-a0-tiles.png', full_page=True)
         assert not dot(pg), 'nothing to act on without a VIN'
         # a hybrid isn't told to turn off engine stop: that's how a hybrid drives
         pg.evaluate("() => { const c = window.Garage.car(); c.info = Object.assign({}, c.info, { features: (c.info && c.info.features || []).concat(['Start-stop']) }); window.dispatchEvent(new Event('garagechange')); }")
@@ -77,7 +88,7 @@ with sync_playwright() as p:
         shown = pg.evaluate('window.__siteShown'); print('  opened:', shown)
         assert shown['key'] == 'nhtsa' and shown['url'] == 'https://www.nhtsa.gov/recalls?vymm=' + VIN
         rc = ft(pg, '#advRecall'); print('  1 open:', rc.replace('\n', ' | ')[:220])
-        assert '1 open recall on your car' in rc and 'for free' in rc and 'The car may lose drive power.' in rc and 'A sensor may fail.' not in rc
+        assert '1 open recall on your car' in rc and 'for free' in rc and 'Power train' in rc and 'Serious' in rc and 'Electrical' not in rc
         assert pg.locator('#advRecall.warn').count() == 1 and dot(pg)
         assert pg.locator('#advCheck').count() == 0, 'checked: no button, it checks again by itself'
         assert 'open safety recall' in pg.evaluate('window.Advisory.departureNote()'), 'Departure mentions it'
