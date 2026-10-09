@@ -1,0 +1,54 @@
+# One-off, run by hand after the history rewrite of 2026-10-09: deletes every release and tag (they pointed at the old
+# commits) and recreates the releases on the rewritten commits, source code only, notes from CHANGELOG.md.
+name: Rebuild releases
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete the old releases and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for tag in $(gh release list --limit 200 --json tagName -q '.[].tagName'); do
+            gh release delete "$tag" --cleanup-tag --yes
+          done
+          for tag in $(gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" -q '.[].name'); do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag"
+          done
+
+      - name: Recreate them on the rewritten commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          while read -r ver sha; do
+            git cat-file -e "$sha^{commit}"
+            grep -q "android:versionName=\"$ver\"" <(git show "$sha:AndroidManifest.xml")
+            awk -v v="$ver" 'index($0, "## " v " ") == 1 || $0 == "## " v { p = 1; next } p && /^## / { exit } p' CHANGELOG.md > notes.md
+            test -s notes.md
+            gh release create "v$ver" --target "$sha" --title "Gasket $ver" --notes-file notes.md --prerelease
+            sleep 2
+          done <<'EOF'
+          0.0.48 2fa1755f5d04a1511243e72f71ff45555dc9e476
+          0.0.49 fbf24e1d8311f8f1332ed1eb19dd38a286e06b0d
+          0.0.50 7c2a38101d0df91e84640e45b1a1e3a28bf3fa75
+          0.0.51 ace8e4fac7ec718be50152d195a236269695cc5f
+          0.0.52 5fcc2987eb01286808d6efe7d3d9ebbc47c01dbd
+          0.0.53 008f310bb9a2a43041407bc2c21dae8a368ac312
+          EOF
