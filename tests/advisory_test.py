@@ -138,6 +138,11 @@ with sync_playwright() as p:
                    '<div>NHTSA Campaign Number: 23V300000 Air bags: may not deploy</div></div>' + FAQ)
     print('  reader:', r)
     assert r['open'] == 2 and r['campaigns'] == ['22V200000', '23V300000'] and 'drive power' in r['items'][0]
+    # today's wording: "N Unrepaired Recalls Found", with the recalls listed under it
+    r = reader(pg, '<div><p>VIN Lookup: 17/17</p><h2>0 Unrepaired Recalls Found</h2></div>' + FAQ)
+    assert r == {'open': 0, 'campaigns': [], 'items': []}, r
+    r = reader(pg, '<div><h2>1 Unrepaired Recall Found</h2><div>NHTSA Campaign Number: 22V200000 Power train: may lose drive power</div></div>' + FAQ)
+    assert r['open'] == 1 and r['campaigns'] == ['22V200000'], r
     r = reader(pg, '<p>An unknown error occurred.</p>' + FAQ)
     assert r and 'error' in r and "couldn't check" in r['error'], r
     # the answer can arrive later (the page fetches it): the reader waits for it

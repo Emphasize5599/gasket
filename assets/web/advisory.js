@@ -49,18 +49,19 @@
 
   // ---------- reading NHTSA's VIN page: in the background like the price sites (siteRead), or shown to you (siteShow).
   // The page does its own checks as in any browser; nothing is ever solved or got around. ----------
-  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, autoBusy = {};
+  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, READER = 2, autoBusy = {};
   /** Check the VIN by itself when there's no check from the last week (and no failed try in the last few hours). */
   function autoCheck(c) {
     if (!c || !c.vin || !call || !N.siteRead || autoBusy[c.id]) return;
     var chk = vinCheck(c); if (chk && days(chk.t) < AUTO_DAYS) return;
-    var tried = c.recallAuto; if (tried && tried.vin === c.vin && Date.now() - tried.t < AUTO_RETRY_H * 3600e3) return;
+    // (a failed try from before the reader knew NHTSA's "N Unrepaired Recalls Found" doesn't count: try again now)
+    var tried = c.recallAuto; if (tried && tried.vin === c.vin && (!tried.failed || tried.r === READER) && Date.now() - tried.t < AUTO_RETRY_H * 3600e3) return;
     var vin = c.vin, done = false;
     autoBusy[c.id] = true; c.recallAuto = { vin: vin, t: Date.now() }; save();
     var finish = function (r) {
       if (done) return; done = true; autoBusy[c.id] = false;
       if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
-        c.recallAuto = { vin: vin, t: Date.now(), failed: true }; save();
+        c.recallAuto = { vin: vin, t: Date.now(), failed: true, r: READER }; save();
         LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA\'s lookup turned the hidden window down (its invisible reCAPTCHA): ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in 2.5 minutes');
       } else record(c, vin, r, true);
       if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }

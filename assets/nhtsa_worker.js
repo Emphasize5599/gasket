@@ -5,9 +5,9 @@ async function (reqId, args) {
   // Reports back through GasketSite.result(reqId, json): {open, campaigns, items} or {error}.
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  // "1 Unrepaired Recall Associated with this VIN", "0 unrepaired recalls associated with this VIN"; the help text quotes
-  // the second one ('you will see the message: "0 unrepaired recalls ..."'), so a quoted match is skipped
-  const RESULT = /(^|[^"“\w])(\d+)\s+unrepaired\s+recalls?\s+associated\s+with\s+this\s+vin/gi;
+  // The answer: "0 Unrepaired Recalls Found", "2 Unrepaired Recalls Found" (older wording: "… Associated with this VIN").
+  // The help text quotes it ('you will see the message: "0 unrepaired recalls ..."'), so a quoted match is skipped.
+  const RESULT = /(^|[^"“\w])(\d+)\s+unrepaired\s+recalls?\b/gi;
   const CAMPAIGN = /\b(\d{2}V\d{3}000)\b/g;
   const t0 = Date.now();
   while (Date.now() - t0 < 120000) {
