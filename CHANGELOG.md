@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.58 - 2026-10-09
+- **The buffer and detour sliders snap** to their green, yellow and usual marks, with a tick each time the knob lands on a new one.
+- **All roads keeps your rule.** Two small toggles under the slider, "No faster than 70 mph" and "As slow as the trucks", decide whether it follows your top speed and the truck limits.
+- **Speed sliders stay smooth while you drag.** The heavier checks run when you let go.
+- The background recall check logs exactly why NHTSA didn't answer.
+- Bug fixes.
+
 ## 0.0.57 - 2026-10-09
 - **Loading looks finished sooner.** Adjustments, Stops, Advisory and Tires show their tiles right away, with a loading bar inside each that says what it's waiting on.
 - **Routes come by themselves** whenever the Route step has a link or both addresses, including a trip you come back to.

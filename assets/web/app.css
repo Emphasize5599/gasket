@@ -1190,3 +1190,5 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 @keyframes ind-slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 @media (prefers-reduced-motion: reduce) { .ind-load .pbar i { animation: none; width: 100%; opacity: .5; } }
 .ind-load { margin: 6px 0 8px; }
+.spd-ov { flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
+.spd-ov button { padding: 4px 10px; font-size: 12px; }

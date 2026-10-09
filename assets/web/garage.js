@@ -944,11 +944,13 @@
   /** Your default offset on a road with this limit: the limit, or "+N over but never above M mph". v = an "All roads" value. */
   function ruleOff(limit, v) {
     var rule = S.speed.rule || {};
-    if (!rule.on) return v == null ? 0 : v;
-    var over = v == null ? +rule.over || 0 : v, cap = +rule.cap || 70;
-    if (over < 0) return over;
-    return limit >= cap ? 0 : Math.max(0, Math.min(over, cap - limit));
+    if (v == null) { if (!rule.on) return 0; v = +rule.over || 0; }
+    if (v < 0 || !capOn()) return v;
+    var cap = +rule.cap || 70;
+    return limit >= cap ? 0 : Math.max(0, Math.min(v, cap - limit));
   }
+  /** "No faster than your top speed" (the toggle under All roads); on by default when you have a rule. */
+  function capOn() { return S.speed.capOn != null ? !!S.speed.capOn : !!(S.speed.rule && S.speed.rule.on); }
   /** This car's mpg-vs-speed curve (calibrated to your log) and the speed range used for trips; null without EPA data. */
   function speedFn() {
     var c = car(); if (!hasEpa(c) || kind(c) !== 'gas') return null;
@@ -997,7 +999,10 @@
       ' Cost uses the gas in your tank on each part.' + ' Stops are planned at these speeds, so you still reach every station with at least your buffer. The All roads slider sets every road, shown or hidden.';
     h += '<div class="leg all"><div class="spd-warn hidden" id="lgWarnAll"></div><div class="leg-h"><span>All roads <b class="all-v" id="lgAllV"></b>' + ' <small>' + (rule.on ? 'rule: +' + (+rule.over || 0) + ', up to ' + (+rule.cap || 70) + ' mph · ' : '') + '<a href="#" id="lgRuleEdit">' + (rule.on ? 'change rule' : 'set a rule') + '</a></small>' + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
       '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + (st.all || 0) + '" id="lgAll" aria-label="Speed on all roads"><i class="gray" id="lgGrayAll"></i></div>' +
-      '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div></div>';
+      '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div>' +
+      // your rule's overrides, right where they apply: All roads follows them while they're on
+      '<div class="chips mini spd-ov" id="lgOv"><button type="button" data-ov="cap" class="' + (capOn() ? 'on' : '') + '">No faster than ' + (+rule.cap || 70) + ' mph</button>' +
+      '<button type="button" data-ov="truck" class="' + (S.speed.truck ? 'on' : '') + '">As slow as the trucks</button></div></div>';
     // the per-road sliders: collapsed until you open them; the chart, total and filters stay pinned only while open
     var nRoads = 0; (function () { var last = -1; roads.forEach(function (r) { if (r.ri !== last) { nRoads++; last = r.ri; } }); })();
     // the way into the per-road sliders (a submenu): the name, its (?), how many roads, and an arrow on the right
@@ -1072,25 +1077,51 @@
       update(i, false);
       var inp = $('lgR' + i);
       if (!inp) return;                       // a road you've hidden
+      var mx = null, raf = 0;
+      var apply = function () { raf = 0; update(i, true); total(); };
       inp.oninput = function () {
         var v = +inp.value;
-        if (G) { var mx = G.maxFor(i, offsArr()); if (v > mx) { v = mx; inp.value = v; } }      // can't slide into the gray
-        st.offsets[i] = v; st.touched = i; activate(i); update(i, true); total(); guards();
+        if (G) { if (mx == null) mx = G.maxFor(i, offsArr()); if (v > mx) { v = mx; inp.value = v; } }      // can't slide into the gray
+        st.offsets[i] = v; st.touched = i; activate(i);
+        if (!raf) raf = requestAnimationFrame(apply);      // at most once a frame; the gray areas when you let go
       };
-      inp.onchange = function () { LG.info('speed', r.name + ' speed offset ' + st.offsets[i], { cost: st.cost, minSaved: st.minSaved }); if (G && G.release) G.release(); if (ctx.onChange) ctx.onChange(); };
+      inp.onchange = function () {
+        if (raf) { cancelAnimationFrame(raf); apply(); }
+        mx = null; guards();
+        LG.info('speed', r.name + ' speed offset ' + st.offsets[i], { cost: st.cost, minSaved: st.minSaved }); if (G && G.release) G.release(); if (ctx.onChange) ctx.onChange();
+      };
     });
     var allLabel = function (v) { $('lgAllV').textContent = v === 0 ? 'at the limit' : (v > 0 ? '+' : '−') + Math.abs(v) + ' mph'; };
     allLabel(+st.all || 0);
+    // dragging stays smooth: the most you can go is worked out once per drag, the roads and chart follow at most once a
+    // frame, and the heavier checks (the gray areas) run when you let go
+    var mxAll = null, allRaf = 0, allPieces = roads.reduce(function (a, r) { return a.concat(r.pieces); }, []);
+    var applyAll = function () {
+      allRaf = 0; var v = st.all;
+      roads.forEach(function (r, i) { st.offsets[i] = ruleOff(r.limit, v); if ($('lgR' + i)) $('lgR' + i).value = st.offsets[i]; update(i, false); });
+      var all = cost({ pieces: allPieces }, v);
+      moveSel($('tChart'), all.avgSpeed || 65, 100 / f(all.avgSpeed || 65));
+      total();
+    };
     $('lgAll').oninput = function () {
       var v = +$('lgAll').value;
-      if (G) { var mx = G.maxAll(); if (v > mx) { v = mx; $('lgAll').value = v; } }
+      if (G) { if (mxAll == null) mxAll = G.maxAll(); if (v > mxAll) { v = mxAll; $('lgAll').value = v; } }
       st.all = v; st.touched = 'all'; allLabel(v);
-      roads.forEach(function (r, i) { st.offsets[i] = ruleOff(r.limit, v); if ($('lgR' + i)) $('lgR' + i).value = st.offsets[i]; update(i, false); });
-      var all = cost({ pieces: roads.reduce(function (a, r) { return a.concat(r.pieces); }, []) }, v);
-      moveSel($('tChart'), all.avgSpeed || 65, 100 / f(all.avgSpeed || 65));
-      total(); guards();
+      if (!allRaf) allRaf = requestAnimationFrame(applyAll);
     };
-    $('lgAll').onchange = function () { LG.info('speed', 'All roads speed offset ' + st.all, { cost: st.cost }); if (G && G.release) G.release(); if (ctx.onChange) ctx.onChange(); };
+    $('lgAll').onchange = function () {
+      if (allRaf) { cancelAnimationFrame(allRaf); applyAll(); }
+      mxAll = null; guards();
+      LG.info('speed', 'All roads speed offset ' + st.all, { cost: st.cost }); if (G && G.release) G.release(); if (ctx.onChange) ctx.onChange();
+    };
+    $('lgOv').onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.ov === 'cap') {
+        S.speed.capOn = !capOn(); b.classList.toggle('on', capOn()); save();
+        LG.info('speed', 'All roads: top speed ' + (capOn() ? 'kept' : 'off'));
+        applyAll(); guards(); if (G && G.release) G.release(); if (ctx.onChange) ctx.onChange();
+      } else if (ctx.onTruck) { S.speed.truck = !S.speed.truck; save(); LG.info('speed', 'Truck limits ' + (S.speed.truck ? 'on' : 'off')); ctx.onTruck(); }
+    };
     /** Gray out speeds the gas in the tank can't cover, and say why — above the slider that's limited or doing the limiting. */
     function offsArr() { return roads.map(function (r, i) { return st.offsets[i] || 0; }); }
     function grayAt(id, mx) {

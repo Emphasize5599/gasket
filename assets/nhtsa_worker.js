@@ -32,13 +32,20 @@ async function (reqId, args) {
       send({ open: +found[2], campaigns: campaigns, items: items });
       return;
     }
-    if (/an unknown error occurred|vin (is )?invalid|not a valid vin/i.test(txt)) {
-      send({ error: 'NHTSA couldn\'t check that VIN right now. Try again in a little while.' });
+    // NHTSA's own error under the VIN box: its lookup turned the request down (in a hidden window, usually its
+    // invisible reCAPTCHA deciding nobody's there). Nothing is retried or worked around; the app offers the page instead.
+    if (/an unknown error occurred/i.test(txt)) {
+      send({ error: 'NHTSA couldn\'t check that VIN right now. Try again in a little while.', refused: true });
+      return;
+    }
+    if (/vin (is )?invalid|not a valid vin/i.test(txt.replace(/where[’']s my vin[\s\S]*$/i, ''))) {   // not the help text below the form
+      send({ error: 'NHTSA says that VIN isn\'t valid. Check it in the Garage.' });
       return;
     }
     await sleep(700);
   }
   // a background read (args.bg) says what the page showed instead, for the log
-  const what = args && args.bg ? ' [' + document.title + ' | ' + ((document.body && document.body.innerText) || '').replace(/\s+/g, ' ').slice(0, 160) + ']' : '';
+  const all = ((document.body && document.body.innerText) || '').replace(/\s+/g, ' '), at = all.search(/vin lookup|search by ymm or vin/i);
+  const what = args && args.bg ? ' [' + document.title + ' | ' + all.slice(Math.max(0, at), Math.max(0, at) + 400) + ']' : '';
   send({ error: 'NHTSA\'s page didn\'t show an answer. You can read it there, then tap Done.' + what });
 }

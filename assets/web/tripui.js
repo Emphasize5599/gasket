@@ -1845,7 +1845,8 @@
     }) : [];
     Garage.tripSpeed(el, { model: model, roads: roads, legs: legs, stats: lim && lim.stats, loading: !lim || lim === 'loading', loadingHtml: limBar(model, 'Looking up speed limits'), state: st, guard: speedGuard(),
       onEditRule: function () { collectSafe(); step = ST_PARAMS; renderStep(); setTimeout(function () { var f = $('tRule') && $('tRule').closest('.field'); if (f) { f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.classList.add('pulse'); setTimeout(function () { f.classList.remove('pulse'); }, 1900); } }, 60); },
-      onToggle: function (open) { sheetSize(); if (open) tpBody().scrollTop = 0; roadSelSoon(); } });
+      onToggle: function (open) { sheetSize(); if (open) tpBody().scrollTop = 0; roadSelSoon(); },
+      onTruck: function () { renderTripSpeed(); replan(); } });   // the truck limits change every road's limit: redraw and plan again
     if (!el._selObs) { el._selObs = new MutationObserver(roadSelSoon); el._selObs.observe(el, { childList: true }); }
     roadSelSoon();
     // first time the speeds are known (speed limits just arrived, or your rule): plan the stops at those speeds
@@ -2088,7 +2089,15 @@
   function markHtml(m, L, attr) {
     if (m.lr < 0) return '';
     var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
-    return '<span class="bm ' + m.kind + (m.lr ? ' r' + (m.lr + 1) : '') + '" style="left:' + L + '%"' + (m.kind !== 'base' ? ' ' + attr + '="' + m.mi + '"' : '') + '><em>' + lab + '</em><i></i></span>';
+    return '<span class="bm ' + m.kind + (m.lr ? ' r' + (m.lr + 1) : '') + '" style="left:' + L + '%" data-snap="' + m.mi + '"' + (m.kind !== 'base' ? ' ' + attr + '="' + m.mi + '"' : '') + '><em>' + lab + '</em><i></i></span>';
+  }
+  /** The points a slider's knob snaps to: its drawn marks (green, yellow, usual) and where it is now. */
+  function snapPoints(box, cur) {
+    var a = Array.prototype.map.call(box.querySelectorAll('.bm[data-snap]'), function (m) { return +m.dataset.snap; });
+    if (cur != null && a.indexOf(cur) < 0) a.push(cur);
+    return a.sort(function (x, y) { return x - y; });
+  }
+  function nearest(a, v) { var b = a[0]; a.forEach(function (x) { if (Math.abs(x - v) < Math.abs(b - v)) b = x; }); return b;
   }
   function bufBox() {
     var r = result, sw = r.sweep;
@@ -2146,10 +2155,13 @@
     var r = result, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
     if (!base.ok) base = cur;
     var last = r.bufMi;
+    // the knob snaps to the marks (and where it is now); a tick each time it lands on another one
+    var snaps = snapPoints($('tsBufBox'), r.bufMi).filter(function (v) { return v === r.bufMi || bufOk(swRow(v)); });
     inp.oninput = function () {
-      var x = swRow(+inp.value);
-      if (!bufOk(x)) { inp.value = last; x = swRow(last); }        // can't slide into the gray
-      else { if (+inp.value !== last) tick(); last = +inp.value; }
+      var v = snaps.length ? nearest(snaps, +inp.value) : +inp.value, x = swRow(v);
+      if (!bufOk(x)) { v = last; x = swRow(last); }        // can't slide into the gray
+      inp.value = v;
+      if (v !== last) { tick(); last = v; }
       $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, base);
     };
     $('tsBufBox').querySelectorAll('[data-bm]').forEach(function (m) { m.onclick = function () { inp.value = m.dataset.bm; inp.oninput(); inp.onchange(); }; });
@@ -2242,9 +2254,16 @@
     if (Garage.guardRange) Garage.guardRange(inp);
     var r = result, sw = r.dsweep, base = detRow(+S.trip.maxDetourMin) || detRow(detMinOf(r)), last = +inp.value;
     if (!base.ok) base = detRow(detMinOf(r));
+    // the knob snaps to the marks (and where it is now); a tick each time it lands on another one
+    var ix = function (mi) { for (var k = 0; k < sw.length; k++) if (Math.abs(sw[k].mi - mi) < 1e-6) return k; return -1; };
+    var snaps = snapPoints($('tsDetBox') || inp.closest('.bufbox'), null).map(ix).filter(function (k) { return k >= 0 && sw[k].ok; });
+    if (snaps.indexOf(last) < 0) snaps.push(last);
+    snaps.sort(function (a2, b2) { return a2 - b2; });
     inp.oninput = function () {
-      var x = sw[+inp.value];
-      if (!x.ok) { inp.value = last; x = sw[last]; } else { if (+inp.value !== last) tick(); last = +inp.value; }
+      var k = nearest(snaps, +inp.value), x = sw[k];
+      if (!x.ok) { k = last; x = sw[last]; }
+      inp.value = k;
+      if (k !== last) { tick(); last = k; }
       $('tsDetVal').textContent = minTxt(x.mi); $('tsDetCost').textContent = detText(x, base);
     };
     inp.onchange = function () {
