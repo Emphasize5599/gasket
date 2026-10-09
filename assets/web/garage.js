@@ -627,7 +627,9 @@
       var set = async function (id, want) {
         var el = $(id); if (!el) return false;
         var o = Array.prototype.filter.call(el.options, function (x) { return x.value && (x.value === String(want) || x.text.toLowerCase() === String(want).toLowerCase()); })[0];
-        if (!o) return false; el.value = o.value; if (el.onchange) await el.onchange.call(el); return true;
+        if (!o) return false; el.value = o.value;
+        if (id !== 'eOpt' && el.onchange) await el.onchange.call(el);   // the last one only shows your pick: re-applying it would redraw and start over
+        return true;
       };
       if (await set('eYear', c.year) && await set('eMake', c.make) && await set('eModel', c.model)) await set('eOpt', c.epaId);
     } catch (e) { } finally { presetting = false; }
@@ -638,7 +640,7 @@
     var ev = /^EV$/i.test(atv) || /^electricity$/i.test(fuel), fc = /FCV/i.test(atv) || /hydrogen/i.test(fuel);
     var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;
     if (!(city > 0 && hwy > 0)) return { error: 'The EPA has no mileage numbers for that one.' };
-    var wasKind = kind(c);
+    var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
     c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : 'gas';
     c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);
     c.name = [v.year, v.make, v.model].join(' ') + (opt ? ' · ' + opt : '');
@@ -656,7 +658,8 @@
     var t = tankFor(c), msg;
     if (t) { c.tank = t.gal; c.tankSrc = t.src; }
     else if (ev && c.epa.range && c.epa.kwh.comb) { c.tank = Math.round(c.epa.range * c.epa.kwh.comb / 100); c.tankSrc = 'estimated from the EPA range × kWh per 100 mi (counts charging losses, like the trip plans do)'; }
-    else if (c.tankSrc !== 'you entered it' || kind(c) !== wasKind) { c.tank = ''; c.tankSrc = ''; }
+    // a different car (or powertrain) needs its own tank size; the same car keeps the one it has
+    else if (kind(c) !== wasKind || (c.tankSrc !== 'you entered it' && [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|') !== wasCar)) { c.tank = ''; c.tankSrc = ''; }
     // details: what's still blank (a VIN's answers win), or everything when you picked this version
     var i = c.info = c.info || {}, src = i.src = Object.assign({}, i.src), fsrc = i.featSrc = Object.assign({}, i.featSrc);
     var mine = function (k) { return force ? src[k] !== 'vin' : !i[k]; };

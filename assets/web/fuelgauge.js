@@ -1,24 +1,27 @@
 /* Gasket — how much is in the tank (trip step Parameters). Three ways to say it: a fuel gauge like the one on the dash
- * (drag the needle; it snaps to eighths), a percentage, or the miles left from the dash. Electric cars: percent or miles.
+ * (drag the needle; it snaps to sixteenths), the miles left from the dash, or a percentage. Electric cars: percent or miles.
  * Each way nudges toward a slightly low guess: a stop planned a little early is cheap, running dry is not.
  * FuelGauge.math is pure (and tested in Node); render() draws the card and reports changes. */
 (function (root) {
   var A0 = 200, SWEEP = 140, CX = 150, CY = 156, R = 118;   // the gauge's arc: E at 200°, F at 340° (SVG angles, y down)
   var FR = ['E', '⅛', '¼', '⅜', '½', '⅝', '¾', '⅞', 'F'];
+  var BULB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>';
 
   var math = {
-    /** The fuel choice, filled in: {mode: 'gauge' | 'pct' | 'miles', eighths, pct, miles}. */
+    /** The fuel choice, filled in: {mode: 'gauge' | 'pct' | 'miles', n16 (sixteenths of a tank), pct, miles}. */
     norm: function (f, kind, milesLeft) {
       f = Object.assign({}, f || {});
       if (!f.mode) f.mode = milesLeft !== '' && milesLeft != null ? 'miles' : kind === 'ev' ? 'pct' : 'gauge';
       if (f.mode === 'miles' && (f.miles == null || f.miles === '') && milesLeft !== '' && milesLeft != null) f.miles = String(milesLeft);
       if (kind === 'ev' && f.mode === 'gauge') f.mode = 'pct';
+      if (f.n16 == null && f.eighths != null && f.eighths !== '') f.n16 = +f.eighths * 2;   // 0.0.54 snapped to eighths
+      delete f.eighths;
       return f;
     },
     /** Share of a full tank, 0..1, or null when nothing is set yet (miles: from the mileage and tank size). */
     frac: function (f, tank, mpu) {
       if (!f) return null;
-      if (f.mode === 'gauge') return f.eighths == null || f.eighths === '' ? null : Math.max(0, Math.min(8, +f.eighths)) / 8;
+      if (f.mode === 'gauge') return f.n16 == null || f.n16 === '' ? null : Math.max(0, Math.min(16, +f.n16)) / 16;
       if (f.mode === 'pct') { var p = parseFloat(f.pct); return isFinite(p) && f.pct !== '' ? Math.max(0, Math.min(100, p)) / 100 : null; }
       var m = parseFloat(f.miles); return isFinite(m) && f.miles !== '' && tank > 0 && mpu > 0 ? Math.max(0, m) / (tank * mpu) : null;
     },
@@ -34,14 +37,15 @@
       if (f.mode === 'miles') { var m = math.miles(f, tank, mpu); return m == null || !(mpu > 0) ? null : m / mpu; }
       var fr = math.frac(f, tank, mpu); return fr == null || !(tank > 0) ? null : fr * tank;
     },
-    /** A pointer at SVG angle a (degrees, y down) -> eighths on the gauge, snapped and clamped to E..F. */
-    eighthsAt: function (a) {
+    /** A pointer at SVG angle a (degrees, y down) -> sixteenths on the gauge, snapped and clamped to E..F. */
+    stepAt: function (a) {
       a = ((a % 360) + 360) % 360;
       if (a < A0 && a > 90) a = A0;           // below the dial on the left: E
       else if (a <= 90) a = A0 + SWEEP;       // below on the right: F
-      return Math.max(0, Math.min(8, Math.round((a - A0) / SWEEP * 8)));
+      return Math.max(0, Math.min(16, Math.round((a - A0) / SWEEP * 16)));
     },
-    label: function (e) { return e === 0 ? 'Empty' : e === 8 ? 'Full' : FR[e] + ' tank'; }
+    /** Sixteenths -> 'Empty', '⅜ tank', '5/16 tank', 'Full'. */
+    label: function (n) { return n === 0 ? 'Empty' : n === 16 ? 'Full' : n % 2 === 0 ? FR[n / 2] + ' tank' : n + '/16 tank'; }
   };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -50,7 +54,7 @@
 
   /** The dial: a band with eighth marks, E ¼ ½ ¾ F, a red reserve zone, the needle and a low-fuel light. */
   function gaugeSvg(e) {
-    var s = '<svg class="fg-svg" viewBox="0 0 300 186" role="slider" tabindex="0" aria-label="Fuel gauge: drag the needle to where yours is" aria-valuemin="0" aria-valuemax="8"' +
+    var s = '<svg class="fg-svg" viewBox="0 0 300 186" role="slider" tabindex="0" aria-label="Fuel gauge: drag the needle to where yours is" aria-valuemin="0" aria-valuemax="16"' +
       (e == null ? ' aria-valuetext="not set"' : ' aria-valuenow="' + e + '" aria-valuetext="' + math.label(e) + '"') + '>';
     s += '<path class="fg-band" d="' + arc(A0, A0 + SWEEP, R) + '"/>';
     s += '<path class="fg-res" d="' + arc(A0, A0 + SWEEP / 8, R) + '"/>';
@@ -63,9 +67,9 @@
       s += '<text class="fg-lbl' + (l[0] % 4 ? ' sm' : '') + '" x="' + p[0].toFixed(1) + '" y="' + (p[1] + 7).toFixed(1) + '" data-e="' + l[0] + '">' + l[1] + '</text>';
     });
     // the pump: a low-fuel light when there's an eighth or less
-    s += '<g class="fg-pump' + (e != null && e <= 1 ? ' lit' : '') + '" transform="translate(137 94)"><path class="fg-pb" fill-rule="evenodd" d="M3 1h9a2 2 0 0 1 2 2v19H1V3a2 2 0 0 1 2-2zm1 3v6h7V4z"/>' +
+    s += '<g class="fg-pump' + (e != null && e <= 2 ? ' lit' : '') + '" transform="translate(137 94)"><path class="fg-pb" fill-rule="evenodd" d="M3 1h9a2 2 0 0 1 2 2v19H1V3a2 2 0 0 1 2-2zm1 3v6h7V4z"/>' +
       '<path class="fg-ph" d="M14 10h2a1.5 1.5 0 0 1 1.5 1.5v6.5a1.6 1.6 0 0 0 3.2 0V8l-3.2-3.5"/></g>';
-    var deg = (e == null ? A0 - 6 : A0 + SWEEP * e / 8) - 270;
+    var deg = (e == null ? A0 - 6 : A0 + SWEEP * e / 16) - 270;
     s += '<g class="fg-needle' + (e == null ? ' unset' : '') + '" style="transform: rotate(' + deg.toFixed(1) + 'deg)"><path d="M' + (CX - 4.5) + ' ' + CY + 'L' + (CX - 1) + ' ' + (CY - R + 8) + 'L' + (CX + 1) + ' ' + (CY - R + 8) + 'L' + (CX + 4.5) + ' ' + CY + 'Z"/></g>';
     s += '<circle class="fg-cap" cx="' + CX + '" cy="' + CY + '" r="11"/><circle class="fg-cap2" cx="' + CX + '" cy="' + CY + '" r="4"/>';
     return s + '</svg>';
@@ -75,16 +79,10 @@
   function render(host, o) {
     var f = o.fuel, ev = o.kind === 'ev';
     function fmt(v, d) { return (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d); }
-    function readout() {
-      var fr = math.frac(f, o.tank, o.mpu), mi = math.miles(f, o.tank, o.mpu), amt = math.amount(f, o.tank, o.mpu);
-      if (fr == null) return f.mode === 'gauge' ? 'Drag the needle to where yours is.' : f.mode === 'pct' ? 'How full is it?' : 'What does your dash say?';
-      var bits = [];
-      if (f.mode === 'gauge') bits.push('<b>' + math.label(+f.eighths) + '</b>');
-      if (f.mode !== 'pct') bits.push(Math.round(fr * 100) + '%'); else bits.push('<b>' + Math.round(fr * 100) + '%</b>');
-      if (amt != null) bits.push('about ' + fmt(amt, amt < 10 ? 1 : 0) + ' ' + o.unit);
-      if (mi != null && f.mode !== 'miles') bits.push('about ' + Math.round(mi) + ' mi');
-      var over = fr > 1.05 ? '<div class="fg-warn">That\'s more than a full ' + (ev ? 'charge' : 'tank') + ' at your mileage (' + Math.round(o.tank * o.mpu) + ' mi). Check your mileage and ' + (ev ? 'battery' : 'tank') + ' size in the Garage.</div>' : '';
-      return bits.join(' · ') + over;
+    function readout() {   // nothing but what you need: a nudge until it's set, and a warning if it can't be right
+      var fr = math.frac(f, o.tank, o.mpu);
+      if (fr == null) return f.mode === 'gauge' ? 'Drag the needle to where yours is.' : '';
+      return fr > 1.05 ? '<div class="fg-warn">That\'s more than a full ' + (ev ? 'charge' : 'tank') + ' at your mileage (' + Math.round(o.tank * o.mpu) + ' mi). Check your mileage and ' + (ev ? 'battery' : 'tank') + ' size in the Garage.</div>' : '';
     }
     var tip = {
       gauge: 'Between two marks? Pick the lower one. Gauges aren\'t exact, and a stop planned a little early costs almost nothing.',
@@ -92,12 +90,12 @@
       miles: 'Use a little less than your dash shows. Its estimate follows your recent driving, and highway speeds use more.'
     };
     function draw() {
-      var modes = ev ? [['pct', 'Percent'], ['miles', 'Miles left']] : [['gauge', 'Gauge'], ['pct', 'Percent'], ['miles', 'Miles left']];
+      var modes = ev ? [['miles', 'Miles left'], ['pct', 'Percent']] : [['gauge', 'Gauge'], ['miles', 'Miles left'], ['pct', 'Percent']];
       var h = '<div class="seg2 fg-modes" id="tFuelMode">' + modes.map(function (m) { return '<button type="button" data-fm="' + m[0] + '" class="' + (f.mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>'; }).join('') + '</div>';
-      if (f.mode === 'gauge') h += '<div class="fg-wrap" id="tGauge">' + gaugeSvg(f.eighths == null || f.eighths === '' ? null : +f.eighths) + '</div>';
+      if (f.mode === 'gauge') h += '<div class="fg-wrap" id="tGauge">' + gaugeSvg(f.n16 == null || f.n16 === '' ? null : +f.n16) + '</div>';
       else if (f.mode === 'pct') h += '<label class="nf fg-in"><span>' + (ev ? 'Battery' : 'Tank') + ' (%)<span class="req" aria-label="required">*</span><small>' + (ev ? 'as your car shows it' : 'if your car shows a percentage') + '</small></span><input type="number" inputmode="decimal" id="tFuelPct" min="0" max="100" step="1" value="' + esc(f.pct) + '"></label>';
       else h += '<label class="nf fg-in"><span>' + (ev ? 'Miles of range left' : 'Miles left in tank') + '<span class="req" aria-label="required">*</span><small>from your dash</small></span><input type="number" inputmode="decimal" id="tMiles" step="1" value="' + esc(f.miles) + '"></label>';
-      h += '<div class="fg-read" id="tFuelRead" aria-live="polite">' + readout() + '</div><p class="fg-tip">' + tip[f.mode] + '</p>';
+      h += '<div class="fg-read" id="tFuelRead" aria-live="polite">' + readout() + '</div><div class="tipbox fg-tip">' + BULB + '<div><b>Tip:</b> ' + tip[f.mode] + '</div></div>';
       host.innerHTML = h;
       bind();
     }
@@ -105,13 +103,13 @@
       Array.prototype.forEach.call(host.querySelectorAll('.need'), function (x) { x.classList.remove('need'); });   // answered: drop the "missing" outline
       o.onChange(f); if (redraw) draw(); else { var r = host.querySelector('#tFuelRead'); if (r) r.innerHTML = readout(); } }
     function setE(e) {
-      if (String(f.eighths) === String(e)) return;
-      f.eighths = e;
+      if (String(f.n16) === String(e)) return;
+      f.n16 = e;
       var svg = host.querySelector('.fg-svg'), nd = svg && svg.querySelector('.fg-needle');
       if (nd) {   // move the needle (CSS animates it) instead of redrawing, so it swings
-        nd.classList.remove('unset'); nd.style.transform = 'rotate(' + (A0 + SWEEP * e / 8 - 270).toFixed(1) + 'deg)';
+        nd.classList.remove('unset'); nd.style.transform = 'rotate(' + (A0 + SWEEP * e / 16 - 270).toFixed(1) + 'deg)';
         svg.setAttribute('aria-valuenow', e); svg.setAttribute('aria-valuetext', math.label(e));
-        svg.querySelector('.fg-pump').classList.toggle('lit', e <= 1);
+        svg.querySelector('.fg-pump').classList.toggle('lit', e <= 2);   // an eighth or less: the low-fuel light
       }
       changed(false);
     }
@@ -128,17 +126,17 @@
       function at(e2) {
         var m = svg.getScreenCTM(); if (!m) return null;
         var p = svg.createSVGPoint(); p.x = e2.clientX; p.y = e2.clientY; p = p.matrixTransform(m.inverse());
-        return math.eighthsAt(Math.atan2(p.y - CY, p.x - CX) * 180 / Math.PI);
+        return math.stepAt(Math.atan2(p.y - CY, p.x - CX) * 180 / Math.PI);
       }
       svg.addEventListener('pointerdown', function (e2) { dragging = true; try { svg.setPointerCapture(e2.pointerId); } catch (x) { } var v = at(e2); if (v != null) setE(v); e2.preventDefault(); });
       svg.addEventListener('pointermove', function (e2) { if (!dragging) return; var v = at(e2); if (v != null) setE(v); });
       svg.addEventListener('pointerup', function () { dragging = false; });
       svg.addEventListener('pointercancel', function () { dragging = false; });
       svg.addEventListener('keydown', function (e2) {
-        var cur = f.eighths == null || f.eighths === '' ? -1 : +f.eighths, k = e2.key, v = null;
-        if (k === 'ArrowRight' || k === 'ArrowUp') v = Math.min(8, cur + 1);
+        var cur = f.n16 == null || f.n16 === '' ? -1 : +f.n16, k = e2.key, v = null;
+        if (k === 'ArrowRight' || k === 'ArrowUp') v = Math.min(16, cur + 1);
         else if (k === 'ArrowLeft' || k === 'ArrowDown') v = Math.max(0, cur < 0 ? 0 : cur - 1);
-        else if (k === 'Home') v = 0; else if (k === 'End') v = 8;
+        else if (k === 'Home') v = 0; else if (k === 'End') v = 16;
         if (v != null) { setE(v); e2.preventDefault(); }
       });
     }

@@ -51,7 +51,10 @@ def wide(pg, label):
 def setchk(pg, sel, on):
     pg.evaluate("([s, on]) => { const e = document.querySelector(s); e.checked = on; e.dispatchEvent(new Event('change')); }", [sel, on])
 def getr(pg, t=700):
-    pg.click('#tGetRoutes'); pg.wait_for_timeout(t)
+    # routes usually come by themselves (a link or both addresses in); the button is there after changing an option
+    pg.wait_for_timeout(300)
+    if pg.locator('#tGetRoutes').count() and pg.is_visible('#tGetRoutes') and not pg.evaluate('window.__trip.state().busy'): pg.click('#tGetRoutes')
+    pg.wait_for_timeout(t)
     pg.wait_for_function("!window.__trip.state().busy", timeout=15000); pg.wait_for_timeout(200)
 def step(pg): return pg.evaluate('window.__trip.state().step')
 def goto(pg, k): pg.evaluate('(k) => window.__trip.step(k)', k); pg.wait_for_timeout(250)
@@ -166,8 +169,9 @@ with sync_playwright() as p:
         assert pg.locator('#tAvoid [data-av="tolls"].on').count() == 1, 'avoid tolls from the link'
         assert 'North Little Rock, AR 72114' in ft(pg, '#tParsed'), 'full address shown'
         pg.screenshot(path=f'{OUT}/{name}-t1-setup.png'); wide(pg, 'route')
-        getr(pg)
-        assert step(pg) == 3 and pg.locator('#tNext.dim').count() == 0 and pg.locator('.rt-ready #tRefreshRoutes').count() == 1, 'routes in: Next available'
+        # the routes come by themselves once the link is in: no Get routes tap
+        pg.wait_for_function("!!window.__trip.state().model && !window.__trip.state().busy", timeout=15000); pg.wait_for_timeout(200)
+        assert step(pg) == 3 and pg.locator('#tNext.dim').count() == 0 and pg.locator('.rt-ready #tRefreshRoutes').count() == 1, 'routes in by themselves: Next available'
         body = pg.evaluate('window.__routeBody')
         assert body['routeModifiers']['avoidTolls'] is True and body['origin']['location']['latLng']['latitude'] == 34.7695, body
         print('  route:', ft(pg, '#tRouteInfo').replace('\n', ' | '))
@@ -175,6 +179,16 @@ with sync_playwright() as p:
         assert 'matches your link' in ft(pg, '.alts-pick button.on'), 'route option from the link pre-selected'
         pg.evaluate("document.querySelector('.alts-pick').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t1b-routes.png'); wide(pg, 'route options')
+        # changing an option (avoid ferries) brings the button back; nothing is looked up until it's tapped
+        n0 = len(pg.evaluate('window.__routeBodies'))
+        pg.click('#tAvoid [data-av="ferries"]'); pg.wait_for_timeout(800)
+        assert pg.locator('#tGetRoutes').count() == 1 and len(pg.evaluate('window.__routeBodies')) == n0 and not pg.evaluate('!!window.__trip.state().model'), 'options changed: Get routes by hand'
+        pg.click('#tAvoid [data-av="ferries"]'); pg.wait_for_timeout(300); getr(pg)
+        print('  after Get routes:', pg.evaluate('!!window.__trip.state().model'), len(pg.evaluate('window.__routeBodies')), n0, pg.locator('#tGetRoutes').count(), ft(pg, '#tRouteGo'))
+        assert pg.evaluate('!!window.__trip.state().model'), 'routes again'
+        # leaving time: never in the past
+        pg.evaluate("() => { const e = document.getElementById('tDepart'); e.value = '2020-01-01T08:00'; e.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(200)
+        assert pg.input_value('#tDepart') == '' and "can't be in the past" in pg.inner_text('#toast') and pg.get_attribute('#tDepart', 'min'), 'a past time is set to now'
         pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(150)
         assert mi(pg) == 318 and pg.locator('.rc-top').count() == 0
         pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(150)
@@ -188,32 +202,34 @@ with sync_playwright() as p:
         # ---- Parameters ----
         pg.evaluate("window.__app.S.trip.fuel = null; window.__app.S.trip.milesLeft = ''")
         nxt(pg); assert step(pg) == 4 and pg.locator('#trip.full').count() == 1, 'Parameters: full screen'
-        assert [b.strip() for b in pg.locator('#tFuelMode button').all_inner_texts()] == ['Gauge', 'Percent', 'Miles left'] and pg.locator('#tFuelMode [data-fm="gauge"].on').count() == 1, 'a gas car starts on the gauge'
+        assert [b.strip() for b in pg.locator('#tFuelMode button').all_inner_texts()] == ['Gauge', 'Miles left', 'Percent'] and pg.locator('#tFuelMode [data-fm="gauge"].on').count() == 1, 'a gas car starts on the gauge'
         assert 'Drag the needle' in ft(pg, '#tFuelRead') and pg.locator('.fg-needle.unset').count() == 1
         pg.click('#tNext'); pg.wait_for_timeout(250)
         assert step(pg) == 4 and pg.locator('#tGauge.need').count() == 1, 'the gauge is outlined until it is set'
         pg.screenshot(path=f'{OUT}/{name}-w3b-need-fuel.png')
-        # the gauge: tap a mark, drag, arrow keys; it snaps to eighths and tells you what that is
+        # the gauge: tap a mark, drag, arrow keys; it snaps to sixteenths
         def tap_label(e):
             bb = pg.locator('.fg-lbl[data-e="%d"]' % e).bounding_box(); pg.mouse.click(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); pg.wait_for_timeout(150)
         fuel = lambda: pg.evaluate('window.__app.S.trip.fuel')
-        tap_label(8); assert fuel()['eighths'] == 8 and pg.get_attribute('.fg-svg', 'aria-valuetext') == 'Full', fuel()
+        tap_label(8); assert fuel()['n16'] == 16 and pg.get_attribute('.fg-svg', 'aria-valuetext') == 'Full', fuel()
         tank = pg.evaluate('window.Garage.tank()'); comb = pg.evaluate('window.Garage.carModel().comb')
         assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb)), 'miles follow the gauge'
         pg.focus('.fg-svg')
         for _ in range(5): pg.keyboard.press('ArrowLeft')
         pg.wait_for_timeout(700)
-        rd = ft(pg, '#tFuelRead'); print('  gauge 3/8:', rd)
-        assert fuel()['eighths'] == 3 and '⅜ tank' in rd and '38%' in rd and 'gal' in rd and ' mi' in rd and pg.locator('.fg-pump.lit').count() == 0
+        assert fuel()['n16'] == 11 and pg.get_attribute('.fg-svg', 'aria-valuetext') == '11/16 tank' and pg.locator('.fg-pump.lit').count() == 0
+        assert ft(pg, '#tFuelRead').strip() == '' and 'gal' not in ft(pg, '#tFuel'), 'no extra numbers under the gauge'
+        assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb * 11 / 16))
         e8 = pg.locator('.fg-lbl[data-e="8"]').bounding_box(); e0 = pg.locator('.fg-lbl[data-e="0"]').bounding_box()
-        pg.mouse.move(e8['x'] + 5, e8['y'] + 5); pg.mouse.down(); pg.mouse.move(e0['x'] + 5, e0['y'] + 5, steps=8); pg.mouse.up(); pg.wait_for_timeout(700)
-        assert fuel()['eighths'] == 0 and pg.locator('.fg-pump.lit').count() == 1, 'dragged to E: the low-fuel light comes on'
-        pg.keyboard.press('ArrowRight'); pg.keyboard.press('ArrowRight'); pg.wait_for_timeout(700)
-        assert fuel()['eighths'] == 2 and pg.locator('.fg-pump.lit').count() == 0 and 'lower one' in ft(pg, '.fg-tip'), 'and the tip says to round down'
+        pg.mouse.move(e8['x'] + e8['width'] / 2, e8['y'] + e8['height'] / 2); pg.mouse.down(); pg.mouse.move(e0['x'], e0['y'] + e0['height'], steps=8); pg.mouse.up(); pg.wait_for_timeout(700)
+        assert fuel()['n16'] == 0 and pg.locator('.fg-pump.lit').count() == 1, 'dragged to E: the low-fuel light comes on'
+        for _ in range(4): pg.keyboard.press('ArrowRight')
+        pg.wait_for_timeout(700)
+        assert fuel()['n16'] == 4 and pg.locator('.fg-pump.lit').count() == 0 and 'lower one' in ft(pg, '.fg-tip') and pg.locator('#tFuel .tipbox svg').count() == 1, 'and a Tip says to round down'
         pg.screenshot(path=f'{OUT}/{name}-p0-gauge.png'); wide(pg, 'gauge')
         # a percentage
         pg.click('#tFuelMode [data-fm="pct"]'); pg.wait_for_timeout(150); pg.fill('#tFuelPct', '50'); pg.wait_for_timeout(150)
-        assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb / 2)) and 'about' in ft(pg, '#tFuelRead')
+        assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb / 2)) and 'Round down' in ft(pg, '.fg-tip')
         # the miles on the dash
         pg.click('#tFuelMode [data-fm="miles"]'); pg.wait_for_timeout(150)
         assert 'less than your dash' in ft(pg, '.fg-tip')
@@ -543,6 +559,7 @@ with sync_playwright() as p:
         assert pg.locator('#tsBufBox .buf-marks .bm.good').count() >= 1 and pg.locator('#tsBufBox .buf-marks .bm.base').count() == 1 and 'Cheapest' not in bt, bt
         labels = pg.evaluate("[...document.querySelectorAll('#tsBufBox .buf-marks .bm')].map(b => b.className.replace('bm ', '') + ':' + b.textContent)"); print('  markers:', labels)
         assert any(l.startswith('good') and '−$' in l for l in labels) and any(l.startswith('base') for l in labels)
+        assert all(l.split(':', 1)[1].strip() for l in labels), 'every line on the slider says what it saves or costs: ' + str(labels)
         pg.screenshot(path=f'{OUT}/{name}-t2d-buffer-marks.png')
         mk = pg.evaluate("Math.max(...window.__trip.state().result.sweep.filter(x => x.mark && x.mi < 30).map(x => x.mi))")
         before = pg.evaluate('window.__trip.state().result.plan.totals.net')

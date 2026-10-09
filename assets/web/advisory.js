@@ -160,20 +160,21 @@
     var n = list ? list.length : 0;
     var park = list && list.some(function (x) { return x.park || x.out; });
     if (chk) {
-      var stale = days(chk.t) > RECHECK_DAYS, when = A.ago(new Date(chk.t));
+      var when = A.ago(new Date(chk.t));
       if (chk.open > 0) {
         h += '<div class="adv-state bad"><b>' + chk.open + ' open recall' + (chk.open === 1 ? '' : 's') + ' on your car</b><small>Any ' + esc(c.make) + ' dealer fixes ' + (chk.open === 1 ? 'it' : 'them') + ' for free. Call one to book it, ideally before a long drive. Checked ' + esc(when) + '.</small></div>';
         var open = (list || []).filter(function (x) { return (chk.campaigns || []).indexOf(x.id) >= 0; });
         if (open.length) h += open.map(recallItem).join('');
         else if ((chk.items || []).length) h += chk.items.map(function (t) { return '<div class="rc"><p>' + esc(t) + '</p></div>'; }).join('');
-      } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '.' + (stale ? ' New recalls come out all the time, so it\'s worth checking again.' : '') + '</small></div>';
-      h += '<div class="btns wrap"><button class="btn tonal sm" id="advCheck">' + (stale ? 'Check again' : 'Check again at NHTSA') + '</button></div>';
-    } else if (c.vin && autoBusy[c.id]) {
+      } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '. Gasket checks again every week.</small></div>';
+      // no button: the VIN is checked again by itself in the background (weekly), so this is always fresh
+    } else if (c.vin && (autoBusy[c.id] || !(c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed) && N.siteRead)) {
       h += '<div class="adv-state"><b><span class="ldspin sm" aria-hidden="true"></span> Checking your VIN with NHTSA…</b><small>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) + '. Finding out which are still open on yours.' : 'Finding out whether any recalls are open on your car.') + '</small></div>';
     } else if (c.vin) {
+      // only when the background check couldn't get an answer (or can't run here): NHTSA's page, shown to you
       var failed = c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed;
       h += '<div class="adv-state"><b>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'See if your car has open recalls') + '</b>' +
-        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? 'NHTSA didn\'t answer the automatic check. Open its page to see which recalls are still open on your car.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
+        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? 'NHTSA didn\'t answer the automatic check. Gasket tries again in a few hours, or open its page now.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
         '<div class="btns wrap"><button class="btn primary sm" id="advCheck">Check my car at NHTSA</button></div>';
     } else {
       h += '<div class="adv-state"><b>' + (R && R.error && !list ? 'Couldn\'t reach NHTSA right now' : n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'No recalls on record for the ' + esc(nm)) + '</b>' +

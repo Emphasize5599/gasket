@@ -66,7 +66,12 @@ with sync_playwright() as p:
         assert 'Nothing to change' in ft(pg, '#tAdvisory') and pg.locator('[data-adv]').count() == 0, 'no start-stop advice for a hybrid'
         # ---- with a VIN: check at NHTSA (the page is shown; the app reads the answer) ----
         pg.evaluate("(v) => { window.Garage.car().vin = v; window.dispatchEvent(new Event('garagechange')); }", VIN); pg.wait_for_timeout(200)
-        assert pg.locator('#advCheck').count() == 1 and 'Check my car at NHTSA' in ft(pg, '#advCheck') and dot(pg), 'VIN: check it (dot on the step)'
+        assert pg.locator('#advCheck').count() == 1 and 'Check my car at NHTSA' in ft(pg, '#advCheck') and dot(pg), 'the background check got no answer here: the page, shown to you (dot on the step)'
+        # closed before NHTSA answered: nothing recorded; an error is shown, nothing recorded
+        pg.evaluate("() => { window.__mocks.siteShow = () => ({ closed: true }); }"); pg.click('#advCheck'); pg.wait_for_timeout(300)
+        assert not pg.evaluate('window.Garage.car().recallCheck')
+        pg.evaluate("() => { window.__mocks.siteShow = () => ({ error: 'NHTSA couldn\\'t check that VIN right now.' }); }"); pg.click('#advCheck'); pg.wait_for_timeout(300)
+        assert "couldn't check" in pg.inner_text('#toast') and not pg.evaluate('window.Garage.car().recallCheck')
         pg.evaluate('''() => { window.__mocks.siteShow = (key, args) => ({ open: 1, campaigns: ['22V200000'], items: ['22V200000 POWER TRAIN The car may lose drive power.'] }); }''')
         pg.click('#advCheck'); pg.wait_for_timeout(400)
         shown = pg.evaluate('window.__siteShown'); print('  opened:', shown)
@@ -74,25 +79,18 @@ with sync_playwright() as p:
         rc = ft(pg, '#advRecall'); print('  1 open:', rc.replace('\n', ' | ')[:220])
         assert '1 open recall on your car' in rc and 'for free' in rc and 'The car may lose drive power.' in rc and 'A sensor may fail.' not in rc
         assert pg.locator('#advRecall.warn').count() == 1 and dot(pg)
+        assert pg.locator('#advCheck').count() == 0, 'checked: no button, it checks again by itself'
         assert 'open safety recall' in pg.evaluate('window.Advisory.departureNote()'), 'Departure mentions it'
         pg.screenshot(path=f'{OUT}/{name}-a1-open.png')
-        # fixed: checked again, none open
-        pg.evaluate("() => { window.__mocks.siteShow = () => ({ open: 0, campaigns: [], items: [] }); }")
-        pg.click('#advCheck'); pg.wait_for_timeout(400)
-        rc = ft(pg, '#advRecall'); assert 'No open recalls on your car' in rc and pg.locator('#advRecall.ok').count() == 1 and not dot(pg), rc
+        # fixed: a week later the background check runs again and finds none open
+        pg.evaluate("() => { window.__mocks.siteRead = () => ({ open: 0, campaigns: [], items: [] }); const c = window.Garage.car(); c.recallCheck.t = Date.now() - 8 * 864e5; c.recallAuto = null; window.dispatchEvent(new Event('garagechange')); }")
+        pg.wait_for_function("window.Garage.car().recallCheck.open === 0", timeout=5000); pg.wait_for_timeout(200)
+        rc = ft(pg, '#advRecall'); assert 'No open recalls on your car' in rc and 'every week' in rc and pg.locator('#advRecall.ok').count() == 1 and not dot(pg) and pg.locator('#advCheck').count() == 0, rc
         assert pg.evaluate('window.Advisory.departureNote()') == ''
-        # months later: worth checking again (dot)
-        pg.evaluate("() => { window.Garage.car().recallCheck.t = Date.now() - 100 * 864e5; window.dispatchEvent(new Event('garagechange')); }"); pg.wait_for_timeout(200)
-        assert "worth checking again" in ft(pg, '#advRecall') and dot(pg)
-        # closed before NHTSA answered: nothing recorded; an error is shown, nothing recorded
-        t0 = pg.evaluate('window.Garage.car().recallCheck.t')
-        pg.evaluate("() => { window.__mocks.siteShow = () => ({ closed: true }); }"); pg.click('#advCheck'); pg.wait_for_timeout(300)
-        assert pg.evaluate('window.Garage.car().recallCheck.t') == t0
-        pg.evaluate("() => { window.__mocks.siteShow = () => ({ error: 'NHTSA couldn\\'t check that VIN right now.' }); }"); pg.click('#advCheck'); pg.wait_for_timeout(300)
-        assert "couldn't check" in pg.inner_text('#toast') and pg.evaluate('window.Garage.car().recallCheck.t') == t0
-        # a new VIN: the old check doesn't count
-        pg.evaluate("() => { window.Garage.car().vin = 'JTDEBRBE0LJ000002'; window.dispatchEvent(new Event('garagechange')); }"); pg.wait_for_timeout(200)
-        assert 'Check my car at NHTSA' in ft(pg, '#advCheck')
+        # a new VIN: the old check doesn't count; the new one is checked in the background, no button
+        pg.evaluate("() => { window.Garage.car().vin = 'JTDEBRBE0LJ000002'; window.dispatchEvent(new Event('garagechange')); }")
+        pg.wait_for_function("window.Garage.car().recallCheck.vin === 'JTDEBRBE0LJ000002'", timeout=5000); pg.wait_for_timeout(200)
+        assert pg.locator('#advCheck').count() == 0 and 'No open recalls on your car' in ft(pg, '#advRecall')
         # ---- the VIN is checked by itself in the background (siteRead), at most weekly ----
         pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = (key, args) => ({ open: 1, campaigns: ['22V200000'], items: [] }); }''')
         pg.evaluate("() => { window.Garage.car().vin = 'JTDEBRBE0LJ000003'; window.dispatchEvent(new Event('garagechange')); }")

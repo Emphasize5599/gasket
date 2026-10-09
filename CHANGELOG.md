@@ -4,6 +4,16 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.55 - 2026-10-09
+- **Fixed:** opening Year / make / model on a car with a VIN kept filling itself in, clearing and filling in again, and wiped the tank size. It now shows your car once, and a car keeps its tank size unless you switch it to a different car.
+- **Recalls check themselves.** With a VIN in the Garage, the check at NHTSA runs in the background soon after the app opens and again every week, so Advisory is ready when you get there. The "Check my car at NHTSA" button only shows up when the background check couldn't get an answer.
+- **Routes come by themselves** once a link is pasted or shared, or both addresses are filled in. Get routes comes back only after you change avoid tolls / highways / ferries or round trip.
+- **The leaving time can't be in the past.** A past time is set back to now.
+- **The fuel gauge snaps to sixteenths** and its tabs are Gauge, Miles left, Percent. Each one's rounding advice is a Tip like the one in Adjustments, and the extra gallons and miles line under it is gone.
+- **"Your tank's gas" sits next to Buffer**, with the other things about your tank.
+- Every mark on the buffer and detour sliders shows what it saves or costs. A third row of labels makes room, and a mark with no room for its label isn't drawn.
+- Adjustments' tip: cheaper stations farther off the route count, but only if they save more money than the extra miles cost.
+
 ## 0.0.54 - 2026-10-09
 - **A fuel gauge in Parameters.** Say how much gas you have the way your dash shows it: drag the needle (it snaps to eighths, with a low-fuel light near E), or switch to a percentage or the miles left on your dash. It shows what that comes to in gallons and miles. Each way nudges toward a slightly low guess, since a stop planned a little early costs almost nothing. Electric cars get percent or miles.
 - **Adding a car is one menu.** The VIN box comes first, outlined in green and marked Recommended, since it gets your exact version, open recalls and factory tire size. Year / make / model sits under it, and a VIN lookup fills it in.

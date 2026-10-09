@@ -258,6 +258,19 @@
     var n = $('tNext'); if (n) n.classList.toggle('dim', step === ST_ROUTE && !model);
     document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > ST_ROUTE && !model); });
   }
+  /**
+   * Routes are fetched by themselves once a link (pasted or shared) or both addresses are in, and every stop is settled.
+   * Changing avoid tolls / highways / ferries or round trip brings the Get routes button back. A trip opened from before
+   * (or after a restore) never looks anything up by itself.
+   */
+  var autoRoute = false;
+  function autoRoutes() {
+    if (!autoRoute || model || busy || step !== ST_ROUTE || !S.apiKey) return;
+    collectSafe();
+    if (srcOf() === 'link' ? !(route && S.trip.link) || parsing : !(S.trip.from && S.trip.to)) return;
+    if (document.querySelector('#tParsed .pick button')) return;
+    getRoutes();
+  }
   async function getRoutes() {
     if (busy) return;
     collectSafe();
@@ -321,7 +334,8 @@
     if (k === ST_PARAMS) {
       var kd = KIND();
       return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div>' +
-        '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') + '<span></span></div></div>' +
+        '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
+        num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, kd === 'ev' ? 'e.g. home charging · blank = your fast-charging price' : 'blank = typical price on the route') + '</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
@@ -332,8 +346,6 @@
       '<div class="seg2" id="tArrive"><button data-a="buffer" class="' + (t.arrive !== 'full' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
 
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up within (mi)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
-      '<div class="grid2">' + num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, kd === 'ev' ? 'e.g. home charging · blank = your fast-charging price' : 'blank = typical price on the route') +
-      '<span></span></div>' +
       '</div><div class="card"><h3>Cruising speed</h3>' +
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
       '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', (S.speed.rule && S.speed.rule.over) || 9, 1) + num('tRuleCap', '…but no faster than (mph)', (S.speed.rule && S.speed.rule.cap) || 70, 1) + '</div>' +
@@ -372,9 +384,18 @@
   }
   function bindRoute() {
     var t = S.trip;
-    $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; result = null; renderInfo(); readLink(); }, 400));
-    ['tFrom', 'tTo'].forEach(function (id) { $(id).addEventListener('input', function () { route = null; model = null; replay = null; result = null; renderInfo(); renderStops(); }); });
-    $('tDepart').addEventListener('change', function () { collectSafe(); result = null; });
+    $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); readLink().then(autoRoutes); }, 400));
+    ['tFrom', 'tTo'].forEach(function (id) {
+      $(id).addEventListener('input', function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); renderStops(); });
+      $(id).addEventListener('change', function () { autoRoutes(); });   // done typing (left the box): fetch once both are in
+    });
+    var dEl = $('tDepart'), minNow = function () { var d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4); dEl.min = d.toISOString().slice(0, 16); };
+    minNow(); dEl.addEventListener('focus', minNow);
+    dEl.addEventListener('change', function () {
+      // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
+      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) { dEl.value = ''; toastMsg('The leaving time can\'t be in the past, so it\'s set to now.'); }
+      collectSafe(); result = null;
+    });
     $('tNow').onclick = function () { $('tDepart').value = ''; collectSafe(); result = null; };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
     $('tSrc').onclick = function (e) {
@@ -383,19 +404,19 @@
       S.trip.src = b.dataset.src; A.save();
       $('tSrcLink').classList.toggle('hidden', S.trip.src !== 'link'); $('tSrcTyped').classList.toggle('hidden', S.trip.src !== 'typed');
       route = null; model = null; replay = null; result = null; parsing = null; parsedEl().innerHTML = ''; renderInfo(); layer.clearLayers();
-      if (S.trip.src === 'link' && $('tLink').value.trim()) readLink();
+      if (S.trip.src === 'link' && $('tLink').value.trim()) readLink().then(autoRoutes);
     };
     $('tRound').onchange = function () {
       collectSafe();
-      if (route && syncReturn(route)) { model = null; replay = null; result = null; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
+      if (route && syncReturn(route)) { model = null; replay = null; result = null; autoRoute = false; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
       renderStops(); renderInfo();
     };
     $('tAvoid').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
-      b.classList.toggle('on'); collectSafe(); model = null; replay = null; result = null; renderInfo();
+      b.classList.toggle('on'); collectSafe(); model = null; replay = null; result = null; autoRoute = false; renderInfo();   // changed options: Get routes again by hand
     };
     renderStops(); renderInfo();
-    if (srcOf() === 'link' && t.link && !route) readLink();
+    if (srcOf() === 'link' && t.link && !route) readLink().then(autoRoutes); else autoRoutes();
   }
   function bindSettings() {
     var again = function () { collectSafe(); result = null; };
@@ -733,7 +754,7 @@
     el.querySelectorAll('[data-choice]').forEach(function (b) {
       b.onclick = function () {
         var st = r.stops[+b.dataset.stop], c = st.choices[+b.dataset.choice];
-        setPlace(st, c); st.choices = null; model = null; renderStops(); renderInfo();
+        setPlace(st, c); st.choices = null; model = null; renderStops(); renderInfo(); autoRoutes();
       };
     });
   }
@@ -2027,6 +2048,22 @@
   }
   /** Room between marker labels on a slider, in % of its width (a label is ~56 px wide). */
   function markGap() { return Math.max(17, 5800 / Math.max(180, innerWidth - 100)); }
+  /**
+   * Give each marker a label row (up to three; the usual one and the biggest saving go first). A marker that finds no
+   * room in any row isn't drawn at all, so every line on the slider says what it saves or costs. -> rows used.
+   */
+  function placeMarks(all, big, pos) {
+    var GAP = markGap(), rows = [[], [], []];
+    var free = function (row, L) { return rows[row].every(function (q) { return Math.abs(q - L) >= GAP; }); };
+    all.filter(function (m) { return m.kind === 'base' || m === big; }).concat(all.filter(function (m) { return !(m.kind === 'base' || m === big); }))
+      .forEach(function (m) { var L = +pos(m.mi); m.lr = free(0, L) ? 0 : free(1, L) ? 1 : free(2, L) ? 2 : -1; if (m.lr >= 0) rows[m.lr].push(L); });
+    return rows[2].length ? 3 : 2;
+  }
+  function markHtml(m, L, attr) {
+    if (m.lr < 0) return '';
+    var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
+    return '<span class="bm ' + m.kind + (m.lr ? ' r' + (m.lr + 1) : '') + '" style="left:' + L + '%"' + (m.kind !== 'base' ? ' ' + attr + '="' + m.mi + '"' : '') + '><em>' + lab + '</em><i></i></span>';
+  }
   function bufBox() {
     var r = result, sw = r.sweep;
     var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
@@ -2045,20 +2082,12 @@
     }
     if (warns.length) h += '<div class="spd-warn">' + warns.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div>';
     h += '<div class="buf-read"><b id="tsBufVal">' + r.bufMi + ' mi</b> <span id="tsBufCost">' + bufText(cur, base) + '</span></div>';
-    var mk = bufMarks(sw, base), GAP = markGap(), rows = [[], []];
-    h += '<div class="buf-track"><div class="buf-marks">';
-    // labels in two rows; where neither row has room the tick stays without a label.
-    // The usual buffer and the biggest saving are placed first, so they always get one.
+    var mk = bufMarks(sw, base);
     var all = mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; });
     var big = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d; })[0];
-    var free = function (row, L) { return rows[row].every(function (q) { return Math.abs(q - L) >= GAP; }); };
-    var order = all.filter(function (m) { return m.kind === 'base' || m === big; }).concat(all.filter(function (m) { return !(m.kind === 'base' || m === big); }));
-    order.forEach(function (m) { var L = +pos(m.mi); m.lr = free(0, L) ? 0 : free(1, L) ? 1 : -1; if (m.lr >= 0) rows[m.lr].push(L); });
-    all.forEach(function (m) {
-      var L = +pos(m.mi);
-      var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
-      h += '<span class="bm ' + m.kind + (m.lr === 1 ? ' r2' : '') + '" style="left:' + L + '%"' + (m.kind !== 'base' ? ' data-bm="' + m.mi + '"' : '') + '>' + (m.lr >= 0 ? '<em>' + lab + '</em>' : '') + '<i></i></span>';
-    });
+    var nRows = placeMarks(all, big, pos);
+    h += '<div class="buf-track' + (nRows > 2 ? ' rows3' : '') + '"><div class="buf-marks">';
+    all.forEach(function (m) { h += markHtml(m, +pos(m.mi), 'data-bm'); });
     // gray: buffers you can't use (no plan keeps that much, or your speeds would run the tank dry)
     var cx = speedCx(), band = null, bands = [], memo = {};
     for (var v = min; v <= max; v++) {
@@ -2165,17 +2194,12 @@
     var n = sw.length, idx = function (v) { var k = 0; sw.forEach(function (x, i) { if (Math.abs(x.mi - v) < Math.abs(sw[k].mi - v)) k = i; }); return k; };
     var pos = function (v) { return (idx(v) / Math.max(1, n - 1) * 100).toFixed(2); };
     h += '<div class="buf-read"><b id="tsDetVal">' + minTxt(cur.mi) + '</b> <span id="tsDetCost">' + detText(cur, base) + '</span></div>';
-    var mk = bufMarks(sw, base), GAP = markGap(), rowsL = [[], []];
+    var mk = bufMarks(sw, base);
     var all = mk.concat([{ mi: base.mi, kind: 'base' }]).sort(function (a2, b2) { return a2.mi - b2.mi; });
     var big = mk.filter(function (m) { return m.kind === 'good'; }).sort(function (a2, b2) { return a2.d - b2.d; })[0];
-    var freeL = function (row, L) { return rowsL[row].every(function (q) { return Math.abs(q - L) >= GAP; }); };
-    all.filter(function (m) { return m.kind === 'base' || m === big; }).concat(all.filter(function (m) { return !(m.kind === 'base' || m === big); }))
-      .forEach(function (m) { var L = +pos(m.mi); m.lr = freeL(0, L) ? 0 : freeL(1, L) ? 1 : -1; if (m.lr >= 0) rowsL[m.lr].push(L); });
-    h += '<div class="buf-track"><div class="buf-marks">';
-    all.forEach(function (m) {
-      var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
-      h += '<span class="bm ' + m.kind + (m.lr === 1 ? ' r2' : '') + '" style="left:' + pos(m.mi) + '%"' + (m.kind !== 'base' ? ' data-dm="' + m.mi + '"' : '') + '>' + (m.lr >= 0 ? '<em>' + lab + '</em>' : '') + '<i></i></span>';
-    });
+    var nRows = placeMarks(all, big, pos);
+    h += '<div class="buf-track' + (nRows > 2 ? ' rows3' : '') + '"><div class="buf-marks">';
+    all.forEach(function (m) { h += markHtml(m, pos(m.mi), 'data-dm'); });
     // gray: limits with no workable plan
     var bands = [], band = null;
     sw.forEach(function (x, i) { if (!x.ok && !band) { band = { a: i, b: i }; bands.push(band); } else if (!x.ok) band.b = i; else band = null; });
@@ -2354,7 +2378,7 @@
   var BULB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>';
   function tipBox() {
     return '<div class="tipbox">' + BULB + '<div><b>Tip:</b> A <b>shorter buffer</b> gives you more range, so you can reach cheap stations right off the highway. ' +
-      'A <b>longer max detour</b> lets cheaper stations farther off the route count — when they save more than the extra miles cost.</div></div>';
+      'A <b>longer max detour</b> lets cheaper stations farther off the route count, but only if they save more money than the extra miles cost.</div></div>';
   }
   function renderResults() {
     var el = $('tsResults'), ea = $('taResults'); if (!el && !ea) return;
@@ -2649,12 +2673,14 @@
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
     S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
+    autoRoute = !!link;   // a link shared from Google Maps: its routes come by themselves
     A.save();
     openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
   }
   async function openSaved(id) {
     if (busy) return;
     resetAdjust();
+    autoRoute = false;
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
@@ -3050,6 +3076,8 @@
   };
   if (window.__pendingShare) { var t0 = window.__pendingShare; window.__pendingShare = null; window.onSharedText(t0); }
 
+  // the car's recalls and VIN check run in the background soon after the app starts (NHTSA, never Google), so Advisory is ready
+  setTimeout(function () { if (window.Advisory) Advisory.init(call); }, 4000);
   window.__trip = { call: call, open: openTrip, relogo: function () {
       drawn = {};
       if (result && onPlan(step)) keepScroll(renderResults);

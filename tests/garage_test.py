@@ -106,6 +106,13 @@ with sync_playwright() as p:
         assert any('DecodeVinValuesExtended/1HGCV1F3XMA000001' in u for u in pg.evaluate('window.__urls'))
         pg.wait_for_function("document.getElementById('eYear') && document.getElementById('eYear').value === '2021' && document.getElementById('eOpt').value !== ''", timeout=5000)
         assert pg.locator('.vin-row.rec').count() == 0 and 'Year / make / model' in ft(pg, '#tEpa summary') and pg.input_value('#eYear') == '2021', 'a car with a VIN: no more nudging, and year / make / model filled in from it'
+        # opening year / make / model on a car with a VIN shows it once, keeps the tank size, and doesn't loop
+        pg.fill('#gTank', '14.8'); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(300)
+        if pg.locator('#tEpa[open]').count(): pg.click('#tEpa summary'); pg.wait_for_timeout(200)
+        n0 = len(pg.evaluate('window.__urls')); pg.click('#tEpa summary'); pg.wait_for_timeout(1500)
+        n1 = len(pg.evaluate('window.__urls')); pg.wait_for_timeout(1500); n2 = len(pg.evaluate('window.__urls'))
+        print('  reopened year / make / model:', n0, n1, n2, pg.input_value('#eModel'), pg.evaluate('window.Garage.car().tank'))
+        assert n2 == n1 and pg.evaluate('window.Garage.car().tank') == 14.8 and pg.input_value('#eYear') == '2021' and pg.input_value('#eOpt') != '', 'no loop, tank kept, the car shown'
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
         pg.click('#gInfo summary'); pg.wait_for_timeout(200)
@@ -192,7 +199,7 @@ with sync_playwright() as p:
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
         assert step(pg) == 1; nxt(pg, 300); assert step(pg) == 2; nxt(pg, 300)   # Garage -> Advisory -> Route
         pg.fill('#tLink', LINK); pg.wait_for_timeout(700)
-        pg.click('#tGetRoutes'); idle(pg, 700)
+        pg.wait_for_function('!!window.__trip.state().model', timeout=15000); idle(pg, 700)   # routes come by themselves
         nxt(pg, 300)
         assert step(pg) == 4 and 'how charged is it?' in ft(pg, '#tpS4').lower() and 'Charge to 80% each stop' in ft(pg, '#tpS4')
         assert pg.locator('#tFuelMode [data-fm]').count() == 2 and pg.locator('#tFuelMode [data-fm="pct"].on').count() == 1, 'EV: percent or miles, no gauge'

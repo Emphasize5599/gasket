@@ -319,6 +319,13 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .buf-marks .bm { position: absolute; top: 0; width: 0; height: 68px; pointer-events: auto; }
 .buf-marks .bm em { position: absolute; left: 0; top: 0; transform: translateX(-50%); font-style: normal; font-size: .72rem; font-weight: 800; white-space: nowrap; padding: 1px 4px; border-radius: 6px; }
 .buf-marks .bm.r2 em { top: 16px; }
+.buf-marks .bm.r3 em { top: 32px; }
+/* a third row of labels: everything below it moves down 16px */
+.buf-track.rows3 { padding-top: 56px; }
+.buf-track.rows3 .buf-marks, .buf-track.rows3 .buf-marks .bm { height: 84px; }
+.buf-track.rows3 .buf-marks .bm i { top: 50px; }
+.buf-track.rows3 .buf-marks .bgray { top: 65px; }
+.buf-track.rows3 .buf-marks .bno { top: 56px; }
 .buf-marks .bm.good em { color: var(--save); background: var(--save-bg); }
 .buf-marks .bm.bad em { color: #8a6100; background: #fff3c4; }
 .buf-marks .bm.base em { color: var(--ink-2); font-weight: 700; }
@@ -1152,9 +1159,10 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 .fg-needle.unset path { fill: var(--ink-2); opacity: .5; }
 .fg-cap { fill: var(--ink); }
 .fg-cap2 { fill: var(--surface); }
-.fg-read { text-align: center; font-size: 15px; color: var(--ink-2); margin: 2px 0 4px; min-height: 20px; }
+.fg-read { text-align: center; font-size: 14px; color: var(--ink-2); margin: 2px 0 0; }
+.fg-read:empty { display: none; }
 .fg-read b { color: var(--ink); font-size: 17px; }
 .fg-warn { color: var(--warn); font-size: 13px; margin-top: 4px; }
-.fg-tip { font-size: 13px; color: var(--ink-2); margin: 6px 0 0; line-height: 1.4; }
+.fg-tip { margin: 8px 0 4px; }
 .fg-in { margin-top: 6px; }
 @media (prefers-reduced-motion: reduce) { .fg-needle { transition: none; } }
