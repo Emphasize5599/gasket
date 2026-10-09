@@ -479,8 +479,8 @@
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
-      $('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
-      if ($('tEpa').open) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); }
+      $('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
+      if ($('tEpa').open && !matching) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); }   // (a VIN match fills them itself)
       if ($('gRemove')) $('gRemove').onclick = function () { removeCar(c); };
     }
     // about this car
@@ -752,7 +752,12 @@
     } catch (e) { vMsg('Couldn\'t reach NHTSA: ' + esc(e.message) + '.', true); }
   }
   /** Fill the EPA pickers for this year / make / model and pick what's certain; the rest is your pick. */
+  var matching = false;   // a VIN match is filling the pickers: a redraw mustn't load them again under it
   async function epaMatch(c, lead) {
+    matching = true;
+    try { await epaMatch0(c, lead); } finally { matching = false; }
+  }
+  async function epaMatch0(c, lead) {
     var say = function (m) { var el = $('eMsg'); if (el) { el.innerHTML = m; el.classList.remove('err'); } };
     say(esc(lead).replace(/&lt;b&gt;|&lt;\/b&gt;/g, '') + ' Matching the EPA\'s mileage…');
     try {
@@ -763,14 +768,29 @@
       var mk = $('eMake'), mm = pick(mk, function (t) { return t === String(c.make).toLowerCase(); });
       if (!mm.length) { say(esc(lead) + ' Pick the make and model below for its mileage.'); return; }
       mk.value = mm[0].value; await mk.onchange.call(mk);
-      var md = $('eModel'), base = String(c.vpicModel || c.model).toLowerCase();
-      var exact = pick(md, function (t) { return t === base; }), starts = pick(md, function (t) { return t.indexOf(base) === 0; });
-      var drv = { fwd: /fwd|2wd/i, rwd: /rwd|2wd/i, awd: /awd|4wd/i, '4wd': /4wd|awd/i }[(c.info || {}).drive];
-      var byDrive = drv ? starts.filter(function (o) { return drv.test(o.text); }) : [];
-      var m = exact.length === 1 ? exact[0] : starts.length === 1 ? starts[0] : byDrive.length === 1 ? byDrive[0] : null;
+      var md = $('eModel'), base = String(c.vpicModel || c.model).toLowerCase(), I = c.info || {};
+      // the EPA splits a model by drive ("Charger" is two-wheel drive, "Charger AWD" all-wheel): use what the VIN says
+      var starts = pick(md, function (t) { return t.indexOf(base) === 0; });
+      var same = starts.filter(function (o) { return o.text.replace(DRV_SUFFIX, '').trim().toLowerCase() === base; });   // not "Corolla Cross" for "Corolla"
+      var cands = same.length ? same : starts, wantAll = I.drive === 'awd' || I.drive === '4wd';
+      if (I.drive && cands.length > 1) {
+        var byDrive = cands.filter(function (o) { var sfx = DRV_SUFFIX.exec(o.text); return sfx ? /awd|4wd|4x4/i.test(sfx[1]) === wantAll : !wantAll; });
+        if (byDrive.length) cands = byDrive;
+      }
+      var m = cands.length === 1 ? cands[0] : null;
       if (!m) { say(esc(lead) + ' Pick the model below' + (starts.length ? ' (' + starts.length + ' versions of the ' + esc(c.model) + ')' : '') + ' for its mileage.'); return; }
       md.value = m.value; await md.onchange.call(md);
-      if (!hasEpa(c) || $('eOpt') && $('eOpt').value === '') say(esc(lead) + ' Pick the engine / transmission below for its mileage.');
+      if (hasEpa(c) && c.epaId && $('eOpt') && $('eOpt').value) return;
+      // more than one engine / transmission: the one with the VIN's engine size, cylinders (and gears, when it says)
+      var eo = $('eOpt'), em = /([\d.]+)\s*L\b/.exec(I.engine || ''), cm = /\bV(\d+)|(\d+)\s*Cyl|Flat (\d+)|W(\d+)/i.exec(I.engine || '');
+      var displ = em ? +em[1] : 0, cyl = cm ? +(cm[1] || cm[2] || cm[3] || cm[4]) : 0;
+      var fit = eo ? Array.prototype.filter.call(eo.options, function (o) {
+        if (!o.value) return false;
+        var p = parseOpt(o.text, m.value);
+        return (!displ || Math.abs(+p.displ - displ) < 0.05) && (!cyl || +p.cyl === cyl) && (!I.transN || !p.n || p.n === +I.transN);
+      }) : [];
+      if (fit.length === 1 && (displ || cyl)) { eo.value = fit[0].value; await eo.onchange.call(eo); return; }
+      say(esc(lead) + ' Pick the engine / transmission below for its mileage' + (fit.length > 1 ? ' (' + fit.length + ' match your VIN\'s ' + esc(I.engine.replace(/\s*\(.*\)/, '')) + ')' : '') + '.');
     } catch (e) { say(esc(lead) + ' Couldn\'t reach fueleconomy.gov — pick the car below or enter your own mileage.'); }
   }
 

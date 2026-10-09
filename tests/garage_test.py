@@ -13,7 +13,10 @@ EXTRA = r'''
 (() => {
   const M = window.__mocks;
   window.__urls = [];
-  M.vpic = (url) => { window.__urls.push(url); return { Results: [{ ModelYear: '2021', Make: 'HONDA', Model: 'Accord', Trim: 'EX', DisplacementL: '1.5', EngineCylinders: '4',
+  // a 2008 Dodge Charger SXT, all-wheel drive, 3.5-liter V6 (made-up serial number; the decode NHTSA gives that model)
+  const CHARGER = { ModelYear: '2008', Make: 'DODGE', Model: 'Charger', Trim: 'SXT', DisplacementL: '3.5', EngineCylinders: '6', EngineConfiguration: 'V-Shaped',
+    DriveType: 'AWD/All-Wheel Drive', FuelTypePrimary: 'Gasoline', FuelInjectionType: 'Multipoint Fuel Injection (MPFI)', ErrorCode: '0', ErrorText: '0 - VIN decoded clean.' };
+  M.vpic = (url) => { window.__urls.push(url); if (/2B3LK33G08H000001/.test(url)) return { Results: [CHARGER] }; return { Results: [{ ModelYear: '2021', Make: 'HONDA', Model: 'Accord', Trim: 'EX', DisplacementL: '1.5', EngineCylinders: '4',
     EngineConfiguration: 'In-Line', EngineModel: 'L15BE', Turbo: 'Yes', TransmissionStyle: 'Continuously Variable Transmission (CVT)', DriveType: 'FWD/Front-Wheel Drive',
     FuelTypePrimary: 'Gasoline', ValveTrainDesign: 'Dual Overhead Cam (DOHC)', FuelInjectionType: 'Stoichiometric Gasoline Direct Injection (SGDI)', ErrorCode: '0', ErrorText: '0 - VIN decoded clean.' }] }; };
   M.recalls = (url) => { window.__urls.push(url); return /accord/i.test(url) ? { Count: 2, results: [
@@ -21,6 +24,12 @@ EXTRA = r'''
       { NHTSACampaignNumber: '22V100000', ReportReceivedDate: '01/02/2022', Component: 'POWER TRAIN', Summary: 'The transmission may shift into a lower gear at speed.', Consequence: 'Loss of control.', Remedy: 'Software update.', parkIt: true, parkOutSide: false } ] } : { Count: 0, results: [] }; };
   const epa0 = M.epa;
   M.epa = (url) => {
+    if (/menu\/year/.test(url)) return { menuItem: [{ text: '2021', value: '2021' }, { text: '2020', value: '2020' }, { text: '2008', value: '2008' }] };
+    if (/menu\/make\?year=2008/.test(url)) return { menuItem: [{ text: 'Chrysler', value: 'Chrysler' }, { text: 'Dodge', value: 'Dodge' }] };
+    if (/menu\/model\?year=2008&make=Dodge/.test(url)) return { menuItem: ['Avenger', 'Avenger AWD', 'Challenger', 'Charger', 'Charger AWD', 'Magnum', 'Magnum AWD'].map((m) => ({ text: m, value: m })) };
+    if (/menu\/options.*model=Charger$/.test(url)) return { menuItem: [['Auto 4-spd, 6 cyl, 2.7 L', '24894'], ['Auto 4-spd, 6 cyl, 3.5 L', '24895'], ['Auto 5-spd, 6 cyl, 3.5 L', '24896'], ['Auto 5-spd, 8 cyl, 5.7 L', '24897'], ['Auto 5-spd, 8 cyl, 6.1 L', '25111']].map((o) => ({ text: o[0], value: o[1] })) };
+    if (/menu\/options.*model=Charger%20AWD/.test(url)) return { menuItem: [{ text: 'Auto 5-spd, 6 cyl, 3.5 L', value: '24898' }, { text: 'Auto 5-spd, 8 cyl, 5.7 L', value: '24899' }] };
+    if (/vehicle\/24898$/.test(url)) return { id: '24898', year: '2008', make: 'Dodge', model: 'Charger AWD', baseModel: 'Charger', trany: 'Automatic 5-spd', drive: '4-Wheel or All-Wheel Drive', displ: '3.5', cylinders: '6', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '15', highway08: '22', comb08: '18', VClass: 'Large Cars' };
     if (/menu\/make/.test(url)) return { menuItem: [{ text: 'Honda', value: 'Honda' }, { text: 'Tesla', value: 'Tesla' }, { text: 'Toyota', value: 'Toyota' }] };
     if (/menu\/model.*make=Tesla/.test(url)) return { menuItem: { text: 'Model 3 Long Range AWD', value: 'Model 3 Long Range AWD' } };
     if (/menu\/model.*make=Toyota/.test(url)) return { menuItem: [{ text: 'Mirai', value: 'Mirai' }, { text: 'Camry', value: 'Camry' }] };
@@ -113,6 +122,13 @@ with sync_playwright() as p:
         n1 = len(pg.evaluate('window.__urls')); pg.wait_for_timeout(1500); n2 = len(pg.evaluate('window.__urls'))
         print('  reopened year / make / model:', n0, n1, n2, pg.input_value('#eModel'), pg.evaluate('window.Garage.car().tank'))
         assert n2 == n1 and pg.evaluate('window.Garage.car().tank') == 14.8 and pg.input_value('#eYear') == '2021' and pg.input_value('#eOpt') != '', 'no loop, tank kept, the car shown'
+        # a VIN whose model the EPA splits by drive: the VIN's all-wheel drive picks "Charger AWD", and its 3.5-liter V6 the version
+        accord = pg.evaluate('window.__app.S.carId')
+        pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
+        pg.fill('#gVin', '2B3LK33G08H000001'); pg.click('#gVinGo'); idle(pg, 1500)
+        c = pg.evaluate('window.Garage.car()'); print('  Charger:', c.get('model'), c.get('epaId'), c.get('epa'), '|', ft(pg, '#eMsg'))
+        assert c['epaId'] == '24898' and c['model'] == 'Charger AWD' and c['epa']['city'] == 15, 'matched to the EPA by drive and engine'
+        pg.evaluate("(id) => { const S = window.__app.S; S.cars = S.cars.filter(x => x.id !== S.carId); S.carId = id; window.Garage.redraw(); }", accord); pg.wait_for_timeout(300)
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
         pg.click('#gInfo summary'); pg.wait_for_timeout(200)
