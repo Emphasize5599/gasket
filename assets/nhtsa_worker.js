@@ -5,9 +5,11 @@ async function (reqId, args) {
   // Reports back through GasketSite.result(reqId, json): {open, campaigns, items} or {error}.
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  // The answer: "0 Unrepaired Recalls Found", "2 Unrepaired Recalls Found" (older wording: "… Associated with this VIN").
-  // The help text quotes it ('you will see the message: "0 unrepaired recalls ..."'), so a quoted match is skipped.
-  const RESULT = /(^|[^"“\w])(\d+)\s+unrepaired\s+recalls?\b/gi;
+  // The answer: "0 Unrepaired Recalls associated with this VIN" (or "… Found"). The number and the words are separate
+  // elements, so the page's text can run them together ("0Unrepaired Recalls"); at most two digits, so a year or date
+  // just before it can't be read as the count. The help text quotes it ('you will see the message: "0 unrepaired
+  // recalls ..."'), so a quoted match is skipped.
+  const RESULT = /(^|[^"“\w\d])(\d{1,2})\s*unrepaired\s*recalls?\b/gi;
   const CAMPAIGN = /\b(\d{2}V\d{3}000)\b/g;
   const t0 = Date.now();
   while (Date.now() - t0 < 45000) {

@@ -142,6 +142,11 @@ with sync_playwright() as p:
                    '<div>NHTSA Campaign Number: 23V300000 Air bags: may not deploy</div></div>' + FAQ)
     print('  reader:', r)
     assert r['open'] == 2 and r['campaigns'] == ['22V200000', '23V300000'] and 'drive power' in r['items'][0]
+    # the page as it really reads (the number and the words are separate elements, so the text runs together)
+    r = reader(pg, '<div><p>2016 TOYOTA PRIUS</p><p>VIN: JTDEBRBE0LJ000001</p><p>Recall data refreshed on Oct 09, 2026</p><div><span>0</span><span>Unrepaired Recalls</span></div><p>associated with this VIN</p></div>' + FAQ)
+    assert r == {'open': 0, 'campaigns': [], 'items': []}, r
+    r = reader(pg, '<div><p>Recall data refreshed on Oct 09, 2026</p><b>2</b>Unrepaired Recalls<p>associated with this VIN</p><div>NHTSA Campaign Number: 22V200000</div></div>' + FAQ)
+    assert r['open'] == 2 and r['campaigns'] == ['22V200000'], r
     # today's wording: "N Unrepaired Recalls Found", with the recalls listed under it
     r = reader(pg, '<div><p>VIN Lookup: 17/17</p><h2>0 Unrepaired Recalls Found</h2></div>' + FAQ)
     assert r == {'open': 0, 'campaigns': [], 'items': []}, r
