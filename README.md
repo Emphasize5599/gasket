@@ -1,8 +1,10 @@
-# Gasket
+# Gasket: Fuel Finder & Travel Safety
 
-**The cheapest fill-up on your route, after your discounts.**
+**The cheapest fill-up on your route, and a car that's ready for the drive.**
 
 Gasket is a personal Android app built around the Walmart+ fuel discount. It maps the stations where the discount works (Walmart, Murphy USA, Sam's Club, Exxon, Mobil and CITGO), shows what you'll actually pay per gallon once every discount is taken off, and plans the cheapest fuel stops for a trip you've laid out in Google Maps.
+
+Before you leave, it checks the car too: open safety recalls on your VIN, tire tread and rotation, and engine features worth turning off.
 
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
 ![Platform: Android 12+](https://img.shields.io/badge/platform-Android%2012%2B-3DDC84)
