@@ -1010,7 +1010,10 @@ details.g-obs[open] { padding-bottom: 12px; }
 .vin-row .nf { flex: 1; min-width: 0; }
 .vin-row #gVin { text-transform: uppercase; letter-spacing: .5px; font-family: ui-monospace, monospace; }
 .vin-row .btn { width: auto; height: 44px; margin: 0; flex: none; }
-.plate-msg { background: var(--surface-2); border-radius: 14px; padding: 10px 12px; margin: 8px 0; line-height: 1.4; }
+/* the VIN is recommended: a green outline and a small label; year / make / model below it */
+.epa summary small { display: block; color: var(--ink-2); font-weight: 500; font-size: 12.5px; }
+.rec-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--save-bg); color: var(--save); font-size: 11px; font-weight: 700; vertical-align: 1px; }
+.vin-row.rec #gVin { border: 2px solid var(--save); }
 .nf.chk { flex-direction: row; align-items: center; gap: 10px; }
 .nf.chk input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
 .g-info summary > span, .g-tires summary > span { display: flex; flex-direction: column; min-width: 0; }
@@ -1126,3 +1129,32 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 .tz-pick select, .tz-pick input { min-width: 0; max-width: 100%; }
 .tz-src { margin-top: -4px; }
 .tz-pick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+
+/* ---------- the fuel gauge (trip Parameters) ---------- */
+.fg-modes { margin-bottom: 6px; }
+.fg-wrap { display: flex; justify-content: center; padding: 4px 0 0; }
+.fg-svg { width: 100%; max-width: 300px; height: auto; touch-action: none; cursor: pointer; outline: none; user-select: none; -webkit-user-select: none; }
+.fg-svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 16px; }
+.fg-band { fill: none; stroke: var(--surface-2); stroke-width: 34; stroke-linecap: round; }
+.fg-res { fill: none; stroke: #e5484d; stroke-opacity: .35; stroke-width: 34; }
+.fg-tick { stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; }
+.fg-tick.maj { stroke: var(--ink); stroke-width: 3.5; }
+.fg-tick.min { stroke-width: 1.5; opacity: .6; }
+.fg-lbl { fill: var(--ink); font: 800 21px system-ui, "Google Sans", Roboto, sans-serif; text-anchor: middle; }
+.fg-lbl.sm { font-size: 16px; font-weight: 700; fill: var(--ink-2); }
+.fg-pump .fg-pb { fill: var(--ink-2); opacity: .45; transition: fill .3s, opacity .3s; }
+.fg-pump .fg-ph { fill: none; stroke: var(--ink-2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .45; transition: stroke .3s, opacity .3s; }
+.fg-pump.lit .fg-pb { fill: #ff9f1a; opacity: 1; }
+.fg-pump.lit .fg-ph { stroke: #ff9f1a; opacity: 1; }
+.fg-pump.lit { filter: drop-shadow(0 0 6px rgba(255, 159, 26, .8)); }
+.fg-needle { transform-box: view-box; transform-origin: 150px 156px; transition: transform .6s cubic-bezier(.34, 1.56, .64, 1); }
+.fg-needle path { fill: #ff5a36; }
+.fg-needle.unset path { fill: var(--ink-2); opacity: .5; }
+.fg-cap { fill: var(--ink); }
+.fg-cap2 { fill: var(--surface); }
+.fg-read { text-align: center; font-size: 15px; color: var(--ink-2); margin: 2px 0 4px; min-height: 20px; }
+.fg-read b { color: var(--ink); font-size: 17px; }
+.fg-warn { color: var(--warn); font-size: 13px; margin-top: 4px; }
+.fg-tip { font-size: 13px; color: var(--ink-2); margin: 6px 0 0; line-height: 1.4; }
+.fg-in { margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .fg-needle { transition: none; } }

@@ -176,7 +176,7 @@
   function fmtPer(v) { return kind() === 'gas' ? Math.round(v) : (Math.round(v * 10) / 10).toFixed(1); }
 
   // ---------- page ----------
-  var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false, how = 'ymm';
+  var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false;
   var epaStay = null;   // the car whose EPA lookup you have open: it stays open across redraws until you close it
   function render(carEl, speedEl, changed, nativeCall) {
     host = carEl; onChange = changed || onChange; call = nativeCall || call;
@@ -238,7 +238,7 @@
   function need() {
     var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0, k = kind(c);
     if (mpgOk && tankOk) return null;
-    if (!mpgOk && !editing && host) { editing = true; how = 'ymm'; epaOpen = true; draw(); epaOpen = false; }
+    if (!mpgOk && !editing && host) { editing = true; epaOpen = true; draw(); epaOpen = false; }
     if (!mpgOk) {
       var d = document.getElementById('tEpa'); if (d && !d.open) d.open = true;
       var sel = ['eYear', 'eMake', 'eModel', 'eOpt'].map(function (id) { return document.getElementById(id); }).filter(function (e) { return e && !e.value; })[0];
@@ -259,17 +259,14 @@
     var k = kind(c), U = units(c);
     var auto = c.typeAuto ? ' (from the EPA: ' + SP.TYPES[c.typeAuto].label.toLowerCase() + ')' : '';
     var h = '<div class="g-edit">';
-    h += '<div class="chips mini g-how" id="gHow">' + [['ymm', 'Year / make / model'], ['vin', 'VIN'], ['plate', 'License plate']].map(function (o) {
-      return '<button data-how="' + o[0] + '" class="' + (how === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div>';
-    if (how === 'vin') {
-      h += '<div class="vin-row"><label class="nf"><span>VIN<small>17 characters — on your insurance card, registration, or the driver-side dashboard (through the windshield)</small></span>' +
+    // one menu: the VIN first (worth the trouble: exact version, open recalls, factory tires; outlined in green until the
+    // car has one), then year / make / model, which a VIN lookup fills in
+    var recVin = !c.vin;
+    h += '<div class="vin-row' + (recVin ? ' rec' : '') + '"><label class="nf"><span>VIN' + (recVin ? '<span class="rec-tag">Recommended</span>' : '') + '<small>Gets your exact version, checks it for open recalls and finds its factory tire size. 17 characters — on your insurance card, registration, or the driver-side dashboard (through the windshield)</small></span>' +
         '<input type="text" id="gVin" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(c.vin || '') + '"></label>' +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>' +
-        '<p class="lead small keep">Decoded free by NHTSA (vpic.nhtsa.dot.gov), then matched to the EPA\'s mileage. Fills in the details below, and Advisory can then check it for open recalls.</p>';
-    } else if (how === 'plate') {
-      h += '<div class="msg plate-msg"><b>Plate lookup isn\'t available.</b> There\'s no free public source that turns a license plate into a VIN — every plate-to-VIN service is a paid business (state registration records are restricted by the federal Driver\'s Privacy Protection Act). Your VIN is on your insurance card, your registration, and the driver-side dashboard. <a href="#" id="gToVin">Enter the VIN instead</a></div>';
-    }
-    h += '<details class="epa' + (how === 'ymm' ? '' : ' hidden') + '" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>' + (hasEpa(c) ? 'Change car (EPA lookup)' : 'Look up EPA mileage by year / make / model') + '</summary>' +
+        '<p class="lead small keep">Decoded free by NHTSA (vpic.nhtsa.dot.gov), then matched to the EPA\'s mileage, and fills in the details below.</p>';
+    h += '<details class="epa" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>Year / make / model<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model].join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
       '<div class="epa-grid"><select id="eYear"><option value="">Year</option></select><select id="eMake" disabled><option>Make</option></select>' +
       '<select id="eModel" disabled><option>Model</option></select><select id="eOpt" disabled><option>Engine / transmission</option></select></div>' +
       '<div class="epa-msg" id="eMsg"></div></details>';
@@ -460,7 +457,7 @@
       b.onclick = function () {
         if (b.dataset.car === '+') {
           var nc = { id: 'c' + Date.now(), name: '', trim: '', type: 'car', power: 'gas', grade: '', tank: '', tankSrc: '', obs: {}, entries: [], epa: null, info: {} };
-          S.cars.push(nc); S.carId = nc.id; editing = true; how = 'ymm';
+          S.cars.push(nc); S.carId = nc.id; editing = true;
         } else { S.carId = b.dataset.car; editing = false; }
         LG.info('car', 'Selected ' + shortName(car()));
         draw(); changed();
@@ -471,8 +468,6 @@
     });
     $('gEdit').onclick = function () { editing = !editing; draw(); };
     if (editing) {
-      $('gHow').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; how = b.dataset.how; draw(); if (how === 'vin' && $('gVin')) $('gVin').focus(); };
-      if ($('gToVin')) $('gToVin').onclick = function (e) { e.preventDefault(); how = 'vin'; draw(); };
       if ($('gVinGo')) {
         $('gVinGo').onclick = function () { lookupVin(c, $('gVin').value); };
         $('gVin').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); lookupVin(c, this.value); } };
@@ -484,8 +479,8 @@
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
-      $('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && $('eYear').options.length < 2) epaYears(c); });
-      if ($('tEpa').open && !hasEpa(c) && how === 'ymm') epaYears(c);
+      $('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
+      if ($('tEpa').open) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); }
       if ($('gRemove')) $('gRemove').onclick = function () { removeCar(c); };
     }
     // about this car
@@ -608,7 +603,7 @@
         var y = $('eYear').value, mk = $('eMake').value, md = this.value; fill($('eOpt'), [], 'Engine / transmission'); if (!md) return;
         var opts = items(await epaGet('menu/options?year=' + encodeURIComponent(y) + '&make=' + encodeURIComponent(mk) + '&model=' + encodeURIComponent(md)));
         fill($('eOpt'), opts, 'Engine / transmission');
-        if (opts.length === 1) { $('eOpt').value = opts[0].value; await $('eOpt').onchange(); }
+        if (opts.length === 1 && !presetting) { $('eOpt').value = opts[0].value; await $('eOpt').onchange(); }
       };
       $('eOpt').onchange = async function () {
         var id = $('eOpt').value; if (!id) return;
@@ -621,6 +616,21 @@
         eMsg(r.msg);
       };
     } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true); }
+  }
+  /** Show the car you have in the year / make / model pickers (after a VIN lookup, or opening them later). */
+  var presetting = false;
+  async function epaPreset(c) {
+    if (presetting) return;
+    presetting = true;
+    try {
+      await epaYears(c);
+      var set = async function (id, want) {
+        var el = $(id); if (!el) return false;
+        var o = Array.prototype.filter.call(el.options, function (x) { return x.value && (x.value === String(want) || x.text.toLowerCase() === String(want).toLowerCase()); })[0];
+        if (!o) return false; el.value = o.value; if (el.onchange) await el.onchange.call(el); return true;
+      };
+      if (await set('eYear', c.year) && await set('eMake', c.make) && await set('eModel', c.model)) await set('eOpt', c.epaId);
+    } catch (e) { } finally { presetting = false; }
   }
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {
@@ -733,7 +743,7 @@
       var note = d.warn && /check digit/i.test(d.warn) ? ' <b>Note:</b> the VIN\'s check digit doesn\'t add up — double-check you typed it right.' : '';
       var hint = !d.trim && d.trimHint ? ' The VIN can\'t tell which trim (' + esc(d.trimHint) + ') — add yours below if you like.' : '';
       // now the EPA's mileage for it: same year, make and model, then the engine / transmission
-      how = 'ymm'; editing = true; epaOpen = true; draw(); epaOpen = false;
+      editing = true; epaOpen = true; draw(); epaOpen = false;
       eMsg('');
       await epaMatch(c, 'Decoded: ' + c.year + ' ' + c.make + ' ' + c.model + '.' + hint + note);
     } catch (e) { vMsg('Couldn\'t reach NHTSA: ' + esc(e.message) + '.', true); }

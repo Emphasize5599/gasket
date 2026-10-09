@@ -232,7 +232,7 @@
       return true;
     }
     if (k === ST_PARAMS) {
-      if (!(parseFloat(S.trip.milesLeft) >= 0) || S.trip.milesLeft === '') { flag($('tMiles'), 'box', 'How many miles are left in your tank?'); return false; }
+      if (!hasFuel()) { flag($('tMiles') || $('tFuelPct') || $('tGauge'), 'box', KIND() === 'ev' ? 'How charged is your battery?' : 'How much gas do you have?'); return false; }
       return true;
     }
     if (onPlan(k)) {
@@ -320,8 +320,8 @@
     }
     if (k === ST_PARAMS) {
       var kd = KIND();
-      return '<div class="card"><h3>' + (kd === 'ev' ? 'Your battery' : 'Your tank') + '</h3><div class="grid2">' +
-        num('tMiles', (kd === 'ev' ? 'Miles of range left' : 'Miles left in tank') + '<span class="req" aria-label="required">*</span>', t.milesLeft, 1, 'from your dash') + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') + '</div></div>' +
+      return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div>' +
+        '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') + '<span></span></div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
@@ -365,7 +365,7 @@
     if (onPlan(k)) {
       renderResults();
       built[k].result = result;
-      if (model && !result && !busy && parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '') findStops();
+      if (model && !result && !busy && hasFuel()) findStops();
       return;
     }
     bindDeparture();
@@ -423,11 +423,21 @@
     $('tTruck').onchange = function () { S.speed.truck = this.checked; A.save(); LG.info('speed', 'Truck limits ' + (this.checked ? 'on' : 'off')); again(); };
     $('tLinkSl').onchange = function () { collectSafe(); $('tLinkBox').classList.toggle('hidden', !S.trip.linkSliders); };
     $('tAltCmp').onchange = function () { $('tAltBox').classList.toggle('hidden', !this.checked); collectSafe(); again(); };
-    ['tMiles', 'tBuffer', 'tMinSave', 'tMaxMin', 'tTime', 'tTopMi', 'tTankPrice', 'tMaxUnder', 'tAltSave'].forEach(function (id) {
+    ['tBuffer', 'tMinSave', 'tMaxMin', 'tTime', 'tTopMi', 'tTankPrice', 'tMaxUnder', 'tAltSave'].forEach(function (id) {
       if ($(id)) $(id).addEventListener('input', function () { collectSafe(); again(); });
     });
     arriveHelp();
+    FuelGauge.render($('tFuel'), { kind: KIND(), tank: Garage.tank(), mpu: Garage.carModel().comb, unit: UN(), fuel: fuel(),
+      onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; } });
   }
+  /** How much is in the tank: S.trip.fuel ({mode: gauge / pct / miles, …}, see fuelgauge.js), filled in for this car. */
+  function fuel() { return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
+  function fuelMiles() { return FuelGauge.math.miles(fuel(), Garage.tank(), Garage.carModel().comb); }
+  function hasFuel() { return fuelMiles() != null; }
+  /** Fuel in the tank at the start: a gauge or percentage is a share of the tank; dash miles use the route's mileage. */
+  function startFuel(m) { var f = fuel(); return f.mode === 'miles' ? (parseFloat(f.miles) || 0) * m.combGpm : FuelGauge.math.amount(f, Garage.tank(), 1) || 0; }
+  /** S.trip.milesLeft follows the fuel choice (saved trips and old exports read it). */
+  function syncMilesLeft() { var m = fuelMiles(); S.trip.milesLeft = m == null ? '' : String(Math.round(m)); }
   /** Where the route comes from: a Google Maps link, or addresses you type. */
   function srcOf() { var t = S.trip; return t.src === 'typed' || t.src === 'link' ? t.src : (!t.link && (t.from || t.to) ? 'typed' : 'link'); }
   /** When you're leaving: the saved time if it's still ahead, else now. */
@@ -457,7 +467,7 @@
     if (v('tMaxUnder') != null) t.maxUnder = Math.max(0, Math.min(10, parseInt(v('tMaxUnder'), 10) || 0));
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
     if (v('tTankPrice') != null) t.tankPrice = v('tTankPrice').trim();
-    if (v('tMiles') != null) { t.milesLeft = v('tMiles'); t.bufferMi = Math.max(0, parseFloat(v('tBuffer')) || 0); }
+    if (v('tBuffer') != null) t.bufferMi = Math.max(0, parseFloat(v('tBuffer')) || 0);
     if (v('tMinSave') != null) { t.minSave = Math.max(0, parseFloat(v('tMinSave')) || 0); t.timeValue = Math.max(0, parseFloat(v('tTime')) || 0); var mm = parseFloat(v('tMaxMin')); t.maxDetourMin = mm >= 0 ? mm : 10; }
     A.save();
   }
@@ -2253,7 +2263,7 @@
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
     if (step >= ST_ADJ) mapLoading('Choosing stops', 0.93);
-    var startGal = (parseFloat(S.trip.milesLeft) || 0) * model.combGpm;
+    var startGal = startFuel(model);
     var opts = makeOpts(model, cands, startGal), planOffs = null;
     var secs0 = flatSecs(model), sf0 = secs0.length && Garage.speedFn ? Garage.speedFn() : null;
     if (sf0) {
@@ -2353,9 +2363,9 @@
     [ST_ADJ, ST_STOPS].forEach(function (k) { if (built[k]) { built[k].result = result; built[k].model = model; } });
     if (!r && loadingTrip) { put('<div class="card finding"><div class="ldspin"></div><span>Opening your trip…</span></div>'); return; }
     if (!r) {
-      var need = parseFloat(S.trip.milesLeft) >= 0 && S.trip.milesLeft !== '';
-      put(model ? '<div class="card empty-res">' + (need ? 'Stops appear here.' : 'Enter the miles left in your tank in Parameters.') + '</div>' : '',
-        model ? '<div class="card empty-res">' + (need ? 'Your adjustments appear here once the stops are planned.' : 'Enter the miles left in your tank in Parameters.') + '</div>' : '');
+      var need = hasFuel();
+      put(model ? '<div class="card empty-res">' + (need ? 'Stops appear here.' : 'Say how much is in your tank in Parameters.') + '</div>' : '',
+        model ? '<div class="card empty-res">' + (need ? 'Your adjustments appear here once the stops are planned.' : 'Say how much is in your tank in Parameters.') + '</div>' : '');
       return;
     }
     var p = r.plan, h = '', ah = tipBox();
@@ -2575,7 +2585,7 @@
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
-      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, avoid: S.trip.avoid, milesLeft: S.trip.milesLeft },
+      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel },
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
     var idx = histIndex().filter(function (x) { return x.id !== id; });
@@ -2648,7 +2658,7 @@
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
-    if (!(parseFloat(S.trip.milesLeft) >= 0)) S.trip.milesLeft = v.trip.milesLeft;
+    if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();
     route = v.route; alts = v.alts;
     S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;

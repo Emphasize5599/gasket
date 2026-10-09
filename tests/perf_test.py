@@ -92,7 +92,7 @@ with sync_playwright() as p:
     t0 = mark(pg); pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(2500); res['pick route'] = worst(pg, t0, 'pick another route')
     t0 = mark(pg); pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(2500); res['pick back'] = worst(pg, t0, 'pick route 1 again')
     pg.click('#tNext'); pg.wait_for_timeout(600)
-    pg.fill('#tMiles', os.environ.get('MILES', '200')); pg.fill('#tBuffer', os.environ.get('BUF', '40'))
+    pg.click('#tFuelMode [data-fm="miles"]'); pg.fill('#tMiles', os.environ.get('MILES', '200')); pg.fill('#tBuffer', os.environ.get('BUF', '40'))
     t0 = mark(pg); pg.click('#tNext'); idle(pg, 3000); res['stops'] = worst(pg, t0, 'enter Stops (find stops)')
     pg.screenshot(path=f'{OUT}/perf-stops.png')
     print('  placing the stop bubbles:', pg.evaluate('window.__trip.placeMs()'), 'ms (CPU x4)')

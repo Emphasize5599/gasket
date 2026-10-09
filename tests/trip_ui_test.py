@@ -186,11 +186,37 @@ with sync_playwright() as p:
         pg.click('#tRmap .rmap-fit'); pg.wait_for_timeout(500)
         assert pg.locator('#tRmap .rmap-fit.hidden').count() == 1, 'and goes away once it re-centers'
         # ---- Parameters ----
-        pg.evaluate("window.__app.S.trip.milesLeft = ''")
+        pg.evaluate("window.__app.S.trip.fuel = null; window.__app.S.trip.milesLeft = ''")
         nxt(pg); assert step(pg) == 4 and pg.locator('#trip.full').count() == 1, 'Parameters: full screen'
+        assert [b.strip() for b in pg.locator('#tFuelMode button').all_inner_texts()] == ['Gauge', 'Percent', 'Miles left'] and pg.locator('#tFuelMode [data-fm="gauge"].on').count() == 1, 'a gas car starts on the gauge'
+        assert 'Drag the needle' in ft(pg, '#tFuelRead') and pg.locator('.fg-needle.unset').count() == 1
         pg.click('#tNext'); pg.wait_for_timeout(250)
-        assert step(pg) == 4 and pg.locator('#tMiles.need').count() == 1, 'miles left outlined'
-        pg.screenshot(path=f'{OUT}/{name}-w3b-need-miles.png')
+        assert step(pg) == 4 and pg.locator('#tGauge.need').count() == 1, 'the gauge is outlined until it is set'
+        pg.screenshot(path=f'{OUT}/{name}-w3b-need-fuel.png')
+        # the gauge: tap a mark, drag, arrow keys; it snaps to eighths and tells you what that is
+        def tap_label(e):
+            bb = pg.locator('.fg-lbl[data-e="%d"]' % e).bounding_box(); pg.mouse.click(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); pg.wait_for_timeout(150)
+        fuel = lambda: pg.evaluate('window.__app.S.trip.fuel')
+        tap_label(8); assert fuel()['eighths'] == 8 and pg.get_attribute('.fg-svg', 'aria-valuetext') == 'Full', fuel()
+        tank = pg.evaluate('window.Garage.tank()'); comb = pg.evaluate('window.Garage.carModel().comb')
+        assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb)), 'miles follow the gauge'
+        pg.focus('.fg-svg')
+        for _ in range(5): pg.keyboard.press('ArrowLeft')
+        pg.wait_for_timeout(700)
+        rd = ft(pg, '#tFuelRead'); print('  gauge 3/8:', rd)
+        assert fuel()['eighths'] == 3 and '⅜ tank' in rd and '38%' in rd and 'gal' in rd and ' mi' in rd and pg.locator('.fg-pump.lit').count() == 0
+        e8 = pg.locator('.fg-lbl[data-e="8"]').bounding_box(); e0 = pg.locator('.fg-lbl[data-e="0"]').bounding_box()
+        pg.mouse.move(e8['x'] + 5, e8['y'] + 5); pg.mouse.down(); pg.mouse.move(e0['x'] + 5, e0['y'] + 5, steps=8); pg.mouse.up(); pg.wait_for_timeout(700)
+        assert fuel()['eighths'] == 0 and pg.locator('.fg-pump.lit').count() == 1, 'dragged to E: the low-fuel light comes on'
+        pg.keyboard.press('ArrowRight'); pg.keyboard.press('ArrowRight'); pg.wait_for_timeout(700)
+        assert fuel()['eighths'] == 2 and pg.locator('.fg-pump.lit').count() == 0 and 'lower one' in ft(pg, '.fg-tip'), 'and the tip says to round down'
+        pg.screenshot(path=f'{OUT}/{name}-p0-gauge.png'); wide(pg, 'gauge')
+        # a percentage
+        pg.click('#tFuelMode [data-fm="pct"]'); pg.wait_for_timeout(150); pg.fill('#tFuelPct', '50'); pg.wait_for_timeout(150)
+        assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb / 2)) and 'about' in ft(pg, '#tFuelRead')
+        # the miles on the dash
+        pg.click('#tFuelMode [data-fm="miles"]'); pg.wait_for_timeout(150)
+        assert 'less than your dash' in ft(pg, '.fg-tip')
         pg.fill('#tMiles', '80'); pg.fill('#tBuffer', '30')
         pg.fill('#tMinSave', '1'); pg.fill('#tMaxMin', '10')
         pg.screenshot(path=f'{OUT}/{name}-p1-params.png'); wide(pg, 'parameters')
@@ -770,7 +796,7 @@ with sync_playwright() as p:
         pg.evaluate("document.querySelector('.leg-pick').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-l1-legs.png'); wide(pg, 'legs')
         assert step(pg) == 3
-        pg.evaluate("window.__app.S.trip.milesLeft = '80'")
+        pg.evaluate("window.__app.S.trip.fuel = {mode: 'miles', miles: '80'}; window.__app.S.trip.milesLeft = '80'")
         nxt(pg, 600); assert step(pg) == 4; nxt(pg, 1200); assert step(pg) == 5; idle(pg); nxt(pg); assert step(pg) == 6
         arr = ft(pg, '.gas-tiles').lower(); print('  round trip tiles:', arr.replace('\n', ' | '))
         assert pg.locator('.gas-tiles .ideal').count() == 3 and 'gas at dallas' in arr and 'enough for the cheapest return trip' in arr and 'buffer' not in arr

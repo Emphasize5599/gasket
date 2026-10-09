@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.54 - 2026-10-09
+- **A fuel gauge in Parameters.** Say how much gas you have the way your dash shows it: drag the needle (it snaps to eighths, with a low-fuel light near E), or switch to a percentage or the miles left on your dash. It shows what that comes to in gallons and miles. Each way nudges toward a slightly low guess, since a stop planned a little early costs almost nothing. Electric cars get percent or miles.
+- **Adding a car is one menu.** The VIN box comes first, outlined in green and marked Recommended, since it gets your exact version, open recalls and factory tire size. Year / make / model sits under it, and a VIN lookup fills it in.
+- Removed the license plate option. No free source turns a plate into a VIN.
+- The Tires card's summary line is styled like About this car's.
+- The built-in example garage and all test data use generic places and example cars.
+
 ## 0.0.53 - 2026-10-08
 - **Tires** have their own card in the Garage:
   - **Size:** your trim's factory size is looked up at Tire Rack (for example 195/65R15 for a 2020 Corolla Hybrid LE). If a trim came with several sizes you pick yours, and you can always type it from the sticker inside the driver's door.

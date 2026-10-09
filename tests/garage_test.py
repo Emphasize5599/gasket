@@ -90,15 +90,22 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__app.S.cars.length') == 1 and pg.locator('#gCars .cx').count() == 0, 'one car left: no x to remove it'
         # ---- add a car by VIN: NHTSA decodes it, the EPA mileage is matched, details filled, recalls checked ----
         pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
-        pg.click('[data-how="plate"]'); pg.wait_for_timeout(150)
-        pt = ft(pg, '.plate-msg'); print('  plate:', pt[:120]); assert "isn't available" in pt and 'VIN' in pt
-        pg.click('#gToVin'); pg.wait_for_timeout(150)
+        # one menu: the VIN first, outlined in green and marked Recommended, then year / make / model; no plate lookup
+        assert pg.locator('#gHow, [data-how], .plate-msg').count() == 0, 'no switch between ways, no license plate'
+        assert pg.locator('.vin-row.rec #gVin').count() == 1 and 'Recommended' in ft(pg, '.vin-row'), 'the VIN box, recommended'
+        bc = pg.evaluate("getComputedStyle(document.getElementById('gVin')).borderTopColor"); print('  VIN outline:', bc)
+        g = [int(x) for x in bc[bc.index('(') + 1:bc.index(')')].split(',')[:3]]; assert g[1] > g[0] + 40 and g[1] > g[2] + 20, 'green: ' + bc
+        assert pg.evaluate("(() => { const v = document.querySelector('.vin-row'), e = document.getElementById('tEpa'); return !!(v.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING); })()"), 'year / make / model below the VIN'
+        assert pg.locator('#tEpa:not(.hidden) #eYear').count() == 1 and 'Year / make / model' in ft(pg, '#tEpa summary')
+        pg.screenshot(path=f'{OUT}/{name}-gr3-vin.png'); wide(pg, 'vin')
         pg.fill('#gVin', 'abc'); pg.click('#gVinGo'); pg.wait_for_timeout(150)
         assert '17' in ft(pg, '#vMsg'), 'bad VIN explained'
         pg.fill('#gVin', '1hgcv1f3xma000001'); pg.click('#gVinGo'); idle(pg, 1200)
         chip = ft(pg, '.carchip.on'); print('  VIN car:', chip, '|', ft(pg, '.epa-tiles').replace('\n', ' '), '|', ft(pg, '#eMsg'))
         assert '2021 Accord EX' in chip and '30' in ft(pg, '.epa-tiles'), 'decoded and matched to the EPA'
         assert any('DecodeVinValuesExtended/1HGCV1F3XMA000001' in u for u in pg.evaluate('window.__urls'))
+        pg.wait_for_function("document.getElementById('eYear') && document.getElementById('eYear').value === '2021' && document.getElementById('eOpt').value !== ''", timeout=5000)
+        assert pg.locator('.vin-row.rec').count() == 0 and 'Year / make / model' in ft(pg, '#tEpa summary') and pg.input_value('#eYear') == '2021', 'a car with a VIN: no more nudging, and year / make / model filled in from it'
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
         pg.click('#gInfo summary'); pg.wait_for_timeout(200)
@@ -187,8 +194,9 @@ with sync_playwright() as p:
         pg.fill('#tLink', LINK); pg.wait_for_timeout(700)
         pg.click('#tGetRoutes'); idle(pg, 700)
         nxt(pg, 300)
-        assert step(pg) == 4 and 'Miles of range left' in ft(pg, '#tpS4') and 'Charge to 80% each stop' in ft(pg, '#tpS4')
-        pg.fill('#tMiles', '120'); pg.fill('#tBuffer', '20')
+        assert step(pg) == 4 and 'how charged is it?' in ft(pg, '#tpS4').lower() and 'Charge to 80% each stop' in ft(pg, '#tpS4')
+        assert pg.locator('#tFuelMode [data-fm]').count() == 2 and pg.locator('#tFuelMode [data-fm="pct"].on').count() == 1, 'EV: percent or miles, no gauge'
+        pg.click('#tFuelMode [data-fm="miles"]'); pg.fill('#tMiles', '120'); pg.fill('#tBuffer', '20')
         nxt(pg, 1500); nxt(pg, 1200)
         assert step(pg) == 6
         rr = [x for x in pg.evaluate('window.__afdc') if 'nearby-route' in x]; print('  along route:', len(rr), rr[0].split('?')[1][:160] if rr else '')
