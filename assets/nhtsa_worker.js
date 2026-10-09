@@ -10,7 +10,7 @@ async function (reqId, args) {
   const RESULT = /(^|[^"“\w])(\d+)\s+unrepaired\s+recalls?\b/gi;
   const CAMPAIGN = /\b(\d{2}V\d{3}000)\b/g;
   const t0 = Date.now();
-  while (Date.now() - t0 < 120000) {
+  while (Date.now() - t0 < 45000) {
     const txt = (document.body && document.body.innerText) || '';
     let m, found = null;
     RESULT.lastIndex = 0;
@@ -42,7 +42,7 @@ async function (reqId, args) {
       send({ error: 'NHTSA says that VIN isn\'t valid. Check it in the Garage.' });
       return;
     }
-    await sleep(700);
+    await sleep(300);
   }
   // a background read (args.bg) says what the page showed instead, for the log
   const all = ((document.body && document.body.innerText) || '').replace(/\s+/g, ' '), at = all.search(/vin lookup|search by ymm or vin/i);

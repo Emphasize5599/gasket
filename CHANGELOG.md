@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.61 - 2026-10-09
+- **Faster recall checks:** the background check follows NHTSA's page when it reloads itself, so it answers in seconds instead of hanging until it gives up. A try that gets no answer stops after a minute.
+
 ## 0.0.60 - 2026-10-09
 - **Saved round trips keep their routes.** A trip that starts from your location no longer drops its saved routes and looks them up again because you've moved a little since saving it.
 

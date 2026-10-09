@@ -258,6 +258,7 @@ public class MainActivity extends Activity {
 
         int showReq = -1;   // set while the page is shown to the user by siteShow
         int readReq = -1;   // set while a page is read in the background by siteRead (answered once)
+        String readCall = null;   // its reader: run on every load of the page (it may reload itself), once per load
 
         SiteWorker(String key, String home, String origin) { this(key, home, origin, false); }
 
@@ -283,7 +284,7 @@ public class MainActivity extends Activity {
                     // a background read (siteRead) starts its reader as soon as the page is drawn: some pages (NHTSA's)
                     // keep loading in the background for a long time, and the reader waits for its answer by itself
                     if (verifying == SiteWorker.this || readReq < 0 || !url.startsWith(SiteWorker.this.origin)) return;
-                    runQueue();
+                    runRead();
                 }
 
                 @Override
@@ -302,11 +303,12 @@ public class MainActivity extends Activity {
                         if (ready) js("window.toast&&toast(" + q("Check passed. Tap Done.") + ")");
                         return;
                     }
+                    if (readReq >= 0 && !blocked && url.startsWith(SiteWorker.this.origin)) { runRead(); return; }
                     if (blocked) {
                         if (readReq >= 0) {
                             // a background read hit a check (a CAPTCHA page, Access Denied): never get past it, just say so
                             js("window.onNativeResult&&onNativeResult(" + readReq + ",{blocked:true})");
-                            readReq = -1;
+                            readReq = -1; readCall = null;
                         } else js("window.onSiteBlocked&&onSiteBlocked(" + q(SiteWorker.this.key) + ")");
                         queue.clear();
                     } else if (ready) {
@@ -314,6 +316,17 @@ public class MainActivity extends Activity {
                     }
                 }
             });
+        }
+
+        /** A background read's reader, on the page as it is now (a page that reloads itself gets it again). */
+        int readRuns = 0;
+        void runRead() {
+            if (readCall == null) return;
+            // NHTSA's page may reload itself during its own checks: its reader goes onto each new load. Other readers
+            // (Tire Rack, which turns pages itself) run on the first load only.
+            if (readRuns > 0 && !"nhtsa".equals(key)) { view.evaluateJavascript("window.__gasketRead=1", null); return; }
+            readRuns++;
+            view.evaluateJavascript(readCall, null);
         }
 
         void runQueue() {
@@ -353,7 +366,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void result(int reqId, String json) {
             SiteWorker w = workers.get(key);
-            if (w != null && w.readReq == reqId) w.readReq = -1;   // a background read is answered once
+            if (w != null && w.readReq == reqId) { w.readReq = -1; w.readCall = null; }   // a background read is answered once
             js("window.onSiteResult&&onSiteResult(" + q(key) + "," + reqId + ",JSON.parse(" + q(json) + "))");
         }
     }
@@ -1334,15 +1347,18 @@ public class MainActivity extends Activity {
                         return;
                     }
                     w.readReq = reqId;
-                    w.loadAndRun(url, "(" + script + ")(" + reqId + "," + argsJson + ")");
-                    // and if the page never says it's drawn or finished, start the reader anyway after a while
+                    // once per page load (the page keeps a flag; a reload clears it and gets the reader again)
+                    w.readCall = "if(!window.__gasketRead){window.__gasketRead=1;(" + script + ")(" + reqId + "," + argsJson + ");}";
+                    w.queue.clear(); w.ready = false; w.readRuns = 0;
+                    w.view.loadUrl(url);
+                    // and if the page never says it's drawn or finished, start the reader anyway after a few seconds
                     final SiteWorker fw = w; final int fr = reqId;
                     main.postDelayed(new Runnable() {
                         public void run() {
                             String at = fw.view.getUrl();
-                            if (fw.readReq == fr && !fw.queue.isEmpty() && verifying != fw && at != null && at.startsWith(fw.origin)) fw.runQueue();
+                            if (fw.readReq == fr && verifying != fw && at != null && at.startsWith(fw.origin)) fw.runRead();
                         }
-                    }, 15000);
+                    }, 5000);
                 }
             });
         }

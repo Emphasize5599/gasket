@@ -62,11 +62,11 @@
       if (done) return; done = true; autoBusy[c.id] = false;
       if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
         c.recallAuto = { vin: vin, t: Date.now(), failed: true, r: READER }; save();
-        LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA\'s lookup turned the hidden window down (its invisible reCAPTCHA): ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in 2.5 minutes');
+        LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA\'s lookup turned the hidden window down (its invisible reCAPTCHA): ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in a minute');
       } else record(c, vin, r, true);
       if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }
     };
-    setTimeout(function () { finish(null); }, 150000);
+    setTimeout(function () { finish(null); }, 60000);   // it normally answers in 5-10 s
     call('siteRead', 'nhtsa', JSON.stringify({ url: VIN_PAGE + encodeURIComponent(vin), bg: true })).then(finish);
     if (host && host.isConnected && car() === c) draw();
   }
