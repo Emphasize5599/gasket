@@ -124,11 +124,25 @@ with sync_playwright() as p:
         assert '78 mph instead of 70' in out and 'sooner' in out and '+$' in out and '1,300 mi' in out
         assert pg.get_attribute('#gChart .sel-l', 'x1') != x0 and pg.text_content('#gChart .sel-t') == '78', 'line follows the slider'
         # log an observed tank with the speed you held -> calibrates
+        assert pg.locator('#oAdd[open]').count() == 0, 'adding an entry is its own menu, closed'
+        pg.click('#oAdd summary'); pg.wait_for_timeout(100)
         pg.fill('#lMpg', '52'); pg.select_option('#lKind', 'highway'); pg.fill('#lSpeed', '72'); pg.click('#lAdd'); pg.wait_for_timeout(400)
         lg = ft(pg, '.log-list'); sp = ft(pg, '#tSpeed'); print('  log:', lg.replace('\n', ' | '), '||', [l for l in sp.split('\n') if 'Calibrated' in l])
-        assert '52.0 mpg' in lg and 'at 72 mph' in lg and 'Calibrated from 1 of your entries' in sp
-        pg.fill('#lMpg', '61'); pg.select_option('#lKind', 'mixed'); pg.click('#lAdd'); pg.wait_for_timeout(300)   # no speed: still fine
+        assert '52.0' in lg and '72' in lg and 'Highway' in lg and 'Calibrated from 1 of your entries' in sp
+        pg.fill('#lMpg', '61'); pg.select_option('#lKind', 'mixed'); pg.fill('#lDate', '2026-01-15'); pg.click('#lAdd'); pg.wait_for_timeout(300)   # no speed, an earlier day: still fine
         assert pg.locator('.log-row').count() == 2 and 'Calibrated from 1 of' in ft(pg, '#tSpeed')
+        # the log: sorted by date (newest first), by any column, and filtered
+        col = lambda k: [r.split('\t')[k] for r in pg.evaluate("[...document.querySelectorAll('.log-row')].map(r => [...r.cells].map(c => c.innerText).join('\\t'))")]
+        assert col(1) == ['52.0', '61.0'], col(1)
+        pg.click('[data-sort="mpg"]'); pg.wait_for_timeout(100); assert col(1) == ['61.0', '52.0'], 'by mpg, highest first'
+        pg.click('[data-sort="mpg"]'); pg.wait_for_timeout(100); assert col(1) == ['52.0', '61.0'], 'tap again: lowest first'
+        pg.click('#oFilt summary'); pg.wait_for_timeout(100)
+        pg.fill('[data-lf="mpgLo"]', '55'); pg.wait_for_timeout(100); assert col(1) == ['61.0'] and '1 of 2' in ft(pg, '#oCount')
+        pg.fill('[data-lf="mpgLo"]', ''); pg.click('[data-lk="mixed"]'); pg.wait_for_timeout(100); assert col(2) == ['Highway'], 'mixed hidden'
+        pg.fill('[data-lf="mphLo"]', '70'); pg.wait_for_timeout(100); assert col(3) == ['72']
+        pg.fill('[data-lf="dHi"]', '2026-02-01'); pg.wait_for_timeout(100); assert pg.locator('.log-row').count() == 0 and 'No entries match' in ft(pg, '.log-list')
+        pg.screenshot(path=f'{OUT}/{name}-g1b-log.png'); wide(pg, 'mileage log')
+        pg.click('#oFiltClear'); pg.wait_for_timeout(150); assert pg.locator('.log-row').count() == 2
         pg.evaluate("document.getElementById('tSpeed').scrollIntoView()"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-g2-speed.png'); wide(pg, 'garage speed')
         # with a time value

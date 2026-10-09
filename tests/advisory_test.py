@@ -70,6 +70,14 @@ with sync_playwright() as p:
         pg.wait_for_function("(() => { const t = document.querySelector('#advList .rc-tile'); return t && t.innerText.includes('Software update.') && t.innerText.includes('22V200000'); })()", timeout=3000)
         t0 = pg.evaluate("document.querySelector('#advList .rc-tile').innerText"); assert 'Software update.' in t0 and 'Jun 5, 2022' in t0 and '22V200000' in t0, t0
         pg.screenshot(path=f'{OUT}/{name}-a0-tiles.png', full_page=True)
+        # not rated yet: "Rating…" and a bar along the bottom of each tile (the model's progress)
+        pg.evaluate("() => { window.__rate0 = Severity.rate; Severity.rate = () => {}; window.__sev0 = window.__app.S.recallSev; window.__app.S.recallSev = null; window.dispatchEvent(new Event('garagechange')); }")
+        pg.wait_for_timeout(150)
+        assert pg.locator('#advList .rc-tile .rc-bar').count() == 2 and 'Rating' in tiles.nth(0).inner_text(), 'a progress bar on each tile being rated'
+        pg.screenshot(path=f'{OUT}/{name}-a0b-rating.png')
+        pg.evaluate("() => { Severity.rate = window.__rate0; window.__app.S.recallSev = window.__sev0; window.dispatchEvent(new Event('garagechange')); }")
+        pg.wait_for_timeout(150)
+        assert pg.locator('#advList .rc-bar').count() == 0
         assert not dot(pg), 'nothing to act on without a VIN'
         # a hybrid isn't told to turn off engine stop: that's how a hybrid drives
         pg.evaluate("() => { const c = window.Garage.car(); c.info = Object.assign({}, c.info, { features: (c.info && c.info.features || []).concat(['Start-stop']) }); window.dispatchEvent(new Event('garagechange')); }")

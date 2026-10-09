@@ -34,6 +34,9 @@
   // the model runs on the same thread as the buttons: a short pause before each sentence lets taps through
   function rest() { return new Promise(function (r) { setTimeout(r, 24); }); }
   var KV = function () { return root.__app && root.__app.KV; };
+  // how far along: the download (first time only, 0–70%), working out the examples (70–95%), then ready
+  var prog = { f: 0, label: 'Waiting to rate' }, listeners = [];
+  function setProg(f, label) { prog = { f: Math.max(prog.f, Math.min(1, f)), label: label }; listeners.forEach(function (fn) { try { fn(prog); } catch (e) { } }); }
   /** Load the library and the model (the first time: the download); resolves to an embedding function. */
   function load() {
     if (loading) return loading;
@@ -43,17 +46,26 @@
       T.env.allowLocalModels = false; T.env.useBrowserCache = false;     // the app keeps the files itself
       if (T.env.backends && T.env.backends.onnx && T.env.backends.onnx.wasm) { T.env.backends.onnx.wasm.numThreads = 1; T.env.backends.onnx.wasm.proxy = false; }
       await rest();
-      var pipe = await T.pipeline('feature-extraction', MODEL, { dtype: 'q8' });
+      var files = {};
+      setProg(0.02, 'Getting the rating model ready');
+      var pipe = await T.pipeline('feature-extraction', MODEL, { dtype: 'q8', progress_callback: function (p) {
+        if (!p || p.status !== 'progress' || !p.total) return;
+        files[p.file] = { a: p.loaded || 0, b: p.total };
+        var a = 0, b = 0; Object.keys(files).forEach(function (k) { a += files[k].a; b += files[k].b; });
+        setProg(0.02 + 0.68 * (a / b), 'Downloading the rating model (first time only)');
+      } });
+      setProg(0.7, 'Setting up the rating model');
       embed = async function (t) { await rest(); return Array.from((await pipe(t, { pooling: 'mean', normalize: true })).data); };
       // the examples' vectors are worked out once and kept (they only change with VERSION)
       var kv = KV(), ak = 'anchors|' + VERSION + '|' + MODEL, kept = kv && kv.get('ai', ak);
       if (kept && kept.v && kept.v[3] && kept.v[3].length === EXAMPLES[3].length && kept.v[1].length === EXAMPLES[1].length && kept.v[2].length === EXAMPLES[2].length) anchors = kept.v;
       else {
         var a = {};
-        for (var k = 3; k >= 1; k--) { a[k] = []; for (var i = 0; i < EXAMPLES[k].length; i++) a[k].push({ t: EXAMPLES[k][i], v: (await embed(EXAMPLES[k][i])).map(function (x) { return Math.round(x * 1e5) / 1e5; }) }); }
+        var nEx = EXAMPLES[1].length + EXAMPLES[2].length + EXAMPLES[3].length, done = 0;
+        for (var k = 3; k >= 1; k--) { a[k] = []; for (var i = 0; i < EXAMPLES[k].length; i++) { a[k].push({ t: EXAMPLES[k][i], v: (await embed(EXAMPLES[k][i])).map(function (x) { return Math.round(x * 1e5) / 1e5; }) }); setProg(0.7 + 0.25 * (++done / nEx), 'Setting up the rating model'); } }
         anchors = a; if (kv) kv.put('ai', ak, a);
       }
-      state = 'ready';
+      state = 'ready'; setProg(0.95, 'Rating');
       return embed;
     })().catch(function (e) { state = 'failed'; loading = null; throw e; });
     return loading;
@@ -101,5 +113,19 @@
     })().catch(function (e) { if (root.FLog) root.FLog.warn('car', 'Couldn\'t load the recall rating model', String(e && e.message || e)); finish(); });
   }
   function busy() { return running; }
-  root.Severity = { get: get, rate: rate, busy: busy, state: function () { return state; }, EXAMPLES: EXAMPLES, _rateText: function (t) { return load().then(function () { return rateText(t); }); } };
+  /** How close a text reads to each group of example sentences: { group: average of its two closest } (loads the model
+   *  if needed), or null when it can't (no model in the tests, or it failed). */
+  function compare(text, groups) {
+    if (root.__mocks && root.__mocks.severity) return Promise.resolve(null);
+    return load().then(async function () {
+      var v = await embed(String(text).slice(0, 300)), out = {};
+      for (var g in groups) {
+        var sc = [];
+        for (var i = 0; i < groups[g].length; i++) sc.push(dot(v, await embed(groups[g][i])));
+        sc.sort(function (a, b) { return b - a; }); out[g] = (sc[0] + (sc[1] != null ? sc[1] : sc[0])) / 2;
+      }
+      return out;
+    }).catch(function () { return null; });
+  }
+  root.Severity = { get: get, rate: rate, busy: busy, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, _rateText: function (t) { return load().then(function () { return rateText(t); }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

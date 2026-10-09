@@ -123,12 +123,17 @@
     if (chk) { if (chk.open > 0) n++; else if (days(chk.t) > RECHECK_DAYS) n++; }
     else if (c.vin && list && list.length) n++;
     n += adviceFor(c).filter(function (a) { return !choice(c, a); }).length;
-    n += tireAdvice(c).filter(function (x) { return x.level === 'warn'; }).length;   // worn tires
+    n += tireAdvice(c).filter(function (x) { return x.level === 'warn' && !x.nodot; }).length;   // worn tires, a spare to air up
     return n;
   }
   /** One line for the Departure step, or ''. */
   function departureNote(c) {
-    c = c || car(); var chk = vinCheck(c), list = onRecord(c);
+    c = c || car();
+    var rc = recallNote(c), sp = window.Tires && Tires.departureNote ? Tires.departureNote(c) : '';
+    return [rc, sp].filter(Boolean).join(' ');
+  }
+  function recallNote(c) {
+    var chk = vinCheck(c), list = onRecord(c);
     if (chk && chk.open > 0) return 'Your ' + G().shortName(c) + ' has ' + chk.open + ' open safety recall' + (chk.open === 1 ? '' : 's') + '. A dealer fixes them for free. Worth doing before a long drive (see Advisory).';
     if (!chk && list && list.length) return 'Your ' + G().shortName(c) + ' has ' + list.length + ' safety recall' + (list.length === 1 ? '' : 's') + ' on record. Check in Advisory whether yours are fixed.';
     return '';
@@ -215,13 +220,21 @@
       return body ? '<details class="rc-sec" data-open="' + esc(k) + '"' + (rcOpen[k] ? ' open' : '') + '><summary>' + title + '</summary><p>' + esc(body) + '</p></details>' : '';
     };
     var sv = severity(x), lv = sv ? sv.level : 0;
-    var why = !sv ? 'Being rated on your phone…' : sv.fact ? sv.near : 'Rated ' + SEV_NAME[lv].toLowerCase() + ' by the small AI model on your phone. It reads most like: “' + sv.near + '”';
+    var pg = window.Severity && Severity.progress ? Severity.progress() : { f: 0, label: 'Rating' };
+    var why = !sv ? '<span class="rc-plab">' + esc(pg.label) + '…</span>' : sv.fact ? sv.near : 'Rated ' + SEV_NAME[lv].toLowerCase() + ' by the small AI model on your phone. It reads most like: “' + sv.near + '”';
     return '<details class="rc-tile sev' + lv + '" data-open="' + esc(key) + '"' + (rcOpen[key] ? ' open' : '') + '><summary><span class="rc-sev">' + (sv ? SEV_NAME[lv] : 'Rating…') + '</span><span class="rc-t"><b>' + esc(compPlain(x.comp)) + '</b>' +
-      '<small>' + esc(firstSentence(x.cons || x.sum)) + '</small></span></summary>' +
-      '<div class="rc-why">' + esc(why) + (x.ota ? ' Fixed over the air.' : '') + '</div>' +
+      '<small>' + esc(firstSentence(x.cons || x.sum)) + '</small></span>' +
+      (sv ? '' : '<span class="rc-bar' + (pg.f ? '' : ' ind') + '"><i style="transform:scaleX(' + pg.f.toFixed(3) + ')"></i></span>') + '</summary>' +
+      '<div class="rc-why">' + (sv ? esc(why) : why) + (x.ota ? ' Fixed over the air.' : '') + '</div>' +
       sec('What\'s wrong', x.sum) + sec('The risk', x.cons) + sec('The fix', x.fix) +
       sec('When it began', ((x.date ? 'Reported to NHTSA ' + datePlain(x.date) + '.' : '') + (x.id ? ' NHTSA campaign ' + x.id + '.' : '')).trim()) + '</details>';
   }
+  // the bars on the tiles still being rated follow the model's progress, without redrawing the page
+  if (window.Severity && Severity.onProgress) Severity.onProgress(function (p) {
+    if (!host || !host.isConnected) return;
+    host.querySelectorAll('.rc-bar').forEach(function (b) { b.classList.toggle('ind', !p.f); b.firstChild.style.transform = 'scaleX(' + p.f.toFixed(3) + ')'; });
+    host.querySelectorAll('.rc-plab').forEach(function (l) { l.textContent = p.label + '…'; });
+  });
   var rcOpen = {};   // which recall tiles and sections you've opened (kept when Advisory redraws)
   /** Most serious first, then newest. */
   function bySeverity(list) {
@@ -232,7 +245,10 @@
   function tireCard(c) {
     var l = tireAdvice(c); if (!l.length) return '';
     return '<div class="card adv-card adv-tires' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advTires"><h3>Tires</h3>' +
-      l.map(function (x) { return '<div class="adv-item"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p></div>'; }).join('') + '</div>';
+      l.map(function (x) {
+        return '<div class="adv-item' + (x.level === 'done' ? ' done' : x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p>' +
+          (x.check ? '<label class="adv-chk"><input type="checkbox" data-tchk="' + esc(x.check.id) + '"' + (x.check.on ? ' checked' : '') + '><span>' + esc(x.check.label) + '</span></label>' : '') + '</div>';
+      }).join('') + '</div>';
   }
   function adviceCards(c) {
     var l = adviceFor(c);
@@ -249,6 +265,7 @@
   }
   function bind(c) {
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
+    host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); }; });
     if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; });
     host.querySelectorAll('details[data-open]').forEach(function (d) { d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
     host.querySelectorAll('[data-adv]').forEach(function (b) {

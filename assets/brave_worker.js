@@ -3,6 +3,7 @@ async function (reqId, args) {
   // window (args.bg) or on the page shown to the user. It only reads the page's text: if Brave shows a check (a CAPTCHA,
   // "unusual traffic"), the hidden read says {blocked: true} and stops; the user can open the page and do it themselves.
   // Reports back through GasketSite.result(reqId, json): {gal, text, src: 'ai' | 'results'} or {blocked} or {error}.
+  // args.kind 'spare' asks about the spare tire instead: {text, src} (the AI answer's words; the app reads which kind).
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const flat = (s) => (s || '').replace(/\s+/g, ' ');
@@ -32,11 +33,12 @@ async function (reqId, args) {
     return out;
   };
   // the AI answer's own text, or '' (not there yet)
+  const spare = !!(args && args.kind === 'spare');
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {
       const t = el.innerText || '';
-      if (!AI_END.test(t) || !/gal/i.test(t)) return;
+      if (!AI_END.test(t) || !(spare ? /spare|repair kit|inflator|run-?flat/i : /gal/i).test(t)) return;
       if (!best || t.length < best.length) best = t;
     });
     return best ? flat(best) : '';
@@ -63,6 +65,15 @@ async function (reqId, args) {
       if (bg) { send({ blocked: true }); return; }
     } else {
       const ai = aiText();
+      if (spare) {
+        // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
+        if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= 3) { send({ text: ai.slice(0, 1500), src: 'ai' }); return; } }
+        else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
+          const at = Math.max(0, t.search(/spare tire/i));
+          if (at > 0) { send({ text: t.slice(at, at + 1500), src: 'results' }); return; }
+        }
+        await sleep(400); continue;
+      }
       const f = ai ? matches(ai)[0] : null;
       if (f) {
         // the answer streams in: take it once it has stopped changing for a moment
@@ -75,5 +86,5 @@ async function (reqId, args) {
     }
     await sleep(400);
   }
-  send({ error: 'Brave Search didn\'t give a tank size.' + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });
+  send({ error: 'Brave Search didn\'t give ' + (spare ? 'an answer about the spare.' : 'a tank size.') + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });
 }

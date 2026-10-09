@@ -903,6 +903,40 @@
   }
   window.__data = { mergeData: mergeData, exportData: exportData, BL: BL };
 
+  // ---------- "there's more below" ----------
+  /**
+   * A small round button at the bottom of a scrolling area (centered, half over its edge): ↓ while there's more below (scrolls most of a screen),
+   * ↑ once you're at the bottom (back to the top); hidden when it all fits. It sits on the page itself (fixed), so a
+   * panel being dragged doesn't carry it off; it follows the area's size, scrolling and content.
+   */
+  function scrollHint(sc) {
+    if (!sc || sc._hint) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'scroll-hint hidden'; b.setAttribute('aria-label', 'More below');
+    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></svg>';
+    document.body.appendChild(b); sc._hint = b;
+    var up = false, raf = 0;
+    var update = function () {
+      raf = 0;
+      var r = sc.getBoundingClientRect(), shown = sc.offsetParent !== null && r.height > 120 && !sc.closest('.hidden');
+      var below = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+      var show = shown && sc.scrollHeight > sc.clientHeight + 24 && (below > 24 || sc.scrollTop > 200);
+      b.classList.toggle('hidden', !show);
+      if (!show) return;
+      up = below <= 24;
+      b.classList.toggle('up', up); b.setAttribute('aria-label', up ? 'Back to the top' : 'More below');
+      b.style.top = Math.round(r.bottom - 22) + 'px'; b.style.left = Math.round(r.left + r.width / 2 - 17) + 'px';   // bottom center, half over the edge: off the chevrons on the right
+    };
+    var soon = function () { if (!raf) raf = requestAnimationFrame(update); };
+    sc.addEventListener('scroll', soon, { passive: true });
+    window.addEventListener('resize', soon);
+    if (window.ResizeObserver) new ResizeObserver(soon).observe(sc);
+    if (window.MutationObserver) new MutationObserver(soon).observe(sc, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'open'] });
+    b.onclick = function () { sc.scrollTo({ top: up ? 0 : sc.scrollTop + Math.round(sc.clientHeight * 0.8), behavior: 'smooth' }); };
+    soon();
+    return { update: soon };
+  }
+
   // ---------- settings ----------
   function sw(key, on) { return '<label class="switch"><input type="checkbox" data-k="' + key + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
   function openSettings(onboarding) {
@@ -981,7 +1015,7 @@
     h += '<button class="btn primary" id="sDone">' + (onboarding ? 'Save & find gas' : 'Done') + '</button>';
     h += '<button class="btn tonal" id="sDemo">' + (demo ? 'Turn off demo data' : 'Try with demo data') + '</button>';
     h += '<p class="lead" style="margin-top:16px;font-size:12.5px">Prices: Google Maps (crowd/partner-sourced, not guaranteed). Discount rules as published by Walmart and CITGO, Oct 2026 — the Walmart app\'s Gas Savings page is the final word on which locations participate.</p>';
-    var pg = $('settings'); pg.innerHTML = h; pg.classList.remove('hidden'); pg.scrollTop = 0;
+    var pg = $('settings'); pg.innerHTML = h; pg.classList.remove('hidden'); pg.scrollTop = 0; scrollHint(pg);
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
     $('sDone').onclick = function () { closeSettings(true); };
     $('sLogView').onclick = function () { showLog(); };
@@ -1246,5 +1280,5 @@
   window.__app = { justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
 })();

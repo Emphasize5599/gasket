@@ -220,7 +220,7 @@
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
-    h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + esc(window.Tires ? Tires.summary(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
+    h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + (window.Tires ? Tires.summaryHtml(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
     host.innerHTML = h;
     restoreEMsg();
     speedHost = $('tSpeed');
@@ -228,7 +228,7 @@
     if ($('tEpa')) $('tEpa').addEventListener('toggle', function () { epaStay = this.open ? c.id : null; });
     $('gInfo').addEventListener('toggle', function () { infoOpen = this.open; });
     $('gTires').addEventListener('toggle', function () { tiresOpen = this.open; });
-    if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.textContent = Tires.summary(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
+    if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.innerHTML = Tires.summaryHtml(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
     drawSpeed();
     setTimeout(function () { tankAuto(car()); }, 0);
@@ -239,6 +239,9 @@
   // check). If it fails (or Brave shows a check, which is never got around), the box has a ↻ and "Search Brave yourself"
   // opens the page for you; typing it in always works.
   var tankBusy = {}, TANK_SRC = 'from Brave Search\'s AI answer · check your owner\'s manual';
+  // the hidden Brave Search page reads one question at a time (the tank size here, the spare in Tires)
+  var braveChain = Promise.resolve();
+  function braveSerial(fn) { var p = braveChain.then(fn, fn); braveChain = p.catch(function () { }); return p; }
   function tankKey(c) { return c && c.year && c.make && c.model ? [c.year, c.make, baseOf(c), c.trim || ''].join(' ').replace(/\s+/g, ' ').trim() : ''; }
   function tankUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&summary=1'; }
   function tankAuto(c) {
@@ -251,8 +254,9 @@
     var key = tankKey(c); if (!key || tankBusy[c.id]) return;
     tankBusy[c.id] = true; draw();
     LG.info('car', 'Asking Brave Search for the tank size' + (shown ? ' (shown to you)' : ''), key);
-    var r = await Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown, year: c.year })),
-      new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]);
+    var ask = function () { return Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown, year: c.year })),
+      new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]); };
+    var r = await (shown ? ask() : braveSerial(ask));
     tankBusy[c.id] = false;
     if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it') {
       c.tank = r2(r.gal); c.tankSrc = TANK_SRC; c.tankLookup = { key: key, t: Date.now(), gal: r.gal };
@@ -455,23 +459,82 @@
   }
   function obsPanel(c) {
     var hw = avg(c, 'highway'), ct = avg(c, 'city'), per = units(c).per;
-    var h = '<div class="lead small keep">What your car really gets. Trip plans use these; blank = EPA.</div>' +
-      '<div class="grid3">' +
+    var help = '<b>What your car really gets.</b> Trip plans use the City and Highway numbers here (blank = the EPA\'s; % of EPA scales both). ' +
+      'Every entry in your log counts too: the ones with a speed tune how your mileage changes with speed on each road of a trip, and “Use these” sets City and Highway from your log\'s averages.';
+    var h = '<div class="obs-row"><div class="grid3">' +
       '<label class="nf"><span>City ' + per + '</span><input type="number" inputmode="decimal" step="0.1" id="oCity" placeholder="' + esc(hasEpa(c) ? fmtPer(c.epa.city) : '') + '" value="' + esc(c.obs.city || '') + '"></label>' +
       '<label class="nf"><span>Highway ' + per + '</span><input type="number" inputmode="decimal" step="0.1" id="oHwy" placeholder="' + esc(hasEpa(c) ? fmtPer(c.epa.hwy) : '') + '" value="' + esc(c.obs.hwy || '') + '"></label>' +
-      '<label class="nf"><span>% of EPA</span><input type="number" inputmode="decimal" step="1" id="oPct" value="' + pctOf(c) + '"' + (hasEpa(c) ? '' : ' disabled') + '></label></div>';
+      '<label class="nf"><span>% of EPA</span><input type="number" inputmode="decimal" step="1" id="oPct" value="' + pctOf(c) + '"' + (hasEpa(c) ? '' : ' disabled') + '></label></div>' + A.qBtn(help) + '</div>';
     if (hw || ct) h += '<div class="lead small keep">Your log averages ' + [ct ? ct.mpg.toFixed(1) + ' city (' + ct.n + ')' : '', hw ? hw.mpg.toFixed(1) + ' highway (' + hw.n + ')' : ''].filter(Boolean).join(' · ') +
       '. <a href="#" id="oUseLog">Use these</a></div>';
-    h += '<div class="log-list">' + (c.entries.length ? c.entries.slice().reverse().map(function (e) {
-      return '<div class="log-row"><b>' + (+e.mpg).toFixed(1) + ' ' + per + '</b><span>' + esc(e.kind) + (e.speed ? ' · at ' + e.speed + ' mph' : '') + ' · ' + esc(fmtDate(e.date)) + '</span>' +
-        '<button class="x sm" data-del="' + esc(e.id) + '" aria-label="Delete entry">✕</button></div>';
-    }).join('') : '<div class="lead small">No logged mileage yet. Log a tank or a stretch of driving below — add the speed you held to calibrate the cruising-speed card.</div>') + '</div>';
-    h += '<div class="log-add"><div class="grid3">' +
+    // adding an entry: its own menu
+    h += '<details class="log-add" id="oAdd"' + (addOpen ? ' open' : '') + '><summary>Log mileage</summary><div class="grid2">' +
       '<label class="nf"><span>' + per + '<span class="req" aria-label="required">*</span></span><input type="number" inputmode="decimal" step="0.1" id="lMpg"></label>' +
       '<label class="nf"><span>Driving</span><select id="lKind"><option value="highway">Highway</option><option value="city">City</option><option value="mixed">Mixed</option></select></label>' +
-      '<label class="nf"><span>Typical speed when observed<small>mph · optional</small></span><input type="number" inputmode="numeric" step="1" id="lSpeed"></label></div>' +
-      '<button class="btn tonal" id="lAdd">Log mileage</button></div>';
-    return h;
+      '<label class="nf"><span>Typical speed<small>mph you held · optional · tunes the cruising-speed curve</small></span><input type="number" inputmode="numeric" step="1" id="lSpeed"></label>' +
+      '<label class="nf"><span>Date</span><input type="date" id="lDate" value="' + today() + '" max="' + today() + '"></label></div>' +
+      '<button class="btn tonal" id="lAdd">Add to the log</button></details>';
+    // the log: a table you can sort by any column and filter
+    if (!c.entries.length) return h + '<div class="lead small keep">No logged mileage yet. Log a tank or a stretch of driving above — add the speed you held to calibrate the cruising-speed card.</div>';
+    var F = logView.f;
+    h += '<details class="log-filt" id="oFilt"' + (logView.open ? ' open' : '') + '><summary>Filter <small id="oCount"></small></summary>' +
+      '<div class="lf-row"><span>' + per + '</span><input type="number" inputmode="decimal" data-lf="mpgLo" placeholder="from" value="' + esc(F.mpgLo) + '"><i>–</i><input type="number" inputmode="decimal" data-lf="mpgHi" placeholder="to" value="' + esc(F.mpgHi) + '"></div>' +
+      '<div class="lf-row"><span>mph</span><input type="number" inputmode="numeric" data-lf="mphLo" placeholder="from" value="' + esc(F.mphLo) + '"><i>–</i><input type="number" inputmode="numeric" data-lf="mphHi" placeholder="to" value="' + esc(F.mphHi) + '"></div>' +
+      '<div class="lf-row"><span>Dates</span><input type="date" data-lf="dLo" value="' + esc(F.dLo) + '"><i>–</i><input type="date" data-lf="dHi" value="' + esc(F.dHi) + '"></div>' +
+      '<div class="chips mini lf-kinds">' + ['city', 'highway', 'mixed'].map(function (k) { return '<button type="button" data-lk="' + k + '" class="' + (F.kinds[k] === false ? '' : 'on') + '">' + KIND_NAME[k] + '</button>'; }).join('') +
+      '<button type="button" class="lf-clear" id="oFiltClear">Clear</button></div></details>';
+    return h + '<div class="log-list" id="oLog">' + logTable(c) + '</div>';
+  }
+  var KIND_NAME = { city: 'City', highway: 'Highway', mixed: 'Mixed' };
+  var addOpen = false;
+  var logView = { sort: 'date', dir: -1, open: false, f: { mpgLo: '', mpgHi: '', mphLo: '', mphHi: '', dLo: '', dHi: '', kinds: {} } };
+  function logRows(c) {
+    var F = logView.f, n = function (v) { return v === '' || v == null ? null : +v; };
+    var rows = c.entries.filter(function (e) {
+      var m = +e.mpg, sp = e.speed ? +e.speed : null;
+      if (n(F.mpgLo) != null && m < n(F.mpgLo)) return false;
+      if (n(F.mpgHi) != null && m > n(F.mpgHi)) return false;
+      if (n(F.mphLo) != null && !(sp != null && sp >= n(F.mphLo))) return false;
+      if (n(F.mphHi) != null && !(sp != null && sp <= n(F.mphHi))) return false;
+      if (F.dLo && String(e.date) < F.dLo) return false;
+      if (F.dHi && String(e.date) > F.dHi) return false;
+      return F.kinds[e.kind] !== false;
+    });
+    var key = logView.sort, dir = logView.dir;
+    var val = function (e) { return key === 'mpg' ? +e.mpg : key === 'speed' ? (e.speed ? +e.speed : -1) : key === 'kind' ? String(e.kind) : String(e.date) + e.id; };
+    return rows.sort(function (a, b) { var x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  }
+  function logTable(c) {
+    var rows = logRows(c), per = units(c).per;
+    var th = function (k, label) { return '<th><button type="button" data-sort="' + k + '" class="' + (logView.sort === k ? 'on' : '') + '">' + label + (logView.sort === k ? (logView.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>'; };
+    var h = '<table class="log-tbl"><thead><tr>' + th('date', 'Date') + th('mpg', per) + th('kind', 'Driving') + th('speed', 'mph') + '<th></th></tr></thead><tbody>';
+    h += rows.map(function (e) {
+      return '<tr class="log-row"><td>' + esc(fmtShort(e.date)) + '</td><td><b>' + (+e.mpg).toFixed(1) + '</b></td><td>' + esc(KIND_NAME[e.kind] || e.kind) + '</td><td>' + (e.speed ? e.speed : '—') + '</td>' +
+        '<td><button class="x sm" data-del="' + esc(e.id) + '" aria-label="Delete entry">✕</button></td></tr>';
+    }).join('');
+    if (!rows.length) h += '<tr><td colspan="5" class="lf-none">No entries match the filter.</td></tr>';
+    return h + '</tbody></table>';
+  }
+  function fmtShort(d) { try { var p = String(d).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }); } catch (e) { return d; } }
+  /** Sorting, filtering and deleting in the log (the table alone is redrawn, so the filter boxes keep your typing). */
+  function bindLog(c) {
+    var box = $('oLog'); if (!box) return;
+    var redo = function () { box.innerHTML = logTable(c); count(); };
+    var count = function () { var el = $('oCount'), n = logRows(c).length; if (el) el.textContent = n === c.entries.length ? '· ' + n + ' entr' + (n === 1 ? 'y' : 'ies') : '· ' + n + ' of ' + c.entries.length; };
+    count();
+    box.onclick = function (ev) {
+      var s = ev.target.closest('[data-sort]');
+      if (s) { var k = s.dataset.sort; if (logView.sort === k) logView.dir = -logView.dir; else { logView.sort = k; logView.dir = k === 'kind' ? 1 : -1; } redo(); return; }
+      var b = ev.target.closest('[data-del]'); if (!b) return;
+      var e0 = c.entries.filter(function (e) { return e.id === b.dataset.del; })[0]; if (!e0) return;
+      ask({ title: 'Delete this mileage entry?', body: esc((+e0.mpg).toFixed(1) + ' ' + units(c).per + ', ' + e0.kind + ' · ' + fmtDate(e0.date)), action: 'Delete' }).then(function (ok) {
+        if (!ok) return; c.entries = c.entries.filter(function (e) { return e !== e0; }); draw(); changed();
+      });
+    };
+    host.querySelectorAll('[data-lf]').forEach(function (i) { i.oninput = function () { logView.f[i.dataset.lf] = i.value; redo(); }; });
+    host.querySelectorAll('[data-lk]').forEach(function (b) { b.onclick = function () { var k = b.dataset.lk; logView.f.kinds[k] = logView.f.kinds[k] === false; b.classList.toggle('on', logView.f.kinds[k] !== false); redo(); }; });
+    if ($('oFiltClear')) $('oFiltClear').onclick = function () { logView.f = { mpgLo: '', mpgHi: '', mphLo: '', mphHi: '', dLo: '', dHi: '', kinds: {} }; draw(); };
+    if ($('oFilt')) $('oFilt').addEventListener('toggle', function () { logView.open = $('oFilt').open; });
   }
   function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   function fmtDate(d) { try { var p = String(d).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d; } }
@@ -595,18 +658,13 @@
       e.preventDefault(); var hw = avg(c, 'highway'), ct = avg(c, 'city');
       if (ct) c.obs.city = r1(ct.mpg); if (hw) c.obs.hwy = r1(hw.mpg); draw(); changed();
     };
-    host.querySelectorAll('[data-del]').forEach(function (b) {
-      b.onclick = function () {
-        var e0 = c.entries.filter(function (e) { return e.id === b.dataset.del; })[0]; if (!e0) return;
-        ask({ title: 'Delete this mileage entry?', body: esc((+e0.mpg).toFixed(1) + ' ' + units(c).per + ', ' + e0.kind + ' · ' + fmtDate(e0.date)), action: 'Delete' }).then(function (ok) {
-          if (!ok) return; c.entries = c.entries.filter(function (e) { return e !== e0; }); draw(); changed();
-        });
-      };
-    });
+    bindLog(c);
+    if ($('oAdd')) $('oAdd').addEventListener('toggle', function () { addOpen = $('oAdd').open; });
     $('lAdd').onclick = function () {
       var mpg = parseFloat($('lMpg').value), sp = parseFloat($('lSpeed').value);
       if (!(mpg > 0 && mpg < 250)) { $('lMpg').focus(); return; }
-      var e = { id: 'e' + Date.now(), date: today(), mpg: r1(mpg), kind: $('lKind').value };
+      var d = $('lDate') && /^\d{4}-\d{2}-\d{2}$/.test($('lDate').value) && $('lDate').value <= today() ? $('lDate').value : today();
+      var e = { id: 'e' + Date.now(), date: d, mpg: r1(mpg), kind: $('lKind').value };
       if (sp >= 5 && sp <= 120) e.speed = Math.round(sp);
       c.entries.push(e);
       LG.info('car', 'Logged mileage', e);
@@ -1235,5 +1293,5 @@
   }
 
   window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
-    need: need, ok: ok, ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
+    need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

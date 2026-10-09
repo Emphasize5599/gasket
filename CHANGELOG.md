@@ -4,6 +4,16 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.69 - 2026-10-09
+- **Tires, rebuilt around safety.** The line under Tires shows the type, a fuel-economy score out of 10, the wear rating and the tread left, each colored from green to red. Tire details fold away once filled in; the tread is in front.
+- **Each tire on its own.** Turn on "My tires aren't all the same" to measure each corner (plus dual or trailer wheels). Gasket says where each tire should go: the better pair always on the rear, and worn tires replaced instead of moved back (on a front-wheel-drive car with worn fronts: new ones on the rear). It allows for your drive, including all-wheel drive's need for matched tires.
+- **Pictures that show why:** how much farther worn tires take to stop on a wet road (Discount Tire's test figures), and understeer vs oversteer.
+- **Your spare tire.** Gasket asks Brave Search whether your car has a full-size spare, a compact one, a repair kit or none, for you to confirm. Advice asks you to tick "I aired up my spare" every month, and Departure reminds you; no spare gets a plan for a flat.
+- **Observed mileage:** one (?) for what the numbers do, "Log mileage" in its own menu (with a date), and the log as a table you can sort by any column and filter by mpg, mph, dates and city / highway / mixed.
+- Advice: a recall still being rated shows a progress bar on its tile.
+- Everywhere: every menu that opens has the same arrow on the right, and a small ↓ button shows when there's more below (↑ takes you back to the top).
+- Bug fixes.
+
 ## 0.0.68 - 2026-10-09
 - **Saved round trips open straight through.** A saved round trip kept being treated as changed at the Route step, which threw its routes away and stopped you there. Now its routes and leg picks stay, and you can jump from the Garage to Departure.
 - **Tank size from Brave's AI answer, not a stray result.** The lookup waits for the AI answer instead of taking the first number on the page (a forum post about another generation). Without an AI answer, it uses the results about your car's year.

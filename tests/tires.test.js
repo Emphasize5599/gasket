@@ -27,4 +27,38 @@ assert.deepEqual(T.split('CONTINENTAL SECURECONTACT AW'), { brand: 'Continental'
 assert.deepEqual(T.split('BF GOODRICH ADVANTAGE CONTROL'), { brand: 'BFGoodrich', model: 'ADVANTAGE CONTROL' });
 assert.equal(T.normSize('195/65-15'), '195/65R15'); assert.equal(T.normSize('P195/65 R15 91H'), '195/65R15'); assert.equal(T.normSize('235/40ZR18'), '235/40R18');
 assert.equal(T.normSize('195 65 15'), ''); assert.equal(T.normSize(''), '');
+// tires that aren't all the same: the shallowest one counts
+const four = (lf, rf, lr, rr, extra) => ({ corners: { split: true, lf: { depth: lf }, rf: { depth: rf }, lr: { depth: lr }, rr: { depth: rr }, extra: extra || [] }, tread: { mode: 'miles', miles: 1000, rotated: 'yes' } });
+assert.deepEqual(T.estimate(four(8, 7, 6, 9)), { depth: 6, measured: true, corner: 'lr' });
+assert.equal(T.estimate(four(8, 7, 6, 9, [{ id: 'x1', name: 'Inner rear', depth: 3 }])).depth, 3, 'an extra wheel counts too');
+assert.equal(T.worst({ corners: { split: false, lf: { depth: 3 } } }), null, 'all the same: no corners');
+assert.equal(T.estimate({ corners: { split: true }, tread: { mode: 'measure', depth: 5 } }).depth, 5, 'no corners filled in: the single answer');
+// where they go: the better pair on the rear
+let r = T.rotation({ lf: 8, rf: 8, lr: 6, rr: 6 }, 'fwd');
+assert.equal(r.kind, 'move'); assert.deepEqual(r.moves.map(m => m.from + '>' + m.to).sort(), ['lf>lr', 'lr>lf', 'rf>rr', 'rr>rf']);
+r = T.rotation({ lf: 6, rf: 6, lr: 8, rr: 8 }, 'fwd'); assert.equal(r.kind, 'even', 'better ones already on the rear'); assert.ok(/already on the rear/.test(r.notes[0]));
+r = T.rotation({ lf: 7, rf: 7, lr: 7, rr: 6 }, 'rwd'); assert.equal(r.kind, 'even'); assert.ok(/rear tires go straight forward/.test(r.pattern));
+r = T.rotation({ lf: 4, rf: 3, lr: 7, rr: 7 }, 'fwd');
+assert.equal(r.kind, 'replace'); assert.deepEqual(r.replace.sort(), ['lf', 'rf']); assert.ok(/instead of rotating them to the back/.test(r.notes[0]), 'FWD worn fronts: replace, not rotate');
+r = T.rotation({ lf: 7, rf: 7, lr: 3, rr: 6 }, 'rwd'); assert.deepEqual(r.replace.sort(), ['lr', 'rr'], 'replaced as an axle pair'); assert.ok(/New tires always go on the rear/.test(r.notes[0]));
+r = T.rotation({ lf: 9, rf: 6, lr: 8, rr: 8 }, 'awd'); assert.ok(r.notes.some(n => /alignment/.test(n)) && r.notes.some(n => /within about 2\/32/.test(n)));
+assert.equal(T.rotation({ lf: 8, rf: null, lr: 6, rr: 6 }, 'fwd'), null, 'all four needed');
+// fuel economy out of 10
+assert.equal(T.fuelScore({ type: 'Mud-Terrain' }).score, 1);
+assert.equal(T.fuelScore({ type: 'Standard Touring All-Season' }).score, 7);
+assert.equal(T.fuelScore({ type: 'Standard Touring All-Season', brand: 'Bridgestone', model: 'ECOPIA EP422 PLUS', utqg: { tw: 680 }, size: '195/65R15' }).score, 10, 'eco line, narrow: top');
+assert.equal(T.fuelScore({ type: 'All-Terrain', size: '275/65R18' }).score, 3, 'wide: rounds down');
+assert.equal(T.fuelScore({ type: 'Grand Touring All-Season' }, -1).score, 5, 'the model can nudge it a point');
+assert.equal(T.fuelScore({}), null);
+// colors: red (bad) -> yellow -> green (good)
+assert.equal(T.hue(0), 'hsl(0, 72%, 48%)'); assert.equal(T.hue(1), 'hsl(120, 72%, 48%)'); assert.equal(T.hue(0.5), 'hsl(60, 72%, 48%)');
+assert.equal(T.twGood(700), 1); assert.equal(T.twGood(200), 0); assert.equal(T.depthGood(2), 0); assert.equal(T.depthGood(7), 1); assert.equal(T.tracGood('AA'), 1);
+// the spare, from Brave's answer
+assert.equal(T.parseSpare('The 2020 Corolla Hybrid LE comes with a compact spare tire (temporary) under the cargo floor.'), 'compact');
+assert.equal(T.parseSpare('It does not come with a full-size spare; instead it has a temporary spare.'), 'compact');
+assert.equal(T.parseSpare('Most trims include a full-size matching spare mounted under the bed.'), 'full');
+assert.equal(T.parseSpare('No spare tire is included; a tire repair kit with sealant and an inflator is provided.'), 'kit');
+assert.equal(T.parseSpare('The car rides on run-flat tires, so there is no spare.'), 'runflat');
+assert.equal(T.parseSpare('The model does not come with a spare tire.'), 'none');
+assert.equal(T.parseSpare('Tire pressure is 35 psi.'), null);
 console.log('tire math tests passed');

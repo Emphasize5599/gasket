@@ -19,7 +19,9 @@ TR = r'''() => {
     { name: 'CONTINENTAL SECURECONTACT AW', type: 'Grand Touring All-Season', size: '195/65R15', utqg: { tw: 700, trac: 'A', temp: 'A' }, warrantyMi: 60000 },
     { name: 'MICHELIN DEFENDER2', type: 'Standard Touring All-Season', size: '195/65R15', utqg: { tw: 820, trac: 'A', temp: 'B' }, warrantyMi: 80000 },
     { name: 'BRIDGESTONE BLIZZAK WS90', type: 'Studless Ice & Snow', size: '195/65R15', utqg: null, warrantyMi: 0 } ];
+  window.__brave = [];
   window.__mocks.siteRead = (key, args) => {
+    if (key === 'brave' && args.kind === 'spare') { window.__brave.push(args); return { text: 'The ' + decodeURIComponent(args.url).replace(/.*Does the (.*) come with.*/, '$1') + ' comes with a compact temporary spare tire under the cargo floor.', src: 'ai' }; }
     if (key !== 'tirerack') return { error: 'No Native bridge' };
     window.__tr.push(args);
     if (window.__trMode === 'blocked') return { blocked: true };
@@ -73,7 +75,18 @@ with sync_playwright() as p:
         t = T(pg); print('  picked:', t['brand'], t['model'], t['utqg'], t['warrantyMi'])
         assert t['utqg'] == {'tw': 680, 'trac': 'A', 'temp': 'B'} and t['utqgSrc'] == 'tirerack' and t['warrantyMi'] == 65000
         assert pg.input_value('#tzTw') == '680' and 'Wear rating from Tire Rack' in ft(pg, '#gTiresIn') and '65,000 miles' in ft(pg, '#gTiresIn')
-        assert '195/65R15 · Bridgestone ECOPIA EP422 PLUS' in ft(pg, '#gTiresLine'), 'the summary line'
+        line = ft(pg, '#gTiresLine'); print('  summary line:', line)
+        assert line.startswith('Standard Touring All-Season · Fuel 10/10 · UTQG 680 A B'), 'the line under Tires: type, fuel /10, wear rating'
+        assert '195/65R15 · Bridgestone ECOPIA EP422 PLUS' in ft(pg, '#tzDet summary'), 'size and tire under Tire details'
+        col = pg.evaluate("[...document.querySelectorAll('#gTiresLine .gr')].map(e => e.textContent + ' ' + getComputedStyle(e).color)"); print('  graded:', col)
+        assert col[0].startswith('10/10 rgb(') and col[3].startswith('B rgb('), col
+        assert 'Fuel economy' in ft(pg, '#tzDet') and 'a fuel-saving line' in ft(pg, '.tz-fuel')
+        # the spare: Brave Search's answer, to confirm
+        pg.wait_for_function("window.__brave.length > 0", timeout=4000); pg.wait_for_timeout(200)
+        assert 'Does%20the%202020%20Toyota%20Corolla%20Hybrid%20LE%20come%20with%20a%20spare%20tire' in pg.evaluate('window.__brave[0].url')
+        assert 'Compact (temporary) spare' in ft(pg, '.tz-guess') and "hasn't been checked" in ft(pg, '.tz-air'), ft(pg, '#gTiresIn')
+        pg.click('#tzSpareYes'); pg.wait_for_timeout(200)
+        assert T(pg)['spare']['kind'] == 'compact' and pg.locator('.tz-guess').count() == 0 and pg.input_value('#tzSpare') == 'compact'
         # ---- tread: estimated from miles and rotation, or measured ----
         pg.fill('#tzMiles', '30000'); pg.dispatch_event('#tzMiles', 'change'); pg.wait_for_timeout(150)
         pg.select_option('#tzRot', 'yes'); pg.wait_for_timeout(200)
@@ -97,9 +110,43 @@ with sync_playwright() as p:
         assert pg.locator('#tpSteps [data-step="2"].attn').count() == 1
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
         pg.select_option('#tzDepth', '8'); pg.select_option('#tzTrac', 'A'); pg.wait_for_timeout(200)
+        # ---- Advisory: the spare's air, ticked once a month (until then: a red dot) ----
         pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(300)
-        assert pg.locator('#advTires').count() == 0, 'nothing to say: no tire card'
+        at = ft(pg, '#advTires'); print('  advisory, spare:', at.replace('\n', ' | '))
+        assert 'Tires: replace' not in at and 'Spare tire air' in at and '60 psi' in at and pg.locator('#tpSteps [data-step="2"].attn').count() == 1
+        pg.check('[data-tchk="spare"]'); pg.wait_for_timeout(250)
+        assert pg.locator('[data-tchk="spare"]:checked').count() == 1 and pg.locator('#tpSteps [data-step="2"].attn').count() == 0 and 'Checked ' in ft(pg, '#advTires')
+        assert T(pg)['spare']['aired'] > 0
+        pg.evaluate("() => { window.Garage.car().tires.spare.aired = Date.now() - 31 * 864e5; window.dispatchEvent(new Event('garagechange')); }"); pg.wait_for_timeout(250)
+        assert pg.locator('[data-tchk="spare"]:checked').count() == 0 and pg.locator('#tpSteps [data-step="2"].attn').count() == 1, 'a month later: again'
+        pg.check('[data-tchk="spare"]'); pg.wait_for_timeout(250)
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
+        assert 'Air checked' in ft(pg, '.tz-air')
+        # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive) ----
+        assert pg.locator('#tzDet[open]').count() == 1, 'details stay open while you fill them in'
+        pg.check('#tzSplit'); pg.wait_for_timeout(200)
+        for k, d in (('lf', '8'), ('rf', '8'), ('lr', '6'), ('rr', '6')): pg.select_option('[data-corner="%s"]' % k, d); pg.wait_for_timeout(120)
+        rot = ft(pg, '.tz-rot'); print('  rotation:', rot.replace('\n', ' | '))
+        assert 'Move these tires' in rot and 'Driver front → Driver rear' in rot and 'two best tires on the rear' in rot
+        assert '6/32 in left' in ft(pg, '.tz-out') and 'Driver rear' in ft(pg, '.tz-out'), 'the shallowest tire counts'
+        pg.select_option('[data-corner="lf"]', '4'); pg.select_option('[data-corner="rf"]', '3'); pg.select_option('[data-corner="lr"]', '7'); pg.select_option('[data-corner="rr"]', '7'); pg.wait_for_timeout(200)
+        rot = ft(pg, '.tz-rot'); assert 'Replace before rotating' in rot and 'instead of rotating them to the back' in rot, rot
+        pg.click('#tzAddDual'); pg.wait_for_timeout(150); pg.click('#tzAddTrailer'); pg.wait_for_timeout(150)
+        assert pg.locator('.tz-extra').count() == 2 and 'towing' in ft(pg, '#gTiresIn')
+        pg.locator('[data-xdepth]').first.select_option('2'); pg.wait_for_timeout(200)
+        assert 'At the legal limit' in ft(pg, '.tz-out') and 'Dual inner rear' in ft(pg, '.tz-out')
+        pg.click('#tzBack summary'); pg.wait_for_timeout(150)
+        if pg.locator('#tzWhy[open]').count() == 0: pg.click('#tzWhy summary'); pg.wait_for_timeout(150)
+        assert 'Oversteer' in ft(pg, '#tzBack') and 'Treadwell' in ft(pg, '#tzWhy') and '158 ft' in pg.inner_html('#tzWhy')
+        pg.evaluate("document.getElementById('tzSplit').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t2-corners.png')
+        pg.evaluate("document.getElementById('tzWhy').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t3-why.png')
+        pg.evaluate("document.getElementById('tzBack').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t4-steer.png')
+        for x in pg.locator('[data-xdel]').all(): pg.locator('[data-xdel]').first.click(); pg.wait_for_timeout(120)
+        pg.uncheck('#tzSplit'); pg.wait_for_timeout(200)
+        assert '8/32 in left' in ft(pg, '.tz-out'), 'all the same again: the single answer'
         # no sideways scrolling, also at 130% text
         o = pg.evaluate(OVER); pg.evaluate(BIG); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'sideways: ' + str(o)

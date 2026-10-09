@@ -137,6 +137,7 @@
       '<div class="tp-head"><div class="tp-steps" id="tpSteps"></div><button class="x" id="tClose" aria-label="Close">✕</button></div>' +
       '<div class="tp-body" id="tpBody"></div><div class="tp-nav" id="tpNav"></div>';
     $('tClose').onclick = closeTrip;
+    A.scrollHint(tpBody());
     $('tpSteps').onclick = function (e) {
       var b = e.target.closest('[data-step]'); if (!b) return;
       var k = +b.dataset.step; if (k === step) return;
