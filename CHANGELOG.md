@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.67 - 2026-10-09
+- **Switching cars no longer locks the buttons.** Recalls are rated only while Advice is on screen, a little at a time so taps get through, and the model's setup is saved instead of redone each launch. The route's fuel math for the new car waits until the Garage has redrawn.
+- **Opening a saved trip shows it's loading.** "Opening your trip" with a moving bar sits where Next goes, and steps 2–7 are grayed out until it's open.
+- **Step tabs show how far you can go.** A step is grayed out until everything before it is done. Once it's all done you can jump straight from the Garage to Departure (it used to stop at Adjustments while the stops were being found).
+- Bug fixes.
+
 ## 0.0.66 - 2026-10-09
 - **Recalls you can read.** Each recall is its own tile, most serious first: how serious it is, the part, and one line. Tap it for "What's wrong", "The risk", "The fix" and "When it began", each folded on its own.
 - **A small AI model on your phone rates each recall** serious, moderate or minor, and says which kind of problem it reads most like. A loose axle hub that can cause a crash without warning comes out serious; a trunk latch, minor. The model (about 46 MB with its runtime) downloads once, the first time it's needed; recall text never leaves the phone.

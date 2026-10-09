@@ -158,6 +158,7 @@
     built = {}; scrolls = {}; shown = 0;
   }
   function renderStep() {
+    freshModel();
     if (window.__apiCount) window.__apiCount();
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);
@@ -176,7 +177,7 @@
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
       var k = i + 1, sh = { Advisory: 'Advice', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
       var attn = k === ST_ADVISORY && window.Advisory && Advisory.attention() > 0;   // something worth a look
-      return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > ST_ROUTE && !model ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
+      return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > reach() ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
     navRender();
     var b = tpBody();
@@ -192,6 +193,7 @@
     } else {
       b.scrollTop = scrolls[step] || 0;
       if (step === ST_ROUTE) refitOptionMaps();
+      if (step === ST_ADVISORY && window.Advisory && Advisory.wake) Advisory.wake();   // a car switch while it was hidden
     }
     // the big map: drawn after this frame paints, and only when its route or stops changed
     var k0 = step;
@@ -221,6 +223,10 @@
   }
   function navRender() {
     var nav = $('tpNav');
+    if (loadingTrip) {   // a saved trip opening: say so where Next will be, and nothing else can be pressed yet
+      nav.innerHTML = '<span></span><button class="btn primary opening" disabled>Opening your trip<span class="ob-bar"><i></i></span></button>';
+      gateTabs(); return;
+    }
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
     if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } closeLegs(); collectSafe(); step--; renderStep(); };
@@ -229,12 +235,13 @@
     routeGate(); backMode();
   }
   /** Go forward to step `to`, one step at a time, stopping at the first requirement that isn't met. */
+  var jumpTo = 0;   // a step tab pressed while a saved trip was opening: gone to once it's open
   async function advance(to) {
-    if (busy) return;
-    collectSafe();
+    if (busy) { if (loadingTrip) jumpTo = to; return; }
+    collectSafe(); freshModel();
     while (step < to) {
       var ok = await ready(step);
-      if (!ok) return;
+      if (!ok) { LG.info('trip', 'Stopped at ' + STEPS[step - 1] + ' on the way to ' + STEPS[to - 1]); return; }
       step++;
       renderStep();
     }
@@ -282,7 +289,21 @@
       if ($('tRefreshRoutes')) $('tRefreshRoutes').onclick = refreshRoutes;
     }
     var n = $('tNext'); if (n) n.classList.toggle('dim', step === ST_ROUTE && !model);
-    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > ST_ROUTE && !model); });
+    gateTabs();
+  }
+  /** The last step you can go straight to: every step before it is done (what Next checks, without pointing at
+   * anything). While a saved trip opens, only the Garage. */
+  function reach() {
+    if (loadingTrip) return ST_GARAGE;
+    if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
+    if (!model || document.querySelector('#tParsed .pick button')) return ST_ROUTE;
+    if (!hasFuel()) return ST_PARAMS;
+    return ST_DEPART;
+  }
+  /** Step tabs past what you can reach are grayed out (pressing one still goes as far as it can and points at what's missing). */
+  function gateTabs() {
+    var r = reach();
+    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > r); });
   }
   /**
    * Routes are fetched by themselves whenever the Route step has a link or both addresses and every stop is settled.
@@ -387,12 +408,19 @@
     if (k === ST_STOPS) return '<div id="tsResults"></div>';
     return departureHtml();
   }
+  // another car: the route's fuel use is worked out again a moment later (a long trip takes a while), or right away
+  // when a step needs it
+  var modelStale = false, staleT = 0;
+  function freshModel() {
+    clearTimeout(staleT); if (!modelStale) return; modelStale = false;
+    if (model && rawRoute) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); }
+  }
   function bindStep(k) {
     if (k === ST_ADVISORY) { Advisory.render($('tAdvisory'), call); return; }
     if (k === ST_GARAGE) {
       Garage.render($('tGarage'), null, function () {
-        if (model) { model = T.buildRoute(rawRoute, carModel()); renderInfo(); }
-        result = null;
+        if (model) { modelStale = true; clearTimeout(staleT); staleT = setTimeout(freshModel, 400); }   // after the Garage has redrawn
+        result = null; gateTabs();
         var e3 = $('tpS' + ST_PARAMS); if (e3 && step !== ST_PARAMS) { e3.remove(); delete built[ST_PARAMS]; }   // its labels follow the car (gal / kWh / kg)
       }, call);
       return;
@@ -474,7 +502,7 @@
     });
     arriveHelp();
     FuelGauge.render($('tFuel'), { kind: KIND(), tank: Garage.tank(), mpu: Garage.carModel().comb, unit: UN(), fuel: fuel(),
-      onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; } });
+      onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; gateTabs(); } });
   }
   /** How much is in the tank: S.trip.fuel ({mode: gauge / pct / miles, …}, see fuelgauge.js), filled in for this car. */
   function fuel() { return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
@@ -2294,8 +2322,12 @@
       lastFull: S.trip.arrive === 'full' };
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
-  async function findStops(force) {
-    if (busy || !model) return;
+  var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
+  function findStops(force) {
+    if (busy || !model) return finding || Promise.resolve();
+    return (finding = findStops1(force).finally(function () { finding = null; }));
+  }
+  async function findStops1(force) {
     busy = true;
     try { await findStops0(force); } catch (e) { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); result = null; }
     busy = false; progEnd();
@@ -2742,10 +2774,11 @@
     openTrip(ST_GARAGE);
     await paint();
     try { model = T.buildRoute(rawRoute, carModel()); ensureLimits(model); }
-    catch (e) { loadingTrip = false; busy = false; mapLoaded(); toastMsg('That saved trip couldn\'t be read.'); LG.error('history', String(e)); return; }
+    catch (e) { loadingTrip = false; busy = false; jumpTo = 0; mapLoaded(); renderStep(); toastMsg('That saved trip couldn\'t be read.'); LG.error('history', String(e)); return; }
     loadingTrip = false; busy = false;
     LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
     renderStep();   // Next goes on from the Garage; entering Stops plans it from the saved stations
+    if (jumpTo) { var j = jumpTo; jumpTo = 0; advance(j); }
   }
   function priceText(v) { return '$' + P.fmt3(v); }
   function keepScroll(f) { var el = tpBody(); if (!el) return f(); var y = el.scrollTop; f(); el.scrollTop = y; }

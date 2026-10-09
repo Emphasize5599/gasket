@@ -31,6 +31,9 @@
   var S = function () { return root.__app && root.__app.S; };
   function store() { var s = S(); if (!s) return {}; if (!s.recallSev || s.recallSev.v !== VERSION) s.recallSev = { v: VERSION, r: {} }; return s.recallSev.r; }
   function dot(a, b) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+  // the model runs on the same thread as the buttons: a short pause before each sentence lets taps through
+  function rest() { return new Promise(function (r) { setTimeout(r, 24); }); }
+  var KV = function () { return root.__app && root.__app.KV; };
   /** Load the library and the model (the first time: the download); resolves to an embedding function. */
   function load() {
     if (loading) return loading;
@@ -39,10 +42,17 @@
       var T = await import(LIB);
       T.env.allowLocalModels = false; T.env.useBrowserCache = false;     // the app keeps the files itself
       if (T.env.backends && T.env.backends.onnx && T.env.backends.onnx.wasm) { T.env.backends.onnx.wasm.numThreads = 1; T.env.backends.onnx.wasm.proxy = false; }
+      await rest();
       var pipe = await T.pipeline('feature-extraction', MODEL, { dtype: 'q8' });
-      embed = async function (t) { return Array.from((await pipe(t, { pooling: 'mean', normalize: true })).data); };
-      anchors = {};
-      for (var k = 3; k >= 1; k--) { anchors[k] = []; for (var i = 0; i < EXAMPLES[k].length; i++) anchors[k].push({ t: EXAMPLES[k][i], v: await embed(EXAMPLES[k][i]) }); }
+      embed = async function (t) { await rest(); return Array.from((await pipe(t, { pooling: 'mean', normalize: true })).data); };
+      // the examples' vectors are worked out once and kept (they only change with VERSION)
+      var kv = KV(), ak = 'anchors|' + VERSION + '|' + MODEL, kept = kv && kv.get('ai', ak);
+      if (kept && kept.v && kept.v[3] && kept.v[3].length === EXAMPLES[3].length && kept.v[1].length === EXAMPLES[1].length && kept.v[2].length === EXAMPLES[2].length) anchors = kept.v;
+      else {
+        var a = {};
+        for (var k = 3; k >= 1; k--) { a[k] = []; for (var i = 0; i < EXAMPLES[k].length; i++) a[k].push({ t: EXAMPLES[k][i], v: (await embed(EXAMPLES[k][i])).map(function (x) { return Math.round(x * 1e5) / 1e5; }) }); }
+        anchors = a; if (kv) kv.put('ai', ak, a);
+      }
       state = 'ready';
       return embed;
     })().catch(function (e) { state = 'failed'; loading = null; throw e; });
@@ -65,21 +75,31 @@
     if (x.park || x.out) return { level: 3, near: x.park ? 'NHTSA says not to drive it until it\'s fixed.' : 'NHTSA says to park it outside until it\'s fixed.', fact: true };
     var r = store()[key(x)]; return r || null;
   }
-  /** Rate the recalls not rated yet (loading the model the first time); calls done() once anything new is in. */
+  /** Rate the recalls not rated yet (loading the model the first time); calls done() once anything new is in.
+   *  One run at a time: recalls asked for while it runs join the queue (a redraw asking again adds nothing). */
+  var queue = [], queued = {}, dones = [], running = false;
   function rate(list, done) {
-    var todo = (list || []).filter(function (x) { return !get(x); });
-    if (!todo.length) return;
+    var todo = (list || []).filter(function (x) { return !get(x) && !queued[key(x)]; });
+    todo.forEach(function (x) { queued[key(x)] = 1; queue.push(x); });
+    if (done && (todo.length || running) && dones.indexOf(done) < 0) dones.push(done);
+    if (running || !queue.length) return;
+    running = true;
     var mock = root.__mocks && root.__mocks.severity;        // the desktop tests stand in for the model
+    var finish = function () {
+      running = false; queue = []; queued = {};
+      if (root.__app && root.__app.save) root.__app.save();
+      var d = dones; dones = []; d.forEach(function (f) { try { f(); } catch (e) { } });
+    };
     (async function () {
       if (!mock) await load();
       var st = store();
-      for (var i = 0; i < todo.length; i++) {
-        var x = todo[i], text = (String(x.cons || '') + ' ' + String(x.sum || '')).trim();
-        st[key(x)] = mock ? mock(text) : await rateText(text);
+      while (queue.length) {
+        var x = queue.shift(), text = (String(x.cons || '') + ' ' + String(x.sum || '')).trim();
+        if (!st[key(x)]) st[key(x)] = mock ? mock(text) : await rateText(text);
       }
-      if (root.__app && root.__app.save) root.__app.save();
-      if (done) done();
-    })().catch(function (e) { if (root.FLog) root.FLog.warn('car', 'Couldn\'t load the recall rating model', String(e && e.message || e)); if (done) done(); });
+      finish();
+    })().catch(function (e) { if (root.FLog) root.FLog.warn('car', 'Couldn\'t load the recall rating model', String(e && e.message || e)); finish(); });
   }
-  root.Severity = { get: get, rate: rate, state: function () { return state; }, EXAMPLES: EXAMPLES, _rateText: function (t) { return load().then(function () { return rateText(t); }); } };
+  function busy() { return running; }
+  root.Severity = { get: get, rate: rate, busy: busy, state: function () { return state; }, EXAMPLES: EXAMPLES, _rateText: function (t) { return load().then(function () { return rateText(t); }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

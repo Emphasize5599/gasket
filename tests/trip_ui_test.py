@@ -634,9 +634,14 @@ with sync_playwright() as p:
         assert 'Dallas' in ht and 'mi' in ht
         pg.screenshot(path=f'{OUT}/{name}-h1-history.png')
         pg.evaluate("window.__jobs = null; window.__routeBody = null; window.__gmapsUrls = []")
-        pg.click('[data-hist]'); idle(pg, 1200)
+        opening = pg.evaluate("document.querySelector('[data-hist]').click(), [document.querySelectorAll('#tpSteps .dim').length, !!document.querySelector('#tpNav .opening')]")
+        assert opening == [6, True], f'while it opens: steps 2-7 grayed and "Opening your trip" ({opening})'
+        idle(pg, 1200)
         assert step(pg) == 1 and pg.locator('#tripPick').count() == 0, 'a saved trip opens at the Garage'
         assert pg.evaluate('!!window.__trip.state().model'), 'its route is ready behind the Garage'
+        assert pg.locator('#tpSteps .dim').count() == 0 and pg.locator('#tpNav .opening').count() == 0, 'opened: every step can be reached'
+        pg.click('#tpSteps [data-step="7"]'); pg.wait_for_function('window.__trip.state().step === 7', timeout=15000)
+        print('  saved trip: Garage straight to Departure')
         stops(pg, 1200)
         assert pg.evaluate('window.__jobs') is None and pg.evaluate('window.__routeBody') is None and not pg.evaluate('window.__gmapsUrls'), 'no lookups'
         sv = ft(pg, '.note.saved'); print('  reopened:', sv)

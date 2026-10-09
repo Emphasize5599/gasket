@@ -141,8 +141,13 @@
   /** The dot on the Advisory step tab: something worth a look. */
   function syncDot() { var b = document.querySelector('#tpSteps [data-step="2"]'); if (b) b.classList.toggle('attn', attention() > 0); }
   var listOpen = false;
+  // drawn only while it's on screen (switching cars elsewhere mustn't start rating recalls behind your back); shown again
+  // later, it catches up (wake)
+  var stale = false;
   function draw() {
     if (!host) return;
+    if (!host.isConnected || host.closest('.hidden')) { stale = true; return; }
+    stale = false;
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
     var h = '<p class="lead small keep adv-lead">Things worth knowing about your ' + esc(G().shortName(c)) + ' before you drive.</p>';
@@ -261,7 +266,8 @@
     autoCheck(c); }
   function init(nativeCall) { call = nativeCall || call; prefetch(); }
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
+  function wake() { if (stale) draw(); }
 
-  window.Advisory = { init: init, render: render, attention: attention, departureNote: departureNote, onRecord: onRecord, vinCheck: vinCheck, ADVICE: ADVICE, adviceFor: adviceFor,
+  window.Advisory = { init: init, render: render, wake: wake, attention: attention, departureNote: departureNote, onRecord: onRecord, vinCheck: vinCheck, ADVICE: ADVICE, adviceFor: adviceFor,
     severity: severity, onChange: function (f) { onChange = f; } };
 })();
