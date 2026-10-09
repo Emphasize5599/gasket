@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.57 - 2026-10-09
+- **Loading looks finished sooner.** Adjustments, Stops, Advisory and Tires show their tiles right away, with a loading bar inside each that says what it's waiting on.
+- **Routes come by themselves** whenever the Route step has a link or both addresses, including a trip you come back to.
+- **Haptics only where they help:** a light tick on each step of the fuel gauge and the buffer and detour sliders, and nowhere else.
+- The background recall check starts reading NHTSA's page as soon as it's drawn, tries again after half an hour if it gets no answer, and logs what the page showed.
+- Bug fixes.
+
 ## 0.0.56 - 2026-10-09
 - Fewer popups: a missing field is shown by its outline alone, and results show in place. Popups are left for errors and for saving, backing up and restoring.
 

@@ -105,6 +105,7 @@
     function setE(e) {
       if (String(f.n16) === String(e)) return;
       f.n16 = e;
+      var N = root.__app && root.__app.N; if (N && N.tick) N.tick();   // a light tick on every sixteenth
       var svg = host.querySelector('.fg-svg'), nd = svg && svg.querySelector('.fg-needle');
       if (nd) {   // move the needle (CSS animates it) instead of redrawing, so it swings
         nd.classList.remove('unset'); nd.style.transform = 'rotate(' + (A0 + SWEEP * e / 16 - 270).toFixed(1) + 'deg)';

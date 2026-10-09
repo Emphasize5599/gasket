@@ -105,7 +105,7 @@ with sync_playwright() as p:
         pg.wait_for_function("window.Garage.car().recallAuto && window.Garage.car().recallAuto.failed", timeout=5000); pg.wait_for_timeout(200)
         assert "didn't answer the automatic check" in ft(pg, '#advRecall') and 'Check my car at NHTSA' in ft(pg, '#advCheck')
         pg.evaluate("() => window.dispatchEvent(new Event('garagechange'))"); pg.wait_for_timeout(300)
-        assert len(pg.evaluate('window.__siteRead')) == 1, 'a failed try waits a few hours'
+        assert len(pg.evaluate('window.__siteRead')) == 1, 'a failed try waits half an hour'
         # ---- engine-friendly advice on a car with both features ----
         pg.evaluate('''() => { const S = window.__app.S, c = S.cars.find(x => x.id === 'venza12'); S.carId = c.id;
           c.info = Object.assign({}, c.info, { features: (c.info.features || []).concat(['Cylinder deactivation', 'Start-stop']) }); window.dispatchEvent(new Event('garagechange')); }''')

@@ -508,7 +508,7 @@
     });
     // versions: the ▾ on a tile opens the list; picking one loads it from the EPA
     host.querySelectorAll('[data-ver]').forEach(function (b) { b.onclick = function () { verOpen = !verOpen; draw(); if (verOpen && $('gVers')) $('gVers').scrollIntoView({ block: 'nearest' }); }; });
-    host.querySelectorAll('[data-vid]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); pickVariant(c, b.dataset.vid); }; });
+    host.querySelectorAll('[data-vid]').forEach(function (b) { b.onclick = function () { pickVariant(c, b.dataset.vid); }; });
     // features: a checklist; confirmed ones (from the VIN or the EPA) ask before they're unchecked; one camshaft layout only
     if ($('gFeats')) $('gFeats').addEventListener('toggle', function () { featOpen = this.open; });
     host.querySelectorAll('[data-feat]').forEach(function (cb) {

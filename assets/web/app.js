@@ -15,7 +15,7 @@
       callsThisMonth: function () { return 0; }, certFingerprint: function () { return 'BROWSER-TEST'; },
       packageName: function () { return 'com.bensanzone.fuelmap'; },
       locate: function () { setTimeout(function () { window.onLocation(34.7450, -92.2900, 30); }, 300); },
-      haptic: function () {}, setStatusBarDark: function () {},
+      haptic: function () {}, tick: function () {}, setStatusBarDark: function () {},
       pickTextFile: function (req) { setTimeout(function () { var m = window.__mocks && window.__mocks.pick; window.onNativeResult(req, m ? { body: m } : { cancelled: true }); }, 30); },
       openUrl: function (u) { window.__lastUrl = u; },
       navigate: function (lat, lng, id) { console.log('navigate', lat, lng, id); window.__lastNav = [lat, lng, id]; },
@@ -143,7 +143,7 @@
       var b = document.createElement('button');
       b.textContent = k === 'midgrade' ? 'Mid' : k === 'premium' ? 'Prem' : P.GRADES[k].label;
       b.className = S.grade === k ? 'on' : '';
-      b.onclick = function () { S.grade = k; save(); buildGrades(); render(); if (selectedId) openDetail(selectedId); N.haptic(); };
+      b.onclick = function () { S.grade = k; save(); buildGrades(); render(); if (selectedId) openDetail(selectedId); };
       g.appendChild(b);
     });
   }
@@ -449,7 +449,7 @@
       var s = x.s, br = P.brand(s.brand), sel = s.id === selectedId; keep[s.id] = 1;
       L.circleMarker([s.lat, s.lng], { renderer: dotsRenderer, pane: 'tdots', radius: sel ? 8 : 6, color: sel ? acc : ring, weight: sel ? 3 : 2,
         fillColor: br.color, fillOpacity: x.c ? 1 : 0.55, bubblingMouseEvents: false })
-        .on('click', function () { N.haptic(); openDetail(s.id); }).addTo(dotLayer);
+        .on('click', function () { openDetail(s.id); }).addTo(dotLayer);
       var html = logoHtml(s.brand) + '<span class="pv">' + (x.c ? priceHtml(x.c.final) : 'no price') + '</span>';
       var cls = { best: !!(x.c && bestIds[s.id]), stale: !!(x.c && x.c.stale), none: !x.c, sel: sel };
       var b = bubs[s.id];
@@ -457,7 +457,7 @@
         b = bubs[s.id] = { tip: L.tooltip({ permanent: true, direction: 'top', offset: [0, -9], className: 'mbub', interactive: true, opacity: 1 }).setLatLng([s.lat, s.lng]), html: null };
         b.tip.setContent(html); b.html = html; bubLayer.addLayer(b.tip);
         var el = b.tip.getElement();
-        if (el) { el.dataset.id = s.id; el.dataset.brand = s.brand; L.DomEvent.disableClickPropagation(el); el.addEventListener('click', function () { N.haptic(); openDetail(s.id); }); }
+        if (el) { el.dataset.id = s.id; el.dataset.brand = s.brand; L.DomEvent.disableClickPropagation(el); el.addEventListener('click', function () { openDetail(s.id); }); }
       } else if (b.html !== html) { b.tip.setContent(html); b.html = html; }
       var e2 = b.tip.getElement(); if (e2) Object.keys(cls).forEach(function (k) { e2.classList.toggle(k, cls[k]); });
     });
@@ -583,7 +583,7 @@
     $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); if ($('btnAlt')) $('btnAlt').classList.add('hidden');
     $('listSheet').classList.add('hidden');
     $('dClose').onclick = closeDetail;
-    $('dNav').onclick = function () { N.haptic(); N.navigate(s.lat, s.lng, String(s.id).indexOf('demo') === 0 ? '' : s.id, s.name); };
+    $('dNav').onclick = function () { N.navigate(s.lat, s.lng, String(s.id).indexOf('demo') === 0 ? '' : s.id, s.name); };
     $('dOther').onclick = function () { N.openInOtherApp(s.lat, s.lng, s.name); };
     bindBl(s, 'd');
     $('dPlace').onclick = function () {
@@ -646,7 +646,7 @@
     var u = $('undoBar');
     u.innerHTML = '<span>' + esc(msg) + '</span><button id="undoBtn">Undo</button>';
     u.classList.remove('hidden', 'gone'); clearTimeout(undoT);
-    $('undoBtn').onclick = function () { clearTimeout(undoT); u.classList.add('hidden'); N.haptic && N.haptic(); undo(); };
+    $('undoBtn').onclick = function () { clearTimeout(undoT); u.classList.add('hidden'); undo(); };
     undoT = setTimeout(function () { u.classList.add('gone'); setTimeout(function () { u.classList.add('hidden'); }, 250); }, 5000);
   }
   window.undoToast = undoToast;
@@ -663,8 +663,8 @@
     return h + '</div>';
   }
   function bindBl(st, idp) {
-    if ($(idp + 'BlAdd')) $(idp + 'BlAdd').onclick = function () { N.haptic && N.haptic(); BL.add(st); };
-    if ($(idp + 'BlRm')) $(idp + 'BlRm').onclick = function () { N.haptic && N.haptic(); confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(st.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(st); }); };
+    if ($(idp + 'BlAdd')) $(idp + 'BlAdd').onclick = function () { BL.add(st); };
+    if ($(idp + 'BlRm')) $(idp + 'BlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(st.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(st); }); };
     if ($(idp + 'BlRisk')) $(idp + 'BlRisk').onchange = function () { BL.dieselRisk(st, this.checked); };
   }
   /** Settings → Bad CITGO stations: each one opens on the map; ✕ takes it off the list. */
@@ -779,7 +779,7 @@
       window.__cfmClose = function () { done(false); };
       bg.onclick = function (e) { if (e.target === bg) done(false); };
       $('cfmNo').onclick = function () { done(false); };
-      $('cfmYes').onclick = function () { N.haptic && N.haptic(); done(true); };
+      $('cfmYes').onclick = function () { done(true); };
     });
   }
   /** Empty the bad CITGO list (Undo puts it all back). */
@@ -1116,12 +1116,10 @@
   $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden'); };
   $('btnSettings').onclick = function () { openSettings(false); };
   $('btnLocate').onclick = function () {
-    N.haptic();
     if (me) { movedByUser = false; map.setView([me.lat, me.lng], Math.max(map.getZoom(), zoomForRadius(S.radiusMi))); $('btnArea').classList.add('hidden'); }
     N.locate();
   };
   $('btnRefresh').onclick = function () {
-    N.haptic();
     var c = me || (lastFetch ? lastFetch : map.getCenter());
     if (movedByUser && !$('btnArea').classList.contains('hidden')) return $('btnArea').onclick();
     fetchAround(c.lat, c.lng);
@@ -1245,7 +1243,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };

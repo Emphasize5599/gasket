@@ -49,7 +49,7 @@
 
   // ---------- reading NHTSA's VIN page: in the background like the price sites (siteRead), or shown to you (siteShow).
   // The page does its own checks as in any browser; nothing is ever solved or got around. ----------
-  var AUTO_DAYS = 7, AUTO_RETRY_H = 6, autoBusy = {};
+  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, autoBusy = {};
   /** Check the VIN by itself when there's no check from the last week (and no failed try in the last few hours). */
   function autoCheck(c) {
     if (!c || !c.vin || !call || !N.siteRead || autoBusy[c.id]) return;
@@ -61,12 +61,12 @@
       if (done) return; done = true; autoBusy[c.id] = false;
       if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
         c.recallAuto = { vin: vin, t: Date.now(), failed: true }; save();
-        LG.info('car', 'Automatic VIN recall check got no answer', r && (r.error || (r.blocked ? 'blocked' : '')) || 'timeout');
+        LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in 2.5 minutes');
       } else record(c, vin, r, true);
       if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }
     };
     setTimeout(function () { finish(null); }, 150000);
-    call('siteRead', 'nhtsa', JSON.stringify({ url: VIN_PAGE + encodeURIComponent(vin) })).then(finish);
+    call('siteRead', 'nhtsa', JSON.stringify({ url: VIN_PAGE + encodeURIComponent(vin), bg: true })).then(finish);
     if (host && host.isConnected && car() === c) draw();
   }
   function record(c, vin, r, quiet) {
@@ -169,13 +169,15 @@
       } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '. Gasket checks again every week.</small></div>';
       // no button: the VIN is checked again by itself in the background (weekly), so this is always fresh
     } else if (c.vin && (autoBusy[c.id] || !(c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed) && N.siteRead)) {
-      h += '<div class="adv-state"><b><span class="ldspin sm" aria-hidden="true"></span> Checking your VIN with NHTSA…</b><small>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) + '. Finding out which are still open on yours.' : 'Finding out whether any recalls are open on your car.') + '</small></div>';
+      h += A.ldBar('Checking your VIN with NHTSA') + '<div class="adv-state"><small>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) + '. Finding out which are still open on yours.' : 'Finding out whether any recalls are open on your car.') + '</small></div>';
     } else if (c.vin) {
       // only when the background check couldn't get an answer (or can't run here): NHTSA's page, shown to you
       var failed = c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed;
       h += '<div class="adv-state"><b>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'See if your car has open recalls') + '</b>' +
-        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? 'NHTSA didn\'t answer the automatic check. Gasket tries again in a few hours, or open its page now.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
+        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? 'NHTSA didn\'t answer the automatic check. Gasket tries again in half an hour, or open its page now.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
         '<div class="btns wrap"><button class="btn primary sm" id="advCheck">Check my car at NHTSA</button></div>';
+    } else if (!list && busy[c.id]) {
+      h += A.ldBar('Getting the recalls on record from NHTSA');   // the card is there right away; it fills in when they arrive
     } else {
       h += '<div class="adv-state"><b>' + (R && R.error && !list ? 'Couldn\'t reach NHTSA right now' : n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'No recalls on record for the ' + esc(nm)) + '</b>' +
         '<small>' + (n ? 'These are for every ' + esc(nm) + '. ' : '') + 'Add your VIN in the Garage (Edit) to see whether any are still open on your car.</small></div>';
@@ -210,7 +212,7 @@
       }).join('') + '</div>';
   }
   function bind(c) {
-    if ($('advCheck')) $('advCheck').onclick = function () { N.haptic && N.haptic(); checkVin(c); };
+    if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
     if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; });
     host.querySelectorAll('[data-adv]').forEach(function (b) {
       b.onclick = function () {

@@ -306,6 +306,7 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .btn.busy { background: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); color: var(--ink); }
 .btn .pfill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); transition: width .35s ease; opacity: .9; }
 #tGo .plab { position: relative; z-index: 1; color: var(--ink); text-shadow: 0 0 6px var(--surface); font-weight: 700; }
+.btn.busy .plab { position: relative; z-index: 1; display: block; max-width: 100%; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); text-shadow: 0 0 6px var(--surface); font-weight: 700; }
 
 .bufbox, .routebox { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 12px 0; }
 .routebox.good { border-color: var(--save); background: var(--save-bg); }
@@ -1166,3 +1167,26 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 .fg-tip { margin: 8px 0 4px; }
 .fg-in { margin-top: 6px; }
 @media (prefers-reduced-motion: reduce) { .fg-needle { transition: none; } }
+
+/* ---------- placeholder tiles while something loads (the tile is there; a bar inside says what it waits on) ---------- */
+.card.skel .sk-h { font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.card.skel .parse-load { margin: 2px 0 10px; }
+.sk-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; margin-top: 8px; }
+.sk-dot { width: 36px; height: 36px; border-radius: 10px; flex: none; }
+.sk-lines { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sk-lines span { height: 10px; border-radius: 6px; }
+.sk-lines span:first-child { width: 45%; height: 12px; }
+.sk-lines span:last-child { width: 75%; }
+.sk-price { width: 64px; height: 18px; border-radius: 8px; flex: none; }
+.sk-big { height: 26px; width: 55%; border-radius: 8px; }
+.sk-slider { height: 10px; border-radius: 999px; margin: 12px 0 6px; }
+.sk-dot, .sk-lines span, .sk-price, .sk-big, .sk-slider {
+  background: linear-gradient(90deg, var(--surface-2) 0%, color-mix(in srgb, var(--surface-2) 60%, var(--ink) 8%) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%; animation: sk-shine 1.4s ease-in-out infinite; }
+@keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk-dot, .sk-lines span, .sk-price, .sk-big, .sk-slider { animation: none; } }
+.skel-tiles .card.skel { margin: 0 0 10px; }
+.ind-load .pbar i { width: 35%; animation: ind-slide 1.2s ease-in-out infinite; }
+@keyframes ind-slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) { .ind-load .pbar i { animation: none; width: 100%; opacity: .5; } }
+.ind-load { margin: 6px 0 8px; }

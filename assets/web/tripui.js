@@ -61,12 +61,38 @@
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
 
   /** Progress inside the Next button: frac 0..1 and what it's doing. */
+  var lastProg = { pct: 0, label: '' };
   function prog(frac, label) {
-    var b = $(routing ? 'tGetRoutes' : 'tNext'); if (!b) return;
     var pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
+    lastProg = { pct: pct, label: label };
+    var b = $(routing ? 'tGetRoutes' : 'tNext'); if (!b) return;
     b.classList.add('busy');
     b.innerHTML = '<span class="pfill" style="width:' + pct + '%"></span><span class="plab">' + esc(label) + ' · ' + pct + '%</span>';
     if (mapLd && mapLd.live) mapLd.set(frac, label);
+    // and the bars inside the placeholder tiles (Adjustments, Stops) say the same
+    document.querySelectorAll('.prog-load').forEach(function (el) {
+      var i = el.querySelector('i'), p = el.querySelector('.pct'), l = el.querySelector('.pl');
+      if (i) i.style.width = pct + '%'; if (p) p.textContent = pct + '%'; if (l) l.textContent = label;
+    });
+  }
+  /**
+   * While stops are worked out, Adjustments and Stops show their usual tiles right away, each with a loading bar
+   * inside saying what it's waiting on, instead of a blank screen that fills in later.
+   */
+  function progBar(label) {   // starts where the work already is (prog() keeps it moving)
+    var pct = busy ? lastProg.pct : 0, l = busy && lastProg.label ? lastProg.label : label;
+    return '<div class="parse-load prog-load"><span class="pl">' + esc(l) + '</span><span class="pbar"><i style="width:' + pct + '%"></i></span><span class="pct">' + pct + '%</span></div>';
+  }
+  function skelCard(title, body) { return '<div class="card skel"><div class="sk-h">' + esc(title) + '</div>' + (body || '') + '</div>'; }
+  function skelRows(n) { var h = ''; for (var i = 0; i < n; i++) h += '<div class="sk-row"><span class="sk-dot"></span><span class="sk-lines"><span></span><span></span></span><span class="sk-price"></span></div>'; return h; }
+  function skelStops(label) {
+    return skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', progBar(label) + skelRows(2)) +
+      '<div class="gas-tiles skel-tiles">' + skelCard(KIND() === 'ev' ? 'Charge to leave with' : 'Gas to leave with', '<div class="sk-big"></div>') +
+      skelCard(KIND() === 'ev' ? 'Charge when you arrive' : 'Gas when you arrive', '<div class="sk-big"></div>') + '</div>';
+  }
+  function skelAdjust(label) {
+    return tipBox() + skelCard('Buffer for this trip', progBar(label) + '<div class="sk-slider"></div>') +
+      skelCard('Max. detour per stop', '<div class="sk-slider"></div>') + skelCard('Cruising speed', '<div class="sk-slider"></div>');
   }
   function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; b._sub = null; } routeGate(); if (typeof backMode === 'function') backMode(); }
   /** Let the screen draw (a progress bar, a tapped button) before a stretch of heavy work. */
@@ -259,11 +285,11 @@
     document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > ST_ROUTE && !model); });
   }
   /**
-   * Routes are fetched by themselves once a link (pasted or shared) or both addresses are in, and every stop is settled.
-   * Changing avoid tolls / highways / ferries or round trip brings the Get routes button back. A trip opened from before
-   * (or after a restore) never looks anything up by itself.
+   * Routes are fetched by themselves whenever the Route step has a link or both addresses and every stop is settled.
+   * Changing avoid tolls / highways / ferries or round trip brings the Get routes button back (until the link or the
+   * addresses change). The first start after a restore never looks anything up by itself.
    */
-  var autoRoute = false;
+  var autoRoute = !A.justRestored;
   function autoRoutes() {
     if (!autoRoute || model || busy || step !== ST_ROUTE || !S.apiKey) return;
     collectSafe();
@@ -287,7 +313,6 @@
   }
   function refreshRoutes() {
     if (busy || !route) return;
-    N.haptic && N.haptic();
     LG.info('route', 'Refreshing every route from Google');
     route.legs = null; alts = []; altSel = 0; model = null; rawRoute = null; result = null; replay = null; freshRoutes = true;
     renderInfo(); layer.clearLayers(); drawn = {};
@@ -1264,7 +1289,7 @@
     h += A.gAttr('in-card') + '<div class="lead small">Finding stations: ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') : 'no Google lookups') + '.</div></div>';
     el.innerHTML = h;
     el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
-    el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
+    el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
     var lineOf = function (a) { return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' }; };
     // a map whose options didn't change is moved over as it is (just re-highlighted); the rest are drawn
     var todo = [];
@@ -1282,7 +1307,6 @@
   var picking = false;
   async function pickAlt(k) {
     if (k === altSel || picking || busy) return;
-    N.haptic && N.haptic();
     altSel = k; rawRoute = alts[altSel];
     document.querySelectorAll('#tRouteInfo [data-alt]').forEach(function (b) { b.classList.toggle('on', +b.dataset.alt === k); });
     var rm = rmaps.tRmap, ld = rm && rm._setSel ? (rm._setSel(k), A.loader(rm.getContainer(), 'Loading this route')) : null;
@@ -1364,7 +1388,7 @@
     rmap.on('dragstart', function () { fb.classList.remove('hidden'); });
     rmap.on('zoomstart', function () { if (!auto) fb.classList.remove('hidden'); });
     L.DomEvent.disableClickPropagation(fb);
-    fb.onclick = function (e) { e.preventDefault(); e.stopPropagation(); N.haptic && N.haptic(); rmap._refit(); };
+    fb.onclick = function (e) { e.preventDefault(); e.stopPropagation(); rmap._refit(); };
     el.appendChild(fb);
     return rmap;
   }
@@ -1401,6 +1425,8 @@
     return out;
   }
   function toastMsg(m) { if (window.toast) window.toast(m); }
+  /** A light tick for each step of the buffer and detour sliders (and the fuel gauge): the app's only haptics for now. */
+  function tick() { if (N.tick) N.tick(); }
 
   // ---------- step 2: stations along the route ----------
   /**
@@ -2067,7 +2093,7 @@
   function bufBox() {
     var r = result, sw = r.sweep;
     var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
-    if (!sw) return h + '<div class="lead small keep">Checking other buffers…</div></div>';
+    if (!sw) return h + A.ldBar('Checking other buffers') + '</div>';
     // the buffer's limits depend on your speeds, which depend on the speed limits: wait for them
     if (S.limitLookup !== false && (!model._lim || model._lim === 'loading')) return h + limBar(model, 'Waiting for speed limits') + '</div>';
     var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
@@ -2123,7 +2149,7 @@
     inp.oninput = function () {
       var x = swRow(+inp.value);
       if (!bufOk(x)) { inp.value = last; x = swRow(last); }        // can't slide into the gray
-      else last = +inp.value;
+      else { if (+inp.value !== last) tick(); last = +inp.value; }
       $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, base);
     };
     $('tsBufBox').querySelectorAll('[data-bm]').forEach(function (m) { m.onclick = function () { inp.value = m.dataset.bm; inp.oninput(); inp.onchange(); }; });
@@ -2132,7 +2158,6 @@
       if (x.mi === r.bufMi) { inp.value = x.mi; return; }
       LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
       if (!bufOk(x)) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg('No plan keeps ' + x.mi + ' mi at your speeds — the stations are too far apart.'); return; }
-      N.haptic && N.haptic();
       var cx = speedCx();
       if (!x.ok && cx) {
         // linked: slow down just enough that a plan keeps this bigger buffer
@@ -2188,7 +2213,7 @@
   function detBox() {
     var r = result, sw = r.dsweep;
     var h = '<div class="bufbox detbox" id="tsDetBox"><div class="tb-h">Max. detour for this trip</div>';
-    if (!sw) return h + '<div class="lead small keep">Checking other limits…</div></div>';
+    if (!sw) return h + A.ldBar('Checking other limits') + '</div>';
     var cur = detRow(detMinOf(r)), base = detRow(+S.trip.maxDetourMin);
     if (!base || !base.ok) base = cur;
     var n = sw.length, idx = function (v) { var k = 0; sw.forEach(function (x, i) { if (Math.abs(x.mi - v) < Math.abs(sw[k].mi - v)) k = i; }); return k; };
@@ -2219,12 +2244,11 @@
     if (!base.ok) base = detRow(detMinOf(r));
     inp.oninput = function () {
       var x = sw[+inp.value];
-      if (!x.ok) { inp.value = last; x = sw[last]; } else last = +inp.value;
+      if (!x.ok) { inp.value = last; x = sw[last]; } else { if (+inp.value !== last) tick(); last = +inp.value; }
       $('tsDetVal').textContent = minTxt(x.mi); $('tsDetCost').textContent = detText(x, base);
     };
     inp.onchange = function () {
       var x = sw[+inp.value]; if (!x || !x.ok || Math.abs(x.mi - detMinOf(r)) < 0.01) return;
-      N.haptic && N.haptic();
       LG.info('plan', 'Max. detour slider: ' + detMinOf(r) + ' → ' + x.mi + ' min', { net: x.net });
       var fo = Object.assign({}, r.opts, { maxDetourMin: x.mi, lite: false });
       r.plan = T.plan(fo); r.opts = fo; r.topSel = -1; r.sweep = null;
@@ -2258,7 +2282,8 @@
     if (onPlan(step) && !result) renderResults();
   }
   async function findStops0(force) {
-    if (onPlan(step)) ['tsResults', 'taResults'].forEach(function (id) { if ($(id)) $(id).innerHTML = '<div class="card finding"><div class="ldspin"></div><span>Finding the best stops…</span></div>'; });
+    if ($('tsResults')) $('tsResults').innerHTML = skelStops('Finding stations');
+    if ($('taResults')) $('taResults').innerHTML = skelAdjust('Finding stations');
     prog(0.01, 'Finding stations');
     LG.info('stations', 'Find the best stops pressed', { miles: Math.round(model.totalMi), points: model.pts.length, force: force === true });
     await new Promise(function (r) { setTimeout(r, 30); });
@@ -2385,7 +2410,8 @@
     var put = function (sh, ah) { if (el) el.innerHTML = sh; if (ea) ea.innerHTML = ah == null ? sh : ah; };
     var r = result;
     [ST_ADJ, ST_STOPS].forEach(function (k) { if (built[k]) { built[k].result = result; built[k].model = model; } });
-    if (!r && loadingTrip) { put('<div class="card finding"><div class="ldspin"></div><span>Opening your trip…</span></div>'); return; }
+    if (!r && loadingTrip) { put(skelStops('Opening your trip'), skelAdjust('Opening your trip')); return; }
+    if (!r && busy && model) { put(skelStops('Finding stations'), skelAdjust('Finding stations')); return; }
     if (!r) {
       var need = hasFuel();
       put(model ? '<div class="card empty-res">' + (need ? 'Stops appear here.' : 'Say how much is in your tank in Parameters.') + '</div>' : '',
@@ -2438,7 +2464,7 @@
       r.topMi = Math.max(0, Math.round((parseFloat(this.value) || 0) * 10) / 10); S.trip.topUpMi = r.topMi; A.save(); r.topSel = -1; recompute(); keepScroll(showResult);
     });
     both.querySelectorAll('[data-route]').forEach(function (b) {
-      b.onclick = function (e) { e.preventDefault(); N.haptic && N.haptic(); switchRoute(+b.dataset.route); };
+      b.onclick = function (e) { e.preventDefault(); switchRoute(+b.dataset.route); };
     });
     bindBuf(); bindDet();
     if (p.ok) { renderTripSpeed(); startDetSweep(); }
@@ -2502,7 +2528,6 @@
    */
   function openMaps() {
     var ex = result && result.plan.ok ? exports() : null; if (!ex) return;
-    N.haptic && N.haptic();
     if (!ex.one.tooMany) { N.openUrl(ex.one.url); return; }
     if (closeLegs()) return;
     var pg = $('trip'), box = document.createElement('div');
@@ -2516,7 +2541,7 @@
     box.style.bottom = ($('tpNav').getBoundingClientRect().height + 6) + 'px';
     requestAnimationFrame(function () { box.classList.add('on'); });
     box.querySelectorAll('[data-legurl]').forEach(function (b) {
-      b.onclick = function () { N.haptic && N.haptic(); var x = ex.legs[+b.dataset.legurl]; opened[x.leg] = true; b.classList.add('done'); N.openUrl(x.url); };
+      b.onclick = function () { var x = ex.legs[+b.dataset.legurl]; opened[x.leg] = true; b.classList.add('done'); N.openUrl(x.url); };
     });
     setTimeout(function () { document.addEventListener('pointerdown', outside, true); }, 0);
   }
@@ -2643,7 +2668,7 @@
     bg.onclick = function (e) { if (e.target === bg) close(); };
     $('tpNew').onclick = function () { close(); newTrip(); };
     if ($('tpCont')) $('tpCont').onclick = function () { close(); openTrip(); };
-    bg.querySelectorAll('[data-hist]').forEach(function (b) { b.onclick = function () { N.haptic && N.haptic(); close(); openSaved(b.dataset.hist); }; });
+    bg.querySelectorAll('[data-hist]').forEach(function (b) { b.onclick = function () { close(); openSaved(b.dataset.hist); }; });
     bg.querySelectorAll('[data-hdel]').forEach(function (b) {
       b.onclick = function () {
         var id = b.dataset.hdel, x = histIndex().filter(function (y) { return y.id === id; })[0];
@@ -2673,14 +2698,13 @@
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
     S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
-    autoRoute = !!link;   // a link shared from Google Maps: its routes come by themselves
+    if (link) autoRoute = true;   // a link shared from Google Maps: its routes come by themselves
     A.save();
     openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
   }
   async function openSaved(id) {
     if (busy) return;
     resetAdjust();
-    autoRoute = false;
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
@@ -2839,7 +2863,7 @@
         (function (which) {
           var te = tip.getElement(); if (!te) return;
           L.DomEvent.disableClickPropagation(te);
-          te.addEventListener('click', function () { N.haptic && N.haptic(); openStopTile(which); });
+          te.addEventListener('click', function () { openStopTile(which); });
         })(g.nums[0]);
         (function (tip, full, small) {
           var cur = false;
@@ -2880,7 +2904,7 @@
       b = document.createElement('button'); b.id = 'btnFit'; b.className = 'fab-fit hidden'; b.setAttribute('aria-label', 'Show the whole route');
       b.innerHTML = FIT_ICON + '<span>Route</span>';
       document.body.appendChild(b);
-      b.onclick = function () { N.haptic && N.haptic(); userMoved = false; fitBtn(); fitRoute(true); };
+      b.onclick = function () { userMoved = false; fitBtn(); fitRoute(true); };
     }
     var on = userMoved && routeBounds && step >= ST_ADJ && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
     b.classList.toggle('hidden', !on);
@@ -2927,7 +2951,7 @@
   }
   /** Save and continue: keep the speeds and close the per-road sliders. */
   function leaveSpeedMode() {
-    var t = $('lgTog'); if (t && $('tsSpeed') && $('tsSpeed').classList.contains('exp')) { N.haptic && N.haptic(); t.click(); }
+    var t = $('lgTog'); if (t && $('tsSpeed') && $('tsSpeed').classList.contains('exp')) { t.click(); }
     modeSnap = null; sheetSize(); backMode();
   }
   /** Discard: back to the speeds (and buffer) you had when you opened the per-road sliders. */
@@ -3068,7 +3092,7 @@
     if (!$('trip').classList.contains('hidden')) { if (speedMode()) { leaveSpeedMode(); return true; } if (step > 1) { collectSafe(); step--; renderStep(); } else closeTrip(); return true; }
     return false;
   };
-  $('btnTrip').onclick = function () { N.haptic(); tripPicker(); };
+  $('btnTrip').onclick = function () { tripPicker(); };
 
   // Google Maps -> Share directions -> Gasket
   window.onSharedText = function (text) {

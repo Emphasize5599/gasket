@@ -38,5 +38,7 @@ async function (reqId, args) {
     }
     await sleep(700);
   }
-  send({ error: 'NHTSA\'s page didn\'t show an answer. You can read it there, then tap Done.' });
+  // a background read (args.bg) says what the page showed instead, for the log
+  const what = args && args.bg ? ' [' + document.title + ' | ' + ((document.body && document.body.innerText) || '').replace(/\s+/g, ' ').slice(0, 160) + ']' : '';
+  send({ error: 'NHTSA\'s page didn\'t show an answer. You can read it there, then tap Done.' + what });
 }

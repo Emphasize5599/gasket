@@ -279,6 +279,14 @@ public class MainActivity extends Activity {
             view.setWebChromeClient(new WebChromeClient());
             view.setWebViewClient(new WebViewClient() {
                 @Override
+                public void onPageCommitVisible(WebView v, String url) {
+                    // a background read (siteRead) starts its reader as soon as the page is drawn: some pages (NHTSA's)
+                    // keep loading in the background for a long time, and the reader waits for its answer by itself
+                    if (verifying == SiteWorker.this || readReq < 0 || !url.startsWith(SiteWorker.this.origin)) return;
+                    runQueue();
+                }
+
+                @Override
                 public void onPageFinished(WebView v, String url) {
                     String title = String.valueOf(v.getTitle()).toLowerCase(Locale.US);
                     boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || title.contains("robot") || title.contains("access denied")
@@ -302,11 +310,15 @@ public class MainActivity extends Activity {
                         } else js("window.onSiteBlocked&&onSiteBlocked(" + q(SiteWorker.this.key) + ")");
                         queue.clear();
                     } else if (ready) {
-                        for (String call : queue) view.evaluateJavascript(call, null);
-                        queue.clear();
+                        runQueue();
                     }
                 }
             });
+        }
+
+        void runQueue() {
+            for (String call : queue) view.evaluateJavascript(call, null);
+            queue.clear();
         }
 
         /** Open a specific page (a shared Google Maps link), then run the script once it has loaded. */
@@ -1323,6 +1335,14 @@ public class MainActivity extends Activity {
                     }
                     w.readReq = reqId;
                     w.loadAndRun(url, "(" + script + ")(" + reqId + "," + argsJson + ")");
+                    // and if the page never says it's drawn or finished, start the reader anyway after a while
+                    final SiteWorker fw = w; final int fr = reqId;
+                    main.postDelayed(new Runnable() {
+                        public void run() {
+                            String at = fw.view.getUrl();
+                            if (fw.readReq == fr && !fw.queue.isEmpty() && verifying != fw && at != null && at.startsWith(fw.origin)) fw.runQueue();
+                        }
+                    }, 15000);
                 }
             });
         }
@@ -1366,6 +1386,14 @@ public class MainActivity extends Activity {
         public void haptic() {
             main.post(new Runnable() {
                 public void run() { web.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); }
+            });
+        }
+
+        /** A light tick, for each step of the fuel gauge and the buffer / detour sliders (the only haptics for now). */
+        @JavascriptInterface
+        public void tick() {
+            main.post(new Runnable() {
+                public void run() { web.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); }
             });
         }
 

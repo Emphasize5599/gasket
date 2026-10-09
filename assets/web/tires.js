@@ -129,7 +129,7 @@
     // size
     var SL = t.sizeLookup || {}, fac = SL.found ? SL.factory || [] : [];
     h += '<div class="nf wide"><span>Size' + q(Q.size) + '</span>';
-    if (busy[c.id] === 'size') h += '<div class="lead small keep"><span class="ldspin sm" aria-hidden="true"></span> Looking up your factory size…</div>';
+    if (busy[c.id] === 'size') h += window.__app.ldBar('Looking up your factory size at Tire Rack');
     if (fac.length > 1 && !t.size) h += '<div class="chips mini wrap" id="tzPick">' + fac.map(function (z) { return '<button data-size="' + esc(z) + '">' + esc(z) + '</button>'; }).join('') + '</div>' +
       '<div class="lead small keep">Your ' + esc(c.year + ' ' + c.make + ' ' + base(c) + ' ' + c.trim) + ' came with ' + fac.length + ' sizes. Pick yours, or type it below.</div>';
     h += '<input type="text" id="tzSize" maxlength="20" autocapitalize="characters" placeholder="e.g. 195/65R15" value="' + esc(t.size || '') + '"></div>';
@@ -142,7 +142,7 @@
     var brands = uniq(inType.map(function (x) { return x.brand; })).sort();
     var models = inType.filter(function (x) { return x.brand === t.brand; }).map(function (x) { return x.model; }).sort();
     var otherBrand = t.brand && brands.indexOf(t.brand) < 0, otherModel = t.model && models.indexOf(t.model) < 0;
-    if (busy[c.id] === 'list') h += '<div class="lead small keep"><span class="ldspin sm" aria-hidden="true"></span> Finding the tires made in ' + esc(t.size) + '…</div>';
+    if (busy[c.id] === 'list') h += window.__app.ldBar('Finding the tires made in ' + t.size);
     h += '<div class="tz-pick"><label class="nf"><span>Type' + q(Q.type) + '</span><select id="tzType">' + opts(types, t.type, 'Type') + '</select></label>' +
       '<label class="nf"><span>Brand</span>' + (otherBrand || !brands.length ? '<input type="text" id="tzBrandT" maxlength="30" placeholder="Brand" value="' + esc(t.brand || '') + '">' : '<select id="tzBrand">' + opts(brands, t.brand, 'Brand') + '</select>') + '</label>' +
       '<label class="nf"><span>Model</span>' + (otherModel || otherBrand || !models.length ? '<input type="text" id="tzModelT" maxlength="40" placeholder="Model" value="' + esc(t.model || '') + '">' : '<select id="tzModel">' + opts(models, t.model, 'Model') + '</select>') + '</label></div>';
