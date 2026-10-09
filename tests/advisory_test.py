@@ -100,6 +100,10 @@ with sync_playwright() as p:
         assert '1 open recall on your car' in ft(pg, '#advRecall'), 'read without a tap'
         pg.evaluate("() => window.dispatchEvent(new Event('garagechange'))"); pg.wait_for_timeout(300)
         assert len(pg.evaluate('window.__siteRead')) == 1, 'not again within a week'
+        # a try that never finished (the app was closed while it ran) doesn't hold the next one back
+        pg.evaluate('''() => { window.__siteRead = []; const c = window.Garage.car(); c.recallCheck = null; c.recallAuto = { vin: c.vin, t: Date.now() - 60000 }; window.dispatchEvent(new Event('garagechange')); }''')
+        pg.wait_for_function("window.Garage.car().recallCheck && window.Garage.car().recallCheck.vin === window.Garage.car().vin", timeout=5000)
+        assert len(pg.evaluate('window.__siteRead')) == 1, 'an unfinished try is run again'
         # no answer (a blocked page): said in one line, and the button opens the page
         pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = () => ({ blocked: true }); window.Garage.car().vin = 'JTDEBRBE0LJ000004'; window.dispatchEvent(new Event('garagechange')); }''')
         pg.wait_for_function("window.Garage.car().recallAuto && window.Garage.car().recallAuto.failed", timeout=5000); pg.wait_for_timeout(200)

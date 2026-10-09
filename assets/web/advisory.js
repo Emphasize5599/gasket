@@ -54,12 +54,14 @@
   function autoCheck(c) {
     if (!c || !c.vin || !call || !N.siteRead || autoBusy[c.id]) return;
     var chk = vinCheck(c); if (chk && days(chk.t) < AUTO_DAYS) return;
-    // (a failed try from before the reader knew NHTSA's "N Unrepaired Recalls Found" doesn't count: try again now)
-    var tried = c.recallAuto; if (tried && tried.vin === c.vin && (!tried.failed || tried.r === READER) && Date.now() - tried.t < AUTO_RETRY_H * 3600e3) return;
-    var vin = c.vin, done = false;
-    autoBusy[c.id] = true; c.recallAuto = { vin: vin, t: Date.now() }; save();
+    // only a failed try waits (half an hour) before the next. A try that never finished (the app was closed while it ran)
+    // doesn't count, and neither does one from before the reader knew NHTSA's "N Unrepaired Recalls Found".
+    var tried = c.recallAuto; if (tried && tried.vin === c.vin && tried.failed && tried.r === READER && Date.now() - tried.t < AUTO_RETRY_H * 3600e3) return;
+    var vin = c.vin, done = false, t0 = Date.now();
+    autoBusy[c.id] = true; LG.info('car', 'Checking the VIN with NHTSA in the background');
     var finish = function (r) {
       if (done) return; done = true; autoBusy[c.id] = false;
+      LG.info('car', 'Background VIN check took ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
       if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
         c.recallAuto = { vin: vin, t: Date.now(), failed: true, r: READER }; save();
         LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA\'s lookup turned the hidden window down (its invisible reCAPTCHA): ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in a minute');
@@ -68,7 +70,7 @@
     };
     setTimeout(function () { finish(null); }, 60000);   // it normally answers in 5-10 s
     call('siteRead', 'nhtsa', JSON.stringify({ url: VIN_PAGE + encodeURIComponent(vin), bg: true })).then(finish);
-    if (host && host.isConnected && car() === c) draw();
+    setTimeout(function () { if (!done && host && host.isConnected && car() === c) draw(); }, 0);   // (may be asked from inside a draw)
   }
   function record(c, vin, r, quiet) {
     c.recallCheck = { t: Date.now(), vin: vin, open: +r.open || 0, campaigns: (r.campaigns || []).slice(0, 30), items: (r.items || []).slice(0, 30) };
@@ -169,7 +171,7 @@
         else if ((chk.items || []).length) h += chk.items.map(function (t) { return '<div class="rc"><p>' + esc(t) + '</p></div>'; }).join('');
       } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '. Gasket checks again every week.</small></div>';
       // no button: the VIN is checked again by itself in the background (weekly), so this is always fresh
-    } else if (c.vin && (autoBusy[c.id] || !(c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed) && N.siteRead)) {
+    } else if (c.vin && (autoBusy[c.id] || (!(c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed) && N.siteRead && (autoCheck(c), autoBusy[c.id])))) {
       h += A.ldBar('Checking your VIN with NHTSA') + '<div class="adv-state"><small>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) + '. Finding out which are still open on yours.' : 'Finding out whether any recalls are open on your car.') + '</small></div>';
     } else if (c.vin) {
       // only when the background check couldn't get an answer (or can't run here): NHTSA's page, shown to you
