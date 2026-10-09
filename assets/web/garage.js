@@ -187,6 +187,7 @@
 
   var drawing = false;
   function draw() {
+    if (matching) { drawLater = true; return; }   // a VIN match is filling the pickers: redraw once it's done
     if (!host || drawing) return;
     drawing = true;
     try { settle(host); draw0(); } finally { drawing = false; }
@@ -230,6 +231,38 @@
     if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.textContent = Tires.summary(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
     drawSpeed();
+    setTimeout(function () { tankAuto(car()); }, 0);
+  }
+  // ---------- the tank size, from Brave Search's AI answer ----------
+  // A gas or hybrid car with no tank size gets it looked up once, in the hidden window: Brave Search with its AI answer,
+  // "<year make model trim> fuel tank capacity in gallons?". The number fills the box (marked as Brave's answer, to
+  // check). If it fails (or Brave shows a check, which is never got around), the box has a ↻ and "Search Brave yourself"
+  // opens the page for you; typing it in always works.
+  var tankBusy = {}, TANK_SRC = 'from Brave Search\'s AI answer · check your owner\'s manual';
+  function tankKey(c) { return c && c.year && c.make && c.model ? [c.year, c.make, baseOf(c), c.trim || ''].join(' ').replace(/\s+/g, ' ').trim() : ''; }
+  function tankUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&summary=1'; }
+  function tankAuto(c) {
+    if (!c || +c.tank > 0 || kind(c) !== 'gas' || !call || !N.siteRead || tankBusy[c.id] || matching) return;
+    var key = tankKey(c); if (!key) return;
+    var L = c.tankLookup; if (L && L.key === key && (!L.failed || Date.now() - L.t < 6 * 3600e3)) return;   // once per car (a failure: again after 6 h)
+    tankFind(c, false);
+  }
+  async function tankFind(c, shown) {
+    var key = tankKey(c); if (!key || tankBusy[c.id]) return;
+    tankBusy[c.id] = true; draw();
+    LG.info('car', 'Asking Brave Search for the tank size' + (shown ? ' (shown to you)' : ''), key);
+    var r = await Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown })),
+      new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]);
+    tankBusy[c.id] = false;
+    if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it') {
+      c.tank = r2(r.gal); c.tankSrc = TANK_SRC; c.tankLookup = { key: key, t: Date.now(), gal: r.gal };
+      LG.info('car', 'Tank size from Brave Search: ' + r.gal + ' gal', r.text || '');
+      changed();
+    } else if (!(r && r.closed)) {
+      c.tankLookup = { key: key, t: Date.now(), failed: true }; save();
+      LG.warn('car', 'Tank size lookup got no answer', r ? (r.blocked ? 'a check on Brave Search\'s page' : r.error || '') : 'no reply in 40 s');
+    }
+    draw();
   }
   /**
    * What the trip planner still needs from the car, top to bottom: the EPA lookup (or your own city + highway mileage),
@@ -273,7 +306,10 @@
     if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
     h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     h += '<div class="grid2"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
-      '<input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '"></label>';
+      (k === 'gas' && tankKey(c) ? '<span class="in-btn"><input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">' +
+        '<button type="button" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button></span>' +
+        (tankBusy[c.id] ? A.ldBar('Asking Brave Search') : c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '')
+        : '<input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">') + '</label>';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
@@ -475,6 +511,8 @@
       if ($('gName')) $('gName').onchange = function () { c.name = this.value.trim(); draw(); save(); };
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
+      if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
+      if ($('gTankShow')) $('gTankShow').onclick = function (e) { e.preventDefault(); tankFind(c, true); };
       if ($('gType')) $('gType').onchange = function () { c.type = this.value; changed(); draw(); };
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
@@ -680,7 +718,7 @@
     if (ev || fc || /hybrid/i.test(c.power)) add('Regenerative braking');
     if (ev) msg = 'Set from the EPA. ' + (c.tank ? 'Battery set to ' + c.tank + ' kWh so the EPA range works out — the usable pack is smaller, but the EPA\'s kWh include charging losses, so this matches what you\'ll pay for at a charger.' : 'Enter the usable battery size.') + ' Set the charge port and DC speed above.';
     else if (fc) msg = 'Set from the EPA (mi per kg of hydrogen). ' + (t ? 'Tank: ' + t.gal + ' kg (' + t.src + ').' : 'Enter the hydrogen tank size (kg).');
-    else msg = t ? 'Set from the EPA; tank size from ' + t.src + '.' : 'Set from the EPA. Enter your tank size — the EPA doesn\'t publish it (owner\'s manual or fuel-door sticker).';
+    else msg = t ? 'Set from the EPA; tank size from ' + t.src + '.' : 'Set from the EPA. The EPA doesn\'t publish tank sizes, so Gasket asks Brave Search; you can always type it from your owner\'s manual.';
     LG.info('car', 'EPA lookup', { id: c.epaId, name: c.name, epa: c.epa, power: c.power, type: c.type, tank: c.tank });
     return { msg: msg };
   }
@@ -752,10 +790,10 @@
     } catch (e) { vMsg('Couldn\'t reach NHTSA: ' + esc(e.message) + '.', true); }
   }
   /** Fill the EPA pickers for this year / make / model and pick what's certain; the rest is your pick. */
-  var matching = false;   // a VIN match is filling the pickers: a redraw mustn't load them again under it
+  var matching = false, drawLater = false;   // a VIN match is filling the pickers: a redraw mustn't replace them under it
   async function epaMatch(c, lead) {
     matching = true;
-    try { await epaMatch0(c, lead); } finally { matching = false; }
+    try { await epaMatch0(c, lead); } finally { matching = false; if (drawLater) { drawLater = false; draw(); } }
   }
   async function epaMatch0(c, lead) {
     var say = function (m) { var el = $('eMsg'); if (el) { el.innerHTML = m; el.classList.remove('err'); } };

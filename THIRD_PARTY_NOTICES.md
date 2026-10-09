@@ -65,6 +65,7 @@ None of this data is bundled in the repository. The app fetches it while it runs
 - **National Highway Traffic Safety Administration:** VIN decoding (vPIC) and safety recalls.
 - **Federal Highway Administration:** posted speed limits (Highway Performance Monitoring System, via geo.dot.gov).
 - **U.S. Department of Energy:** electric-charging and hydrogen station locations from the Alternative Fuels Data Center, via the National Renewable Energy Laboratory's developer network.
+- **Brave Search:** a car's fuel tank size, read from Brave Search's AI answer when the Garage has none (marked as such; check your owner's manual).
 - **Tire Rack:** a car's factory tire size, and the tires sold in that size (type, wear rating, mileage warranty), read from tirerack.com when you open Tires in the Garage.
 - **Station operators' own websites:** prices and station details from walmart.com and murphyusa.com, and the ExxonMobil station finder.
 - **Brand logos:** fetched from each brand's own website or icon services at run time. The logos are trademarks of their owners.

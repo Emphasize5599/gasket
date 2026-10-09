@@ -124,10 +124,24 @@ with sync_playwright() as p:
         assert n2 == n1 and pg.evaluate('window.Garage.car().tank') == 14.8 and pg.input_value('#eYear') == '2021' and pg.input_value('#eOpt') != '', 'no loop, tank kept, the car shown'
         # a VIN whose model the EPA splits by drive: the VIN's all-wheel drive picks "Charger AWD", and its 3.5-liter V6 the version
         accord = pg.evaluate('window.__app.S.carId')
+        pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = (key, args) => key === 'brave' ? (window.__braveMode === 'blocked' ? { blocked: true }
+          : { gal: 19, text: 'The 2008 Dodge Charger SXT has a fuel tank capacity of 19 gallons.' }) : { error: 'x' }; }''')
         pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
         pg.fill('#gVin', '2B3LK33G08H000001'); pg.click('#gVinGo'); idle(pg, 1500)
         c = pg.evaluate('window.Garage.car()'); print('  Charger:', c.get('model'), c.get('epaId'), c.get('epa'), '|', ft(pg, '#eMsg'))
         assert c['epaId'] == '24898' and c['model'] == 'Charger AWD' and c['epa']['city'] == 15, 'matched to the EPA by drive and engine'
+        # its tank size: asked of Brave Search's AI answer in the hidden window, filled in and marked as such
+        pg.wait_for_function("window.Garage.car().tank === 19", timeout=5000); pg.wait_for_timeout(200)
+        br = [x for x in pg.evaluate('window.__siteRead') if x['key'] == 'brave']; print('  tank lookup:', br, '|', pg.evaluate('window.Garage.car().tankSrc'))
+        assert len(br) == 1 and br[0]['url'].startswith('https://search.brave.com/search?q=2008%20Dodge%20Charger%20SXT%20fuel%20tank%20capacity%20in%20gallons') and 'Brave' in pg.evaluate('window.Garage.car().tankSrc')
+        # a check on Brave's page: no tank, a ↻ and "Search Brave yourself" (the page, shown to you)
+        pg.evaluate("window.__braveMode = 'blocked'"); pg.fill('#gTank', ''); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(200)
+        pg.click('#gTankFind'); pg.wait_for_timeout(500)
+        assert pg.locator('#gTankShow').count() == 1 and "Couldn't find it" in ft(pg, '.tk-fail') and not pg.evaluate('window.Garage.car().tank'), 'failed: search it yourself'
+        pg.screenshot(path=f'{OUT}/{name}-gr4-tank.png'); wide(pg, 'tank')
+        pg.evaluate("() => { window.__mocks.siteShow = (key, args) => key === 'brave' ? { gal: 18.5, text: '18.5 gallons fuel tank' } : { closed: true }; }")
+        pg.click('#gTankShow'); pg.wait_for_timeout(500)
+        assert pg.evaluate('window.__siteShown')['key'] == 'brave' and pg.evaluate('window.Garage.car().tank') == 18.5, 'the answer found on the page you looked at'
         pg.evaluate("(id) => { const S = window.__app.S; S.cars = S.cars.filter(x => x.id !== S.carId); S.carId = id; window.Garage.redraw(); }", accord); pg.wait_for_timeout(300)
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
@@ -252,6 +266,19 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-s1-settings.png', full_page=True); wide(pg, 'settings')
         pg.click('#sDone'); pg.wait_for_timeout(200)
         pg.close()
+    # ---- the Brave Search reader (stand-in pages in its text layout) ----
+    BR = open(os.path.join(ROOT, 'assets', 'brave_worker.js')).read()
+    def brave(html, args, ms=2500):
+        pg = b.new_page(); pg.set_content(html)
+        pg.evaluate('''([src, a]) => { window.__got = null; window.GasketSite = { result: (id, j) => { window.__got = JSON.parse(j); } }; (0, eval)('(' + src + ')')(1, a); }''', [BR, args])
+        pg.wait_for_timeout(ms); r = pg.evaluate('window.__got'); pg.close(); return r
+    PAGE = ('<input value="2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?"><div>Answer with AI</div><p>2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?</p>'
+            '<p>The 2020 Toyota Corolla Hybrid LE has a fuel tank capacity of 11.3 gallons (42.8 liters).</p><p>Sources: toyota.com</p>'
+            '<p>Related: 2020 Corolla Cross tank 9.5 gallons</p><p>Gas price $3.50 per gallon</p>')
+    r = brave(PAGE, {'bg': True}); print('  brave reader:', r)
+    assert r and r['gal'] == 11.3, r
+    r = brave('<h1>Please complete the CAPTCHA</h1><p>We noticed unusual traffic</p>', {'bg': True}, 800)
+    assert r == {'blocked': True}, r
     b.close()
 print('JS errors:', errors or 'none')
 print('Too wide:', WIDE or 'none')

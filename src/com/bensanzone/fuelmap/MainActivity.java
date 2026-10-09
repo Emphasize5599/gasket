@@ -154,10 +154,12 @@ public class MainActivity extends Activity {
         workers.put("walmart", new SiteWorker("walmart", "https://www.walmart.com/store-finder", "https://www.walmart.com/"));
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
-        // NHTSA's recall lookup by VIN: only ever shown to the user (siteShow), never run hidden
+        // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
         workers.put("nhtsa", new SiteWorker("nhtsa", "https://www.nhtsa.gov/recalls", "https://www.nhtsa.gov/"));
         // Tire Rack: a car's factory tire size, and the tires sold in that size (read in the background)
         workers.put("tirerack", new SiteWorker("tirerack", "https://www.tirerack.com/tires/brands", "https://www.tirerack.com/"));
+        // Brave Search's AI answer: a car's fuel tank size (in the background, or shown to the user to finish it themselves)
+        workers.put("brave", new SiteWorker("brave", "https://search.brave.com/", "https://search.brave.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps")) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -1341,6 +1343,7 @@ public class MainActivity extends Activity {
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only these pages may be read this way
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
+                            || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
@@ -1372,8 +1375,10 @@ public class MainActivity extends Activity {
                     String script = w != null ? asset(key + "_worker.js") : "";
                     String url;
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
-                    // only NHTSA's recall page may be opened this way
-                    if (w == null || script.length() == 0 || !url.startsWith("https://www.nhtsa.gov/recalls?vymm=")) {
+                    // only NHTSA's recall page and Brave Search may be opened this way
+                    boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
+                            || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"));
+                    if (w == null || script.length() == 0 || !ok) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
                         return;
                     }

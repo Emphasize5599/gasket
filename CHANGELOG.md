@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.65 - 2026-10-09
+- **Tank size looks itself up.** When a gas or hybrid car has no tank size, Gasket asks Brave Search's AI answer in the background and fills in the box, marked as Brave's answer so you know to check it. If that fails, the box has a ↻ to try again and a "Search Brave yourself" link that opens the page for you. Typing it in always works.
+- Bug fixes.
+
 ## 0.0.64 - 2026-10-09
 - **A VIN finds the car's mileage again.** The Garage redrew itself in the middle of matching a VIN to the EPA, which cleared the year and left the car without mileage. The match also uses the VIN's drive and engine, so a 2008 Charger with all-wheel drive and a 3.5-liter V6 gets the EPA's "Charger AWD" and that engine.
 

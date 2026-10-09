@@ -153,7 +153,7 @@ with sync_playwright() as p:
         pg.select_option('#eMake', 'Honda'); pg.wait_for_timeout(200)
         pg.select_option('#eModel', 'Accord'); pg.wait_for_timeout(600)
         print('  car:', ft(pg, '.carchip.on').replace('\n', ' | '), '|', ft(pg, '.epa-tiles').replace('\n', ' '), '|', ft(pg, '#eMsg'))
-        assert 'Accord' in ft(pg, '.carchip.on') and '30' in ft(pg, '.epa-tiles') and "doesn't publish it" in ft(pg, '#eMsg')
+        assert 'Accord' in ft(pg, '.carchip.on') and '30' in ft(pg, '.epa-tiles') and "doesn't publish tank sizes" in ft(pg, '#eMsg')
         pg.click('#tNext'); pg.wait_for_timeout(250)
         assert step(pg) == 1 and pg.locator('#gTank.need').count() == 1, 'Next outlines the empty tank box'
         pg.screenshot(path=f'{OUT}/{name}-w3-need-box.png')

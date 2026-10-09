@@ -270,7 +270,7 @@
     sourceDone();
   };
   window.onSiteResult = function (key, id, res) {
-    if (key === 'nhtsa' || key === 'tirerack') { window.onNativeResult && window.onNativeResult(id, res); return; }   // read with siteRead / siteShow
+    if (key === 'nhtsa' || key === 'tirerack' || key === 'brave') { window.onNativeResult && window.onNativeResult(id, res); return; }   // read with siteRead / siteShow
     if (window.__tripSite && window.__tripSite(key, id, res)) return;
     if (id !== reqId || !sitePending[key]) return;
     sitePending[key] = false;
