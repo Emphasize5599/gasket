@@ -428,20 +428,6 @@
   var SVGNS = 'http://www.w3.org/2000/svg';
   function el(tag, attrs, parent) { var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
   function still() { try { return root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
-  /** Runs frame(t seconds) every animation frame for dur seconds (then once more at the end); -> stop(). */
-  function run(dur, frame, done) {
-    var t0 = null, raf = 0, live = true;
-    var step = function (ts) {
-      if (!live) return;
-      if (t0 == null) t0 = ts;
-      var t = (ts - t0) / 1000;
-      frame(Math.min(t, dur));
-      if (t < dur) raf = requestAnimationFrame(step); else { live = false; if (done) done(); }
-    };
-    if (still()) { frame(dur); if (done) done(); return function () { }; }
-    raf = requestAnimationFrame(step);
-    return function () { live = false; cancelAnimationFrame(raf); };
-  }
   /** Rain over a w x h area: slanted drops falling, rings where they hit the roads (lanes: [{y, h}]). -> step(dt). */
   function rain(g, w, h, lanes, n) {
     var drops = [], rings = [];
@@ -466,26 +452,46 @@
       });
     };
   }
-  /** A car from the side, facing right, nose at x = 0 (so it's drawn to the left of where it is). */
+  /**
+   * Plays frame(t, dt) over and over: t runs 0..cycle seconds, then starts again (the rain keeps falling throughout).
+   * Off-screen pages get no frames (the browser pauses them). Reduced motion: one still at `still` seconds.
+   * -> { stop(), at(t): stop and draw the moment t (for the tests) }.
+   */
+  function loop(cycle, frame, stillAt) {
+    var t0 = null, prev = null, raf = 0, live = true;
+    var step = function (ts) {
+      if (!live) return;
+      if (t0 == null) t0 = ts;
+      var dt = prev == null ? 0 : Math.min(0.1, (ts - prev) / 1000); prev = ts;
+      frame(((ts - t0) / 1000) % cycle, dt);
+      raf = requestAnimationFrame(step);
+    };
+    var ctl = { stop: function () { live = false; cancelAnimationFrame(raf); }, at: function (t) { ctl.stop(); frame(t, 0); } };
+    if (still()) { frame(stillAt, 0); return ctl; }
+    raf = requestAnimationFrame(step);
+    return ctl;
+  }
+  /** A car from the side, facing right, nose at x = 0 (so it's drawn to the left of where it is); brake light at the back. */
   function sideCar(g, cls) {
     var c = el('g', { class: 'an-car ' + (cls || '') }, g);
-    el('path', { d: 'M-32 -4 L-31 -9 L-24 -10.5 L-19 -16 L-9 -16 L-4 -10.5 L0 -9 L0 -4 Z', class: 'an-body' }, c);
-    el('path', { d: 'M-18 -15 L-14 -15 L-14 -10.5 L-22 -10.5 Z M-12.5 -15 L-9.5 -15 L-5.5 -10.5 L-12.5 -10.5 Z', class: 'an-glass' }, c);
-    el('rect', { x: -32.5, y: -9, width: 2, height: 3, class: 'an-brake' }, c);
-    el('circle', { cx: -24, cy: -3.5, r: 3.6, class: 'an-wheel' }, c); el('circle', { cx: -8, cy: -3.5, r: 3.6, class: 'an-wheel' }, c);
+    var m = el('g', { transform: 'translate(-32 0) scale(-1 1)' }, c);      // drawn nose-left, turned to face right
+    el('path', { d: 'M-32 -4 L-31 -9 L-24 -10.5 L-19 -16 L-9 -16 L-4 -10.5 L0 -9 L0 -4 Z', class: 'an-body' }, m);
+    el('path', { d: 'M-18 -15 L-14 -15 L-14 -10.5 L-22 -10.5 Z M-12.5 -15 L-9.5 -15 L-5.5 -10.5 L-12.5 -10.5 Z', class: 'an-glass' }, m);
+    el('circle', { cx: -24, cy: -3.5, r: 3.6, class: 'an-wheel' }, m); el('circle', { cx: -8, cy: -3.5, r: 3.6, class: 'an-wheel' }, m);
+    el('rect', { x: -32.6, y: -9, width: 2, height: 3, class: 'an-brake' }, c);
     return c;
   }
   /**
    * Wet braking, new vs worn tires: three roads in the rain. The cars come in at the same speed and brake at the same
    * line, each slowing evenly to a stop at its tested distance (Discount Tire's 158, 226 and 301 ft), so the worn ones slide
-   * past the stop sign where the car on new tires stopped.
+   * past the stop sign where the car on new tires stopped. They wait a second, fade, and it starts again.
    */
   function stopAnim(host) {
-    var W = 340, H = 214, S = 34, K = (W - S - 8) / 301, X = function (ft) { return S + ft * K; };
+    var W = 340, H = 222, S = 40, K = (W - S - 8) / 301, X = function (ft) { return S + ft * K; };
     var CARS = [{ ft: 158, lab: 'New tires', cls: 'good' }, { ft: 226, lab: 'Worn tire A', cls: 'bad' }, { ft: 301, lab: 'Worn tire B', cls: 'bad' }];
     var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Three cars brake from the same speed on a wet road. New tires stop at the stop sign after 158 feet; worn tires slide on to 226 and 301 feet, past the sign.' });
     host.appendChild(svg);
-    var lanes = CARS.map(function (c, i) { return { y: 48 + i * 58, h: 24 }; });
+    var lanes = CARS.map(function (c, i) { return { y: 56 + i * 58, h: 24 }; });
     var gR = el('g', {}, svg);
     lanes.forEach(function (ln, i) {
       el('rect', { x: 0, y: ln.y, width: W, height: ln.h, class: 'an-road' }, gR);
@@ -493,136 +499,179 @@
       el('line', { x1: 0, y1: ln.y + ln.h / 2, x2: W, y2: ln.y + ln.h / 2, class: 'an-lane' }, gR);
       el('text', { x: 2, y: ln.y - 6, class: 'il-t' }, gR).textContent = CARS[i].lab;
     });
-    // where they all start braking, and the stop sign where new tires stop
-    el('line', { x1: S, y1: 40, x2: S, y2: H - 8, class: 'an-brakeline' }, gR);
+    // where they all start braking (an arrow, "started braking"), and the stop sign where new tires stop
+    el('line', { x1: S, y1: 48, x2: S, y2: H - 6, class: 'an-brakeline' }, gR);
+    el('text', { x: S, y: 12, class: 'an-small', 'text-anchor': 'middle' }, gR).textContent = 'started braking';
+    el('path', { d: 'M' + S + ' 16 L' + S + ' 34 M' + (S - 4) + ' 29 L' + S + ' 35 L' + (S + 4) + ' 29', class: 'an-arrowd' }, gR);
     var sx = X(158);
-    el('line', { x1: sx, y1: 22, x2: sx, y2: H - 8, class: 'il-stop' }, gR);
-    var sign = el('g', { transform: 'translate(' + sx + ' 14)' }, gR);
-    el('line', { x1: 0, y1: 8, x2: 0, y2: 30, class: 'an-post' }, sign);
+    el('line', { x1: sx, y1: 30, x2: sx, y2: H - 6, class: 'il-stop' }, gR);
+    var sign = el('g', { transform: 'translate(' + sx + ' 20)' }, gR);
+    el('line', { x1: 0, y1: 8, x2: 0, y2: 32, class: 'an-post' }, sign);
     var oct = []; for (var i = 0; i < 8; i++) { var a = Math.PI / 8 + i * Math.PI / 4; oct.push((Math.cos(a) * 11).toFixed(2) + ',' + (Math.sin(a) * 11).toFixed(2)); }
     el('polygon', { points: oct.join(' '), class: 'an-sign' }, sign);
     el('text', { x: 0, y: 2.8, class: 'an-signt', 'text-anchor': 'middle' }, sign).textContent = 'STOP';
     var gC = el('g', {}, svg), gN = el('g', {}, svg), gRain = el('g', { class: 'an-rain' }, svg);
     var cars = CARS.map(function (c, i) { var g = sideCar(gC, c.cls); return { c: c, g: g, y: lanes[i].y + lanes[i].h / 2 + 4 }; });
-    var step = rain(gRain, W, H, lanes, 46);
+    var labels = CARS.map(function (c, i) {
+      var past = c.ft - 158;
+      var t = el('text', { x: W - 4, y: lanes[i].y - 6, class: 'an-n ' + c.cls, 'text-anchor': 'end', opacity: 0 }, gN);
+      t.textContent = c.ft + ' ft' + (past > 0 ? ' · ' + past + ' ft past the sign' : ' · stopped at the sign'); return t;
+    });
+    var drops = rain(gRain, W, H, lanes, 46);
     // the same speed for all: each takes 2d / v to stop (evenly slowing), so the farther one takes longer
-    var V = 2 * 158 / 1.7, PRE = 0.45, ROLL = V * K * PRE;     // px/s on the way in
+    var V = 2 * 158 / 1.7, PRE = 0.5, ROLL = V * K * PRE;
     var stopT = function (ft) { return 2 * ft / V; };
-    var DUR = PRE + stopT(301) + 1.4, last = 0;
-    var shown = {};
-    var frame = function (t) {
-      step(Math.max(0, t - last)); last = t;
-      cars.forEach(function (o) {
-        var x, braking = t >= PRE;
+    var END = PRE + stopT(301), HOLD = 1.2, FADE = 0.5, CYCLE = END + HOLD + FADE;
+    var ctl = loop(CYCLE, function (t, dt) {
+      drops(dt);
+      var fade = t > END + HOLD ? Math.max(0, 1 - (t - END - HOLD) / FADE) : 1;
+      cars.forEach(function (o, i) {
+        var x, braking = t >= PRE, u = 1;
         if (!braking) x = S - ROLL + V * K * t;
-        else { var u = Math.min(1, (t - PRE) / stopT(o.c.ft)); x = S + o.c.ft * K * (1 - (1 - u) * (1 - u)); }
+        else { u = Math.min(1, (t - PRE) / stopT(o.c.ft)); x = S + o.c.ft * K * (1 - (1 - u) * (1 - u)); }
         o.g.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + o.y + ')');
-        o.g.classList.toggle('braking', braking && x < X(o.c.ft) - 0.05);
-        if (braking && x >= X(o.c.ft) - 0.05 && !shown[o.c.ft]) {
-          shown[o.c.ft] = 1;
-          var past = o.c.ft - 158;
-          el('text', { x: W - 4, y: o.y - 22, class: 'an-n ' + o.c.cls, 'text-anchor': 'end' }, gN).textContent = o.c.ft + ' ft' + (past > 0 ? ' · ' + past + ' ft past the sign' : ' · stopped at the sign');
-        }
+        o.g.setAttribute('opacity', fade.toFixed(2));
+        o.g.classList.toggle('braking', braking && u < 1);
+        labels[i].setAttribute('opacity', (braking && u >= 1 ? fade : 0).toFixed(2));
       });
-    };
-    var stop = null, btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'btn tonal sm an-replay'; btn.textContent = '▶ Play again';
-    var play = function () {
-      if (stop) stop(); gN.innerHTML = ''; shown = {}; last = 0; btn.disabled = true;
-      stop = run(DUR, frame, function () { btn.disabled = false; });
-    };
-    btn.onclick = play; host.appendChild(btn);
-    play();
-    return function () { if (stop) stop(); };
+    }, END + HOLD * 0.5);
+    host.__anim = ctl;
+    return ctl.stop;
   }
-  /** A car from above, nose up at (0, 0) center; its underside shows when it's rolled over. */
+  /** A car from above, nose up, centered on (0, 0), with its wheels (the front ones steer); its underside shows when it's rolled over. */
   function topCar(g, cls) {
-    var c = el('g', { class: 'an-tcar ' + cls }, g), r = el('g', {}, c);
+    var c = el('g', { class: 'an-tcar ' + cls }, g), r = el('g', {}, c), wh = [];
+    [[-7.2, -7.5, 1], [7.2, -7.5, 1], [-7.2, 7.5, 0], [7.2, 7.5, 0]].forEach(function (p) {
+      var w = el('g', { transform: 'translate(' + p[0] + ' ' + p[1] + ')' }, r); el('rect', { x: -1.6, y: -3.2, width: 3.2, height: 6.4, rx: 1, class: 'an-wheel' }, w);
+      wh.push({ g: w, x: p[0], y: p[1], front: !!p[2] });
+    });
     el('rect', { x: -6.5, y: -12, width: 13, height: 24, rx: 4, class: 'an-tbody' }, r);
     el('rect', { x: -5, y: -7.5, width: 10, height: 5.5, rx: 1.5, class: 'il-glass an-top' }, r);
     el('rect', { x: -5, y: 5, width: 10, height: 3.5, rx: 1.2, class: 'il-glass an-top' }, r);
-    // underneath: the axles and wheels (shown when it's upside down)
     var u = el('g', { class: 'an-under' }, r);
     el('rect', { x: -6.5, y: -12, width: 13, height: 24, rx: 4, class: 'an-belly' }, u);
     [-8, 8].forEach(function (y) { el('line', { x1: -6, y1: y, x2: 6, y2: y, class: 'an-axle' }, u); el('rect', { x: -8.5, y: y - 3, width: 3, height: 6, rx: 1, class: 'an-wheel' }, u); el('rect', { x: 5.5, y: y - 3, width: 3, height: 6, rx: 1, class: 'an-wheel' }, u); });
-    return { g: c, roll: r, under: u };
+    return { g: c, roll: r, under: u, wheels: wh };
+  }
+  /** A thought bubble ("Phew!") or a speech bubble ("I'm okay!"), above (x, y). */
+  function bubble(g, text, kind) {
+    var b = el('g', { class: 'an-bub ' + kind, opacity: 0 }, g), w = text.length * 5.4 + 14;
+    b.__w = w;
+    el('rect', { x: -w / 2, y: -30, width: w, height: 17, rx: 8.5, class: 'an-bubbg' }, b);
+    if (kind === 'think') { el('circle', { cx: -3, cy: -10, r: 2.4, class: 'an-bubbg' }, b); el('circle', { cx: -6, cy: -5.5, r: 1.5, class: 'an-bubbg' }, b); }
+    else el('path', { d: 'M -5 -13.5 L 1 -13.5 L -4 -6 Z', class: 'an-bubbg' }, b);
+    el('text', { x: 0, y: -18.5, class: 'an-bubt', 'text-anchor': 'middle' }, b).textContent = text;
+    return b;
+  }
+  /** Flames around a wreck, flickering. -> step(t). */
+  function fire(g) {
+    var f = el('g', { class: 'an-fire', opacity: 0 }, g), fl = [];
+    [[-10, 6, 1], [9, 2, 0.9], [-4, -13, 0.8], [5, 12, 0.75], [12, -8, 0.7]].forEach(function (p, i) {
+      var q = el('g', { transform: 'translate(' + p[0] + ' ' + p[1] + ')' }, f);
+      el('path', { d: 'M0 4 C-5 0 -3 -6 0 -11 C1 -6 6 -4 3 1 C3 3 1 4 0 4 Z', class: 'an-flame' }, q);
+      el('path', { d: 'M0 3 C-2 1 -1.5 -2 0 -5 C1 -2 2.5 -1 1.5 1.5 Z', class: 'an-flame2' }, q);
+      fl.push({ q: q, x: p[0], y: p[1], s: p[2], ph: i * 1.7 });
+    });
+    return { g: f, step: function (t) { fl.forEach(function (o) { var k = o.s * (0.85 + 0.2 * Math.sin(t * 13 + o.ph) + 0.08 * Math.sin(t * 29 + o.ph * 2)); o.q.setAttribute('transform', 'translate(' + o.x + ' ' + o.y + ') scale(' + (k * 0.9).toFixed(3) + ' ' + k.toFixed(3) + ')'); }); } };
   }
   /**
-   * A curve in the rain, from above, twice: understeer (the front lets go: the car runs wide onto the shoulder and stops)
-   * and oversteer (the rear lets go: it spins, slides off the road, and rolls over when the tires dig into the ground).
+   * Curves in the rain, from above, three ways. Understeer (the front tires let go: the car keeps going straighter than
+   * the curve, front wheels turned and skidding): 1) it catches grip and stays on the road ("Phew!"); 2) it runs off onto
+   * the grass but stays upright and stops ("I'm okay!"). Oversteer (the rear lets go): it spins off the road, digs in and
+   * rolls onto its roof, and catches fire ("Not okay! Help!"). Then it starts again.
    */
   function steerAnim(host) {
-    var W = 340, H = 236, svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'From above, on a wet curve: understeer, the car runs wide onto the shoulder and stops; oversteer, the rear swings out, the car spins off the road and rolls over.' });
+    var W = 340, H = 248;
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'From above, on wet curves: understeer, the car runs wide and grips again; understeer, the car runs onto the grass and stops upright; oversteer, the rear swings out, the car spins off the road, rolls over and catches fire.' });
     host.appendChild(svg);
-    var ROAD = 'M 120 214 C 120 140, 98 84, 22 46';
-    var panels = [{ dx: 0, title: 'Understeer: runs wide', kind: 'under' }, { dx: 170, title: 'Oversteer: spins and rolls', kind: 'over' }];
-    var gRain = null, P = [];
-    panels.forEach(function (pn) {
-      var g = el('g', { transform: 'translate(' + pn.dx + ' 0)' }, svg);
-      el('rect', { x: 2, y: 4, width: 166, height: 206, rx: 10, class: 'an-grass' }, g);
-      el('path', { d: ROAD, class: 'il-road' }, g); el('path', { d: ROAD, class: 'il-lane' }, g);
-      var path = el('path', { d: ROAD, fill: 'none', stroke: 'none' }, g);
-      var trail = el('path', { d: '', class: 'il-path ' + (pn.kind === 'under' ? 'warn' : 'bad') }, g);
-      var car = topCar(g, pn.kind === 'under' ? 'warn' : 'bad');
-      el('text', { x: 85, y: 228, class: 'il-h', 'text-anchor': 'middle' }, g).textContent = pn.title;
-      var note = el('text', { x: 85, y: 22, class: 'an-note', 'text-anchor': 'middle' }, g);
-      P.push({ pn: pn, path: path, trail: trail, car: car, note: note, len: path.getTotalLength() });
+    // the left column: understeer twice (stacked); the right: oversteer, as tall as both
+    var PANELS = [
+      { kind: 'u1', x: 2, y: 2, w: 166, h: 120, road: 'M 140 122 C 140 76, 96 52, 14 62', sc: 0.78, tb: 1, title: 'Understeer: grips again', say: 'Phew!', bub: 'think' },
+      { kind: 'u2', x: 2, y: 126, w: 166, h: 120, road: 'M 140 122 C 140 76, 96 52, 14 62', sc: 0.78, tb: 1, title: 'Understeer: off the road', say: 'I\'m okay!', bub: 'say' },
+      { kind: 'over', x: 172, y: 2, w: 166, h: 244, road: 'M 120 240 C 120 160, 98 100, 22 60', sc: 1, title: 'Oversteer: spins and rolls', say: 'Not okay! Help!', bub: 'say' }];
+    var P = PANELS.map(function (pn) {
+      var g = el('g', { transform: 'translate(' + pn.x + ' ' + pn.y + ')' }, svg);
+      var clip = 'anc' + pn.kind + Math.random().toString(36).slice(2, 7);
+      var cp = el('clipPath', { id: clip }, g); el('rect', { x: 0, y: 0, width: pn.w, height: pn.h, rx: 10 }, cp);
+      var inner = el('g', { 'clip-path': 'url(#' + clip + ')' }, g);
+      el('rect', { x: 0, y: 0, width: pn.w, height: pn.h, class: 'an-grass' }, inner);
+      el('path', { d: pn.road, class: 'il-road' }, inner); el('path', { d: pn.road, class: 'il-lane' }, inner);
+      var path = el('path', { d: pn.road, fill: 'none', stroke: 'none' }, inner);
+      var skids = el('g', { class: 'an-skids' }, inner);
+      var trail = el('path', { d: '', class: 'il-path ' + (pn.kind === 'over' ? 'bad' : 'warn') }, inner);
+      var fx = pn.kind === 'over' ? fire(inner) : null;
+      var car = topCar(inner, pn.kind === 'over' ? 'bad' : 'warn');
+      var bub = bubble(inner, pn.say, pn.bub);
+      el('text', { x: 8, y: pn.tb ? pn.h - 8 : 14, class: 'an-title' }, inner).textContent = pn.title;
+      return { pn: pn, path: path, len: path.getTotalLength(), trail: trail, skids: skids, car: car, bub: bub, fx: fx, g: inner };
     });
-    gRain = el('g', { class: 'an-rain' }, svg);
-    var step = rain(gRain, W, H, [], 40);
-    var at = function (p, s) { var a = p.path.getPointAtLength(s), b = p.path.getPointAtLength(Math.min(p.len, s + 1)); return { x: a.x, y: a.y, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
+    var drops = rain(el('g', { class: 'an-rain' }, svg), W, H, [], 44);
+    var at = function (p, s) { s = Math.max(0, Math.min(p.len, s)); var a = p.path.getPointAtLength(s), b = p.path.getPointAtLength(Math.min(p.len, s + 1)); return { x: a.x, y: a.y, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
     var deg = function (r) { return r * 180 / Math.PI; };
-    var DUR = 5.2, last = 0, LEAVE = 0.42;
-    var frame = function (t) {
-      step(Math.max(0, t - last)); last = t;
+    var RUN = 5.2, HOLD = 2.0, FADE = 0.5, CYCLE = RUN + HOLD + FADE, T0 = 1.4, LEAVE = 0.42;
+    var ctl = loop(CYCLE, function (t, dt) {
+      drops(dt);
+      var fade = t > RUN + HOLD ? Math.max(0, 1 - (t - RUN - HOLD) / FADE) : 1, tr = Math.min(t, RUN);
       P.forEach(function (p) {
-        var s0 = p.len * LEAVE, T0 = 1.4, x, y, yaw, roll = 0, pts = [];
-        if (t <= T0) {              // on the road, at speed, both the same
-          var q = at(p, s0 * t / T0); x = q.x; y = q.y; yaw = deg(q.ang) + 90;
-          p.note.textContent = '';
-        } else {
-          var L = at(p, s0), dir = L.ang, u = t - T0;
-          if (p.pn.kind === 'under') {
-            // the front slides: the car drifts wide toward the outside edge, then (easing off) grips again and follows the
-            // curve, slowing down, still on its wheels
-            var k = Math.min(1, u / 3.6), s1 = s0 + (p.len * 0.92 - s0) * (1 - Math.pow(1 - k, 2)), q2 = at(p, s1);
-            var off = 15 * Math.sin(Math.PI * Math.min(1, u / 2.8)), nx = Math.cos(q2.ang + Math.PI / 2), ny = Math.sin(q2.ang + Math.PI / 2);
-            x = q2.x + nx * off; y = q2.y + ny * off; yaw = deg(q2.ang) + 90 - 14 * Math.sin(Math.PI * Math.min(1, u / 2.8));
-            p.note.textContent = u < 1.4 ? 'Front slides: runs wide' : 'Ease off: it grips again';
+        if (t < 0.05 || !p.pts) { p.pts = []; p.skL = []; p.skR = []; p.skids.innerHTML = ''; }
+        var s0 = p.len * LEAVE, x, y, yaw, roll = 0, steer = 0, slideF = false, done = false;
+        if (tr <= T0) { var q = at(p, s0 * tr / T0); x = q.x; y = q.y; yaw = deg(q.ang) + 90; steer = -6 * Math.min(1, tr / T0); }
+        else {
+          var L = at(p, s0), dir = L.ang, u = tr - T0;
+          if (p.pn.kind === 'u1') {
+            // the front tires slide for a moment (the car drifts toward the outside edge, front wheels turned but skidding),
+            // then grip again: back in its lane, carrying on round the curve
+            var k = Math.min(1, u / 3.4), s1 = s0 + (p.len * 0.93 - s0) * (1 - Math.pow(1 - k, 2)), q2 = at(p, s1);
+            var wide = Math.sin(Math.PI * Math.min(1, u / 2.2)), off = 11 * wide;
+            x = q2.x + Math.cos(q2.ang + Math.PI / 2) * off; y = q2.y + Math.sin(q2.ang + Math.PI / 2) * off;
+            yaw = deg(q2.ang) + 90 - 8 * wide; steer = -18; slideF = u < 1.8; done = u > 2.6;
+          } else if (p.pn.kind === 'u2') {
+            // the front tires don't grip: the car keeps going nearly straight, off the outside of the curve onto the grass,
+            // front wheels still turned, slowing to a stop the right way up
+            var k2 = Math.min(1, u / 3.2), d = 70 * (1 - Math.pow(1 - k2, 2)), bend = 0.04 * k2;
+            x = L.x + Math.cos(dir + bend * 0.5) * d; y = L.y + Math.sin(dir + bend * 0.5) * d; yaw = deg(dir + bend) + 90;
+            steer = -22; slideF = k2 < 0.95; done = k2 >= 1;
           } else {
             // the rear slides out: the car rotates as it slides off the outside of the curve, then digs in and rolls
             var slide = Math.min(1, u / 1.9), d2 = 64 * (1 - Math.pow(1 - slide, 1.6)), drift = dir + 0.55 * slide;
             x = L.x + Math.cos(drift) * d2; y = L.y + Math.sin(drift) * d2; yaw = deg(dir) + 90 + 230 * Math.pow(slide, 1.3);
-            if (u > 1.9) {              // off the road: it trips and rolls twice, ending on its roof
-              var r = Math.min(1, (u - 1.9) / 1.6); roll = 540 * (1 - Math.pow(1 - r, 2));
-              var e = Math.min(1, (u - 1.9) / 1.6), dd = 22 * e;
-              x += Math.cos(drift) * dd; y += Math.sin(drift) * dd;
-              p.note.textContent = r < 1 ? 'Rolls over' : 'Upside down';
-            } else p.note.textContent = u > 0.3 ? 'Rear slides out' : '';
+            if (u > 1.9) { var r = Math.min(1, (u - 1.9) / 1.6); roll = 540 * (1 - Math.pow(1 - r, 2)); x += Math.cos(drift) * 22 * r; y += Math.sin(drift) * 22 * r; done = r >= 1; }
           }
         }
-        // its track: drawn as it goes
-        p.trailPts = t <= 0.02 ? [] : (p.trailPts || []);
-        p.trailPts.push(x.toFixed(1) + ' ' + y.toFixed(1));
-        if (p.trailPts.length > 1) p.trail.setAttribute('d', 'M ' + p.trailPts.join(' L '));
-        // rolling, from above: the car narrows to its edge and shows its underside every other half turn
-        var c = Math.cos(roll * Math.PI / 180), up = c >= 0;
-        p.car.g.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + yaw.toFixed(1) + ')');
+        // the car, its front wheels (steered), and rolling: from above, it narrows to its edge and shows its underside
+        var c = Math.cos(roll * Math.PI / 180), sc = p.pn.sc;
+        p.car.g.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + yaw.toFixed(1) + ') scale(' + sc + ')');
         p.car.roll.setAttribute('transform', 'scale(' + Math.max(0.08, Math.abs(c)).toFixed(3) + ' 1)');
-        p.car.under.style.display = up ? 'none' : '';
+        p.car.under.style.display = c >= 0 ? 'none' : '';
+        p.car.wheels.forEach(function (w) { w.g.setAttribute('transform', 'translate(' + w.x + ' ' + w.y + ')' + (w.front ? ' rotate(' + steer.toFixed(1) + ')' : '')); });
+        p.car.g.setAttribute('opacity', fade.toFixed(2));
+        // its track, and the front tires' skid marks while they slide
+        if (tr < RUN) { p.pts.push(x.toFixed(1) + ' ' + y.toFixed(1)); if (p.pts.length > 1) p.trail.setAttribute('d', 'M ' + p.pts.join(' L ')); }
+        if (slideF && tr < RUN) {
+          var yr = yaw * Math.PI / 180, fx0 = x + Math.sin(yr) * 7.5 * sc, fy0 = y - Math.cos(yr) * 7.5 * sc, ox = Math.cos(yr) * 7.2 * sc, oy = Math.sin(yr) * 7.2 * sc;
+          p.skL.push((fx0 - ox).toFixed(1) + ' ' + (fy0 - oy).toFixed(1)); p.skR.push((fx0 + ox).toFixed(1) + ' ' + (fy0 + oy).toFixed(1));
+          p.skids.innerHTML = '';
+          [p.skL, p.skR].forEach(function (a) { if (a.length > 1) el('path', { d: 'M ' + a.join(' L '), class: 'an-skid' }, p.skids); });
+        }
+        p.trail.setAttribute('opacity', fade.toFixed(2)); p.skids.setAttribute('opacity', fade.toFixed(2));
+        // how it ends: a thought or speech bubble over the car, and for the rolled car, fire
+        var hw = p.bub.__w / 2 + 4, bx = Math.max(hw, Math.min(p.pn.w - hw, x)), by = Math.max(36, y - 10 * sc);
+        p.bub.setAttribute('transform', 'translate(' + bx.toFixed(1) + ' ' + by.toFixed(1) + ')');
+        p.bub.setAttribute('opacity', (done ? fade : 0).toFixed(2));
+        if (p.fx) {
+          p.fx.g.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
+          var fOn = roll >= 540 - 1 ? Math.min(1, (tr - (T0 + 3.5)) / 0.4 + 1) : 0;
+          p.fx.g.setAttribute('opacity', (Math.max(0, Math.min(1, fOn)) * fade).toFixed(2)); p.fx.step(t);
+        }
       });
-    };
-    var stop = null, btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'btn tonal sm an-replay'; btn.textContent = '▶ Play again';
-    var play = function () { if (stop) stop(); last = 0; P.forEach(function (p) { p.trailPts = []; }); btn.disabled = true; stop = run(DUR, frame, function () { btn.disabled = false; }); };
-    btn.onclick = play; host.appendChild(btn);
-    play();
-    return function () { if (stop) stop(); };
+    }, RUN + HOLD * 0.5);
+    host.__anim = ctl;
+    return ctl.stop;
   }
   var WHY_TREAD = '<div class="an-box" id="anStop"></div><p class="an-cap">Three cars on a wet road, braking from the same speed at the same line. On new tires the car stops at the sign, in <b>158 ft</b>. On worn tires it needed <b>226 and 301 ft</b>: 68 to 143 ft more, sliding right through where the first car stopped. Tread is what pushes water out from under a tire, so worn tires lose grip in the rain first.</p>' +
     '<p class="an-src">Source: Discount Tire, Treadwell Research Park: two tires from top-10 tire makers, new vs worn, on a wet road.</p>';
-  var WHY_BACK = '<div class="an-box" id="anSteer"></div><p class="an-cap">On a wet road, the tires with less tread hydroplane first. If those are on the <b>back</b>, the rear loses grip before the front and swings out: that\'s <b>oversteer</b>. The car spins, and when its tires catch on the shoulder or grass it can roll over.</p>' +
-    '<p class="an-cap">With the better tires on the back, the front lets go first and the car runs wide: that\'s <b>understeer</b>. Easing off the gas lets the front grip again, and the car stays upright. So the better tires always go on the rear, whatever wheels drive the car.</p>';
+  var WHY_BACK = '<div class="an-box" id="anSteer"></div><p class="an-cap">On a wet road, the tires with less tread hydroplane first. If those are on the <b>back</b>, the rear loses grip before the front and swings out: that\'s <b>oversteer</b>. The car spins, and when its tires dig into the shoulder or grass it can roll over.</p>' +
+    '<p class="an-cap">With the better tires on the back, the <b>front</b> tires let go first: that\'s <b>understeer</b>. The front wheels are turned but skid, so the car keeps going straighter than the curve. Easing off the gas usually lets them grip again and the car stays in its lane; at worst it runs off the road the right way up, which is far safer than a spin. So the better tires always go on the rear, whatever wheels drive the car.</p>';
   function openWhy(which) {
     A.subPage(which === 'tread' ? 'Why tread matters' : 'Why the better tires go on the back', which === 'tread' ? WHY_TREAD : WHY_BACK, function (body) {
       return which === 'tread' ? stopAnim(body.querySelector('#anStop')) : steerAnim(body.querySelector('#anSteer'));

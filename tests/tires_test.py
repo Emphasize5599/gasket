@@ -140,20 +140,38 @@ with sync_playwright() as p:
         # ---- the "why" pictures: submenus that play an animation ----
         pg.click('[data-why="tread"]'); pg.wait_for_selector('.sub-page #anStop svg')
         pg.wait_for_timeout(1200); pg.screenshot(path=f'{OUT}/{name}-t3a-why-moving.png')
-        pg.wait_for_function("!document.querySelector('.sub-page .an-replay').disabled", timeout=12000)
+        # it loops, with the rain falling all the time: drops keep moving
+        y0 = pg.evaluate("document.querySelector('#anStop .rn-drop').getAttribute('y1')"); pg.wait_for_timeout(300)
+        assert pg.evaluate("document.querySelector('#anStop .rn-drop').getAttribute('y1')") != y0, 'continuous rain'
+        # a moment after they've all stopped (the animation jumped there and held)
+        pg.evaluate("document.getElementById('anStop').__anim.at(4.2)")
         nose = pg.evaluate('''() => [...document.querySelectorAll('#anStop .an-car')].map(g => +/translate\(([\d.]+)/.exec(g.getAttribute('transform'))[1])''')
         line = pg.evaluate("+document.querySelector('#anStop .il-stop').getAttribute('x1')"); print('  cars stopped at', nose, '| stop sign at', line)
-        assert abs(nose[0] - line) < 0.6 and nose[1] > line + 20 and nose[2] > nose[1] + 20, 'new tires stop at the sign; worn ones slide past it'
-        assert '68 ft past the sign' in pg.inner_html('#anStop') and pg.locator('#anStop .an-sign').count() == 1 and pg.locator('#anStop .rn-drop').count() > 20, 'stop sign, rain'
+        assert abs(nose[0] - line) < 0.6 and nose[1] > line + 20 and nose[2] > nose[1] + 20, 'new tires stop at the sign (on its near side); worn ones slide past it'
+        car0 = pg.evaluate("(() => { const b = document.querySelector('#anStop .an-car').getBBox(); return [b.x, b.x + b.width]; })()")
+        assert car0[1] <= 0.6, 'the car is drawn behind its nose: left of the stop line'
+        brake = pg.evaluate("+document.querySelector('#anStop .an-brake').getAttribute('x')"); assert brake < -30, 'brake light at the back'
+        assert '68 ft past the sign' in pg.inner_html('#anStop') and pg.locator('#anStop .an-sign').count() == 1 and 'started braking' in pg.inner_html('#anStop')
         assert 'Treadwell' in ft(pg, '.sub-page') and pg.locator('#tpBody #anStop').count() == 0
         pg.screenshot(path=f'{OUT}/{name}-t3-why.png')
+        pg.evaluate("document.getElementById('anStop').__anim.at(4.95)")
+        op = pg.evaluate("[...document.querySelectorAll('#anStop .an-car')].map(g => +g.getAttribute('opacity'))"); assert all(0 < o < 1 for o in op), ('fading out', op)
         pg.click('.sub-back'); pg.wait_for_timeout(150); assert pg.locator('.sub-page').count() == 0, 'Back closes it'
         pg.click('[data-why="back"]'); pg.wait_for_selector('.sub-page #anSteer svg')
         pg.wait_for_timeout(2600); pg.screenshot(path=f'{OUT}/{name}-t4a-steer-moving.png')
-        pg.wait_for_function("!document.querySelector('.sub-page .an-replay').disabled", timeout=12000)
+        pg.evaluate("document.getElementById('anSteer').__anim.at(5.9)")
         under = pg.evaluate("[...document.querySelectorAll('#anSteer .an-under')].map(u => u.style.display !== 'none')"); print('  upside down:', under)
-        assert under == [False, True], 'understeer: still on its wheels; oversteer: rolled onto its roof'
-        assert 'Upside down' in pg.inner_html('#anSteer') and 'grips again' in pg.inner_html('#anSteer')
+        assert under == [False, False, True], 'understeer twice: still on its wheels; oversteer: rolled onto its roof'
+        bubs = pg.evaluate("[...document.querySelectorAll('#anSteer .an-bub')].map(b => b.textContent + ' ' + b.getAttribute('opacity'))"); print('  bubbles:', bubs)
+        assert bubs == ['Phew! 1.00', "I'm okay! 1.00", 'Not okay! Help! 1.00'], bubs
+        assert pg.evaluate("+document.querySelector('#anSteer .an-fire').getAttribute('opacity')") > 0.9, 'the rolled car is on fire'
+        # understeer 1 ends back on the road; understeer 2 off it
+        off = pg.evaluate('''() => [...document.querySelectorAll('#anSteer .an-tcar')].slice(0, 2).map(c => {
+          const g = c.parentNode, road = g.querySelector('.il-road'), m = /translate\(([\d.]+) ([\d.]+)\)/.exec(c.getAttribute('transform'));
+          const x = +m[1], y = +m[2], L = road.getTotalLength(); let best = 1e9;
+          for (let s = 0; s <= L; s += 1) { const p = road.getPointAtLength(s); best = Math.min(best, Math.hypot(p.x - x, p.y - y)); }
+          return Math.round(best); })''')
+        print('  understeer cars from the road center:', off); assert off[0] <= 6 and off[1] >= 18, off
         pg.screenshot(path=f'{OUT}/{name}-t4-steer.png')
         assert pg.evaluate('window.onBack()') and pg.locator('.sub-page').count() == 0, "the phone's Back button closes it too"
         for x in pg.locator('[data-xdel]').all(): pg.locator('[data-xdel]').first.click(); pg.wait_for_timeout(120)

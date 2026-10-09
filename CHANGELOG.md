@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.71 - 2026-10-09
+- **Why tread matters** now loops: the rain never stops, the cars hold at their stopping points for a moment, fade, and drive in again. They face the right way, and an arrow marks where they started braking.
+- **Why the better tires go on the back** has three scenes: understeer where the front tires skid, then grip again and the car stays on the road ("Phew!"); understeer where it runs off onto the grass but stays upright ("I'm okay!"); and oversteer, where it spins, rolls over and catches fire ("Not okay! Help!"). The front wheels turn and leave skid marks, and it loops too.
+- Bug fixes.
+
 ## 0.0.70 - 2026-10-09
 - **Your VIN stays private.** The VIN box shows dots like a password, with an eye to show it; the VIN no longer appears under Features, and the debug log writes [VIN] instead of it.
 - **Why tread matters, animated.** Three cars brake from the same speed on wet roads in the rain: on new tires the car stops at the stop sign (158 ft); on worn tires they slide 68 and 143 ft past it.
