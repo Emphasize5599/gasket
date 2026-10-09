@@ -14,7 +14,7 @@
       loadCache: function () { return mem.c || ''; }, saveCache: function (j) { mem.c = j; },
       callsThisMonth: function () { return 0; }, certFingerprint: function () { return 'BROWSER-TEST'; },
       packageName: function () { return 'com.bensanzone.fuelmap'; },
-      locate: function () { setTimeout(function () { window.onLocation(34.7695, -92.2671, 30); }, 300); },
+      locate: function () { setTimeout(function () { window.onLocation(34.7450, -92.2900, 30); }, 300); },
       haptic: function () {}, setStatusBarDark: function () {},
       pickTextFile: function (req) { setTimeout(function () { var m = window.__mocks && window.__mocks.pick; window.onNativeResult(req, m ? { body: m } : { cancelled: true }); }, 30); },
       openUrl: function (u) { window.__lastUrl = u; },

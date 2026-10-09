@@ -1,12 +1,23 @@
 // Stand-ins for Google Routes, Places along-route, EPA, Walmart and Murphy (shapes match the real APIs)
 (function () {
   const A = [34.7695, -92.2671], B = [32.7767, -96.797];   // North Little Rock AR -> Dallas TX
-  const N = 1200, line = [];
-  for (let i = 0; i <= N; i++) { const t = i / N; line.push({ lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * 9) * 0.05, lng: A[1] + (B[1] - A[1]) * t }); }
   const total = 318;
+  // the road bows south so it's about as long as its 318 miles (a straight line would be 294); points are spaced by distance,
+  // so mile m of the route is where the map has it
+  const raw = (t) => ({ lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * 9) * 0.05 - Math.sin(Math.PI * t) * 0.95, lng: A[1] + (B[1] - A[1]) * t });
+  const hav = (p, q) => { const r = Math.PI / 180, x = Math.sin((q.lat - p.lat) * r / 2) ** 2 + Math.cos(p.lat * r) * Math.cos(q.lat * r) * Math.sin((q.lng - p.lng) * r / 2) ** 2; return 7917.6 * Math.asin(Math.sqrt(x)); };
+  const R = 4000, rp = [], cum = [0];
+  for (let i = 0; i <= R; i++) { rp.push(raw(i / R)); if (i) cum.push(cum[i - 1] + hav(rp[i - 1], rp[i])); }
+  const at = (mi) => {
+    const want = Math.max(0, Math.min(1, mi / total)) * cum[R]; let lo = 0, hi = R;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] < want) lo = m; else hi = m; }
+    const f = cum[hi] > cum[lo] ? (want - cum[lo]) / (cum[hi] - cum[lo]) : 0;
+    return { lat: rp[lo].lat + (rp[hi].lat - rp[lo].lat) * f, lng: rp[lo].lng + (rp[hi].lng - rp[lo].lng) * f };
+  };
+  const N = 1200, line = [];
+  for (let i = 0; i <= N; i++) line.push(at(total * i / N));
   const lineI30 = line.map((p) => ({ lat: p.lat + 0.003, lng: p.lng }));   // a hair north, so tests can tell the two routes apart
   const enc = window.Trip.encodePolyline;
-  const at = (mi) => { const t = mi / total; return { lat: A[0] + (B[0] - A[0]) * t + Math.sin(t * 9) * 0.05, lng: A[1] + (B[1] - A[1]) * t }; };
   const money = (v) => ({ currencyCode: 'USD', units: String(Math.floor(v)), nanos: Math.round((v - Math.floor(v)) * 1e9) });
   const now = new Date().toISOString();
   const steps = [];

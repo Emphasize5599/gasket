@@ -30,7 +30,7 @@ with sync_playwright() as p:
                   '|', ' '.join(pg.locator('#detail .note').all_inner_texts())[-70:])
             if label == 'M': pg.screenshot(path=f'{OUT}/{name}-0c-murphy.png')
             pg.click('#dClose')
-        pg.evaluate("window.__wmMock={blocked:true}; window.__app.fetchAround(34.77,-92.27)")
+        pg.evaluate("window.__wmMock={blocked:true}; window.__app.fetchAround(34.7450,-92.2900)")
         pg.wait_for_timeout(500)
         assert pg.is_visible('#wmCheck'), 'verify banner'
         assert 'Walmart' in pg.inner_text('#wmCheckTitle')

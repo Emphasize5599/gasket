@@ -23,7 +23,7 @@ EXTRA = r'''
   M.epa = (url) => {
     if (/menu\/make/.test(url)) return { menuItem: [{ text: 'Honda', value: 'Honda' }, { text: 'Tesla', value: 'Tesla' }, { text: 'Toyota', value: 'Toyota' }] };
     if (/menu\/model.*make=Tesla/.test(url)) return { menuItem: { text: 'Model 3 Long Range AWD', value: 'Model 3 Long Range AWD' } };
-    if (/menu\/model.*make=Toyota/.test(url)) return { menuItem: [{ text: 'Mirai', value: 'Mirai' }, { text: 'Corolla Hybrid', value: 'Corolla Hybrid' }] };
+    if (/menu\/model.*make=Toyota/.test(url)) return { menuItem: [{ text: 'Mirai', value: 'Mirai' }, { text: 'Camry', value: 'Camry' }] };
     if (/menu\/options.*Model%203/.test(url)) return { menuItem: { text: 'Auto (A1)', value: 'ev1' } };
     if (/menu\/options.*Mirai/.test(url)) return { menuItem: { text: 'Auto (A1)', value: 'fc1' } };
     if (/vehicle\/ev1$/.test(url)) return { id: 'ev1', year: '2021', make: 'Tesla', model: 'Model 3 Long Range AWD', atvType: 'EV', fuelType1: 'Electricity', city08: '134', highway08: '126', comb08: '131',

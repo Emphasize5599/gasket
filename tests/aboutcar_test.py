@@ -13,18 +13,19 @@ MOCKS = open(os.path.join(ROOT, 'tests', 'trip_mocks.js')).read()
 EPA = r'''() => {
   window.__epaUrls = [];
   const rec = {
-    32199: { id: '32199', year: '2011', make: 'Toyota', model: 'Venza', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'Front-Wheel Drive', displ: '3.5', cylinders: '6', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '18', highway08: '24', comb08: '20', VClass: 'Minivan - 2WD' },
-    32198: { id: '32198', year: '2011', make: 'Toyota', model: 'Venza', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'Front-Wheel Drive', displ: '2.7', cylinders: '4', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '19', highway08: '24', comb08: '21', VClass: 'Minivan - 2WD' },
-    32203: { id: '32203', year: '2011', make: 'Toyota', model: 'Venza AWD', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'All-Wheel Drive', displ: '3.5', cylinders: '6', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '16', highway08: '22', comb08: '18', VClass: 'Minivan - 4WD' },
-    41214: { id: '41214', year: '2016', make: 'Toyota', model: 'Corolla Hybrid', baseModel: 'Corolla Hybrid', trany: 'Automatic (variable gear ratios)', drive: 'Front-Wheel Drive', displ: '1.8', cylinders: '4', eng_dscr: '', atvType: 'Hybrid', startStop: 'Y', fuelType1: 'Regular Gasoline', city08: '54', highway08: '50', comb08: '52', VClass: 'Midsize Cars' }
+    32199: { id: '32199', year: '2012', make: 'Toyota', model: 'Venza', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'Front-Wheel Drive', displ: '3.5', cylinders: '6', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '19', highway08: '26', comb08: '21', VClass: 'Sport Utility Vehicle - 2WD' },
+    32198: { id: '32198', year: '2012', make: 'Toyota', model: 'Venza', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'Front-Wheel Drive', displ: '2.7', cylinders: '4', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '21', highway08: '27', comb08: '23', VClass: 'Sport Utility Vehicle - 2WD' },
+    32202: { id: '32202', year: '2012', make: 'Toyota', model: 'Venza AWD', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'All-Wheel Drive', displ: '2.7', cylinders: '4', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '20', highway08: '25', comb08: '22', VClass: 'Sport Utility Vehicle - 4WD' },
+    32203: { id: '32203', year: '2012', make: 'Toyota', model: 'Venza AWD', baseModel: 'Venza', trany: 'Automatic (S6)', drive: 'All-Wheel Drive', displ: '3.5', cylinders: '6', eng_dscr: '', atvType: '', startStop: '', fuelType1: 'Regular Gasoline', city08: '18', highway08: '25', comb08: '21', VClass: 'Sport Utility Vehicle - 4WD' },
+    41214: { id: '41214', year: '2020', make: 'Toyota', model: 'Corolla Hybrid', baseModel: 'Corolla', trany: 'Automatic (variable gear ratios)', drive: 'Front-Wheel Drive', displ: '1.8', cylinders: '4', eng_dscr: 'Hybrid', atvType: 'Hybrid', startStop: 'Y', fuelType1: 'Regular Gasoline', city08: '53', highway08: '52', comb08: '52', VClass: 'Compact Cars' }
   };
   window.__mocks.epa = (url) => {
     window.__epaUrls.push(url);
-    if (/menu\/model\?year=2011&make=Toyota/.test(url)) return { menuItem: [{ text: 'Camry', value: 'Camry' }, { text: 'Venza', value: 'Venza' }, { text: 'Venza AWD', value: 'Venza AWD' }] };
-    if (/menu\/model\?year=2016&make=Toyota/.test(url)) return { menuItem: [{ text: 'Corolla Hybrid', value: 'Corolla Hybrid' }, { text: 'Corolla Hybrid c', value: 'Corolla Hybrid c' }, { text: 'Corolla Hybrid Eco', value: 'Corolla Hybrid Eco' }] };
-    if (/menu\/options.*model=Venza/.test(url)) return { menuItem: [{ text: 'Auto (S6), 6 cyl, 3.5 L', value: '32199' }, { text: 'Auto (S6), 4 cyl, 2.7 L', value: '32198' }] };
-    if (/menu\/options.*model=Venza%20AWD/.test(url)) return { menuItem: { text: 'Auto (S6), 6 cyl, 3.5 L', value: '32203' } };
-    if (/menu\/options.*model=Corolla Hybrid$/.test(url)) return { menuItem: { text: 'Auto (variable gear ratios), 4 cyl, 1.8 L', value: '41214' } };
+    if (/menu\/model\?year=2012&make=Toyota/.test(url)) return { menuItem: [{ text: 'Camry', value: 'Camry' }, { text: 'Venza', value: 'Venza' }, { text: 'Venza AWD', value: 'Venza AWD' }, { text: 'Yaris', value: 'Yaris' }] };
+    if (/menu\/model\?year=2020&make=Toyota/.test(url)) return { menuItem: [{ text: 'Corolla', value: 'Corolla' }, { text: 'Corolla Hybrid', value: 'Corolla Hybrid' }] };
+    if (/menu\/options.*model=Venza$/.test(url)) return { menuItem: [{ text: 'Auto (S6), 4 cyl, 2.7 L', value: '32198' }, { text: 'Auto (S6), 6 cyl, 3.5 L', value: '32199' }] };
+    if (/menu\/options.*model=Venza%20AWD/.test(url)) return { menuItem: [{ text: 'Auto (S6), 4 cyl, 2.7 L', value: '32202' }, { text: 'Auto (S6), 6 cyl, 3.5 L', value: '32203' }] };
+    if (/menu\/options.*model=Corolla%20Hybrid$/.test(url)) return { menuItem: { text: 'Auto (variable gear ratios), 4 cyl, 1.8 L', value: '41214' } };
     const m = /vehicle\/(\d+)$/.exec(url); if (m && rec[m[1]]) return rec[m[1]];
     return { menuItem: [] };
   };
@@ -50,10 +51,10 @@ with sync_playwright() as p:
         pg.evaluate(MOCKS); pg.evaluate(EPA)
         pg.click('#btnTrip'); pg.wait_for_timeout(400)
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
-        # ---- the Venza: the EPA lists three versions (2WD V6, 2WD 4-cylinder, AWD V6) ----
+        # ---- the Venza: the EPA lists four versions (V6 or 4-cylinder, front- or all-wheel drive) ----
         pick(pg, 'venza12')
         assert car(pg)['epaId'] == '32199', 'the seeded Venza knows its EPA record'
-        pg.wait_for_function("window.Garage.car().variants && window.Garage.car().variants.list.length === 3", timeout=5000); pg.wait_for_timeout(200)
+        pg.wait_for_function("window.Garage.car().variants && window.Garage.car().variants.list.length === 4", timeout=5000); pg.wait_for_timeout(200)
         tiles = ft(pg, '.ac-tiles'); print(' ', name, 'Venza tiles:', tiles.replace('\n', ' | '))
         assert '3.5-liter V6' in tiles and 'Automatic, 6 speeds' in tiles and 'Front-wheel drive' in tiles and 'Gas engine' in tiles
         dd = pg.evaluate("[...document.querySelectorAll('.ac-tiles .ac-dd')].map(b => b.dataset.ver)")
@@ -61,12 +62,12 @@ with sync_playwright() as p:
         assert pg.locator('#gEngine, #gDrive, #gTrans').count() == 0, 'no menus for a car from the EPA'
         pg.click('[data-ver="engine"]'); pg.wait_for_timeout(250)
         vers = ft(pg, '#gVers'); print('  versions:', vers.replace('\n', ' | '))
-        assert '2.7-liter 4-cylinder · automatic, 6 speeds · two-wheel drive' in vers and '3.5-liter 6-cylinder · automatic, 6 speeds · all-wheel drive' in vers
+        assert '2.7-liter 4-cylinder · automatic, 6 speeds' in vers and '3.5-liter 6-cylinder · automatic, 6 speeds · all-wheel drive' in vers
         assert pg.locator('#gVers [data-vid="32199"].on').count() == 1, 'yours is marked'
         pg.screenshot(path=f'{OUT}/{name}-ac1-versions.png')
         pg.click('#gVers [data-vid="32203"]'); pg.wait_for_timeout(500)
         c = car(pg); print('  picked:', c['model'], c['info']['engine'], c['info']['drive'], c['epa'])
-        assert c['epaId'] == '32203' and c['model'] == 'Venza AWD' and c['info']['drive'] == 'awd' and c['epa']['city'] == 16 and c['info']['src']['drive'] == 'epa'
+        assert c['epaId'] == '32203' and c['model'] == 'Venza AWD' and c['info']['drive'] == 'awd' and c['epa']['city'] == 18 and c['info']['src']['drive'] == 'epa'
         assert 'All-wheel drive' in ft(pg, '.ac-tiles') and pg.locator('#gVers').count() == 0
         # a VIN settles it: no ▾
         pg.evaluate("() => { window.Garage.car().vin = '4T3ZK3BB0CU000001'; window.Garage.redraw(); }"); pg.wait_for_timeout(250)
@@ -74,7 +75,7 @@ with sync_playwright() as p:
         # ---- the Corolla Hybrid: one version, so plain tiles ----
         pick(pg, 'corolla20')
         pg.wait_for_function("window.Garage.car().variants && window.Garage.car().variants.list.length === 1", timeout=5000); pg.wait_for_timeout(200)
-        tiles = ft(pg, '.ac-tiles'); print('  Corolla Hybrid tiles:', tiles.replace('\n', ' | '))
+        tiles = ft(pg, '.ac-tiles'); print('  Corolla tiles:', tiles.replace('\n', ' | '))
         assert '1.8-liter 4-cylinder' in tiles and 'Hybrid automatic (eCVT)' in tiles and 'Hybrid (gas + electric)' in tiles and pg.locator('.ac-tiles .ac-dd').count() == 0
         # features: collapsed, alphabetical, plain words, a (?) on each
         assert pg.locator('#gFeats[open]').count() == 0, 'Features collapsed at first'

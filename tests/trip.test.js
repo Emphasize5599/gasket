@@ -9,7 +9,7 @@ assert.equal(r.mode, 'drive'); assert.equal(r.avoidDetected, false); assert.equa
 // same street name in two towns: each stop keeps ITS OWN coordinates and full address
 r = T.parseMapsUrl('https://www.google.com/maps/dir/100+Main+St,+North+Little+Rock,+AR+72114/100+Main+St,+Conway,+AR+72032/@34.9,-92.3,10z/data=!4m14!4m13!1m5!1m1!1s0xA:0xB!2m2!1d-92.2680!2d34.7699!1m5!1m1!1s0xC:0xD!2m2!1d-92.4421!2d35.0887!3e0');
 assert.equal(r.stops[0].address, '100 Main St, North Little Rock, AR 72114'); assert.equal(r.stops[1].address, '100 Main St, Conway, AR 72032');
-assert.equal(r.stops[0].lat, 34.7699); assert.equal(r.stops[1].lat, 35.25);
+assert.equal(r.stops[0].lat, 34.7699); assert.equal(r.stops[1].lat, 35.0887);
 assert.equal(r.stops[0].short, '100 Main St, North Little Rock'); assert.equal(r.stops[1].short, '100 Main St, Conway');
 // your location -> place (empty block for the current location) with avoid tolls and the 2nd route picked (!5i1)
 r = T.parseMapsUrl('https://www.google.com/maps/dir//Hot+Springs,+AR/data=!4m14!4m13!1m0!1m5!1m1!1s0x1!2m2!1d-93.05!2d34.50!2m3!1b0!2b1!3b0!3e0!5i1');

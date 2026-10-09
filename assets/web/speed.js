@@ -5,7 +5,7 @@
  * like sedans); the outliers were V8s with cylinder deactivation, which lose more above 60 once all 8 cylinders run.
  * Hybrids: steady-speed dyno (INL) and owner data show similar per-band drops (≈11% / 13%, 70–80 extrapolated), but a
  * steady 55 mph gets far more than the EPA highway label, because that label is built for mixed driving. So hybrids are
- * anchored at 1.3 × EPA highway at 55 mph (2020 Corolla Hybrid: Consumer Reports measured 59 mpg at a steady 65 vs. 50 EPA hwy).
+ * anchored at 1.3 × EPA highway at 55 mph (a hybrid rated 50 EPA hwy: Consumer Reports measured 59 mpg at a steady 65).
  * Each 10-mph band's drop is compounded evenly per mph. Speeds outside 50–80 continue the nearest band's rate.
  */
 (function (root) {

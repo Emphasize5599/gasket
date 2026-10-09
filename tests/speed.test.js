@@ -13,7 +13,7 @@ near(c[61] / c[60], Math.pow(0.86, 0.1), 1e-9, 'even per mph');
 near(c[84] / c[80], Math.pow(1 - 0.154, 0.4), 1e-9, 'above 80 keeps the 70–80 rate');
 // hybrid: steady 55 is well above the EPA highway label
 c = S.curve('hybrid', 50, 1, 40, 90);
-near(c[55], 65, 1e-9); near(c[65], 57.2, 0.1, 'close to Consumer Reports’ 59 mpg at 65 (2020 Corolla Hybrid)');
+near(c[55], 65, 1e-9); near(c[65], 57.2, 0.1, 'close to Consumer Reports’ 59 mpg at 65 (a hybrid rated 50 hwy)');
 // type from an EPA record
 assert.equal(S.typeFromEpa({ atvType: 'Hybrid', VClass: 'Midsize Cars' }), 'hybrid');
 assert.equal(S.typeFromEpa({ VClass: 'Minivan - 2WD', cylinders: 6 }), 'suv');

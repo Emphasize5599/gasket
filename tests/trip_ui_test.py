@@ -81,7 +81,7 @@ with sync_playwright() as p:
         # ---- garage: your two cars are there, EPA numbers read-only, the rest behind Edit ----
         chips = ft(pg, '#gCars'); tiles = ft(pg, '.epa-tiles')
         print('  cars:', chips.replace('\n', ' | '), '||', tiles.replace('\n', ' '))
-        assert '2020 Corolla Hybrid LE' in chips and '2012 Venza XLE' in chips and '54' in tiles and '50' in tiles
+        assert '2020 Corolla Hybrid LE' in chips and '2012 Venza XLE' in chips and '53' in tiles and '52' in tiles
         assert pg.locator('.g-head').count() == 0 and pg.locator('#gCars .carchip .cx').count() == 2, 'just the car buttons, each with a small x'
         order = pg.evaluate("[...document.querySelectorAll('#tGarage > .card')].map(e => e.id || e.className.split(' ')[1])")
         print('  garage order:', order)
@@ -96,15 +96,15 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-g0-tiles.png')
         pg.click('#gObs summary'); pg.wait_for_timeout(150)
         pg.click('#gEdit'); pg.wait_for_timeout(150)
-        assert pg.input_value('#gTank') == '11.3' and pg.input_value('#gType') == 'hybrid'
+        assert pg.input_value('#gTank') == '11.4' and pg.input_value('#gType') == 'hybrid'
         pg.screenshot(path=f'{OUT}/{name}-g1-edit.png'); wide(pg, 'garage edit')
         pg.click('#gEdit'); pg.wait_for_timeout(150)
         # observed mileage <-> % of EPA
         pg.fill('#oHwy', '45'); pg.wait_for_timeout(100)
         print('  obs hwy 45 -> pct', pg.input_value('#oPct'))
-        assert pg.input_value('#oPct') == '95', pg.input_value('#oPct')
+        assert pg.input_value('#oPct') == '93', pg.input_value('#oPct')
         pg.fill('#oPct', '110'); pg.wait_for_timeout(100)
-        assert pg.input_value('#oCity') == '59.4' and pg.input_value('#oHwy') == '55', (pg.input_value('#oCity'), pg.input_value('#oHwy'))
+        assert pg.input_value('#oCity') == '58.3' and pg.input_value('#oHwy') == '57.2', (pg.input_value('#oCity'), pg.input_value('#oHwy'))
         pg.fill('#oPct', '100'); pg.wait_for_timeout(400)
         assert pg.input_value('#oCity') == '' and pg.input_value('#oHwy') == ''
         # best cruising speed: hybrid, balanced (no time value)

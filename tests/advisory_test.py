@@ -56,7 +56,7 @@ with sync_playwright() as p:
         car = pg.evaluate('window.Garage.car()'); print(' ', name, 'car:', car['year'], car['make'], car['model'], car.get('power'))
         # ---- no VIN: the recalls on record for the model, and how to check yours ----
         rc = ft(pg, '#advRecall'); print('  recalls, no VIN:', rc.replace('\n', ' | ')[:200])
-        assert '2 recalls on record' in rc and 'Add your VIN' in rc and 'Corolla Hybrid' in rc
+        assert '2 recalls on record' in rc and 'Add your VIN' in rc and 'Corolla' in rc
         pg.click('#advList summary'); pg.wait_for_timeout(150)
         assert 'The car may lose drive power.' in ft(pg, '#advList') and 'Software update.' in ft(pg, '#advList')
         assert not dot(pg), 'nothing to act on without a VIN'

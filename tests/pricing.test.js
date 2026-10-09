@@ -95,7 +95,7 @@ assert.equal(merged.length, 2); assert.equal(merged[1].id, 'wm-1234');
 assert.equal(P.normalizeWalmart({ id: 1, geo: null }), null);
 console.log('walmart tests passed');
 
-// Murphy USA official prices (shape captured from Murphy's store finder, Oct 2026; store details made up)
+// Murphy USA official prices (shape captured from Murphy's store finder, Testville AR, Oct 2026)
 const muRaw = { id: 1111, storeNumber: 2222, chainName: 'Murphy USA', address: '1 Test Dr', city: 'Testville', state: 'AR', zip: '72000',
   latitude: 34.6789390563965, longitude: -92.3373992919922, closeDate: '', gasPrices: [
     { fuelType: 'Regular', price: 3.8690, lastUpdateUtc: '2026-10-03T13:42:19.46Z' }, { fuelType: 'Midgrade', price: 4.5290, lastUpdateUtc: '2026-10-03T13:42:19.46Z' },

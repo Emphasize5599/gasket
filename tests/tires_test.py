@@ -23,7 +23,7 @@ TR = r'''() => {
     if (key !== 'tirerack') return { error: 'No Native bridge' };
     window.__tr.push(args);
     if (window.__trMode === 'blocked') return { blocked: true };
-    if (args.step === 'size') return /autoModClar=Two/.test(args.url) ? { factory: ['195/65R15'], optional: ['215/45R17'] } : /autoModClar=LE/.test(args.url) ? { factory: ['215/65R16', '235/55R18'], optional: [] } : { unknown: true };
+    if (args.step === 'size') return /autoModClar=LE/.test(args.url) ? { factory: ['195/65R15'], optional: ['215/45R17'] } : /autoModClar=XLE/.test(args.url) ? { factory: ['245/55R19', '245/50R20'], optional: [] } : { unknown: true };
     if (args.step === 'list') return /width=195\/&ratio=65&diameter=15/.test(args.url) ? { tires: LIST } : { tires: [] };
     return { error: '?' };
   };
@@ -56,12 +56,12 @@ with sync_playwright() as p:
         pg.evaluate(MOCKS); pg.evaluate(TR)
         pg.click('#btnTrip'); pg.wait_for_timeout(400)
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
-        # ---- the Corolla Hybrid Two: factory size from Tire Rack, then the tires in that size ----
+        # ---- the Corolla Hybrid LE: factory size from Tire Rack, then the tires in that size ----
         show(pg, 'corolla20')
         pg.wait_for_function("window.Garage.car().tires && window.Garage.car().tires.list && window.Garage.car().tires.list.items.length === 4", timeout=5000); pg.wait_for_timeout(200)
         reads = pg.evaluate('window.__tr'); print(' ', name, 'Tire Rack reads:', [r['url'] for r in reads])
-        assert reads[0]['step'] == 'size' and reads[0]['url'] == 'https://www.tirerack.com/tires/SelectTireSize.jsp?autoMake=Toyota&autoYear=2016&autoModel=Corolla Hybrid&autoModClar=Two'
-        assert reads[1]['step'] == 'list' and 'width=195/&ratio=65&diameter=15' in reads[1]['url'] and 'autoModClar=Two' in reads[1]['url']
+        assert reads[0]['step'] == 'size' and reads[0]['url'] == 'https://www.tirerack.com/tires/SelectTireSize.jsp?autoMake=Toyota&autoYear=2020&autoModel=Corolla%20Hybrid&autoModClar=LE'
+        assert reads[1]['step'] == 'list' and 'width=195/&ratio=65&diameter=15' in reads[1]['url'] and 'autoModClar=LE' in reads[1]['url']
         assert pg.input_value('#tzSize') == '195/65R15' and 'from Tire Rack' in ft(pg, '#gTiresIn')
         types = opts(pg, '#tzType'); print('  types:', types)
         assert types == ['Type', 'Grand Touring All-Season', 'Standard Touring All-Season', 'Studless Ice & Snow', 'Other…']
@@ -103,13 +103,13 @@ with sync_playwright() as p:
         # no sideways scrolling, also at 130% text
         o = pg.evaluate(OVER); pg.evaluate(BIG); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'sideways: ' + str(o)
-        # ---- the Venza LE: two factory sizes -> pick one ----
+        # ---- the Venza XLE: two factory sizes -> pick one ----
         show(pg, 'venza12')
         pg.wait_for_function("window.Garage.car().tires && window.Garage.car().tires.sizeLookup && window.Garage.car().tires.sizeLookup.found", timeout=5000); pg.wait_for_timeout(200)
         assert pg.locator('#tzPick [data-size]').count() == 2 and pg.input_value('#tzSize') == '' and 'came with 2 sizes' in ft(pg, '#gTiresIn')
-        assert any('autoModel=Venza&autoModClar=LE' in r['url'] for r in pg.evaluate('window.__tr')), 'the EPA model "Venza" is just "Venza" at Tire Rack'
-        pg.click('#tzPick [data-size="235/55R18"]'); pg.wait_for_timeout(300)
-        assert T(pg)['size'] == '235/55R18'
+        assert any('autoModel=Venza&autoModClar=XLE' in r['url'] for r in pg.evaluate('window.__tr')), 'the EPA model "Venza AWD" is just "Venza" at Tire Rack'
+        pg.click('#tzPick [data-size="245/50R20"]'); pg.wait_for_timeout(300)
+        assert T(pg)['size'] == '245/50R20'
         # ---- a trim Tire Rack doesn't know; a blocked lookup; typed sizes ----
         pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cz', name: '2019 Honda Fit', year: 2019, make: 'Honda', model: 'Fit', trim: 'Sport', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 33, hwy: 40, comb: 36 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
         show(pg, 'cz'); pg.wait_for_timeout(300)

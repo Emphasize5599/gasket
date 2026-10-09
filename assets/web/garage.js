@@ -14,8 +14,8 @@
   // fueleconomy.gov and NHTSA's vPIC don't have it). Anything else: type it from the owner's manual.
   // Fuel-cell cars: hydrogen tank in kg.
   var TANKS = [
-    { make: /^toyota$/i, model: /^corolla$/i, from: 2016, to: 2016, gal: 11.3, src: 'Toyota spec (via Edmunds, new-cars.com)' },
-    { make: /^toyota$/i, model: /^venza/i, from: 2011, to: 2011, gal: 20.0, src: 'Toyota spec (via Cars.com, CarsDirect)' },
+    { make: /^toyota$/i, model: /^corolla hybrid$/i, from: 2020, to: 2022, gal: 11.4, src: 'Toyota spec' },
+    { make: /^toyota$/i, model: /^venza/i, from: 2009, to: 2015, gal: 17.7, src: 'Toyota spec' },
     { make: /^toyota$/i, model: /^mirai/i, from: 2016, to: 2020, gal: 5.0, src: 'Toyota spec' },
     { make: /^toyota$/i, model: /^mirai/i, from: 2021, to: 2030, gal: 5.6, src: 'Toyota spec' },
     { make: /^hyundai$/i, model: /^nexo/i, from: 2019, to: 2030, gal: 6.33, src: 'Hyundai spec' },
@@ -119,12 +119,12 @@
   // ---------- data ----------
   function seeds() {
     return [
-      { id: 'corolla20', name: '2020 Toyota Corolla Hybrid LE', year: 2016, make: 'Toyota', model: 'Corolla Hybrid', trim: 'Two', epaId: '41214',
-        epa: { city: 54, hwy: 50, comb: 52, fuel: 'Regular Gasoline' }, type: 'hybrid', power: 'hybrid', grade: 'regular',
-        tank: 11.3, tankSrc: TANKS[0].src, obs: {}, entries: [], info: seedInfo('corolla20') },
-      { id: 'venza12', name: '2012 Toyota Venza XLE 3.5L V6 FWD', year: 2011, make: 'Toyota', model: 'Venza', trim: 'LE',
-        epa: { city: 18, hwy: 24, comb: 20, fuel: 'Regular Gasoline' }, type: 'suv', power: 'gas', grade: 'regular',
-        tank: 20, tankSrc: TANKS[1].src, obs: {}, entries: [], info: seedInfo('venza12') }
+      { id: 'corolla20', name: '2020 Toyota Corolla Hybrid LE', year: 2020, make: 'Toyota', model: 'Corolla Hybrid', trim: 'LE', epaId: '41214',
+        epa: { city: 53, hwy: 52, comb: 52, fuel: 'Regular Gasoline' }, type: 'hybrid', power: 'hybrid', grade: 'regular',
+        tank: 11.4, tankSrc: TANKS[0].src, obs: {}, entries: [], info: seedInfo('corolla20') },
+      { id: 'venza12', name: '2012 Toyota Venza XLE 3.5L V6 FWD', year: 2012, make: 'Toyota', model: 'Venza', trim: 'XLE', epaId: '32199',
+        epa: { city: 19, hwy: 26, comb: 21, fuel: 'Regular Gasoline' }, type: 'suv', power: 'gas', grade: 'regular',
+        tank: 17.7, tankSrc: TANKS[1].src, obs: {}, entries: [], info: seedInfo('venza12') }
     ];
   }
   function seedInfo(id) {
@@ -135,7 +135,7 @@
   if (!Array.isArray(S.cars) || !S.cars.length) {
     S.cars = seeds();
     var old = S.car;
-    if (old && old.name && !/corolla|venza/i.test(old.name)) {     // keep a car set up in an earlier version
+    if (old && old.name) {     // keep a car set up in an earlier version
       S.cars.unshift({ id: 'c' + Date.now(), name: old.name, epa: { city: old.city, hwy: old.hwy, comb: old.comb, fuel: old.epaFuel || '' },
         type: 'car', grade: old.grade || '', tank: old.tank, tankSrc: 'you entered it',
         obs: old.adjustPct && old.adjustPct !== 100 ? { city: r1(old.city * old.adjustPct / 100), hwy: r1(old.hwy * old.adjustPct / 100) } : {}, entries: [] });
@@ -146,10 +146,9 @@
   S.cars.forEach(function (c) {
     c.obs = c.obs || {}; c.entries = c.entries || [];
     if (!c.power) c.power = /electric/i.test(c.epa && c.epa.fuel || '') ? 'ev' : /hydrogen/i.test(c.epa && c.epa.fuel || '') ? 'h2' : c.type === 'hybrid' ? 'hybrid' : 'gas';
-    if (c.trim == null) c.trim = c.id === 'corolla20' ? 'Two' : c.id === 'venza12' ? 'LE' : '';
+    if (c.trim == null) c.trim = '';
     if (!c.info) c.info = seedInfo(c.id);
-    // 0.0.51: where each detail came from (vin / epa: confirmed; user: you set it), and the Venza's EPA record
-    if (c.id === 'venza12' && !c.epaId && /venza 2wd/i.test(c.model || '')) c.epaId = '32199';
+    // 0.0.51: where each detail came from (vin / epa: confirmed; user: you set it)
     if (!c.info.src) c.info.src = {};
     if (!c.info.featSrc) c.info.featSrc = {};
     // 0.0.53: the tire fields moved to their own card
@@ -275,7 +274,7 @@
       '<select id="eModel" disabled><option>Model</option></select><select id="eOpt" disabled><option>Engine / transmission</option></select></div>' +
       '<div class="epa-msg" id="eMsg"></div></details>';
     if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
-    h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2016) + ' ' + String(c.model || 'Corolla Hybrid').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
+    h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     h += '<div class="grid2"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
       '<input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '"></label>';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
