@@ -188,7 +188,7 @@ with sync_playwright() as p:
         assert pg.evaluate('!!window.__trip.state().model'), 'routes again'
         # leaving time: never in the past
         pg.evaluate("() => { const e = document.getElementById('tDepart'); e.value = '2020-01-01T08:00'; e.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(200)
-        assert pg.input_value('#tDepart') == '' and "can't be in the past" in pg.inner_text('#toast') and pg.get_attribute('#tDepart', 'min'), 'a past time is set to now'
+        assert pg.input_value('#tDepart') == '' and pg.get_attribute('#tDepart', 'min'), 'a past time is set to now'
         pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(150)
         assert mi(pg) == 318 and pg.locator('.rc-top').count() == 0
         pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(150)

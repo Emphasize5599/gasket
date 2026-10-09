@@ -90,7 +90,7 @@
     if (!c || c.vin !== p.vin) return;
     if (r.error) { A.toast && A.toast(r.error); LG.warn('car', 'VIN recall check', r.error); return; }
     record(c, p.vin, r, false);
-    A.toast && A.toast(c.recallCheck.open ? c.recallCheck.open + ' open recall' + (c.recallCheck.open === 1 ? '' : 's') + ' found. Tap Done to come back.' : 'No open recalls. Tap Done to come back.');
+    // no popup: Advisory shows the answer
     if (car() === c) draw();
   }
 

@@ -32,6 +32,11 @@ A personal Android app (formerly Fuel+ Map) that maps gas stations from the bran
 - Keep compatibility: Restore full backup accepts Fuel+ 0.0.47 backups (`fromPackage` `com.ben.gasmap`, same `files/kv/<namespace>/<sha1>` layout); imports accept old Fuel+ exports (`fuelPlusData`) and old shared trips (`-----FUEL+ TRIP-----`).
 - A restore, and the restart right after it, never use Google lookups; restored lookup counts keep the higher number.
 
+## Working with the owner
+- Small changes don't need the full test suite; run it on a larger batch of changes (it catches anything a small change broke). Still syntax-check what you touched.
+- Changelog entries: the big things that matter, plus a general "Bug fixes" line instead of listing each fix.
+- No popups (toasts) for things the screen already shows: missing fields get an outline or pulse, results show in place. Popups are only for errors and for save / backup / restore results.
+
 ## Versioning and commits
 - `versionName` is always `0.0.<versionCode>` (see `VERSIONING.md`). Each bump gets a `CHANGELOG.md` entry.
 - Use conventional commits (`feat:`, `fix:`, `chore:`, `test:`, `build:`, `docs:`, `refactor:`).

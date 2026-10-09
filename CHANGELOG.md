@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.56 - 2026-10-09
+- Fewer popups: a missing field is shown by its outline alone, and results show in place. Popups are left for errors and for saving, backing up and restoring.
+
 ## 0.0.55 - 2026-10-09
 - **Fixed:** opening Year / make / model on a car with a VIN kept filling itself in, clearing and filling in again, and wiped the tank size. It now shows your car once, and a car keeps its tank size unless you switch it to a different car.
 - **Recalls check themselves.** With a VIN in the Garage, the check at NHTSA runs in the background soon after the app opens and again every week, so Advisory is ready when you get there. The "Check my car at NHTSA" button only shows up when the background check couldn't get an answer.

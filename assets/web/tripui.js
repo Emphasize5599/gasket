@@ -294,8 +294,8 @@
     getRoutes();
   }
   /** Show the user what's missing: red outline on a box, a soft pulse on something to pick. */
-  function flag(el, kind, msg) {
-    if (msg) toastMsg(msg);
+  function flag(el, kind, msg) {   // msg: what's missing, for the log; the outline or pulse says it on screen (no popup)
+    if (msg) LG.info('trip', 'Needs: ' + msg);
     if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     if (kind === 'box') {
@@ -393,7 +393,7 @@
     minNow(); dEl.addEventListener('focus', minNow);
     dEl.addEventListener('change', function () {
       // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
-      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) { dEl.value = ''; toastMsg('The leaving time can\'t be in the past, so it\'s set to now.'); }
+      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
       collectSafe(); result = null;
     });
     $('tNow').onclick = function () { $('tDepart').value = ''; collectSafe(); result = null; };
@@ -2940,7 +2940,7 @@
       if (changed) {
         LG.info('speed', 'Speed changes discarded');
         S.speed.view = S.speed.view || {}; S.speed.view.open = false; A.save();
-        modeSnap = null; replan(snap.bufMi); sheetSize(); backMode(); toastMsg('Speed changes discarded.'); return;
+        modeSnap = null; replan(snap.bufMi); sheetSize(); backMode(); return;
       }
     }
     leaveSpeedMode();
