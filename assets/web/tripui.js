@@ -916,6 +916,9 @@
    */
   function syncReturn(r) {
     if (!r || !r.stops || r.stops.length < 2) return false;
+    // a way back that's already there stays as it is (a saved trip's; "your location" moves a little every time
+    // you look, and that's no reason to throw its routes away)
+    if (S.trip.returnTrip && !loopTrip(r) && r.stops.filter(function (x) { return x.ret; }).length === 1 && r.stops[r.stops.length - 1].ret) return false;
     var before = JSON.stringify(r.stops.filter(function (x) { return x.ret; }));
     r.stops = r.stops.filter(function (x) { return !x.ret; });
     if (S.trip.returnTrip && r.stops.length >= 2 && !loopTrip(r)) {
