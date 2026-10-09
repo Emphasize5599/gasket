@@ -139,6 +139,10 @@ with sync_playwright() as p:
         pg.click('#gTankFind'); pg.wait_for_timeout(500)
         assert pg.locator('#gTankShow').count() == 1 and "Couldn't find it" in ft(pg, '.tk-fail') and not pg.evaluate('window.Garage.car().tank'), 'failed: search it yourself'
         pg.screenshot(path=f'{OUT}/{name}-gr4-tank.png'); wide(pg, 'tank')
+        tj = pg.locator('.tk-join').bounding_box(); ty = pg.locator('#gType').bounding_box(); tf = pg.locator('#gTankFind').bounding_box()
+        print('  tank box + ↻ vs vehicle type:', round(tj['width']), round(ty['width']), '| tops', round(tj['y']), round(ty['y']))
+        assert abs(tj['width'] - ty['width']) < 2 and abs(tj['y'] - ty['y']) < 2 and abs(tj['height'] - ty['height']) < 2, 'tank size (with its ↻) as wide and level as vehicle type'
+        assert abs(tf['x'] + tf['width'] - (tj['x'] + tj['width'])) < 1 and abs(tf['height'] - tj['height']) < 1, 'the ↻ is the end of the tank box'
         pg.evaluate("() => { window.__mocks.siteShow = (key, args) => key === 'brave' ? { gal: 18.5, text: '18.5 gallons fuel tank' } : { closed: true }; }")
         pg.click('#gTankShow'); pg.wait_for_timeout(500)
         assert pg.evaluate('window.__siteShown')['key'] == 'brave' and pg.evaluate('window.Garage.car().tank') == 18.5, 'the answer found on the page you looked at'
@@ -272,11 +276,20 @@ with sync_playwright() as p:
         pg = b.new_page(); pg.set_content(html)
         pg.evaluate('''([src, a]) => { window.__got = null; window.GasketSite = { result: (id, j) => { window.__got = JSON.parse(j); } }; (0, eval)('(' + src + ')')(1, a); }''', [BR, args])
         pg.wait_for_timeout(ms); r = pg.evaluate('window.__got'); pg.close(); return r
-    PAGE = ('<input value="2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?"><div>Answer with AI</div><p>2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?</p>'
-            '<p>The 2020 Toyota Corolla Hybrid LE has a fuel tank capacity of 11.3 gallons (42.8 liters).</p><p>Sources: toyota.com</p>'
+    # a forum result about another generation sits above the AI answer: the AI answer wins
+    PAGE = ('<input value="2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?"><p>2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?</p>'
+            '<div class="res"><p>r/corolla: Gen ten Corolla owners how big is your tank? But I read that the capacity is 11.9 gal.</p></div>'
+            '<div class="ai"><div>Answer with AI</div><p>The 2020 Toyota Corolla Hybrid LE has a fuel tank capacity of 11.4 gallons (43.2 liters).</p><p>Sources: toyota.com</p>'
+            '<p>AI-generated answer. Please verify critical facts.</p></div>'
             '<p>Related: 2020 Corolla Cross tank 9.5 gallons</p><p>Gas price $3.50 per gallon</p>')
-    r = brave(PAGE, {'bg': True}); print('  brave reader:', r)
-    assert r and r['gal'] == 11.3, r
+    r = brave(PAGE, {'bg': True, 'year': 2020}); print('  brave reader:', r)
+    assert r and r['gal'] == 11.4 and r['src'] == 'ai', r
+    # no AI answer: the results, the ones about this year first
+    RES = ('<p>2020 Toyota Corolla Hybrid LE fuel tank capacity in gallons?</p><p>Failed to generate answer for your search</p>'
+           '<p>Gen ten Corolla owners: the capacity is 11.9 gal.</p><p>2020 Toyota Corolla specs: fuel tank capacity 11.4 gal.</p>'
+           '<p>2010 Corolla fuel tank 11.9 gallons</p><p>The 2020 Corolla fuel tank holds 11.4 gallons.</p>')
+    r = brave(RES, {'bg': True, 'year': 2020}); print('  brave reader, results:', r)
+    assert r and r['gal'] == 11.4 and r['src'] == 'results', r
     r = brave('<h1>Please complete the CAPTCHA</h1><p>We noticed unusual traffic</p>', {'bg': True}, 800)
     assert r == {'blocked': True}, r
     b.close()

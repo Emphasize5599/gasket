@@ -946,7 +946,8 @@
     if (!r || !r.stops || r.stops.length < 2) return false;
     // a way back that's already there stays as it is (a saved trip's; "your location" moves a little every time
     // you look, and that's no reason to throw its routes away)
-    if (S.trip.returnTrip && !loopTrip(r) && r.stops.filter(function (x) { return x.ret; }).length === 1 && r.stops[r.stops.length - 1].ret) return false;
+    // (is it a loop without the way back? the way back itself always ends where it started)
+    if (S.trip.returnTrip && !loopTrip({ stops: r.stops.filter(function (x) { return !x.ret; }) }) && r.stops.filter(function (x) { return x.ret; }).length === 1 && r.stops[r.stops.length - 1].ret) return false;
     var before = JSON.stringify(r.stops.filter(function (x) { return x.ret; }));
     r.stops = r.stops.filter(function (x) { return !x.ret; });
     if (S.trip.returnTrip && r.stops.length >= 2 && !loopTrip(r)) {
@@ -2122,6 +2123,8 @@
     var lab = m.kind === 'base' ? 'usual' : (m.d < 0 ? '−' : '+') + money(Math.abs(m.d)).replace(/^[−-]/, '');
     return '<span class="bm ' + m.kind + (m.lr ? ' r' + (m.lr + 1) : '') + '" style="left:' + L + '%" data-snap="' + m.mi + '"' + (m.kind !== 'base' ? ' ' + attr + '="' + m.mi + '"' : '') + '><em>' + lab + '</em><i></i></span>';
   }
+  /** The blue part of a buffer / detour slider's track, up to the knob (the slider is drawn by us; see app.css). */
+  function fillRange(inp) { var lo = +inp.min, hi = +inp.max; inp.style.setProperty('--p', (hi > lo ? (+inp.value - lo) / (hi - lo) * 100 : 0) + '%'); }
   /** The points a slider's knob snaps to: its drawn marks (green, yellow, usual) and where it is now. */
   function snapPoints(box, cur) {
     var a = Array.prototype.map.call(box.querySelectorAll('.bm[data-snap]'), function (m) { return +m.dataset.snap; });
@@ -2182,7 +2185,7 @@
   }
   function bindBuf() {
     var inp = $('tsBuf'); if (!inp) return;
-    Garage.guardRange(inp);
+    Garage.guardRange(inp); fillRange(inp);
     var r = result, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
     if (!base.ok) base = cur;
     var last = r.bufMi;
@@ -2191,7 +2194,7 @@
     inp.oninput = function () {
       var v = snaps.length ? nearest(snaps, +inp.value) : +inp.value, x = swRow(v);
       if (!bufOk(x)) { v = last; x = swRow(last); }        // can't slide into the gray
-      inp.value = v;
+      inp.value = v; fillRange(inp);
       if (v !== last) { tick(); last = v; }
       $('tsBufVal').textContent = x.mi + ' mi'; $('tsBufCost').textContent = bufText(x, base);
     };
@@ -2200,7 +2203,7 @@
       var x = swRow(+inp.value);
       if (x.mi === r.bufMi) { inp.value = x.mi; return; }
       LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
-      if (!bufOk(x)) { inp.value = r.bufMi; $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg('No plan keeps ' + x.mi + ' mi at your speeds — the stations are too far apart.'); return; }
+      if (!bufOk(x)) { inp.value = r.bufMi; fillRange(inp); $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg('No plan keeps ' + x.mi + ' mi at your speeds — the stations are too far apart.'); return; }
       var cx = speedCx();
       if (!x.ok && cx) {
         // linked: slow down just enough that a plan keeps this bigger buffer
@@ -2283,6 +2286,7 @@
   function bindDet() {
     var inp = $('tsDet'); if (!inp) return;
     if (Garage.guardRange) Garage.guardRange(inp);
+    fillRange(inp);
     var r = result, sw = r.dsweep, base = detRow(+S.trip.maxDetourMin) || detRow(detMinOf(r)), last = +inp.value;
     if (!base.ok) base = detRow(detMinOf(r));
     // the knob snaps to the marks (and where it is now); a tick each time it lands on another one
@@ -2293,7 +2297,7 @@
     inp.oninput = function () {
       var k = nearest(snaps, +inp.value), x = sw[k];
       if (!x.ok) { k = last; x = sw[last]; }
-      inp.value = k;
+      inp.value = k; fillRange(inp);
       if (k !== last) { tick(); last = k; }
       $('tsDetVal').textContent = minTxt(x.mi); $('tsDetCost').textContent = detText(x, base);
     };

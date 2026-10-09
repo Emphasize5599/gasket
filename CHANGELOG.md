@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.68 - 2026-10-09
+- **Saved round trips open straight through.** A saved round trip kept being treated as changed at the Route step, which threw its routes away and stopped you there. Now its routes and leg picks stay, and you can jump from the Garage to Departure.
+- **Tank size from Brave's AI answer, not a stray result.** The lookup waits for the AI answer instead of taking the first number on the page (a forum post about another generation). Without an AI answer, it uses the results about your car's year.
+- Garage: the tank size box and its ↻ are one box, as wide and level as Vehicle type.
+- Adjust: the marks on the buffer and detour sliders sit right over the knob, and the All roads line never passes your rule, even while you drag.
+- Bug fixes.
+
 ## 0.0.67 - 2026-10-09
 - **Switching cars no longer locks the buttons.** Recalls are rated only while Advice is on screen, a little at a time so taps get through, and the model's setup is saved instead of redone each launch. The route's fuel math for the new car waits until the Garage has redrawn.
 - **Opening a saved trip shows it's loading.** "Opening your trip" with a moving bar sits where Next goes, and steps 2–7 are grayed out until it's open.

@@ -316,7 +316,7 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .buf-read span { color: var(--ink-2); font-size: .92rem; }
 .buf-track { position: relative; padding-top: 40px; }
 .buf-track input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); height: 28px; }
-.buf-marks { position: absolute; left: 11px; right: 11px; top: 0; height: 68px; pointer-events: none; }
+.buf-marks { position: absolute; left: 8px; right: 8px; top: 0; height: 68px; pointer-events: none; }
 .buf-marks .bm { position: absolute; top: 0; width: 0; height: 68px; pointer-events: auto; }
 .buf-marks .bm em { position: absolute; left: 0; top: 0; transform: translateX(-50%); font-style: normal; font-size: .72rem; font-weight: 800; white-space: nowrap; padding: 1px 4px; border-radius: 6px; }
 .buf-marks .bm.r2 em { top: 16px; }
@@ -491,7 +491,14 @@ b.good, .leg-sub.good { color: var(--save); }
 .leg input[type=range], .buf-track input[type=range], .spd-try input[type=range] { width: calc(100% - 48px); margin-left: -4px; }
 .leg-scale { margin-right: 50px; }
 .leg-out { padding-right: 44px; }
-.buf-marks { right: 59px; }
+.buf-marks { right: 64px; }
+/* buffer / detour: a 24px knob drawn by us, so the marks above sit right on its center at every value (the marks run
+   from the knob's center at min, 12px in from the slider's left edge (which sits 4px out), to its center at max) */
+.buf-track input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
+.buf-track input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) 0 var(--p, 0%), color-mix(in srgb, var(--ink-2) 35%, transparent) var(--p, 0%) 100%); }
+.buf-track input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; margin-top: -9px; border: 0; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
 .buf-scale { margin-right: 48px; }
 .rule-line b { color: var(--ink); }
 .leg-h small { white-space: nowrap; }
@@ -1192,11 +1199,13 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
 .ind-load { margin: 6px 0 8px; }
 .spd-ov { flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
 .spd-ov button { padding: 4px 10px; font-size: 12px; }
-.tk-fail { display: block; margin-top: 6px; color: var(--ink-2); font-size: 12.5px; }
-.tank-row { padding-top: 0; }
-.tank-row .tk-find { width: 44px; padding: 0; display: grid; place-items: center; }
-.tank-row .tk-find svg { width: 22px; height: 22px; fill: currentColor; }
-.grid2.g-top { align-items: start; }
+.tk-fail { display: block; margin-top: -4px; margin-bottom: 8px; color: var(--ink-2); font-size: 12.5px; }
+/* tank size: the box and its blue ↻ are one control, as wide as the vehicle type next to it */
+.tk-join { display: flex; align-items: stretch; min-width: 0; }
+.tk-join > .in-q, .tk-join > input { flex: 1; min-width: 0; }
+.tk-join.has-find input { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
+.tk-join .tk-find { flex: none; width: 44px; height: auto; min-height: 0; margin: 0; padding: 0; display: grid; place-items: center; border-radius: 0 12px 12px 0; }
+.tk-join .tk-find svg { width: 22px; height: 22px; fill: currentColor; }
 
 /* ---------- recalls: a tile each (how serious, what part, one line); tap for the sections ---------- */
 .rc-tile { border: 1px solid var(--line); border-left: 4px solid var(--ink-2); border-radius: 14px; margin: 8px 0; background: var(--surface-2); overflow: hidden; }

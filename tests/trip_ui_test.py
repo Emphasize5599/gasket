@@ -244,6 +244,15 @@ with sync_playwright() as p:
         assert pg.locator('.tp-step:not(.hidden) #tsBufBox').count() == 1 and pg.locator('.tp-step:not(.hidden) #tsSpeed').count() == 1 and pg.locator('.tp-step:not(.hidden) #tsStopsH').count() == 0
         ah = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); assert abs(ah - 0.75) < 0.03, ah
         pg.screenshot(path=f'{OUT}/{name}-a1-adjustments.png'); wide(pg, 'adjustments')
+        # every mark sits right over the knob's center at its value (the knob is 24 px, drawn by app.css)
+        off = pg.evaluate('''() => [...document.querySelectorAll('.tp-step:not(.hidden) .bufbox')].flatMap(box => {
+          const inp = box.querySelector('input[type=range]'), r = inp.getBoundingClientRect(), lo = +inp.min, hi = +inp.max;
+          return [...box.querySelectorAll('.bm i')].map(i => {
+            const m = i.closest('.bm'), at = box.id === 'tsDetBox' ? null : +m.dataset.snap, b = i.getBoundingClientRect();
+            const L = parseFloat(m.style.left) / 100, knob = r.left + 12 + L * (r.width - 24);
+            return Math.round((b.left + b.width / 2 - knob) * 10) / 10; }); })''')
+        print('  marks vs knob centers (px):', off)
+        assert off and all(abs(x) <= 1 for x in off), off
         nxt(pg); assert step(pg) == 6
         ph = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  Stops panel height:', round(ph, 2))
         assert abs(ph - 0.75) < 0.03, 'Stops opens at 75% of the screen'
@@ -858,6 +867,19 @@ with sync_playwright() as p:
         assert pg.locator('.leg-pick').count() == 2 and mi(pg) == 636, ft(pg, '#tRouteInfo')
         pg.evaluate("document.querySelector('#tRound').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-l3-roundswitch.png')
+        # saved and reopened, the round trip keeps its routes and the leg you picked: Garage straight to Departure
+        lk = pg.locator('#tRouteInfo [data-leg="1"]:not(.on)')
+        if lk.count(): lk.first.click(); pg.wait_for_timeout(500)
+        sel = pg.evaluate("window.__trip.state().route.legs.map(L => L.sel)")
+        stops(pg, 1200); pg.click('#tClose'); pg.wait_for_timeout(200)
+        pg.click('#btnTrip'); pg.wait_for_timeout(400); pg.click('[data-hist]'); idle(pg, 1200)
+        n0 = pg.evaluate("FLog.entries().length")
+        pg.click('#tpSteps [data-step="7"]'); pg.wait_for_function('window.__trip.state().step === 7', timeout=15000)
+        ms = [e['m'] for e in pg.evaluate("FLog.entries()")[n0:]]
+        assert not any('Get route' in m or 'Stopped at' in m for m in ms), ms
+        assert pg.evaluate("window.__trip.state().route.legs.map(L => L.sel)") == sel, 'the leg picks are remembered'
+        print('  saved round trip: straight to Departure, legs', sel)
+        goto(pg, 3)
         setchk(pg, '#tRound', False); pg.wait_for_timeout(300)
         assert pg.locator('#tParsed .nlist li').count() == 2 and pg.locator('.leg-pick').count() == 0, 'switch off: one way again'
         pg.click('#tClose'); pg.wait_for_timeout(200)

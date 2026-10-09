@@ -251,12 +251,12 @@
     var key = tankKey(c); if (!key || tankBusy[c.id]) return;
     tankBusy[c.id] = true; draw();
     LG.info('car', 'Asking Brave Search for the tank size' + (shown ? ' (shown to you)' : ''), key);
-    var r = await Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown })),
+    var r = await Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown, year: c.year })),
       new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]);
     tankBusy[c.id] = false;
     if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it') {
       c.tank = r2(r.gal); c.tankSrc = TANK_SRC; c.tankLookup = { key: key, t: Date.now(), gal: r.gal };
-      LG.info('car', 'Tank size from Brave Search: ' + r.gal + ' gal', r.text || '');
+      LG.info('car', 'Tank size from Brave Search' + (r.src === 'results' ? '\'s results (no AI answer)' : r.src === 'ai' ? '\'s AI answer' : '') + ': ' + r.gal + ' gal', r.text || '');
       changed();
     } else if (!(r && r.closed)) {
       c.tankLookup = { key: key, t: Date.now(), failed: true }; save();
@@ -308,16 +308,17 @@
     if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
     h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     var tankFindable = k === 'gas' && !!tankKey(c);
-    h += '<div class="grid2 g-top"><div class="tank-cell"><div class="vin-row tank-row"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
-      '<input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '"></label>' +
-      (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</div>' +
-      (tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '') + '</div>';
+    h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
+      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">' +
+      (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
+    // under the row, so the two boxes stay level
+    var tkExtra = tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
       return '<option value="' + t + '"' + ((c.type || 'car') === t ? ' selected' : '') + '>' + SP.TYPES[t].label + '</option>'; }).join('') + '</select></label></div>';
-    h += (S.cars.length > 1 ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
+    h += tkExtra + (S.cars.length > 1 ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
     return h;
   }
   function infoLine(c) {
@@ -1155,12 +1156,14 @@
     allLabel(+st.all || 0);
     // dragging stays smooth: the most you can go is worked out once per drag, the roads and chart follow at most once a
     // frame, and the heavier checks (the gray areas) run when you let go
-    var mxAll = null, allRaf = 0, allPieces = roads.reduce(function (a, r) { return a.concat(r.pieces); }, []);
+    var mxAll = null, allRaf = 0;
     var applyAll = function () {
       allRaf = 0; var v = st.all;
-      roads.forEach(function (r, i) { st.offsets[i] = ruleOff(r.limit, v); if ($('lgR' + i)) $('lgR' + i).value = st.offsets[i]; update(i, false); });
-      var all = cost({ pieces: allPieces }, v);
-      moveSel($('tChart'), all.avgSpeed || 65, 100 / f(all.avgSpeed || 65));
+      // each road at what your rule allows it (not the slider's raw value): the line never passes the rule, even mid-drag
+      var mi = 0, w = 0;
+      roads.forEach(function (r, i) { st.offsets[i] = ruleOff(r.limit, v); if ($('lgR' + i)) $('lgR' + i).value = st.offsets[i]; update(i, false); var x = cost(r, st.offsets[i]); mi += x.mi; w += x.avgSpeed * x.mi; });
+      var avg = mi ? w / mi : 65;
+      moveSel($('tChart'), avg, 100 / f(avg));
       total();
     };
     $('lgAll').oninput = function () {
