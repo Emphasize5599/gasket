@@ -177,6 +177,10 @@
 
   // ---------- page ----------
   var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false;
+  // the VIN is the car's identity: dots like a password until you tap the eye
+  var vinShown = false;
+  var EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>';
+  var EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.3 2 2 3.3l3.1 3.1C3.4 7.8 2.2 9.8 1.5 12c1.2 2.7 5 7 10.5 7 1.8 0 3.4-.4 4.8-1.2l3.9 3.9 1.3-1.3L3.3 2zM12 16.5A4.5 4.5 0 0 1 7.5 12c0-.8.2-1.6.6-2.2l1.5 1.5c-.1.2-.1.5-.1.7a2.5 2.5 0 0 0 3.2 2.4l1.5 1.5c-.7.4-1.4.6-2.2.6zm10.5-4.5c-.7-1.6-2.2-3.7-4.4-5.2A11 11 0 0 0 12 5c-1.3 0-2.6.2-3.7.6l2.1 2.1c.5-.1 1-.2 1.6-.2a4.5 4.5 0 0 1 4.5 4.5c0 .6-.1 1.1-.3 1.6l2.9 2.9c1.6-1.3 2.8-2.9 3.4-4.5z"/></svg>';
   var epaStay = null;   // the car whose EPA lookup you have open: it stays open across redraws until you close it
   function render(carEl, speedEl, changed, nativeCall) {
     host = carEl; onChange = changed || onChange; call = nativeCall || call;
@@ -302,7 +306,8 @@
     // car has one), then year / make / model, which a VIN lookup fills in
     var recVin = !c.vin;
     h += '<div class="vin-row' + (recVin ? ' rec' : '') + '"><label class="nf"><span>VIN' + (recVin ? '<span class="rec-tag">Recommended</span>' : '') + '<small>Gets your exact version, checks it for open recalls and finds its factory tire size. 17 characters — on your insurance card, registration, or the driver-side dashboard (through the windshield)</small></span>' +
-        '<input type="text" id="gVin" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(c.vin || '') + '"></label>' +
+        '<span class="vin-box"><input type="text" id="gVin" class="' + (vinShown ? '' : 'masked') + '" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(c.vin || '') + '">' +
+        '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button></span></label>' +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>' +
         '<p class="lead small keep">Decoded free by NHTSA (vpic.nhtsa.dot.gov), then matched to the EPA\'s mileage, and fills in the details below.</p>';
     h += '<details class="epa" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>Year / make / model<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model].join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
@@ -454,7 +459,6 @@
     h += isCustom(c) ? customPanel(c) : tilesPanel(c);
     if (fuel) h += '<div class="grid2">' + fuel + '</div>';
     h += featPanel(c);
-    if (c.vin) h += '<div class="lead small keep">VIN ' + esc(c.vin) + '</div>';
     return h;
   }
   function obsPanel(c) {
@@ -572,6 +576,10 @@
     if (editing) {
       if ($('gVinGo')) {
         $('gVinGo').onclick = function () { lookupVin(c, $('gVin').value); };
+        $('gVinEye').onclick = function () {
+          vinShown = !vinShown; $('gVin').classList.toggle('masked', !vinShown);
+          this.innerHTML = vinShown ? EYE_OFF : EYE; this.setAttribute('aria-label', (vinShown ? 'Hide' : 'Show') + ' the VIN'); this.setAttribute('aria-pressed', String(vinShown));
+        };
         $('gVin').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); lookupVin(c, this.value); } };
       }
       if ($('gName')) $('gName').onchange = function () { c.name = this.value.trim(); draw(); save(); };

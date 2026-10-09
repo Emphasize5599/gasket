@@ -135,15 +135,27 @@ with sync_playwright() as p:
         assert pg.locator('.tz-extra').count() == 2 and 'towing' in ft(pg, '#gTiresIn')
         pg.locator('[data-xdepth]').first.select_option('2'); pg.wait_for_timeout(200)
         assert 'At the legal limit' in ft(pg, '.tz-out') and 'Dual inner rear' in ft(pg, '.tz-out')
-        pg.click('#tzBack summary'); pg.wait_for_timeout(150)
-        if pg.locator('#tzWhy[open]').count() == 0: pg.click('#tzWhy summary'); pg.wait_for_timeout(150)
-        assert 'Oversteer' in ft(pg, '#tzBack') and 'Treadwell' in ft(pg, '#tzWhy') and '158 ft' in pg.inner_html('#tzWhy')
         pg.evaluate("document.getElementById('tzSplit').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2-corners.png')
-        pg.evaluate("document.getElementById('tzWhy').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        # ---- the "why" pictures: submenus that play an animation ----
+        pg.click('[data-why="tread"]'); pg.wait_for_selector('.sub-page #anStop svg')
+        pg.wait_for_timeout(1200); pg.screenshot(path=f'{OUT}/{name}-t3a-why-moving.png')
+        pg.wait_for_function("!document.querySelector('.sub-page .an-replay').disabled", timeout=12000)
+        nose = pg.evaluate('''() => [...document.querySelectorAll('#anStop .an-car')].map(g => +/translate\(([\d.]+)/.exec(g.getAttribute('transform'))[1])''')
+        line = pg.evaluate("+document.querySelector('#anStop .il-stop').getAttribute('x1')"); print('  cars stopped at', nose, '| stop sign at', line)
+        assert abs(nose[0] - line) < 0.6 and nose[1] > line + 20 and nose[2] > nose[1] + 20, 'new tires stop at the sign; worn ones slide past it'
+        assert '68 ft past the sign' in pg.inner_html('#anStop') and pg.locator('#anStop .an-sign').count() == 1 and pg.locator('#anStop .rn-drop').count() > 20, 'stop sign, rain'
+        assert 'Treadwell' in ft(pg, '.sub-page') and pg.locator('#tpBody #anStop').count() == 0
         pg.screenshot(path=f'{OUT}/{name}-t3-why.png')
-        pg.evaluate("document.getElementById('tzBack').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.click('.sub-back'); pg.wait_for_timeout(150); assert pg.locator('.sub-page').count() == 0, 'Back closes it'
+        pg.click('[data-why="back"]'); pg.wait_for_selector('.sub-page #anSteer svg')
+        pg.wait_for_timeout(2600); pg.screenshot(path=f'{OUT}/{name}-t4a-steer-moving.png')
+        pg.wait_for_function("!document.querySelector('.sub-page .an-replay').disabled", timeout=12000)
+        under = pg.evaluate("[...document.querySelectorAll('#anSteer .an-under')].map(u => u.style.display !== 'none')"); print('  upside down:', under)
+        assert under == [False, True], 'understeer: still on its wheels; oversteer: rolled onto its roof'
+        assert 'Upside down' in pg.inner_html('#anSteer') and 'grips again' in pg.inner_html('#anSteer')
         pg.screenshot(path=f'{OUT}/{name}-t4-steer.png')
+        assert pg.evaluate('window.onBack()') and pg.locator('.sub-page').count() == 0, "the phone's Back button closes it too"
         for x in pg.locator('[data-xdel]').all(): pg.locator('[data-xdel]').first.click(); pg.wait_for_timeout(120)
         pg.uncheck('#tzSplit'); pg.wait_for_timeout(200)
         assert '8/32 in left' in ft(pg, '.tz-out'), 'all the same again: the single answer'

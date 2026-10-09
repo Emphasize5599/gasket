@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.70 - 2026-10-09
+- **Your VIN stays private.** The VIN box shows dots like a password, with an eye to show it; the VIN no longer appears under Features, and the debug log writes [VIN] instead of it.
+- **Why tread matters, animated.** Three cars brake from the same speed on wet roads in the rain: on new tires the car stops at the stop sign (158 ft); on worn tires they slide 68 and 143 ft past it.
+- **Understeer vs oversteer, animated.** On a wet curve, the car with the better tires on the back runs wide and grips again; the one with worn rear tires spins off the road and rolls over.
+- Both open as their own pages from Tires, with Back to return.
+- Bug fixes.
+
 ## 0.0.69 - 2026-10-09
 - **Tires, rebuilt around safety.** The line under Tires shows the type, a fuel-economy score out of 10, the wear rating and the tread left, each colored from green to red. Tire details fold away once filled in; the tread is in front.
 - **Each tire on its own.** Turn on "My tires aren't all the same" to measure each corner (plus dual or trailer wheels). Gasket says where each tire should go: the better pair always on the rear, and worn tires replaced instead of moved back (on a front-wheel-drive car with worn fronts: new ones on the rear). It allows for your drive, including all-wheel drive's need for matched tires.

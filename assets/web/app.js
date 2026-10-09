@@ -937,6 +937,24 @@
     return { update: soon };
   }
 
+  // ---------- a submenu: a page of its own over everything, with a Back bar ----------
+  /** Opens title + html as a full page; onOpen(body) runs once it's on screen and may return a cleanup (stop animations). */
+  function subPage(title, html, onOpen) {
+    if (window.__subClose) window.__subClose();
+    var pg = document.createElement('section');
+    pg.className = 'page sub-page';
+    pg.innerHTML = '<div class="sub-bar"><button type="button" class="sub-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button><h2>' + esc(title) + '</h2></div><div class="sub-body"></div>';
+    pg.querySelector('.sub-body').innerHTML = html;
+    document.body.appendChild(pg);
+    var stop = null;
+    var close = function () { if (stop) try { stop(); } catch (e) { } if (pg._hint) pg._hint.remove(); pg.remove(); window.__subClose = null; };
+    window.__subClose = close;
+    pg.querySelector('.sub-back').onclick = close;
+    qify(pg); scrollHint(pg);
+    if (onOpen) stop = onOpen(pg.querySelector('.sub-body')) || null;
+    return close;
+  }
+
   // ---------- settings ----------
   function sw(key, on) { return '<label class="switch"><input type="checkbox" data-k="' + key + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
   function openSettings(onboarding) {
@@ -1164,7 +1182,7 @@
     var cap = bbox(c.lat, c.lng, 25);
     fetchAround(c.lat, c.lng, [Math.max(b.getSouth(), cap[0]), Math.max(b.getWest(), cap[1]), Math.min(b.getNorth(), cap[2]), Math.min(b.getEast(), cap[3])]);
   };
-  window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (document.querySelector('.qpop')) { window.__closeQ(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
+  window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (document.querySelector('.qpop')) { window.__closeQ(); return true; } if (window.__subClose) { window.__subClose(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }
     if (!$('licPage').classList.contains('hidden')) { $('licPage').classList.add('hidden'); return true; }
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
@@ -1280,5 +1298,5 @@
   window.__app = { justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
 })();

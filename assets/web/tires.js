@@ -279,7 +279,7 @@
     split: 'Front and rear tires wear differently, and a tire replaced on its own starts deeper than the rest. Measure each one (the coin test, or a tread gauge) and Gasket says which tires should go where: the better pair always goes on the rear.',
     spare: 'A <b>full-size</b> spare can stay on. A <b>compact</b> (temporary) spare is for about 70 miles at no more than 50 mph, and it usually needs 60 psi. A <b>repair kit</b> (sealant and a pump) fixes small punctures in the tread, not sidewall cuts or blowouts. <b>Run-flat</b> tires keep going about 50 miles at up to 50 mph after a puncture. Check under the trunk floor (or under a truck\'s bed) to be sure.'
   };
-  var detOpen = {}, whyOpen = {};
+  var detOpen = {};
   function hasDetails(t) { return !!(t.size || t.brand || t.type); }
   function depthOpts(cur, max, plain) {
     var a = []; for (var d = max || 12; d >= 1; d--) a.push(d);
@@ -324,9 +324,8 @@
     h += '</details>';
     // tread left: what keeps you safe, in the main menu
     var r = t.tread, C = t.corners || {}, e = estimate(t), st = e ? status(e.depth) : null;
-    if (whyOpen[c.id] == null) whyOpen[c.id] = !e || st === 'low' || st === 'worn';
     h += '<div class="sub-h tz-h">Tread left</div>';
-    h += '<details class="tz-why" id="tzWhy"' + (whyOpen[c.id] ? ' open' : '') + '><summary>Why tread matters</summary>' + stopSvg() + '</details>';
+    h += whyRow('tread', 'Why tread matters', 'How far new and worn tires take to stop in the rain');
     h += '<div class="field tz-split"><div class="lbl">My tires aren\'t all the same<small>' + Q.split + '</small></div><label class="switch"><input type="checkbox" id="tzSplit"' + (C.split ? ' checked' : '') + '><span></span></label></div>';
     var deep = /mud|terrain/i.test(t.type || '') ? 15 : 12;
     if (!C.split) {
@@ -350,7 +349,7 @@
           (rot.moves.length ? '<ul>' + rot.moves.map(function (m) { return '<li>' + esc(cname(m.from)) + ' → ' + esc(cname(m.to)) + ' <small>(' + C[m.from].depth + '/32 in)</small></li>'; }).join('') + '</ul>' : '') +
           rot.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + (!(c.info && c.info.drive) ? '<p class="tz-xnote">Add your drive (front-, rear- or all-wheel) under About this car for advice that fits it.</p>' : '') + '</div>';
       } else h += '<div class="lead small keep">Fill in all four corners and Gasket says which tires should go where.</div>';
-      h += '<details class="tz-why" id="tzBack"><summary>Why the better tires go on the back</summary>' + steerSvg() + '</details>';
+      h += whyRow('back', 'Why the better tires go on the back', 'Understeer vs oversteer on a wet curve');
     }
     if (e) {
       var word = { good: 'Plenty left.', ok: 'Plan new tires: wet and snow grip start to fade at 4/32 in.', low: 'Replace them soon.', worn: 'At the legal limit: replace them now.' }[st];
@@ -387,7 +386,7 @@
       if (x) { t.type = x.type; if (x.utqg) { t.utqg = Object.assign({}, x.utqg); t.utqgSrc = 'tirerack'; } t.warrantyMi = x.warrantyMi || 0; t.newDepth = 0; }
     };
     $('tzDet').addEventListener('toggle', function () { detOpen[c.id] = this.open; });
-    $('tzWhy').addEventListener('toggle', function () { whyOpen[c.id] = this.open; });
+    host.querySelectorAll('[data-why]').forEach(function (b) { b.onclick = function () { openWhy(b.dataset.why); }; });
     if ($('tzPick')) host.querySelectorAll('[data-size]').forEach(function (b) { b.onclick = set(function () { t.size = b.dataset.size; t.sizeSrc = 'tirerack'; lookup(c); }); });
     $('tzSize').onchange = set(function () {
       var v = normSize(this.value);
@@ -425,31 +424,214 @@
   }
   window.addEventListener('garagechange', function () { var c = G() && G().car(); if (c && host && host.isConnected) { lookup(c); spareLookup(c); draw(); } });
 
-  // ---------- pictures: why tread matters, and why the better tires go on the back ----------
-  /** Stopping on a wet road, new vs worn tires (Discount Tire's Treadwell Research Park figures, credited). */
-  function stopSvg() {
-    var X0 = 64, W = 236, ft = function (n) { return X0 + W * n / 301; };
-    var row = function (y, lab, n, cls) {
-      return '<text x="0" y="' + (y + 9) + '" class="il-t">' + lab + '</text><rect x="' + X0 + '" y="' + y + '" width="' + (ft(n) - X0).toFixed(1) + '" height="12" rx="3" class="' + cls + '"/>' +
-        '<g transform="translate(' + (ft(n) - 1).toFixed(1) + ' ' + (y - 13) + ')" class="il-car"><path d="M0 10 L2 6 L7 5 L10 1 L17 1 L21 5 L25 6 L25 10 Z"/><circle cx="6" cy="10.5" r="2.4"/><circle cx="19.5" cy="10.5" r="2.4"/></g>' +
-        '<text x="' + (ft(n) - 4).toFixed(1) + '" y="' + (y + 9.5) + '" class="il-n" text-anchor="end">' + n + ' ft</text>';
+  // ---------- pictures that move: why tread matters, and why the better tires go on the back ----------
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) { var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+  function still() { try { return root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  /** Runs frame(t seconds) every animation frame for dur seconds (then once more at the end); -> stop(). */
+  function run(dur, frame, done) {
+    var t0 = null, raf = 0, live = true;
+    var step = function (ts) {
+      if (!live) return;
+      if (t0 == null) t0 = ts;
+      var t = (ts - t0) / 1000;
+      frame(Math.min(t, dur));
+      if (t < dur) raf = requestAnimationFrame(step); else { live = false; if (done) done(); }
     };
-    return '<figure class="il"><svg viewBox="0 0 330 118" role="img" aria-label="Stopping on a wet road: new tires stopped in 158 feet; worn tires took 226 and 301 feet.">' +
-      '<line x1="' + ft(158).toFixed(1) + '" y1="6" x2="' + ft(158).toFixed(1) + '" y2="112" class="il-stop"/><text x="' + (ft(158) + 3).toFixed(1) + '" y="12" class="il-s">new tires stop here</text>' +
-      row(26, 'New tires', 158, 'il-good') + row(58, 'Worn tire A', 226, 'il-bad') + row(90, 'Worn tire B', 301, 'il-bad') + '</svg>' +
-      '<figcaption>The same cars braking on a wet road. With worn tires they needed <b>68 to 143 ft more</b> to stop: about 40% to 90% farther, past where the car with new tires had already stopped. Tread is what pushes water out from under the tire, so worn tires lose grip in the rain first.' +
-      '<small>Source: Discount Tire, Treadwell Research Park (two tires from top-10 tire makers, new vs worn, on a wet road).</small></figcaption></figure>';
+    if (still()) { frame(dur); if (done) done(); return function () { }; }
+    raf = requestAnimationFrame(step);
+    return function () { live = false; cancelAnimationFrame(raf); };
   }
-  /** Understeer (the front slides: the car runs wide) vs oversteer (the rear slides out: a spin), from above. */
-  function steerSvg() {
-    var road = '<path d="M 112 150 C 112 92, 92 56, 26 30" class="il-road"/><path d="M 112 150 C 112 92, 92 56, 26 30" class="il-lane"/>';
-    var car = function (x, y, a, cls) { return '<g transform="translate(' + x + ' ' + y + ') rotate(' + a + ')" class="' + cls + '"><rect x="-7" y="-13" width="14" height="26" rx="4"/><rect x="-5.5" y="-8" width="11" height="6" rx="1.5" class="il-glass"/></g>'; };
-    var panel = function (dx, title, body) { return '<g transform="translate(' + dx + ' 0)">' + road + body + '<text x="70" y="168" class="il-h" text-anchor="middle">' + title + '</text></g>'; };
-    var under = '<path d="M 112 140 C 114 110, 118 84, 124 50" class="il-path warn"/>' + car(124, 50, 10, 'il-car2 warn');
-    var over = '<path d="M 112 140 C 112 112, 106 92, 96 80" class="il-path bad"/>' + car(92, 78, 70, 'il-car2 bad') + '<path d="M 104 92 C 112 92, 116 86, 116 78" class="il-arrow bad"/>';
-    return '<figure class="il"><svg viewBox="0 0 330 176" role="img" aria-label="From above: understeer, the car runs wide of the curve; oversteer, the rear swings out and the car spins.">' +
-      panel(0, 'Understeer: runs wide', under) + panel(170, 'Oversteer: spins', over) + '</svg>' +
-      '<figcaption>On a wet road, the tires with less tread hydroplane first. If those are on the <b>back</b>, the rear loses grip before the front and swings out (oversteer): a spin, and when the tires grab again the car can roll over. With the better tires on the back, the front lets go first and the car runs wide (understeer). Easing off the gas brings it back. So the better tires always go on the rear, whatever drives the car.</figcaption></figure>';
+  /** Rain over a w x h area: slanted drops falling, rings where they hit the roads (lanes: [{y, h}]). -> step(dt). */
+  function rain(g, w, h, lanes, n) {
+    var drops = [], rings = [];
+    for (var i = 0; i < n; i++) drops.push({ x: Math.random() * (w + 40), y: Math.random() * h, v: 260 + Math.random() * 120, e: el('line', { class: 'rn-drop' }, g) });
+    var put = function (d) { d.e.setAttribute('x1', d.x.toFixed(1)); d.e.setAttribute('y1', d.y.toFixed(1)); d.e.setAttribute('x2', (d.x - 3).toFixed(1)); d.e.setAttribute('y2', (d.y + 9).toFixed(1)); };
+    drops.forEach(put);
+    return function (dt) {
+      drops.forEach(function (d) {
+        d.y += d.v * dt; d.x -= d.v * dt * 0.33;
+        if (d.y > h) {
+          var ln = lanes[Math.floor(Math.random() * lanes.length)];
+          if (ln && rings.length < 14 && Math.random() < 0.6) rings.push({ x: d.x, y: ln.y + 3 + Math.random() * (ln.h - 6), r: 0.5, e: el('ellipse', { class: 'rn-ring' }, g) });
+          d.y = -10 - Math.random() * 30; d.x = Math.random() * (w + 40);
+        }
+        put(d);
+      });
+      rings = rings.filter(function (r) {
+        r.r += dt * 14; var o = Math.max(0, 1 - r.r / 6);
+        if (o <= 0) { r.e.remove(); return false; }
+        r.e.setAttribute('cx', r.x.toFixed(1)); r.e.setAttribute('cy', r.y.toFixed(1)); r.e.setAttribute('rx', r.r.toFixed(2)); r.e.setAttribute('ry', (r.r * 0.4).toFixed(2)); r.e.setAttribute('opacity', o.toFixed(2));
+        return true;
+      });
+    };
+  }
+  /** A car from the side, facing right, nose at x = 0 (so it's drawn to the left of where it is). */
+  function sideCar(g, cls) {
+    var c = el('g', { class: 'an-car ' + (cls || '') }, g);
+    el('path', { d: 'M-32 -4 L-31 -9 L-24 -10.5 L-19 -16 L-9 -16 L-4 -10.5 L0 -9 L0 -4 Z', class: 'an-body' }, c);
+    el('path', { d: 'M-18 -15 L-14 -15 L-14 -10.5 L-22 -10.5 Z M-12.5 -15 L-9.5 -15 L-5.5 -10.5 L-12.5 -10.5 Z', class: 'an-glass' }, c);
+    el('rect', { x: -32.5, y: -9, width: 2, height: 3, class: 'an-brake' }, c);
+    el('circle', { cx: -24, cy: -3.5, r: 3.6, class: 'an-wheel' }, c); el('circle', { cx: -8, cy: -3.5, r: 3.6, class: 'an-wheel' }, c);
+    return c;
+  }
+  /**
+   * Wet braking, new vs worn tires: three roads in the rain. The cars come in at the same speed and brake at the same
+   * line, each slowing evenly to a stop at its tested distance (Discount Tire's 158, 226 and 301 ft), so the worn ones slide
+   * past the stop sign where the car on new tires stopped.
+   */
+  function stopAnim(host) {
+    var W = 340, H = 214, S = 34, K = (W - S - 8) / 301, X = function (ft) { return S + ft * K; };
+    var CARS = [{ ft: 158, lab: 'New tires', cls: 'good' }, { ft: 226, lab: 'Worn tire A', cls: 'bad' }, { ft: 301, lab: 'Worn tire B', cls: 'bad' }];
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Three cars brake from the same speed on a wet road. New tires stop at the stop sign after 158 feet; worn tires slide on to 226 and 301 feet, past the sign.' });
+    host.appendChild(svg);
+    var lanes = CARS.map(function (c, i) { return { y: 48 + i * 58, h: 24 }; });
+    var gR = el('g', {}, svg);
+    lanes.forEach(function (ln, i) {
+      el('rect', { x: 0, y: ln.y, width: W, height: ln.h, class: 'an-road' }, gR);
+      el('rect', { x: 0, y: ln.y + 1, width: W, height: 5, class: 'an-sheen' }, gR);
+      el('line', { x1: 0, y1: ln.y + ln.h / 2, x2: W, y2: ln.y + ln.h / 2, class: 'an-lane' }, gR);
+      el('text', { x: 2, y: ln.y - 6, class: 'il-t' }, gR).textContent = CARS[i].lab;
+    });
+    // where they all start braking, and the stop sign where new tires stop
+    el('line', { x1: S, y1: 40, x2: S, y2: H - 8, class: 'an-brakeline' }, gR);
+    var sx = X(158);
+    el('line', { x1: sx, y1: 22, x2: sx, y2: H - 8, class: 'il-stop' }, gR);
+    var sign = el('g', { transform: 'translate(' + sx + ' 14)' }, gR);
+    el('line', { x1: 0, y1: 8, x2: 0, y2: 30, class: 'an-post' }, sign);
+    var oct = []; for (var i = 0; i < 8; i++) { var a = Math.PI / 8 + i * Math.PI / 4; oct.push((Math.cos(a) * 11).toFixed(2) + ',' + (Math.sin(a) * 11).toFixed(2)); }
+    el('polygon', { points: oct.join(' '), class: 'an-sign' }, sign);
+    el('text', { x: 0, y: 2.8, class: 'an-signt', 'text-anchor': 'middle' }, sign).textContent = 'STOP';
+    var gC = el('g', {}, svg), gN = el('g', {}, svg), gRain = el('g', { class: 'an-rain' }, svg);
+    var cars = CARS.map(function (c, i) { var g = sideCar(gC, c.cls); return { c: c, g: g, y: lanes[i].y + lanes[i].h / 2 + 4 }; });
+    var step = rain(gRain, W, H, lanes, 46);
+    // the same speed for all: each takes 2d / v to stop (evenly slowing), so the farther one takes longer
+    var V = 2 * 158 / 1.7, PRE = 0.45, ROLL = V * K * PRE;     // px/s on the way in
+    var stopT = function (ft) { return 2 * ft / V; };
+    var DUR = PRE + stopT(301) + 1.4, last = 0;
+    var shown = {};
+    var frame = function (t) {
+      step(Math.max(0, t - last)); last = t;
+      cars.forEach(function (o) {
+        var x, braking = t >= PRE;
+        if (!braking) x = S - ROLL + V * K * t;
+        else { var u = Math.min(1, (t - PRE) / stopT(o.c.ft)); x = S + o.c.ft * K * (1 - (1 - u) * (1 - u)); }
+        o.g.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + o.y + ')');
+        o.g.classList.toggle('braking', braking && x < X(o.c.ft) - 0.05);
+        if (braking && x >= X(o.c.ft) - 0.05 && !shown[o.c.ft]) {
+          shown[o.c.ft] = 1;
+          var past = o.c.ft - 158;
+          el('text', { x: W - 4, y: o.y - 22, class: 'an-n ' + o.c.cls, 'text-anchor': 'end' }, gN).textContent = o.c.ft + ' ft' + (past > 0 ? ' · ' + past + ' ft past the sign' : ' · stopped at the sign');
+        }
+      });
+    };
+    var stop = null, btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn tonal sm an-replay'; btn.textContent = '▶ Play again';
+    var play = function () {
+      if (stop) stop(); gN.innerHTML = ''; shown = {}; last = 0; btn.disabled = true;
+      stop = run(DUR, frame, function () { btn.disabled = false; });
+    };
+    btn.onclick = play; host.appendChild(btn);
+    play();
+    return function () { if (stop) stop(); };
+  }
+  /** A car from above, nose up at (0, 0) center; its underside shows when it's rolled over. */
+  function topCar(g, cls) {
+    var c = el('g', { class: 'an-tcar ' + cls }, g), r = el('g', {}, c);
+    el('rect', { x: -6.5, y: -12, width: 13, height: 24, rx: 4, class: 'an-tbody' }, r);
+    el('rect', { x: -5, y: -7.5, width: 10, height: 5.5, rx: 1.5, class: 'il-glass an-top' }, r);
+    el('rect', { x: -5, y: 5, width: 10, height: 3.5, rx: 1.2, class: 'il-glass an-top' }, r);
+    // underneath: the axles and wheels (shown when it's upside down)
+    var u = el('g', { class: 'an-under' }, r);
+    el('rect', { x: -6.5, y: -12, width: 13, height: 24, rx: 4, class: 'an-belly' }, u);
+    [-8, 8].forEach(function (y) { el('line', { x1: -6, y1: y, x2: 6, y2: y, class: 'an-axle' }, u); el('rect', { x: -8.5, y: y - 3, width: 3, height: 6, rx: 1, class: 'an-wheel' }, u); el('rect', { x: 5.5, y: y - 3, width: 3, height: 6, rx: 1, class: 'an-wheel' }, u); });
+    return { g: c, roll: r, under: u };
+  }
+  /**
+   * A curve in the rain, from above, twice: understeer (the front lets go: the car runs wide onto the shoulder and stops)
+   * and oversteer (the rear lets go: it spins, slides off the road, and rolls over when the tires dig into the ground).
+   */
+  function steerAnim(host) {
+    var W = 340, H = 236, svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'From above, on a wet curve: understeer, the car runs wide onto the shoulder and stops; oversteer, the rear swings out, the car spins off the road and rolls over.' });
+    host.appendChild(svg);
+    var ROAD = 'M 120 214 C 120 140, 98 84, 22 46';
+    var panels = [{ dx: 0, title: 'Understeer: runs wide', kind: 'under' }, { dx: 170, title: 'Oversteer: spins and rolls', kind: 'over' }];
+    var gRain = null, P = [];
+    panels.forEach(function (pn) {
+      var g = el('g', { transform: 'translate(' + pn.dx + ' 0)' }, svg);
+      el('rect', { x: 2, y: 4, width: 166, height: 206, rx: 10, class: 'an-grass' }, g);
+      el('path', { d: ROAD, class: 'il-road' }, g); el('path', { d: ROAD, class: 'il-lane' }, g);
+      var path = el('path', { d: ROAD, fill: 'none', stroke: 'none' }, g);
+      var trail = el('path', { d: '', class: 'il-path ' + (pn.kind === 'under' ? 'warn' : 'bad') }, g);
+      var car = topCar(g, pn.kind === 'under' ? 'warn' : 'bad');
+      el('text', { x: 85, y: 228, class: 'il-h', 'text-anchor': 'middle' }, g).textContent = pn.title;
+      var note = el('text', { x: 85, y: 22, class: 'an-note', 'text-anchor': 'middle' }, g);
+      P.push({ pn: pn, path: path, trail: trail, car: car, note: note, len: path.getTotalLength() });
+    });
+    gRain = el('g', { class: 'an-rain' }, svg);
+    var step = rain(gRain, W, H, [], 40);
+    var at = function (p, s) { var a = p.path.getPointAtLength(s), b = p.path.getPointAtLength(Math.min(p.len, s + 1)); return { x: a.x, y: a.y, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
+    var deg = function (r) { return r * 180 / Math.PI; };
+    var DUR = 5.2, last = 0, LEAVE = 0.42;
+    var frame = function (t) {
+      step(Math.max(0, t - last)); last = t;
+      P.forEach(function (p) {
+        var s0 = p.len * LEAVE, T0 = 1.4, x, y, yaw, roll = 0, pts = [];
+        if (t <= T0) {              // on the road, at speed, both the same
+          var q = at(p, s0 * t / T0); x = q.x; y = q.y; yaw = deg(q.ang) + 90;
+          p.note.textContent = '';
+        } else {
+          var L = at(p, s0), dir = L.ang, u = t - T0;
+          if (p.pn.kind === 'under') {
+            // the front slides: the car drifts wide toward the outside edge, then (easing off) grips again and follows the
+            // curve, slowing down, still on its wheels
+            var k = Math.min(1, u / 3.6), s1 = s0 + (p.len * 0.92 - s0) * (1 - Math.pow(1 - k, 2)), q2 = at(p, s1);
+            var off = 15 * Math.sin(Math.PI * Math.min(1, u / 2.8)), nx = Math.cos(q2.ang + Math.PI / 2), ny = Math.sin(q2.ang + Math.PI / 2);
+            x = q2.x + nx * off; y = q2.y + ny * off; yaw = deg(q2.ang) + 90 - 14 * Math.sin(Math.PI * Math.min(1, u / 2.8));
+            p.note.textContent = u < 1.4 ? 'Front slides: runs wide' : 'Ease off: it grips again';
+          } else {
+            // the rear slides out: the car rotates as it slides off the outside of the curve, then digs in and rolls
+            var slide = Math.min(1, u / 1.9), d2 = 64 * (1 - Math.pow(1 - slide, 1.6)), drift = dir + 0.55 * slide;
+            x = L.x + Math.cos(drift) * d2; y = L.y + Math.sin(drift) * d2; yaw = deg(dir) + 90 + 230 * Math.pow(slide, 1.3);
+            if (u > 1.9) {              // off the road: it trips and rolls twice, ending on its roof
+              var r = Math.min(1, (u - 1.9) / 1.6); roll = 540 * (1 - Math.pow(1 - r, 2));
+              var e = Math.min(1, (u - 1.9) / 1.6), dd = 22 * e;
+              x += Math.cos(drift) * dd; y += Math.sin(drift) * dd;
+              p.note.textContent = r < 1 ? 'Rolls over' : 'Upside down';
+            } else p.note.textContent = u > 0.3 ? 'Rear slides out' : '';
+          }
+        }
+        // its track: drawn as it goes
+        p.trailPts = t <= 0.02 ? [] : (p.trailPts || []);
+        p.trailPts.push(x.toFixed(1) + ' ' + y.toFixed(1));
+        if (p.trailPts.length > 1) p.trail.setAttribute('d', 'M ' + p.trailPts.join(' L '));
+        // rolling, from above: the car narrows to its edge and shows its underside every other half turn
+        var c = Math.cos(roll * Math.PI / 180), up = c >= 0;
+        p.car.g.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + yaw.toFixed(1) + ')');
+        p.car.roll.setAttribute('transform', 'scale(' + Math.max(0.08, Math.abs(c)).toFixed(3) + ' 1)');
+        p.car.under.style.display = up ? 'none' : '';
+      });
+    };
+    var stop = null, btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn tonal sm an-replay'; btn.textContent = '▶ Play again';
+    var play = function () { if (stop) stop(); last = 0; P.forEach(function (p) { p.trailPts = []; }); btn.disabled = true; stop = run(DUR, frame, function () { btn.disabled = false; }); };
+    btn.onclick = play; host.appendChild(btn);
+    play();
+    return function () { if (stop) stop(); };
+  }
+  var WHY_TREAD = '<div class="an-box" id="anStop"></div><p class="an-cap">Three cars on a wet road, braking from the same speed at the same line. On new tires the car stops at the sign, in <b>158 ft</b>. On worn tires it needed <b>226 and 301 ft</b>: 68 to 143 ft more, sliding right through where the first car stopped. Tread is what pushes water out from under a tire, so worn tires lose grip in the rain first.</p>' +
+    '<p class="an-src">Source: Discount Tire, Treadwell Research Park: two tires from top-10 tire makers, new vs worn, on a wet road.</p>';
+  var WHY_BACK = '<div class="an-box" id="anSteer"></div><p class="an-cap">On a wet road, the tires with less tread hydroplane first. If those are on the <b>back</b>, the rear loses grip before the front and swings out: that\'s <b>oversteer</b>. The car spins, and when its tires catch on the shoulder or grass it can roll over.</p>' +
+    '<p class="an-cap">With the better tires on the back, the front lets go first and the car runs wide: that\'s <b>understeer</b>. Easing off the gas lets the front grip again, and the car stays upright. So the better tires always go on the rear, whatever wheels drive the car.</p>';
+  function openWhy(which) {
+    A.subPage(which === 'tread' ? 'Why tread matters' : 'Why the better tires go on the back', which === 'tread' ? WHY_TREAD : WHY_BACK, function (body) {
+      return which === 'tread' ? stopAnim(body.querySelector('#anStop')) : steerAnim(body.querySelector('#anSteer'));
+    });
+  }
+  /** A row that opens one of them (a submenu, like Adjust speed by road). */
+  function whyRow(which, title, sub) {
+    return '<button type="button" class="sub-ent" data-why="' + which + '"><span><b>' + title + '</b><small>' + sub + '</small></span>' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg></button>';
   }
   /** A small car from above, for the corner picker. */
   function carTopSvg() {

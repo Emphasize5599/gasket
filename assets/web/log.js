@@ -1,6 +1,6 @@
 /* Debug log. Off unless you turn on "Debug logging" in Settings.
  * Levels: 1 errors, 2 + warnings, 3 + steps, 4 + details (requests/answers, summarized), 5 + everything (raw answers, trimmed).
- * Kept in a private file on the phone (newest ~400 KB). Your Google API key is never written to it. */
+ * Kept in a private file on the phone (newest ~400 KB). Your Google API key and your VIN are never written to it. */
 (function (root) {
   'use strict';
   var LEVELS = { 1: 'ERROR', 2: 'WARN', 3: 'INFO', 4: 'DEBUG', 5: 'TRACE' };
@@ -9,7 +9,9 @@
 
   function scrub(text) {
     secret.forEach(function (k) { if (k && k.length > 8) text = text.split(k).join('[API key]'); });
-    return text.replace(/AIza[0-9A-Za-z_\-]{30,}/g, '[API key]');
+    return text.replace(/AIza[0-9A-Za-z_\-]{30,}/g, '[API key]')
+      // a VIN (17 letters and digits, no I, O or Q) is the car's identity: never in the log, even in a URL
+      .replace(/(^|[^A-Za-z0-9])([A-HJ-NPR-Z0-9]{17})(?![A-Za-z0-9])/gi, function (m, p, v) { return /\d/.test(v) && /[A-Z]/i.test(v) ? p + '[VIN]' : m; });
   }
   function clip(v, n) {
     var t;

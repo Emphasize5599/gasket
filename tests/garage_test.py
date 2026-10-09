@@ -109,12 +109,23 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-gr3-vin.png'); wide(pg, 'vin')
         pg.fill('#gVin', 'abc'); pg.click('#gVinGo'); pg.wait_for_timeout(150)
         assert '17' in ft(pg, '#vMsg'), 'bad VIN explained'
+        lv0 = pg.evaluate('FLog.level()'); pg.evaluate('FLog.configure(5)')   # logging on: the VIN must not reach it
         pg.fill('#gVin', '1hgcv1f3xma000001'); pg.click('#gVinGo'); idle(pg, 1200)
         chip = ft(pg, '.carchip.on'); print('  VIN car:', chip, '|', ft(pg, '.epa-tiles').replace('\n', ' '), '|', ft(pg, '#eMsg'))
         assert '2021 Accord EX' in chip and '30' in ft(pg, '.epa-tiles'), 'decoded and matched to the EPA'
         assert any('DecodeVinValuesExtended/1HGCV1F3XMA000001' in u for u in pg.evaluate('window.__urls'))
         pg.wait_for_function("document.getElementById('eYear') && document.getElementById('eYear').value === '2021' && document.getElementById('eOpt').value !== ''", timeout=5000)
         assert pg.locator('.vin-row.rec').count() == 0 and 'Year / make / model' in ft(pg, '#tEpa summary') and pg.input_value('#eYear') == '2021', 'a car with a VIN: no more nudging, and year / make / model filled in from it'
+        # the VIN: dots like a password until you tap the eye, and never shown anywhere else (or written to the log)
+        assert pg.locator('#gVin.masked').count() == 1 and 'disc' in pg.evaluate("getComputedStyle(document.getElementById('gVin')).webkitTextSecurity")
+        pg.click('#gVinEye'); pg.wait_for_timeout(100); assert pg.locator('#gVin.masked').count() == 0 and pg.get_attribute('#gVinEye', 'aria-pressed') == 'true'
+        pg.click('#gVinEye'); pg.wait_for_timeout(100); assert pg.locator('#gVin.masked').count() == 1
+        assert '1HGCV1F3XMA000001' not in pg.evaluate("document.body.innerText"), 'the VIN is not shown on the page'
+        lt = pg.evaluate('FLog.text()'); print('  log level:', pg.evaluate('FLog.level()'), '| VIN in log:', '1HGCV1F3XMA000001' in lt, '| [VIN]:', '[VIN]' in lt, '|', [l for l in lt.split('\n') if 'VIN' in l or '1HGCV' in l][:4])
+        assert '1HGCV1F3XMA000001' not in lt, 'the log hides it'
+        pg.evaluate('FLog.configure(5)'); pg.evaluate("FLog.info('car', 'Get route pressed', { car: window.Garage.car(), url: 'https://www.nhtsa.gov/recalls?vymm=1HGCV1F3XMA000001' })")
+        lt = pg.evaluate('FLog.text()'); assert '1HGCV1F3XMA000001' not in lt and lt.count('[VIN]') >= 2, 'a whole car record or a URL: the VIN comes out as [VIN]'
+        pg.evaluate('(l) => FLog.configure(l)', lv0)
         # opening year / make / model on a car with a VIN shows it once, keeps the tank size, and doesn't loop
         pg.fill('#gTank', '14.8'); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(300)
         if pg.locator('#tEpa[open]').count(): pg.click('#tEpa summary'); pg.wait_for_timeout(200)
