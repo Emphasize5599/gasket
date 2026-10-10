@@ -69,7 +69,50 @@
   var S = Object.assign({}, P.DEFAULTS);
   try { var saved = JSON.parse(N.loadSettings() || '{}'); S = Object.assign(S, saved); S.brands = Object.assign({}, P.DEFAULTS.brands, saved.brands || {}); } catch (e) {}
   S.blacklist = (S.blacklist || []).slice(); S.dieselRisk = Object.assign({}, S.dieselRisk || {});
-  function save() { if (window.__restoring) return; N.saveSettings(JSON.stringify(S)); logSetup(); }   // a restore in progress owns the settings
+  // Lookups that can simply be fetched again (recalls, the NHTSA VIN check, versions, Tire Rack's lists, Brave's answers,
+  // recall ratings) live in the app's cache, not its settings: Android's "Clear cache" empties them and they load again.
+  // Settings, your cars and anything that cost a Google lookup stay in storage.
+  var CAR_CACHE = ['recalls', 'recallCheck', 'recallAuto', 'variants', 'tankLookup'], TIRE_CACHE = ['list', 'sizeLookup', 'fuelNudge'], lastLookups = '';
+  function splitLookups(o) {
+    var cc = {};
+    (o.cars || []).forEach(function (c) {
+      var k = {}, any = false;
+      CAR_CACHE.forEach(function (f) { if (c[f] !== undefined) { k[f] = c[f]; delete c[f]; any = true; } });
+      if (c.tires) {
+        var tk = {};
+        TIRE_CACHE.forEach(function (f) { if (c.tires[f] !== undefined) { tk[f] = c.tires[f]; delete c.tires[f]; any = true; } });
+        if (c.tires.spare && c.tires.spare.lookup) { tk.spareLookup = c.tires.spare.lookup; delete c.tires.spare.lookup; any = true; }
+        k.tires = tk;
+      }
+      if (any) cc[c.id] = k;
+    });
+    if (o.recallSev) { cc['*sev'] = o.recallSev; delete o.recallSev; }
+    return cc;
+  }
+  function mergeLookups() {
+    try {
+      var r = N.kvGet && N.kvGet('lookups', 'cars'), cc = r ? JSON.parse(r).v || {} : {};
+      lastLookups = r ? JSON.stringify(cc) : '';
+      (S.cars || []).forEach(function (c) {
+        var k = cc[c.id]; if (!k) return;
+        CAR_CACHE.forEach(function (f) { if (c[f] === undefined && k[f] !== undefined) c[f] = k[f]; });
+        if (k.tires) {
+          c.tires = c.tires || {};
+          TIRE_CACHE.forEach(function (f) { if (c.tires[f] === undefined && k.tires[f] !== undefined) c.tires[f] = k.tires[f]; });
+          if (k.tires.spareLookup) { c.tires.spare = c.tires.spare || {}; if (!c.tires.spare.lookup) c.tires.spare.lookup = k.tires.spareLookup; }
+        }
+      });
+      if (!S.recallSev && cc['*sev']) S.recallSev = cc['*sev'];
+    } catch (e) { }
+  }
+  mergeLookups();
+  function save() {
+    if (window.__restoring) return;   // a restore in progress owns the settings
+    var o = JSON.parse(JSON.stringify(S)), cc = splitLookups(o), cs = JSON.stringify(cc);
+    N.saveSettings(JSON.stringify(o));
+    if (cs !== lastLookups && N.kvPut) { try { N.kvPut('lookups', 'cars', JSON.stringify({ t: Date.now(), v: cc })); lastLookups = cs; } catch (e) { } }
+    logSetup();
+  }
   // debug log: off unless turned on in Settings
   if (S.debug == null) S.debug = false;
   if (!S.logLevel) S.logLevel = 3;
@@ -794,7 +837,7 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
-    CACHE_NS.concat(['trips', 'logos']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trips', 'logos', 'lookups']).forEach(function (ns) { KV.clear(ns); });
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(''); } catch (e) { }
     if (window.FLog) FLog.clear();

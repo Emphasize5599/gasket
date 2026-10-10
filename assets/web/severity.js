@@ -89,7 +89,8 @@
   }
   /** Rate the recalls not rated yet (loading the model the first time); calls done() once anything new is in.
    *  One run at a time: recalls asked for while it runs join the queue (a redraw asking again adds nothing). */
-  var queue = [], queued = {}, dones = [], running = false;
+  var queue = [], queued = {}, dones = [], running = false, BATCH = 3;
+  var watching = function () { return true; };    // Advisory says whether it's on screen (focus)
   function rate(list, done) {
     var todo = (list || []).filter(function (x) { return !get(x) && !queued[key(x)]; });
     todo.forEach(function (x) { queued[key(x)] = 1; queue.push(x); });
@@ -104,10 +105,16 @@
     };
     (async function () {
       if (!mock) await load();
-      var st = store();
+      var st = store(), n = 0;
       while (queue.length) {
         var x = queue.shift(), text = (String(x.cons || '') + ' ' + String(x.sum || '')).trim();
-        if (!st[key(x)]) st[key(x)] = mock ? mock(text) : await rateText(text);
+        if (!st[key(x)]) { st[key(x)] = mock ? mock(text) : await rateText(text); n++; }
+        // a few at a time, then a breather: short while you're looking at them (Advice on screen), long when you aren't
+        if (!mock && queue.length && n % BATCH === 0) {
+          if (root.__app && root.__app.save) root.__app.save();
+          var d = dones.slice(); d.forEach(function (f) { try { f(true); } catch (e) { } });     // show the ones done so far
+          await new Promise(function (r) { setTimeout(r, watching() ? 700 : 6000); });
+        }
       }
       finish();
     })().catch(function (e) { if (root.FLog) root.FLog.warn('car', 'Couldn\'t load the recall rating model', String(e && e.message || e)); finish(); });
@@ -127,5 +134,5 @@
       return out;
     }).catch(function () { return null; });
   }
-  root.Severity = { get: get, rate: rate, busy: busy, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, _rateText: function (t) { return load().then(function () { return rateText(t); }); } };
+  root.Severity = { get: get, rate: rate, busy: busy, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, _rateText: function (t) { return load().then(function () { return rateText(t); }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

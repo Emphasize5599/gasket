@@ -235,11 +235,14 @@ public class MainActivity extends Activity {
 
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
+    /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai"));
     private static final String[] AI_FILES = { "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/",
             "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/" };
 
     private WebResourceResponse aiFile(String u) {
         try {
+            // kept in the app's storage (a 46 MB download): "Clear cache" leaves it
             File dir = new File(getFilesDir(), "ai");
             dir.mkdirs();
             byte[] dg = MessageDigest.getInstance("SHA-1").digest(u.getBytes("UTF-8"));
@@ -1290,15 +1293,26 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        // ---- small key/value cache in the app's private storage (saved searches, speed limits, routes) ----
+        // ---- small key/value store (saved searches, speed limits, routes, saved trips) ----
+        // What cost a Google lookup (Places searches, routes, stations along a route), your saved trips and the recall model's
+        // setup stay in the app's storage; everything else can be fetched again, so it lives in the app's cache.
+        private java.io.File kvDir(String ns, boolean storage) {
+            return new java.io.File(new java.io.File(storage ? getFilesDir() : getCacheDir(), "kv"), ns.replaceAll("[^a-z0-9_-]", "_"));
+        }
         private java.io.File kvFile(String ns, String key) throws Exception {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
             byte[] h = md.digest(key.getBytes("UTF-8"));
             StringBuilder sb = new StringBuilder();
             for (byte x : h) sb.append(String.format("%02x", x));
-            java.io.File dir = new java.io.File(new java.io.File(getFilesDir(), "kv"), ns.replaceAll("[^a-z0-9_-]", "_"));
+            boolean storage = KV_STORAGE.contains(ns);
+            java.io.File dir = kvDir(ns, storage);
             if (!dir.exists()) dir.mkdirs();
-            return new java.io.File(dir, sb.toString());
+            java.io.File f = new java.io.File(dir, sb.toString());
+            if (!storage && !f.exists()) {                 // written by an older version, in storage: moved to the cache
+                java.io.File old = new java.io.File(kvDir(ns, true), sb.toString());
+                if (old.exists() && !old.renameTo(f)) old.delete();
+            }
+            return f;
         }
 
         @JavascriptInterface
@@ -1322,9 +1336,10 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public int kvClear(String ns) {
             int n = 0;
-            java.io.File dir = new java.io.File(new java.io.File(getFilesDir(), "kv"), ns.replaceAll("[^a-z0-9_-]", "_"));
-            java.io.File[] fs = dir.listFiles();
-            if (fs != null) for (java.io.File f : fs) if (f.delete()) n++;
+            for (boolean storage : new boolean[] { true, false }) {
+                java.io.File[] fs = kvDir(ns, storage).listFiles();
+                if (fs != null) for (java.io.File f : fs) if (f.delete()) n++;
+            }
             return n;
         }
 

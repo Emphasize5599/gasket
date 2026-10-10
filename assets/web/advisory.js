@@ -205,7 +205,10 @@
   // ---------- how serious a recall is: rated on the phone by a small AI model (severity.js) ----------
   function severity(x) { return window.Severity ? Severity.get(x) : null; }   // null: not rated yet
   /** Rate what isn't rated yet (the model loads the first time), then draw again. */
-  function rateAll(list) { if (window.Severity && list && list.length) Severity.rate(list, function () { if (host && host.isConnected) draw(); }); }
+  function onRated() { if (host && host.isConnected) draw(); }       // one callback (the rater calls it after each batch)
+  function rateAll(list) { if (window.Severity && list && list.length) Severity.rate(list, onRated); }
+  // the rater works harder while Advisory is what you're looking at
+  if (window.Severity && Severity.focus) Severity.focus(function () { return !!(host && host.isConnected && !host.closest('.hidden') && !document.hidden); });
   var SEV_NAME = { 3: 'Serious', 2: 'Moderate', 1: 'Minor' };
   /** "POWER TRAIN:AXLE ASSEMBLY:HUB" -> "Power train › Axle assembly › Hub". */
   function compPlain(s) { return String(s || 'Recall').split(':').map(function (p) { p = p.trim().toLowerCase(); return p.charAt(0).toUpperCase() + p.slice(1); }).join(' › '); }

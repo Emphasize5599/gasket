@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.72 - 2026-10-10
+- **Smoother recall rating.** The AI rates recalls three at a time with a pause in between, and goes much slower while you're not on Advice.
+- **Clear cache, keep your setup.** Settings, your cars, saved trips, anything that cost a Google lookup, and the recall-rating model stay in the app's storage. Everything that can simply load again (recalls and VIN checks, Tire Rack and Brave answers, recall ratings, logos, speed limits, station lists from the stores' own sites) is now in the cache, so Android's "Clear cache" lets you watch it all load fresh.
+- Bug fixes.
+
 ## 0.0.71 - 2026-10-09
 - **Why tread matters** now loops: the rain never stops, the cars hold at their stopping points for a moment, fade, and drive in again. They face the right way, and an arrow marks where they started braking.
 - **Why the better tires go on the back** has three scenes: understeer where the front tires skid, then grip again and the car stays on the road ("Phew!"); understeer where it runs off onto the grass but stays upright ("I'm okay!"); and oversteer, where it spins, rolls over and catches fire ("Not okay! Help!"). The front wheels turn and leave skid marks, and it loops too.

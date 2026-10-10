@@ -78,6 +78,10 @@ with sync_playwright() as p:
         pg.evaluate("() => { Severity.rate = window.__rate0; window.__app.S.recallSev = window.__sev0; window.dispatchEvent(new Event('garagechange')); }")
         pg.wait_for_timeout(150)
         assert pg.locator('#advList .rc-bar').count() == 0
+        # recalls and their ratings are cache (Android's "Clear cache" empties them), not settings
+        sp = pg.evaluate("(() => { window.__app.save(); const N = window.__app.N; return [N.loadSettings(), N.kvGet('lookups', 'cars')]; })()")
+        assert '"recalls"' not in sp[0] and '"recallSev"' not in sp[0] and '"recalls"' in sp[1] and '*sev' in sp[1], 'lookups saved apart from the settings'
+        assert pg.evaluate("window.Garage.car().recalls != null"), 'still there while the app runs'
         assert not dot(pg), 'nothing to act on without a VIN'
         # a hybrid isn't told to turn off engine stop: that's how a hybrid drives
         pg.evaluate("() => { const c = window.Garage.car(); c.info = Object.assign({}, c.info, { features: (c.info && c.info.features || []).concat(['Start-stop']) }); window.dispatchEvent(new Event('garagechange')); }")
