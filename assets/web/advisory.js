@@ -167,7 +167,13 @@
     var R = c.recalls;
     if (!R || R.key !== key || days(R.t) > 7 || (R.error && Date.now() - R.t > 3600e3)) fetchRecalls(c);
     var list = onRecord(c), chk = vinCheck(c), nm = name(c);
-    rateAll(list);
+    // the recalls still open on your car (once the VIN is checked at NHTSA) are shown first, outside the list, and rated
+    // right away; the rest wait in the folded list, rated only once you open it
+    var openL = chk && chk.open > 0 ? (list || []).filter(function (x) { return (chk.campaigns || []).indexOf(x.id) >= 0; }) : [];
+    var rest = (list || []).filter(function (x) { return openL.indexOf(x) < 0; });
+    restList = rest;
+    if (openL.length) rateAll(openL);
+    if (listOpen && rest.length) rateAll(rest);
     var q = A.qBtn('<b>Safety recalls</b> are problems a car maker must fix for free, at any of its dealers, for as long as you own the car. The list here is every recall on record for the ' + esc(nm) + ' from the National Highway Traffic Safety Administration. ' +
       'Checking your VIN shows which are still open on <i>your</i> car. Already-fixed recalls don\'t show up there, nor do recalls more than 15 years old or from some small manufacturers.');
     var h = '<div class="card adv-card adv-recall' + (chk && chk.open > 0 ? ' warn' : chk && !chk.open ? ' ok' : '') + '" id="advRecall"><h3>Safety recalls ' + q + '</h3>';
@@ -177,8 +183,7 @@
       var when = A.ago(new Date(chk.t));
       if (chk.open > 0) {
         h += '<div class="adv-state bad"><b>' + chk.open + ' open recall' + (chk.open === 1 ? '' : 's') + ' on your car</b><small>Any ' + esc(c.make) + ' dealer fixes ' + (chk.open === 1 ? 'it' : 'them') + ' for free. Call one to book it, ideally before a long drive. Checked ' + esc(when) + '.</small></div>';
-        var open = (list || []).filter(function (x) { return (chk.campaigns || []).indexOf(x.id) >= 0; });
-        if (open.length) h += bySeverity(open).map(recallItem).join('');
+        if (openL.length) h += bySeverity(openL).map(recallItem).join('');
         else if ((chk.items || []).length) h += chk.items.map(function (t) { return '<div class="rc"><p>' + esc(t) + '</p></div>'; }).join('');
       } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '. Gasket checks again every week.</small></div>';
       // no button: the VIN is checked again by itself in the background (weekly), so this is always fresh
@@ -196,8 +201,9 @@
       h += '<div class="adv-state"><b>' + (R && R.error && !list ? 'Couldn\'t reach NHTSA right now' : n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'No recalls on record for the ' + esc(nm)) + '</b>' +
         '<small>' + (n ? 'These are for every ' + esc(nm) + '. ' : '') + 'Add your VIN in the Garage (Edit) to see whether any are still open on your car.</small></div>';
     }
-    if (n && !(chk && chk.open > 0)) {
-      h += '<details class="rc-list" id="advList"' + (listOpen ? ' open' : '') + '><summary>' + (chk ? 'All ' + n + ' recalls on record for this model' : 'See the recalls') + '</summary>' + bySeverity(list).map(recallItem).join('') + '</details>';
+    if (rest.length) {
+      var lab = !chk ? 'See the recalls' : openL.length ? rest.length + ' more on record (fixed on yours, or for other ' + nm + 's)' : 'All ' + n + ' recalls on record for this model';
+      h += '<details class="rc-list" id="advList"' + (listOpen ? ' open' : '') + '><summary>' + esc(lab) + '</summary>' + (listOpen ? bySeverity(rest) : rest).map(recallItem).join('') + '</details>';
     }
     if (park && !(chk && !chk.open)) h += '<div class="lead small keep"><b>One of these says not to drive the car, or to park it outside, until it\'s fixed.</b></div>';
     return h + '</div>';
@@ -238,7 +244,7 @@
     host.querySelectorAll('.rc-bar').forEach(function (b) { b.classList.toggle('ind', !p.f); b.firstChild.style.transform = 'scaleX(' + p.f.toFixed(3) + ')'; });
     host.querySelectorAll('.rc-plab').forEach(function (l) { l.textContent = p.label + '…'; });
   });
-  var rcOpen = {};   // which recall tiles and sections you've opened (kept when Advisory redraws)
+  var rcOpen = {}, restList = [];   // which recall tiles and sections you've opened (kept when Advisory redraws)
   /** Most serious first, then newest. */
   function bySeverity(list) {
     var lv = function (x) { var s = severity(x); return s ? s.level : 0; };
@@ -269,7 +275,7 @@
   function bind(c) {
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
     host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); }; });
-    if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; });
+    if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; if (listOpen) rateAll(restList); });
     host.querySelectorAll('details[data-open]').forEach(function (d) { d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
     host.querySelectorAll('[data-adv]').forEach(function (b) {
       b.onclick = function () {

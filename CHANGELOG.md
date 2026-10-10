@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.74 - 2026-10-10
+- **No more lag from rating recalls.** The AI model now runs in the background, apart from the screen, so scrolling and taps stay smooth while it works (if a phone can't, it falls back to one recall at a time).
+- **Open recalls first.** Once your VIN has been checked at NHTSA, the recalls still open on your car show up front and are rated right away. The rest (fixed on yours, or for other cars of the model) sit in the folded list and are rated only when you open it. Without a VIN check, nothing is rated until you open the list.
+- Bug fixes.
+
 ## 0.0.73 - 2026-10-10
 - **Past the monthly Google lookup cap, prices still update where they can.** Walmart and Murphy USA prices come from their own sites, so they keep refreshing; the warning now says "Only locations already in your phone's storage were updated, for Walmart and Murphy USA" (on the map and when planning stops).
 - Bug fixes.

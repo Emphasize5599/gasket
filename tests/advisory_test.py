@@ -57,7 +57,9 @@ with sync_playwright() as p:
         # ---- no VIN: the recalls on record for the model, and how to check yours ----
         rc = ft(pg, '#advRecall'); print('  recalls, no VIN:', rc.replace('\n', ' | ')[:200])
         assert '2 recalls on record' in rc and 'Add your VIN' in rc and 'Corolla' in rc
+        assert pg.evaluate("Object.keys(((window.__app.S.recallSev || {}).r) || {}).length") == 0, 'no VIN check: nothing rated until you open the list'
         pg.click('#advList summary'); pg.wait_for_timeout(150)
+        assert pg.evaluate("Object.keys(((window.__app.S.recallSev || {}).r) || {}).length") == 2, 'opened: rated'
         # a tile each, most serious first: how serious (and why), the part, one line; tap for the sections
         tiles = pg.locator('#advList .rc-tile')
         assert tiles.count() == 2 and 'sev3' in tiles.nth(0).get_attribute('class') and 'Power train' in tiles.nth(0).inner_text() and 'Serious' in tiles.nth(0).inner_text(), tiles.nth(0).inner_text()
@@ -100,7 +102,10 @@ with sync_playwright() as p:
         shown = pg.evaluate('window.__siteShown'); print('  opened:', shown)
         assert shown['key'] == 'nhtsa' and shown['url'] == 'https://www.nhtsa.gov/recalls?vymm=' + VIN
         rc = ft(pg, '#advRecall'); print('  1 open:', rc.replace('\n', ' | ')[:220])
-        assert '1 open recall on your car' in rc and 'for free' in rc and 'Power train' in rc and 'Serious' in rc and 'Electrical' not in rc
+        assert '1 open recall on your car' in rc and 'for free' in rc and 'Power train' in rc and 'Serious' in rc
+        # the open one is outside the folded list; the other recall on record is inside it ("1 more on record")
+        assert pg.locator('#advRecall > .rc-tile').count() == 1 and 'Power train' in ft(pg, '#advRecall > .rc-tile')
+        assert pg.locator('#advList .rc-tile').count() == 1 and 'Electrical' in pg.inner_html('#advList') and '1 more on record' in ft(pg, '#advList summary')
         assert pg.locator('#advRecall.warn').count() == 1 and dot(pg)
         assert pg.locator('#advCheck').count() == 0, 'checked: no button, it checks again by itself'
         assert 'open safety recall' in pg.evaluate('window.Advisory.departureNote()'), 'Departure mentions it'
