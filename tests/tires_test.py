@@ -74,7 +74,7 @@ with sync_playwright() as p:
         pg.select_option('#tzModel', 'ECOPIA EP422 PLUS'); pg.wait_for_timeout(250)
         t = T(pg); print('  picked:', t['brand'], t['model'], t['utqg'], t['warrantyMi'])
         assert t['utqg'] == {'tw': 680, 'trac': 'A', 'temp': 'B'} and t['utqgSrc'] == 'tirerack' and t['warrantyMi'] == 65000
-        assert pg.input_value('#tzTw') == '680' and 'Wear rating from Tire Rack' in ft(pg, '#gTiresIn') and '65,000 miles' in ft(pg, '#gTiresIn')
+        assert pg.input_value('#tzTw') == '680' and 'Wear rating and warranty from Tire Rack' in ft(pg, '#gTiresIn') and pg.input_value('#tzWarranty') == '65000'
         line = ft(pg, '#gTiresLine'); print('  summary line:', line)
         assert line.startswith('Standard Touring All-Season · Fuel 10/10 · UTQG 680 A B'), 'the line under Tires: type, fuel /10, wear rating'
         assert '195/65R15 · Bridgestone ECOPIA EP422 PLUS' in ft(pg, '#tzDet summary'), 'size and tire under Tire details'
@@ -136,31 +136,68 @@ with sync_playwright() as p:
         assert '6/32 in left' in ft(pg, '.tz-out') and 'Driver rear' in ft(pg, '.tz-out'), 'the shallowest tire counts'
         pg.select_option('[data-corner="lf"]', '4'); pg.select_option('[data-corner="rf"]', '3'); pg.select_option('[data-corner="lr"]', '7'); pg.select_option('[data-corner="rr"]', '7'); pg.wait_for_timeout(200)
         rot = ft(pg, '.tz-rot'); assert 'Replace before rotating' in rot and 'instead of rotating them to the back' in rot, rot
-        # a hybrid can't have dual rear wheels: grayed out; a trailer: its axles and tires per axle, each tire by number
-        assert pg.locator('#tzDually[disabled]').count() == 1 and 'have%20them' in pg.inner_html('.tz-sw.off')
-        assert pg.locator('.tz-pic .tz-w').count() == 4
-        pg.check('#tzTrailer'); pg.wait_for_timeout(200)
-        assert pg.locator('.tz-pic .tz-w').count() == 6 and 'towing' in pg.inner_html('#gTiresIn') and 'Trailer axle 1' in pg.inner_html('#gTiresIn')
-        pg.click('[data-axles="2"]'); pg.wait_for_timeout(150); pg.click('[data-per="4"]'); pg.wait_for_timeout(150)
+        # an EPA-rated hybrid can't be a dually: no switch
+        assert pg.locator('#tzDually').count() == 0 and pg.locator('.tz-pic .tz-w').count() == 4
+        # ---- tow mode: "Car tire details", and a tile for each trailer; the hooked-up ones' tires count ----
+        pg.check('#tzTow'); pg.wait_for_timeout(200)
+        assert 'Car tire details' in ft(pg, '#tzDet summary') and pg.locator('.tz-trl').count() == 1 and pg.locator('.tz-trl[open]').count() == 1
+        assert pg.locator('.tz-pic .tz-w').count() == 6, 'a trailer hooked up behind'
+        tid = pg.evaluate("window.Garage.car().tires.trailers[0].id")
+        pg.click('[data-tr="%s"][data-axles="2"]' % tid); pg.wait_for_timeout(150); pg.click('[data-tr="%s"][data-per="4"]' % tid); pg.wait_for_timeout(150)
         assert pg.locator('.tz-pic .tz-w').count() == 12 and pg.locator('[data-corner]').count() == 12, 'two axles of four'
-        assert pg.locator('[aria-label="Trailer axle 2, passenger side outer"]').count() == 1
-        pg.select_option('[data-corner="t2ro"]', '2'); pg.wait_for_timeout(200)
-        assert 'At the legal limit' in ft(pg, '.tz-out') and 'Trailer axle 2, passenger side outer' in ft(pg, '.tz-out')
+        assert pg.locator('[aria-label="Trailer, axle 2, passenger side outer"]').count() == 1
+        # its tires aren't filled in: the Garage won't go on (fill them in, or discard the tire changes); Advice warns
+        assert 'missing a tread depth' in ft(pg, '#tzMiss') and 'Discard tire changes' in ft(pg, '#tzMiss')
+        assert 'Your tires could be unsafe' in pg.evaluate("Tires.advice(window.Garage.car()).map(x => x.title).join('|')")
+        pg.click('#tNext'); pg.wait_for_timeout(300); assert pg.evaluate('window.__trip.state().step') == 1, 'Garage waits for the tires'
+        assert pg.locator('#tpSteps [data-step="2"].dim').count() == 1
+        for k in ['%s:a1lo', '%s:a1li', '%s:a1ri', '%s:a1ro', '%s:a2lo', '%s:a2li', '%s:a2ri']: pg.select_option('[data-corner="%s"]' % (k % tid), '8'); pg.wait_for_timeout(60)
+        pg.select_option('[data-corner="%s:a2ro"]' % tid, '2'); pg.wait_for_timeout(200)
+        assert pg.locator('#tzMiss').count() == 0 and 'At the legal limit' in ft(pg, '.tz-out') and 'Trailer, axle 2, passenger side outer' in ft(pg, '.tz-out')
         fill = pg.evaluate("[...document.querySelectorAll('.tz-pic .tz-w rect')].map(r => r.style.fill)[11]"); assert 'rgb' in fill or 'hsl' in fill, fill
-        pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        assert pg.locator('#tpSteps [data-step="2"].dim').count() == 0, 'all filled in: on you go'
+        # a second trailer, hooked up too: chained behind; its tires missing: discard brings back the last complete set
+        pg.click('#tzAddTr'); pg.wait_for_timeout(200)
+        t2 = pg.evaluate("window.Garage.car().tires.trailers[1].id")
+        pg.check('#tt%s_Hooked' % t2); pg.wait_for_timeout(200)
+        assert pg.locator('.tz-pic .tz-w').count() == 14 and pg.locator('#tzMiss').count() == 1
         pg.screenshot(path=f'{OUT}/{name}-t2b-trailer.png')
-        # a pickup can: a dually's four rear tires
-        pg.evaluate("() => { window.Garage.car().type = 'truck'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        pg.click('#tzDiscard'); pg.wait_for_timeout(200)
+        assert pg.locator('#tzMiss').count() == 0 and pg.locator('.tz-pic .tz-w').count() == 12 and pg.locator('.tz-trl').count() == 2, 'back to the last complete set (the second trailer, unhooked)'
+        assert pg.evaluate("window.Garage.car().tires.trailers[1].hooked") is False
+        pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.uncheck('#tzTow'); pg.wait_for_timeout(200)
+        assert pg.locator('.tz-pic .tz-w').count() == 4 and 'Car tire details' not in ft(pg, '#tzDet summary')
+        # ---- by mileage: each tire opens its own page; miles, warranty (from the car's tire details) and rotation ----
+        pg.click('[data-by="miles"]'); pg.wait_for_timeout(200)
+        assert pg.locator('[data-tire]').count() == 4 and pg.locator('[data-tire].need').count() == 4 and 'missing details' in ft(pg, '#tzMiss')
+        pg.click('[data-tire="lf"]'); pg.wait_for_selector('.sub-page #tpMiles')
+        assert pg.input_value('#tpWarranty') == '65000', 'the warranty from the car\'s tire details'
+        pg.fill('#tpMiles', '30000'); pg.dispatch_event('#tpMiles', 'change'); pg.wait_for_timeout(100)
+        pg.select_option('#tpRot', 'yes'); pg.wait_for_timeout(150)
+        assert 'About 6.5/32 in left' in ft(pg, '.sub-page .tz-out'), ft(pg, '.sub-page')
+        pg.screenshot(path=f'{OUT}/{name}-t2d-tire.png')
+        pg.click('.sub-back'); pg.wait_for_timeout(200)
+        assert '30,000 mi · 65k warranty' in ft(pg, '[data-tire="lf"]') and pg.locator('[data-tire].need').count() == 3
+        pg.click('#tzDiscard'); pg.wait_for_timeout(200)
+        assert pg.locator('[data-tire]').count() == 0 and pg.locator('[data-corner]').count() == 4, 'discarded: back to the measured set'
+        # ---- dual rear wheels: a heavy pickup nothing settles shows the switch; a VIN that says DRW turns it on ----
+        pg.evaluate("() => { const c = window.Garage.car(); window.__keep = { type: c.type, epaId: c.epaId, epa: c.epa }; c.type = 'truck'; delete c.epaId; c.epa = null; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        assert pg.locator('#tzDually').count() == 1
         pg.check('#tzDually'); pg.wait_for_timeout(200)
-        assert pg.locator('[data-corner="lri"]').count() == 1 and pg.locator('[data-corner="rri"]').count() == 1 and pg.locator('.tz-pic .tz-w').count() == 14
-        pg.select_option('[data-corner="lri"]', '3'); pg.wait_for_timeout(200)
+        assert pg.locator('[data-corner="lri"]').count() == 1 and pg.locator('[data-corner="rri"]').count() == 1 and pg.locator('.tz-pic .tz-w').count() == 6
+        pg.select_option('[data-corner="rri"]', '7'); pg.select_option('[data-corner="lri"]', '3'); pg.wait_for_timeout(200)
         assert 'rear duals differ by 4/32' in ft(pg, '.tz-rot'), ft(pg, '.tz-rot')
         pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2c-dually.png')
-        pg.uncheck('#tzDually'); pg.uncheck('#tzTrailer'); pg.wait_for_timeout(200)
-        pg.evaluate("() => { window.Garage.car().type = 'hybrid'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        pg.uncheck('#tzDually'); pg.wait_for_timeout(200)
+        pg.evaluate("() => { const c = window.Garage.car(); Object.assign(c, window.__keep); c.info = Object.assign({}, c.info, { drw: 'yes' }); window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        assert pg.locator('#tzDually').count() == 1 and 'VIN%20says' in pg.inner_html('#gTiresIn'), 'the VIN says DRW: shown even with an EPA record'
+        pg.evaluate("() => { const c = window.Garage.car(); c.info.drw = 'no'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        assert pg.locator('#tzDually').count() == 0, 'the VIN rules it out: hidden'
         pg.evaluate("document.getElementById('tzSplit').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2-corners.png')
         # ---- the "why" pictures: submenus that play an animation ----
@@ -171,7 +208,7 @@ with sync_playwright() as p:
         assert pg.evaluate("document.querySelector('#anStop .rn-drop').getAttribute('y1')") != y0, 'continuous rain'
         # a moment after they've all stopped (the animation jumped there and held)
         pg.evaluate("document.getElementById('anStop').__anim.at(4.2)")
-        nose = pg.evaluate('''() => [...document.querySelectorAll('#anStop .an-car')].map(g => +/translate\(([\d.]+)/.exec(g.getAttribute('transform'))[1])''')
+        nose = pg.evaluate(r'''() => [...document.querySelectorAll('#anStop .an-car')].map(g => +/translate\(([\d.]+)/.exec(g.getAttribute('transform'))[1])''')
         line = pg.evaluate("+document.querySelector('#anStop .il-stop').getAttribute('x1')"); print('  cars stopped at', nose, '| stop sign at', line)
         assert abs(nose[0] - line) < 0.6 and nose[1] > line + 20 and nose[2] > nose[1] + 20, 'new tires stop at the sign (on its near side); worn ones slide past it'
         car0 = pg.evaluate("(() => { const b = document.querySelector('#anStop .an-car').getBBox(); return [b.x, b.x + b.width]; })()")
@@ -192,7 +229,7 @@ with sync_playwright() as p:
         assert bubs == ['Phew! 1.00', "I'm okay! 1.00", 'Not okay! Help! 1.00'], bubs
         assert pg.evaluate("+document.querySelector('#anSteer .an-fire').getAttribute('opacity')") > 0.9, 'the rolled car is on fire'
         # understeer 1 ends back on the road; understeer 2 off it
-        off = pg.evaluate('''() => [...document.querySelectorAll('#anSteer .an-tcar')].slice(0, 2).map(c => {
+        off = pg.evaluate(r'''() => [...document.querySelectorAll('#anSteer .an-tcar')].slice(0, 2).map(c => {
           const g = c.parentNode, road = g.querySelector('.il-road'), m = /translate\(([\d.]+) ([\d.]+)\)/.exec(c.getAttribute('transform'));
           const x = +m[1], y = +m[2], L = road.getTotalLength(); let best = 1e9;
           for (let s = 0; s <= L; s += 1) { const p = road.getPointAtLength(s); best = Math.min(best, Math.hypot(p.x - x, p.y - y)); }

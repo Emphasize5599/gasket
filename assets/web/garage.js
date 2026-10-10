@@ -277,10 +277,16 @@
    * then the tank / battery size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
    */
   /** Is the car ready for a trip (mileage and tank size), without pointing at anything? */
-  function ok() { var c = car(); return !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0; }
+  function tiresMissing(c) { return window.Tires && Tires.missing ? Tires.missing(c).length : 0; }
+  function ok() { var c = car(); return !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0 && !tiresMissing(c); }
   function need() {
     var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0, k = kind(c);
-    if (mpgOk && tankOk) return null;
+    if (mpgOk && tankOk) {
+      // tires that aren't all the same, not all filled in: fill them in, or discard the tire changes
+      var nm = tiresMissing(c); if (!nm) return null;
+      var gt = document.getElementById('gTires'); if (gt && !gt.open) { gt.open = true; tiresOpen = true; }
+      return { el: document.getElementById('tzMiss') || gt, kind: 'pick', msg: nm + ' tire(s) missing details: fill them in or discard the tire changes.' };
+    }
     if (!mpgOk && !editing && host) { editing = true; epaOpen = true; draw(); epaOpen = false; }
     if (!mpgOk) {
       var d = document.getElementById('tEpa'); if (d && !d.open) d.open = true;
@@ -815,9 +821,12 @@
     if (/VVT|variable valve/i.test(oth)) feats.push('Variable valve timing');
     if (power !== 'gas') feats.push('Regenerative braking');
     var trim = g('Trim'); if (/\//.test(trim)) trim = '';     // "Two Eco/Three/Four": the VIN doesn't say which
+    // dual rear wheels: the VIN's wheel count, or "DRW" in its names; a weight class of 1–2 or a passenger body rules it out
+    var wheels = parseInt(g('Wheels'), 10) || 0, cls = /Class\s*(\d)/i.exec(g('GVWR')), names = [g('Series'), g('Series2'), g('Trim'), g('Trim2'), g('Model')].join(' ');
+    var drw = wheels >= 6 || /\bDRW\b|dual rear/i.test(names) ? 'yes' : (cls && +cls[1] <= 2) || /sedan|coupe|hatchback|wagon|convertible|sport utility|minivan|crossover/i.test(g('BodyClass')) ? 'no' : '';
     return { year: parseInt(g('ModelYear'), 10) || 0, make: titleCase(g('Make')), model: g('Model'), trim: trim, trimHint: g('Trim'), series: g('Series'),
       power: power, diesel: /diesel/i.test(fuel), battery: parseFloat(g('BatteryKWh')) || 0,
-      info: { engine: engine, asp: asp, trans: trans, transN: parseInt(g('TransmissionSpeeds'), 10) || '', drive: drive, features: feats },
+      info: { engine: engine, asp: asp, trans: trans, transN: parseInt(g('TransmissionSpeeds'), 10) || '', drive: drive, features: feats, drw: drw },
       warn: g('ErrorCode') && !/^0/.test(g('ErrorCode')) ? g('ErrorText') : '' };
   }
   async function lookupVin(c, raw) {

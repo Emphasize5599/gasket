@@ -35,14 +35,30 @@ assert.deepEqual(T.estimate(duallyT), { depth: 3, measured: true, corner: 'lri' 
 // every position: a car, a dually, a trailer with 2 axles of 4 tires
 assert.deepEqual(T.positions(four(8, 8, 8, 8)).map(p => p.k), ['lf', 'rf', 'lr', 'rr']);
 assert.deepEqual(T.positions(duallyT).map(p => p.k), ['lf', 'rf', 'lr', 'lri', 'rri', 'rr']);
-const tr = four(8, 8, 8, 8); tr.corners.trailer = { on: true, axles: 2, per: 4 }; tr.corners.t2ro = { depth: 2 };
-assert.equal(T.positions(tr).length, 12); assert.equal(T.positions(tr)[11].name, 'Trailer axle 2, passenger side outer');
-assert.equal(T.estimate(tr).depth, 2, 'a trailer tire counts');
-tr.corners.trailer.on = false; assert.equal(T.estimate(tr).depth, 8, 'trailer off: its tires don\'t count');
-// older saves: free-listed dual and trailer tires become the dually's inner tires and a trailer axle
+// trailers: a saved list, the hooked-up ones count in tow mode (two at once: chained)
+const tr = four(8, 8, 8, 8); tr.towMode = true;
+tr.trailers = [{ id: 'b', name: 'Boat', hooked: true, axles: 2, per: 4 }, { id: 'u', name: 'Utility', hooked: false, axles: 1, per: 2 }];
+tr.corners['b:a2ro'] = { depth: 2 };
+assert.equal(T.positions(tr).length, 12); assert.equal(T.positions(tr)[11].name, 'Boat, axle 2, passenger side outer');
+assert.equal(T.estimate(tr).depth, 2, 'a hooked-up trailer\'s tire counts');
+tr.trailers[1].hooked = true; assert.equal(T.positions(tr).length, 14, 'two hooked up: both count'); assert.equal(T.positions(tr)[13].name, 'Utility, passenger side');
+tr.towMode = false; assert.equal(T.positions(tr).length, 4); assert.equal(T.estimate(tr).depth, 8, 'tow mode off: trailer tires don\'t count');
+// older saves: free-listed dual and trailer tires, and 0.0.75's one trailer, become the dually's inner tires and the first trailer
 const old = four(8, 8, 8, 8, [{ id: 'w1', kind: 'dual', name: 'Dual inner rear', depth: 5 }, { id: 'w2', kind: 'trailer', name: 'Trailer tire', depth: 4 }]);
-assert.deepEqual(T.positions(old).map(p => p.k), ['lf', 'rf', 'lr', 'lri', 'rri', 'rr', 't1l', 't1r']);
-assert.equal(old.corners.lri.depth, 5); assert.equal(old.corners.t1l.depth, 4); assert.equal(T.estimate(old).depth, 4);
+assert.deepEqual(T.positions(old).map(p => p.k), ['lf', 'rf', 'lr', 'lri', 'rri', 'rr', 'tr1:a1l', 'tr1:a1r']);
+assert.equal(old.corners.lri.depth, 5); assert.equal(old.corners['tr1:a1l'].depth, 4); assert.equal(T.estimate(old).depth, 4); assert.ok(old.towMode && old.trailers[0].hooked);
+const v75 = four(8, 8, 8, 8); v75.corners.trailer = { on: true, axles: 2, per: 2 }; v75.corners.t2r = { depth: 3 };
+assert.equal(T.estimate(v75).depth, 3); assert.equal(v75.trailers.length, 1); assert.ok(!v75.corners.trailer && v75.corners['tr1:a2r']);
+// by mileage: each tire needs its miles, a warranty (its own, or its car's / trailer's) and whether it's been rotated
+const mi = four(0, 0, 0, 0); mi.corners.mode = 'miles'; mi.warrantyMi = 60000; mi.type = 'Grand Touring All-Season';
+assert.equal(T.missing(mi).length, 4, 'nothing filled in: all four missing');
+['lf', 'rf', 'lr'].forEach(k => { mi.corners[k] = { miles: 30000, rotated: 'yes' }; });
+assert.deepEqual(T.missing(mi).map(p => p.k), ['rr']); assert.deepEqual(T.needs(mi, T.positions(mi)[3]), ['miles', 'rotated']);
+mi.corners.rr = { miles: 30000, rotated: 'no', warrantyMi: 80000 };
+assert.equal(T.missing(mi).length, 0);
+assert.equal(T.depthAt(mi, T.positions(mi)[0]), 6, 'halfway through the car\'s 60k warranty: 6/32');
+assert.equal(T.estimate(mi).measured, false, 'estimated, not measured');
+delete mi.warrantyMi; assert.deepEqual(T.missing(mi).map(p => p.k), ['lf', 'rf', 'lr'], 'no warranty anywhere: still needed (rr has its own)');
 // duals that don't match
 const dr = T.rotation({ lf: 8, rf: 8, lr: 9, rr: 9 }, 'rwd', { lri: 6, rri: 9 });
 assert.ok(dr.notes.some(n => /driver-side rear duals differ by 3\/32/.test(n)) && !dr.notes.some(n => /passenger-side rear duals differ/.test(n)));

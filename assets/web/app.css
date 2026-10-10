@@ -1406,3 +1406,19 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .an-canopy { fill: #2d5a27; stroke: #1c3a18; stroke-width: 1; }
 .an-canopy2 { fill: #3f7a36; }
 .an-hit { fill: #ffd23f; stroke: #c97800; stroke-width: .8; }
+/* tow mode, trailer tiles, a tire by mileage (its own page), and tires still missing details */
+.tz-tow { border-bottom: 0; padding: 4px 0 6px; }
+.tz-addtr { width: auto; margin: 2px 0 10px; }
+.tz-trl[open] .btn.danger { margin-top: 8px; }
+.tz-trtop { align-items: end; padding: 4px 0; }
+.tz-trtop .tz-sw { padding: 0 0 6px; }
+.tz-trn { font-size: 8px; font-weight: 800; fill: var(--ink-2); }
+.tz-tire { width: 100%; display: flex; align-items: center; gap: 6px; text-align: left; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 10px 10px; min-height: 46px; }
+.tz-tire > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tz-tire svg { flex: none; width: 20px; height: 20px; fill: var(--ink-2); }
+.tz-tire.need { border-color: var(--danger); color: var(--danger); }
+.tz-miss { border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--danger-bg); border-left: 4px solid var(--danger); }
+.tz-miss b { display: block; font-size: 15px; color: var(--danger); }
+.tz-miss p { margin: 6px 0 8px; font-size: 13.5px; line-height: 1.4; }
+.tz-miss .btn { width: auto; margin: 0; }

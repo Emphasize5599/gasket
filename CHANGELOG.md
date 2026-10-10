@@ -4,6 +4,14 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.76 - 2026-10-10
+- **Tow mode.** A switch at the top of Tires: "Tire details" becomes "Car tire details", and each of your trailers gets its own tile (name, hooked up or not, axles, tires per axle, size, Tire Rack tires, wear rating, warranty). Keep as many trailers as you like; the hooked-up ones are drawn behind the car, one after another, and their tires count.
+- **Each tire by tread depth or by mileage.** By mileage, every tire opens its own page: its miles, the maker's mileage warranty (filled in from the car's or trailer's tire details) and whether it's been rotated, plus an optional Tire Rack lookup by size.
+- **No half-filled tires.** When your tires aren't all the same, the Garage won't go on until every tire is filled in, or you discard the tire changes; Advice warns that your tires could be unsafe.
+- **Dual rear wheels only where they can be.** The switch is hidden for cars the EPA rates and anything that isn't a pickup or van, turned on by itself when your VIN says the truck is a dually.
+- The understeer crash star now fades out with the rest.
+- Bug fixes.
+
 ## 0.0.75 - 2026-10-10
 - **The spare check is required.** With a full-size or compact spare, Advice's Next waits until you tick "I aired up my spare" (the later steps stay grayed out). The tick lasts 30 days, saved trips included.
 - **Tires by position, with pictures.** Turn on dual rear wheels (pickups and vans only; grayed out for other cars) and the picture becomes a dually with four rear tires. Turn on a trailer and pick its axles (1–3) and tires per axle (2 or 4): it hooks up behind the car. Every tire is numbered on the picture, colored by its tread, and gets its own box. Mismatched duals are flagged.
