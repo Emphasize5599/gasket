@@ -350,30 +350,44 @@
     var c = car(); if (!c || e.detail !== c.id || !host) return;
     var p = document.getElementById('gcPic'); if (p) p.innerHTML = picHtml(c);
     var s = document.getElementById('gcSub'); if (s) { s.innerHTML = subHtml(c); bindSub(); }
+    var pp = document.getElementById('gPaints'); if (pp && editing) { pp.outerHTML = paintHtml(c); bindPaints(c); }
   });
   /** The line under the picture: the doodle's color, or who took the photo (a Commons photo links to its page and license). */
   function subHtml(c) {
     var cr = window.CarPics ? CarPics.credit(c) : { text: '' };
-    var col = c.picMode === 'doodle' && c.paint && c.paint.name ? esc(c.paint.name) + ' · ' : '';
+    var col = c.paint && c.paint.name && (c.picMode === 'doodle' || (window.CarPics && CarPics.which(c, CarPics.hasKey()) === 'fuel' && c.paint.code)) ? esc(c.paint.name) + ' · ' : '';
     return col + (cr.url ? '<a href="#" data-url="' + esc(cr.url) + '">' + esc(cr.text) + '</a>' : esc(cr.text));
   }
   function bindSub() { var s = document.getElementById('gcSub'); if (s) s.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); if (N.openUrl) N.openUrl(a.dataset.url); }; }); }
-  /** Photo (NHTSA, else Wikimedia Commons) or Doodle (the app's drawing, in the color you pick: the colors are only here). */
+  /**
+   * Photo (NHTSA, else Wikimedia Commons; with a Fuel API key, your trim's factory colors, each shown by Fuel API) or Doodle
+   * (the app's drawing, in the color you pick).
+   */
   function paintHtml(c) {
-    var doodle = c.picMode === 'doodle', cur = c.paint || {};
-    var h = '<div class="nf wide" id="gPaints"><span>Picture<small>' + (doodle ? 'The app\'s drawing of your car\'s body style, in your color.' : 'NHTSA\'s photo of the model, or one from Wikimedia Commons. For your own color, switch to Doodle.') + '</small></span>' +
+    var CP = window.CarPics, doodle = c.picMode === 'doodle', cur = c.paint || {}, key = CP && CP.hasKey(), cols = CP && !doodle ? CP.colors(c) : [], f = c.pic && c.pic.fuel;
+    var hint = doodle ? 'The app\'s drawing of your car\'s body style, in your color.' : cols.length ? 'NHTSA\'s photo, or pick one of your trim\'s factory colors to see it in that color (Fuel API).' :
+      key && f && f.fail ? 'NHTSA\'s photo, or one from Wikimedia Commons. Fuel API has no pictures of this car.' : key ? 'NHTSA\'s photo, or one from Wikimedia Commons. Loading your trim\'s colors…' :
+      'NHTSA\'s photo of the model, or one from Wikimedia Commons. For your own color, switch to Doodle, or add a Fuel API key in Settings.';
+    var h = '<div class="nf wide" id="gPaints"><span>Picture<small>' + hint + '</small></span>' +
       '<div class="seg2 gc-mode" id="gPicMode"><button type="button" data-pm="photo" class="' + (doodle ? '' : 'on') + '">Photo</button><button type="button" data-pm="doodle" class="' + (doodle ? 'on' : '') + '">Doodle</button></div>';
-    if (doodle) h += '<div class="gc-paints">' + PAINTS.map(function (x) { return '<button type="button" class="gc-paint' + (cur.name === x[0] ? ' on' : '') + '" data-paint="' + esc(x[0]) + '" data-rgb="' + esc(x[1]) + '" style="background:' + esc(x[1]) + '" aria-label="' + esc(x[0]) + '" title="' + esc(x[0]) + '"></button>'; }).join('') + '</div>' +
-      (cur.name ? '<small class="gc-paint-name">' + esc(cur.name) + '</small>' : '');
+    var sw = function (name, rgb, code, on) { return '<button type="button" class="gc-paint' + (on ? ' on' : '') + '" data-paint="' + esc(name) + '" data-code="' + esc(code || '') + '" data-rgb="' + esc(rgb) + '" style="background:' + esc(rgb) + '" aria-label="' + esc(name) + '" title="' + esc(name) + '"></button>'; };
+    if (doodle) h += '<div class="gc-paints">' + PAINTS.map(function (x) { return sw(x[0], x[1], '', cur.name === x[0]); }).join('') + '</div>';
+    else if (cols.length) h += '<div class="gc-paints"><button type="button" class="gc-orig' + (CP.which(c, true) !== 'fuel' ? ' on' : '') + '" data-orig="1">As photographed</button>' +
+      cols.map(function (x) { return sw(x.name, x.rgb || '#999', x.code, cur.code === x.code); }).join('') + '</div>';
+    else if (key && CP.busyColors(c)) h += A.ldBar('Loading colors');
+    if (cur.name && (doodle || (cols.length && cur.code))) h += '<small class="gc-paint-name">' + esc(cur.name) + '</small>';
     return h + '</div>';
   }
   function bindPaints(c) {
+    if (window.CarPics) CarPics.loadColors(c);        // the trim's factory colors: asked for only while you're here (needs a key)
     host.querySelectorAll('#gPicMode [data-pm]').forEach(function (b) {
       b.onclick = function () { c.picMode = b.dataset.pm === 'doodle' ? 'doodle' : ''; LG.info('car', 'Picture: ' + (c.picMode || 'photo')); save(); draw(); if (window.CarPics) CarPics.ensure(c); };
     });
     host.querySelectorAll('#gPaints [data-paint]').forEach(function (b) {
-      b.onclick = function () { c.paint = { name: b.dataset.paint, rgb: b.dataset.rgb }; LG.info('car', 'Doodle color: ' + c.paint.name); save(); draw(); };
+      b.onclick = function () { c.paint = { name: b.dataset.paint, code: b.dataset.code || '', rgb: b.dataset.rgb }; LG.info('car', 'Color: ' + c.paint.name); save(); draw(); if (window.CarPics) CarPics.ensure(c); };
     });
+    var o = host.querySelector('#gPaints [data-orig]');
+    if (o) o.onclick = function () { if (c.paint) c.paint.code = ''; LG.info('car', 'Picture: as photographed'); save(); draw(); };
   }
   function editPanel(c) {
     var k = kind(c), U = units(c);

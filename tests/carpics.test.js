@@ -30,4 +30,25 @@ assert.equal(C.bodyOf({ epa: { vclass: 'Minivan - 2WD' } }), 'minivan'); assert.
 assert.equal(C.bodyOf({ epa: { vclass: 'Standard Pickup Trucks 4WD' } }), 'pickup'); assert.equal(C.bodyOf({ epa: { vclass: 'Vans, Passenger Type' } }), 'van');
 assert.equal(C.bodyOf({ epa: { vclass: 'Two Seaters' } }), 'coupe'); assert.equal(C.bodyOf({ epa: { vclass: 'Midsize Cars' } }), 'sedan');
 assert.equal(C.bodyOf({ pic: { nhtsa: { body: '5 HB PRIUS' } } }), 'hatch'); assert.equal(C.bodyOf({ type: 'truck' }), 'pickup'); assert.equal(C.bodyOf({}), 'sedan');
+// Fuel API (with a key): the trim, its factory colors, shown only for a picked color (or when there's no other photo)
+const L = [{ id: '1', trim: 'LE', drivetrain: 'FWD' }, { id: '2', trim: 'LE', drivetrain: 'AWD' }, { id: '3', trim: 'XSE V6', drivetrain: 'FWD' }];
+assert.deepEqual(C.matchTrim(L, 'le', ''), { v: L[0], exact: true }); assert.deepEqual(C.matchTrim(L, 'LE', 'AWD'), { v: L[1], exact: true });
+assert.deepEqual(C.matchTrim(L, 'XSE', ''), { v: L[2], exact: false }); assert.deepEqual(C.matchTrim(L, 'Nightshade', ''), { v: L[0], exact: false }); assert.equal(C.matchTrim([], 'LE'), null);
+assert.equal(C.driveOf('Venza AWD'), 'AWD');
+const V = { products: [{ productFormats: [{ code: 'color_0640_032_png', assets: [
+  { url: 'u070', shotCode: { color: { code: '070', oem_name: 'Blizzard Pearl', simple_name: 'White', rgb1: 'FFFFFF' } } },
+  { url: 'u218', shotCode: { color: { code: '218', oem_name: 'Midnight Black Metallic', simple_name: 'Black', rgb1: '000417' } } },
+  { url: 'u218b', shotCode: { color: { code: '218' } } }] }, { code: 'color_0640_001_png', assets: [{ url: 'side', shotCode: { color: { code: '1G3' } } }] }] }] };
+const cols = C.colorsOf(V, 'color_0640_032_png');
+assert.deepEqual(cols.map(c => c.code), ['070', '218'], 'one per paint, the front three-quarter (032) only');
+assert.deepEqual(cols[1], { code: '218', name: 'Midnight Black Metallic', simple: 'Black', rgb: '#000417', url: 'u218' });
+const fu = { colors: cols }, both = { nhtsa: { url: 'n' }, wiki: { fail: 1 }, fuel: fu };
+assert.equal(C.which({ pic: both }, true), 'nhtsa', 'no color picked: NHTSA');
+assert.equal(C.which({ pic: both, paint: { code: '218' } }, true), 'fuel', 'a factory color: Fuel API');
+assert.equal(C.which({ pic: both, paint: { code: '218' } }, false), 'nhtsa', 'no key: NHTSA');
+assert.equal(C.which({ pic: both, paint: { name: 'Red', rgb: '#a00' } }, true), 'nhtsa', 'a doodle color: still the photo');
+assert.equal(C.which({ pic: { nhtsa: { fail: 1 }, wiki: { fail: 1 }, fuel: fu } }, true), 'fuel', 'no other photo: Fuel API');
+assert.equal(C.which({ pic: { nhtsa: { fail: 1 }, wiki: { url: 'w' }, fuel: fu } }, true), 'wiki', 'Commons before Fuel API\'s default color');
+assert.equal(C.which({ pic: both, paint: { code: '218' }, picMode: 'doodle' }, true), null, 'doodle mode');
+assert.equal(C.sig({ year: 2020, make: 'Toyota', model: 'Camry', trim: 'LE' }, true), '2020|toyota|camry|le', 'Fuel API goes by the trim');
 console.log('car picture tests passed');

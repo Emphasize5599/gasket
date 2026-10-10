@@ -48,6 +48,7 @@
       routeCallsThisMonth: function () { return 0; },
       placesFind: function (req, key, q, lat, lng, bias, radius) { setTimeout(function () { var m = window.__mocks && window.__mocks.find; window.onNativeResult(req, m ? { body: JSON.stringify(m(q, lat, lng, radius)) } : { error: 'No find mock' }); }, 50); },
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
+      fetchFuel: function (req, path, key) { setTimeout(function () { var m = window.__mocks && window.__mocks.fuel; window.onNativeResult(req, m ? m(path, key) : { error: 'offline' }); }, 30); },
       fetchImage: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.image; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 30); },
       fetchIcon: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.icon; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 20); },
       fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa\.gov\/vehicles\/byYmmt/.test(url) ? window.__mocks.nhtsaPic : /commons\.wikimedia/.test(url) ? window.__mocks.commons : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
@@ -107,7 +108,6 @@
     } catch (e) { }
   }
   mergeLookups();
-  var hadFuelKey = !!S.fuelKey; delete S.fuelKey;   // 0.0.83–0.0.84's Fuel API key: no longer used, not kept
   function save() {
     if (window.__restoring) return;   // a restore in progress owns the settings
     var o = JSON.parse(JSON.stringify(S)), cc = splitLookups(o), cs = JSON.stringify(cc);
@@ -125,7 +125,6 @@
     FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.fuelKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
   }
   logSetup();
-  if (hadFuelKey) save();
   if (window.FLog) FLog.info('app', 'Started Gasket ' + (N.appVersion ? N.appVersion() : ''));
 
   var me = null;            // {lat,lng,acc}
@@ -1070,6 +1069,7 @@
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
       '<div class="field col"><div class="lbl">Station finder key (optional)<small>EV chargers and hydrogen stations come from the U.S. Department of Energy\'s free station finder. Blank uses the shared DEMO_KEY (about 30 lookups an hour). A free key of your own: <a href="#" data-url="https://developer.nlr.gov/signup/">sign up</a>. Never logged or exported.</small></div><input type="password" id="nrelKey" placeholder="DEMO_KEY" autocomplete="off" spellcheck="false" value="' + esc(S.nrelKey || '') + '"></div>' +
+      '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Fast-charging price ($/kWh)<small>What you expect to pay at DC fast chargers — most don\'t publish prices to the finder. Typical: $0.40–0.60.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
       '<div class="field"><div class="lbl">Hydrogen price ($/kg)<small>What you expect to pay. California stations have been around $30–36.</small></div><input type="number" id="h2Price" min="0" max="100" step="0.5" value="' + (S.h2Price || 36) + '"></div></div>';
     h += '<div class="card"><h3>Bad CITGO stations</h3>' +
@@ -1208,6 +1208,7 @@
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
     S.logLevel = parseInt($('logLevel').value, 10) || 3;
     S.nrelKey = $('nrelKey').value.trim();
+    if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
     S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);
     S.h2Price = Math.max(0, parseFloat($('h2Price').value) || 36);
     pg.querySelectorAll('input[type=checkbox]').forEach(function (cb) {

@@ -16,7 +16,14 @@ PICS = r'''() => {
   window.__mocks.commons = (url) => { window.__pic.commons.push(url); return { query: { pages: {
     '1': { title: 'File:2012 Toyota Venza interior.jpg', index: 1, imageinfo: [{ width: 1600, height: 1000, thumburl: 'https://upload.wikimedia.org/x/1.jpg', descriptionurl: 'https://commons.wikimedia.org/wiki/File:1', extmetadata: {} }] },
     '2': { title: 'File:2012 Toyota Venza XLE front.jpg', index: 2, imageinfo: [{ width: 1600, height: 1000, thumburl: 'https://upload.wikimedia.org/x/2.jpg', descriptionurl: 'https://commons.wikimedia.org/wiki/File:2', extmetadata: { Artist: { value: 'Test Photographer' }, LicenseShortName: { value: 'CC BY-SA 4.0' } } }] } } } }; };
-  window.__mocks.image = (url) => { window.__pic.img.push(url); return { body: svg(/upload\.wikimedia/.test(url) ? '#a63' : /22_/.test(url) ? '#3a6' : '#88a') }; };
+  window.__mocks.image = (url) => { window.__pic.img.push(url); return { body: svg(/_218/.test(url) ? '#000417' : /upload\.wikimedia/.test(url) ? '#a63' : /22_/.test(url) ? '#3a6' : '#88a') }; };
+  window.__pic.fuel = [];
+  window.__mocks.fuel = (path, key) => {
+    window.__pic.fuel.push([path, key]);
+    if (/^vehicles\?/.test(path)) return { body: JSON.stringify([{ id: '501', trim: 'LE', drivetrain: 'FWD' }, { id: '502', trim: 'XLE', drivetrain: 'FWD' }]) };
+    const a = (code, name, rgb) => ({ url: 'https://i.fuelapi.com/x/501_cc0640_032_' + code + '.png', shotCode: { color: { code, oem_name: name, simple_name: name.split(' ')[0], rgb1: rgb } } });
+    return { body: JSON.stringify({ id: '501', products: [{ productFormats: [{ code: 'color_0640_032_png', assets: [a('070', 'Blizzard Pearl', 'FFFFFF'), a('218', 'Midnight Black Metallic', '000417')] }] }] }) };
+  };
 }'''
 errors = []
 def ft(pg, sel): return pg.evaluate("(s) => { const e = document.querySelector(s); if (!e) throw new Error('no ' + s); return e.innerText; }", sel)
@@ -74,8 +81,21 @@ with sync_playwright() as p:
         assert 'Test Photographer' in sub and 'CC BY-SA 4.0' in sub and 'Wikimedia Commons' in sub and pg.get_attribute('#gcSub a', 'data-url') == 'https://commons.wikimedia.org/wiki/File:2'
         assert 'gsrsearch=2012%20Toyota%20Venza' in pg.evaluate('window.__pic.commons[0]') and 'https://upload.wikimedia.org/x/2.jpg' in pg.evaluate('window.__pic.img'), 'the front photo, not the interior'
         pg.click('#gcPrev'); pg.wait_for_timeout(300)
-        # the old Fuel API key is gone
-        assert pg.evaluate('window.__app.S.fuelKey') is None and pg.locator('#fuelKey').count() == 0
+        # ---- a Fuel API key: nothing asked until Edit; a factory color shows Fuel API's picture (front three-quarter, 032) ----
+        pg.evaluate("() => { window.__app.S.fuelKey = 'test-fuel-key'; window.CarPics.keyChanged(); window.Garage.redraw(); }"); pg.wait_for_timeout(400)
+        assert pg.evaluate('window.__pic.fuel') == [] and 'Photo: NHTSA' in ft(pg, '#gcSub'), 'NHTSA by default, no Fuel API calls'
+        pg.click('#gEdit'); pg.wait_for_selector('#gPaints .gc-orig'); pg.wait_for_timeout(200)
+        calls = pg.evaluate('window.__pic.fuel'); print(' ', name, 'fuel calls:', [c[0] for c in calls])
+        assert calls[0][0] == 'vehicles?year=2020&make=Toyota&model=Corolla%20Hybrid' and calls[1][0] == 'vehicle/501?productID=2&productFormatIDs=12' and all(c[1] == 'test-fuel-key' for c in calls)
+        assert pg.locator('#gPaints .gc-paint').count() == 2 and pg.locator('#gPaints .gc-orig.on').count() == 1 and 'Photo: NHTSA' in ft(pg, '#gcSub'), 'colors listed; still the photo'
+        pg.click('.gc-paint[data-code="218"]'); pg.wait_for_timeout(400)
+        assert pg.evaluate('window.Garage.car().paint') == {'name': 'Midnight Black Metallic', 'code': '218', 'rgb': '#000417'}
+        assert any(u.endswith('_032_218.png') for u in pg.evaluate('window.__pic.img')) and 'EVOX Images via Fuel API' in ft(pg, '#gcSub') and 'Midnight Black Metallic' in ft(pg, '#gcSub')
+        pg.click('#gPaints .gc-orig'); pg.wait_for_timeout(300)
+        assert 'Photo: NHTSA' in ft(pg, '#gcSub') and pg.evaluate('window.Garage.car().paint.code') == '', 'As photographed: NHTSA\'s photo again'
+        pg.click('#gEdit'); pg.wait_for_timeout(200)
+        log = pg.evaluate("window.FLog && FLog.text ? FLog.text() : ''")
+        assert 'test-fuel-key' not in (log or '')
         # no sideways scrolling, also at 130% text
         o = pg.evaluate(OVER); pg.click('#gEdit'); pg.wait_for_timeout(200); pg.evaluate(BIG, '#gCars *, .gc-dots *, #gPaints *'); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'sideways: ' + str(o)

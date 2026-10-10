@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.86 - 2026-10-10
+- **Fuel API is back for colors.** With your Fuel API key in Settings, Edit → Picture lists your trim's factory colors; pick one to see your car in it ("As photographed" goes back to NHTSA's photo). Pictures are shown as Fuel API delivers them, watermark included. They're from the front three-quarter angle closest to NHTSA's (EVOX makes its color pictures at only three angles, none of them NHTSA's shot).
+
 ## 0.0.85 - 2026-10-10
 - **Photo or Doodle.** Your car's picture is NHTSA's photo of the model, or for cars NHTSA doesn't have (older ones), a photo from Wikimedia Commons, credited to its photographer. Switch to Doodle under Edit → Picture for the app's own drawing of your car's body style in the color you pick; colors are only for the doodle.
 - Fuel API is gone (its pictures can't be used without a license), and its saved key is deleted.
