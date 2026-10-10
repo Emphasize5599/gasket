@@ -17,7 +17,7 @@ want() { [ ${#ONLY_TESTS[@]} -eq 0 ] && return 0; for w in "${ONLY_TESTS[@]}"; d
 for t in tests/*.test.js; do
   n=$(basename "$t" .js); want "$n" && jobs+=("node $n -")
 done
-for t in trip_ui garage blacklist advisory aboutcar tires climate ui about restore perf est; do   # longest first, so they start early
+for t in trip_ui garage blacklist advisory aboutcar tires climate carpics ui about restore perf est; do   # longest first, so they start early
   want "$t" || continue
   if grep -q 'fastwait.viewports(' "tests/${t}_test.py"; then jobs+=("ui $t 0" "ui $t 1"); else jobs+=("ui $t -"); fi
 done

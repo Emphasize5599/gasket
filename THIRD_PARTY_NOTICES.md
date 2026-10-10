@@ -78,5 +78,6 @@ None of this data is bundled in the repository. The app fetches it while it runs
 - **Brave Search:** a car's fuel tank size and which kind of spare tire it has, read from Brave Search's AI answer when the Garage has none (marked as such; check your owner's manual).
 - **Tire Rack:** a car's factory tire size, and the tires sold in that size (type, wear rating, mileage warranty), read from tirerack.com when you open Tires in the Garage.
 - **Discount Tire (Treadwell Research Park):** the wet stopping distances in Tires' "Why tread matters" picture (158 ft on new tires, 226 and 301 ft on worn ones), from its published new-vs-worn test results and credited under the picture. The picture itself is the app's own drawing.
+- **Car pictures:** NHTSA's photo of each model (EVOX Images, the pictures nhtsa.gov's vehicle pages show) from api.nhtsa.gov; with your own Fuel API key, the trim in its factory paint colors from Fuel API (fuelapi.com, EVOX Images). © EVOX Images; credited under each picture.
 - **Station operators' own websites:** prices and station details from walmart.com and murphyusa.com, and the ExxonMobil station finder.
 - **Brand logos:** fetched from each brand's own website or icon services at run time. The logos are trademarks of their owners.

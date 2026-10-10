@@ -84,8 +84,9 @@ with sync_playwright() as p:
         # ---- garage: your two cars are there, EPA numbers read-only, the rest behind Edit ----
         chips = ft(pg, '#gCars'); tiles = ft(pg, '.epa-tiles')
         print('  cars:', chips.replace('\n', ' | '), '||', tiles.replace('\n', ' '))
-        assert '2020 Corolla Hybrid LE' in chips and '2012 Venza XLE' in chips and '53' in tiles and '52' in tiles
-        assert pg.locator('.g-head').count() == 0 and pg.locator('#gCars .carchip .cx').count() == 2, 'just the car buttons, each with a small x'
+        names = pg.evaluate("[...document.querySelectorAll('.gc-dot')].map(b => b.getAttribute('aria-label'))")
+        assert '2020 Corolla Hybrid LE' in chips and names == ['2020 Corolla Hybrid LE', '2012 Venza XLE'] and '53' in tiles and '52' in tiles, names
+        assert pg.locator('.g-head').count() == 0 and pg.locator('#gCars .cx').count() == 0, 'one car at a time, no x (Remove is in Edit)'
         order = pg.evaluate("[...document.querySelectorAll('#tGarage > .card')].map(e => e.id || e.className.split(' ')[1])")
         print('  garage order:', order)
         assert order.index('tSpeed') < order.index('g-econ') < order.index('gObs') < order.index('gInfo'), 'speed above fuel economy; details last'

@@ -207,10 +207,7 @@
   };
   function draw0() {
     var c = car(), U = units(c), k = kind(c);
-    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><button class="btn tonal sm" id="gEdit">' + (editing ? 'Done' : 'Edit') + '</button></div><div class="chips cars" id="gCars">' + S.cars.map(function (x) {
-      return '<span class="carchip' + (x.id === c.id ? ' on' : '') + '"><button data-car="' + esc(x.id) + '">' + esc(shortName(x)) + '</button>' +
-        (S.cars.length > 1 ? '<button class="cx" data-rmcar="' + esc(x.id) + '" aria-label="Remove ' + esc(shortName(x)) + '">✕</button>' : '') + '</span>';
-    }).join('') + '<button data-car="+">+ Add car</button></div>';
+    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><button class="btn tonal sm" id="gEdit">' + (editing ? 'Done' : 'Edit') + '</button></div>' + carousel(c);
     if (editing) h += editPanel(c);
     h += '</div>';
     h += '<div class="card spd" id="tSpeed"></div>';
@@ -307,6 +304,68 @@
   function opts(map, cur, blank) {
     return (blank != null ? '<option value="">' + blank + '</option>' : '') + Object.keys(map).map(function (k) { return '<option value="' + esc(k) + '"' + (cur === k ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join('');
   }
+  // ---------- your cars, one at a time: its picture, swipe or the arrows for the next ----------
+  var slideIn = 0;
+  var ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg>';
+  var PAINTS = [['White', '#f4f4f2'], ['Black', '#1b1c1f'], ['Silver', '#c9ccd0'], ['Gray', '#6d7178'], ['Red', '#a3161c'], ['Blue', '#1d3f8f'], ['Green', '#2f5d3a'],
+    ['Brown', '#5a3d2b'], ['Beige', '#cdbb98'], ['Gold', '#b8953f'], ['Orange', '#d4631c'], ['Yellow', '#e3b81f']];
+  function picHtml(c) {
+    var src = window.CarPics && CarPics.src(c);
+    if (src) return '<img src="' + src + '" alt="' + esc(shortName(c)) + '">';
+    var p = c.pic, waiting = window.CarPics && c.year && c.model && (!p || (!p.fail && p.sig));
+    return (window.CarPics ? CarPics.drawing(c) : '') + (waiting && !(p && p.fail) ? '<div class="gc-ld">' + A.ldBar('Finding a picture') + '</div>' : '');
+  }
+  function carousel(c) {
+    var i = S.cars.indexOf(c), n = S.cars.length, many = n > 1;
+    var sub = [c.paint && c.paint.name, window.CarPics && CarPics.credit(c)].filter(Boolean).join(' · ');
+    var h = '<div class="gc" id="gCars"><button type="button" class="gc-nav prev" id="gcPrev" aria-label="Previous car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button>' +
+      '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
+      '<div class="gc-slide carchip on' + (slideIn ? (slideIn > 0 ? ' in-r' : ' in-l') : '') + '"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
+      '<b class="gc-name">' + esc(shortName(c)) + '</b>' + (sub ? '<small class="gc-sub" id="gcSub">' + esc(sub) + '</small>' : '<small class="gc-sub" id="gcSub"></small>') + '</div></div>' +
+      '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
+    h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
+      '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
+    slideIn = 0;
+    return h;
+  }
+  /** Next / previous car (wraps around), with the slide sliding. */
+  function go(d) {
+    var n = S.cars.length; if (n < 2) return;
+    var i = S.cars.indexOf(car()), nx = S.cars[(i + d + n) % n], sl = host.querySelector('.gc-slide');
+    if (sl) sl.classList.add(d > 0 ? 'out-l' : 'out-r');
+    setTimeout(function () { S.carId = nx.id; editing = false; slideIn = d; LG.info('car', 'Selected ' + shortName(nx)); draw(); changed(); }, sl ? 140 : 0);
+  }
+  function bindCarousel(c) {
+    $('gcPrev').onclick = function () { go(-1); }; $('gcNext').onclick = function () { go(1); };
+    var st = $('gcStage'), x0 = null, y0 = 0, sl = st.querySelector('.gc-slide');
+    st.onkeydown = function (e) { if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); } };
+    st.addEventListener('pointerdown', function (e) { if (S.cars.length < 2) return; x0 = e.clientX; y0 = e.clientY; });
+    st.addEventListener('pointermove', function (e) { if (x0 == null) return; var dx = e.clientX - x0; if (Math.abs(dx) > Math.abs(e.clientY - y0)) sl.style.transform = 'translateX(' + Math.max(-60, Math.min(60, dx * 0.5)) + 'px)'; });
+    var end = function (e) { if (x0 == null) return; var dx = e.clientX - x0; x0 = null; sl.style.transform = ''; if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(e.clientY - y0)) go(dx < 0 ? 1 : -1); };
+    st.addEventListener('pointerup', end); st.addEventListener('pointercancel', function () { x0 = null; sl.style.transform = ''; });
+    if (window.CarPics) { CarPics.ensure(c); var n = S.cars.length, i = S.cars.indexOf(c); if (n > 1) { CarPics.ensure(S.cars[(i + 1) % n]); CarPics.ensure(S.cars[(i - 1 + n) % n]); } }
+  }
+  // a picture came in: put it in place (no redraw)
+  window.addEventListener('carpic', function (e) {
+    var c = car(); if (!c || e.detail !== c.id || !host) return;
+    var p = document.getElementById('gcPic'); if (p) p.innerHTML = picHtml(c);
+    var s = document.getElementById('gcSub'); if (s) s.textContent = [c.paint && c.paint.name, window.CarPics && CarPics.credit(c)].filter(Boolean).join(' · ');
+    var pp = document.getElementById('gPaints'); if (pp && editing) pp.outerHTML = paintHtml(c);
+    if (editing) bindPaints(c);
+  });
+  /** The paint colors: the trim's factory colors (Fuel API), else common ones (they color the drawing). */
+  function paintHtml(c) {
+    var cols = window.CarPics ? CarPics.colors(c) : [], list = cols.length ? cols.map(function (x) { return [x.name, x.rgb || '#999', x.code]; }) : PAINTS.map(function (x) { return [x[0], x[1], '']; });
+    var cur = c.paint || {};
+    return '<div class="nf wide" id="gPaints"><span>Paint color<small>' + (cols.length ? 'your trim\'s factory colors' : 'colors the picture when there\'s no photo in your color') + '</small></span><div class="gc-paints">' +
+      list.map(function (x) { var on = cur.code ? cur.code === x[2] : cur.name === x[0]; return '<button type="button" class="gc-paint' + (on ? ' on' : '') + '" data-paint="' + esc(x[0]) + '" data-code="' + esc(x[2]) + '" data-rgb="' + esc(x[1]) + '" style="background:' + esc(x[1]) + '" aria-label="' + esc(x[0]) + '" title="' + esc(x[0]) + '"></button>'; }).join('') +
+      '</div>' + (cur.name ? '<small class="gc-paint-name">' + esc(cur.name) + '</small>' : '') + '</div>';
+  }
+  function bindPaints(c) {
+    host.querySelectorAll('[data-paint]').forEach(function (b) {
+      b.onclick = function () { c.paint = { name: b.dataset.paint, code: b.dataset.code || '', rgb: b.dataset.rgb || '' }; LG.info('car', 'Paint: ' + c.paint.name); save(); draw(); if (window.CarPics) CarPics.ensure(c); };
+    });
+  }
   function editPanel(c) {
     var k = kind(c), U = units(c);
     var auto = c.typeAuto ? ' (from the EPA: ' + SP.TYPES[c.typeAuto].label.toLowerCase() + ')' : '';
@@ -325,6 +384,7 @@
       '<div class="epa-msg" id="eMsg"></div></details>';
     if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
     h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
+    h += paintHtml(c);
     var tankFindable = k === 'gas' && !!tankKey(c);
     h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
       '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">' +
@@ -568,6 +628,8 @@
   }
 
   function bind(c) {
+    bindCarousel(c);
+    if (editing) bindPaints(c);
     host.querySelectorAll('[data-car]').forEach(function (b) {
       b.onclick = function () {
         if (b.dataset.car === '+') {

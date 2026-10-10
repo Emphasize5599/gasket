@@ -83,20 +83,21 @@ with sync_playwright() as p:
         pg.evaluate("window.__app.S.citgoUsed = { tuesday: window.__app.P.monthKey(), friday: window.__app.P.monthKey() }")
         pg.click('#btnTrip'); pg.wait_for_timeout(400)
         assert step(pg) == 1
-        # ---- Remove this car: red text; the x on a car button asks first ----
+        # ---- Remove this car (in Edit): red text; it asks first ----
         pg.click('#gEdit'); pg.wait_for_timeout(150)
         col = pg.evaluate("getComputedStyle(document.getElementById('gRemove')).color"); print(name, 'remove color:', col)
         rgb = [int(x) for x in col[col.index('(') + 1:col.index(')')].split(',')[:3]]
         assert rgb[0] > 180 and rgb[1] < 140 and rgb[2] < 140, 'red, not yellow'
         pg.screenshot(path=f'{OUT}/{name}-gr0-edit.png'); wide(pg, 'edit')
         pg.click('#gEdit'); pg.wait_for_timeout(150)
-        pg.click('[data-rmcar="venza12"]'); pg.wait_for_timeout(250)
+        pg.click('[data-car="venza12"]'); pg.wait_for_timeout(250); pg.click('#gEdit'); pg.wait_for_timeout(150)
+        pg.click('#gRemove'); pg.wait_for_timeout(250)
         assert pg.locator('#cfm').count() == 1 and 'Remove 2012 Venza XLE?' in ft(pg, '#cfm'), ft(pg, '#cfm')
         pg.screenshot(path=f'{OUT}/{name}-gr1-confirm.png'); wide(pg, 'confirm')
         pg.click('#cfmNo'); pg.wait_for_timeout(250)
         assert pg.evaluate('window.__app.S.cars.length') == 2
-        pg.click('[data-rmcar="venza12"]'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(300)
-        assert pg.evaluate('window.__app.S.cars.length') == 1 and pg.locator('#gCars .cx').count() == 0, 'one car left: no x to remove it'
+        pg.click('#gRemove'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(300)
+        assert pg.evaluate('window.__app.S.cars.length') == 1 and pg.locator('#gRemove').count() == 0 and pg.locator('#gcNext[disabled]').count() == 1, 'one car left: no Remove, no arrows'
         # ---- add a car by VIN: NHTSA decodes it, the EPA mileage is matched, details filled, recalls checked ----
         pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
         # one menu: the VIN first, outlined in green and marked Recommended, then year / make / model; no plate lookup

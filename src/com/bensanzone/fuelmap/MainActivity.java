@@ -720,6 +720,9 @@ public class MainActivity extends Activity {
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com",
             "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov"};
 
+    // car pictures: NHTSA's vehicle photos, Fuel API's (signed links on i.fuelapi.com that redirect to its CDN)
+    private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "i.fuelapi.com"};
+
     // brand icons: Google's favicon service, or each brand's own site
     private static final String[] ICON_HOSTS = {"www.google.com", "icons.duckduckgo.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
 
@@ -1154,6 +1157,51 @@ public class MainActivity extends Activity {
             is.close();
             if (finalUrl != null) finalUrl[0] = c.getURL().toString();
             return bo.toByteArray();
+        }
+
+        /** Fuel API (car pictures by trim and paint): path under /v1/json/, the owner's key sent as the Basic-auth user (never in the URL, never logged). */
+        @JavascriptInterface
+        public void fetchFuel(final int reqId, final String path, final String key) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        if (path == null || path.startsWith("/") || path.contains("..") || path.contains("://")) throw new Exception("Bad path");
+                        HttpURLConnection c = (HttpURLConnection) new URL("https://api.fuelapi.com/v1/json/" + path).openConnection();
+                        c.setConnectTimeout(10000); c.setReadTimeout(20000);
+                        c.setRequestProperty("Accept", "application/json");
+                        c.setRequestProperty("Authorization", "Basic " + android.util.Base64.encodeToString((key + ":").getBytes("UTF-8"), android.util.Base64.NO_WRAP));
+                        int st = c.getResponseCode();
+                        String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
+                        if (st >= 400) o.put("status", st);
+                        o.put("body", body);
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
+        /** A car's picture (NHTSA's vehicle photo or Fuel API's), shrunk to at most 640 px wide and handed back as a WebP data URL to keep. */
+        @JavascriptInterface
+        public void fetchImage(final int reqId, final String url) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        if (!hostAllowed(url, PIC_HOSTS)) throw new Exception("Host not allowed");
+                        byte[] data = iconBytes(url, null);
+                        android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length);
+                        if (bm == null) throw new Exception("not an image");
+                        int w = bm.getWidth(), h = bm.getHeight();
+                        if (w > 640) { float sc = 640f / w; bm = android.graphics.Bitmap.createScaledBitmap(bm, 640, Math.max(1, Math.round(h * sc)), true); }
+                        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                        bm.compress(android.graphics.Bitmap.CompressFormat.WEBP, 82, out);
+                        o.put("body", "data:image/webp;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP));
+                        o.put("w", bm.getWidth()); o.put("h", bm.getHeight());
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
         }
 
         /** A brand's own icon (its website's favicon), shrunk to at most 96 px and handed back as a PNG data URL. */
