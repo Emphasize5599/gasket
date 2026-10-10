@@ -142,8 +142,9 @@
     var pattern = drive === 'fwd' ? 'front-wheel drive: the front tires go straight back, and the rear ones cross to the front' :
       drive === 'rwd' || drive === 'awd' || drive === '4wd' ? (drive === 'rwd' ? 'rear-wheel drive' : drive === 'awd' ? 'all-wheel drive' : 'four-wheel drive') + ': the rear tires go straight forward, and the front ones cross to the back' :
       'the usual pattern for your drive (front-wheel drive: fronts straight back, rears cross forward; rear- or all-wheel drive: rears straight forward, fronts cross back)';
-    if (Math.abs(d.lf - d.rf) >= 2) notes.push('The front tires differ by ' + Math.abs(d.lf - d.rf) + '/32 in side to side: have the alignment checked.');
-    if (Math.abs(d.lr - d.rr) >= 2) notes.push('The rear tires differ by ' + Math.abs(d.lr - d.rr) + '/32 in side to side: have the alignment checked.');
+    // uneven wear across an axle points at the alignment, but only between tires that went on together
+    if (Math.abs(d.lf - d.rf) >= 2) notes.push('The front tires differ by ' + Math.abs(d.lf - d.rf) + '/32 in side to side. If both went on around the same time, have the alignment checked.');
+    if (Math.abs(d.lr - d.rr) >= 2) notes.push('The rear tires differ by ' + Math.abs(d.lr - d.rr) + '/32 in side to side. If both went on around the same time, have the alignment checked.');
     if ((drive === 'awd' || drive === '4wd') && max - min > 2) notes.push('All- and four-wheel drive need all four tires within about 2/32 in of each other, or the drivetrain strains. When you replace, replace all four (or have a new tire shaved to match).');
     var worn = keys.filter(function (k) { return d[k] <= 4; }).sort(function (a, b) { return d[a] - d[b]; });
     if (worn.length) {
@@ -274,7 +275,7 @@
       redraw(c);
     }
   }
-  function redraw(c) { if (host && host.isConnected && G().car() === c) draw(); }
+  function redraw(c) { if (host && host.isConnected && G().car() === c) { draw(); if (subFill) subFill(); } }
 
   // ---------- the spare: Brave Search's AI answer says which kind, you confirm ----------
   var spareBusy = {};
@@ -352,7 +353,6 @@
     split: 'Front and rear tires wear differently, and a tire replaced on its own starts deeper than the rest. Measure each one (the coin test, or a tread gauge) and Gasket says which tires should go where: the better pair always goes on the rear.',
     spare: 'A <b>full-size</b> spare can stay on. A <b>compact</b> (temporary) spare is for about 70 miles at no more than 50 mph, and it usually needs 60 psi. A <b>repair kit</b> (sealant and a pump) fixes small punctures in the tread, not sidewall cuts or blowouts. <b>Run-flat</b> tires keep going about 50 miles at up to 50 mph after a puncture. Check under the trunk floor (or under a truck\'s bed) to be sure.'
   };
-  var detOpen = {};
   function hasDetails(t) { return !!(t.size || t.brand || t.type); }
   function depthOpts(cur, max, plain) {
     var a = []; for (var d = max || 12; d >= 1; d--) a.push(d);
@@ -363,16 +363,16 @@
     var c = G().car(); if (!c) { host.innerHTML = ''; return; }
     var t = tires(c), q = A.qBtn;
     upgrade(t);
-    if (detOpen[c.id] == null) detOpen[c.id] = !hasDetails(t);      // closed once the car has its tire details
     if (snaps[c.id] == null) snaps[c.id] = JSON.stringify(t);       // what "Discard tire changes" goes back to
     // tow mode: the car's tire details become "Car tire details", with a tile for each of your trailers below
     var h = '<div class="field tz-sw tz-tow"><div class="lbl">Tow mode<small>Your trailers, each with its own tires. The ones you hook up count toward your tire warnings (trip plans don\'t include towing yet).</small></div>' +
       '<label class="switch"><input type="checkbox" id="tzTow"' + (t.towMode ? ' checked' : '') + '><span></span></label></div>';
-    h += '<details class="tz-det" id="tzDet"' + (detOpen[c.id] ? ' open' : '') + '><summary><span>' + (t.towMode ? 'Car tire details' : 'Tire details') + '<small>' + esc([t.size, t.brand ? t.brand + (t.model ? ' ' + t.model : '') : ''].filter(Boolean).join(' · ') || 'size, type, brand, wear rating') + '</small></span></summary>';
-    h += carDetails(c, t) + '</details>';
+    h += subRow('tzDet', 'car', t.towMode ? 'Car tire details' : 'Tire details', [t.size, t.brand ? t.brand + (t.model ? ' ' + t.model : '') : ''].filter(Boolean).join(' · ') || 'Size, type, brand, wear rating, warranty', !hasDetails(t));
     if (t.towMode) {
-      (t.trailers || []).forEach(function (tr) { h += trailerTile(tr); });
-      h += '<button type="button" class="btn tonal sm tz-addtr" id="tzAddTr">+ Add a trailer</button>';
+      hooked(t).forEach(function (tr) { h += subRow('tzTr_' + tr.id, 'tr:' + tr.id, 'Trailer tire details · ' + (tr.name || 'Trailer'), trSummary(tr), !tr.size && !tr.brand); });
+      var saved = (t.trailers || []).filter(function (x) { return !x.hooked; });
+      h += '<div class="tz-trbar"><button type="button" class="btn tonal sm" id="tzAddTr">+ Add a trailer</button>' +
+        (saved.length ? '<button type="button" class="sub-ent tz-saved" id="tzSaved"><span><b>Saved trailers</b><small>' + saved.length + ' not hooked up</small></span>' + GO + '</button>' : '') + '</div>';
     }
     // tread left: what keeps you safe, in the main menu
     var r = t.tread, C = t.corners || {}, e = estimate(t), st = e ? status(e.depth) : null;
@@ -481,14 +481,15 @@
     if (fs) h += '<div class="tz-fuel"><span>Fuel economy' + q(Q.fuel) + '</span><b class="gr" style="color:' + hue((fs.score - 1) / 9) + '">' + fs.score + '/10</b><small>' + esc(fs.why.join(', ')) + '</small></div>';
     return h;
   }
-  /** A trailer's tile: its name, hooked up or not, axles and tires per axle, and its tire details (size -> Tire Rack). */
-  var trOpen = {};
-  function trailerTile(tr) {
-    var L = sizeList(tr.size), p = 'tt' + tr.id + '_', inc = !tr.size && !tr.brand;
-    var open = trOpen[tr.id] != null ? trOpen[tr.id] : inc;
-    var h = '<details class="tz-det tz-trl" data-trl="' + esc(tr.id) + '"' + (open ? ' open' : '') + '><summary><span>Trailer tire details · ' + esc(tr.name || 'Trailer') + '<small>' + esc([tr.hooked ? 'hooked up' : 'not hooked up', tr.axles + ' axle' + (tr.axles > 1 ? 's' : '') + ' × ' + tr.per, tr.size, tr.brand ? tr.brand + (tr.model ? ' ' + tr.model : '') : ''].filter(Boolean).join(' · ')) + '</small></span></summary>';
-    h += '<div class="grid2 tz-trtop"><label class="nf"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>' +
-      '<div class="field tz-sw"><div class="lbl">Hooked up</div><label class="switch"><input type="checkbox" id="' + p + 'Hooked"' + (tr.hooked ? ' checked' : '') + '><span></span></label></div></div>';
+  /** A row that opens a submenu: title, one line under it, and an arrow (empty: outlined, nothing filled in yet). */
+  function subRow(id, key, title, sub, empty) {
+    return '<button type="button" class="sub-ent tz-row' + (empty ? ' empty' : '') + '" id="' + id + '" data-sub="' + esc(key) + '"><span><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span>' + GO + '</button>';
+  }
+  function trSummary(tr) { return [tr.axles + ' axle' + (tr.axles > 1 ? 's' : '') + ' × ' + tr.per + ' tires', tr.size, tr.brand ? tr.brand + (tr.model ? ' ' + tr.model : '') : ''].filter(Boolean).join(' · '); }
+  /** A trailer's details: its name, axles and tires per axle, and its tires (size -> Tire Rack, wear rating, warranty). */
+  function trailerForm(tr) {
+    var L = sizeList(tr.size), p = 'tt' + tr.id + '_';
+    var h = '<label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>';
     h += '<div class="tz-cfg"><span>Axles</span><div class="chips mini">' + [1, 2, 3].map(function (n) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-axles="' + n + '" class="' + (tr.axles === n ? 'on' : '') + '">' + n + '</button>'; }).join('') + '</div>' +
       '<span>Tires per axle</span><div class="chips mini">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-per="' + o[0] + '" class="' + (tr.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
     h += '<label class="nf wide"><span>Size' + A.qBtn('Printed on the tire\'s side: for example <b>ST205/75R15</b> (ST = special trailer).') + '</span><input type="text" maxlength="20" autocapitalize="characters" id="' + p + 'Size" placeholder="e.g. 205/75R15" value="' + esc(tr.size || '') + '"></label>';
@@ -496,8 +497,72 @@
     h += pickHtml(L, tr, p);
     h += '<div class="nf wide"><span>Wear rating' + A.qBtn(Q.utqg) + '</span>' + utqgHtml(tr.utqg, p) + '</div>';
     h += '<label class="nf wide"><span>Maker\'s mileage warranty' + A.qBtn(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="' + p + 'Warranty" placeholder="e.g. 40000" value="' + esc(+tr.warrantyMi > 0 ? tr.warrantyMi : '') + '"></label>';
-    h += '<button type="button" class="btn tonal sm danger" data-trdel="' + esc(tr.id) + '">Remove this trailer</button></details>';
+    h += '<div class="tz-trbtns"><button type="button" class="btn tonal sm danger-sm" id="ttDel">Delete</button><button type="button" class="btn tonal sm" id="ttUnhook">Unhook &amp; save</button><button type="button" class="btn tonal sm" id="ttDiscard">Discard changes</button></div>';
     return h;
+  }
+  var subFill = null;      // the submenu on screen, redrawn when a lookup it shows comes back
+  /** The car's tire details, as its own page. */
+  function openCarDetails(c) {
+    var t = tires(c), pg = null;
+    var fill = function () {
+      var b = pg.querySelector('.sub-body'); b.innerHTML = carDetails(c, t);
+      var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
+      b.querySelectorAll('#tzPick [data-size]').forEach(function (x) { x.onclick = set(function () { t.size = x.dataset.size; t.sizeSrc = 'tirerack'; lookup(c); }); });
+      b.querySelector('#tzSize').onchange = set(function () {
+        var v = normSize(this.value);
+        if (!this.value.trim()) { t.size = ''; t.sizeSrc = ''; return; }
+        if (!v) { A.toast && A.toast('A tire size looks like 195/65R15.'); return; }
+        if (v !== t.size) { t.size = v; t.sizeSrc = 'user'; } lookup(c);
+      });
+      bindPick(b, 'tz', t, function () { return t.list && t.list.size === t.size ? t.list.items || [] : []; }, set);
+      if (A.qify) A.qify(b);
+    };
+    A.subPage(t.towMode ? 'Car tire details' : 'Tire details', '', function (b) { pg = b.closest('.sub-page'); subFill = fill; fill(); nudgeFuel(c); return function () { subFill = null; draw(); onChange(); }; });
+  }
+  /**
+   * A trailer's details, as its own page. Back keeps what you changed; at the bottom: Delete, Unhook & save (it goes to
+   * Saved trailers), Discard changes (back to how it was when you opened it; a new trailer goes away).
+   */
+  function openTrailer(c, id, isNew) {
+    var t = tires(c), tr = (t.trailers || []).filter(function (x) { return x.id === id; })[0]; if (!tr) return;
+    var mine = function () { var o = {}; Object.keys(t.corners || {}).forEach(function (k) { if (k.indexOf(id + ':') === 0) o[k] = t.corners[k]; }); return o; };
+    var snap = JSON.stringify({ tr: tr, corners: mine() }), pg = null, close = null;
+    var drop = function () { t.trailers = t.trailers.filter(function (x) { return x !== tr; }); Object.keys(mine()).forEach(function (k) { delete t.corners[k]; }); };
+    var fill = function () {
+      var b = pg.querySelector('.sub-body'); b.innerHTML = trailerForm(tr);
+      var p = 'tt' + tr.id + '_', $$ = function (x) { return b.querySelector('#' + p + x); };
+      var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
+      $$('Name').onchange = set(function () { tr.name = this.value.trim() || tr.name; pg.querySelector('.sub-bar h2').textContent = 'Trailer tire details · ' + tr.name; });
+      $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
+      bindPick(b, p, tr, function () { return sizeList(tr.size); }, set);
+      b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; }); });
+      b.querySelectorAll('[data-per]').forEach(function (x) { x.onclick = set(function () { tr.per = +x.dataset.per; }); });
+      b.querySelector('#ttUnhook').onclick = function () { tr.hooked = false; LG.info('car', 'Trailer unhooked and saved: ' + tr.name); save(); close(); };
+      b.querySelector('#ttDiscard').onclick = function () {
+        if (isNew) drop();
+        else { var o = JSON.parse(snap); Object.keys(tr).forEach(function (k) { delete tr[k]; }); Object.assign(tr, o.tr); Object.keys(mine()).forEach(function (k) { delete t.corners[k]; }); Object.assign(t.corners = t.corners || {}, o.corners); }
+        save(); close();
+      };
+      b.querySelector('#ttDel').onclick = function () {
+        (A.confirmDel ? A.confirmDel({ title: 'Delete ' + (tr.name || 'this trailer') + '?', body: 'Its tires go with it.', action: 'Delete' }) : Promise.resolve(true)).then(function (ok) { if (!ok) return; drop(); save(); close(); });
+      };
+      if (A.qify) A.qify(b);
+    };
+    close = A.subPage('Trailer tire details · ' + (tr.name || 'Trailer'), '', function (b) { pg = b.closest('.sub-page'); subFill = fill; fill(); return function () { subFill = null; draw(); onChange(); }; });
+  }
+  /** The trailers not hooked up: hook one up, or open it. */
+  function openSaved(c) {
+    var t = tires(c), pg = null, close = null;
+    var fill = function () {
+      var b = pg.querySelector('.sub-body'), saved = (t.trailers || []).filter(function (x) { return !x.hooked; });
+      if (!saved.length) { close(); return; }
+      b.innerHTML = '<p class="lead small keep">Trailers you\'ve unhooked. Hook one up and its tires count again.</p>' + saved.map(function (tr) {
+        return '<div class="tz-svd"><div><b>' + esc(tr.name || 'Trailer') + '</b><small>' + esc(trSummary(tr)) + '</small></div><button type="button" class="btn tonal sm" data-edit="' + esc(tr.id) + '">Edit</button><button type="button" class="btn primary sm" data-hook="' + esc(tr.id) + '">Hook up</button></div>';
+      }).join('');
+      b.querySelectorAll('[data-hook]').forEach(function (x) { x.onclick = function () { var tr = t.trailers.filter(function (y) { return y.id === x.dataset.hook; })[0]; tr.hooked = true; LG.info('car', 'Trailer hooked up: ' + tr.name); save(); onChange(); fill(); }; });
+      b.querySelectorAll('[data-edit]').forEach(function (x) { x.onclick = function () { openTrailer(c, x.dataset.edit, false); }; });
+    };
+    close = A.subPage('Saved trailers', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
   /** Tire Rack's tires in a size (for a trailer or one tire): kept for a month; -> items, or [] while it's looked up. */
   var sizeBusy = {}, sizeMem = {};
@@ -577,16 +642,8 @@
   function bind(c) {
     var t = tires(c);
     var set = function (fn) { return function () { fn.call(this); save(); draw(); onChange(); }; };
-    $('tzDet').addEventListener('toggle', function () { detOpen[c.id] = this.open; });
     host.querySelectorAll('[data-why]').forEach(function (b) { b.onclick = function () { openWhy(b.dataset.why); }; });
-    if ($('tzPick')) host.querySelectorAll('#tzPick [data-size]').forEach(function (b) { b.onclick = set(function () { t.size = b.dataset.size; t.sizeSrc = 'tirerack'; lookup(c); }); });
-    $('tzSize').onchange = set(function () {
-      var v = normSize(this.value);
-      if (!this.value.trim()) { t.size = ''; t.sizeSrc = ''; return; }
-      if (!v) { A.toast && A.toast('A tire size looks like 195/65R15.'); return; }
-      if (v !== t.size) { t.size = v; t.sizeSrc = 'user'; } lookup(c);
-    });
-    bindPick(host, 'tz', t, function () { return t.list && t.list.size === t.size ? t.list.items || [] : []; }, set);
+    host.querySelectorAll('[data-sub]').forEach(function (b) { b.onclick = function () { var k = b.dataset.sub; if (k === 'car') openCarDetails(c); else openTrailer(c, k.slice(3), false); }; });
     host.querySelectorAll('#tzMode [data-mode]').forEach(function (b) { b.onclick = set(function () { t.tread = Object.assign({}, t.tread, { mode: b.dataset.mode }); }); });
     if ($('tzDepth')) $('tzDepth').onchange = set(function () { t.tread.depth = parseFloat(this.value) || ''; t.tread.t = Date.now(); });
     if ($('tzMiles')) $('tzMiles').onchange = set(function () { t.tread.miles = this.value === '' ? '' : Math.max(0, parseInt(this.value, 10) || 0); t.tread.t = Date.now(); });
@@ -608,32 +665,14 @@
       LG.info('car', 'Tires: discarded the incomplete tire changes'); save(); draw(); onChange();
     };
     // tow mode, and each trailer
-    $('tzTow').onchange = set(function () {
+    // a new trailer is hooked up, and opens to fill in
+    var addTrailer = function () { var n = (t.trailers || []).length + 1, id = 'tr' + Date.now(); (t.trailers = t.trailers || []).push({ id: id, name: n > 1 ? 'Trailer ' + n : 'Trailer', hooked: true, axles: 1, per: 2 }); save(); draw(); onChange(); openTrailer(c, id, true); };
+    $('tzTow').onchange = function () {
       t.towMode = this.checked; LG.info('car', 'Tow mode ' + (this.checked ? 'on' : 'off'));
-      if (this.checked && !(t.trailers || []).length) t.trailers = [{ id: 'tr' + Date.now(), name: 'Trailer', hooked: true, axles: 1, per: 2 }];
-    });
-    if ($('tzAddTr')) $('tzAddTr').onclick = set(function () { var n = (t.trailers || []).length + 1; (t.trailers = t.trailers || []).push({ id: 'tr' + Date.now(), name: 'Trailer ' + n, hooked: false, axles: 1, per: 2 }); });
-    var TR = function (id) { return (t.trailers || []).filter(function (x) { return x.id === id; })[0]; };
-    host.querySelectorAll('[data-trl]').forEach(function (d) {
-      var tr = TR(d.dataset.trl); if (!tr) return;
-      var p = 'tt' + tr.id + '_', $$ = function (id) { return d.querySelector('#' + p + id); };
-      d.addEventListener('toggle', function () { trOpen[tr.id] = d.open; });
-      $$('Name').onchange = set(function () { tr.name = this.value.trim() || tr.name; });
-      $$('Hooked').onchange = set(function () { tr.hooked = this.checked; LG.info('car', 'Trailer ' + (this.checked ? 'hooked up' : 'unhooked')); });
-      $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v); });
-      bindPick(d, p, tr, function () { return sizeList(tr.size); }, set);
-    });
-    host.querySelectorAll('[data-axles][data-tr]').forEach(function (b) { b.onclick = set(function () { TR(b.dataset.tr).axles = +b.dataset.axles; }); });
-    host.querySelectorAll('[data-per][data-tr]').forEach(function (b) { b.onclick = set(function () { TR(b.dataset.tr).per = +b.dataset.per; }); });
-    host.querySelectorAll('[data-trdel]').forEach(function (b) { b.onclick = function () {
-      var tr = TR(b.dataset.trdel);
-      (A.confirmDel ? A.confirmDel({ title: 'Remove ' + (tr.name || 'this trailer') + '?', body: 'Its tires go with it.', action: 'Remove' }) : Promise.resolve(true)).then(function (ok) {
-        if (!ok) return;
-        t.trailers = t.trailers.filter(function (x) { return x !== tr; });
-        Object.keys(t.corners || {}).forEach(function (k) { if (k.indexOf(tr.id + ':') === 0) delete t.corners[k]; });
-        save(); draw(); onChange();
-      });
-    }; });
+      if (this.checked && !(t.trailers || []).length) addTrailer(); else { save(); draw(); onChange(); }
+    };
+    if ($('tzAddTr')) $('tzAddTr').onclick = addTrailer;
+    if ($('tzSaved')) $('tzSaved').onclick = function () { openSaved(c); };
     // the spare
     $('tzSpare').onchange = set(function () { spare(t).kind = this.value; LG.info('car', 'Spare tire: ' + (this.value || 'not sure')); });
     if ($('tzSpareYes')) $('tzSpareYes').onclick = set(function () { spare(t).kind = spare(t).lookup.guess; LG.info('car', 'Spare tire confirmed: ' + spare(t).kind); });

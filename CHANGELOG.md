@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.77 - 2026-10-10
+- **Tire details on their own pages.** "Tire details" (or "Car tire details") and each hooked-up trailer are now rows that open their own page.
+- **Trailers.** A new trailer is hooked up right away and opens to fill in. Its page ends with Delete, Unhook & save, and Discard changes. Unhooked trailers wait under "Saved trailers", next to "+ Add a trailer", where you can hook one back up.
+- The alignment tip now says it only applies when both tires on that axle went on around the same time.
+
 ## 0.0.76 - 2026-10-10
 - **Tow mode.** A switch at the top of Tires: "Tire details" becomes "Car tire details", and each of your trailers gets its own tile (name, hooked up or not, axles, tires per axle, size, Tire Rack tires, wear rating, warranty). Keep as many trailers as you like; the hooked-up ones are drawn behind the car, one after another, and their tires count.
 - **Each tire by tread depth or by mileage.** By mileage, every tire opens its own page: its miles, the maker's mileage warranty (filled in from the car's or trailer's tire details) and whether it's been rotated, plus an optional Tire Rack lookup by size.

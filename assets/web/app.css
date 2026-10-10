@@ -1408,8 +1408,18 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .an-hit { fill: #ffd23f; stroke: #c97800; stroke-width: .8; }
 /* tow mode, trailer tiles, a tire by mileage (its own page), and tires still missing details */
 .tz-tow { border-bottom: 0; padding: 4px 0 6px; }
-.tz-addtr { width: auto; margin: 2px 0 10px; }
-.tz-trl[open] .btn.danger { margin-top: 8px; }
+.tz-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tz-row.empty { border-color: var(--accent); }
+.tz-trbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.tz-trbar > .btn.btn { flex: none; width: auto; margin: 0; }
+.tz-trbar .tz-saved { width: auto; flex: 0 1 auto; margin: 0 0 0 auto; min-width: 0; padding: 6px 6px 6px 10px; }
+.tz-trbar .tz-saved b { font-size: 13.5px; } .tz-trbar .tz-saved small { font-size: 11.5px; white-space: nowrap; }
+.tz-trbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.tz-trbtns .btn { flex: 1 1 auto; width: auto; }
+.tz-svd { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.tz-svd > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tz-svd small { color: var(--ink-2); font-size: 12.5px; }
+.tz-svd .btn { flex: none; width: auto; }
 .tz-trtop { align-items: end; padding: 4px 0; }
 .tz-trtop .tz-sw { padding: 0 0 6px; }
 .tz-trn { font-size: 8px; font-weight: 800; fill: var(--ink-2); }
