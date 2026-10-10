@@ -254,6 +254,11 @@
       if (g) { flag(g.el, g.kind, g.msg); return false; }
       return true;
     }
+    if (k === ST_ADVISORY) {
+      // a spare to air up: tick it in Advisory first (it stays ticked for 30 days, saved trips included)
+      if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) { flag(document.querySelector('.adv-chk') || $('advTires'), 'pick', 'Check your spare\'s air, then tick it.'); return false; }
+      return true;
+    }
     if (k === ST_ROUTE) {
       if (srcOf() === 'link') { if (!S.trip.link) { flag($('tLink'), 'box', 'Paste a Google Maps directions link.'); return false; } }
       else {
@@ -297,10 +302,12 @@
   function reach() {
     if (loadingTrip) return ST_GARAGE;
     if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
+    if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) return ST_ADVISORY;
     if (!model || document.querySelector('#tParsed .pick button')) return ST_ROUTE;
     if (!hasFuel()) return ST_PARAMS;
     return ST_DEPART;
   }
+  window.addEventListener('advisorychange', function () { gateTabs(); }); window.addEventListener('garagechange', function () { gateTabs(); });
   /** Step tabs past what you can reach are grayed out (pressing one still goes as far as it can and points at what's missing). */
   function gateTabs() {
     var r = reach();

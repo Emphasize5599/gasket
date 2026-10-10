@@ -30,7 +30,22 @@ assert.equal(T.normSize('195 65 15'), ''); assert.equal(T.normSize(''), '');
 // tires that aren't all the same: the shallowest one counts
 const four = (lf, rf, lr, rr, extra) => ({ corners: { split: true, lf: { depth: lf }, rf: { depth: rf }, lr: { depth: lr }, rr: { depth: rr }, extra: extra || [] }, tread: { mode: 'miles', miles: 1000, rotated: 'yes' } });
 assert.deepEqual(T.estimate(four(8, 7, 6, 9)), { depth: 6, measured: true, corner: 'lr' });
-assert.equal(T.estimate(four(8, 7, 6, 9, [{ id: 'x1', name: 'Inner rear', depth: 3 }])).depth, 3, 'an extra wheel counts too');
+const duallyT = Object.assign(four(8, 7, 6, 9), {}); duallyT.corners.dually = true; duallyT.corners.lri = { depth: 3 };
+assert.deepEqual(T.estimate(duallyT), { depth: 3, measured: true, corner: 'lri' }, 'a dually\'s inner tire counts too');
+// every position: a car, a dually, a trailer with 2 axles of 4 tires
+assert.deepEqual(T.positions(four(8, 8, 8, 8)).map(p => p.k), ['lf', 'rf', 'lr', 'rr']);
+assert.deepEqual(T.positions(duallyT).map(p => p.k), ['lf', 'rf', 'lr', 'lri', 'rri', 'rr']);
+const tr = four(8, 8, 8, 8); tr.corners.trailer = { on: true, axles: 2, per: 4 }; tr.corners.t2ro = { depth: 2 };
+assert.equal(T.positions(tr).length, 12); assert.equal(T.positions(tr)[11].name, 'Trailer axle 2, passenger side outer');
+assert.equal(T.estimate(tr).depth, 2, 'a trailer tire counts');
+tr.corners.trailer.on = false; assert.equal(T.estimate(tr).depth, 8, 'trailer off: its tires don\'t count');
+// older saves: free-listed dual and trailer tires become the dually's inner tires and a trailer axle
+const old = four(8, 8, 8, 8, [{ id: 'w1', kind: 'dual', name: 'Dual inner rear', depth: 5 }, { id: 'w2', kind: 'trailer', name: 'Trailer tire', depth: 4 }]);
+assert.deepEqual(T.positions(old).map(p => p.k), ['lf', 'rf', 'lr', 'lri', 'rri', 'rr', 't1l', 't1r']);
+assert.equal(old.corners.lri.depth, 5); assert.equal(old.corners.t1l.depth, 4); assert.equal(T.estimate(old).depth, 4);
+// duals that don't match
+const dr = T.rotation({ lf: 8, rf: 8, lr: 9, rr: 9 }, 'rwd', { lri: 6, rri: 9 });
+assert.ok(dr.notes.some(n => /driver-side rear duals differ by 3\/32/.test(n)) && !dr.notes.some(n => /passenger-side rear duals differ/.test(n)));
 assert.equal(T.worst({ corners: { split: false, lf: { depth: 3 } } }), null, 'all the same: no corners');
 assert.equal(T.estimate({ corners: { split: true }, tread: { mode: 'measure', depth: 5 } }).depth, 5, 'no corners filled in: the single answer');
 // where they go: the better pair on the rear

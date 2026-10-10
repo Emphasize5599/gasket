@@ -119,7 +119,12 @@ with sync_playwright() as p:
         assert T(pg)['spare']['aired'] > 0
         pg.evaluate("() => { window.Garage.car().tires.spare.aired = Date.now() - 31 * 864e5; window.dispatchEvent(new Event('garagechange')); }"); pg.wait_for_timeout(250)
         assert pg.locator('[data-tchk="spare"]:checked').count() == 0 and pg.locator('#tpSteps [data-step="2"].attn').count() == 1, 'a month later: again'
+        # until it's ticked, Advisory's Next doesn't go on (the box pulses) and the later steps are grayed out
+        assert pg.locator('#tpSteps [data-step="3"].dim').count() == 1
+        pg.click('#tNext'); pg.wait_for_timeout(300)
+        assert pg.evaluate('window.__trip.state().step') == 2, 'Next waits for the spare'
         pg.check('[data-tchk="spare"]'); pg.wait_for_timeout(250)
+        assert pg.locator('#tpSteps [data-step="3"].dim').count() == 0, 'ticked: the steps open up'
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
         assert 'Air checked' in ft(pg, '.tz-air')
         # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive) ----
@@ -131,10 +136,31 @@ with sync_playwright() as p:
         assert '6/32 in left' in ft(pg, '.tz-out') and 'Driver rear' in ft(pg, '.tz-out'), 'the shallowest tire counts'
         pg.select_option('[data-corner="lf"]', '4'); pg.select_option('[data-corner="rf"]', '3'); pg.select_option('[data-corner="lr"]', '7'); pg.select_option('[data-corner="rr"]', '7'); pg.wait_for_timeout(200)
         rot = ft(pg, '.tz-rot'); assert 'Replace before rotating' in rot and 'instead of rotating them to the back' in rot, rot
-        pg.click('#tzAddDual'); pg.wait_for_timeout(150); pg.click('#tzAddTrailer'); pg.wait_for_timeout(150)
-        assert pg.locator('.tz-extra').count() == 2 and 'towing' in ft(pg, '#gTiresIn')
-        pg.locator('[data-xdepth]').first.select_option('2'); pg.wait_for_timeout(200)
-        assert 'At the legal limit' in ft(pg, '.tz-out') and 'Dual inner rear' in ft(pg, '.tz-out')
+        # a hybrid can't have dual rear wheels: grayed out; a trailer: its axles and tires per axle, each tire by number
+        assert pg.locator('#tzDually[disabled]').count() == 1 and 'have%20them' in pg.inner_html('.tz-sw.off')
+        assert pg.locator('.tz-pic .tz-w').count() == 4
+        pg.check('#tzTrailer'); pg.wait_for_timeout(200)
+        assert pg.locator('.tz-pic .tz-w').count() == 6 and 'towing' in pg.inner_html('#gTiresIn') and 'Trailer axle 1' in pg.inner_html('#gTiresIn')
+        pg.click('[data-axles="2"]'); pg.wait_for_timeout(150); pg.click('[data-per="4"]'); pg.wait_for_timeout(150)
+        assert pg.locator('.tz-pic .tz-w').count() == 12 and pg.locator('[data-corner]').count() == 12, 'two axles of four'
+        assert pg.locator('[aria-label="Trailer axle 2, passenger side outer"]').count() == 1
+        pg.select_option('[data-corner="t2ro"]', '2'); pg.wait_for_timeout(200)
+        assert 'At the legal limit' in ft(pg, '.tz-out') and 'Trailer axle 2, passenger side outer' in ft(pg, '.tz-out')
+        fill = pg.evaluate("[...document.querySelectorAll('.tz-pic .tz-w rect')].map(r => r.style.fill)[11]"); assert 'rgb' in fill or 'hsl' in fill, fill
+        pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t2b-trailer.png')
+        # a pickup can: a dually's four rear tires
+        pg.evaluate("() => { window.Garage.car().type = 'truck'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        pg.check('#tzDually'); pg.wait_for_timeout(200)
+        assert pg.locator('[data-corner="lri"]').count() == 1 and pg.locator('[data-corner="rri"]').count() == 1 and pg.locator('.tz-pic .tz-w').count() == 14
+        pg.select_option('[data-corner="lri"]', '3'); pg.wait_for_timeout(200)
+        assert 'rear duals differ by 4/32' in ft(pg, '.tz-rot'), ft(pg, '.tz-rot')
+        pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        pg.screenshot(path=f'{OUT}/{name}-t2c-dually.png')
+        pg.uncheck('#tzDually'); pg.uncheck('#tzTrailer'); pg.wait_for_timeout(200)
+        pg.evaluate("() => { window.Garage.car().type = 'hybrid'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
         pg.evaluate("document.getElementById('tzSplit').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2-corners.png')
         # ---- the "why" pictures: submenus that play an animation ----
@@ -174,7 +200,6 @@ with sync_playwright() as p:
         print('  understeer cars from the road center:', off); assert off[0] <= 6 and off[1] >= 18, off
         pg.screenshot(path=f'{OUT}/{name}-t4-steer.png')
         assert pg.evaluate('window.onBack()') and pg.locator('.sub-page').count() == 0, "the phone's Back button closes it too"
-        for x in pg.locator('[data-xdel]').all(): pg.locator('[data-xdel]').first.click(); pg.wait_for_timeout(120)
         pg.uncheck('#tzSplit'); pg.wait_for_timeout(200)
         assert '8/32 in left' in ft(pg, '.tz-out'), 'all the same again: the single answer'
         # no sideways scrolling, also at 130% text

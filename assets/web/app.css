@@ -1388,3 +1388,21 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .an-flame { fill: #ff6a00; }
 .an-flame2 { fill: #ffd23f; }
 .an-skid { fill: none; stroke: rgba(15, 15, 15, .55); stroke-width: 1.6; stroke-linecap: round; }
+/* tires by position: a dually and a trailer, as a picture with numbered wheels */
+.tz-sw { border-bottom: 0; padding: 6px 0; }
+.tz-sw.off .lbl { opacity: .55; }
+.tz-cfg { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); margin: 2px 0 8px; }
+.tz-cfg .chips { padding: 0; flex-wrap: wrap; }
+.tz-pic { display: flex; justify-content: center; margin: 4px 0 6px; }
+.tz-pic svg { width: 150px; height: auto; display: block; }
+.tz-w text { font-size: 7px; font-weight: 900; fill: #111; }
+.tz-bed { fill: none; stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 2; opacity: .6; }
+.tz-hitch { stroke: var(--ink-2); stroke-width: 3; }
+.tz-axle { stroke: var(--ink-2); stroke-width: 2; }
+.tz-grp { margin: 6px 0; }
+.tz-gh { font-size: 12px; font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; margin: 4px 0 2px; }
+.tz-gl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.tz-num { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 9px; font-size: 11px; background: var(--line); color: var(--ink); margin-right: 5px; padding: 0 4px; }
+.an-canopy { fill: #2d5a27; stroke: #1c3a18; stroke-width: 1; }
+.an-canopy2 { fill: #3f7a36; }
+.an-hit { fill: #ffd23f; stroke: #c97800; stroke-width: .8; }

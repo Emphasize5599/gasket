@@ -49,11 +49,36 @@
     var o = {}; CORNERS.forEach(function (x) { var d = C[x.k] && +C[x.k].depth; o[x.k] = d > 0 ? d : null; });
     return o;
   }
-  /** The shallowest tire you measured (corners and any extra wheels), or null. */
+  /**
+   * Every tire position, in order: the four corners (a dually's rear ones are the outer tires, with an inner tire beside
+   * each), then a trailer's axles (2 or 4 tires each). -> [{ k, name, group }]. Older saves' "extra wheels" become these.
+   */
+  function positions(t) {
+    var C = (t && t.corners) || {};
+    upgrade(C);
+    var P = [{ k: 'lf', name: 'Driver front', group: 'Front' }, { k: 'rf', name: 'Passenger front', group: 'Front' }];
+    if (C.dually) P.push({ k: 'lr', name: 'Driver rear, outer', group: 'Rear' }, { k: 'lri', name: 'Driver rear, inner', group: 'Rear' }, { k: 'rri', name: 'Passenger rear, inner', group: 'Rear' }, { k: 'rr', name: 'Passenger rear, outer', group: 'Rear' });
+    else P.push({ k: 'lr', name: 'Driver rear', group: 'Rear' }, { k: 'rr', name: 'Passenger rear', group: 'Rear' });
+    var T = C.trailer;
+    if (T && T.on) for (var a = 1; a <= T.axles; a++) {
+      var g = 'Trailer axle ' + a;
+      if (T.per === 4) P.push({ k: 't' + a + 'lo', name: g + ', driver side outer', group: g }, { k: 't' + a + 'li', name: g + ', driver side inner', group: g }, { k: 't' + a + 'ri', name: g + ', passenger side inner', group: g }, { k: 't' + a + 'ro', name: g + ', passenger side outer', group: g });
+      else P.push({ k: 't' + a + 'l', name: g + ', driver side', group: g }, { k: 't' + a + 'r', name: g + ', passenger side', group: g });
+    }
+    return P;
+  }
+  /** 0.0.69–0.0.75 kept dual and trailer tires as a free list: those become the dually's inner tires and a trailer axle. */
+  function upgrade(C) {
+    if (!C || !C.extra || !C.extra.length) return;
+    var duals = C.extra.filter(function (e) { return e.kind === 'dual'; }), tr = C.extra.filter(function (e) { return e.kind === 'trailer'; });
+    if (duals.length) { C.dually = true; ['lri', 'rri'].forEach(function (k, i) { if (duals[i] && !C[k]) C[k] = { depth: duals[i].depth }; }); }
+    if (tr.length) { C.trailer = C.trailer || { on: true, axles: Math.min(3, Math.ceil(tr.length / 2)), per: 2 }; ['t1l', 't1r', 't2l', 't2r', 't3l', 't3r'].forEach(function (k, i) { if (tr[i] && !C[k]) C[k] = { depth: tr[i].depth }; }); }
+    C.extra = [];
+  }
+  /** The shallowest tire you measured (any position), or null. */
   function worst(t) {
-    var c4 = corners(t); if (!c4) return null;
-    var all = CORNERS.map(function (x) { return { k: x.k, depth: c4[x.k] }; }).concat(((t.corners.extra) || []).map(function (e) { return { k: e.id, name: e.name, depth: +e.depth > 0 ? +e.depth : null }; }));
-    var got = all.filter(function (x) { return x.depth != null; });
+    if (!corners(t)) return null;
+    var got = positions(t).map(function (p) { var d = t.corners[p.k] && +t.corners[p.k].depth; return { k: p.k, name: p.name, depth: d > 0 ? d : null }; }).filter(function (x) { return x.depth != null; });
     return got.length ? got.sort(function (a, b) { return a.depth - b.depth; })[0] : null;
   }
   /**
@@ -63,10 +88,16 @@
    * the rear: those are replaced (on a front-wheel-drive car with worn fronts: replace the fronts, new ones on the rear).
    * -> { kind: 'even' | 'move' | 'replace', moves: [{ from, to }], replace: [keys], notes: [text], pattern } or null.
    */
-  function rotation(d, drive) {
+  function rotation(d, drive, duals) {
     if (!d || CORNERS.some(function (x) { return !(d[x.k] > 0); })) return null;
     drive = String(drive || '').toLowerCase();
     var keys = CORNERS.map(function (x) { return x.k; }), notes = [];
+    // a dually's pair on each side carries the load together: a shallower one is a smaller tire, and the deeper one does the work
+    if (duals) [['lr', 'lri', 'driver'], ['rr', 'rri', 'passenger']].forEach(function (p) {
+      var a = d[p[0]], b = duals[p[1]]; if (!(a > 0 && b > 0)) return;
+      if (Math.abs(a - b) >= 2) notes.push('The ' + p[2] + '-side rear duals differ by ' + Math.abs(a - b) + '/32 in. Duals should match within about 2/32 in, or the bigger one carries the load and wears out fast; swap or replace to match them.');
+      if (Math.min(a, b) <= 4) notes.push('A ' + p[2] + '-side rear dual is down to ' + Math.min(a, b) + '/32 in: replace it (as a matched pair).');
+    });
     var min = Math.min.apply(null, keys.map(function (k) { return d[k]; })), max = Math.max.apply(null, keys.map(function (k) { return d[k]; }));
     var pattern = drive === 'fwd' ? 'front-wheel drive: the front tires go straight back, and the rear ones cross to the front' :
       drive === 'rwd' || drive === 'awd' || drive === '4wd' ? (drive === 'rwd' ? 'rear-wheel drive' : drive === 'awd' ? 'all-wheel drive' : 'four-wheel drive') + ': the rear tires go straight forward, and the front ones cross to the back' :
@@ -141,7 +172,7 @@
     return null;
   }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare,
     hue: hue, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   root.TireMath = TireMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = TireMath;
@@ -334,16 +365,25 @@
       else h += '<div class="grid2"><label class="nf"><span>Miles on these tires' + q(Q.miles) + '</span><input type="number" inputmode="numeric" min="0" step="1000" id="tzMiles" placeholder="e.g. 20000" value="' + esc(r.miles === '' || r.miles == null ? '' : r.miles) + '"></label>' +
         '<label class="nf"><span>Rotated regularly?' + q(Q.rotate) + '</span><select id="tzRot">' + [['', 'Pick…'], ['yes', 'Yes'], ['sometimes', 'Sometimes'], ['no', 'Never'], ['unsure', 'Not sure']].map(function (o) { return '<option value="' + o[0] + '"' + ((r.rotated || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>';
     } else {
-      // each corner around the car, then any extra wheels (duals, a trailer)
-      var cell = function (k, nm) { var d = C[k] && C[k].depth, f = d ? depthGood(d) : null; return '<label class="nf tz-c"><span>' + (f != null ? '<i class="tz-dot" style="background:' + hue(f) + '"></i>' : '') + nm + '</span><select data-corner="' + k + '">' + depthOpts(d, deep, true) + '</select></label>'; };
+      // the layout (a car, or a dually, with a trailer or not) as a picture, its wheels numbered and colored by tread,
+      // then a box for each tire, by number
+      var P = positions(t), canDual = duallyOk(c) || C.dually, T = C.trailer || {};
+      h += '<div class="field tz-sw' + (canDual ? '' : ' off') + '"><div class="lbl">Dual rear wheels (dually)<small>' + (canDual ? 'Four tires on the rear axle, two on each side.' : 'Your ' + esc(G().shortName(c)) + ' doesn\'t have them: only some pickups and vans do.') + '</small></div>' +
+        '<label class="switch"><input type="checkbox" id="tzDually"' + (C.dually ? ' checked' : '') + (canDual ? '' : ' disabled') + '><span></span></label></div>';
+      h += '<div class="field tz-sw"><div class="lbl">Towing a trailer<small>Its tires count toward your tire warnings. Trip plans don\'t include towing yet.</small></div>' +
+        '<label class="switch"><input type="checkbox" id="tzTrailer"' + (T.on ? ' checked' : '') + '><span></span></label></div>';
+      if (T.on) h += '<div class="tz-cfg"><span>Axles</span><div class="chips mini" id="tzAxles">' + [1, 2, 3].map(function (n) { return '<button type="button" data-axles="' + n + '" class="' + (T.axles === n ? 'on' : '') + '">' + n + '</button>'; }).join('') + '</div>' +
+        '<span>Tires per axle</span><div class="chips mini" id="tzPer">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-per="' + o[0] + '" class="' + (T.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
+      h += '<div class="tz-pic" aria-hidden="true">' + wheelSvg(c, t) + '</div>';
       h += '<div class="lead small keep">The shallowest groove of each tire' + q(Q.measure) + '</div>';
-      h += '<div class="tz-car">' + cell('lf', 'Driver front') + '<div class="tz-body" aria-hidden="true">' + carTopSvg() + '</div>' + cell('rf', 'Passenger front') + cell('lr', 'Driver rear') + cell('rr', 'Passenger rear') + '</div>';
-      (C.extra || []).forEach(function (x) {
-        h += '<div class="tz-extra" data-x="' + esc(x.id) + '"><input type="text" maxlength="30" data-xname="' + esc(x.id) + '" value="' + esc(x.name) + '" aria-label="Which wheel"><select data-xdepth="' + esc(x.id) + '">' + depthOpts(x.depth, deep, true) + '</select>' +
-          '<button class="x sm" data-xdel="' + esc(x.id) + '" aria-label="Remove this wheel">✕</button></div>' + (x.kind === 'trailer' ? '<div class="lead small keep tz-xnote">Trailer tires count toward your tire warnings; trip plans don\'t include towing yet.</div>' : '');
+      var groups = []; P.forEach(function (p, n) { p.n = n + 1; var g = groups.filter(function (x) { return x.g === p.group; })[0]; if (!g) groups.push(g = { g: p.group, l: [] }); g.l.push(p); });
+      groups.forEach(function (g) {
+        h += '<div class="tz-grp"><div class="tz-gh">' + esc(g.g) + '</div><div class="tz-gl">' + g.l.map(function (p) {
+          var d = C[p.k] && C[p.k].depth, f = d ? depthGood(d) : null;
+          return '<label class="nf tz-c"><span><b class="tz-num" style="' + (f != null ? 'background:' + hue(f) + ';color:#111' : '') + '">' + p.n + '</b>' + esc(p.name.replace(/^Trailer axle \d+, /, '')) + '</span><select data-corner="' + p.k + '" aria-label="' + esc(p.name) + '">' + depthOpts(d, deep, true) + '</select></label>';
+        }).join('') + '</div></div>';
       });
-      h += '<div class="btns wrap tz-add"><button class="btn tonal sm" id="tzAddDual">+ Dual wheel</button><button class="btn tonal sm" id="tzAddTrailer">+ Trailer tire</button></div>';
-      var rot = rotation(corners(t), (c.info && c.info.drive) || '');
+      var rot = rotation(corners(t), (c.info && c.info.drive) || '', C.dually ? { lri: C.lri && +C.lri.depth, rri: C.rri && +C.rri.depth } : null);
       if (rot) {
         h += '<div class="tz-rot ' + rot.kind + '"><b>' + (rot.kind === 'replace' ? 'Replace before rotating' : rot.kind === 'move' ? 'Move these tires' : 'Where they are is fine') + '</b>' +
           (rot.moves.length ? '<ul>' + rot.moves.map(function (m) { return '<li>' + esc(cname(m.from)) + ' → ' + esc(cname(m.to)) + ' <small>(' + C[m.from].depth + '/32 in)</small></li>'; }).join('') + '</ul>' : '') +
@@ -373,9 +413,9 @@
     nudgeFuel(c);
   }
   function cname(k, C) {
-    var x = CORNERS.filter(function (y) { return y.k === k; })[0];
+    var x = positions({ corners: C || (G().car().tires || {}).corners || {} }).filter(function (y) { return y.k === k; })[0];
     if (x) return x.name;
-    var e = ((C || {}).extra || []).filter(function (y) { return y.id === k; })[0]; return e ? e.name : k;
+    var y = CORNERS.filter(function (z) { return z.k === k; })[0]; return y ? y.name : k;
   }
   function bind(c) {
     var t = tires(c);
@@ -408,16 +448,13 @@
     if ($('tzMiles')) $('tzMiles').onchange = set(function () { t.tread.miles = this.value === '' ? '' : Math.max(0, parseInt(this.value, 10) || 0); t.tread.t = Date.now(); });
     if ($('tzRot')) $('tzRot').onchange = set(function () { t.tread.rotated = this.value; });
     // each corner, and the extra wheels
-    var C = function () { t.corners = t.corners || { split: false, extra: [] }; t.corners.extra = t.corners.extra || []; return t.corners; };
+    var C = function () { t.corners = t.corners || { split: false }; return t.corners; };
     $('tzSplit').onchange = set(function () { C().split = this.checked; LG.info('car', 'Tires: ' + (this.checked ? 'each corner' : 'all the same')); });
     host.querySelectorAll('[data-corner]').forEach(function (s) { s.onchange = set(function () { C()[s.dataset.corner] = { depth: parseFloat(s.value) || '', t: Date.now() }; }); });
-    var add = function (kind, name) { return set(function () { C().extra.push({ id: 'w' + Date.now(), kind: kind, name: name, depth: '' }); }); };
-    if ($('tzAddDual')) $('tzAddDual').onclick = add('dual', 'Dual inner rear');
-    if ($('tzAddTrailer')) $('tzAddTrailer').onclick = add('trailer', 'Trailer tire');
-    var X = function (id) { return C().extra.filter(function (x) { return x.id === id; })[0]; };
-    host.querySelectorAll('[data-xname]').forEach(function (i) { i.onchange = function () { var x = X(i.dataset.xname); if (x) { x.name = i.value.trim() || x.name; save(); onChange(); } }; });
-    host.querySelectorAll('[data-xdepth]').forEach(function (s) { s.onchange = set(function () { var x = X(s.dataset.xdepth); if (x) x.depth = parseFloat(s.value) || ''; }); });
-    host.querySelectorAll('[data-xdel]').forEach(function (b) { b.onclick = set(function () { C().extra = C().extra.filter(function (x) { return x.id !== b.dataset.xdel; }); }); });
+    if ($('tzDually')) $('tzDually').onchange = set(function () { C().dually = this.checked; LG.info('car', 'Tires: dual rear wheels ' + (this.checked ? 'on' : 'off')); });
+    if ($('tzTrailer')) $('tzTrailer').onchange = set(function () { var T = C().trailer = Object.assign({ axles: 1, per: 2 }, C().trailer); T.on = this.checked; LG.info('car', 'Tires: trailer ' + (this.checked ? 'on' : 'off')); });
+    host.querySelectorAll('[data-axles]').forEach(function (b) { b.onclick = set(function () { C().trailer.axles = +b.dataset.axles; }); });
+    host.querySelectorAll('[data-per]').forEach(function (b) { b.onclick = set(function () { C().trailer.per = +b.dataset.per; }); });
     // the spare
     $('tzSpare').onchange = set(function () { spare(t).kind = this.value; LG.info('car', 'Spare tire: ' + (this.value || 'not sure')); });
     if ($('tzSpareYes')) $('tzSpareYes').onclick = set(function () { spare(t).kind = spare(t).lookup.guess; LG.info('car', 'Spare tire confirmed: ' + spare(t).kind); });
@@ -587,7 +624,7 @@
     // the left column: understeer twice (stacked); the right: oversteer, as tall as both
     var PANELS = [
       { kind: 'u1', x: 2, y: 2, w: 166, h: 120, road: 'M 140 122 C 140 76, 96 52, 14 62', sc: 0.78, tb: 1, title: 'Understeer: grips again', say: 'Phew!', bub: 'think' },
-      { kind: 'u2', x: 2, y: 126, w: 166, h: 120, road: 'M 140 122 C 140 76, 96 52, 14 62', sc: 0.78, tb: 1, title: 'Understeer: off the road', say: 'I\'m okay!', bub: 'say' },
+      { kind: 'u2', x: 2, y: 126, w: 166, h: 120, road: 'M 140 122 C 140 76, 96 52, 14 62', sc: 0.78, tb: 1, title: 'Understeer: into a tree', say: 'I\'m okay!', bub: 'say' },
       { kind: 'over', x: 172, y: 2, w: 166, h: 244, road: 'M 120 240 C 120 160, 98 100, 22 60', sc: 1, title: 'Oversteer: spins and rolls', say: 'Not okay! Help!', bub: 'say' }];
     var P = PANELS.map(function (pn) {
       var g = el('g', { transform: 'translate(' + pn.x + ' ' + pn.y + ')' }, svg);
@@ -606,7 +643,18 @@
       return { pn: pn, path: path, len: path.getTotalLength(), trail: trail, skids: skids, car: car, bub: bub, fx: fx, g: inner };
     });
     var drops = rain(el('g', { class: 'an-rain' }, svg), W, H, [], 44);
+    var U2D = 80;
     var at = function (p, s) { s = Math.max(0, Math.min(p.len, s)); var a = p.path.getPointAtLength(s), b = p.path.getPointAtLength(Math.min(p.len, s + 1)); return { x: a.x, y: a.y, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
+    // understeer off the road still hits what's there: a tree where the second car ends up
+    P.forEach(function (p) {
+      if (p.pn.kind !== 'u2') return;
+      var L = at(p, p.len * 0.42), dir = L.ang + 0.02, ex = L.x + Math.cos(dir) * (U2D + 14), ey = L.y + Math.sin(dir) * (U2D + 14);
+      var tr = el('g', { class: 'an-tree', transform: 'translate(' + ex.toFixed(1) + ' ' + ey.toFixed(1) + ')' });
+      p.g.insertBefore(tr, p.car.g);
+      el('circle', { cx: 0, cy: 0, r: 9, class: 'an-canopy' }, tr); el('circle', { cx: -3, cy: -3, r: 4, class: 'an-canopy2' }, tr);
+      var hit = el('g', { opacity: 0 }, p.g); p.hit = hit;
+      el('path', { d: 'M0 -7 L2 -2 L7 -2 L3 1 L5 6 L0 3 L-5 6 L-3 1 L-7 -2 L-2 -2 Z', class: 'an-hit', transform: 'translate(' + (L.x + Math.cos(dir) * (U2D + 7)).toFixed(1) + ' ' + (L.y + Math.sin(dir) * (U2D + 7)).toFixed(1) + ') scale(0.9)' }, hit);
+    });
     var deg = function (r) { return r * 180 / Math.PI; };
     var RUN = 5.2, HOLD = 2.0, FADE = 0.5, CYCLE = RUN + HOLD + FADE, T0 = 1.4, LEAVE = 0.42;
     var ctl = loop(CYCLE, function (t, dt) {
@@ -628,13 +676,14 @@
           } else if (p.pn.kind === 'u2') {
             // the front tires don't grip: the car keeps going nearly straight, off the outside of the curve onto the grass,
             // front wheels still turned, slowing to a stop the right way up
-            var k2 = Math.min(1, u / 3.2), d = 70 * (1 - Math.pow(1 - k2, 2)), bend = 0.04 * k2;
+            var k2 = Math.min(1, u / 3.2), d = U2D * (1 - Math.pow(1 - k2, 2)), bend = 0.04 * k2;
             x = L.x + Math.cos(dir + bend * 0.5) * d; y = L.y + Math.sin(dir + bend * 0.5) * d; yaw = deg(dir + bend) + 90;
             steer = -22; slideF = k2 < 0.95; done = k2 >= 1;
+            if (p.hit) p.hit.setAttribute('opacity', k2 >= 0.97 ? 1 : 0);
           } else {
             // the rear slides out: the car rotates as it slides off the outside of the curve, then digs in and rolls
             var slide = Math.min(1, u / 1.9), d2 = 64 * (1 - Math.pow(1 - slide, 1.6)), drift = dir + 0.55 * slide;
-            x = L.x + Math.cos(drift) * d2; y = L.y + Math.sin(drift) * d2; yaw = deg(dir) + 90 + 230 * Math.pow(slide, 1.3);
+            x = L.x + Math.cos(drift) * d2; y = L.y + Math.sin(drift) * d2; yaw = deg(dir) + 90 - 230 * Math.pow(slide, 1.3);     // a left-hand curve: the rear swings out right, the car turns counterclockwise
             if (u > 1.9) { var r = Math.min(1, (u - 1.9) / 1.6); roll = 540 * (1 - Math.pow(1 - r, 2)); x += Math.cos(drift) * 22 * r; y += Math.sin(drift) * 22 * r; done = r >= 1; }
           }
         }
@@ -671,7 +720,7 @@
   var WHY_TREAD = '<div class="an-box" id="anStop"></div><p class="an-cap">Three cars on a wet road, braking from the same speed at the same line. On new tires the car stops at the sign, in <b>158 ft</b>. On worn tires it needed <b>226 and 301 ft</b>: 68 to 143 ft more, sliding right through where the first car stopped. Tread is what pushes water out from under a tire, so worn tires lose grip in the rain first.</p>' +
     '<p class="an-src">Source: Discount Tire, Treadwell Research Park: two tires from top-10 tire makers, new vs worn, on a wet road.</p>';
   var WHY_BACK = '<div class="an-box" id="anSteer"></div><p class="an-cap">On a wet road, the tires with less tread hydroplane first. If those are on the <b>back</b>, the rear loses grip before the front and swings out: that\'s <b>oversteer</b>. The car spins, and when its tires dig into the shoulder or grass it can roll over.</p>' +
-    '<p class="an-cap">With the better tires on the back, the <b>front</b> tires let go first: that\'s <b>understeer</b>. The front wheels are turned but skid, so the car keeps going straighter than the curve. Easing off the gas usually lets them grip again and the car stays in its lane; at worst it runs off the road the right way up, which is far safer than a spin. So the better tires always go on the rear, whatever wheels drive the car.</p>';
+    '<p class="an-cap">With the better tires on the back, the <b>front</b> tires let go first: that\'s <b>understeer</b>. The front wheels are turned but skid, so the car keeps going straighter than the curve. Easing off the gas usually lets them grip again and the car stays in its lane. But understeer can still run you off the road, into a ditch, a pole, a tree or the next lane: it\'s the safer of the two, not a safe one. Slow down for wet curves either way. So the better tires always go on the rear, whatever wheels drive the car.</p>';
   function openWhy(which) {
     A.subPage(which === 'tread' ? 'Why tread matters' : 'Why the better tires go on the back', which === 'tread' ? WHY_TREAD : WHY_BACK, function (body) {
       return which === 'tread' ? stopAnim(body.querySelector('#anStop')) : steerAnim(body.querySelector('#anSteer'));
@@ -682,11 +731,37 @@
     return '<button type="button" class="sub-ent" data-why="' + which + '"><span><b>' + title + '</b><small>' + sub + '</small></span>' +
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg></button>';
   }
-  /** A small car from above, for the corner picker. */
-  function carTopSvg() {
-    return '<svg viewBox="0 0 40 80"><rect x="6" y="4" width="28" height="72" rx="10" class="il-body"/><rect x="10" y="20" width="20" height="12" rx="3" class="il-glass"/><rect x="10" y="54" width="20" height="9" rx="3" class="il-glass"/>' +
-      '<rect x="1" y="12" width="6" height="14" rx="2" class="il-wheel"/><rect x="33" y="12" width="6" height="14" rx="2" class="il-wheel"/><rect x="1" y="54" width="6" height="14" rx="2" class="il-wheel"/><rect x="33" y="54" width="6" height="14" rx="2" class="il-wheel"/>' +
-      '<path d="M20 0 L24 6 L16 6 Z" class="il-front"/></svg>';
+  /** Can this car have dual rear wheels? Only pickups and vans (a car, SUV, minivan or hybrid can't). */
+  function duallyOk(c) { var ty = c.type || ''; return !ty || ty === 'truck' || ty === 'v8deact'; }
+  /**
+   * The car from above, nose up (a dually: wider at the back, two tires a side), and a trailer behind it when you tow
+   * one, with its axles. Each wheel is numbered like the boxes below and colored by its tread (gray: not measured).
+   */
+  function wheelSvg(c, t) {
+    var C = t.corners || {}, P = positions(t), num = {}, T = C.trailer || {};
+    P.forEach(function (p, n) { num[p.k] = n + 1; });
+    var W = 140, du = !!C.dually, body = du ? 'M52 10 Q70 2 88 10 L90 60 L100 64 L100 104 Q70 112 40 104 L40 64 L50 60 Z' : 'M50 10 Q70 2 90 10 L92 102 Q70 110 48 102 Z';
+    var h = '<path d="' + body + '" class="il-body"/><rect x="56" y="22" width="28" height="16" rx="4" class="il-glass"/><rect x="56" y="' + (du ? 46 : 74) + '" width="28" height="' + (du ? 10 : 12) + '" rx="3" class="il-glass"/>' +
+      (du ? '<rect x="50" y="62" width="40" height="38" rx="3" class="tz-bed"/>' : '') + '<path d="M70 0 L75 7 L65 7 Z" class="il-front"/>';
+    var wheel = function (k, x, y) {
+      var d = C[k] && +C[k].depth, f = d > 0 ? depthGood(d) : null;
+      return '<g class="tz-w"><rect x="' + (x - 5) + '" y="' + (y - 8) + '" width="10" height="16" rx="2.5" style="fill:' + (f != null ? hue(f) : 'var(--line)') + '"/><text x="' + x + '" y="' + (y + 3) + '" text-anchor="middle">' + num[k] + '</text></g>';
+    };
+    h += wheel('lf', 44, 26) + wheel('rf', 96, 26);
+    if (du) h += wheel('lr', 30, 86) + wheel('lri', 42, 86) + wheel('rri', 98, 86) + wheel('rr', 110, 86);
+    else h += wheel('lr', 44, 84) + wheel('rr', 96, 84);
+    var H = 116;
+    if (T.on) {
+      var top = 124, len = 32 + T.axles * 24;
+      h += '<line x1="70" y1="108" x2="70" y2="' + (top + 2) + '" class="tz-hitch"/><rect x="38" y="' + top + '" width="64" height="' + len + '" rx="4" class="il-body"/>';
+      for (var a = 1; a <= T.axles; a++) {
+        var y = top + len - 14 - (T.axles - a) * 24;
+        h += '<line x1="' + (T.per === 4 ? 20 : 32) + '" y1="' + y + '" x2="' + (T.per === 4 ? 120 : 108) + '" y2="' + y + '" class="tz-axle"/>';
+        h += T.per === 4 ? wheel('t' + a + 'lo', 20, y) + wheel('t' + a + 'li', 32, y) + wheel('t' + a + 'ri', 108, y) + wheel('t' + a + 'ro', 120, y) : wheel('t' + a + 'l', 32, y) + wheel('t' + a + 'r', 108, y);
+      }
+      H = top + len + 6;
+    }
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="max-height:' + Math.round(H * 1.25) + 'px">' + h + '</svg>';
   }
 
   /** What Advisory says about the tires: [{ level: 'warn'|'info', title, text, check? }]. */
@@ -720,5 +795,7 @@
     if (k === 'kit' || k === 'none') return 'Your car has no spare tire: have a plan for a flat (roadside assistance, phone charged).';
     return '';
   }
-  root.Tires = { render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
+  /** A spare that needs its monthly air check ticked before a trip goes on (Advisory's Next waits for it). */
+  function spareDue(c) { var t = c && c.tires || {}, k = spareKind(t); return (k === 'full' || k === 'compact') && !airedOk(t); }
+  root.Tires = { spareDue: spareDue, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
 })(typeof window !== 'undefined' ? window : globalThis);

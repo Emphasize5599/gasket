@@ -274,7 +274,7 @@
   }
   function bind(c) {
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
-    host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); }; });
+    host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; if (listOpen) rateAll(restList); });
     host.querySelectorAll('details[data-open]').forEach(function (d) { d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
     host.querySelectorAll('[data-adv]').forEach(function (b) {

@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.75 - 2026-10-10
+- **The spare check is required.** With a full-size or compact spare, Advice's Next waits until you tick "I aired up my spare" (the later steps stay grayed out). The tick lasts 30 days, saved trips included.
+- **Tires by position, with pictures.** Turn on dual rear wheels (pickups and vans only; grayed out for other cars) and the picture becomes a dually with four rear tires. Turn on a trailer and pick its axles (1–3) and tires per axle (2 or 4): it hooks up behind the car. Every tire is numbered on the picture, colored by its tread, and gets its own box. Mismatched duals are flagged.
+- **Understeer vs oversteer:** the oversteer car now spins the right way (counterclockwise on that left-hand curve), and the second understeer car runs farther off the road into a tree, because understeer is the safer of the two, not a safe one.
+- Bug fixes.
+
 ## 0.0.74 - 2026-10-10
 - **No more lag from rating recalls.** The AI model now runs in the background, apart from the screen, so scrolling and taps stay smooth while it works (if a phone can't, it falls back to one recall at a time).
 - **Open recalls first.** Once your VIN has been checked at NHTSA, the recalls still open on your car show up front and are rated right away. The rest (fixed on yours, or for other cars of the model) sit in the folded list and are rated only when you open it. Without a VIN check, nothing is rated until you open the list.

@@ -657,6 +657,8 @@ with sync_playwright() as p:
         assert 'Dallas' in ht and 'mi' in ht
         pg.screenshot(path=f'{OUT}/{name}-h1-history.png')
         pg.evaluate("window.__jobs = null; window.__routeBody = null; window.__gmapsUrls = []")
+        # a compact spare aired up 10 days ago: still good for the saved trip (no stop at Advisory)
+        pg.evaluate("() => { const t = window.Garage.car().tires = window.Garage.car().tires || {}; t.spare = { kind: 'compact', aired: Date.now() - 10 * 864e5 }; window.__app.save(); }")
         opening = pg.evaluate("document.querySelector('[data-hist]').click(), [document.querySelectorAll('#tpSteps .dim').length, !!document.querySelector('#tpNav .opening')]")
         assert opening == [6, True], f'while it opens: steps 2-7 grayed and "Opening your trip" ({opening})'
         idle(pg, 1200)
