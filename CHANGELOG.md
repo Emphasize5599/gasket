@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.73 - 2026-10-10
+- **Past the monthly Google lookup cap, prices still update where they can.** Walmart and Murphy USA prices come from their own sites, so they keep refreshing; the warning now says "Only locations already in your phone's storage were updated, for Walmart and Murphy USA" (on the map and when planning stops).
+- Bug fixes.
+
 ## 0.0.72 - 2026-10-10
 - **Smoother recall rating.** The AI rates recalls three at a time with a pause in between, and goes much slower while you're not on Advice.
 - **Clear cache, keep your setup.** Settings, your cars, saved trips, anything that cost a Google lookup, and the recall-rating model stay in the app's storage. Everything that can simply load again (recalls and VIN checks, Tire Rack and Brave answers, recall ratings, logos, speed limits, station lists from the stores' own sites) is now in the cache, so Android's "Clear cache" lets you watch it all load fresh.

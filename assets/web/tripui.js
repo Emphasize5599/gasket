@@ -1567,7 +1567,7 @@
   }
   async function gatherAll(models, pg, dbgS, force, replay, ks) {
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS);
-    var KV = A.KV, notes = [], official = [], perModel = models.map(function () { return []; });
+    var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; });
     if (replay) {
       // a saved trip: the stations (with their prices) it found then — no lookups at all
       official = (replay.official || []).slice();
@@ -1664,7 +1664,7 @@
           dbgSearch.murphy = { stores: (res.stores || []).length, error: res.error, blocked: res.blocked };
           LG.info('stations', 'Murphy USA done', dbgSearch.murphy);
           if (res.error) notes.push('Murphy USA: ' + (res.blocked ? 'wants an “are you human?” check (Settings → Site checks)' : res.error));
-          else KV.put('murphy', mkey, res.stores || []);
+          else { KV.put('murphy', mkey, res.stores || []); siteOk.push('Murphy USA'); }
           takeMurphy(res.stores);
         }));
       }
@@ -1693,9 +1693,12 @@
         LG.info('stations', 'Walmart prices', dbgSearch.walmartPrices);
         if (pr.blocked) notes.push('Walmart: wants a “Robot or human?” check for some prices (Settings → Site checks)');
         (pr.stores || []).forEach(function (w) { KV.put('wmprice', String(w.id), w); var s = P.normalizeWalmart(w); if (s) official.push(s); });
+        if ((pr.stores || []).length) siteOk.unshift('Walmart');
       })());
       tick();
       await Promise.all(tasks);
+      // past the Google lookup cap: say which brands were still updated (their own sites don't use Google lookups)
+      notes = notes.map(function (n) { return /cap reached/i.test(n) ? A.capMsg(n, siteOk) : n; });
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
 

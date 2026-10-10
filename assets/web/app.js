@@ -278,8 +278,19 @@
     murphy: { label: 'Murphy USA', normalize: function (x) { return P.normalizeMurphy(x); }, max: 25 }
   };
   function siteOn(k) { return !!S.brands[k] && S[k + 'Direct'] !== false && !!N.siteSearch; }
+  /** "Walmart", "Walmart and Murphy USA", "A, B and C". */
+  function andList(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+  /**
+   * The Google lookup cap is reached: say so, and which brands were still updated from their own sites (their prices
+   * don't use Google lookups): "Only locations already in your phone's storage were updated, for Walmart and Murphy USA."
+   */
+  function capMsg(err, labels) {
+    var m = /\((\d+)\/(\d+)\)/.exec(err || ''), head = 'Monthly Google lookup cap reached' + (m ? ' (' + m[1] + '/' + m[2] + ')' : '') + '.';
+    return head + (labels.length ? ' Only locations already in your phone\'s storage were updated, for ' + andList(labels) + '.' : ' Showing prices already in your phone\'s storage.') +
+      ' Raise the cap in Settings if you accept possible charges.';
+  }
   var gStations = [], official = {}, errs = [];
-  var pendingSources = 0, sitePending = {};
+  var pendingSources = 0, sitePending = {}, siteOk = {};
   function allOfficial() { var a = []; Object.keys(official).forEach(function (k) { a = a.concat(official[k] || []); }); return a; }
   function fetchAround(lat, lng, bounds) {
     $('btnArea').classList.add('hidden');
@@ -290,7 +301,7 @@
     if (!useGoogle && !sites.length) { openSettings(true); return; }
     var b = bounds || bbox(lat, lng, S.radiusMi);
     var id = ++reqId; pending = id; errs = [];
-    pendingSources = 0; sitePending = {};
+    pendingSources = 0; sitePending = {}; siteOk = {};
     pendingCenter = { lat: lat, lng: lng };
     $('btnRefresh').classList.add('spin');
     status('Getting live prices…');
@@ -319,7 +330,7 @@
     sitePending[key] = false;
     if (res.blocked) siteNeedsCheck(key);
     else if (res.error) errs.push(SITES[key].label + ' prices: ' + res.error);
-    else official[key] = (res.stores || []).map(SITES[key].normalize).filter(Boolean);
+    else { official[key] = (res.stores || []).map(SITES[key].normalize).filter(Boolean); siteOk[key] = true; }
     sourceDone();
   };
   window.onSiteBlocked = function (key) {
@@ -359,6 +370,8 @@
     if (!demo) N.saveCache(JSON.stringify({ lastFetch: lastFetch, g: gStations, o: official }));
     movedByUser = false;
     render();
+    var capErr = errs.filter(function (e) { return /cap reached/i.test(e); })[0];
+    if (capErr) errs = [capMsg(capErr, Object.keys(SITES).filter(function (k) { return siteOk[k]; }).map(function (k) { return SITES[k].label; }))].concat(errs.filter(function (e) { return e !== capErr; }));
     if (errs.length) { status(errs[0], true); if (errs.length > 1) console.warn(errs); }
     // which Exxon / Mobil stations take Walmart+ (free, from ExxonMobil's own station finder)
     if (window.__xom && !demo) window.__xom(gStations).then(function (n) {
@@ -1341,5 +1354,5 @@
   window.__app = { justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
 })();

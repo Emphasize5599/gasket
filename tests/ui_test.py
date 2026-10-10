@@ -94,6 +94,15 @@ with sync_playwright() as p:
         pg.click('#bestLine')
         pg.wait_for_timeout(500)
         pg.screenshot(path=f'{OUT}/{name}-3-list.png')
+        # past the monthly Google lookup cap: the stations on the phone stay, Walmart and Murphy USA (their own sites) still update
+        pg.evaluate("() => { window.__mocks = window.__mocks || {}; window.__mocks.search = () => ({ places: [], errors: ['Monthly API-call cap reached (900/900). Showing cached prices. Raise the cap in Settings if you accept possible charges.'] }); }")
+        key0 = pg.evaluate("window.__app.S.apiKey"); pg.evaluate("window.__app.S.apiKey = 'AIzaSyTESTKEY0123456789abcdefghijklmnop'; window.__app.setDemo(false)")
+        pg.evaluate("window.__app.fetchAround(34.7450,-92.2900)"); pg.wait_for_function("!document.getElementById('btnRefresh').classList.contains('spin')", timeout=5000); pg.wait_for_timeout(200)
+        st = pg.inner_text('#status'); print('  at the cap:', st)
+        pg.evaluate("(k) => { window.__app.S.apiKey = k; }", key0)
+        assert "Monthly Google lookup cap reached (900/900). Only locations already in your phone's storage were updated, for Walmart and Murphy USA." in st, st
+        assert pg.evaluate("document.getElementById('status').classList.contains('err')"), 'shown as a warning'
+        pg.evaluate("() => { delete window.__mocks.search; }")
         pg.click('#btnSettings')
         pg.wait_for_timeout(300)
         pg.screenshot(path=f'{OUT}/{name}-4-settings.png', full_page=True)
