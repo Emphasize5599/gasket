@@ -156,7 +156,7 @@
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
     var h = '<p class="lead small keep adv-lead">Things worth knowing about your ' + esc(G().shortName(c)) + ' before you drive.</p>';
-    h += recallCard(c) + tireCard(c) + adviceCards(c);
+    h += recallCard(c) + tireCard(c) + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);
     syncDot();
@@ -258,6 +258,13 @@
         return '<div class="adv-item' + (x.level === 'done' ? ' done' : x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p>' +
           (x.check ? '<label class="adv-chk"><input type="checkbox" data-tchk="' + esc(x.check.id) + '"' + (x.check.on ? ' checked' : '') + '><span>' + esc(x.check.label) + '</span></label>' : '') + '</div>';
       }).join('') + '</div>';
+  }
+  /** Climate: this season's preset, and fresh air over recirculate. */
+  function climateCard(c) {
+    var l = window.Climate ? Climate.advice(c) : []; if (!l.length) return '';
+    return '<div class="card adv-card adv-clim" id="advClimate"><h3>Climate</h3>' + l.map(function (x) {
+      return '<div class="adv-item' + (x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p></div>';
+    }).join('') + '</div>';
   }
   function adviceCards(c) {
     var l = adviceFor(c);

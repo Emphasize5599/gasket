@@ -197,7 +197,7 @@
     try { settle(host); draw0(); } finally { drawing = false; }
   }
   // Your car (the buttons; details behind Edit), best cruising speed, fuel economy, observed mileage, about this car.
-  var obsOpen = false, infoOpen = false, tiresOpen = false;
+  var obsOpen = false, infoOpen = false, tiresOpen = false, climOpen = false;
   var EPA_Q = {
     city: '<b>EPA city</b>: a lab test of stop-and-go driving — about 11 miles averaging 21 mph (top speed 56), with frequent stops and idling. Since 2008 it\'s adjusted for A/C, cold starts and harder acceleration.',
     hwy: '<b>EPA highway</b>: a lab test of rural and interstate driving — about 10 miles averaging 48 mph (top speed 60), no stops. Steady 70+ mph cruising uses more than this.',
@@ -225,6 +225,7 @@
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
     h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + (window.Tires ? Tires.summaryHtml(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
+    h += '<details class="card g-obs g-clim" id="gClimate"' + (climOpen ? ' open' : '') + '><summary><span>Climate control<small id="gClimLine">' + esc(window.Climate ? Climate.summary(c) : '') + '</small></span></summary><div id="gClimIn"></div></details>';
     host.innerHTML = h;
     restoreEMsg();
     speedHost = $('tSpeed');
@@ -232,6 +233,8 @@
     if ($('tEpa')) $('tEpa').addEventListener('toggle', function () { epaStay = this.open ? c.id : null; });
     $('gInfo').addEventListener('toggle', function () { infoOpen = this.open; });
     $('gTires').addEventListener('toggle', function () { tiresOpen = this.open; });
+    $('gClimate').addEventListener('toggle', function () { climOpen = this.open; });
+    if (window.Climate) Climate.render($('gClimIn'), function () { var l = $('gClimLine'); if (l) l.textContent = Climate.summary(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.innerHTML = Tires.summaryHtml(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
     drawSpeed();

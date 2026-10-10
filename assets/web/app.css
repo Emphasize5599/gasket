@@ -1433,3 +1433,17 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .tz-miss p { margin: 6px 0 8px; font-size: 13.5px; line-height: 1.4; }
 .tz-miss .btn { width: auto; margin: 0; }
 .tz-trbtns .btn.caution { color: var(--warn); }
+/* climate control */
+.cl-h { margin: 14px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+.cl-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-row.empty { border-style: dashed; }
+.cl-row.empty b { color: var(--ink-2); }
+.cl-row.warn small { color: var(--warn); }
+.cl-add { align-items: center; padding: 4px 0 6px; }
+.cl-add > span { font-size: 13px; color: var(--ink-2); }
+.cl-new { width: auto; margin: 4px 0 6px; }
+.cl-ch { padding: 2px 0 4px; }
+.cl-temps { display: flex; gap: 10px; } .cl-temps > .nf { flex: 1; min-width: 0; }
+.cl-warn { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 6px 0; }
+.cl-warn p { margin: 4px 0; font-size: 13.5px; line-height: 1.4; color: var(--warn); }
+.cl-sws { margin-top: 6px; }
