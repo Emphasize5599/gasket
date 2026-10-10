@@ -148,7 +148,7 @@ with sync_playwright() as p:
         # ---- tow mode: "Car tire details", and a tile for each trailer; the hooked-up ones' tires count ----
         pg.check('#tzTow'); pg.wait_for_selector('.sub-page [data-axles]')
         assert ft(pg, '.sub-page h2') == 'Trailer tire details · Trailer' and pg.locator('.sub-page [id$="_Hooked"]').count() == 0, 'a new trailer is hooked up: it opens to fill in, no switch'
-        assert [ft(pg, '.tz-trbtns .btn:nth-child(%d)' % i) for i in (1, 2, 3)] == ['Delete', 'Unhook & save', 'Discard changes']
+        assert [ft(pg, '.tz-trbtns .btn:nth-child(%d)' % i) for i in (1, 2, 3)] == ['Delete', 'Unhook', 'Discard changes']
         tid = pg.evaluate("window.Garage.car().tires.trailers[0].id")
         pg.click('[data-tr="%s"][data-axles="2"]' % tid); pg.wait_for_timeout(150); pg.click('[data-tr="%s"][data-per="4"]' % tid); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2a-trailer-page.png')

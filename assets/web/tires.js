@@ -497,7 +497,7 @@
     h += pickHtml(L, tr, p);
     h += '<div class="nf wide"><span>Wear rating' + A.qBtn(Q.utqg) + '</span>' + utqgHtml(tr.utqg, p) + '</div>';
     h += '<label class="nf wide"><span>Maker\'s mileage warranty' + A.qBtn(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="' + p + 'Warranty" placeholder="e.g. 40000" value="' + esc(+tr.warrantyMi > 0 ? tr.warrantyMi : '') + '"></label>';
-    h += '<div class="tz-trbtns"><button type="button" class="btn tonal sm danger-sm" id="ttDel">Delete</button><button type="button" class="btn tonal sm" id="ttUnhook">Unhook &amp; save</button><button type="button" class="btn tonal sm" id="ttDiscard">Discard changes</button></div>';
+    h += '<div class="tz-trbtns"><button type="button" class="btn tonal sm danger-sm" id="ttDel">Delete</button><button type="button" class="btn tonal sm" id="ttUnhook">Unhook</button><button type="button" class="btn tonal sm caution" id="ttDiscard">Discard changes</button></div>';
     return h;
   }
   var subFill = null;      // the submenu on screen, redrawn when a lookup it shows comes back
@@ -520,7 +520,7 @@
     A.subPage(t.towMode ? 'Car tire details' : 'Tire details', '', function (b) { pg = b.closest('.sub-page'); subFill = fill; fill(); nudgeFuel(c); return function () { subFill = null; draw(); onChange(); }; });
   }
   /**
-   * A trailer's details, as its own page. Back keeps what you changed; at the bottom: Delete, Unhook & save (it goes to
+   * A trailer's details, as its own page. Back keeps what you changed; at the bottom: Delete, Unhook (it goes to
    * Saved trailers), Discard changes (back to how it was when you opened it; a new trailer goes away).
    */
   function openTrailer(c, id, isNew) {

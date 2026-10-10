@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.78 - 2026-10-10
+- A trailer's "Unhook & save" is now just "Unhook" (changes are always kept), and "Discard changes" is in orange.
+
 ## 0.0.77 - 2026-10-10
 - **Tire details on their own pages.** "Tire details" (or "Car tire details") and each hooked-up trailer are now rows that open their own page.
 - **Trailers.** A new trailer is hooked up right away and opens to fill in. Its page ends with Delete, Unhook & save, and Discard changes. Unhooked trailers wait under "Saved trailers", next to "+ Add a trailer", where you can hook one back up.

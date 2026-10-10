@@ -1432,3 +1432,4 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .tz-miss b { display: block; font-size: 15px; color: var(--danger); }
 .tz-miss p { margin: 6px 0 8px; font-size: 13.5px; line-height: 1.4; }
 .tz-miss .btn { width: auto; margin: 0; }
+.tz-trbtns .btn.caution { color: var(--warn); }
