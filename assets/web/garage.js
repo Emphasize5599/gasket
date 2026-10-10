@@ -312,8 +312,7 @@
   function picHtml(c) {
     var src = window.CarPics && CarPics.src(c);
     if (src) return '<img src="' + src + '" alt="' + esc(shortName(c)) + '">';
-    var p = c.pic, waiting = window.CarPics && c.year && c.model && (!p || (!p.fail && p.sig));
-    return (window.CarPics ? CarPics.drawing(c) : '') + (waiting && !(p && p.fail) ? '<div class="gc-ld">' + A.ldBar('Finding a picture') + '</div>' : '');
+    return (window.CarPics ? CarPics.drawing(c) : '') + (window.CarPics && CarPics.pending(c) ? '<div class="gc-ld">' + A.ldBar('Finding a picture') + '</div>' : '');
   }
   function carousel(c) {
     var i = S.cars.indexOf(c), n = S.cars.length, many = n > 1;
@@ -353,17 +352,30 @@
     var pp = document.getElementById('gPaints'); if (pp && editing) pp.outerHTML = paintHtml(c);
     if (editing) bindPaints(c);
   });
-  /** The paint colors: the trim's factory colors (Fuel API), else common ones (they color the drawing). */
+  /**
+   * The paint colors. With a Fuel API key: the trim's factory colors (picking one shows Fuel API's photo in it; "As
+   * photographed" goes back to NHTSA's). Without: common colors, which color the drawing when there's no photo.
+   */
   function paintHtml(c) {
-    var cols = window.CarPics ? CarPics.colors(c) : [], list = cols.length ? cols.map(function (x) { return [x.name, x.rgb || '#999', x.code]; }) : PAINTS.map(function (x) { return [x[0], x[1], '']; });
-    var cur = c.paint || {};
-    return '<div class="nf wide" id="gPaints"><span>Paint color<small>' + (cols.length ? 'your trim\'s factory colors' : 'colors the picture when there\'s no photo in your color') + '</small></span><div class="gc-paints">' +
-      list.map(function (x) { var on = cur.code ? cur.code === x[2] : cur.name === x[0]; return '<button type="button" class="gc-paint' + (on ? ' on' : '') + '" data-paint="' + esc(x[0]) + '" data-code="' + esc(x[2]) + '" data-rgb="' + esc(x[1]) + '" style="background:' + esc(x[1]) + '" aria-label="' + esc(x[0]) + '" title="' + esc(x[0]) + '"></button>'; }).join('') +
+    var CP = window.CarPics, key = CP && CP.hasKey(), cols = CP ? CP.colors(c) : [], cur = c.paint || {}, f = c.pic && c.pic.fuel;
+    var list = cols.length ? cols.map(function (x) { return [x.name, x.rgb || '#999', x.code]; }) : PAINTS.map(function (x) { return [x[0], x[1], '']; });
+    var hint = cols.length ? 'Your trim\'s factory colors. Picking one shows your car in it (Fuel API).' : key && f && f.fail ? 'Fuel API doesn\'t have pictures of this car, so these only color the drawing.' :
+      key ? 'Loading your trim\'s factory colors…' : 'These color the drawing when there\'s no photo. Add a Fuel API key in Settings to see your car in its own color.';
+    var h = '<div class="nf wide" id="gPaints"><span>Paint color<small>' + hint + '</small></span>';
+    if (key && !cols.length && !(f && f.fail) && CP.busyColors(c)) h += A.ldBar('Loading colors');
+    var nh = c.pic && c.pic.nhtsa && c.pic.nhtsa.url;
+    h += '<div class="gc-paints">' + (cols.length && nh ? '<button type="button" class="gc-orig' + (!cur.code ? ' on' : '') + '" data-paint="" data-code="" data-rgb="">As photographed</button>' : '') +
+      list.map(function (x) { var on = cur.code ? cur.code === x[2] : !x[2] && cur.name === x[0]; return '<button type="button" class="gc-paint' + (on ? ' on' : '') + '" data-paint="' + esc(x[0]) + '" data-code="' + esc(x[2]) + '" data-rgb="' + esc(x[1]) + '" style="background:' + esc(x[1]) + '" aria-label="' + esc(x[0]) + '" title="' + esc(x[0]) + '"></button>'; }).join('') +
       '</div>' + (cur.name ? '<small class="gc-paint-name">' + esc(cur.name) + '</small>' : '') + '</div>';
+    return h;
   }
   function bindPaints(c) {
-    host.querySelectorAll('[data-paint]').forEach(function (b) {
-      b.onclick = function () { c.paint = { name: b.dataset.paint, code: b.dataset.code || '', rgb: b.dataset.rgb || '' }; LG.info('car', 'Paint: ' + c.paint.name); save(); draw(); if (window.CarPics) CarPics.ensure(c); };
+    if (window.CarPics) CarPics.loadColors(c);        // the factory colors: asked for only when you're picking one
+    host.querySelectorAll('#gPaints [data-paint]').forEach(function (b) {
+      b.onclick = function () {
+        c.paint = b.dataset.paint ? { name: b.dataset.paint, code: b.dataset.code || '', rgb: b.dataset.rgb || '' } : null;
+        LG.info('car', 'Paint: ' + (c.paint ? c.paint.name : 'as photographed')); save(); draw(); if (window.CarPics) CarPics.ensure(c);
+      };
     });
   }
   function editPanel(c) {

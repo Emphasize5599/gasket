@@ -20,6 +20,16 @@ assert.equal(C.pickColor(cols, { code: '218' }).code, '218'); assert.equal(C.pic
 assert.equal(C.nhtsaPic({ results: [{ vehiclePicture: null }, { vehiclePicture: 'https://static.nhtsa.gov/images/vehicles/1_st0640_046.png' }] }), 'https://static.nhtsa.gov/images/vehicles/1_st0640_046.png');
 assert.equal(C.nhtsaPic({ results: [] }), '');
 const car = { year: 2020, make: 'Toyota', model: 'Camry AWD', trim: 'LE' };
-assert.equal(C.sig(car, true), 'fuel|2020|toyota|camry|le'); assert.equal(C.sig(car, false), 'nhtsa|2020|toyota|camry|', 'NHTSA has one photo per model: the trim doesn\'t matter');
+assert.equal(C.sig(car, 'fuel'), 'fuel|2020|toyota|camry|le'); assert.equal(C.sig(car, 'nhtsa'), 'nhtsa|2020|toyota|camry|', 'NHTSA has one photo per model: the trim doesn\'t matter');
+// NHTSA's photo by default; Fuel API's when you pick one of its paints, or when NHTSA has none (and there's a key)
+const nh = { url: 'n' }, fu = { colors: [{ code: '070' }, { code: '218' }] };
+assert.equal(C.which({ nhtsa: nh, fuel: fu }, null, true), 'nhtsa');
+assert.equal(C.which({ nhtsa: nh, fuel: fu }, { code: '218' }, true), 'fuel');
+assert.equal(C.which({ nhtsa: nh, fuel: fu }, { code: '218' }, false), 'nhtsa', 'no key: NHTSA');
+assert.equal(C.which({ nhtsa: nh, fuel: fu }, { name: 'Red', code: '' }, true), 'nhtsa', 'a common color: still the photo');
+assert.equal(C.which({ nhtsa: nh, fuel: fu }, { code: '1G3' }, true), 'nhtsa', 'not one of this trim\'s paints');
+assert.equal(C.which({ nhtsa: { fail: 1 }, fuel: fu }, null, true), 'fuel', 'NHTSA has none: Fuel API');
+assert.equal(C.which({ nhtsa: { fail: 1 }, fuel: { fail: 1 } }, null, true), null, 'neither: draw it');
+assert.equal(C.which({ nhtsa: { fail: 1 } }, null, false), null);
 assert.equal(C.bodyOf({ type: 'truck' }), 'truck'); assert.equal(C.bodyOf({ type: 'suv' }), 'suv'); assert.equal(C.bodyOf({ type: 'hybrid' }), 'car');
 console.log('car picture tests passed');
