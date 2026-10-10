@@ -31,7 +31,7 @@ with sync_playwright() as p:
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
         now = pg.evaluate('ClimateMath.season()')
         pg.evaluate("document.querySelector('#gClimate').scrollIntoView()"); pg.click('#gClimate summary'); pg.wait_for_selector('#clCaps')
-        assert 'by season and weather' in ft(pg, '#gClimLine') and pg.locator('.cl-row.empty').count() == 5, 'controls and the four seasons: not set up'
+        assert 'by season and weather' in ft(pg, '#gClimLine') and pg.locator('.cl-row.empty').count() == 15, 'controls, the four seasons and the ten what-ifs: not set up'
         assert '(now)' in ft(pg, '#clS_' + now)
         # ---- your car's controls ----
         pg.click('#clCaps'); pg.wait_for_selector('.sub-page [data-cap]')
@@ -75,10 +75,14 @@ with sync_playwright() as p:
         assert pg.locator('#tpSteps [data-step="3"].dim').count() == 0 and pg.evaluate('window.__app.S.recircAck') > 0
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300)
         # ---- a weather preset; Discard changes on a new one: gone. Back to fresh air: Advice quiets down ----
-        pg.click('[data-addw="fog"]'); pg.wait_for_selector('.sub-page #cpTemp')
-        assert ft(pg, '.sub-page h2') == 'Foggy windows' and 'on' in pg.get_attribute('[data-k="flow"] [data-v="defrost"]', 'class')
+        here = pg.evaluate("ClimateMath.situations(ClimateMath.season()).map(w => w[0])")
+        rows = pg.evaluate("[...document.querySelectorAll('[data-kind=weather]')].map(b => b.dataset.key)")
+        assert rows[:len(here)] == here and len(rows) == 10, ('this time of year first', rows, here)
+        assert "What would you do if it's" in pg.inner_html('#gClimIn') and pg.locator('[data-kind=weather].empty').count() == 10
+        pg.click('#clW_fog'); pg.wait_for_selector('.sub-page #cpTemp')
+        assert ft(pg, '.sub-page h2') == "If it's foggy" and 'on' in pg.get_attribute('[data-k="flow"] [data-v="defrost"]', 'class')
         pg.click('#cpDiscard'); pg.wait_for_timeout(200)
-        assert pg.locator('.sub-page').count() == 0 and not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('[data-addw="fog"]').count() == 1
+        assert pg.locator('.sub-page').count() == 0 and not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('#clW_fog.empty').count() == 1
         pg.click('#clS_winter'); pg.wait_for_selector('.sub-page #cpTemp')
         pg.click('[data-k="air"] [data-v="fresh"]'); pg.wait_for_timeout(100); assert pg.locator('.cl-warn').count() == 0
         pg.click('[data-k="air"] [data-v="recirc"]'); pg.click('#cpDiscard'); pg.wait_for_timeout(200)

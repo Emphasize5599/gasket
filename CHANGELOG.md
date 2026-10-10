@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.82 - 2026-10-10
+- **"What would you do if it's…"** replaces the weather presets in Climate control: snowy, icy, frosty, foggy, rainy, stormy, full of pollen, hot & sunny, humid, smoky or polluted. The ones that come with this time of year are listed first, and Advice shows your answers for them (and which are still open).
+- The scroll button sits clear of the Back / Next bar, and turns into "back to the top" near the end.
+- Bug fixes (including a lag when the gauge reaches empty).
+
 ## 0.0.81 - 2026-10-10
 - **An empty tank isn't a starting point.** Empty on the gauge, 0% or 0 miles now grays out Adjustments, Stops and Departure. A red box under the gauge says how much to put in first: enough to reach the nearest station Gasket knows, or the first one along your route (0.1 mile extra included), with a button to use that amount.
 

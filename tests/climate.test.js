@@ -28,5 +28,7 @@ assert.deepEqual(C.warnings({ air: 'auto' }), ['autoAir']);
 const p = Object.assign(C.starter('season', 'winter', caps), { mode: 'manual', fan: 4, tempP: 75 });
 assert.equal(C.line(p, { dual: true }), '72° / 75° · Fan 4 · A/C off · Fresh air · Feet & windshield · Heated seat 2 · Heated wheel');
 assert.equal(C.line(p, {}), '72° · Fan 4 · A/C off · Fresh air · Feet & windshield · Heated seat 2 · Heated wheel', 'one zone: one temperature');
-assert.equal(C.label({ kind: 'weather', key: 'snow' }), 'Snow & ice'); assert.equal(C.label({ kind: 'custom', name: 'Road trip' }), 'Road trip');
+assert.equal(C.label({ kind: 'weather', key: 'snow' }), 'Snowy'); assert.equal(C.title({ kind: 'weather', key: 'snow' }), "If it's snowy");
+assert.deepEqual(C.situations('winter').map(w => w[0]), ['snow', 'ice', 'frost', 'fog']); assert.deepEqual(C.situations('summer').map(w => w[0]), ['rain', 'storm', 'heat', 'humid', 'smoke']);
+C.SEASONS.forEach(s => assert.ok(C.situations(s[0]).length >= 3, s[0])); assert.equal(C.label({ kind: 'custom', name: 'Road trip' }), 'Road trip');
 console.log('climate tests passed');

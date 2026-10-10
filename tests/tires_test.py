@@ -61,6 +61,13 @@ with sync_playwright() as p:
         # ---- the Corolla Hybrid LE: factory size from Tire Rack, then the tires in that size ----
         show(pg, 'corolla20')
         pg.wait_for_function("window.Garage.car().tires && window.Garage.car().tires.list && window.Garage.car().tires.list.items.length === 4", timeout=5000); pg.wait_for_timeout(200)
+        # the scroll button: just above the Back / Next bar going down; an up arrow near the end and when heading back up
+        hint = "(() => { const sc = document.getElementById('tpBody'), h = sc._hint, r = h.getBoundingClientRect(); return { cls: h.className, bottom: r.bottom, nav: document.getElementById('tNext').getBoundingClientRect().top, sc: sc.getBoundingClientRect().bottom } })()"
+        o = pg.evaluate(hint); assert 'hidden' not in o['cls'] and 'up' not in o['cls'] and o['bottom'] <= o['sc'] and o['bottom'] < o['nav'], o
+        pg.evaluate("document.getElementById('tpBody').scrollTop = 1e6"); pg.wait_for_timeout(200); assert ' up' in pg.evaluate(hint)['cls'], 'at the end: back to the top'
+        pg.evaluate("(() => { const sc = document.getElementById('tpBody'); sc.scrollTop = sc.scrollHeight - sc.clientHeight - 40; })()"); pg.wait_for_timeout(200)
+        assert ' up' in pg.evaluate(hint)['cls'], 'a little short of the end: still up'
+        pg.evaluate("(() => { const sc = document.getElementById('tpBody'); sc.scrollTop = 0; })()"); pg.wait_for_timeout(200); assert ' up' not in pg.evaluate(hint)['cls']
         reads = pg.evaluate('window.__tr'); print(' ', name, 'Tire Rack reads:', [r['url'] for r in reads])
         assert reads[0]['step'] == 'size' and reads[0]['url'] == 'https://www.tirerack.com/tires/SelectTireSize.jsp?autoMake=Toyota&autoYear=2020&autoModel=Corolla%20Hybrid&autoModClar=LE'
         assert reads[1]['step'] == 'list' and 'width=195/&ratio=65&diameter=15' in reads[1]['url'] and 'autoModClar=LE' in reads[1]['url']

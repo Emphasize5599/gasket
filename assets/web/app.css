@@ -1439,8 +1439,6 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .cl-row.empty { border-style: dashed; }
 .cl-row.empty b { color: var(--ink-2); }
 .cl-row.warn small { color: var(--warn); }
-.cl-add { align-items: center; padding: 4px 0 6px; }
-.cl-add > span { font-size: 13px; color: var(--ink-2); }
 .cl-new { width: auto; margin: 4px 0 6px; }
 .cl-ch { padding: 2px 0 4px; }
 .cl-temps { display: flex; gap: 10px; } .cl-temps > .nf { flex: 1; min-width: 0; }
@@ -1453,3 +1451,4 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .fg-empty p { margin: 6px 0 0; overflow-wrap: anywhere; }
 .fe-opt { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 6px; }
 .fe-opt .btn { width: auto; margin-top: 6px; }
+.cl-sub { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); }

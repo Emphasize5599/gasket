@@ -1,15 +1,22 @@
-/* Gasket — Climate control (Garage). Your car's climate controls, and your favorite settings as presets: one per season, any
- * weather you set one up for, and your own. Advice reminds you to keep it on fresh air (recirculate makes you drowsy, and
+/* Gasket — Climate control (Garage). Your car's climate controls, and your favorite settings as presets: one per season,
+ * what you'd do if it's snowy / frosty / rainy / ... (the ones that come with each season), and your own. Advice reminds you to keep it on fresh air (recirculate makes you drowsy, and
  * with the A/C on the air gets dry). ClimateMath is pure and runs in Node for the tests. */
 (function (root) {
   'use strict';
   // ---------- the rules ----------
   var SEASONS = [['spring', 'Spring'], ['summer', 'Summer'], ['fall', 'Fall'], ['winter', 'Winter']];
-  var WEATHER = [['rain', 'Rain'], ['snow', 'Snow & ice'], ['fog', 'Foggy windows'], ['heat', 'Hot & sunny'], ['frost', 'Frosty morning'], ['humid', 'Humid'], ['pollen', 'High pollen'], ['smoke', 'Smoke or pollution']];
+  // what a year up north brings: [key, label, the seasons it comes with]
+  var WEATHER = [['snow', 'Snowy', ['winter']], ['ice', 'Icy', ['winter']], ['frost', 'Frosty', ['fall', 'winter', 'spring']], ['fog', 'Foggy', ['fall', 'winter', 'spring']],
+    ['rain', 'Rainy', ['spring', 'summer', 'fall']], ['storm', 'Stormy', ['spring', 'summer']], ['pollen', 'Full of pollen', ['spring']], ['heat', 'Hot & sunny', ['summer']],
+    ['humid', 'Humid', ['summer']], ['smoke', 'Smoky or polluted', ['summer', 'fall']]];
+  /** The situations that come with a season, in the order above. */
+  function situations(s) { return WEATHER.filter(function (w) { return w[2].indexOf(s) >= 0; }); }
   var FLOW = [['face', 'Face'], ['bi', 'Face & feet'], ['feet', 'Feet'], ['mix', 'Feet & windshield'], ['defrost', 'Windshield']];
   /** The season for a date (northern hemisphere, by month). */
   function season(d) { var m = (d || new Date()).getMonth(); return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'fall' : 'winter'; }
   function label(p) { var l = SEASONS.concat(WEATHER).filter(function (x) { return x[0] === p.key; })[0]; return p.kind === 'custom' ? (p.name || 'My preset') : l ? l[1] : p.key; }
+  /** A preset's page title: "Winter", "If it's snowy", "Road trip". */
+  function title(p) { return p.kind === 'weather' ? 'If it\'s ' + label(p).toLowerCase() : label(p); }
   /** A starting point for a new preset: fresh air throughout (smoke aside), the A/C where it clears glass or dries the air. */
   function starter(kind, key, caps) {
     caps = caps || {};
@@ -21,6 +28,8 @@
       summer: { ac: 'on', flow: 'face', coolD: caps.seatCool ? 2 : 0 },
       winter: { temp: 72, flow: 'mix', seatD: caps.seatHeat ? 2 : 0, wheel: !!caps.wheelHeat },
       rain: { ac: 'on', flow: 'mix' },
+      storm: { ac: 'on', flow: 'mix', fan: Math.min(hi, 5), mode: 'manual', rearDef: !!caps.rearDefrost },
+      ice: { temp: 74, ac: 'on', flow: 'defrost', frontDef: true, rearDef: !!caps.rearDefrost, fan: hi, mode: 'manual', seatD: caps.seatHeat ? 3 : 0, wheel: !!caps.wheelHeat },
       snow: { temp: 72, flow: 'mix', rearDef: !!caps.rearDefrost, seatD: caps.seatHeat ? 3 : 0, wheel: !!caps.wheelHeat },
       fog: { ac: 'on', flow: 'defrost', fan: Math.min(hi, 5), mode: 'manual' },
       heat: { temp: 68, ac: 'on', flow: 'face', fan: hi, mode: 'manual', coolD: caps.seatCool ? 3 : 0, notes: 'Windows down for the first minute to let the hot air out.' },
@@ -56,7 +65,7 @@
     if (+p.seatD) a.push('Heated seat ' + p.seatD); if (+p.coolD) a.push('Cooled seat ' + p.coolD); if (p.wheel) a.push('Heated wheel');
     return a.filter(Boolean).join(' · ');
   }
-  var ClimateMath = { recircOk: recircOk, season: season, starter: starter, warnings: warnings, line: line, label: label, SEASONS: SEASONS, WEATHER: WEATHER, FLOW: FLOW };
+  var ClimateMath = { situations: situations, title: title, recircOk: recircOk, season: season, starter: starter, warnings: warnings, line: line, label: label, SEASONS: SEASONS, WEATHER: WEATHER, FLOW: FLOW };
   root.ClimateMath = ClimateMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = ClimateMath;
   if (!root.document) return;                                   // Node: the rules only
@@ -94,26 +103,26 @@
     var c = G().car(); if (!c) { host.innerHTML = ''; return; }
     var x = cl(c), now = season(), caps = x.caps;
     var capsOn = CAPS.filter(function (k) { return caps[k[0]]; }).map(function (k) { return k[1]; });
-    var h = '<p class="lead small keep">Your favorite settings, ready for the season or the weather. Advice reminds you of this season\'s.</p>';
+    var h = '<p class="lead small keep">Your favorite settings for each season, and what you\'d do when the weather turns. Advice reminds you of the ones for this time of year.</p>';
     h += row('clCaps', '', 'Your car\'s controls', capsOn.length ? capsOn.join(', ') : 'Tell Gasket what your car has', capsOn.length ? '' : 'empty');
     h += '<h4 class="cl-h">Seasons</h4>';
     SEASONS.forEach(function (s) {
       var p = find(c, 'season', s[0]);
       h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : ''));
     });
-    var wx = x.presets.filter(function (p) { return p.kind === 'weather'; }), cu = x.presets.filter(function (p) { return p.kind === 'custom'; });
-    h += '<h4 class="cl-h">Weather</h4>';
-    wx.forEach(function (p) { h += row('clW_' + p.key, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), bad(p, caps) ? 'warn' : ''); });
-    var left = WEATHER.filter(function (w) { return !find(c, 'weather', w[0]); });
-    if (left.length) h += '<div class="chips cl-add" id="clAddW"><span>Add:</span>' + left.map(function (w) { return '<button type="button" data-addw="' + w[0] + '">+ ' + esc(w[1]) + '</button>'; }).join('') + '</div>';
+    var cu = x.presets.filter(function (p) { return p.kind === 'custom'; });
+    // what would you do if it's...: this time of year first, the rest after
+    var wrow = function (w) { var p = find(c, 'weather', w[0]); return row('clW_' + w[0], 'data-kind="weather" data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); };
+    var mine = situations(now);
+    h += '<h4 class="cl-h">What would you do if it\'s…</h4><p class="cl-sub">This time of year</p>' + mine.map(wrow).join('');
+    h += '<p class="cl-sub">Other times of year</p>' + WEATHER.filter(function (w) { return mine.indexOf(w) < 0; }).map(wrow).join('');
     h += '<h4 class="cl-h">Custom</h4>';
     cu.forEach(function (p) { h += row('clC_' + p.id, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), bad(p, caps) ? 'warn' : ''); });
     h += '<button type="button" class="btn tonal sm cl-new" id="clAddC">+ Custom preset</button>';
     host.innerHTML = h;
     $('clCaps').onclick = function () { openCaps(c); };
-    host.querySelectorAll('[data-kind="season"]').forEach(function (b) { b.onclick = function () { var p = find(c, 'season', b.dataset.key); if (p) openPreset(c, p.id, false); else add(c, 'season', b.dataset.key); }; });
+    host.querySelectorAll('[data-kind]').forEach(function (b) { b.onclick = function () { var k = b.dataset.kind, p = find(c, k, b.dataset.key); if (p) openPreset(c, p.id, false); else add(c, k, b.dataset.key); }; });
     host.querySelectorAll('[data-id]').forEach(function (b) { b.onclick = function () { openPreset(c, b.dataset.id, false); }; });
-    host.querySelectorAll('[data-addw]').forEach(function (b) { b.onclick = function () { add(c, 'weather', b.dataset.addw); }; });
     $('clAddC').onclick = function () { add(c, 'custom', ''); };
   }
   function changed() { save(); draw(); onChange(); }
@@ -178,11 +187,11 @@
       $('cpNotes').onchange = function () { p.notes = this.value.trim(); save(); };
       $('cpDiscard').onclick = function () { if (isNew) drop(); else { var o = JSON.parse(snap); Object.keys(p).forEach(function (k) { delete p[k]; }); Object.assign(p, o); } save(); close(); };
       $('cpDel').onclick = function () {
-        A.confirmDel({ title: 'Delete your ' + label(p) + ' preset?', action: 'Delete' }).then(function (ok) { if (!ok) return; drop(); LG.info('car', 'Climate preset deleted'); save(); close(); });
+        A.confirmDel({ title: 'Delete "' + title(p) + '"?', action: 'Delete' }).then(function (ok) { if (!ok) return; drop(); LG.info('car', 'Climate preset deleted'); save(); close(); });
       };
       if (A.qify) A.qify(b);
     };
-    close = A.subPage(label(p), '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
+    close = A.subPage(title(p), '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
   /** A preset that recirculates where it shouldn't. */
   function bad(p, caps) { return p.air === 'recirc' && !recircOk(p, caps); }
@@ -193,6 +202,14 @@
   function advice(c) {
     var x = c && c.climate || {}, out = [], ps = x.presets || [], now = current(c);
     if (now) out.push({ level: 'info', title: 'This season: ' + label(now), paras: [line(now, x.caps) + (now.notes ? '. ' + now.notes : '')] });
+    // what you said you'd do in this time of year's weather (and which ones are still open)
+    var sit = situations(season()), got = sit.map(function (w) { return find(c, 'weather', w[0]); });
+    if (got.some(Boolean) || ps.length) {
+      var paras0 = sit.map(function (w, i) { var p = got[i]; return p ? w[1] + ': ' + line(p, x.caps) + (p.notes ? '. ' + p.notes : '') : null; }).filter(Boolean);
+      var open = sit.filter(function (w, i) { return !got[i]; }).map(function (w) { return w[1]; });
+      if (open.length) paras0.push('Not answered yet (what you\'d do if it\'s…): ' + open.join(' · ') + '. Set ' + (open.length > 1 ? 'them' : 'it') + ' up under Climate control in the Garage.');
+      out.push({ level: 'info', title: 'If the weather turns', paras: paras0 });
+    }
     var b = ps.filter(function (p) { return bad(p, x.caps); });
     var paras = [(b.length ? 'Your ' + b.map(label).join(', ') + ' preset' + (b.length > 1 ? 's use' : ' uses') + ' recirculate. ' : '') + RECIRC, DRY, WHEN];
     if (x.caps && x.caps.noFilter) paras.push(NOFILTER);

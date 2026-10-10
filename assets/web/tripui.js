@@ -519,6 +519,7 @@
     FuelGauge.render($('tFuel'), { kind: KIND(), tank: Garage.tank(), mpu: Garage.carModel().comb, unit: UN(), fuel: fuel(),
       onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; emptyHelp(); gateTabs(); } });
     emptyHelp();
+    setTimeout(function () { try { emptyPlan(); } catch (e) { } }, 300);   // ready before the needle gets to E
   }
   /** How much is in the tank: S.trip.fuel ({mode: gauge / pct / miles, …}, see fuelgauge.js), filled in for this car. */
   function fuel() { return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
@@ -543,7 +544,14 @@
    * An empty tank: the nearest known station from the start (straight line x ROAD), and the nearest one along the route
    * (miles along it, plus the way off it). -> { near: {st, mi}, along: {st, mi} } (either may be null).
    */
+  var emptyMemo = null;   // the answer for this route and these stations, worked out ahead (dragging to E must not wait on it)
   function emptyPlan() {
+    var n = A.stations ? A.stations().length : 0, key = [KIND(), n, Object.keys(S.brands).filter(function (b) { return S.brands[b]; }).join()].join('|');
+    if (emptyMemo && emptyMemo.model === model && emptyMemo.key === key) return emptyMemo.v;
+    var v = emptyPlan0(); emptyMemo = { model: model, key: key, v: v };
+    return v;
+  }
+  function emptyPlan0() {
     var start = model && model.pts.length ? model.pts[0] : A.me && A.me(), near = null, along = null;
     if (!start) return { near: null, along: null };
     knownStations().forEach(function (st) {
