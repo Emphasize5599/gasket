@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.85 - 2026-10-10
+- **Photo or Doodle.** Your car's picture is NHTSA's photo of the model, or for cars NHTSA doesn't have (older ones), a photo from Wikimedia Commons, credited to its photographer. Switch to Doodle under Edit → Picture for the app's own drawing of your car's body style in the color you pick; colors are only for the doodle.
+- Fuel API is gone (its pictures can't be used without a license), and its saved key is deleted.
+
 ## 0.0.84 - 2026-10-10
 - **NHTSA's photo first.** Your car's picture is NHTSA's photo of the model. Fuel API (with your key) is only asked when you pick one of your trim's factory colors under Edit, or when NHTSA has no photo of the car; "As photographed" goes back to NHTSA's.
 

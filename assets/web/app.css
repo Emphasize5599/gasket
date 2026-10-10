@@ -1480,5 +1480,7 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .gc-paint { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); padding: 0; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15); }
 .gc-paint.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .gc-paint-name { font-size: 12.5px; color: var(--ink-2); }
-.gc-orig { font-size: 12.5px; font-weight: 600; height: 30px; padding: 0 12px; border-radius: 999px; background: var(--surface-2); border: 2px solid var(--line); color: var(--ink); }
-.gc-orig.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.gc-mode { margin: 4px 0 6px; }
+.gc-sub a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); }
+.gc-draw .gc-line { stroke: rgba(0, 0, 0, .3); stroke-width: 1; fill: none; }
+.gc-draw .gc-head { fill: #fff6d0; } .gc-draw .gc-taillight { fill: #c62828; }

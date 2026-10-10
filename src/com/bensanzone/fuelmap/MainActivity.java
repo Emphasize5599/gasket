@@ -718,10 +718,10 @@ public class MainActivity extends Activity {
     // EPA mileage, OpenStreetMap places, FHWA speed limits, ExxonMobil's station finder, the DOE station finder (EV chargers,
     // hydrogen), and NHTSA (VIN decoding, recalls)
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com",
-            "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov"};
+            "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org"};
 
-    // car pictures: NHTSA's vehicle photos, Fuel API's (signed links on i.fuelapi.com that redirect to its CDN)
-    private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "i.fuelapi.com"};
+    // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails)
+    private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org"};
 
     // brand icons: Google's favicon service, or each brand's own site
     private static final String[] ICON_HOSTS = {"www.google.com", "icons.duckduckgo.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
@@ -1159,29 +1159,7 @@ public class MainActivity extends Activity {
             return bo.toByteArray();
         }
 
-        /** Fuel API (car pictures by trim and paint): path under /v1/json/, the owner's key sent as the Basic-auth user (never in the URL, never logged). */
-        @JavascriptInterface
-        public void fetchFuel(final int reqId, final String path, final String key) {
-            new Thread(new Runnable() {
-                public void run() {
-                    JSONObject o = new JSONObject();
-                    try {
-                        if (path == null || path.startsWith("/") || path.contains("..") || path.contains("://")) throw new Exception("Bad path");
-                        HttpURLConnection c = (HttpURLConnection) new URL("https://api.fuelapi.com/v1/json/" + path).openConnection();
-                        c.setConnectTimeout(10000); c.setReadTimeout(20000);
-                        c.setRequestProperty("Accept", "application/json");
-                        c.setRequestProperty("Authorization", "Basic " + android.util.Base64.encodeToString((key + ":").getBytes("UTF-8"), android.util.Base64.NO_WRAP));
-                        int st = c.getResponseCode();
-                        String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
-                        if (st >= 400) o.put("status", st);
-                        o.put("body", body);
-                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
-                    reply(reqId, o);
-                }
-            }).start();
-        }
-
-        /** A car's picture (NHTSA's vehicle photo or Fuel API's), shrunk to at most 640 px wide and handed back as a WebP data URL to keep. */
+        /** A car's picture (NHTSA's vehicle photo, or a Wikimedia Commons photo), shrunk to at most 640 px wide and handed back as a WebP data URL to keep. */
         @JavascriptInterface
         public void fetchImage(final int reqId, final String url) {
             new Thread(new Runnable() {
@@ -1189,7 +1167,16 @@ public class MainActivity extends Activity {
                     JSONObject o = new JSONObject();
                     try {
                         if (!hostAllowed(url, PIC_HOSTS)) throw new Exception("Host not allowed");
-                        byte[] data = iconBytes(url, null);
+                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                        c.setConnectTimeout(8000); c.setReadTimeout(20000); c.setInstanceFollowRedirects(true);
+                        c.setRequestProperty("User-Agent", userAgent());     // Wikimedia asks apps to say who they are
+                        if (c.getResponseCode() >= 400) throw new Exception("HTTP " + c.getResponseCode());
+                        InputStream is = c.getInputStream();
+                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                        byte[] buf = new byte[8192]; int n;
+                        while ((n = is.read(buf)) > 0) { bo.write(buf, 0, n); if (bo.size() > 6000000) throw new Exception("too big"); }
+                        is.close();
+                        byte[] data = bo.toByteArray();
                         android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length);
                         if (bm == null) throw new Exception("not an image");
                         int w = bm.getWidth(), h = bm.getHeight();
