@@ -35,3 +35,10 @@ assert.equal(M.stepAt(-90), 8, 'negative angles from atan2');
 assert.equal(M.stepAt(170), 0); assert.equal(M.stepAt(10), 16); assert.equal(M.stepAt(95), 0); assert.equal(M.stepAt(85), 16);
 assert.equal(M.label(0), 'Empty'); assert.equal(M.label(16), 'Full'); assert.equal(M.label(6), '⅜ tank'); assert.equal(M.label(5), '5/16 tank');
 console.log('fuel gauge tests passed');
+
+// an empty tank isn't a starting point (gauge on E, 0%, 0 miles); what to put in to reach a station, 0.1 mile extra
+{ const M = require('../assets/web/fuelgauge.js').math, assert2 = require('assert');
+  assert2.ok(M.empty({ mode: 'gauge', n16: 0 }, 12, 30) && M.empty({ mode: 'pct', pct: '0' }, 12, 30) && M.empty({ mode: 'miles', miles: '0' }, 12, 30));
+  assert2.ok(!M.empty({ mode: 'gauge', n16: 1 }, 12, 30) && !M.empty({ mode: 'gauge' }, 12, 30) && !M.empty({ mode: 'pct', pct: '' }, 12, 30), 'not set is not empty');
+  assert2.equal(M.toReach(2.9, 30), 0.1); assert2.equal(M.toReach(3, 30), 0.11, 'rounded up'); assert2.equal(M.toReach(0, 50), 0.01);
+  console.log('empty tank tests passed'); }

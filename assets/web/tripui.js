@@ -273,6 +273,7 @@
       return true;
     }
     if (k === ST_PARAMS) {
+      if (FuelGauge.math.empty(fuel(), Garage.tank(), Garage.carModel().comb)) { flag($('tEmpty') || $('tFuel'), 'pick', KIND() === 'ev' ? 'Charge enough to reach a station first.' : 'Put in enough gas to reach a station first.'); return false; }
       if (!hasFuel()) { flag($('tMiles') || $('tFuelPct') || $('tGauge'), 'box', KIND() === 'ev' ? 'How charged is your battery?' : 'How much gas do you have?'); return false; }
       return true;
     }
@@ -390,7 +391,7 @@
     }
     if (k === ST_PARAMS) {
       var kd = KIND();
-      return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div>' +
+      return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div><div id="tEmpty"></div>' +
         '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
         num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, kd === 'ev' ? 'e.g. home charging · blank = your fast-charging price' : 'blank = typical price on the route') + '</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
@@ -512,13 +513,74 @@
       if ($(id)) $(id).addEventListener('input', function () { collectSafe(); again(); });
     });
     arriveHelp();
+    renderFuel();
+  }
+  function renderFuel() {
     FuelGauge.render($('tFuel'), { kind: KIND(), tank: Garage.tank(), mpu: Garage.carModel().comb, unit: UN(), fuel: fuel(),
-      onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; gateTabs(); } });
+      onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; emptyHelp(); gateTabs(); } });
+    emptyHelp();
   }
   /** How much is in the tank: S.trip.fuel ({mode: gauge / pct / miles, …}, see fuelgauge.js), filled in for this car. */
   function fuel() { return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
   function fuelMiles() { return FuelGauge.math.miles(fuel(), Garage.tank(), Garage.carModel().comb); }
-  function hasFuel() { return fuelMiles() != null; }
+  function hasFuel() { var m = fuelMiles(); return m != null && m > 0; }   // an empty tank isn't an answer (see emptyHelp)
+  /** Roads wind: a straight line times this is a fair guess at the miles to a station off the route. */
+  var ROAD = 1.25;
+  /** Stations Gasket already knows (the map's, plus this route's saved Google answers) — nothing is looked up. */
+  function knownStations() {
+    var out = (A.stations ? A.stations() : []).slice();
+    if (model && KIND() === 'gas') try {
+      googleBrands().forEach(function (b) {
+        T.chunks(model, 125).forEach(function (ch) {
+          var o = A.KV.get('along', P.BRANDS[b].query + '|' + ch.polyline, 30 * 864e5);
+          ((o && o.v && o.v.places) || []).forEach(function (pl) { var st = P.normalize(pl); if (st && S.brands[st.brand]) out.push(st); });
+        });
+      });
+    } catch (e) { LG.warn('plan', 'Couldn\'t read saved stations', String(e)); }
+    return dedupe(out.filter(function (s) { return s && s.lat != null && s.lng != null; }));
+  }
+  /**
+   * An empty tank: the nearest known station from the start (straight line x ROAD), and the nearest one along the route
+   * (miles along it, plus the way off it). -> { near: {st, mi}, along: {st, mi} } (either may be null).
+   */
+  function emptyPlan() {
+    var start = model && model.pts.length ? model.pts[0] : A.me && A.me(), near = null, along = null;
+    if (!start) return { near: null, along: null };
+    knownStations().forEach(function (st) {
+      var mi = P.haversineMi(start.lat, start.lng, st.lat, st.lng) * ROAD;
+      if (!near || mi < near.mi) near = { st: st, mi: mi };
+      if (model) {
+        var pj = T.project(model, { lat: st.lat, lng: st.lng });
+        if (pj.offset <= 1) { var am = pj.along + pj.offset * ROAD; if (!along || am < along.mi) along = { st: st, mi: am }; }
+      }
+    });
+    return { near: near, along: along };
+  }
+  /** Under the gauge when it says empty: how much to put in to reach a station first (Adjustments on wait for a real amount). */
+  function emptyHelp() {
+    var host = $('tEmpty'); if (!host) return;
+    if (!FuelGauge.math.empty(fuel(), Garage.tank(), Garage.carModel().comb)) { host.innerHTML = ''; return; }
+    var ev = KIND() === 'ev', u = UN(), mpu = Garage.carModel().comb, p = emptyPlan();
+    var opt = function (o, how, id) {
+      var amt = FuelGauge.math.toReach(o.mi, mpu);
+      return '<div class="fe-opt"><p><b>' + amt.toFixed(2) + ' ' + esc(u) + '</b> ' + how + ' <b>' + esc(o.st.name || 'a station') + '</b>' + (o.st.address ? ', ' + esc(o.st.address) : '') + ' (about ' + o.mi.toFixed(1) + ' mi).</p>' +
+        '<button type="button" class="btn tonal sm" id="' + id + '" data-mi="' + (o.mi + 0.1).toFixed(2) + '">I\'ll put in ' + amt.toFixed(2) + ' ' + esc(u) + '</button></div>';
+    };
+    var h = '<div class="fg-empty" role="alert"><b>' + (ev ? 'Your battery is empty.' : 'Your tank is empty.') + '</b><p>' +
+      (ev ? 'Charge' : 'Put in') + ' at least enough to reach a station first (0.1 mile extra is included), then set the ' + (ev ? 'charge' : 'gauge') + ' to what you have.</p>';
+    if (p.near) h += opt(p.near, 'to reach the nearest station Gasket knows,', 'tEmptyNear');
+    if (p.along && (!p.near || p.along.st.id !== p.near.st.id)) h += opt(p.along, 'to reach the first station along your route,', 'tEmptyAlong');
+    else if (p.near && p.along) h += '<p class="fe-same">It\'s also the first station along your route.</p>';
+    if (!p.near) h += '<p>Gasket doesn\'t know any stations near your start yet. Search the map there, or ' + (ev ? 'charge' : 'fill up') + ' at the closest station you know.</p>';
+    host.innerHTML = h + '</div>';
+    host.querySelectorAll('[data-mi]').forEach(function (b) {
+      b.onclick = function () {
+        S.trip.fuel = { mode: 'miles', miles: String(Math.ceil(+b.dataset.mi * 10) / 10) }; syncMilesLeft(); A.save(); result = null;
+        LG.info('plan', 'Empty tank: putting in enough for ' + S.trip.fuel.miles + ' mi');
+        renderFuel(); gateTabs();
+      };
+    });
+  }
   /** Fuel in the tank at the start: a gauge or percentage is a share of the tank; dash miles use the route's mileage. */
   function startFuel(m) { var f = fuel(); return f.mode === 'miles' ? (parseFloat(f.miles) || 0) * m.combGpm : FuelGauge.math.amount(f, Garage.tank(), 1) || 0; }
   /** S.trip.milesLeft follows the fuel choice (saved trips and old exports read it). */

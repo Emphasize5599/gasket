@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.81 - 2026-10-10
+- **An empty tank isn't a starting point.** Empty on the gauge, 0% or 0 miles now grays out Adjustments, Stops and Departure. A red box under the gauge says how much to put in first: enough to reach the nearest station Gasket knows, or the first one along your route (0.1 mile extra included), with a button to use that amount.
+
 ## 0.0.80 - 2026-10-10
 - **Cabin climate advice.** The card explains when recirculate does make sense (harsh allergens, heavy pollution, and very hot, humid days when the A/C can't keep up and the windows could fog), and you tick "I understand when to use recirculate" once before the trip goes on.
 - New High pollen weather preset, and a "No cabin air filter" switch under your car's controls (recirculate is flagged less for those cars).

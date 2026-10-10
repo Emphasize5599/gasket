@@ -237,17 +237,40 @@ with sync_playwright() as p:
         e8 = pg.locator('.fg-lbl[data-e="8"]').bounding_box(); e0 = pg.locator('.fg-lbl[data-e="0"]').bounding_box()
         pg.mouse.move(e8['x'] + e8['width'] / 2, e8['y'] + e8['height'] / 2); pg.mouse.down(); pg.mouse.move(e0['x'], e0['y'] + e0['height'], steps=8); pg.mouse.up(); pg.wait_for_timeout(700)
         assert fuel()['n16'] == 0 and pg.locator('.fg-pump.lit').count() == 1, 'dragged to E: the low-fuel light comes on'
+        # empty isn't a starting point: a red box says how much to put in first, and Adjustments on wait
+        emp = ft(pg, '#tEmpty .fg-empty'); print('  empty:', emp.replace('\n', ' | '))
+        assert 'Your tank is empty' in emp and '0.1 mile extra' in emp
+        assert pg.locator('#tpSteps [data-step="5"].dim').count() == 1 and pg.locator('#tpSteps [data-step="7"].dim').count() == 1
+        pg.click('#tNext'); pg.wait_for_timeout(250); assert step(pg) == 4, 'Next waits'
+        pg.screenshot(path=f'{OUT}/{name}-p0b-empty.png'); wide(pg, 'empty tank')
+        btn = pg.locator('#tEmptyAlong, #tEmptyNear').first
+        if btn.count():
+            need = float(btn.get_attribute('data-mi')); amt = btn.inner_text()
+            assert ('%.2f' % (int((need / comb) * 100 + 0.999999) / 100)) in amt, (need, comb, amt)
+            btn.click(); pg.wait_for_timeout(200)
+            assert fuel()['mode'] == 'miles' and float(fuel()['miles']) >= need and pg.locator('#tEmpty .fg-empty').count() == 0 and pg.locator('#tpSteps [data-step="5"].dim').count() == 0, fuel()
+            pg.click('#tFuelMode [data-fm="gauge"]'); pg.wait_for_timeout(150)
+        else: print('  (no known stations: no amount to put in)')
+        tap_label(0); assert fuel()['n16'] == 0 and pg.locator('#tEmpty .fg-empty').count() == 1
+        pg.focus('.fg-svg')
         for _ in range(4): pg.keyboard.press('ArrowRight')
         pg.wait_for_timeout(700)
         assert fuel()['n16'] == 4 and pg.locator('.fg-pump.lit').count() == 0 and 'lower one' in ft(pg, '.fg-tip') and pg.locator('#tFuel .tipbox svg').count() == 1, 'and a Tip says to round down'
         pg.screenshot(path=f'{OUT}/{name}-p0-gauge.png'); wide(pg, 'gauge')
         # a percentage
-        pg.click('#tFuelMode [data-fm="pct"]'); pg.wait_for_timeout(150); pg.fill('#tFuelPct', '50'); pg.wait_for_timeout(150)
+        assert pg.locator('#tEmpty .fg-empty').count() == 0
+        pg.click('#tFuelMode [data-fm="pct"]'); pg.wait_for_timeout(150); pg.fill('#tFuelPct', '0'); pg.wait_for_timeout(150)
+        assert pg.locator('#tEmpty .fg-empty').count() == 1 and pg.locator('#tpSteps [data-step="5"].dim').count() == 1, '0%: empty too'
+        pg.fill('#tFuelPct', '50'); pg.wait_for_timeout(150)
+        assert pg.locator('#tEmpty .fg-empty').count() == 0
         assert pg.evaluate('window.__app.S.trip.milesLeft') == str(round(tank * comb / 2)) and 'Round down' in ft(pg, '.fg-tip')
         # the miles on the dash
         pg.click('#tFuelMode [data-fm="miles"]'); pg.wait_for_timeout(150)
         assert 'less than your dash' in ft(pg, '.fg-tip')
-        pg.fill('#tMiles', '80'); pg.fill('#tBuffer', '30')
+        pg.fill('#tMiles', '0'); pg.wait_for_timeout(150)
+        assert pg.locator('#tEmpty .fg-empty').count() == 1 and pg.locator('#tpSteps [data-step="5"].dim').count() == 1, '0 miles: empty too'
+        pg.fill('#tMiles', '80'); pg.wait_for_timeout(150); assert pg.locator('#tEmpty .fg-empty').count() == 0
+        pg.fill('#tBuffer', '30')
         pg.fill('#tMinSave', '1'); pg.fill('#tMaxMin', '10')
         pg.screenshot(path=f'{OUT}/{name}-p1-params.png'); wide(pg, 'parameters')
         # ---- Stops ----

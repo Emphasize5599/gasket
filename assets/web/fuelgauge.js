@@ -44,6 +44,10 @@
       else if (a <= 90) a = A0 + SWEEP;       // below on the right: F
       return Math.max(0, Math.min(16, Math.round((a - A0) / SWEEP * 16)));
     },
+    /** An empty tank (gauge on E, 0%, 0 miles): not something a trip can start from. */
+    empty: function (f, tank, mpu) { var m = math.miles(f, tank, mpu); return m != null && m <= 0; },
+    /** Fuel to reach a station `miles` away, with 0.1 mile more to be safe, rounded up to a hundredth (gallons / kWh / kg). */
+    toReach: function (miles, mpu) { return mpu > 0 ? Math.ceil((miles + 0.1) / mpu * 100 - 1e-9) / 100 : null; },
     /** Sixteenths -> 'Empty', '⅜ tank', '5/16 tank', 'Full'. */
     label: function (n) { return n === 0 ? 'Empty' : n === 16 ? 'Full' : n % 2 === 0 ? FR[n / 2] + ' tank' : n + '/16 tank'; }
   };
