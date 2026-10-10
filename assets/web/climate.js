@@ -5,7 +5,7 @@
   'use strict';
   // ---------- the rules ----------
   var SEASONS = [['spring', 'Spring'], ['summer', 'Summer'], ['fall', 'Fall'], ['winter', 'Winter']];
-  var WEATHER = [['rain', 'Rain'], ['snow', 'Snow & ice'], ['fog', 'Foggy windows'], ['heat', 'Hot & sunny'], ['frost', 'Frosty morning'], ['humid', 'Humid'], ['smoke', 'Smoke or dust']];
+  var WEATHER = [['rain', 'Rain'], ['snow', 'Snow & ice'], ['fog', 'Foggy windows'], ['heat', 'Hot & sunny'], ['frost', 'Frosty morning'], ['humid', 'Humid'], ['pollen', 'High pollen'], ['smoke', 'Smoke or pollution']];
   var FLOW = [['face', 'Face'], ['bi', 'Face & feet'], ['feet', 'Feet'], ['mix', 'Feet & windshield'], ['defrost', 'Windshield']];
   /** The season for a date (northern hemisphere, by month). */
   function season(d) { var m = (d || new Date()).getMonth(); return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'fall' : 'winter'; }
@@ -26,16 +26,20 @@
       heat: { temp: 68, ac: 'on', flow: 'face', fan: hi, mode: 'manual', coolD: caps.seatCool ? 3 : 0, notes: 'Windows down for the first minute to let the hot air out.' },
       frost: { temp: 74, ac: 'on', flow: 'defrost', frontDef: true, rearDef: !!caps.rearDefrost, fan: hi, mode: 'manual', seatD: caps.seatHeat ? 3 : 0, wheel: !!caps.wheelHeat },
       humid: { ac: 'on', flow: 'face' },
+      pollen: { ac: 'on', air: 'recirc', flow: 'face', notes: 'Back to fresh air once you\'re out of it.' },
       smoke: { ac: 'on', air: 'recirc', flow: 'face', notes: 'Back to fresh air once you\'re past it.' }
     }[key] || {};
     Object.keys(set).forEach(function (k) { p[k] = set[k]; });
     if (p.mode === 'manual' && p.fan === 'auto') p.fan = 3;
     return p;
   }
+  /** Where recirculating makes sense for a while: allergens, pollution, and heat and humidity the A/C can't keep up with. */
+  var RECIRC_OK = { pollen: 1, smoke: 1, heat: 1, humid: 1 };
+  function recircOk(p, caps) { return p.kind === 'weather' && !!RECIRC_OK[p.key] || !!(caps && caps.noFilter && p.kind === 'weather' && p.key !== 'fog' && p.key !== 'frost'); }
   /** Things to say about a preset: recirculate (drowsy), recirculate with the A/C on (dry air), Auto air that can switch to it. */
-  function warnings(p) {
+  function warnings(p, caps) {
     var w = [];
-    if (p.air === 'recirc') w.push(p.key === 'smoke' ? 'recircShort' : 'recirc');
+    if (p.air === 'recirc') w.push(recircOk(p, caps) ? 'recircShort' : 'recirc');
     if (p.air === 'recirc' && p.ac === 'on') w.push('dry');
     if (p.air === 'auto') w.push('autoAir');
     return w;
@@ -52,7 +56,7 @@
     if (+p.seatD) a.push('Heated seat ' + p.seatD); if (+p.coolD) a.push('Cooled seat ' + p.coolD); if (p.wheel) a.push('Heated wheel');
     return a.filter(Boolean).join(' · ');
   }
-  var ClimateMath = { season: season, starter: starter, warnings: warnings, line: line, label: label, SEASONS: SEASONS, WEATHER: WEATHER, FLOW: FLOW };
+  var ClimateMath = { recircOk: recircOk, season: season, starter: starter, warnings: warnings, line: line, label: label, SEASONS: SEASONS, WEATHER: WEATHER, FLOW: FLOW };
   root.ClimateMath = ClimateMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = ClimateMath;
   if (!root.document) return;                                   // Node: the rules only
@@ -63,10 +67,12 @@
   var GO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg>';
   var CAPS = [['auto', 'Automatic climate control', 'An AUTO button that sets the fan and vents itself'], ['dual', 'Dual-zone', 'Separate driver and passenger temperatures'],
     ['rear', 'Rear climate', 'Its own controls for the back seats'], ['rearDefrost', 'Rear window defroster'], ['seatHeat', 'Heated seats'], ['seatCool', 'Cooled seats'],
-    ['wheelHeat', 'Heated steering wheel'], ['sunroof', 'Sunroof']];
+    ['wheelHeat', 'Heated steering wheel'], ['sunroof', 'Sunroof'], ['noFilter', 'No cabin air filter', 'Older cars and some basic trims: dust, smoke and pollen come straight in']];
   var RECIRC = 'Recirculate keeps reusing the air already in the car. With the windows up, the carbon dioxide everyone breathes out builds up and fresh oxygen runs short within minutes, and that makes you drowsy, which is dangerous behind the wheel. Keep it on fresh air.';
   var DRY = 'With the A/C on too (many cars run it even when you pick heat), the recirculated air gets very dry, which is hard on your eyes, nose and throat.';
-  var SHORT = 'Fine for a few minutes to keep smoke, dust or a smell out. Switch back to fresh air once you\'re past it, or you\'ll get drowsy.';
+  var SHORT = 'Recirculate makes sense here for a while. Switch back to fresh air once it passes, or you\'ll get drowsy.';
+  var WHEN = 'When recirculate does make sense: harsh allergens outside, like heavy pollen; heavily polluted areas, where smells or contaminants can get past your cabin air filter (a car without a cabin air filter should use recirculate more freely); and extremely hot, humid days, when your A/C may struggle to keep up and the muggy outside air can fog the inside of your windows, which is a safety problem. Switch back to fresh air once it passes.';
+  var NOFILTER = 'Your car has no cabin air filter, so recirculate whenever the air outside is dusty, smoky or full of pollen.';
   var AUTOAIR = 'Some cars\' automatic air setting switches to recirculate on its own (often with the A/C on high). If yours has a fresh-air button, use it.';
   var TEXT = { recirc: RECIRC, dry: DRY, recircShort: SHORT, autoAir: AUTOAIR };
   function G() { return root.Garage; }
@@ -93,15 +99,15 @@
     h += '<h4 class="cl-h">Seasons</h4>';
     SEASONS.forEach(function (s) {
       var p = find(c, 'season', s[0]);
-      h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && warnings(p).length ? ' warn' : ''));
+      h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : ''));
     });
     var wx = x.presets.filter(function (p) { return p.kind === 'weather'; }), cu = x.presets.filter(function (p) { return p.kind === 'custom'; });
     h += '<h4 class="cl-h">Weather</h4>';
-    wx.forEach(function (p) { h += row('clW_' + p.key, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), warnings(p).length ? 'warn' : ''); });
+    wx.forEach(function (p) { h += row('clW_' + p.key, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), bad(p, caps) ? 'warn' : ''); });
     var left = WEATHER.filter(function (w) { return !find(c, 'weather', w[0]); });
     if (left.length) h += '<div class="chips cl-add" id="clAddW"><span>Add:</span>' + left.map(function (w) { return '<button type="button" data-addw="' + w[0] + '">+ ' + esc(w[1]) + '</button>'; }).join('') + '</div>';
     h += '<h4 class="cl-h">Custom</h4>';
-    cu.forEach(function (p) { h += row('clC_' + p.id, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), warnings(p).length ? 'warn' : ''); });
+    cu.forEach(function (p) { h += row('clC_' + p.id, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), bad(p, caps) ? 'warn' : ''); });
     h += '<button type="button" class="btn tonal sm cl-new" id="clAddC">+ Custom preset</button>';
     host.innerHTML = h;
     $('clCaps').onclick = function () { openCaps(c); };
@@ -148,7 +154,7 @@
       if (!(caps.auto && p.mode === 'auto')) h += '<div class="nf wide"><span>Fan</span>' + chips('fan', fans, p.fan) + '</div>';
       h += '<div class="nf wide"><span>A/C' + A.qBtn('The A/C dries the air as well as cooling it, so it clears foggy windows fastest, even with the heat on.') + '</span>' + chips('ac', [['on', 'On'], ['off', 'Off']].concat(caps.auto ? [['auto', 'Auto']] : []), p.ac) + '</div>';
       h += '<div class="nf wide"><span>Air</span>' + chips('air', [['fresh', 'Fresh air'], ['recirc', 'Recirculate']].concat(caps.auto ? [['auto', 'Auto']] : []), p.air) + '</div>';
-      var w = warnings(p); if (w.length) h += '<div class="cl-warn">' + w.map(function (k) { return '<p>' + esc(TEXT[k]) + '</p>'; }).join('') + '</div>';
+      var w = warnings(p, caps); if (w.length) h += '<div class="cl-warn">' + w.map(function (k) { return '<p>' + esc(TEXT[k]) + '</p>'; }).join('') + '</div>';
       if (!(caps.auto && p.mode === 'auto')) h += '<div class="nf wide"><span>Vents</span>' + chips('flow', FLOW, p.flow) + '</div>';
       var sw = function (k, title, sub) { return '<div class="field"><div class="lbl">' + esc(title) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div><label class="switch"><input type="checkbox" data-sw="' + k + '"' + (p[k] ? ' checked' : '') + '><span></span></label></div>'; };
       h += '<div class="cl-sws">' + sw('frontDef', 'Front defrost', 'The windshield button: full fan on the glass') + (caps.rearDefrost ? sw('rearDef', 'Rear defrost') : '') +
@@ -178,16 +184,22 @@
     };
     close = A.subPage(label(p), '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
-  /** Advice: this season's preset, and fresh air over recirculate (louder when a preset of yours recirculates). */
+  /** A preset that recirculates where it shouldn't. */
+  function bad(p, caps) { return p.air === 'recirc' && !recircOk(p, caps); }
+  /** Recirculate's downsides haven't been acknowledged yet: Advisory's Next waits for the tick. */
+  function ackDue() { return !(A.S && A.S.recircAck); }
+  function setAck(on) { A.S.recircAck = on ? Date.now() : 0; LG.info('car', 'Recirculate advice ' + (on ? 'acknowledged' : 'unticked')); save(); }
+  /** Advice: this season's preset, and fresh air over recirculate (louder when a preset of yours recirculates), to tick. */
   function advice(c) {
-    var x = c && c.climate, out = [], ps = x && x.presets || [], now = current(c);
-    if (now) out.push({ level: 'info', title: 'This season: ' + label(now), text: line(now, x.caps) + (now.notes ? '. ' + now.notes : '') });
-    var bad = ps.filter(function (p) { return p.air === 'recirc' && p.key !== 'smoke'; });
-    var dry = ps.some(function (p) { return p.air === 'recirc' && p.ac === 'on'; });
-    out.push({ level: bad.length ? 'warn' : 'info', nodot: true, title: 'Use fresh air, not recirculate',
-      text: (bad.length ? 'Your ' + bad.map(label).join(', ') + ' preset' + (bad.length > 1 ? 's use' : ' uses') + ' recirculate. ' : '') + RECIRC + ' ' + (dry || !bad.length ? DRY : '') });
+    var x = c && c.climate || {}, out = [], ps = x.presets || [], now = current(c);
+    if (now) out.push({ level: 'info', title: 'This season: ' + label(now), paras: [line(now, x.caps) + (now.notes ? '. ' + now.notes : '')] });
+    var b = ps.filter(function (p) { return bad(p, x.caps); });
+    var paras = [(b.length ? 'Your ' + b.map(label).join(', ') + ' preset' + (b.length > 1 ? 's use' : ' uses') + ' recirculate. ' : '') + RECIRC, DRY, WHEN];
+    if (x.caps && x.caps.noFilter) paras.push(NOFILTER);
+    out.push({ level: b.length || ackDue() ? 'warn' : 'info', title: 'Use fresh air, not recirculate', paras: paras,
+      check: { id: 'recirc', label: 'I understand when to use recirculate', on: !ackDue() } });
     return out;
   }
   window.addEventListener('garagechange', function () { if (host && host.isConnected) draw(); });
-  root.Climate = { render: render, summary: summary, advice: advice, current: current };
+  root.Climate = { ackDue: ackDue, setAck: setAck, render: render, summary: summary, advice: advice, current: current };
 })(typeof window !== 'undefined' ? window : globalThis);

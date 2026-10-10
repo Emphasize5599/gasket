@@ -256,7 +256,9 @@
     }
     if (k === ST_ADVISORY) {
       // a spare to air up: tick it in Advisory first (it stays ticked for 30 days, saved trips included)
-      if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) { flag(document.querySelector('.adv-chk') || $('advTires'), 'pick', 'Check your spare\'s air, then tick it.'); return false; }
+      if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) { flag(document.querySelector('#advTires .adv-chk') || $('advTires'), 'pick', 'Check your spare\'s air, then tick it.'); return false; }
+      // recirculate's downsides: acknowledged once
+      if (window.Climate && Climate.ackDue()) { flag(document.querySelector('#advClimate .adv-chk') || $('advClimate'), 'pick', 'Read about recirculate, then tick it.'); return false; }
       return true;
     }
     if (k === ST_ROUTE) {
@@ -303,6 +305,7 @@
     if (loadingTrip) return ST_GARAGE;
     if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
     if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) return ST_ADVISORY;
+    if (window.Climate && Climate.ackDue()) return ST_ADVISORY;
     if (!model || document.querySelector('#tParsed .pick button')) return ST_ROUTE;
     if (!hasFuel()) return ST_PARAMS;
     return ST_DEPART;

@@ -124,6 +124,7 @@
     else if (c.vin && list && list.length) n++;
     n += adviceFor(c).filter(function (a) { return !choice(c, a); }).length;
     n += tireAdvice(c).filter(function (x) { return x.level === 'warn' && !x.nodot; }).length;   // worn tires, a spare to air up
+    if (window.Climate && Climate.ackDue()) n++;                                                   // recirculate, to acknowledge
     return n;
   }
   /** One line for the Departure step, or ''. */
@@ -262,8 +263,9 @@
   /** Climate: this season's preset, and fresh air over recirculate. */
   function climateCard(c) {
     var l = window.Climate ? Climate.advice(c) : []; if (!l.length) return '';
-    return '<div class="card adv-card adv-clim" id="advClimate"><h3>Climate</h3>' + l.map(function (x) {
-      return '<div class="adv-item' + (x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p></div>';
+    return '<div class="card adv-card adv-clim' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advClimate"><h3>Cabin climate</h3>' + l.map(function (x) {
+      return '<div class="adv-item' + (x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div>' + x.paras.map(function (t) { return '<p>' + esc(t) + '</p>'; }).join('') +
+        (x.check ? '<label class="adv-chk"><input type="checkbox" data-cchk="' + esc(x.check.id) + '"' + (x.check.on ? ' checked' : '') + '><span>' + esc(x.check.label) + '</span></label>' : '') + '</div>';
     }).join('') + '</div>';
   }
   function adviceCards(c) {
@@ -281,6 +283,7 @@
   }
   function bind(c) {
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
+    host.querySelectorAll('[data-cchk="recirc"]').forEach(function (b) { b.onchange = function () { if (window.Climate) Climate.setAck(b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; if (listOpen) rateAll(restList); });
     host.querySelectorAll('details[data-open]').forEach(function (d) { d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });

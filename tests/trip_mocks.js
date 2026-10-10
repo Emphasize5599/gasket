@@ -1,5 +1,7 @@
 // Stand-ins for Google Routes, Places along-route, EPA, Walmart and Murphy (shapes match the real APIs)
 (function () {
+  // recirculate's advice already acknowledged (climate_test unticks it to check the gate)
+  if (window.__app && window.__app.S) window.__app.S.recircAck = Date.now();
   const A = [34.7695, -92.2671], B = [32.7767, -96.797];   // North Little Rock AR -> Dallas TX
   const total = 318;
   // the road bows south so it's about as long as its 318 miles (a straight line would be 294); points are spaced by distance,

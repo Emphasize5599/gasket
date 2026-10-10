@@ -63,9 +63,16 @@ with sync_playwright() as p:
         # ---- Advice: fresh air, louder for a preset that recirculates ----
         pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(300)
         a = ft(pg, '#advClimate'); print(' ', name, 'advice:', a.replace('\n', ' | '))
-        assert 'Use fresh air, not recirculate' in a and 'Your Winter preset uses recirculate' in a and 'drowsy' in a and 'very dry' in a
+        assert '>Cabin climate<' in pg.inner_html('#advClimate') and 'Use fresh air, not recirculate' in a and 'Your Winter preset uses recirculate' in a and 'drowsy' in a and 'very dry' in a
         assert pg.locator('#advClimate .adv-item.due').count() == 1
-        assert pg.locator('#tpSteps [data-step="2"].attn').count() == 0 or pg.evaluate("Climate.advice(window.Garage.car()).every(x => x.nodot || x.level !== 'warn')"), 'no dot for climate'
+        ps = pg.evaluate("[...document.querySelectorAll('#advClimate .adv-item.due p')].map(p => p.innerText)")
+        assert len(ps) == 3 and ps[1].startswith('With the A/C') and 'harsh allergens' in ps[2] and 'without a cabin air filter' in ps[2] and 'fog the inside of your windows' in ps[2], ps
+        # acknowledged before going on: untick it and Next waits (the tab gets a dot), tick it and on you go
+        pg.uncheck('[data-cchk="recirc"]'); pg.wait_for_timeout(200)
+        assert pg.locator('#tpSteps [data-step="2"].attn').count() == 1 and pg.locator('#tpSteps [data-step="3"].dim').count() == 1
+        pg.click('#tNext'); pg.wait_for_timeout(300); assert pg.evaluate('window.__trip.state().step') == 2, 'Next waits for the tick'
+        pg.check('[data-cchk="recirc"]'); pg.wait_for_timeout(200)
+        assert pg.locator('#tpSteps [data-step="3"].dim').count() == 0 and pg.evaluate('window.__app.S.recircAck') > 0
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300)
         # ---- a weather preset; Discard changes on a new one: gone. Back to fresh air: Advice quiets down ----
         pg.click('[data-addw="fog"]'); pg.wait_for_selector('.sub-page #cpTemp')

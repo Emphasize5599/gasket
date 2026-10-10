@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.80 - 2026-10-10
+- **Cabin climate advice.** The card explains when recirculate does make sense (harsh allergens, heavy pollution, and very hot, humid days when the A/C can't keep up and the windows could fog), and you tick "I understand when to use recirculate" once before the trip goes on.
+- New High pollen weather preset, and a "No cabin air filter" switch under your car's controls (recirculate is flagged less for those cars).
+
 ## 0.0.79 - 2026-10-10
 - **Climate control.** A new Garage section: tell Gasket what your car's climate controls have (automatic, dual-zone, heated / cooled seats, heated wheel, rear defroster, sunroof, fan steps), then save your favorite settings as presets: one for each season, any weather you like (rain, snow & ice, foggy windows, hot & sunny, frosty mornings, humid, smoke or dust), and your own. Each preset opens its own page with a sensible starting point.
 - **Fresh air, not recirculate.** Advice shows this season's preset and explains why to keep it on fresh air: recirculating makes you drowsy, and with the A/C on the air gets very dry. A preset that recirculates gets flagged.
