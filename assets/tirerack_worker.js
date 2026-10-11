@@ -12,30 +12,9 @@ async function (reqId, args) {
   const norm = (m) => m[1] + '/' + m[2] + 'R' + m[3];
   const settle = async (ok, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const t = text(); if (refused(t) || ok(t)) return t; await sleep(400); } return text(); };
 
-  if (args.step === 'size') {
-    const t = await settle((t) => /factory tire size/i.test(t) || /error=noVehicle/.test(location.href), 20000);
-    if (refused(t)) { send({ blocked: true }); return; }
-    if (/error=|noVehicle/i.test(location.href) || !/factory tire size/i.test(t)) { send({ unknown: true }); return; }
-    // Sections start at each heading; the tab labels ("Factory Tire Size Optional Tire Sizes Custom Tire Size") are
-    // headings with no sizes after them, so they add nothing. Sizes under "Factory" headings are the factory ones.
-    const HEAD = /factory tire size|optional tire sizes?|custom tire size|need help|view results/gi;
-    const marks = []; let h; HEAD.lastIndex = 0;
-    while ((h = HEAD.exec(t))) marks.push({ at: h.index, end: h.index + h[0].length, kind: /factory/i.test(h[0]) ? 'f' : /optional/i.test(h[0]) ? 'o' : 'x' });
-    const factory = [], optional = [];
-    marks.forEach((mk, n) => {
-      const seg = t.slice(mk.end, n + 1 < marks.length ? marks[n + 1].at : mk.end + 600);
-      let m; SIZE.lastIndex = 0;
-      while ((m = SIZE.exec(seg))) { const z = norm(m); if (mk.kind === 'f' && factory.indexOf(z) < 0) factory.push(z); else if (mk.kind === 'o' && optional.indexOf(z) < 0) optional.push(z); }
-    });
-    send({ factory: factory, optional: optional.filter((x) => factory.indexOf(x) < 0).slice(0, 12) });
-    return;
-  }
-
-  if (args.step === 'trims') {
-    // The size page without a trim: Tire Rack asks which version it is. Its own names for the versions are in the links
-    // and menus it offers (autoModClar=…); if it goes straight to the factory sizes, there's only one version.
-    const t = await settle((t) => /factory tire size|autoModClar/i.test(t + document.documentElement.innerHTML.slice(0, 200000)) || /error=noVehicle/.test(location.href), 20000);
-    if (refused(t)) { send({ blocked: true }); return; }
+  // Tire Rack's own names for a model's versions (autoModClar=…), from the links, buttons and menus on the page; when there
+  // are none, a short description of the page for the debug log (no personal data on it).
+  const readTrims = (t) => {
     const out = [];
     const add = (v) => { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v && v.length < 60 && !/^(select|choose|--|please)/i.test(v) && out.indexOf(v) < 0) out.push(v); };
     const base = /^https?:/.test(location.href) ? location.href : 'https://www.tirerack.com/';
@@ -53,7 +32,34 @@ async function (reqId, args) {
     const debug = out.length ? null : { url: location.pathname + location.search.slice(0, 160), title: document.title.slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 500),
       selects: [...document.querySelectorAll('select')].slice(0, 8).map((s) => (s.name || s.id || s.className || '?') + ':' + s.options.length),
       clarMentions: (document.documentElement.innerHTML.match(/modclar[^"'&<>]{0,40}/gi) || []).slice(0, 8) };
-    send({ trims: out.slice(0, 40), single: !out.length && /factory tire size/i.test(t), debug: debug });
+    return { trims: out.slice(0, 40), debug: debug };
+  };
+
+  if (args.step === 'size') {
+    const t = await settle((t) => /factory tire size/i.test(t) || /error=noVehicle/.test(location.href), 20000);
+    if (refused(t)) { send({ blocked: true }); return; }
+    if (/error=|noVehicle/i.test(location.href) || !/factory tire size/i.test(t)) { const r = readTrims(t); send({ unknown: true, trims: r.trims, debug: r.debug }); return; }   // the page may list the versions it does know
+    // Sections start at each heading; the tab labels ("Factory Tire Size Optional Tire Sizes Custom Tire Size") are
+    // headings with no sizes after them, so they add nothing. Sizes under "Factory" headings are the factory ones.
+    const HEAD = /factory tire size|optional tire sizes?|custom tire size|need help|view results/gi;
+    const marks = []; let h; HEAD.lastIndex = 0;
+    while ((h = HEAD.exec(t))) marks.push({ at: h.index, end: h.index + h[0].length, kind: /factory/i.test(h[0]) ? 'f' : /optional/i.test(h[0]) ? 'o' : 'x' });
+    const factory = [], optional = [];
+    marks.forEach((mk, n) => {
+      const seg = t.slice(mk.end, n + 1 < marks.length ? marks[n + 1].at : mk.end + 600);
+      let m; SIZE.lastIndex = 0;
+      while ((m = SIZE.exec(seg))) { const z = norm(m); if (mk.kind === 'f' && factory.indexOf(z) < 0) factory.push(z); else if (mk.kind === 'o' && optional.indexOf(z) < 0) optional.push(z); }
+    });
+    send({ factory: factory, optional: optional.filter((x) => factory.indexOf(x) < 0).slice(0, 12) });
+    return;
+  }
+
+  if (args.step === 'trims') {
+    // The size page without a trim: Tire Rack asks which version it is. If it goes straight to the factory sizes, there's only one.
+    const t = await settle((t) => /factory tire size|modclar/i.test(t + document.documentElement.innerHTML.slice(0, 200000)) || /error=noVehicle/.test(location.href), 20000);
+    if (refused(t)) { send({ blocked: true }); return; }
+    const r = readTrims(t);
+    send({ trims: r.trims, single: !r.trims.length && /factory tire size/i.test(t), debug: r.debug });
     return;
   }
 

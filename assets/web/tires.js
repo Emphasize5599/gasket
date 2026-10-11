@@ -230,6 +230,7 @@
   function tires(c) { c.tires = c.tires || {}; if (!c.tires.tread) c.tires.tread = { mode: 'miles', miles: '', rotated: '' }; return c.tires; }
   function base(c) { return String(c.epaBase || c.vpicModel || c.model || '').replace(/\s+(2WD|4WD|AWD|FWD|RWD|4x4)$/i, '').trim(); }
   /** The version Tire Rack knows the car by: the one you picked from Tire Rack's list, else the car's own trim. */
+  function verKey(c) { return ['v2', c.year, c.make, base(c)].join('|'); }   // v2: 0.0.95 reads more of the page, so older empty lists are asked again
   function trTrim(c) { var t = c.tires || {}; return t.trTrim != null && t.trTrim !== '' ? t.trTrim : c.trim || ''; }
   function sizeUrl(c, noTrim) {
     return TR + 'SelectTireSize.jsp?autoMake=' + encodeURIComponent(c.make) + '&autoYear=' + encodeURIComponent(c.year) + '&autoModel=' + encodeURIComponent(base(c)) + (noTrim ? '' : '&autoModClar=' + encodeURIComponent(trTrim(c)));
@@ -245,10 +246,15 @@
   function lookup(c) {
     var t = tires(c); if (!call || !N.siteRead) return;
     // Tire Rack's own names for this model's versions: when it doesn't know your trim (or there's none), you pick one
-    var TL = t.trims, tkey = [c.year, c.make, base(c)].join('|'), SL0 = t.sizeLookup;
-    if (!t.size && c.year && c.make && c.model && (!trTrim(c) || (SL0 && SL0.failed === 'unknown' && SL0.key === [c.year, c.make, base(c), trTrim(c)].join('|'))) &&
-        !busy[c.id] && !(TL && TL.key === tkey && (TL.list && TL.list.length || TL.single || recent(TL, RETRY_H)))) {
-      busy[c.id] = 'trims'; t.trims = { key: tkey, t: Date.now() };
+    var TL = t.trims, tkey = verKey(c), SL0 = t.sizeLookup;
+    var needVer = !t.size && c.year && c.make && c.model && (!trTrim(c) || (SL0 && SL0.failed === 'unknown' && SL0.key === [c.year, c.make, base(c), trTrim(c)].join('|')));
+    // Fuel API's trim names too (with its key), for the list to pick from
+    if (needVer && window.CarPics && CarPics.trims && CarPics.hasKey && CarPics.hasKey() && !(t.fuelTrims && t.fuelTrims.key === tkey) && !busy['ft' + c.id]) {
+      busy['ft' + c.id] = 1;
+      CarPics.trims(c).then(function (list) { delete busy['ft' + c.id]; t.fuelTrims = { key: tkey, list: list || [] }; save(); redraw(c); });
+    }
+    if (needVer && !busy[c.id] && !(TL && TL.key === tkey && (TL.list && TL.list.length || TL.single || recent(TL, 1)))) {
+      busy[c.id] = 'trims'; t.trims = { key: tkey, t: Date.now(), list: TL && TL.key === tkey ? TL.list : [] };
       call('siteRead', 'tirerack', JSON.stringify({ url: sizeUrl(c, true), step: 'trims' })).then(function (r) {
         busy[c.id] = false; r = r || {};
         t.trims = { key: tkey, t: Date.now(), list: r.trims || [], single: !!r.single, failed: r.blocked ? 'blocked' : r.error ? 'error' : '' };
@@ -273,6 +279,9 @@
           LG.info('car', 'Tire Rack factory size: ' + r.factory.join(', '));
         } else {
           t.sizeLookup = { key: key, t: Date.now(), failed: r.blocked ? 'blocked' : r.unknown ? 'unknown' : 'error' };
+          // the "doesn't know that one" page may list the versions it does know
+          if (r.trims && r.trims.length) { t.trims = { key: verKey(c), t: Date.now(), list: r.trims }; LG.info('car', 'Tire Rack versions: ' + r.trims.join(', ')); }
+          else if (r.debug) LG.info('car', 'Tire Rack\'s page for an unknown version', r.debug);
           LG.info('car', 'Tire Rack factory size not found', t.sizeLookup.failed);
         }
         save(); redraw(c); lookup(c);
@@ -488,10 +497,13 @@
       '<div class="lead small keep">Your ' + esc(c.year + ' ' + c.make + ' ' + base(c) + ' ' + trTrim(c)) + ' came with ' + fac.length + ' sizes. Pick yours, or type it below.</div>';
     h += '<input type="text" id="tzSize" maxlength="20" autocapitalize="characters" placeholder="e.g. 195/65R15" value="' + esc(t.size || '') + '"></div>';
     if (t.size && t.sizeSrc === 'tirerack') h += '<div class="lead small keep tz-src">Factory size for the ' + esc(c.year + ' ' + c.make + ' ' + base(c) + ' ' + trTrim(c)) + ', from Tire Rack.</div>';
-    var TV = t.trims && t.trims.key === [c.year, c.make, base(c)].join('|') ? t.trims : null;
-    if (!t.size && TV && TV.list && TV.list.length && (!trTrim(c) || SL.failed === 'unknown'))
-      h += '<div class="lead small keep">' + (trTrim(c) ? 'Tire Rack doesn\'t list "' + esc(trTrim(c)) + '" for this model. ' : '') + 'Pick your version as Tire Rack names it:</div>' +
-        '<div class="chips mini wrap tz-trims" id="tzTrims">' + TV.list.map(function (v) { return '<button type="button" data-trtrim="' + esc(v) + '">' + esc(v) + '</button>'; }).join('') + '</div>';
+    // pick your version: Tire Rack's own names when its page lists them, and Fuel API's trims for the model
+    var vk = verKey(c), trL = t.trims && t.trims.key === vk ? t.trims.list || [] : [], fuL = (t.fuelTrims && t.fuelTrims.key === vk ? t.fuelTrims.list || [] : []).filter(function (v) { return trL.indexOf(v) < 0; });
+    if (!t.size && (trL.length || fuL.length) && (!trTrim(c) || SL.failed === 'unknown'))
+      h += '<label class="nf wide"><span>' + (trTrim(c) && SL.failed === 'unknown' ? 'Tire Rack doesn\'t list "' + esc(trTrim(c)) + '". Pick your version' : 'Pick your version') + '<small>to look up its factory tire size</small></span><select id="tzTrimSel">' +
+        '<option value="">Choose…</option>' + (trL.length ? '<optgroup label="As Tire Rack names it">' + trL.map(function (v) { return '<option value="' + esc(v) + '"' + (t.trTrim === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</optgroup>' : '') +
+        (fuL.length ? '<optgroup label="' + (trL.length ? 'Other trims of this model' : 'Trims of this model') + '">' + fuL.map(function (v) { return '<option value="' + esc(v) + '"' + (t.trTrim === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</optgroup>' : '') +
+        '</select></label>' + (busy[c.id] === 'trims' ? window.__app.ldBar('Asking Tire Rack for its versions') : '');
     else if (!t.size && busy[c.id] === 'trims') h += window.__app.ldBar('Finding the versions Tire Rack lists');
     else if (!t.size && SL.failed) h += '<div class="lead small keep">' + (SL.failed === 'unknown' ? 'Tire Rack doesn\'t list "' + esc(trTrim(c)) + '" for this model.' : 'Tire Rack didn\'t answer.') + ' Type the size from the sticker inside the driver\'s door.</div>';
     else if (!t.size && !c.trim) h += '<div class="lead small keep">Add your trim (Edit, above) to look up its factory size, or type it from the sticker inside the driver\'s door.</div>';
@@ -530,7 +542,7 @@
     var fill = function () {
       var b = pg.querySelector('.sub-body'); b.innerHTML = carDetails(c, t);
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
-      b.querySelectorAll('#tzTrims [data-trtrim]').forEach(function (x) { x.onclick = set(function () { t.trTrim = x.dataset.trtrim; t.sizeLookup = null; LG.info('car', 'Tire Rack version picked: ' + t.trTrim); lookup(c); }); });
+      if (b.querySelector('#tzTrimSel')) b.querySelector('#tzTrimSel').onchange = set(function () { if (!this.value) return; t.trTrim = this.value; t.sizeLookup = null; LG.info('car', 'Tire Rack version picked: ' + t.trTrim); lookup(c); });
       b.querySelectorAll('#tzPick [data-size]').forEach(function (x) { x.onclick = set(function () { t.size = x.dataset.size; t.sizeSrc = 'tirerack'; lookup(c); }); });
       b.querySelector('#tzSize').onchange = set(function () {
         var v = normSize(this.value);

@@ -293,13 +293,14 @@ with sync_playwright() as p:
         pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cz', name: '2019 Honda Fit', year: 2019, make: 'Honda', model: 'Fit', trim: 'Sport', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 33, hwy: 40, comb: 36 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
         show(pg, 'cz'); pg.wait_for_timeout(300)
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
-        pg.wait_for_selector('.sub-page #tzTrims button')
-        assert "doesn't list \"Sport\"" in ft(pg, '.sub-page') and pg.input_value('#tzSize') == '' and 'Pick your version as Tire Rack names it' in ft(pg, '.sub-page')
-        assert pg.evaluate("[...document.querySelectorAll('#tzTrims button')].map(b => b.textContent)") == ['LX', 'EX', 'Sport w/Honda Sensing']
+        pg.wait_for_selector('.sub-page #tzTrimSel option[value="LX"]', state='attached')
+        assert "doesn't list \"Sport\"" in ft(pg, '.sub-page') and pg.input_value('#tzSize') == '' and 'Pick your version' in ft(pg, '.sub-page')
+        opts_ = pg.evaluate("[...document.querySelectorAll('#tzTrimSel option')].map(o => (o.parentElement.label || '') + ':' + o.value)")
+        assert opts_ == [':', 'As Tire Rack names it:LX', 'As Tire Rack names it:EX', 'As Tire Rack names it:Sport w/Honda Sensing'], opts_
         assert any(r['step'] == 'trims' and 'autoModClar' not in r['url'] for r in pg.evaluate('window.__tr')), 'the versions come from the page without a trim'
-        pg.click('#tzTrims [data-trtrim="Sport w/Honda Sensing"]'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
+        pg.select_option('#tzTrimSel', 'Sport w/Honda Sensing'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
         assert T(pg)['trTrim'] == 'Sport w/Honda Sensing' and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
-        assert 'Sport w/Honda Sensing' in ft(pg, '.sub-page') and pg.locator('#tzTrims').count() == 0, 'picked: its factory size'
+        assert 'Sport w/Honda Sensing' in ft(pg, '.sub-page') and pg.locator('#tzTrimSel').count() == 0, 'picked: its factory size'
         pg.evaluate("() => { const t = window.Garage.car().tires; t.size = ''; t.sizeSrc = ''; t.trTrim = ''; t.sizeLookup = { key: '2019|Honda|Fit|Sport', t: Date.now(), failed: 'unknown' }; }")
         pg.click('.sub-back'); pg.wait_for_timeout(200); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         pg.fill('#tzSize', '185 55 16'); pg.dispatch_event('#tzSize', 'change'); pg.wait_for_timeout(250)

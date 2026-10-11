@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.95 - 2026-10-11
+- **Pick your trim for tires.** When Tire Rack can't find your car's trim (or there's none), Tires → Tire details shows a dropdown of versions: Tire Rack's own names when its page lists them, plus the model's trims from Fuel API if you have a key.
+- Bug fixes.
+
 ## 0.0.94 - 2026-10-11
 - Bug fixes (older cars' paint colors are looked up again; Tire Rack's version list reads more of its page).
 

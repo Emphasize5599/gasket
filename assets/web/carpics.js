@@ -243,6 +243,16 @@
     if (c && c.picMode === 'doodle') return { text: 'Doodle' };
     return { text: c && c.year && !pending(c) ? 'No photo found: here\'s a doodle' : '' };
   }
+  /** Fuel API's trims for the car's year / make / model (needs the key; asked once per model, kept for the session). */
+  function trims(c) {
+    if (!hasKey() || !c || !c.year || !c.make || !c.model) return Promise.resolve([]);
+    var k = 'trims|' + sig(c);
+    if (mem[k]) return Promise.resolve(mem[k]);
+    return fuel('vehicles?year=' + encodeURIComponent(c.year) + '&make=' + encodeURIComponent(c.make) + '&model=' + encodeURIComponent(baseModel(c.model))).then(function (list) {
+      var out = []; (list || []).forEach(function (v) { var t = String(v.trim || '').trim(); if (t && out.indexOf(t) < 0) out.push(t); });
+      return (mem[k] = out);
+    }).catch(function () { return []; });
+  }
   function keyChanged() { (S.cars || []).forEach(function (c) { if (c.pic) delete c.pic.fuel; }); LG.info('car', 'Car pictures: ' + (hasKey() ? 'Fuel API key set' : 'no Fuel API key')); A.save(); }
   function recreationPrompt(c) {
     return 'Recreate this image without the watermark. Preserve the car’s original shadow and use a transparent background.';
@@ -301,7 +311,7 @@
   function resetChatGPTSetup() {
     keep('chatgptSetup', '');
   }
-  root.CarPics = { loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
+  root.CarPics = { trims: trims, loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
     colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf,
     hasGenerated: hasGenerated, importGenerated: importGenerated, clearGenerated: clearGenerated, recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -75,7 +75,7 @@
   // Lookups that can simply be fetched again (recalls, the NHTSA VIN check, versions, Tire Rack's lists, Brave's answers,
   // recall ratings) live in the app's cache, not its settings: Android's "Clear cache" empties them and they load again.
   // Settings, your cars and anything that cost a Google lookup stay in storage.
-  var CAR_CACHE = ['recalls', 'recallCheck', 'recallAuto', 'variants', 'tankLookup', 'pic'], TIRE_CACHE = ['list', 'sizeLookup', 'fuelNudge', 'trims'], lastLookups = '';
+  var CAR_CACHE = ['recalls', 'recallCheck', 'recallAuto', 'variants', 'tankLookup', 'pic'], TIRE_CACHE = ['list', 'sizeLookup', 'fuelNudge', 'trims', 'fuelTrims'], lastLookups = '';
   function splitLookups(o) {
     var cc = {};
     (o.cars || []).forEach(function (c) {
