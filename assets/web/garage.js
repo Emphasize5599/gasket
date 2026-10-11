@@ -321,7 +321,10 @@
       '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
       '<div class="gc-slide carchip on' + (slideIn ? (slideIn > 0 ? ' in-r' : ' in-l') : '') + '"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
       '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
-      '<button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button></div></div>' +
+      '<button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>' +
+      '<button type="button" class="gc-recreate" id="gcUseGenerated">Use generated image</button>' +
+      (window.CarPics && CarPics.hasGenerated(c) ? '<button type="button" class="gc-recreate gc-original" id="gcOriginal">Use original photo</button>' : '') +
+      '</div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
       '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
@@ -346,6 +349,13 @@
     bindSub();
     var recreate = $('gcRecreate');
     if (recreate) recreate.onclick = function () { if (window.CarPics && CarPics.recreate) CarPics.recreate(c); };
+    var useGenerated = $('gcUseGenerated');
+    if (useGenerated) useGenerated.onclick = function () { if (window.CarPics && CarPics.importGenerated) CarPics.importGenerated(c); };
+    var original = $('gcOriginal');
+    if (original) original.onclick = function () {
+      if (window.CarPics && CarPics.clearGenerated) CarPics.clearGenerated(c);
+      draw();
+    };
     if (window.CarPics) { CarPics.ensure(c); var n = S.cars.length, i = S.cars.indexOf(c); if (n > 1) { CarPics.ensure(S.cars[(i + 1) % n]); CarPics.ensure(S.cars[(i - 1 + n) % n]); } }
   }
   // a picture came in: put it in place (no redraw)
