@@ -1500,3 +1500,5 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
   font-weight: 650;
 }
 .gc-recreate:active { transform: scale(.98); }
+
+.gc-original { opacity: .82; }
