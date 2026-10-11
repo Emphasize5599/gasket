@@ -183,7 +183,26 @@
       .then(function () { delete busy['img|' + k]; told(c); });
   }
   /** The kept photo to show (a data URL), or null (still coming, none, or doodle mode). */
-  function src(c) { var k = c && imgKey(c); return k ? stored(k) : null; }
+  function generatedKey(c) { return c && c.id ? 'generated|' + c.id : null; }
+  function hasGenerated(c) { return !!(c && stored(generatedKey(c))); }
+  function src(c) { var g = c && stored(generatedKey(c)); if (g) return g; var k = c && imgKey(c); return k ? stored(k) : null; }
+  function importGenerated(c) {
+    if (!c || !c.id) return Promise.resolve();
+    return call('pickImageFile').then(function (r) {
+      if (!r || r.cancelled) return;
+      if (r.error) { if (root.alert) root.alert('Could not import image: ' + r.error); return; }
+      var data = r.dataUrl || '';
+      if (!/^data:image\/(webp|png|jpe?g);base64,/i.test(data)) { if (root.alert) root.alert('Please choose a PNG, JPEG, or WebP image.'); return; }
+      keep(generatedKey(c), data);
+      told(c);
+      if (root.FLog) root.FLog.info('car', 'Imported a generated image for ' + (c.name || c.id));
+    }).catch(function (e) { if (root.alert) root.alert('Could not open image picker: ' + String(e && e.message || e)); });
+  }
+  function clearGenerated(c) {
+    if (!c) return;
+    keep(generatedKey(c), '');
+    told(c);
+  }
   function pending(c) {
     if (!c || !c.year || !c.make || !c.model || c.picMode === 'doodle') return false;
     if (busy['n|' + c.id] || busy['w|' + c.id] || busy['f|' + c.id]) return true;
@@ -240,7 +259,7 @@
       keep('chatgptSetup', '1');
     }
     try { if (root.Native && root.Native.copyText) root.Native.copyText(prompt); } catch (e) {}
-    try { if (root.alert) root.alert('Your recreation prompt is copied. In ChatGPT, attach the vehicle photo, paste the prompt, and generate the image. Then save the result to your device. Importing that result back into Gasket is not part of this first handoff yet.'); } catch (e) {}
+    try { if (root.alert) root.alert('Your recreation prompt is copied. In ChatGPT, attach the vehicle photo, paste the prompt, and generate the image. Then save the result to your device. When the image is generated, save it to your device, return to Gasket, and tap Use generated image to import it.'); } catch (e) {}
     try {
       if (root.Native && root.Native.openUrl) root.Native.openUrl('https://chatgpt.com/');
       else root.open('https://chatgpt.com/', '_blank');
@@ -252,5 +271,5 @@
   }
   root.CarPics = { loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
     colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf,
-    recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
+    hasGenerated: hasGenerated, importGenerated: importGenerated, clearGenerated: clearGenerated, recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
 })(typeof window !== 'undefined' ? window : globalThis);
