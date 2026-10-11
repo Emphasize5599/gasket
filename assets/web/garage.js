@@ -320,7 +320,8 @@
     var h = '<div class="gc" id="gCars"><button type="button" class="gc-nav prev" id="gcPrev" aria-label="Previous car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button>' +
       '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
       '<div class="gc-slide carchip on' + (slideIn ? (slideIn > 0 ? ' in-r' : ' in-l') : '') + '"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
-      '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' + '</div></div>' +
+      '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
+      '<button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button></div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
       '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
@@ -343,6 +344,8 @@
     var end = function (e) { if (x0 == null) return; var dx = e.clientX - x0; x0 = null; sl.style.transform = ''; if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(e.clientY - y0)) go(dx < 0 ? 1 : -1); };
     st.addEventListener('pointerup', end); st.addEventListener('pointercancel', function () { x0 = null; sl.style.transform = ''; });
     bindSub();
+    var recreate = $('gcRecreate');
+    if (recreate) recreate.onclick = function () { if (window.CarPics && CarPics.recreate) CarPics.recreate(c); };
     if (window.CarPics) { CarPics.ensure(c); var n = S.cars.length, i = S.cars.indexOf(c); if (n > 1) { CarPics.ensure(S.cars[(i + 1) % n]); CarPics.ensure(S.cars[(i - 1 + n) % n]); } }
   }
   // a picture came in: put it in place (no redraw)
