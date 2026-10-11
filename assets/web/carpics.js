@@ -223,24 +223,33 @@
     return { text: c && c.year && !pending(c) ? 'No photo found: here\'s a doodle' : '' };
   }
   function keyChanged() { (S.cars || []).forEach(function (c) { if (c.pic) delete c.pic.fuel; }); LG.info('car', 'Car pictures: ' + (hasKey() ? 'Fuel API key set' : 'no Fuel API key')); A.save(); }
-  root.CarPics = { loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
-    colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf };
-})(typeof window !== 'undefined' ? window : globalThis);
-
-  /**
-   * Optional: send a Fuel API image to Grok for watermark removal.
-   * Requires the user to have provided a Grok (xAI) API key.
-   * Call this after fetching a Fuel image URL when a Grok key is present.
-   */
-  function cleanWithGrok(imageUrl, grokKey) {
-    if (!grokKey) return Promise.resolve(imageUrl);
-    // In the Android WebView this should be routed through a native bridge
-    // for security and to avoid CORS. Example call:
-    return call('cleanFuelImageWithGrok', imageUrl, grokKey).catch(function () {
-      return imageUrl; // fallback to original on failure
-    });
+  function recreationPrompt(c) {
+    var paint = c && c.paint && (c.paint.name || c.paint.simple);
+    return 'Recreate this vehicle image as a clean, photorealistic automotive studio photograph. Vehicle: ' +
+      [c && c.year, c && c.make, c && baseModel(c.model), c && c.trim].filter(Boolean).join(' ') +
+      (paint ? '. Paint color: ' + paint + (c.paint.rgb ? ' (' + c.paint.rgb + ')' : '') : '') +
+      '. Preserve the source image’s camera angle, perspective, body shape, trim details, proportions, and wheel design. Use realistic studio lighting, a simple neutral seamless background, crisp details, and no text, logos, watermark, or extra objects. Make a faithful recreation rather than redesigning the vehicle.';
   }
-
-  // Expose for the app
-  root.CarPics = root.CarPics || {};
-  root.CarPics.cleanWithGrok = cleanWithGrok;
+  function recreate(c) {
+    if (!c) return;
+    var setup = stored('chatgptSetup');
+    var prompt = recreationPrompt(c);
+    try { if (root.Native && root.Native.copyText) root.Native.copyText(prompt); } catch (e) {}
+    if (!setup) {
+      var ok = root.confirm('First, sign in to ChatGPT in the browser that opens. Gasket will remember that you completed setup, but may not be able to detect when your ChatGPT session expires. Your recreation prompt will be copied to the clipboard. Continue?');
+      if (!ok) return;
+      keep('chatgptSetup', '1');
+    }
+    try {
+      if (root.Native && root.Native.openUrl) root.Native.openUrl('https://chatgpt.com/');
+      else root.open('https://chatgpt.com/', '_blank');
+    } catch (e) {}
+    if (root.FLog) root.FLog.info('car', 'Opened ChatGPT for image recreation');
+  }
+  function resetChatGPTSetup() {
+    keep('chatgptSetup', '');
+  }
+  root.CarPics = { loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
+    colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf,
+    recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
+})(typeof window !== 'undefined' ? window : globalThis);
