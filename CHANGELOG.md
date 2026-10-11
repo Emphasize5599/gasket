@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.91 - 2026-10-11
+- The current season's outline in Climate control is subtler: a thin, faint light that moves slowly.
+
 ## 0.0.90 - 2026-10-11
 - Bug fixes (0.0.89's source didn't build).
 
