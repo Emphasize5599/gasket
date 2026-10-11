@@ -323,7 +323,7 @@
       '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
       '<button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>' +
       '<button type="button" class="gc-recreate" id="gcUseGenerated">Use generated image</button>' +
-      (window.CarPics && CarPics.hasGenerated(c) ? '<button type="button" class="gc-recreate gc-original" id="gcOriginal">Use original photo</button>' : '') +
+      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasGenerated(c) ? '' : ' hidden') + '>Use original photo</button>' +
       '</div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
@@ -362,6 +362,8 @@
   window.addEventListener('carpic', function (e) {
     var c = car(); if (!c || e.detail !== c.id || !host) return;
     var p = document.getElementById('gcPic'); if (p) p.innerHTML = picHtml(c);
+    var originalButton = document.getElementById('gcOriginal');
+    if (originalButton && window.CarPics) originalButton.hidden = !CarPics.hasGenerated(c);
     var s = document.getElementById('gcSub'); if (s) { s.innerHTML = subHtml(c); bindSub(); }
     var pp = document.getElementById('gPaints'); if (pp && editing) { pp.outerHTML = paintHtml(c); bindPaints(c); }
   });
