@@ -10,37 +10,51 @@ async function (reqId, args) {
   // It reads text only, never clicks through a check; if the site refuses ("currently unavailable", a robot check) it says
   // {blocked: true}.
   // Reports back through GasketSite.result(reqId, json).
-  const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
+  let sent = false;
+  const started = Date.now();
+  const send = (o) => {
+    if (sent) return;
+    sent = true;
+    if (o.error || o.blocked || o.unknown) o.detail = Object.assign({ step: args.step, url: location.href, title: document.title, elapsedMs: Date.now() - started }, o.detail || {});
+    GasketSite.result(reqId, JSON.stringify(o));
+  };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // A WebView fetch can otherwise remain pending indefinitely when Tire Rack drops a
   // vehicle-picker request.  Always answer Gasket so the lookup can be retried.
   const fetchText = async (url) => {
     const controller = typeof AbortController === 'undefined' ? null : new AbortController();
-    const timer = controller && setTimeout(() => controller.abort(), 20000);
+    let timer;
     try {
-      return await fetch(url, { credentials: 'include', signal: controller && controller.signal });
-    } catch (e) {
-      if (controller && controller.signal.aborted) throw new Error('timed out');
-      throw e;
+      // Cover response headers AND its body. Abort alone does not guarantee the promise settles.
+      return await Promise.race([
+        (async () => {
+          const r = await fetch(url, { credentials: 'include', signal: controller ? controller.signal : undefined });
+          const body = await r.text();
+          const detail = { requestUrl: url, responseUrl: r.url || url, status: r.status, excerpt: body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 240) };
+          if (refused(body) || r.status === 403 || r.status === 429) throw Object.assign(new Error('Tire Rack restricted this request'), { blocked: true, code: 'blocked', detail: detail });
+          if (!r.ok && r.status !== 204) throw Object.assign(new Error('HTTP ' + r.status), { code: 'http', detail: detail });
+          return body;
+        })(),
+        new Promise((_, reject) => { timer = setTimeout(() => { reject(Object.assign(new Error('Tire Rack request timed out'), { code: 'timeout', detail: { requestUrl: url } })); if (controller) controller.abort(); }, 18000); })
+      ]);
     } finally {
       if (timer) clearTimeout(timer);
     }
   };
+  const fail = (e) => send({ error: String(e && e.message || e).slice(0, 160), code: e.code || 'network', blocked: !!e.blocked, detail: e.detail });
   const text = () => (document.body && document.body.innerText) || '';
-  const refused = (t) => /currently unavailable|access denied|are you a robot|verify you are (a )?human|unusual traffic/i.test(t);
+  const refused = (t) => /currently unavailable|access denied|are you a robot|verify (?:that )?you are (?:a )?human|unusual traffic|request (?:was )?(?:blocked|rejected)|automated (?:requests|access)|security (?:check|verification)|pardon our interruption|enable javascript and cookies to continue|too many requests/i.test(t);
+  const pageBlocked = () => refused(text()) || /access denied|captcha|robot|just a moment|security check/i.test(document.title || '') || /\/(blocked|sorry)\//i.test(location.href);
   const SIZE = /\b(\d{3})\/(\d{2})(?:-|\s*Z?R)(\d{2})\b/g;
   const norm = (m) => m[1] + '/' + m[2] + 'R' + m[3];
-  const settle = async (ok, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const t = text(); if (refused(t) || ok(t)) return t; await sleep(400); } return text(); };
+  const settle = async (ok, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const t = text(); if (pageBlocked() || ok(t)) return t; await sleep(400); } return text(); };
 
   // Tire Rack's vehicle picker: the same service its own "select your vehicle" menus ask, from its own page and with the
   // page's cookies (nothing gotten around). It answers in small XML lists: <models><model>…, <clarifiers><clar>….
   // Asked gently: one request at a time, a pause in between (fast bursts get "currently unavailable").
   const V = '/survey/ValidationServlet?';
   const ask = async (q) => {
-    const r = await fetchText(V + q), body = await r.text();
-    if (refused(body) || r.status === 403 || r.status === 429) { const e = new Error('blocked'); e.blocked = true; throw e; }
-    if (!r.ok && r.status !== 204) throw new Error('HTTP ' + r.status);
-    return body;
+    return fetchText(V + q);
   };
   const tags = (xml, tag) => {
     if (!/^\s*(<\?xml[^>]*>\s*)?<[a-z]/i.test(xml || '') || /<html/i.test(xml || '')) return null;      // not one of its lists
@@ -49,12 +63,12 @@ async function (reqId, args) {
   const enc = encodeURIComponent;
   const pickerStep = async () => {
     await settle((t) => t.length > 200, 15000);
-    if (refused(text())) { send({ blocked: true }); return; }
+    if (pageBlocked()) { send({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
     try {
       if (args.step === 'models') {
         // the make as Tire Rack spells it ("RAM", "MINI", "Mercedes-Benz"): asked only when the first try finds nothing
         let make = args.make, models = tags(await ask('autoYear=' + enc(args.year) + '&autoMake=' + enc(make) + '&newDesktop=true'), 'model');
-        if (models === null) { send({ error: 'not a list' }); return; }
+        if (models === null) { send({ error: 'Tire Rack model response was not a list', code: 'unreadable' }); return; }
         if (!models.length) {
           await sleep(700);
           const makes = tags(await ask('autoMakesNeeded=true&autoYear=' + enc(args.year)), 'make') || [];
@@ -70,13 +84,13 @@ async function (reqId, args) {
         for (const [i, model] of (args.models || []).slice(0, 3).entries()) {
           if (i) await sleep(800);
           const list = tags(await ask('autoYear=' + enc(args.year) + '&autoMake=' + enc(args.make) + '&autoModel=' + enc(model) + '&newDesktop=true'), 'clar');
-          if (list === null) { send({ error: 'not a list', clars: out }); return; }
+          if (list === null) { send({ error: 'Tire Rack trim response was not a list', code: 'unreadable', clars: out }); return; }
           out[model] = list.slice(0, 60);
         }
         send({ clars: out });
         return;
       }
-    } catch (e) { send(e.blocked ? { blocked: true } : { error: String(e && e.message || e).slice(0, 120) }); return; }
+    } catch (e) { fail(e); return; }
   };
   if (args.step === 'models' || args.step === 'clars') { await pickerStep(); return; }
 
@@ -96,10 +110,12 @@ async function (reqId, args) {
   };
 
   if (args.step === 'size') {
-    const t = await settle((t) => /factory tire size/i.test(t) || /error=noVehicle/.test(location.href), 20000);
-    if (refused(t)) { send({ blocked: true }); return; }
-    if (/error=|noVehicle/i.test(location.href) || !/factory tire size/i.test(t)) { send({ unknown: true }); return; }   // Tire Rack doesn't know that model / version
-    send(readSizes(t));
+    const t = await settle((t) => readSizes(t).factory.length || /error=noVehicle/.test(location.href), 20000);
+    if (pageBlocked()) { send({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
+    if (/error=noVehicle/i.test(location.href)) { send({ unknown: true }); return; }
+    const sizes = readSizes(t);
+    if (!sizes.factory.length) { send({ error: 'Tire Rack did not provide a readable factory size', code: 'unreadable', detail: { excerpt: t.slice(0, 240) } }); return; }
+    send(sizes);
     return;
   }
 
@@ -107,23 +123,21 @@ async function (reqId, args) {
     // A model with no versions ("Mustang Coupe"): SelectTireSize.jsp only says "currently unavailable" for these, so this
     // does what Tire Rack's own vehicle menu does: set the vehicle, then read its "select your tire size" panel.
     await settle((t) => t.length > 200, 15000);
-    if (refused(text())) { send({ blocked: true }); return; }
+    if (pageBlocked()) { send({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
     const q = 'modClarLookUpCompleted=false&mmycPAX=false&cameFrom=vehicleSelector&performance=&search=tire&index=0&autoYear=' + enc(args.year) +
       '&autoMake=' + enc(args.make) + '&autoModel=' + enc(args.model) + '&autoModClar=' + enc(args.clar || '') + '&zip-code=';
     try {
-      const r = await fetchText('/SetCurrentVehicleServlet?ajax=true&' + q), body = await r.text();
-      if (refused(body) || r.status === 403 || r.status === 429) { send({ blocked: true }); return; }
+      const body = await fetchText('/SetCurrentVehicleServlet?ajax=true&' + q);
       let j = null; try { j = JSON.parse(body); } catch (e) { /* not its answer */ }
       if (!j || j.vehicleZipSet !== 'success') { send(j && j.vehicleZipSet === 'redirect' ? { unknown: true } : { error: 'vehicle not set' }); return; }
       await sleep(900);
-      const r2 = await fetchText('/modalPopups/selectOETireSize.jsp?' + q), html = await r2.text();
-      if (refused(html) || r2.status === 403 || r2.status === 429) { send({ blocked: true }); return; }
+      const html = await fetchText('/modalPopups/selectOETireSize.jsp?' + q);
       const t = (new DOMParser().parseFromString(html, 'text/html').body.textContent || '').replace(/\s+/g, ' ');
       // the panel names the vehicle it's for; if it isn't this one, the vehicle didn't take
       const key = (x) => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
       if (!/factory tire size/i.test(t) || key(t).indexOf(key(args.year + ' ' + args.make + ' ' + args.model)) < 0) { send({ unknown: true }); return; }
       send(readSizes(t));
-    } catch (e) { send({ error: String(e && e.message || e).slice(0, 120) }); }
+    } catch (e) { fail(e); }
     return;
   }
 
@@ -149,19 +163,30 @@ async function (reqId, args) {
       }
     };
     let t = await settle((t) => /UTQG:/i.test(t) || /no tires|no results/i.test(t), 25000);
-    if (refused(t)) { send({ blocked: true }); return; }
+    if (pageBlocked()) { send({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
     readPage(t);
+    if (!out.length && !/no tires|no results/i.test(t)) { send({ error: 'Tire Rack tire list could not be read', code: 'unreadable', detail: { excerpt: t.slice(0, 240) } }); return; }
     // more pages: follow "next" while there is one (at most 10 pages)
-    for (let page = 2; page <= 10; page++) {
-      const next = Array.from(document.querySelectorAll('a, button')).find((e) => /^(next|›|>|»)$/i.test((e.innerText || e.getAttribute('aria-label') || '').trim()) && !e.disabled && e.offsetParent);
+    let doc = document;
+    const visited = new Set([location.href]);
+    for (let page = 2; page <= 10 && Date.now() - started < 55000; page++) {
+      const next = Array.from(doc.querySelectorAll('a')).find((e) => /^(next(?: page)?|›|>|»)$/i.test((e.textContent || e.getAttribute('aria-label') || '').trim()) && e.getAttribute('href'));
       if (!next) break;
-      const before = out.length; next.click();
-      await sleep(2500); t = await settle(() => false, 1500);
-      if (refused(t)) break;
+      const url = new URL(next.getAttribute('href'), location.href);
+      if (url.origin !== location.origin || !url.pathname.startsWith('/tires/') || visited.has(url.href)) break;
+      visited.add(url.href);
+      const before = out.length;
+      try {
+        await sleep(800);
+        doc = new DOMParser().parseFromString(await fetchText(url.href), 'text/html');
+        // Preserve block boundaries as newlines, as innerText does in the live page.
+        doc.querySelectorAll('p,div,li,br,h1,h2,h3').forEach((e) => e.appendChild(doc.createTextNode('\n')));
+        t = doc.body.textContent || '';
+      } catch (e) { send({ tires: out, partial: true, blocked: !!e.blocked, error: e.message, code: e.code, detail: e.detail }); return; }
       readPage(t);
       if (out.length === before) break;
     }
-    send({ tires: out.slice(0, 300) });
+    send({ tires: out.slice(0, 300), empty: out.length === 0 });
     return;
   }
   send({ error: 'unknown step' });

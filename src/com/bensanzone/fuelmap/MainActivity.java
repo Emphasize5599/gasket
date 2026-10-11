@@ -29,6 +29,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceResponse;
 import android.webkit.CookieManager;
 import android.net.http.HttpResponseCache;
@@ -307,6 +308,15 @@ public class MainActivity extends Activity {
         int showReq = -1;   // set while the page is shown to the user by siteShow
         int readReq = -1;   // set while a page is read in the background by siteRead (answered once)
         String readCall = null;   // its reader: run on every load of the page (it may reload itself), once per load
+        Runnable readDeadline = null;
+
+        void finishRead(int reqId, String json) {
+            if (readReq != reqId) return;
+            readReq = -1; readCall = null;
+            if (readDeadline != null) main.removeCallbacks(readDeadline);
+            readDeadline = null;
+            js("window.onNativeResult&&onNativeResult(" + reqId + ",JSON.parse(" + q(json) + "))");
+        }
 
         SiteWorker(String key, String home, String origin) { this(key, home, origin, false); }
 
@@ -331,12 +341,13 @@ public class MainActivity extends Activity {
                 public void onPageCommitVisible(WebView v, String url) {
                     // a background read (siteRead) starts its reader as soon as the page is drawn: some pages (NHTSA's)
                     // keep loading in the background for a long time, and the reader waits for its answer by itself
-                    if (verifying == SiteWorker.this || readReq < 0 || !url.startsWith(SiteWorker.this.origin)) return;
+                    if (verifying == SiteWorker.this || readReq < 0 || !url.startsWith(SiteWorker.this.origin) || !url.equals(v.getUrl())) return;
                     runRead();
                 }
 
                 @Override
                 public void onPageFinished(WebView v, String url) {
+                    if (readReq >= 0 && !url.equals(v.getUrl())) return; // a callback from the page we just left
                     String title = String.valueOf(v.getTitle()).toLowerCase(Locale.US);
                     boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || title.contains("robot") || title.contains("access denied")
                             || title.contains("captcha") || title.contains("unusual traffic");
@@ -355,25 +366,40 @@ public class MainActivity extends Activity {
                     if (blocked) {
                         if (readReq >= 0) {
                             // a background read hit a check (a CAPTCHA page, Access Denied): never get past it, just say so
-                            js("window.onNativeResult&&onNativeResult(" + readReq + ",{blocked:true})");
-                            readReq = -1; readCall = null;
+                            finishRead(readReq, "{\"blocked\":true,\"error\":\"Site access restricted\"}");
                         } else js("window.onSiteBlocked&&onSiteBlocked(" + q(SiteWorker.this.key) + ")");
                         queue.clear();
                     } else if (ready) {
                         runQueue();
                     }
                 }
+
+                @Override
+                public void onReceivedError(WebView v, WebResourceRequest request, WebResourceError error) {
+                    if (request.isForMainFrame() && readReq >= 0) {
+                        finishRead(readReq, "{\"error\":\"Page could not load\",\"code\":\"network\"}");
+                        ready = false;
+                    }
+                }
+
+                @Override
+                public void onReceivedHttpError(WebView v, WebResourceRequest request, WebResourceResponse response) {
+                    if (!request.isForMainFrame() || readReq < 0) return;
+                    int status = response.getStatusCode();
+                    if (status >= 400) {
+                        finishRead(readReq, "{\"error\":\"HTTP " + status + "\",\"code\":\"http\",\"status\":" + status
+                                + ",\"blocked\":" + (status == 403 || status == 429) + "}");
+                        ready = false;
+                    }
+                }
             });
         }
 
         /** A background read's reader, on the page as it is now (a page that reloads itself gets it again). */
-        int readRuns = 0;
         void runRead() {
             if (readCall == null) return;
-            // NHTSA's page may reload itself during its own checks: its reader goes onto each new load. Other readers
-            // (Tire Rack, which turns pages itself) run on the first load only.
-            if (readRuns > 0 && !"nhtsa".equals(key)) { view.evaluateJavascript("window.__gasketRead=1", null); return; }
-            readRuns++;
+            // The document guards by request ID. A previous request or a callback from the old document must not
+            // consume the new request; a real page reload needs the reader again because its JS was destroyed.
             view.evaluateJavascript(readCall, null);
         }
 
@@ -413,9 +439,16 @@ public class MainActivity extends Activity {
         /** Called by the worker script; payload is data only and is parsed with JSON.parse on the app side. */
         @JavascriptInterface
         public void result(int reqId, String json) {
-            SiteWorker w = workers.get(key);
-            if (w != null && w.readReq == reqId) { w.readReq = -1; w.readCall = null; }   // a background read is answered once
-            js("window.onSiteResult&&onSiteResult(" + q(key) + "," + reqId + ",JSON.parse(" + q(json) + "))");
+            final int id = reqId; final String payload = json;
+            main.post(new Runnable() {
+                public void run() {
+                    SiteWorker w = workers.get(key);
+                    if (w != null && w.readReq == id) { w.finishRead(id, payload); return; }
+                    // Ignore late/duplicate background replies. Visible reads and price workers use onSiteResult.
+                    if ("tirerack".equals(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
+                    js("window.onSiteResult&&onSiteResult(" + q(key) + "," + id + ",JSON.parse(" + q(payload) + "))");
+                }
+            });
         }
     }
 
@@ -1565,13 +1598,24 @@ public class MainActivity extends Activity {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
                         return;
                     }
+                    if (w.readReq >= 0) w.finishRead(w.readReq, "{\"error\":\"Lookup replaced by another request\",\"code\":\"cancelled\"}");
                     w.readReq = reqId;
                     // once per page load (the page keeps a flag; a reload clears it and gets the reader again)
-                    w.readCall = "if(!window.__gasketRead){window.__gasketRead=1;(" + script + ")(" + reqId + "," + argsJson + ");}";
-                    w.queue.clear(); w.ready = false; w.readRuns = 0;
-                    w.view.loadUrl(url);
+                    w.readCall = "if(window.__gasketRead!==" + reqId + "){window.__gasketRead=" + reqId + ";Promise.resolve((" + script + ")(" + reqId + "," + argsJson + ")).catch(function(){GasketSite.result(" + reqId + ",JSON.stringify({error:'Page reader failed',code:'reader'}));});}";
+                    w.queue.clear();
+                    // Picker steps share the same page and cookies. Reuse it instead of racing same-URL reload callbacks.
+                    if ("tirerack".equals(key) && w.ready && url.equals(w.view.getUrl())) w.runRead();
+                    else { w.ready = false; w.view.loadUrl(url); }
                     // and if the page never says it's drawn or finished, start the reader anyway after a few seconds
                     final SiteWorker fw = w; final int fr = reqId;
+                    fw.readDeadline = new Runnable() {
+                        public void run() {
+                            if (fw.readReq != fr) return;
+                            fw.finishRead(fr, "{\"error\":\"Site lookup timed out\",\"code\":\"timeout\"}");
+                            fw.ready = false; fw.view.stopLoading();
+                        }
+                    };
+                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             String at = fw.view.getUrl();

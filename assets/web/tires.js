@@ -320,6 +320,32 @@
     return out;
   }
   var VER_DAYS = 60;
+  var trQueue = Promise.resolve();
+  function tireRead(args) {
+    // All cars and trailer sizes share one native Tire Rack WebView; never navigate it over an unfinished request.
+    var job = trQueue.then(function () {
+      var started = Date.now();
+      LG.info('car', 'Tire Rack lookup started: ' + args.step, args);
+      return call('siteRead', 'tirerack', JSON.stringify(args)).then(function (r) {
+        r = r || { error: 'Tire Rack returned no answer', code: 'empty' };
+        LG[r.blocked || r.error ? 'warn' : 'info']('car', 'Tire Rack lookup finished: ' + args.step,
+          { elapsedMs: Date.now() - started, code: r.blocked ? 'blocked' : r.code || (r.unknown ? 'unknown' : 'ok'), error: r.error, detail: r.detail });
+        return r;
+      });
+    });
+    trQueue = job.catch(function () {});
+    return job.catch(function (e) { return { error: String(e && e.message || e), code: 'bridge' }; });
+  }
+  function failure(r) { return r.blocked ? 'blocked' : r.code || (r.unknown ? 'unknown' : 'error'); }
+  function failureText(x) {
+    if (x.failed === 'blocked') return 'Tire Rack restricted this request or showed a security check. Gasket stopped the lookup.';
+    if (x.failed === 'timeout') return 'Tire Rack took too long to respond. The lookup has stopped.';
+    if (x.failed === 'network') return 'Could not connect to Tire Rack. Check your connection and try again.';
+    if (x.failed === 'unreadable') return 'Tire Rack responded, but Gasket could not read the expected results.';
+    if (x.failed === 'http') return 'Tire Rack returned a site error' + (x.error ? ': ' + x.error : '.') ;
+    if (x.failed === 'none') return 'Tire Rack returned no matching results.';
+    return 'Tire Rack lookup failed' + (x.error ? ': ' + x.error : '.');
+  }
 
   /**
    * Tire Rack, in the background, for a car with no size yet: its model names for the year and make (one request), the
@@ -334,10 +360,11 @@
       // 1. Tire Rack's model names for the year and make
       if (!tr || (tr.failed && !recent(tr, RETRY_H)) || (!tr.failed && Date.now() - tr.t > VER_DAYS * 864e5)) {
         busy[c.id] = 'versions'; t.tr = { key: vk, t: Date.now(), models: [], clars: {} };
-        call('siteRead', 'tirerack', JSON.stringify({ url: TR + 'brands', step: 'models', make: c.make, year: c.year })).then(function (r) {
+        tireRead({ url: TR + 'brands', step: 'models', make: c.make, year: c.year }).then(function (r) {
           busy[c.id] = false; r = r || {};
+          if (vk !== verKey(c)) { lookup(c); return; }
           var mine = r.models ? rankModels(c, r.models) : [];
-          t.tr = { key: vk, t: Date.now(), make: r.make || c.make, models: mine.map(function (x) { return x.model; }), clars: {}, failed: r.blocked ? 'blocked' : !r.models ? 'error' : !mine.length ? 'none' : '' };
+          t.tr = { key: vk, t: Date.now(), make: r.make || c.make, models: mine.map(function (x) { return x.model; }), clars: {}, failed: r.blocked || !r.models ? failure(r) : !mine.length ? 'none' : '', error: r.error };
           LG.info('car', 'Tire Rack models: ' + (t.tr.models.join(', ') || t.tr.failed));
           save(); redraw(c); if (!t.tr.failed) lookup(c);
         });
@@ -354,10 +381,12 @@
         var auto = t.trWant || f.trim.length || plan.length <= 2;     // no trim and many models: you pick the model first
         if (next.length && auto && !(tr.clarFail && recent({ t: tr.clarFail }, RETRY_H))) {
           busy[c.id] = 'versions';
-          call('siteRead', 'tirerack', JSON.stringify({ url: TR + 'brands', step: 'clars', make: tr.make || c.make, year: c.year, models: next })).then(function (r) {
+          tireRead({ url: TR + 'brands', step: 'clars', make: tr.make || c.make, year: c.year, models: next }).then(function (r) {
             busy[c.id] = false; r = r || {};
+            if (tr !== trOf(c)) { lookup(c); return; }
             Object.keys(r.clars || {}).forEach(function (m) { tr.clars[m] = r.clars[m]; });
-            if (r.blocked || r.error) tr.clarFail = Date.now();
+            if (r.blocked || r.error) { tr.clarFail = Date.now(); tr.clarError = { failed: failure(r), error: r.error }; }
+            else { delete tr.clarFail; delete tr.clarError; }
             LG.info('car', 'Tire Rack versions: ' + next.map(function (m) { return m + (tr.clars[m] ? ' (' + (tr.clars[m].join(', ') || 'one') + ')' : ' (' + (r.blocked ? 'blocked' : 'no answer') + ')'); }).join('; '));
             save(); redraw(c); if (!r.blocked && !r.error) lookup(c);
           });
@@ -371,14 +400,15 @@
       busy[c.id] = 'size'; t.sizeLookup = { key: key, t: Date.now() };
       // a model with no versions only answers through Tire Rack's vehicle menu (its size page says "currently unavailable")
       var ask = v.clar ? { url: sizeUrl(c, v), step: 'size' } : { url: TR + 'brands', step: 'oesize', make: (tr && tr.make) || c.make, year: c.year, model: v.model, clar: '' };
-      call('siteRead', 'tirerack', JSON.stringify(ask)).then(function (r) {
+      tireRead(ask).then(function (r) {
         busy[c.id] = false; r = r || {};
+        if (!ver(c) || key !== verKey(c) + '|' + verName(ver(c)) || t.sizeSrc === 'user') { lookup(c); return; }
         if (r.factory && r.factory.length) {
           t.sizeLookup = { key: key, t: Date.now(), found: true, factory: r.factory, optional: r.optional || [] };
           if (r.factory.length === 1 && !t.size) { t.size = r.factory[0]; t.sizeSrc = 'tirerack'; }
           LG.info('car', 'Tire Rack factory size for the ' + verName(v) + ': ' + r.factory.join(', '));
         } else {
-          t.sizeLookup = { key: key, t: Date.now(), failed: r.blocked ? 'blocked' : r.unknown ? 'unknown' : 'error' };
+          t.sizeLookup = { key: key, t: Date.now(), failed: failure(r), error: r.error };
           LG.info('car', 'Tire Rack factory size not found for the ' + verName(v), t.sizeLookup.failed);
         }
         save(); redraw(c); lookup(c);
@@ -391,10 +421,12 @@
       var url = listUrl(c, t.size); if (!url) return;
       var sz = t.size;
       busy[c.id] = 'list'; t.list = { size: sz, t: Date.now(), items: L && L.size === sz ? L.items : [] };
-      call('siteRead', 'tirerack', JSON.stringify({ url: url, step: 'list' })).then(function (r) {
+      tireRead({ url: url, step: 'list' }).then(function (r) {
         busy[c.id] = false; r = r || {};
+        if (t.size !== sz) { lookup(c); return; }
         if (r.tires && r.tires.length) { t.list = { size: sz, t: Date.now(), items: r.tires.map(function (x) { var s = split(x.name); return { name: x.name, brand: s.brand, model: s.model, type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; }) }; LG.info('car', 'Tire Rack: ' + r.tires.length + ' tires in ' + sz); }
-        else { t.list = { size: sz, t: Date.now(), items: (t.list && t.list.size === sz && t.list.items) || [], failed: r.blocked ? 'blocked' : 'error' }; LG.info('car', 'Tire Rack tire list not read', t.list.failed); }
+        else { t.list = { size: sz, t: Date.now(), items: (t.list && t.list.size === sz && t.list.items) || [], failed: r.empty ? 'none' : failure(r), error: r.error }; LG.info('car', 'Tire Rack tire list not read', t.list.failed); }
+        if (r.partial) { t.list.failed = failure(r); t.list.error = r.error; t.list.partial = true; }
         save(); redraw(c);
         if (t.size !== sz) lookup(c);          // the size changed while this was read (another version picked): look that one up
       });
@@ -591,7 +623,6 @@
     var L = t.list && t.list.size === t.size ? t.list.items || [] : [], q = A.qBtn, h = '';
     var SL = t.sizeLookup || {}, fac = SL.found ? SL.factory || [] : [];
     h += '<div class="nf wide"><span>Size' + q(Q.size) + '</span>';
-    if (busy[c.id] === 'size') h += window.__app.ldBar('Looking up your factory size at Tire Rack');
     var v = ver(c), tr = trOf(c), vn = verName(v), yr = c.year + ' ' + ((tr && tr.make) || c.make) + ' ';
     if (fac.length > 1 && !t.size) h += '<div class="chips mini wrap" id="tzPick">' + fac.map(function (z) { return '<button data-size="' + esc(z) + '">' + esc(z) + '</button>'; }).join('') + '</div>' +
       '<div class="lead small keep">Your ' + esc(yr + vn) + ' came with ' + fac.length + ' sizes. Pick yours, or type it below.</div>';
@@ -609,12 +640,16 @@
     }
     if (!t.size && busy[c.id] === 'versions') h += window.__app.ldBar('Asking Tire Rack for the versions of the ' + yr + base(c));
     else if (busy[c.id] === 'size') h += window.__app.ldBar('Looking up the factory size at Tire Rack');
-    else if (!t.size && tr && tr.failed) h += '<div class="lead small keep">' + (tr.failed === 'none' ? 'Tire Rack doesn\'t list the ' + esc(yr + base(c)) + '.' : 'Tire Rack didn\'t answer — it\'ll try again later.') + ' Type the size from the sticker inside the driver\'s door.</div>';
-    else if (!t.size && SL.failed && v && SL.key === verKey(c) + '|' + vn) h += '<div class="lead small keep">' + (SL.failed === 'unknown' ? 'Tire Rack has no sizes for the ' + esc(yr + vn) + '. Pick another version, or type' : 'Tire Rack didn\'t answer. Type') + ' the size from the sticker inside the driver\'s door.</div>';
-    else if (!t.size && tr && tr.clarFail && !v) h += '<div class="lead small keep">Tire Rack didn\'t answer — it\'ll try again later. Pick a model above, or type the size from the sticker inside the driver\'s door.</div>';
+    var failed = !t.size ? (tr && tr.failed ? tr : SL.failed && v && SL.key === verKey(c) + '|' + vn ? SL : tr && tr.clarFail && !v ? tr.clarError || { failed: 'error' } : null) : t.list && t.list.failed ? t.list : null;
+    if (!busy[c.id] && failed) {
+      h += '<div class="lead small keep" role="status" id="tzLookupError">' + (failed.failed === 'unknown' ? 'Tire Rack has no sizes for the ' + esc(yr + vn) + '. Pick another version, or type the size from the sticker inside the driver\'s door.' : esc(failureText(failed))) + '</div>';
+      h += '<button type="button" class="btn tonal sm" id="tzRetry">Retry Tire Rack lookup</button>';
+      if (N.openUrl) h += '<button type="button" class="btn tonal sm" id="tzOpenSite">Open Tire Rack in browser</button>';
+      if (!t.size) h += '<div class="lead small keep">You can enter the tire size from the sticker inside the driver\'s door.</div>';
+    }
     if (busy[c.id] === 'list') h += window.__app.ldBar('Finding the tires made in ' + t.size);
     h += pickHtml(L, t, 'tz');
-    if (t.size && t.list && t.list.failed && !L.length) h += '<div class="lead small keep">Couldn\'t get Tire Rack\'s list for ' + esc(t.size) + '. Type the brand and model, and the wear rating from the tire\'s side.</div>';
+    if (t.size && t.list && t.list.failed) h += '<div class="lead small keep">' + (L.length ? 'The tire list may be incomplete.' : 'Couldn\'t get Tire Rack\'s list for ' + esc(t.size) + '. Type the brand and model, and the wear rating from the tire\'s side.') + '</div>';
     h += '<div class="nf wide"><span>Wear rating' + q(Q.utqg) + '</span>' + utqgHtml(t.utqg, 'tz') + (t.utqgSrc === 'tirerack' ? '<div class="lead small keep">Wear rating and warranty from Tire Rack.</div>' : '') + '</div>';
     h += '<label class="nf wide"><span>Maker\'s mileage warranty' + q(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="tzWarranty" placeholder="e.g. 65000" value="' + esc(+t.warrantyMi > 0 ? t.warrantyMi : '') + '"></label>';
     var fs = fuel(t);
@@ -647,6 +682,18 @@
     var fill = function () {
       var b = pg.querySelector('.sub-body'); b.innerHTML = carDetails(c, t);
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
+      if (b.querySelector('#tzRetry')) b.querySelector('#tzRetry').onclick = set(function () {
+        var tr = trOf(c);
+        if (tr && tr.failed) t.tr = null;
+        else if (tr) { delete tr.clarFail; delete tr.clarError; }
+        t.sizeLookup = null;
+        if (t.list && t.list.failed) t.list = null;
+        lookup(c);
+      });
+      if (b.querySelector('#tzOpenSite')) b.querySelector('#tzOpenSite').onclick = function () {
+        var v = ver(c);
+        N.openUrl(t.size ? listUrl(c, t.size) : v ? sizeUrl(c, v) : TR + 'brands');
+      };
       if (b.querySelector('#tzVerSel')) b.querySelector('#tzVerSel').onchange = set(function () {
         var x = this.value; if (!x) return;
         if (t.sizeSrc === 'tirerack') { t.size = ''; t.sizeSrc = ''; t.list = null; }       // another version: its own factory size
@@ -721,7 +768,7 @@
     if (o && o.v && o.v.length) return (sizeMem[size] = o.v);
     if (!sizeBusy[size] && call && N.siteRead) {
       sizeBusy[size] = true;
-      call('siteRead', 'tirerack', JSON.stringify({ url: listUrl({}, size), step: 'list' })).then(function (r) {
+      tireRead({ url: listUrl({}, size), step: 'list' }).then(function (r) {
         sizeBusy[size] = false; r = r || {};
         var items = (r.tires || []).map(function (x) { var s2 = split(x.name); return { name: x.name, brand: s2.brand, model: s2.model, type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; });
         if (items.length) { sizeMem[size] = items; if (kv) kv.put('trlist', size, items); }
