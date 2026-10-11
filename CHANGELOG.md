@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.98 - 2026-10-11
+- Tire Rack vehicle-picker requests now time out cleanly instead of leaving the tire lookup spinning forever. The lookup reports the failure and can retry later.
+
 ## 0.0.97 - 2026-10-11
 - **Tire Rack sizes work for every car.** Tire Rack files cars under its own names (a 2011 Sienna LE is "Sienna FWD" + "LE V6"), and its size page answers only to those. Tires now asks Tire Rack's vehicle menu for its names and matches your car by trim, drive, engine and body, so the factory size comes up on its own. When that isn't certain (no trim, or two close matches) you pick your version from Tire Rack's list, and you can change it any time.
 - Bug fixes.
