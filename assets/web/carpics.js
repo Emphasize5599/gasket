@@ -70,7 +70,7 @@
     return { title: String(best.p.title).replace(/^File:/i, ''), url: best.ii.thumburl || best.ii.url, page: best.ii.descriptionurl || '', artist: txt('Artist').slice(0, 60) || 'unknown', license: txt('LicenseShortName') || 'see the file page' };
   }
   /** What a lookup depends on: one photo per model (year / make / model). */
-  function sig(c, fuel) { return [c.year, norm(c.make), norm(baseModel(c.model))].concat(fuel ? [norm(c.trim)] : []).join('|'); }
+  function sig(c, fuel) { return (fuel ? ['f2'] : []).concat([c.year, norm(c.make), norm(baseModel(c.model))]).concat(fuel ? [norm(c.trim)] : []).join('|'); }   // f2: 0.0.93 also takes side views, so older failures are asked again
   /**
    * Which picture to show: 'fuel' when you've picked one of the trim's factory colors (and there's a key), else 'nhtsa',
    * else 'wiki', else 'fuel' in its first color (a key, no other photo), else null (the doodle). Doodle mode always draws.

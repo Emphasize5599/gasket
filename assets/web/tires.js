@@ -252,7 +252,7 @@
       call('siteRead', 'tirerack', JSON.stringify({ url: sizeUrl(c, true), step: 'trims' })).then(function (r) {
         busy[c.id] = false; r = r || {};
         t.trims = { key: tkey, t: Date.now(), list: r.trims || [], single: !!r.single, failed: r.blocked ? 'blocked' : r.error ? 'error' : '' };
-        LG.info('car', 'Tire Rack versions: ' + ((r.trims || []).join(', ') || (r.single ? 'one' : 'none found')));
+        LG.info('car', 'Tire Rack versions: ' + ((r.trims || []).join(', ') || (r.single ? 'one' : 'none found')), r.debug || undefined);
         if (r.single && !trTrim(c)) t.trTrim = '';                                   // one version: its sizes need no trim
         save(); redraw(c); if (r.single) lookup(c);
       });

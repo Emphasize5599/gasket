@@ -37,11 +37,23 @@ async function (reqId, args) {
     const t = await settle((t) => /factory tire size|autoModClar/i.test(t + document.documentElement.innerHTML.slice(0, 200000)) || /error=noVehicle/.test(location.href), 20000);
     if (refused(t)) { send({ blocked: true }); return; }
     const out = [];
-    const add = (v) => { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v && v.length < 60 && !/^(select|choose|--)/i.test(v) && out.indexOf(v) < 0) out.push(v); };
-    document.querySelectorAll('a[href*="autoModClar="]').forEach((a) => { try { add(new URL(a.getAttribute('href'), /^https?:/.test(location.href) ? location.href : 'https://www.tirerack.com/').searchParams.get('autoModClar')); } catch (e) { } });
-    document.querySelectorAll('select').forEach((sel) => { if (/clar|trim|addl|additional|option/i.test((sel.name || '') + ' ' + (sel.id || ''))) sel.querySelectorAll('option').forEach((o) => add(o.value || o.textContent)); });
+    const add = (v) => { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v && v.length < 60 && !/^(select|choose|--|please)/i.test(v) && out.indexOf(v) < 0) out.push(v); };
+    const base = /^https?:/.test(location.href) ? location.href : 'https://www.tirerack.com/';
+    const clarOf = (u) => { try { const q = new URL(u, base).searchParams; for (const [k, v] of q) if (/modclar/i.test(k)) return v; } catch (e) { } const m = /modclar=([^&'"]+)/i.exec(u || ''); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; };
+    // links and buttons that carry the version (href, onclick, data-…)
+    document.querySelectorAll('a[href], [onclick], [data-href], [data-url], [data-value]').forEach((e) => {
+      const s = [e.getAttribute('href'), e.getAttribute('onclick'), e.getAttribute('data-href'), e.getAttribute('data-url')].filter(Boolean).join(' ');
+      if (/modclar/i.test(s)) add(clarOf(s.split(' ').filter((x) => /modclar/i.test(x))[0] || s) || e.textContent);
+    });
+    // menus and option lists for the version
+    document.querySelectorAll('select').forEach((sel) => { if (/clar|trim|addl|additional|option|vehicle/i.test((sel.name || '') + ' ' + (sel.id || '') + ' ' + (sel.className || ''))) sel.querySelectorAll('option').forEach((o) => add(o.value && !/^\d*$/.test(o.value) ? o.value : o.textContent)); });
+    document.querySelectorAll('input[type=radio], input[type=hidden]').forEach((i) => { if (/modclar/i.test(i.name || '')) add(i.value); });
     document.querySelectorAll('[data-modclar], [data-autoModClar]').forEach((e) => add(e.getAttribute('data-modclar') || e.getAttribute('data-autoModClar')));
-    send({ trims: out.slice(0, 40), single: !out.length && /factory tire size/i.test(t) });
+    // nothing found: what the page looked like, for the debug log (no personal data on it)
+    const debug = out.length ? null : { url: location.pathname + location.search.slice(0, 160), title: document.title.slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 500),
+      selects: [...document.querySelectorAll('select')].slice(0, 8).map((s) => (s.name || s.id || s.className || '?') + ':' + s.options.length),
+      clarMentions: (document.documentElement.innerHTML.match(/modclar[^"'&<>]{0,40}/gi) || []).slice(0, 8) };
+    send({ trims: out.slice(0, 40), single: !out.length && /factory tire size/i.test(t), debug: debug });
     return;
   }
 

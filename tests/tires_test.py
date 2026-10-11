@@ -319,7 +319,7 @@ with sync_playwright() as p:
     assert r == {'factory': ['195/65R15'], 'optional': ['215/45R17']}, r
     TRIMPAGE = '<h1>2019 HONDA FIT</h1><p>Please select additional vehicle info</p><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=LX">LX</a><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=Sport%20w%2FHonda%20Sensing">Sport w/Honda Sensing</a><a href="/x">Help</a>'
     r = reader(pg, TRIMPAGE, {'step': 'trims'}); print('  trims reader:', r)
-    assert r == {'trims': ['LX', 'Sport w/Honda Sensing'], 'single': False}, r
+    assert r == {'trims': ['LX', 'Sport w/Honda Sensing'], 'single': False, 'debug': None}, r
     LISTPAGE = ('<div><p>GRAND TOURING ALL-SEASON</p><p>Category Ratings Charts</p>'
                 '<p>CONTINENTAL SECURECONTACT AW</p><p>Grand Touring All-Season</p><p>Reviews (28)</p><p>$153.99</p><p>Size: 195/65R15 91H</p><p>Load Range: SL</p><p>UTQG: 700 A A</p><p>More information on UTQG</p><p>60K Mile Manufacturer\'s Warranty</p>'
                 '<p>BRIDGESTONE BLIZZAK WS90</p><p>Studless Ice &amp; Snow</p><p>Size: 195/65R15 91T</p><p>Free Road Hazard Protection</p>'
