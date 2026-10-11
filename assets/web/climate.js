@@ -107,29 +107,40 @@
     h += row('clCaps', '', 'Your car\'s controls', capsOn.length ? capsOn.join(', ') : 'Tell Gasket what your car has', capsOn.length ? '' : 'empty');
     h += '<h4 class="cl-h">Seasons</h4>';
     SEASONS.forEach(function (s) {
-      var p = find(c, 'season', s[0]);
+      var p = find(c, 'season', s[0]), sit = situations(s[0]), done = sit.filter(function (w) { return find(c, 'weather', w[0]); });
       h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : ''));
+      // under each season: what you'd do in the weather it brings (snowy, frosty, rainy…)
+      h += row('clX_' + s[0], 'data-wx="' + s[0] + '"', 'Adjust for special weather conditions', done.length + ' of ' + sit.length + ' answered · ' + sit.map(function (w) { return w[1]; }).join(', '),
+        'cl-wx' + (sit.some(function (w) { var q = find(c, 'weather', w[0]); return q && bad(q, caps); }) ? ' warn' : ''));
     });
     var cu = x.presets.filter(function (p) { return p.kind === 'custom'; });
-    // what would you do if it's...: this time of year first, the rest after
-    var wrow = function (w) { var p = find(c, 'weather', w[0]); return row('clW_' + w[0], 'data-kind="weather" data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); };
-    var mine = situations(now);
-    h += '<h4 class="cl-h">What would you do if it\'s…</h4><p class="cl-sub">This time of year</p>' + mine.map(wrow).join('');
-    h += '<p class="cl-sub">Other times of year</p>' + WEATHER.filter(function (w) { return mine.indexOf(w) < 0; }).map(wrow).join('');
     h += '<h4 class="cl-h">Custom</h4>';
     cu.forEach(function (p) { h += row('clC_' + p.id, 'data-id="' + esc(p.id) + '"', label(p), line(p, caps), bad(p, caps) ? 'warn' : ''); });
     h += '<button type="button" class="btn tonal sm cl-new" id="clAddC">+ Custom preset</button>';
     host.innerHTML = h;
     $('clCaps').onclick = function () { openCaps(c); };
+    host.querySelectorAll('[data-wx]').forEach(function (b) { b.onclick = function () { openWeather(c, b.dataset.wx); }; });
     host.querySelectorAll('[data-kind]').forEach(function (b) { b.onclick = function () { var k = b.dataset.kind, p = find(c, k, b.dataset.key); if (p) openPreset(c, p.id, false); else add(c, k, b.dataset.key); }; });
     host.querySelectorAll('[data-id]').forEach(function (b) { b.onclick = function () { openPreset(c, b.dataset.id, false); }; });
     $('clAddC').onclick = function () { add(c, 'custom', ''); };
   }
   function changed() { save(); draw(); onChange(); }
-  function add(c, kind, key) {
+  /** A season's special weather: "What would you do if it's…" each situation that season brings (answers are shared between seasons). */
+  function openWeather(c, sk) {
+    var x = cl(c), sn = SEASONS.filter(function (s) { return s[0] === sk; })[0], pg = null;
+    var again = function () { openWeather(c, sk); };
+    var fill = function () {
+      var b = pg.querySelector('.sub-body'), caps = x.caps;
+      b.innerHTML = '<p class="lead small keep">What would you do if it\'s… Your answer for each one is used whenever that weather comes, in any season.</p>' +
+        situations(sk).map(function (w) { var p = find(c, 'weather', w[0]); return row('clW_' + w[0], 'data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); }).join('');
+      b.querySelectorAll('[data-key]').forEach(function (r) { r.onclick = function () { var p = find(c, 'weather', r.dataset.key); if (p) openPreset(c, p.id, false, again); else add(c, 'weather', r.dataset.key, again); }; });
+    };
+    A.subPage(sn[1] + ': special weather', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
+  }
+  function add(c, kind, key, back) {
     var x = cl(c), p = starter(kind, key, x.caps);
     if (kind === 'custom') p.name = 'My preset' + (x.presets.filter(function (q) { return q.kind === 'custom'; }).length ? ' ' + (x.presets.filter(function (q) { return q.kind === 'custom'; }).length + 1) : '');
-    x.presets.push(p); LG.info('car', 'Climate preset added: ' + label(p)); changed(); openPreset(c, p.id, true);
+    x.presets.push(p); LG.info('car', 'Climate preset added: ' + label(p)); changed(); openPreset(c, p.id, true, back);
   }
   /** What the car's climate controls can do: decides which settings the presets show. */
   function openCaps(c) {
@@ -149,7 +160,8 @@
   }
   function levels(max) { var a = [[0, 'Off']]; for (var i = 1; i <= max; i++) a.push([i, String(i)]); return a; }
   /** One preset, as its own page. Back keeps what you changed; at the bottom: Delete, and Discard changes (a new one goes away). */
-  function openPreset(c, id, isNew) {
+  /** back: reopen the page this came from (a season's special weather) once it closes. */
+  function openPreset(c, id, isNew, back) {
     var x = cl(c), p = x.presets.filter(function (q) { return q.id === id; })[0]; if (!p) return;
     var snap = JSON.stringify(p), pg = null, close = null;
     var drop = function () { x.presets = x.presets.filter(function (q) { return q !== p; }); };
@@ -191,7 +203,7 @@
       };
       if (A.qify) A.qify(b);
     };
-    close = A.subPage(title(p), '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
+    close = A.subPage(title(p), '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); if (back) setTimeout(back, 0); }; });
   }
   /** A preset that recirculates where it shouldn't. */
   function bad(p, caps) { return p.air === 'recirc' && !recircOk(p, caps); }

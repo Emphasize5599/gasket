@@ -31,7 +31,7 @@ with sync_playwright() as p:
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
         now = pg.evaluate('ClimateMath.season()')
         pg.evaluate("document.querySelector('#gClimate').scrollIntoView()"); pg.click('#gClimate summary'); pg.wait_for_selector('#clCaps')
-        assert 'by season and weather' in ft(pg, '#gClimLine') and pg.locator('.cl-row.empty').count() == 15, 'controls, the four seasons and the ten what-ifs: not set up'
+        assert 'by season and weather' in ft(pg, '#gClimLine') and pg.locator('.cl-row.empty').count() == 5 and pg.locator('.cl-wx').count() == 4, 'controls and the four seasons: not set up; special weather under each season'
         assert '(now)' in ft(pg, '#clS_' + now)
         # ---- your car's controls ----
         pg.click('#clCaps'); pg.wait_for_selector('.sub-page [data-cap]')
@@ -75,14 +75,23 @@ with sync_playwright() as p:
         assert pg.locator('#tpSteps [data-step="3"].dim').count() == 0 and pg.evaluate('window.__app.S.recircAck') > 0
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300)
         # ---- a weather preset; Discard changes on a new one: gone. Back to fresh air: Advice quiets down ----
-        here = pg.evaluate("ClimateMath.situations(ClimateMath.season()).map(w => w[0])")
-        rows = pg.evaluate("[...document.querySelectorAll('[data-kind=weather]')].map(b => b.dataset.key)")
-        assert rows[:len(here)] == here and len(rows) == 10, ('this time of year first', rows, here)
-        assert "What would you do if it's" in pg.inner_html('#gClimIn') and pg.locator('[data-kind=weather].empty').count() == 10
-        pg.click('#clW_fog'); pg.wait_for_selector('.sub-page #cpTemp')
+        # each season: "Adjust for special weather conditions" opens what you'd do in the weather it brings
+        assert 'Adjust for special weather conditions' in ft(pg, '#clX_winter') and '0 of 4 answered' in ft(pg, '#clX_winter')
+        assert pg.evaluate("document.querySelector('#clS_winter').nextElementSibling.id") == 'clX_winter', 'right under its season'
+        pg.click('#clX_winter'); pg.wait_for_selector('.sub-page [data-key]')
+        assert ft(pg, '.sub-page h2') == 'Winter: special weather' and "What would you do if it's" in ft(pg, '.sub-page')
+        assert pg.evaluate("[...document.querySelectorAll('.sub-page [data-key]')].map(b => b.dataset.key)") == ['snow', 'ice', 'frost', 'fog'] and pg.locator('.sub-page .cl-row.empty').count() == 4
+        nosideways(pg, '.sub-page *', 'special weather page')
+        pg.click('.sub-page #clW_fog'); pg.wait_for_selector('.sub-page #cpTemp')
         assert ft(pg, '.sub-page h2') == "If it's foggy" and 'on' in pg.get_attribute('[data-k="flow"] [data-v="defrost"]', 'class')
-        pg.click('#cpDiscard'); pg.wait_for_timeout(200)
-        assert pg.locator('.sub-page').count() == 0 and not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('#clW_fog.empty').count() == 1
+        pg.click('#cpDiscard'); pg.wait_for_timeout(300)
+        assert ft(pg, '.sub-page h2') == 'Winter: special weather', 'closing an answer goes back to the season\'s list'
+        assert not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('.sub-page #clW_fog.empty').count() == 1
+        pg.click('.sub-page #clW_frost'); pg.wait_for_selector('.sub-page #cpTemp'); pg.click('.sub-back'); pg.wait_for_timeout(300)
+        assert pg.locator('.sub-page #clW_frost.empty').count() == 0 and 'Defrost' in ft(pg, '.sub-page #clW_frost'), 'answered'
+        pg.click('.sub-back'); pg.wait_for_timeout(300)
+        assert pg.locator('.sub-page').count() == 0 and '1 of 4 answered' in ft(pg, '#clX_winter') and '1 of 4 answered' in ft(pg, '#clX_fall'), 'frosty comes with fall too: the same answer'
+        assert '0 of ' in ft(pg, '#clX_summer')
         pg.click('#clS_winter'); pg.wait_for_selector('.sub-page #cpTemp')
         pg.click('[data-k="air"] [data-v="fresh"]'); pg.wait_for_timeout(100); assert pg.locator('.cl-warn').count() == 0
         pg.click('[data-k="air"] [data-v="recirc"]'); pg.click('#cpDiscard'); pg.wait_for_timeout(200)
@@ -94,15 +103,16 @@ with sync_playwright() as p:
         assert ft(pg, '.sub-page h2') == 'Road trip'
         pg.click('.sub-back'); pg.wait_for_timeout(200)
         cid = [x for x in CL(pg)['presets'] if x['kind'] == 'custom'][0]['id']
-        assert 'Road trip' in ft(pg, '#clC_' + cid) and '2 presets' in ft(pg, '#gClimLine')
+        assert 'Road trip' in ft(pg, '#clC_' + cid) and '3 presets' in ft(pg, '#gClimLine')
         nosideways(pg, '#gClimate *', 'climate card')
         pg.click('#clC_' + cid); pg.wait_for_selector('.sub-page #cpDel'); pg.click('#cpDel'); pg.wait_for_timeout(200)
         if pg.locator('.cfm-go').count(): pg.click('.cfm-go'); pg.wait_for_timeout(250)
-        assert len(CL(pg)['presets']) == 1 and pg.locator('.sub-page').count() == 0
+        assert len(CL(pg)['presets']) == 2 and pg.locator('.sub-page').count() == 0
         pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(300)
         a = ft(pg, '#advClimate')
         assert 'Your Winter preset' not in a and pg.locator('#advClimate .adv-item.due').count() == 0
         if now == 'winter': assert 'This season: Winter' in a
+        if now in ('fall', 'winter', 'spring'): assert 'Frosty:' in a and 'Defrost' in a, 'this time of year\'s weather answers in Advice'
         pg.close()
     assert not errors, errors
     print('JS errors: none')
