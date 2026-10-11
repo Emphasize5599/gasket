@@ -93,3 +93,29 @@ assert.equal(T.parseSpare('The car rides on run-flat tires, so there is no spare
 assert.equal(T.parseSpare('The model does not come with a spare tire.'), 'none');
 assert.equal(T.parseSpare('Tire pressure is 35 psi.'), null);
 console.log('tire math tests passed');
+
+// ---- matching a car to Tire Rack's names (real lists, as Tire Rack's vehicle picker gave them on Oct 11 2026) ----
+{
+  const V = (a) => a.map((x) => ({ model: x[0], clar: x[1] }));
+  const pick = (car, vs) => { const p = T.pickVersion(car, V(vs)); return { sure: p.sure, best: p.best && p.best.model + '/' + p.best.clar }; };
+  const PRIUS = [['Prius', 'Four'], ['Prius', 'Four Touring'], ['Prius', 'Three'], ['Prius', 'Three Touring'], ['Prius', 'Two'], ['Prius', 'Two Eco'], ['Prius c', 'Four'], ['Prius c', 'One'], ['Prius c', 'Three'], ['Prius c', 'Two'], ['Prius v', 'Five'], ['Prius v', 'Two']];
+  const SIENNA = [['Sienna AWD', 'LE V6'], ['Sienna AWD', 'Limited'], ['Sienna AWD', 'XLE'], ['Sienna FWD', 'LE 4cyl'], ['Sienna FWD', 'LE V6'], ['Sienna FWD', 'Limited'], ['Sienna FWD', 'SE'], ['Sienna FWD', 'XLE']];
+  const CHARGER = [['Charger Daytona R/T', ''], ['Charger R/T', 'AWD'], ['Charger R/T', 'RWD'], ['Charger SE', ''], ['Charger SXT', 'AWD'], ['Charger SXT', 'RWD'], ['Charger SXT DUB Edition', ''], ['Charger Super Bee', '']];
+  const MUSTANG = [['Mustang Convertible', ''], ['Mustang Coupe', ''], ['Mustang GT Convertible', ''], ['Mustang GT Coupe', '']];
+  assert.deepStrictEqual(pick({ model: 'Prius', trim: 'Two', info: { drive: 'fwd', engine: '1.8L Inline 4 Cyl' } }, PRIUS), { sure: true, best: 'Prius/Two' }, 'not the Two Eco, not the Prius c');
+  assert.deepStrictEqual(pick({ model: 'Sienna 2WD', trim: 'LE', info: { drive: 'fwd', engine: '3.5L V6 (2GR-FE)' } }, SIENNA), { sure: true, best: 'Sienna FWD/LE V6' }, 'drive and engine pick the right LE');
+  assert.strictEqual(pick({ model: 'Sienna 2WD', trim: 'LE', info: {} }, SIENNA).sure, false, 'an LE with no drive or engine known: you pick');
+  assert.deepStrictEqual(pick({ model: 'Charger', trim: 'SXT', info: { drive: 'rwd' } }, CHARGER), { sure: true, best: 'Charger SXT/RWD' }, 'the trim can be in Tire Rack\'s model name');
+  assert.deepStrictEqual(pick({ model: 'Mustang', trim: '', name: '2005 Ford Mustang · Auto 5-spd, 6 cyl, 4.0 L', info: {} }, MUSTANG), { sure: false, best: 'Mustang Coupe/' }, 'no trim: never guessed, plainest first');
+  assert.deepStrictEqual(pick({ model: 'Mustang', trim: 'GT', info: { body: 'Convertible' } }, MUSTANG), { sure: true, best: 'Mustang GT Convertible/' });
+  assert.deepStrictEqual(pick({ model: 'Fit', trim: 'Sport', info: {} }, [['Fit', 'LX'], ['Fit', 'Sport']]), { sure: true, best: 'Fit/Sport' });
+  assert.deepStrictEqual(pick({ model: 'Model Y', trim: '', info: {} }, [['Model Y', '255/40-20']]), { sure: true, best: 'Model Y/255/40-20' }, 'only one version: no question');
+  // which models to ask about (each is a request, so only the likely ones)
+  const ask = (car, models) => T.modelsToAsk(T.rankModels(car, models));
+  assert.deepStrictEqual(ask({ model: 'Sienna 2WD', trim: 'LE', info: { drive: 'fwd' } }, ['Sequoia', 'Sienna AWD', 'Sienna FWD']), ['Sienna FWD'], 'never the AWD for a FWD car');
+  assert.deepStrictEqual(ask({ model: 'Charger', trim: 'SXT', info: { drive: 'rwd' } }, ['Charger Daytona R/T', 'Charger R/T', 'Charger SE', 'Charger SXT', 'Charger SXT DUB Edition', 'Charger Super Bee']), ['Charger SXT', 'Charger SXT DUB Edition']);
+  assert.deepStrictEqual(ask({ model: 'Xterra 4WD', trim: 'Off-Road', info: { drive: '4wd' } }, ['Xterra Off-Road 2wd', 'Xterra Off-Road 4wd', 'Xterra S 2wd', 'Xterra S 4wd']), ['Xterra Off-Road 4wd']);
+  assert.deepStrictEqual(T.rankModels({ model: 'Corolla Hybrid', trim: 'LE' }, ['Corolla', 'Corolla Cross Hybrid', 'Corolla Hybrid']).map((r) => r.model), ['Corolla Hybrid', 'Corolla Cross Hybrid'], 'every word of the model, the plainest first');
+  assert.deepStrictEqual(T.rankModels({ model: 'Escalade' }, ['Corolla']), [], 'not listed: nothing');
+}
+console.log('tire version matching ok');

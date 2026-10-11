@@ -25,8 +25,11 @@ TR = r'''() => {
     if (key !== 'tirerack') return { error: 'No Native bridge' };
     window.__tr.push(args);
     if (window.__trMode === 'blocked') return { blocked: true };
-    if (args.step === 'trims') return /autoModel=Fit/.test(args.url) ? { trims: ['LX', 'EX', 'Sport w/Honda Sensing'] } : { trims: [] };
-    if (args.step === 'size') return /autoModClar=Sport%20w%2FHonda%20Sensing/.test(args.url) ? { factory: ['185/55R16'], optional: [] } : /autoModClar=LE/.test(args.url) ? { factory: ['195/65R15'], optional: ['215/45R17'] } : /autoModClar=XLE/.test(args.url) ? { factory: ['245/55R19', '245/50R20'], optional: [] } : { unknown: true };
+    // Tire Rack's vehicle picker: its model names per make and year, then each model's versions ("clarifiers")
+    if (args.step === 'models') return { make: args.make, models: { Toyota: ['Corolla', 'Corolla Hatchback', 'Corolla Hybrid', 'Sequoia', 'Venza AWD', 'Venza FWD'], Honda: ['Civic Sedan', 'Fit'] }[args.make] || [] };
+    if (args.step === 'clars') { const C = { 'Corolla Hybrid': ['LE'], 'Venza FWD': ['LE 4cyl', 'XLE V6', 'Limited V6'], 'Venza AWD': ['XLE V6'], 'Fit': ['LX', 'EX', 'Sport w/Honda Sensing'] }, out = {}; args.models.forEach((m) => { out[m] = C[m] || []; }); return { clars: out }; }
+    if (args.step === 'size') return /autoModel=Fit&autoModClar=Sport%20w%2FHonda%20Sensing/.test(args.url) ? { factory: ['185/55R16'], optional: [] } : /autoModel=Corolla%20Hybrid&autoModClar=LE$/.test(args.url) ? { factory: ['195/65R15'], optional: ['215/45R17'] } : /autoModel=Venza%20FWD&autoModClar=XLE%20V6$/.test(args.url) ? { factory: ['245/55R19', '245/50R20'], optional: [] } : { unknown: true };
+    if (args.step === 'oesize') return args.model === 'Sequoia' && args.clar === '' ? { factory: ['275/55R20'], optional: ['275/65R18'] } : { unknown: true };
     if (args.step === 'list') return /width=195\/&ratio=65&diameter=15/.test(args.url) ? { tires: LIST } : { tires: [] };
     return { error: '?' };
   };
@@ -70,8 +73,11 @@ with sync_playwright() as p:
         assert ' up' in pg.evaluate(hint)['cls'], 'a little short of the end: still up'
         pg.evaluate("(() => { const sc = document.getElementById('tpBody'); sc.scrollTop = 0; })()"); pg.wait_for_timeout(200); assert ' up' not in pg.evaluate(hint)['cls']
         reads = pg.evaluate('window.__tr'); print(' ', name, 'Tire Rack reads:', [r['url'] for r in reads])
-        assert reads[0]['step'] == 'size' and reads[0]['url'] == 'https://www.tirerack.com/tires/SelectTireSize.jsp?autoMake=Toyota&autoYear=2020&autoModel=Corolla%20Hybrid&autoModClar=LE'
-        assert reads[1]['step'] == 'list' and 'width=195/&ratio=65&diameter=15' in reads[1]['url'] and 'autoModClar=LE' in reads[1]['url']
+        assert [r['step'] for r in reads] == ['models', 'clars', 'size', 'list'], 'models, then the likely model\'s versions, then the size, then the tires'
+        assert reads[0]['make'] == 'Toyota' and reads[0]['year'] == 2020 and reads[1]['models'] == ['Corolla Hybrid'], 'only the model that is this car is asked about'
+        assert reads[2]['url'] == 'https://www.tirerack.com/tires/SelectTireSize.jsp?autoMake=Toyota&autoYear=2020&autoModel=Corolla%20Hybrid&autoModClar=LE'
+        assert 'width=195/&ratio=65&diameter=15' in reads[3]['url'] and 'autoModel=Corolla%20Hybrid&autoModClar=LE&' in reads[3]['url']
+        assert T(pg)['trVer']['auto'] is True, 'matched from the trim'
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         assert ft(pg, '.sub-page h2') == 'Tire details'
         assert pg.input_value('#tzSize') == '195/65R15' and 'from Tire Rack' in ft(pg, '.sub-page')
@@ -285,23 +291,39 @@ with sync_playwright() as p:
         pg.wait_for_function("window.Garage.car().tires && window.Garage.car().tires.sizeLookup && window.Garage.car().tires.sizeLookup.found", timeout=5000); pg.wait_for_timeout(200)
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         assert pg.locator('#tzPick [data-size]').count() == 2 and pg.input_value('#tzSize') == '' and 'came with 2 sizes' in ft(pg, '.sub-page')
-        assert any('autoModel=Venza&autoModClar=XLE' in r['url'] for r in pg.evaluate('window.__tr')), 'the EPA model "Venza AWD" is just "Venza" at Tire Rack'
+        reads = pg.evaluate('window.__tr'); print('  Venza reads:', [r.get('models') or r.get('url', '')[-60:] for r in reads[-3:]])
+        assert any('autoModel=Venza%20FWD&autoModClar=XLE%20V6' in r.get('url', '') for r in reads), 'Tire Rack files it as "Venza FWD" + "XLE V6": matched from trim, drive and engine'
+        assert any(r['step'] == 'clars' and r['models'] == ['Venza FWD'] for r in reads), 'the AWD model is never asked about for a FWD car'
+        assert 'Your version at Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzVerSel') == 'v:Venza FWD\u001fXLE V6', 'the match shows, to change if it is wrong'
         pg.click('#tzPick [data-size="245/50R20"]'); pg.wait_for_timeout(300)
         assert T(pg)['size'] == '245/50R20' and pg.input_value('#tzSize') == '245/50R20', 'picked: the page shows it'
+        pg.click('.sub-back'); pg.wait_for_timeout(200)
+        # ---- a model with no versions at Tire Rack (its size page won't show those): read through its vehicle menu ----
+        pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cq', name: '2020 Toyota Sequoia', year: 2020, make: 'Toyota', model: 'Sequoia', trim: '', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 13, hwy: 17, comb: 15 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
+        show(pg, 'cq'); pg.wait_for_timeout(300)
+        pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
+        pg.wait_for_function("window.Garage.car().tires.size === '275/55R20'", timeout=5000)
+        oe = [r for r in pg.evaluate('window.__tr') if r['step'] == 'oesize']
+        assert oe and oe[-1]['model'] == 'Sequoia' and oe[-1]['clar'] == '' and oe[-1]['url'].endswith('/tires/brands'), oe
+        assert not any(r['step'] == 'size' and 'Sequoia' in r.get('url', '') for r in pg.evaluate('window.__tr')), 'never the size page that only says "currently unavailable"'
         pg.click('.sub-back'); pg.wait_for_timeout(200)
         # ---- a trim Tire Rack doesn't know; a blocked lookup; typed sizes ----
         pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cz', name: '2019 Honda Fit', year: 2019, make: 'Honda', model: 'Fit', trim: 'Sport', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 33, hwy: 40, comb: 36 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
         show(pg, 'cz'); pg.wait_for_timeout(300)
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
-        pg.wait_for_selector('.sub-page #tzTrimSel option[value="LX"]', state='attached')
-        assert "doesn't list \"Sport\"" in ft(pg, '.sub-page') and pg.input_value('#tzSize') == '' and 'Pick your version' in ft(pg, '.sub-page')
-        opts_ = pg.evaluate("[...document.querySelectorAll('#tzTrimSel option')].map(o => (o.parentElement.label || '') + ':' + o.value)")
-        assert opts_ == [':', 'As Tire Rack names it:LX', 'As Tire Rack names it:EX', 'As Tire Rack names it:Sport w/Honda Sensing'], opts_
-        assert any(r['step'] == 'trims' and 'autoModClar' not in r['url'] for r in pg.evaluate('window.__tr')), 'the versions come from the page without a trim'
-        pg.select_option('#tzTrimSel', 'Sport w/Honda Sensing'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
-        assert T(pg)['trTrim'] == 'Sport w/Honda Sensing' and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
-        assert 'Sport w/Honda Sensing' in ft(pg, '.sub-page') and pg.locator('#tzTrimSel').count() == 0, 'picked: its factory size'
-        pg.evaluate("() => { const t = window.Garage.car().tires; t.size = ''; t.sizeSrc = ''; t.trTrim = ''; t.sizeLookup = { key: '2019|Honda|Fit|Sport', t: Date.now(), failed: 'unknown' }; }")
+        pg.wait_for_selector('.sub-page #tzVerSel option[value="v:Fit\u001fLX"]', state='attached')
+        assert pg.input_value('#tzSize') == '' and 'Pick your version' in ft(pg, '.sub-page'), 'the trim "Sport" isn\'t one of Tire Rack\'s names: you pick'
+        opts_ = pg.evaluate("[...document.querySelectorAll('#tzVerSel option')].map(o => (o.parentElement.label || '') + ':' + o.textContent)")
+        print('  Fit versions:', opts_)
+        assert opts_[0] == ':Choose…' and opts_[1] == 'As Tire Rack names them:Fit Sport w/Honda Sensing' and len(opts_) == 4, 'yours first: it has your trim word'
+        assert [r['models'] for r in pg.evaluate('window.__tr') if r['step'] == 'clars'][-1] == ['Fit'], 'Civic Sedan is another car'
+        pg.select_option('#tzVerSel', 'v:Fit\u001fSport w/Honda Sensing'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
+        assert T(pg)['trVer'] == {'key': 'v3|2019|Honda|Fit', 'model': 'Fit', 'clar': 'Sport w/Honda Sensing', 'auto': False} and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
+        assert 'Factory size for the 2019 Honda Fit Sport w/Honda Sensing, from Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzVerSel') == 'v:Fit\u001fSport w/Honda Sensing', 'picked: its factory size; the menu stays to change it'
+        # another version: its own size (Tire Rack has none for the EX here)
+        pg.select_option('#tzVerSel', 'v:Fit\u001fEX'); pg.wait_for_timeout(400)
+        assert not T(pg).get('size') and 'Tire Rack has no sizes for the 2019 Honda Fit EX' in ft(pg, '.sub-page'), 'a version without sizes says so'
+        pg.evaluate("() => { const t = window.Garage.car().tires; t.size = ''; t.sizeSrc = ''; t.trVer = null; }")
         pg.click('.sub-back'); pg.wait_for_timeout(200); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         pg.fill('#tzSize', '185 55 16'); pg.dispatch_event('#tzSize', 'change'); pg.wait_for_timeout(250)
         assert 'looks like 195/65R15' in pg.inner_text('#toast') and not T(pg).get('size')
@@ -318,14 +340,35 @@ with sync_playwright() as p:
     SIZEPAGE = '<h1>See all tire sizes for: 2020 TOYOTA COROLLA HYBRID LE</h1><p>WHAT TIRE SIZE IS ON YOUR VEHICLE?</p><p>Factory Tire Size Optional Tire Sizes Custom Tire Size</p><h2>Factory Tire Size</h2><p>15"</p><p>195/65-15</p><a>View Results</a><h2>Optional Tire Sizes</h2><p>17"</p><p>215/45-17</p><p>Need help?</p>'
     r = reader(pg, SIZEPAGE, {'step': 'size'}); print('  size reader:', r)
     assert r == {'factory': ['195/65R15'], 'optional': ['215/45R17']}, r
-    TRIMPAGE = '<h1>2019 HONDA FIT</h1><p>Please select additional vehicle info</p><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=LX">LX</a><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=Sport%20w%2FHonda%20Sensing">Sport w/Honda Sensing</a><a href="/x">Help</a>'
-    r = reader(pg, TRIMPAGE, {'step': 'trims'}); print('  trims reader:', r)
-    assert r == {'trims': ['LX', 'Sport w/Honda Sensing'], 'single': False, 'debug': None}, r
-    PICKERPAGE = ('<h1>Tires for Sale</h1><script>window.__asked = []; window.fetch = async (u) => { window.__asked.push(u); return { ok: true, status: 200, headers: { get: () => "text/xml" },'
-                  ' text: async () => \'<?xml version="1.0"?><vehicle><modClar>LE 8-Passenger</modClar><modClar>XLE</modClar><modClar>Limited</modClar></vehicle>\' }; };</script>')
-    r = reader(pg, PICKERPAGE, {'step': 'trims', 'make': 'Toyota', 'year': 2011, 'model': 'Sienna'}); print('  picker reader:', r)
-    assert r == {'trims': ['LE 8-Passenger', 'XLE', 'Limited'], 'src': 'picker'}, r
-    assert pg.evaluate('window.__asked[0]') == '/survey/ValidationServlet?autoYear=2011&autoMake=Toyota&autoModel=Sienna'
+    # Tire Rack's vehicle picker, asked from its own page (stand-in answers in its XML format)
+    PICKERPAGE = ('<h1>Tires for Sale</h1>' + 'x' * 300 + '<script>window.__asked = []; window.fetch = async (u) => { window.__asked.push(u); const xml = /autoModel=/.test(u)'
+                  ' ? (/Sienna%20FWD/.test(u) ? "<clarifiers><clar>LE 4cyl</clar><clar>LE V6</clar></clarifiers>" : "<clarifiers></clarifiers>")'
+                  ' : /autoMake=toyota/.test(u) ? "<models></models>" : /autoMakesNeeded/.test(u) ? "<makes><make>Ford</make><make>Toyota</make></makes>"'
+                  ' : "<models><model>Sienna AWD</model><model>Sienna FWD</model></models>";'
+                  ' return { ok: true, status: 200, headers: { get: () => "text/xml" }, text: async () => xml }; };</script>')
+    r = reader(pg, PICKERPAGE, {'step': 'models', 'make': 'Toyota', 'year': 2011}, 2500); print('  models reader:', r)
+    assert r == {'make': 'Toyota', 'models': ['Sienna AWD', 'Sienna FWD']}, r
+    assert pg.evaluate('window.__asked') == ['/survey/ValidationServlet?autoYear=2011&autoMake=Toyota&newDesktop=true']
+    r = reader(pg, PICKERPAGE, {'step': 'models', 'make': 'toyota', 'year': 2011}, 4000); print('  models reader (make spelled differently):', r)
+    assert r == {'make': 'Toyota', 'models': ['Sienna AWD', 'Sienna FWD']} and len(pg.evaluate('window.__asked')) == 3, 'asks for the makes, then the models as Tire Rack spells the make'
+    r = reader(pg, PICKERPAGE, {'step': 'clars', 'make': 'Toyota', 'year': 2011, 'models': ['Sienna FWD', 'Sienna AWD']}, 3000); print('  clarifiers reader:', r)
+    assert r == {'clars': {'Sienna FWD': ['LE 4cyl', 'LE V6'], 'Sienna AWD': []}}, r
+    assert pg.evaluate('window.__asked')[0] == '/survey/ValidationServlet?autoYear=2011&autoMake=Toyota&autoModel=Sienna%20FWD&newDesktop=true'
+    BUSY = PICKERPAGE.replace('const xml =', 'const xml = "<html><body>We\'re sorry. This page is currently unavailable.</body></html>"; const _x =')
+    assert reader(pg, BUSY, {'step': 'models', 'make': 'Toyota', 'year': 2011}, 2500) == {'blocked': True}, 'Tire Rack saying "slow down" is a block, never retried in a loop'
+    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'clars', 'make': 'Toyota', 'year': 2011, 'models': ['Sienna FWD']}) == {'blocked': True}
+    # a model with no versions: set the vehicle the way Tire Rack's menu does, then read its tire-size panel
+    OEPAGE = ('<h1>Tires for Sale</h1>' + 'x' * 300 + '<script>window.__asked = []; window.fetch = async (u) => { window.__asked.push(u); const body = /SetCurrentVehicle/.test(u)'
+              ' ? (/Nonsense/.test(u) ? \'{"vehicleZipSet":"redirect","redirect":"/tires"}\' : \'{"vehicleZipSet":"success"}\')'
+              ' : \'<div>Select the correct tire size for your \' + (/Stale/.test(u) ? "2016 Toyota Prius Two" : "2005 Ford Mustang Coupe") + \' &nbsp; Change Factory Tire Size 16" 215/65-16 Don\\\'t see your tire size? Optional Size(s) The optional sizes listed below fit most vehicles. 17" 235/55-17 18" 255/45-18 Front Size 18" 255/45-18 Rear Size 18" 285/40-18 Custom Tire Size Warning</div>\';'
+              ' return { ok: true, status: 200, text: async () => body }; };</script>')
+    r = reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Coupe', 'clar': ''}, 3000); print('  vehicle-menu size reader:', r)
+    assert r == {'factory': ['215/65R16'], 'optional': ['235/55R17', '255/45R18', '285/40R18']}, r
+    asked = pg.evaluate('window.__asked')
+    assert asked[0].startswith('/SetCurrentVehicleServlet?ajax=true&') and 'autoModel=Mustang%20Coupe&autoModClar=&' in asked[0] and asked[1].startswith('/modalPopups/selectOETireSize.jsp?'), asked
+    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Nonsense', 'clar': ''}, 3000) == {'unknown': True}, 'a vehicle Tire Rack sends elsewhere'
+    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Stale', 'clar': ''}, 3000) == {'unknown': True}, 'a panel for another vehicle (the last one set) is never read as this one'
+    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Coupe', 'clar': ''}) == {'blocked': True}
     LISTPAGE = ('<div><p>GRAND TOURING ALL-SEASON</p><p>Category Ratings Charts</p>'
                 '<p>CONTINENTAL SECURECONTACT AW</p><p>Grand Touring All-Season</p><p>Reviews (28)</p><p>$153.99</p><p>Size: 195/65R15 91H</p><p>Load Range: SL</p><p>UTQG: 700 A A</p><p>More information on UTQG</p><p>60K Mile Manufacturer\'s Warranty</p>'
                 '<p>BRIDGESTONE BLIZZAK WS90</p><p>Studless Ice &amp; Snow</p><p>Size: 195/65R15 91T</p><p>Free Road Hazard Protection</p>'
