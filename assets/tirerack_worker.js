@@ -31,6 +31,20 @@ async function (reqId, args) {
     return;
   }
 
+  if (args.step === 'trims') {
+    // The size page without a trim: Tire Rack asks which version it is. Its own names for the versions are in the links
+    // and menus it offers (autoModClar=…); if it goes straight to the factory sizes, there's only one version.
+    const t = await settle((t) => /factory tire size|autoModClar/i.test(t + document.documentElement.innerHTML.slice(0, 200000)) || /error=noVehicle/.test(location.href), 20000);
+    if (refused(t)) { send({ blocked: true }); return; }
+    const out = [];
+    const add = (v) => { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v && v.length < 60 && !/^(select|choose|--)/i.test(v) && out.indexOf(v) < 0) out.push(v); };
+    document.querySelectorAll('a[href*="autoModClar="]').forEach((a) => { try { add(new URL(a.getAttribute('href'), /^https?:/.test(location.href) ? location.href : 'https://www.tirerack.com/').searchParams.get('autoModClar')); } catch (e) { } });
+    document.querySelectorAll('select').forEach((sel) => { if (/clar|trim|addl|additional|option/i.test((sel.name || '') + ' ' + (sel.id || ''))) sel.querySelectorAll('option').forEach((o) => add(o.value || o.textContent)); });
+    document.querySelectorAll('[data-modclar], [data-autoModClar]').forEach((e) => add(e.getAttribute('data-modclar') || e.getAttribute('data-autoModClar')));
+    send({ trims: out.slice(0, 40), single: !out.length && /factory tire size/i.test(t) });
+    return;
+  }
+
   if (args.step === 'list') {
     const CAT = /(all-season|all season|summer|winter|snow|all-weather|all-terrain|mud-terrain|highway|touring|performance|ice)/i;
     const seen = {}, out = [];

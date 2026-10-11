@@ -33,6 +33,8 @@
     }); });
     return out;
   }
+  /** The paint pictures to use: the front three-quarter (032), else the side view (001), which is all older cars have. */
+  function bestColors(v) { var a = colorsOf(v, 'color_0640_032_png'); return a.length ? a : colorsOf(v, 'color_0640_001_png'); }
   function pickColor(colors, paint) {
     if (!colors || !colors.length || !paint) return null;
     return colors.filter(function (c) { return paint.code && c.code === paint.code; })[0] || null;
@@ -92,12 +94,12 @@
     if (/sedan|saloon|cars\b|\b4 dr\b/.test(s)) return 'sedan';
     var t = c && c.type; return t === 'truck' ? 'pickup' : t === 'suv' ? 'suv' : 'sedan';
   }
-  var CarPicMath = { driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, sig: sig, which: which, bodyOf: bodyOf };
+  var CarPicMath = { bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, sig: sig, which: which, bodyOf: bodyOf };
   root.CarPicMath = CarPicMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = CarPicMath;
   if (!root.document) return;
 
-  var A = root.__app, S = A.S, FORMAT = 'color_0640_032_png', FORMAT_ID = 12, LG = root.FLog || { info: function () {}, warn: function () {} };
+  var A = root.__app, S = A.S, FORMAT_ID = '12,6', LG = root.FLog || { info: function () {}, warn: function () {} };
   var RETRY_H = 24, busy = {}, mem = {};
   function call(name) { var args = [].slice.call(arguments, 1); return root.__trip ? root.__trip.call.apply(null, [name].concat(args)) : Promise.reject(new Error('no bridge')); }
   function stored(k) { if (mem[k]) return mem[k]; try { var o = A.KV.get('carpics', k); if (o && o.v) return (mem[k] = o.v); } catch (e) { } return null; }
@@ -120,7 +122,7 @@
     return fuel('vehicles?year=' + encodeURIComponent(c.year) + '&make=' + encodeURIComponent(c.make) + '&model=' + encodeURIComponent(baseModel(c.model))).then(function (list) {
       var m = matchTrim(list, c.trim, driveOf(c.model)); if (!m) throw new Error('not listed');
       return fuel('vehicle/' + encodeURIComponent(m.v.id) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) {
-        var cols = colorsOf(v, FORMAT); if (!cols.length) throw new Error('no pictures');
+        var cols = bestColors(v); if (!cols.length) throw new Error('no pictures');
         mem['urls|' + m.v.id] = cols;
         P(c).fuel = { sig: sg, vid: String(m.v.id), trim: m.v.trim || '', exact: m.exact, colors: cols.map(function (x) { return { code: x.code, name: x.name, simple: x.simple, rgb: x.rgb }; }), t: Date.now() };
         LG.info('car', 'Fuel API: ' + cols.length + ' colors' + (m.exact ? '' : ' (closest trim: ' + (m.v.trim || 'base') + ')'));
@@ -175,7 +177,7 @@
     if (w !== 'fuel') urlP = Promise.resolve(c.pic[w].url);
     else {
       var f = c.pic.fuel, want = pickColor(f.colors, c.paint) || f.colors[0], cached = mem['urls|' + f.vid];
-      urlP = (cached ? Promise.resolve(cached) : fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) { return (mem['urls|' + f.vid] = colorsOf(v, FORMAT)); }))
+      urlP = (cached ? Promise.resolve(cached) : fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) { return (mem['urls|' + f.vid] = bestColors(v)); }))
         .then(function (cols) { var m = cols.filter(function (x) { return x.code === want.code; })[0]; if (!m) throw new Error('no picture in that color'); return m.url; });   // Fuel API's links expire: fresh ones each time
     }
     urlP.then(function (u) { return call('fetchImage', u); }).then(function (r) { if (r.error || !r.body) throw new Error(r.error || 'no image'); keep(k, r.body); })
@@ -264,7 +266,7 @@
       if (!f || f.fail || !f.colors || !f.colors.length || !f.vid) throw new Error('No Fuel API image is available for this vehicle and trim.');
       var want = pickColor(f.colors, c.paint) || f.colors[0];
       return fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) {
-        var fresh = colorsOf(v, FORMAT).filter(function (x) { return x.code === want.code; })[0];
+        var fresh = bestColors(v).filter(function (x) { return x.code === want.code; })[0];
         if (!fresh || !fresh.url) throw new Error('Fuel API did not return an image for the selected paint color.');
         var name = ('gasket-' + [c.year, c.make, baseModel(c.model), c.paint && c.paint.simple || want.simple || want.name || want.code].filter(Boolean).join('-'))
           .toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) + '.webp';

@@ -51,4 +51,7 @@ assert.equal(C.which({ pic: { nhtsa: { fail: 1 }, wiki: { fail: 1 }, fuel: fu } 
 assert.equal(C.which({ pic: { nhtsa: { fail: 1 }, wiki: { url: 'w' }, fuel: fu } }, true), 'wiki', 'Commons before Fuel API\'s default color');
 assert.equal(C.which({ pic: both, paint: { code: '218' }, picMode: 'doodle' }, true), null, 'doodle mode');
 assert.equal(C.sig({ year: 2020, make: 'Toyota', model: 'Camry', trim: 'LE' }, true), '2020|toyota|camry|le', 'Fuel API goes by the trim');
+// older cars: Fuel API has their paint pictures only from the side (001)
+const old = { products: [{ productFormats: [{ code: 'color_0640_032_png', assets: [] }, { code: 'color_0640_001_png', assets: [{ url: 's', shotCode: { color: { code: 'UA', oem_name: 'Black' } } }] }] }] };
+assert.deepEqual(C.bestColors(old).map(x => x.url), ['s']); assert.deepEqual(C.bestColors(V).map(x => x.code), ['070', '218'], 'the front three-quarter when there is one');
 console.log('car picture tests passed');

@@ -88,7 +88,7 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__pic.fuel') == [] and 'Photo: NHTSA' in ft(pg, '#gcSub'), 'NHTSA by default, no Fuel API calls'
         pg.click('#gEdit'); pg.wait_for_selector('#gPaints .gc-orig'); pg.wait_for_timeout(200)
         calls = pg.evaluate('window.__pic.fuel'); print(' ', name, 'fuel calls:', [c[0] for c in calls])
-        assert calls[0][0] == 'vehicles?year=2020&make=Toyota&model=Corolla%20Hybrid' and calls[1][0] == 'vehicle/501?productID=2&productFormatIDs=12' and all(c[1] == 'test-fuel-key' for c in calls)
+        assert calls[0][0] == 'vehicles?year=2020&make=Toyota&model=Corolla%20Hybrid' and calls[1][0] == 'vehicle/501?productID=2&productFormatIDs=12,6' and all(c[1] == 'test-fuel-key' for c in calls)
         assert pg.locator('#gPaints .gc-paint').count() == 2 and pg.locator('#gPaints .gc-orig.on').count() == 1 and 'Photo: NHTSA' in ft(pg, '#gcSub'), 'colors listed; still the photo'
         pg.click('.gc-paint[data-code="218"]'); pg.wait_for_timeout(400)
         assert pg.evaluate('window.Garage.car().paint') == {'name': 'Midnight Black Metallic', 'code': '218', 'rgb': '#000417'}

@@ -25,7 +25,8 @@ TR = r'''() => {
     if (key !== 'tirerack') return { error: 'No Native bridge' };
     window.__tr.push(args);
     if (window.__trMode === 'blocked') return { blocked: true };
-    if (args.step === 'size') return /autoModClar=LE/.test(args.url) ? { factory: ['195/65R15'], optional: ['215/45R17'] } : /autoModClar=XLE/.test(args.url) ? { factory: ['245/55R19', '245/50R20'], optional: [] } : { unknown: true };
+    if (args.step === 'trims') return /autoModel=Fit/.test(args.url) ? { trims: ['LX', 'EX', 'Sport w/Honda Sensing'] } : { trims: [] };
+    if (args.step === 'size') return /autoModClar=Sport%20w%2FHonda%20Sensing/.test(args.url) ? { factory: ['185/55R16'], optional: [] } : /autoModClar=LE/.test(args.url) ? { factory: ['195/65R15'], optional: ['215/45R17'] } : /autoModClar=XLE/.test(args.url) ? { factory: ['245/55R19', '245/50R20'], optional: [] } : { unknown: true };
     if (args.step === 'list') return /width=195\/&ratio=65&diameter=15/.test(args.url) ? { tires: LIST } : { tires: [] };
     return { error: '?' };
   };
@@ -292,7 +293,15 @@ with sync_playwright() as p:
         pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cz', name: '2019 Honda Fit', year: 2019, make: 'Honda', model: 'Fit', trim: 'Sport', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 33, hwy: 40, comb: 36 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
         show(pg, 'cz'); pg.wait_for_timeout(300)
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
-        assert "doesn't list \"Sport\"" in ft(pg, '.sub-page') and pg.input_value('#tzSize') == ''
+        pg.wait_for_selector('.sub-page #tzTrims button')
+        assert "doesn't list \"Sport\"" in ft(pg, '.sub-page') and pg.input_value('#tzSize') == '' and 'Pick your version as Tire Rack names it' in ft(pg, '.sub-page')
+        assert pg.evaluate("[...document.querySelectorAll('#tzTrims button')].map(b => b.textContent)") == ['LX', 'EX', 'Sport w/Honda Sensing']
+        assert any(r['step'] == 'trims' and 'autoModClar' not in r['url'] for r in pg.evaluate('window.__tr')), 'the versions come from the page without a trim'
+        pg.click('#tzTrims [data-trtrim="Sport w/Honda Sensing"]'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
+        assert T(pg)['trTrim'] == 'Sport w/Honda Sensing' and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
+        assert 'Sport w/Honda Sensing' in ft(pg, '.sub-page') and pg.locator('#tzTrims').count() == 0, 'picked: its factory size'
+        pg.evaluate("() => { const t = window.Garage.car().tires; t.size = ''; t.sizeSrc = ''; t.trTrim = ''; t.sizeLookup = { key: '2019|Honda|Fit|Sport', t: Date.now(), failed: 'unknown' }; }")
+        pg.click('.sub-back'); pg.wait_for_timeout(200); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         pg.fill('#tzSize', '185 55 16'); pg.dispatch_event('#tzSize', 'change'); pg.wait_for_timeout(250)
         assert 'looks like 195/65R15' in pg.inner_text('#toast') and not T(pg).get('size')
         pg.evaluate("window.__trMode = 'blocked'")
@@ -308,6 +317,9 @@ with sync_playwright() as p:
     SIZEPAGE = '<h1>See all tire sizes for: 2020 TOYOTA COROLLA HYBRID LE</h1><p>WHAT TIRE SIZE IS ON YOUR VEHICLE?</p><p>Factory Tire Size Optional Tire Sizes Custom Tire Size</p><h2>Factory Tire Size</h2><p>15"</p><p>195/65-15</p><a>View Results</a><h2>Optional Tire Sizes</h2><p>17"</p><p>215/45-17</p><p>Need help?</p>'
     r = reader(pg, SIZEPAGE, {'step': 'size'}); print('  size reader:', r)
     assert r == {'factory': ['195/65R15'], 'optional': ['215/45R17']}, r
+    TRIMPAGE = '<h1>2019 HONDA FIT</h1><p>Please select additional vehicle info</p><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=LX">LX</a><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=Sport%20w%2FHonda%20Sensing">Sport w/Honda Sensing</a><a href="/x">Help</a>'
+    r = reader(pg, TRIMPAGE, {'step': 'trims'}); print('  trims reader:', r)
+    assert r == {'trims': ['LX', 'Sport w/Honda Sensing'], 'single': False}, r
     LISTPAGE = ('<div><p>GRAND TOURING ALL-SEASON</p><p>Category Ratings Charts</p>'
                 '<p>CONTINENTAL SECURECONTACT AW</p><p>Grand Touring All-Season</p><p>Reviews (28)</p><p>$153.99</p><p>Size: 195/65R15 91H</p><p>Load Range: SL</p><p>UTQG: 700 A A</p><p>More information on UTQG</p><p>60K Mile Manufacturer\'s Warranty</p>'
                 '<p>BRIDGESTONE BLIZZAK WS90</p><p>Studless Ice &amp; Snow</p><p>Size: 195/65R15 91T</p><p>Free Road Hazard Protection</p>'
