@@ -1036,7 +1036,7 @@ public class MainActivity extends Activity {
                         OutputStream os = getContentResolver().openOutputStream(uri);
                         os.write(text.getBytes("UTF-8"));
                         os.close();
-                        o.put("path", "Downloads/Gasket/" + name);
+                        o.put("path", "Downloads/Gasket/" + savedName);
                     } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
                     final Uri u = uri;
                     main.post(new Runnable() {
@@ -1255,9 +1255,13 @@ public class MainActivity extends Activity {
                         if (code < 200 || code >= 300) throw new Exception("Image server returned HTTP " + code);
                         String mime = c.getContentType();
                         if (mime == null || !mime.toLowerCase(Locale.US).startsWith("image/")) throw new Exception("Fuel API link did not return an image");
+                        String cleanMime = mime.split(";")[0].toLowerCase(Locale.US);
+                        String ext = cleanMime.equals("image/png") ? ".png" : cleanMime.equals("image/webp") ? ".webp" : cleanMime.equals("image/jpeg") ? ".jpg" : cleanMime.equals("image/gif") ? ".gif" : ".img";
+                        String baseName = name.replaceAll("[^A-Za-z0-9._ -]", "_").replaceFirst("(?i)\\.(webp|png|jpe?g|gif|img)$", "");
+                        String savedName = baseName + ext;
                         android.content.ContentValues values = new android.content.ContentValues();
-                        values.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
-                        values.put("mime_type", mime.split(";")[0]);
+                        values.put("_display_name", savedName);
+                        values.put("mime_type", cleanMime);
                         values.put("relative_path", "Download/Gasket");
                         Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), values);
                         if (uri == null) throw new Exception("Could not create a file in Downloads/Gasket");
