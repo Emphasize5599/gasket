@@ -1240,6 +1240,43 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        /** Downloads a selected Fuel API vehicle image into Downloads/Gasket for attaching to ChatGPT. Only approved car-picture hosts are accepted. */
+        @JavascriptInterface
+        public void saveCarImage(final int reqId, final String url, final String name) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        if (!hostAllowed(url, PIC_HOSTS)) throw new Exception("Image host not allowed");
+                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                        c.setConnectTimeout(10000); c.setReadTimeout(30000); c.setInstanceFollowRedirects(true);
+                        c.setRequestProperty("User-Agent", userAgent());
+                        int code = c.getResponseCode();
+                        if (code < 200 || code >= 300) throw new Exception("Image server returned HTTP " + code);
+                        String mime = c.getContentType();
+                        if (mime == null || !mime.toLowerCase(Locale.US).startsWith("image/")) throw new Exception("Fuel API link did not return an image");
+                        android.content.ContentValues values = new android.content.ContentValues();
+                        values.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
+                        values.put("mime_type", mime.split(";")[0]);
+                        values.put("relative_path", "Download/Gasket");
+                        Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), values);
+                        if (uri == null) throw new Exception("Could not create a file in Downloads/Gasket");
+                        InputStream is = c.getInputStream();
+                        OutputStream os = getContentResolver().openOutputStream(uri);
+                        byte[] buf = new byte[8192]; int n, total = 0;
+                        while ((n = is.read(buf)) > 0) {
+                            total += n;
+                            if (total > 20 * 1024 * 1024) throw new Exception("Image is too large (20 MB maximum)");
+                            os.write(buf, 0, n);
+                        }
+                        is.close(); os.close(); c.disconnect();
+                        o.put("path", "Downloads/Gasket/" + name);
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
+
         /** A car's picture (NHTSA's vehicle photo, a Wikimedia Commons photo, or Fuel API's in a paint color), shrunk to at most 640 px wide and handed back as a WebP data URL to keep. */
         @JavascriptInterface
         public void fetchImage(final int reqId, final String url) {
