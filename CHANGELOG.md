@@ -8,6 +8,7 @@ Dates are when each build's source was archived (America/Chicago).
 - Fix Tire Rack lookups getting stuck when the hidden page is reused for model and trim requests. Readers are keyed to each request, and lookups share a queue instead of replacing one another.
 - Stop stalled page loads, response bodies, and native bridge requests. Show site restrictions, connection errors, timeouts, and unreadable results with a manual retry button and detailed debug logs.
 - Ignore a factory-size answer when another version or a manual size was selected while it was loading. Read linked result pages without destroying the active reader.
+- Resume incomplete lookups after restarting the app; unfinished requests are no longer cached as completed failures.
 
 ## 0.0.98 - 2026-10-11
 - Tire Rack vehicle-picker requests now time out cleanly instead of leaving the tire lookup spinning forever. The lookup reports the failure and can retry later.

@@ -59,6 +59,8 @@ async function run() {
     assert.equal((await result(pg)).code, 'network');
     await start(pg, base, picker, `window.fetch=async()=>({ok:true,status:200,text:async()=>'<html><body>Different page</body></html>'});`);
     assert.equal((await result(pg)).code, 'unreadable');
+    await start(pg, base, picker, `window.fetch=async()=>({ok:true,status:200,text:async()=>'<error>Invalid request</error>'});`);
+    assert.equal((await result(pg)).code, 'unreadable');
     console.log('HTTP, network and site restriction detection passed');
 
     for (const setup of [
@@ -123,11 +125,16 @@ async function run() {
     assert.equal(await ui.inputValue('#tzSize'), '235/60R17');
     // Multiple cars must not overwrite the shared native worker or lose either completion.
     await ui.evaluate(() => {
-      const a={id:'a',tires:{size:'195/65R15',sizeSrc:'user'}}, b={id:'b',tires:{size:'215/55R17',sizeSrc:'user'}};
+      const a={id:'a',tires:{size:'195/65R15',sizeSrc:'user',list:{size:'195/65R15',t:Date.now(),items:[]}}}, b={id:'b',tires:{size:'215/55R17',sizeSrc:'user'}};
       window.__otherCars=[a,b]; Tires.lookup(a); Tires.lookup(b);
     });
     await ui.waitForFunction(() => __otherCars.every(c=>c.tires.list && c.tires.list.failed));
     assert.equal(await ui.evaluate(() => __max), 1, 'concurrent cars must serialize');
+    await ui.evaluate(() => {
+      const c={id:'interrupted',name:'2011 Sienna LE',year:2011,make:'Toyota',model:'Sienna 2WD',trim:'LE',info:{drive:'fwd',engine:'3.5L V6'},tires:{tr:{key:'v3|2011|Toyota|Sienna',t:Date.now(),models:[],clars:{}},sizeLookup:{key:'v3|2011|Toyota|Sienna|Sienna FWD LE V6',t:Date.now()}}};
+      window.__interrupted=c; Tires.lookup(c);
+    });
+    await ui.waitForFunction(() => __interrupted.tires.size==='235/60R17');
     // Do not overwrite a manual size with the response from the version that was loading.
     await ui.evaluate(() => {
       const c=Garage.car(); window.__held=[];
