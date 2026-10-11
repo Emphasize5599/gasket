@@ -1,0 +1,56 @@
+name: Build separate APK
+
+on:
+  push:
+    branches:
+      - build-apk-chatgpt
+    paths:
+      - .github/workflows/build-apk.yml
+      - AndroidManifest.xml
+      - build.sh
+      - src/**
+      - res/**
+      - assets/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Android SDK tools and Java
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y android-sdk android-sdk-build-tools android-sdk-platform-23 openjdk-17-jdk-headless
+
+      - name: Create a temporary signing key for this separate build
+        run: |
+          mkdir -p keystore
+          keytool -genkeypair -noprompt \
+            -alias gasket-temporary-build \
+            -keystore keystore/release.jks \
+            -storepass temporary-build-only \
+            -keypass temporary-build-only \
+            -dname "CN=Gasket Temporary Build, O=Local Test, C=US" \
+            -keyalg RSA -keysize 2048 -validity 3650
+
+      - name: Build and verify APK
+        env:
+          KS_PASS: temporary-build-only
+        run: |
+          chmod +x build.sh
+          ./build.sh
+          test -s Gasket.apk
+          apksigner verify --verbose Gasket.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gasket-0.0.97-separate-build
+          path: Gasket.apk
+          if-no-files-found: error
+          retention-days: 7
