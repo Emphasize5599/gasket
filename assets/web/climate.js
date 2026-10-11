@@ -5,6 +5,7 @@
   'use strict';
   // ---------- the rules ----------
   var SEASONS = [['spring', 'Spring'], ['summer', 'Summer'], ['fall', 'Fall'], ['winter', 'Winter']];
+  var EMOJI = { spring: '🌷', summer: '☀️', fall: '🍂', winter: '❄️' };
   // what a year up north brings: [key, label, the seasons it comes with]
   var WEATHER = [['snow', 'Snowy', ['winter']], ['ice', 'Icy', ['winter']], ['frost', 'Frosty', ['fall', 'winter', 'spring']], ['fog', 'Foggy', ['fall', 'winter', 'spring']],
     ['rain', 'Rainy', ['spring', 'summer', 'fall']], ['storm', 'Stormy', ['spring', 'summer']], ['pollen', 'Full of pollen', ['spring']], ['heat', 'Hot & sunny', ['summer']],
@@ -108,7 +109,7 @@
     h += '<h4 class="cl-h">Seasons</h4>';
     SEASONS.forEach(function (s) {
       var p = find(c, 'season', s[0]), sit = situations(s[0]), done = sit.filter(function (w) { return find(c, 'weather', w[0]); });
-      h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : ''));
+      h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', EMOJI[s[0]] + ' ' + s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '') + (s[0] === now ? ' now' : ''));
       // under each season: what you'd do in the weather it brings (snowy, frosty, rainy…)
       h += row('clX_' + s[0], 'data-wx="' + s[0] + '"', 'Adjust for special weather conditions', done.length + ' of ' + sit.length + ' answered · ' + sit.map(function (w) { return w[1]; }).join(', '),
         'cl-wx' + (sit.some(function (w) { var q = find(c, 'weather', w[0]); return q && bad(q, caps); }) ? ' warn' : ''));
@@ -135,7 +136,7 @@
         situations(sk).map(function (w) { var p = find(c, 'weather', w[0]); return row('clW_' + w[0], 'data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); }).join('');
       b.querySelectorAll('[data-key]').forEach(function (r) { r.onclick = function () { var p = find(c, 'weather', r.dataset.key); if (p) openPreset(c, p.id, false, again); else add(c, 'weather', r.dataset.key, again); }; });
     };
-    A.subPage(sn[1] + ': special weather', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
+    A.subPage(EMOJI[sk] + ' ' + sn[1] + ': special weather', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
   function add(c, kind, key, back) {
     var x = cl(c), p = starter(kind, key, x.caps);

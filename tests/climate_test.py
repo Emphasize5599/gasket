@@ -31,8 +31,13 @@ with sync_playwright() as p:
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
         now = pg.evaluate('ClimateMath.season()')
         pg.evaluate("document.querySelector('#gClimate').scrollIntoView()"); pg.click('#gClimate summary'); pg.wait_for_selector('#clCaps')
-        assert 'by season and weather' in ft(pg, '#gClimLine') and pg.locator('.cl-row.empty').count() == 5 and pg.locator('.cl-wx').count() == 4, 'controls and the four seasons: not set up; special weather under each season'
+        assert pg.locator('#gClimLine').count() == 0 and pg.locator('.cl-row.empty').count() == 5 and pg.locator('.cl-wx').count() == 4, 'controls and the four seasons: not set up; special weather under each season'
         assert '(now)' in ft(pg, '#clS_' + now)
+        emo = pg.evaluate("['spring','summer','fall','winter'].map(k => document.querySelector('#clS_' + k + ' b').textContent.split(' ')[0])")
+        assert emo == ['🌷', '☀️', '🍂', '❄️'], emo
+        assert pg.locator('.cl-row.now').count() == 1 and pg.locator('#clS_' + now + '.now').count() == 1, 'this season: outlined'
+        glow = pg.evaluate("(() => { const s = getComputedStyle(document.querySelector('.cl-row.now'), '::before'); return [s.animationName, s.position]; })()")
+        assert glow == ['clRun', 'absolute'], glow
         # ---- your car's controls ----
         pg.click('#clCaps'); pg.wait_for_selector('.sub-page [data-cap]')
         for k in ('auto', 'dual', 'seatHeat', 'rearDefrost'): pg.check('[data-cap="%s"]' % k); pg.wait_for_timeout(50)
@@ -79,13 +84,13 @@ with sync_playwright() as p:
         assert 'Adjust for special weather conditions' in ft(pg, '#clX_winter') and '0 of 4 answered' in ft(pg, '#clX_winter')
         assert pg.evaluate("document.querySelector('#clS_winter').nextElementSibling.id") == 'clX_winter', 'right under its season'
         pg.click('#clX_winter'); pg.wait_for_selector('.sub-page [data-key]')
-        assert ft(pg, '.sub-page h2') == 'Winter: special weather' and "What would you do if it's" in ft(pg, '.sub-page')
+        assert ft(pg, '.sub-page h2') == '❄️ Winter: special weather' and "What would you do if it's" in ft(pg, '.sub-page')
         assert pg.evaluate("[...document.querySelectorAll('.sub-page [data-key]')].map(b => b.dataset.key)") == ['snow', 'ice', 'frost', 'fog'] and pg.locator('.sub-page .cl-row.empty').count() == 4
         nosideways(pg, '.sub-page *', 'special weather page')
         pg.click('.sub-page #clW_fog'); pg.wait_for_selector('.sub-page #cpTemp')
         assert ft(pg, '.sub-page h2') == "If it's foggy" and 'on' in pg.get_attribute('[data-k="flow"] [data-v="defrost"]', 'class')
         pg.click('#cpDiscard'); pg.wait_for_timeout(300)
-        assert ft(pg, '.sub-page h2') == 'Winter: special weather', 'closing an answer goes back to the season\'s list'
+        assert ft(pg, '.sub-page h2') == '❄️ Winter: special weather', 'closing an answer goes back to the season\'s list'
         assert not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('.sub-page #clW_fog.empty').count() == 1
         pg.click('.sub-page #clW_frost'); pg.wait_for_selector('.sub-page #cpTemp'); pg.click('.sub-back'); pg.wait_for_timeout(300)
         assert pg.locator('.sub-page #clW_frost.empty').count() == 0 and 'Defrost' in ft(pg, '.sub-page #clW_frost'), 'answered'
@@ -103,7 +108,7 @@ with sync_playwright() as p:
         assert ft(pg, '.sub-page h2') == 'Road trip'
         pg.click('.sub-back'); pg.wait_for_timeout(200)
         cid = [x for x in CL(pg)['presets'] if x['kind'] == 'custom'][0]['id']
-        assert 'Road trip' in ft(pg, '#clC_' + cid) and '3 presets' in ft(pg, '#gClimLine')
+        assert 'Road trip' in ft(pg, '#clC_' + cid)
         nosideways(pg, '#gClimate *', 'climate card')
         pg.click('#clC_' + cid); pg.wait_for_selector('.sub-page #cpDel'); pg.click('#cpDel'); pg.wait_for_timeout(200)
         if pg.locator('.cfm-go').count(): pg.click('.cfm-go'); pg.wait_for_timeout(250)

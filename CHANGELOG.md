@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.89 - 2026-10-11
+- **Climate control seasons** get an emoji each (🌷 ☀️ 🍂 ❄️), and the season you're in has a glowing light running around its outline. The summary next to the Climate control heading is gone.
+
 ## 0.0.88 - 2026-10-11
 - The car picture buttons only show while you're editing the car.
 

@@ -222,7 +222,7 @@
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
     h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + (window.Tires ? Tires.summaryHtml(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
-    h += '<details class="card g-obs g-clim" id="gClimate"' + (climOpen ? ' open' : '') + '><summary><span>Climate control<small id="gClimLine">' + esc(window.Climate ? Climate.summary(c) : '') + '</small></span></summary><div id="gClimIn"></div></details>';
+    h += '<details class="card g-obs g-clim" id="gClimate"' + (climOpen ? ' open' : '') + '><summary><span>Climate control</span></summary><div id="gClimIn"></div></details>';
     host.innerHTML = h;
     restoreEMsg();
     speedHost = $('tSpeed');
@@ -231,7 +231,7 @@
     $('gInfo').addEventListener('toggle', function () { infoOpen = this.open; });
     $('gTires').addEventListener('toggle', function () { tiresOpen = this.open; });
     $('gClimate').addEventListener('toggle', function () { climOpen = this.open; });
-    if (window.Climate) Climate.render($('gClimIn'), function () { var l = $('gClimLine'); if (l) l.textContent = Climate.summary(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
+    if (window.Climate) Climate.render($('gClimIn'), function () { try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.innerHTML = Tires.summaryHtml(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
     drawSpeed();

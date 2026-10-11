@@ -1504,3 +1504,17 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .gc-original { opacity: .82; }
 .cl-row.cl-wx { margin: -2px 0 10px 18px; width: calc(100% - 18px); padding-top: 7px; padding-bottom: 7px; }
 .cl-row.cl-wx b { font-size: 13.5px; }
+/* this season: a white light running around its outline */
+@property --cl-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.cl-row.now { position: relative; border-color: rgba(255, 255, 255, .35); box-shadow: 0 0 10px rgba(255, 255, 255, .18); }
+.cl-row.now::before { content: ""; position: absolute; inset: -2px; border-radius: 14px; padding: 2px; pointer-events: none;
+  background: conic-gradient(from var(--cl-a), transparent 0 55%, var(--cl-glow-soft) 68%, var(--cl-glow) 80%, var(--cl-glow-soft) 90%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  filter: drop-shadow(0 0 4px var(--cl-glow)); animation: clRun 3.2s linear infinite; }
+:root { --cl-glow: #fff; --cl-glow-soft: rgba(255, 255, 255, .25); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --cl-glow: var(--accent); --cl-glow-soft: rgba(11, 87, 208, .2); } }
+:root[data-theme="light"] { --cl-glow: var(--accent); --cl-glow-soft: rgba(11, 87, 208, .2); }
+@keyframes clRun { to { --cl-a: 360deg; } }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .cl-row.now { border-color: rgba(120, 140, 170, .5); box-shadow: 0 0 10px rgba(80, 110, 160, .25); } }
+:root[data-theme="light"] .cl-row.now { border-color: rgba(120, 140, 170, .5); box-shadow: 0 0 10px rgba(80, 110, 160, .25); }
+@media (prefers-reduced-motion: reduce) { .cl-row.now::before { animation: none; background: var(--cl-glow); } }
