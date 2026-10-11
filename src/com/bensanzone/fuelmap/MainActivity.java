@@ -759,8 +759,8 @@ public class MainActivity extends Activity {
         handleShare(i);
     }
 
-    private static final int PICK_FILE = 4711, RESTORE_FILE = 4712;
-    private int pickReq = -1, restoreReq = -1;
+    private static final int PICK_FILE = 4711, RESTORE_FILE = 4712, PICK_IMAGE = 4713;
+    private int pickReq = -1, restoreReq = -1, imagePickReq = -1;
 
     // ---------------- full backup / restore (moving to a new install) ----------------
     // Everything the app keeps: every preference (settings incl. API keys, the map's last results, this month's lookup
@@ -923,6 +923,46 @@ public class MainActivity extends Activity {
             }).start();
             return;
         }
+        if (request == PICK_IMAGE && imagePickReq >= 0) {
+            final int rq = imagePickReq; imagePickReq = -1;
+            final Uri imageUri = result == RESULT_OK && data != null ? data.getData() : null;
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        if (imageUri == null) o.put("cancelled", true);
+                        else {
+                            InputStream is = getContentResolver().openInputStream(imageUri);
+                            ByteArrayOutputStream raw = new ByteArrayOutputStream();
+                            byte[] buf = new byte[8192]; int n, total = 0;
+                            while ((n = is.read(buf)) > 0) {
+                                total += n;
+                                if (total > 20 * 1024 * 1024) throw new Exception("Image file is too big (20 MB maximum)");
+                                raw.write(buf, 0, n);
+                            }
+                            is.close();
+                            byte[] bytes = raw.toByteArray();
+                            android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+                            bounds.inJustDecodeBounds = true;
+                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+                            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new Exception("That file is not a readable image");
+                            int sample = 1;
+                            while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > 1024) sample *= 2;
+                            android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+                            opts.inSampleSize = sample;
+                            android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
+                            if (bm == null) throw new Exception("Could not decode that image");
+                            ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+                            bm.compress(android.graphics.Bitmap.CompressFormat.WEBP, 84, compressed);
+                            bm.recycle();
+                            o.put("dataUrl", "data:image/webp;base64," + android.util.Base64.encodeToString(compressed.toByteArray(), android.util.Base64.NO_WRAP));
+                        }
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(rq, o);
+                }
+            }).start();
+            return;
+        }
         if (request != PICK_FILE || pickReq < 0) return;
         final int reqId = pickReq; pickReq = -1;
         final Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
@@ -1064,6 +1104,25 @@ public class MainActivity extends Activity {
                         JSONObject o = new JSONObject();
                         try { o.put("error", "No file picker available"); } catch (Exception ignored) { }
                         reply(reqId, o); restoreReq = -1;
+                    }
+                }
+            });
+        }
+
+        /** Opens Android's image picker and returns a compressed image data URL to the car selector. */
+        @JavascriptInterface
+        public void pickImageFile(final int reqId) {
+            main.post(new Runnable() {
+                public void run() {
+                    imagePickReq = reqId;
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("image/*");
+                    try { startActivityForResult(i, PICK_IMAGE); }
+                    catch (Exception e) {
+                        JSONObject o = new JSONObject();
+                        try { o.put("error", "No image picker available"); } catch (Exception ignored) { }
+                        reply(reqId, o); imagePickReq = -1;
                     }
                 }
             });
