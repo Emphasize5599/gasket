@@ -58,7 +58,10 @@ async function (reqId, args) {
   };
   const tags = (xml, tag) => {
     if (!/^\s*(<\?xml[^>]*>\s*)?<[a-z]/i.test(xml || '') || /<html/i.test(xml || '')) return null;      // not one of its lists
-    return Array.from(new DOMParser().parseFromString(xml, 'text/xml').getElementsByTagName(tag)).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const container = { model: 'models', make: 'makes', clar: 'clarifiers' }[tag];
+    if (doc.getElementsByTagName('parsererror').length || !doc.getElementsByTagName(container).length) return null;
+    return Array.from(doc.getElementsByTagName(tag)).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
   };
   const enc = encodeURIComponent;
   const pickerStep = async () => {

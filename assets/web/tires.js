@@ -358,7 +358,7 @@
     if (!t.size && c.year && c.make && base(c)) {
       if (busy[c.id]) return;
       // 1. Tire Rack's model names for the year and make
-      if (!tr || (tr.failed && !recent(tr, RETRY_H)) || (!tr.failed && Date.now() - tr.t > VER_DAYS * 864e5)) {
+      if (!tr || (!tr.failed && !(tr.models || []).length) || (tr.failed && !recent(tr, RETRY_H)) || (!tr.failed && Date.now() - tr.t > VER_DAYS * 864e5)) {
         busy[c.id] = 'versions'; t.tr = { key: vk, t: Date.now(), models: [], clars: {} };
         tireRead({ url: TR + 'brands', step: 'models', make: c.make, year: c.year }).then(function (r) {
           busy[c.id] = false; r = r || {};
@@ -396,7 +396,7 @@
       }
       // 3. its factory size
       var key = vk + '|' + verName(v);
-      if (t.sizeLookup && t.sizeLookup.key === key && (t.sizeLookup.found || recent(t.sizeLookup, RETRY_H))) return;
+      if (t.sizeLookup && t.sizeLookup.key === key && (t.sizeLookup.found || (t.sizeLookup.failed && recent(t.sizeLookup, RETRY_H)))) return;
       busy[c.id] = 'size'; t.sizeLookup = { key: key, t: Date.now() };
       // a model with no versions only answers through Tire Rack's vehicle menu (its size page says "currently unavailable")
       var ask = v.clar ? { url: sizeUrl(c, v), step: 'size' } : { url: TR + 'brands', step: 'oesize', make: (tr && tr.make) || c.make, year: c.year, model: v.model, clar: '' };
@@ -417,7 +417,7 @@
     }
     if (t.size && !busy[c.id]) {
       var L = t.list;
-      if (L && L.size === t.size && (L.items && L.items.length ? Date.now() - L.t < LIST_DAYS * 864e5 : recent(L, RETRY_H))) return;
+      if (L && L.size === t.size && (L.items && L.items.length ? Date.now() - L.t < LIST_DAYS * 864e5 : L.failed && recent(L, RETRY_H))) return;
       var url = listUrl(c, t.size); if (!url) return;
       var sz = t.size;
       busy[c.id] = 'list'; t.list = { size: sz, t: Date.now(), items: L && L.size === sz ? L.items : [] };
