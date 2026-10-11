@@ -249,22 +249,44 @@
       (paint ? '. Paint color: ' + paint + (c.paint.rgb ? ' (' + c.paint.rgb + ')' : '') : '') +
       '. Preserve the source image’s camera angle, perspective, body shape, trim details, proportions, and wheel design. Use realistic studio lighting, a simple neutral seamless background, crisp details, and no text, logos, watermark, or extra objects. Make a faithful recreation rather than redesigning the vehicle.';
   }
+  function downloadFuelImage(c) {
+    if (!hasKey()) return Promise.reject(new Error('Add your Fuel API key in Settings to download this car’s Fuel API image.'));
+    return lookFuel(c).then(function () {
+      var f = c.pic && c.pic.fuel;
+      if (!f || f.fail || !f.colors || !f.colors.length || !f.vid) throw new Error('No Fuel API image is available for this vehicle and trim.');
+      var want = pickColor(f.colors, c.paint) || f.colors[0];
+      return fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) {
+        var fresh = colorsOf(v, FORMAT).filter(function (x) { return x.code === want.code; })[0];
+        if (!fresh || !fresh.url) throw new Error('Fuel API did not return an image for the selected paint color.');
+        var name = ('gasket-' + [c.year, c.make, baseModel(c.model), c.paint && c.paint.simple || want.simple || want.name || want.code].filter(Boolean).join('-'))
+          .toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) + '.webp';
+        return call('saveCarImage', fresh.url, name);
+      });
+    }).then(function (r) {
+      if (!r || r.error) throw new Error(r && r.error || 'Image download failed.');
+      return r;
+    });
+  }
   function recreate(c) {
     if (!c) return;
-    var setup = stored('chatgptSetup');
     var prompt = recreationPrompt(c);
-    if (!setup) {
-      var ok = root.confirm('First, sign in to ChatGPT in the browser that opens. Gasket will remember that setup was completed, but cannot verify whether your session later expires. The recreation prompt will be copied to your clipboard. Continue?');
-      if (!ok) return;
-      keep('chatgptSetup', '1');
-    }
+    var setup = stored('chatgptSetup');
+    if (!setup && !root.confirm('First, sign in to ChatGPT in the browser that opens. Gasket will remember that setup was completed, but cannot verify whether your session later expires. Continue?')) return;
+    if (!root.confirm('Gasket will download the selected Fuel API vehicle image to Downloads/Gasket so you can attach that exact image in ChatGPT. Your recreation prompt will also be copied to the clipboard. Continue?')) return;
+    if (!setup) keep('chatgptSetup', '1');
     try { if (root.Native && root.Native.copyText) root.Native.copyText(prompt); } catch (e) {}
-    try { if (root.alert) root.alert('Your recreation prompt is copied. In ChatGPT, attach the vehicle photo, paste the prompt, and generate the image. Then save the result to your device. When the image is generated, save it to your device, return to Gasket, and tap Use generated image to import it.'); } catch (e) {}
-    try {
-      if (root.Native && root.Native.openUrl) root.Native.openUrl('https://chatgpt.com/');
-      else root.open('https://chatgpt.com/', '_blank');
-    } catch (e) {}
-    if (root.FLog) root.FLog.info('car', 'Opened ChatGPT for image recreation');
+    if (root.FLog) root.FLog.info('car', 'Downloading Fuel API source image before opening ChatGPT');
+    downloadFuelImage(c).then(function (r) {
+      if (root.alert) root.alert('Source image saved to ' + (r.path || 'Downloads/Gasket') + '. Your recreation prompt is copied. In ChatGPT, attach that downloaded image and paste the prompt.');
+      try {
+        if (root.Native && root.Native.openUrl) root.Native.openUrl('https://chatgpt.com/');
+        else root.open('https://chatgpt.com/', '_blank');
+      } catch (e) {}
+      if (root.FLog) root.FLog.info('car', 'Opened ChatGPT for image recreation');
+    }).catch(function (e) {
+      if (root.alert) root.alert('Could not download the Fuel API image: ' + String(e && e.message || e) + '\nYour prompt is copied to the clipboard. Check your Fuel API key and try again.');
+      if (root.FLog) root.FLog.warn('car', 'Fuel API source image download failed', String(e && e.message || e));
+    });
   }
   function resetChatGPTSetup() {
     keep('chatgptSetup', '');
