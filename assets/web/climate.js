@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
   // ---------- the rules ----------
-  var SEASONS = [['spring', 'Spring'], ['summer', 'Summer'], ['fall', 'Fall'], ['winter', 'Winter']];
+  var SEASONS = [['winter', 'Winter'], ['spring', 'Spring'], ['summer', 'Summer'], ['fall', 'Fall']];   // the year starts in winter
   var EMOJI = { spring: '🌷', summer: '☀️', fall: '🍂', winter: '❄️' };
   // what a year up north brings: [key, label, the seasons it comes with]
   var WEATHER = [['snow', 'Snowy', ['winter']], ['ice', 'Icy', ['winter']], ['frost', 'Frosty', ['fall', 'winter', 'spring']], ['fog', 'Foggy', ['fall', 'winter', 'spring']],
