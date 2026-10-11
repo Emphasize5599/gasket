@@ -243,11 +243,7 @@
   }
   function keyChanged() { (S.cars || []).forEach(function (c) { if (c.pic) delete c.pic.fuel; }); LG.info('car', 'Car pictures: ' + (hasKey() ? 'Fuel API key set' : 'no Fuel API key')); A.save(); }
   function recreationPrompt(c) {
-    var paint = c && c.paint && (c.paint.name || c.paint.simple);
-    return 'Recreate this vehicle image as a clean, photorealistic automotive studio photograph. Vehicle: ' +
-      [c && c.year, c && c.make, c && baseModel(c.model), c && c.trim].filter(Boolean).join(' ') +
-      (paint ? '. Paint color: ' + paint + (c.paint.rgb ? ' (' + c.paint.rgb + ')' : '') : '') +
-      '. Preserve the source image’s camera angle, perspective, body shape, trim details, proportions, and wheel design. Use realistic studio lighting, a simple neutral seamless background, crisp details, and no text, logos, watermark, or extra objects. Make a faithful recreation rather than redesigning the vehicle. Gasket will download the selected Fuel API reference image to Downloads/Gasket before opening ChatGPT.';
+    return 'Recreate this image without the watermark. Preserve the car’s original shadow and use a transparent background.';
   }
   function downloadFuelImage(c) {
     if (!hasKey()) return Promise.reject(new Error('Add your Fuel API key in Settings to download this car’s Fuel API image.'));
