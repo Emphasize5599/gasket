@@ -247,11 +247,23 @@
     return 'Recreate this vehicle image as a clean, photorealistic automotive studio photograph. Vehicle: ' +
       [c && c.year, c && c.make, c && baseModel(c.model), c && c.trim].filter(Boolean).join(' ') +
       (paint ? '. Paint color: ' + paint + (c.paint.rgb ? ' (' + c.paint.rgb + ')' : '') : '') +
-      '. Preserve the source image’s camera angle, perspective, body shape, trim details, proportions, and wheel design. Use realistic studio lighting, a simple neutral seamless background, crisp details, and no text, logos, watermark, or extra objects. Make a faithful recreation rather than redesigning the vehicle.';
+      '. Preserve the source image’s camera angle, perspective, body shape, trim details, proportions, and wheel design. Use realistic studio lighting, a simple neutral seamless background, crisp details, and no text, logos, watermark, or extra objects. Make a faithful recreation rather than redesigning the vehicle. Gasket will download the selected Fuel API reference image to Downloads/Gasket before opening ChatGPT.';
   }
   function downloadFuelImage(c) {
     if (!hasKey()) return Promise.reject(new Error('Add your Fuel API key in Settings to download this car’s Fuel API image.'));
-    return lookFuel(c).then(function () {
+    function waitForFuel() {
+      if (!busy['f|' + c.id]) return lookFuel(c);
+      return new Promise(function (resolve, reject) {
+        var tries = 0;
+        function poll() {
+          if (!busy['f|' + c.id]) { lookFuel(c).then(resolve, reject); return; }
+          if (++tries > 300) { reject(new Error('Timed out waiting for the Fuel API vehicle lookup.')); return; }
+          setTimeout(poll, 100);
+        }
+        poll();
+      });
+    }
+    return waitForFuel().then(function () {
       var f = c.pic && c.pic.fuel;
       if (!f || f.fail || !f.colors || !f.colors.length || !f.vid) throw new Error('No Fuel API image is available for this vehicle and trim.');
       var want = pickColor(f.colors, c.paint) || f.colors[0];
