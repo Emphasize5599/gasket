@@ -22,6 +22,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Test Tire Rack request lifecycle and failure UI
+        run: |
+          npm install --prefix "$RUNNER_TEMP/gasket-tests" playwright@1.63.0
+          "$RUNNER_TEMP/gasket-tests/node_modules/.bin/playwright" install --with-deps chromium
+          export NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules"
+          node tests/tires.test.js
+          node tests/tirerack.test.js
+
       - name: Install Android SDK tools and Java
         run: |
           sudo apt-get update
@@ -50,7 +58,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gasket-0.0.98-separate-build
+          name: Gasket-0.0.99-separate-build
           path: Gasket.apk
           if-no-files-found: error
           retention-days: 7

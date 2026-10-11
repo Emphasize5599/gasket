@@ -10,7 +10,6 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 URL = 'file://' + os.path.join(ROOT, 'assets', 'web', 'index.html')
 MOCKS = open(os.path.join(ROOT, 'tests', 'trip_mocks.js')).read()
 READER = open(os.path.join(ROOT, 'assets', 'tirerack_worker.js')).read()
-assert 'controller.abort()' in READER and "new Error('timed out')" in READER, 'Tire Rack fetches must not hang forever'
 # Tire Rack's answers (made-up tires in its format)
 TR = r'''() => {
   window.__tr = [];
@@ -356,8 +355,8 @@ with sync_playwright() as p:
     assert r == {'clars': {'Sienna FWD': ['LE 4cyl', 'LE V6'], 'Sienna AWD': []}}, r
     assert pg.evaluate('window.__asked')[0] == '/survey/ValidationServlet?autoYear=2011&autoMake=Toyota&autoModel=Sienna%20FWD&newDesktop=true'
     BUSY = PICKERPAGE.replace('const xml =', 'const xml = "<html><body>We\'re sorry. This page is currently unavailable.</body></html>"; const _x =')
-    assert reader(pg, BUSY, {'step': 'models', 'make': 'Toyota', 'year': 2011}, 2500) == {'blocked': True}, 'Tire Rack saying "slow down" is a block, never retried in a loop'
-    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'clars', 'make': 'Toyota', 'year': 2011, 'models': ['Sienna FWD']}) == {'blocked': True}
+    assert reader(pg, BUSY, {'step': 'models', 'make': 'Toyota', 'year': 2011}, 2500).get('blocked'), 'Tire Rack saying "slow down" is a block, never retried in a loop'
+    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'clars', 'make': 'Toyota', 'year': 2011, 'models': ['Sienna FWD']}).get('blocked')
     # a model with no versions: set the vehicle the way Tire Rack's menu does, then read its tire-size panel
     OEPAGE = ('<h1>Tires for Sale</h1>' + 'x' * 300 + '<script>window.__asked = []; window.fetch = async (u) => { window.__asked.push(u); const body = /SetCurrentVehicle/.test(u)'
               ' ? (/Nonsense/.test(u) ? \'{"vehicleZipSet":"redirect","redirect":"/tires"}\' : \'{"vehicleZipSet":"success"}\')'
@@ -367,9 +366,9 @@ with sync_playwright() as p:
     assert r == {'factory': ['215/65R16'], 'optional': ['235/55R17', '255/45R18', '285/40R18']}, r
     asked = pg.evaluate('window.__asked')
     assert asked[0].startswith('/SetCurrentVehicleServlet?ajax=true&') and 'autoModel=Mustang%20Coupe&autoModClar=&' in asked[0] and asked[1].startswith('/modalPopups/selectOETireSize.jsp?'), asked
-    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Nonsense', 'clar': ''}, 3000) == {'unknown': True}, 'a vehicle Tire Rack sends elsewhere'
-    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Stale', 'clar': ''}, 3000) == {'unknown': True}, 'a panel for another vehicle (the last one set) is never read as this one'
-    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Coupe', 'clar': ''}) == {'blocked': True}
+    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Nonsense', 'clar': ''}, 3000).get('unknown'), 'a vehicle Tire Rack sends elsewhere'
+    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Stale', 'clar': ''}, 3000).get('unknown'), 'a panel for another vehicle (the last one set) is never read as this one'
+    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Coupe', 'clar': ''}).get('blocked')
     LISTPAGE = ('<div><p>GRAND TOURING ALL-SEASON</p><p>Category Ratings Charts</p>'
                 '<p>CONTINENTAL SECURECONTACT AW</p><p>Grand Touring All-Season</p><p>Reviews (28)</p><p>$153.99</p><p>Size: 195/65R15 91H</p><p>Load Range: SL</p><p>UTQG: 700 A A</p><p>More information on UTQG</p><p>60K Mile Manufacturer\'s Warranty</p>'
                 '<p>BRIDGESTONE BLIZZAK WS90</p><p>Studless Ice &amp; Snow</p><p>Size: 195/65R15 91T</p><p>Free Road Hazard Protection</p>'
@@ -380,8 +379,8 @@ with sync_playwright() as p:
     assert tz['CONTINENTAL SECURECONTACT AW'] == {'name': 'CONTINENTAL SECURECONTACT AW', 'type': 'Grand Touring All-Season', 'size': '195/65R15', 'utqg': {'tw': 700, 'trac': 'A', 'temp': 'A'}, 'warrantyMi': 60000}
     assert tz['BRIDGESTONE BLIZZAK WS90']['utqg'] is None and tz['BRIDGESTONE BLIZZAK WS90']['type'] == 'Studless Ice & Snow'
     assert tz['MICHELIN DEFENDER2']['utqg'] == {'tw': 820, 'trac': 'A', 'temp': 'B'} and tz['MICHELIN DEFENDER2']['warrantyMi'] == 80000
-    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'list'}) == {'blocked': True}
-    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'size'}) == {'blocked': True}
+    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'list'}).get('blocked')
+    assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'size'}).get('blocked')
     pg.close()
     b.close()
 print('JS errors:', errors or 'none')

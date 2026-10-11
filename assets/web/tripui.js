@@ -16,8 +16,14 @@
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function (resolve) {
-      var id = ++nid; waiting[id] = resolve;
-      N[fn].apply(N, [id].concat(args));
+      var id = ++nid, timer;
+      waiting[id] = function (res) { clearTimeout(timer); resolve(res); };
+      // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
+      if (fn === 'siteRead' && args[0] === 'tirerack') timer = setTimeout(function () {
+        window.onNativeResult(id, { error: 'Tire Rack lookup timed out', code: 'timeout' });
+      }, 80000);
+      try { N[fn].apply(N, [id].concat(args)); }
+      catch (e) { window.onNativeResult(id, { error: String(e && e.message || e), code: 'bridge' }); }
     });
   }
   var progH = {};
