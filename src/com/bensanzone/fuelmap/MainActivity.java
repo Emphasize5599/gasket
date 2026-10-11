@@ -1027,8 +1027,9 @@ public class MainActivity extends Activity {
                     final JSONObject o = new JSONObject();
                     Uri uri = null;
                     try {
+                        String savedName = name.replaceAll("[^A-Za-z0-9._ -]", "_");
                         android.content.ContentValues v = new android.content.ContentValues();
-                        v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
+                        v.put("_display_name", savedName);
                         v.put("mime_type", mime);
                         v.put("relative_path", "Download/Gasket");
                         uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
