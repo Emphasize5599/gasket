@@ -226,3 +226,21 @@
   root.CarPics = { loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
     colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+  /**
+   * Optional: send a Fuel API image to Grok for watermark removal.
+   * Requires the user to have provided a Grok (xAI) API key.
+   * Call this after fetching a Fuel image URL when a Grok key is present.
+   */
+  function cleanWithGrok(imageUrl, grokKey) {
+    if (!grokKey) return Promise.resolve(imageUrl);
+    // In the Android WebView this should be routed through a native bridge
+    // for security and to avoid CORS. Example call:
+    return call('cleanFuelImageWithGrok', imageUrl, grokKey).catch(function () {
+      return imageUrl; // fallback to original on failure
+    });
+  }
+
+  // Expose for the app
+  root.CarPics = root.CarPics || {};
+  root.CarPics.cleanWithGrok = cleanWithGrok;
