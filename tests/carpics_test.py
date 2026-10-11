@@ -61,8 +61,10 @@ with sync_playwright() as p:
         n_img = len(pg.evaluate('window.__pic.img'))
         pg.click('#gcNext'); pg.wait_for_timeout(400); pg.click('#gcPrev'); pg.wait_for_timeout(400)
         assert len(pg.evaluate('window.__pic.img')) == n_img, 'pictures are kept: nothing downloaded again'
-        # ---- Photo / Doodle (in Edit): colors only for the doodle ----
+        # ---- Photo / Doodle (in Edit): colors only for the doodle; the picture tools only while editing ----
+        assert pg.locator('#gcRecreate, #gcUseGenerated, #gcOriginal').count() == 0, 'not editing: no picture buttons'
         pg.click('#gEdit'); pg.wait_for_timeout(200)
+        assert pg.locator('#gcRecreate').count() == 1 and pg.locator('#gcUseGenerated').count() == 1
         assert pg.locator('#gPicMode [data-pm="photo"].on').count() == 1 and pg.locator('.gc-paint').count() == 0, 'photo: no colors'
         pg.click('#gPicMode [data-pm="doodle"]'); pg.wait_for_timeout(200)
         assert pg.locator('#gcPic img').count() == 0 and pg.locator('#gcPic .gc-draw').count() == 1 and 'Doodle' in ft(pg, '#gcSub') and pg.locator('.gc-paint').count() == 12

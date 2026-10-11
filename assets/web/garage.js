@@ -321,9 +321,9 @@
       '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
       '<div class="gc-slide carchip on' + (slideIn ? (slideIn > 0 ? ' in-r' : ' in-l') : '') + '"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
       '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
-      '<button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>' +
-      '<button type="button" class="gc-recreate" id="gcUseGenerated">Use generated image</button>' +
-      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasGenerated(c) ? '' : ' hidden') + '>Use original photo</button>' +
+      (editing ? '<button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>' +       // the picture tools: only while editing the car
+        '<button type="button" class="gc-recreate" id="gcUseGenerated">Use generated image</button>' +
+        '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasGenerated(c) ? '' : ' hidden') + '>Use original photo</button>' : '') +
       '</div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +

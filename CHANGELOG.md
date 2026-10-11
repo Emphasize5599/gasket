@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.88 - 2026-10-11
+- The car picture buttons only show while you're editing the car.
+
 ## 0.0.87 - 2026-10-11
 - **Special weather, by season.** In Climate control, each season now has "Adjust for special weather conditions" right under it, with "What would you do if it's…" for the weather that season brings (winter: snowy, icy, frosty, foggy; and so on). An answer counts in every season that has that weather.
 - Import your own picture of a car into the Garage.
