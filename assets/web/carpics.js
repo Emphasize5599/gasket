@@ -234,12 +234,13 @@
     if (!c) return;
     var setup = stored('chatgptSetup');
     var prompt = recreationPrompt(c);
-    try { if (root.Native && root.Native.copyText) root.Native.copyText(prompt); } catch (e) {}
     if (!setup) {
-      var ok = root.confirm('First, sign in to ChatGPT in the browser that opens. Gasket will remember that you completed setup, but may not be able to detect when your ChatGPT session expires. Your recreation prompt will be copied to the clipboard. Continue?');
+      var ok = root.confirm('First, sign in to ChatGPT in the browser that opens. Gasket will remember that setup was completed, but cannot verify whether your session later expires. The recreation prompt will be copied to your clipboard. Continue?');
       if (!ok) return;
       keep('chatgptSetup', '1');
     }
+    try { if (root.Native && root.Native.copyText) root.Native.copyText(prompt); } catch (e) {}
+    try { if (root.alert) root.alert('Your recreation prompt is copied. In ChatGPT, attach the vehicle photo, paste the prompt, and generate the image. Then save the result to your device. Importing that result back into Gasket is not part of this first handoff yet.'); } catch (e) {}
     try {
       if (root.Native && root.Native.openUrl) root.Native.openUrl('https://chatgpt.com/');
       else root.open('https://chatgpt.com/', '_blank');
