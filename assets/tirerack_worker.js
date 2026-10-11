@@ -31,14 +31,16 @@ async function (reqId, args) {
     // nothing found: what the page looked like, for the debug log (no personal data on it)
     const debug = out.length ? null : { url: location.pathname + location.search.slice(0, 160), title: document.title.slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 500),
       selects: [...document.querySelectorAll('select')].slice(0, 8).map((s) => (s.name || s.id || s.className || '?') + ':' + s.options.length),
-      clarMentions: (document.documentElement.innerHTML.match(/modclar[^"'&<>]{0,40}/gi) || []).slice(0, 8) };
+      clarMentions: (document.documentElement.innerHTML.match(/modclar[^"'&<>]{0,40}/gi) || []).slice(0, 8),
+      scripts: (() => { const out = []; document.querySelectorAll('script').forEach((sc) => { const x = sc.textContent || ''; let i = x.search(/vehicleSearch|modclar/i); while (i >= 0 && out.length < 4) { out.push(x.slice(Math.max(0, i - 250), i + 350).replace(/\s+/g, ' ')); const j = x.slice(i + 350).search(/vehicleSearch|modclar/i); i = j < 0 ? -1 : i + 350 + j; } }); return out; })(),
+      endpoints: [...new Set((document.documentElement.innerHTML.match(/["'](\/[A-Za-z0-9_\/.-]*(?:Servlet|\.jsp|\/api\/|vehicle)[A-Za-z0-9_\/.-]*)/gi) || []).map((x) => x.slice(1)))].slice(0, 20) };
     return { trims: out.slice(0, 40), debug: debug };
   };
 
   if (args.step === 'size') {
     const t = await settle((t) => /factory tire size/i.test(t) || /error=noVehicle/.test(location.href), 20000);
     if (refused(t)) { send({ blocked: true }); return; }
-    if (/error=|noVehicle/i.test(location.href) || !/factory tire size/i.test(t)) { const r = readTrims(t); send({ unknown: true, trims: r.trims, debug: r.debug }); return; }   // the page may list the versions it does know
+    if (/error=|noVehicle/i.test(location.href) || !/factory tire size/i.test(t)) { const r = readTrims(t); if (!r.trims.length) { const p = await askPicker(); if (p.trims.length) r.trims = p.trims; else if (r.debug) r.debug.picker = p.note; } send({ unknown: true, trims: r.trims, debug: r.trims.length ? null : r.debug }); return; }   // the page may list the versions it does know
     // Sections start at each heading; the tab labels ("Factory Tire Size Optional Tire Sizes Custom Tire Size") are
     // headings with no sizes after them, so they add nothing. Sizes under "Factory" headings are the factory ones.
     const HEAD = /factory tire size|optional tire sizes?|custom tire size|need help|view results/gi;
@@ -54,11 +56,36 @@ async function (reqId, args) {
     return;
   }
 
+  // The vehicle picker's own service (the site's script asks it for a model's versions): same page, same cookies, nothing
+  // gotten around. Reads whatever list comes back (XML, JSON or HTML options). -> { trims, note }
+  const askPicker = async () => {
+    if (!args.make || !args.year || !args.model) return { trims: [], note: 'no car' };
+    const q = 'autoYear=' + encodeURIComponent(args.year) + '&autoMake=' + encodeURIComponent(args.make) + '&autoModel=' + encodeURIComponent(args.model);
+    const notes = [], found = [];
+    const add = (v) => { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v && v.length < 60 && !/^(select|choose|--|please|additional)/i.test(v) && found.indexOf(v) < 0) found.push(v); };
+    for (const path of ['/survey/ValidationServlet?' + q, '/survey/ValidationServlet?' + q + '&autoModClar=']) {
+      try {
+        const r = await fetch(path, { credentials: 'include' }); const body = await r.text();
+        notes.push(path.split('?')[0] + ' ' + r.status + ' ' + (r.headers.get('content-type') || '') + ' ' + body.replace(/\s+/g, ' ').slice(0, 300));
+        if (!r.ok || refused(body)) continue;
+        if (/^\s*[\[{]/.test(body)) { const walk = (o, key) => { if (Array.isArray(o)) o.forEach((x) => walk(x, key)); else if (o && typeof o === 'object') Object.keys(o).forEach((k) => walk(o[k], k)); else if (typeof o === 'string' && /clar|trim|name|value|label/i.test(key || '')) add(o); }; walk(JSON.parse(body), ''); }
+        else {
+          const doc = new DOMParser().parseFromString(body, /<\?xml|^\s*<[a-z]+>/i.test(body) && !/<html/i.test(body) ? 'text/xml' : 'text/html');
+          doc.querySelectorAll('*').forEach((e) => { if (/clar|trim/i.test(e.tagName) && !e.children.length) add(e.textContent); if (/clar/i.test(e.getAttribute && (e.getAttribute('name') || '') || '')) add(e.getAttribute('value') || e.textContent); });
+          doc.querySelectorAll('option').forEach((o) => add(o.getAttribute('value') && !/^\d*$/.test(o.getAttribute('value')) ? o.getAttribute('value') : o.textContent));
+        }
+        if (found.length) break;
+      } catch (e) { notes.push(path.split('?')[0] + ' error ' + String(e).slice(0, 80)); }
+    }
+    return { trims: found.slice(0, 40), note: notes.join(' | ').slice(0, 900) };
+  };
+
   if (args.step === 'trims') {
     // The size page without a trim: Tire Rack asks which version it is. If it goes straight to the factory sizes, there's only one.
     const t = await settle((t) => /factory tire size|modclar/i.test(t + document.documentElement.innerHTML.slice(0, 200000)) || /error=noVehicle/.test(location.href), 20000);
     if (refused(t)) { send({ blocked: true }); return; }
     const r = readTrims(t);
+    if (!r.trims.length) { const p = await askPicker(); if (p.trims.length) { send({ trims: p.trims, src: 'picker' }); return; } if (r.debug) r.debug.picker = p.note; }
     send({ trims: r.trims, single: !r.trims.length && /factory tire size/i.test(t), debug: r.debug });
     return;
   }

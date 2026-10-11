@@ -321,6 +321,11 @@ with sync_playwright() as p:
     TRIMPAGE = '<h1>2019 HONDA FIT</h1><p>Please select additional vehicle info</p><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=LX">LX</a><a href="/tires/SelectTireSize.jsp?autoMake=Honda&autoYear=2019&autoModel=Fit&autoModClar=Sport%20w%2FHonda%20Sensing">Sport w/Honda Sensing</a><a href="/x">Help</a>'
     r = reader(pg, TRIMPAGE, {'step': 'trims'}); print('  trims reader:', r)
     assert r == {'trims': ['LX', 'Sport w/Honda Sensing'], 'single': False, 'debug': None}, r
+    PICKERPAGE = ('<h1>Tires for Sale</h1><script>window.__asked = []; window.fetch = async (u) => { window.__asked.push(u); return { ok: true, status: 200, headers: { get: () => "text/xml" },'
+                  ' text: async () => \'<?xml version="1.0"?><vehicle><modClar>LE 8-Passenger</modClar><modClar>XLE</modClar><modClar>Limited</modClar></vehicle>\' }; };</script>')
+    r = reader(pg, PICKERPAGE, {'step': 'trims', 'make': 'Toyota', 'year': 2011, 'model': 'Sienna'}); print('  picker reader:', r)
+    assert r == {'trims': ['LE 8-Passenger', 'XLE', 'Limited'], 'src': 'picker'}, r
+    assert pg.evaluate('window.__asked[0]') == '/survey/ValidationServlet?autoYear=2011&autoMake=Toyota&autoModel=Sienna'
     LISTPAGE = ('<div><p>GRAND TOURING ALL-SEASON</p><p>Category Ratings Charts</p>'
                 '<p>CONTINENTAL SECURECONTACT AW</p><p>Grand Touring All-Season</p><p>Reviews (28)</p><p>$153.99</p><p>Size: 195/65R15 91H</p><p>Load Range: SL</p><p>UTQG: 700 A A</p><p>More information on UTQG</p><p>60K Mile Manufacturer\'s Warranty</p>'
                 '<p>BRIDGESTONE BLIZZAK WS90</p><p>Studless Ice &amp; Snow</p><p>Size: 195/65R15 91T</p><p>Free Road Hazard Protection</p>'

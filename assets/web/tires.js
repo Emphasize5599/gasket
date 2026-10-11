@@ -255,7 +255,7 @@
     }
     if (needVer && !busy[c.id] && !(TL && TL.key === tkey && (TL.list && TL.list.length || TL.single || recent(TL, 1)))) {
       busy[c.id] = 'trims'; t.trims = { key: tkey, t: Date.now(), list: TL && TL.key === tkey ? TL.list : [] };
-      call('siteRead', 'tirerack', JSON.stringify({ url: sizeUrl(c, true), step: 'trims' })).then(function (r) {
+      call('siteRead', 'tirerack', JSON.stringify({ url: sizeUrl(c, true), step: 'trims', make: c.make, year: c.year, model: base(c) })).then(function (r) {
         busy[c.id] = false; r = r || {};
         t.trims = { key: tkey, t: Date.now(), list: r.trims || [], single: !!r.single, failed: r.blocked ? 'blocked' : r.error ? 'error' : '' };
         LG.info('car', 'Tire Rack versions: ' + ((r.trims || []).join(', ') || (r.single ? 'one' : 'none found')), r.debug || undefined);
@@ -270,7 +270,7 @@
       var key = [c.year, c.make, base(c), et].join('|');
       if (busy[c.id] || (t.sizeLookup && t.sizeLookup.key === key && (t.sizeLookup.found || recent(t.sizeLookup, RETRY_H)))) return;
       busy[c.id] = 'size'; t.sizeLookup = { key: key, t: Date.now() };
-      call('siteRead', 'tirerack', JSON.stringify({ url: sizeUrl(c, !et), step: 'size' })).then(function (r) {
+      call('siteRead', 'tirerack', JSON.stringify({ url: sizeUrl(c, !et), step: 'size', make: c.make, year: c.year, model: base(c) })).then(function (r) {
         busy[c.id] = false;
         r = r || {};
         if (r.factory && r.factory.length) {
