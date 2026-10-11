@@ -12,6 +12,20 @@ async function (reqId, args) {
   // Reports back through GasketSite.result(reqId, json).
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // A WebView fetch can otherwise remain pending indefinitely when Tire Rack drops a
+  // vehicle-picker request.  Always answer Gasket so the lookup can be retried.
+  const fetchText = async (url) => {
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+    const timer = controller && setTimeout(() => controller.abort(), 20000);
+    try {
+      return await fetch(url, { credentials: 'include', signal: controller && controller.signal });
+    } catch (e) {
+      if (controller && controller.signal.aborted) throw new Error('timed out');
+      throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
   const text = () => (document.body && document.body.innerText) || '';
   const refused = (t) => /currently unavailable|access denied|are you a robot|verify you are (a )?human|unusual traffic/i.test(t);
   const SIZE = /\b(\d{3})\/(\d{2})(?:-|\s*Z?R)(\d{2})\b/g;
@@ -23,7 +37,7 @@ async function (reqId, args) {
   // Asked gently: one request at a time, a pause in between (fast bursts get "currently unavailable").
   const V = '/survey/ValidationServlet?';
   const ask = async (q) => {
-    const r = await fetch(V + q, { credentials: 'include' }), body = await r.text();
+    const r = await fetchText(V + q), body = await r.text();
     if (refused(body) || r.status === 403 || r.status === 429) { const e = new Error('blocked'); e.blocked = true; throw e; }
     if (!r.ok && r.status !== 204) throw new Error('HTTP ' + r.status);
     return body;
@@ -97,12 +111,12 @@ async function (reqId, args) {
     const q = 'modClarLookUpCompleted=false&mmycPAX=false&cameFrom=vehicleSelector&performance=&search=tire&index=0&autoYear=' + enc(args.year) +
       '&autoMake=' + enc(args.make) + '&autoModel=' + enc(args.model) + '&autoModClar=' + enc(args.clar || '') + '&zip-code=';
     try {
-      const r = await fetch('/SetCurrentVehicleServlet?ajax=true&' + q, { credentials: 'include' }), body = await r.text();
+      const r = await fetchText('/SetCurrentVehicleServlet?ajax=true&' + q), body = await r.text();
       if (refused(body) || r.status === 403 || r.status === 429) { send({ blocked: true }); return; }
       let j = null; try { j = JSON.parse(body); } catch (e) { /* not its answer */ }
       if (!j || j.vehicleZipSet !== 'success') { send(j && j.vehicleZipSet === 'redirect' ? { unknown: true } : { error: 'vehicle not set' }); return; }
       await sleep(900);
-      const r2 = await fetch('/modalPopups/selectOETireSize.jsp?' + q, { credentials: 'include' }), html = await r2.text();
+      const r2 = await fetchText('/modalPopups/selectOETireSize.jsp?' + q), html = await r2.text();
       if (refused(html) || r2.status === 403 || r2.status === 429) { send({ blocked: true }); return; }
       const t = (new DOMParser().parseFromString(html, 'text/html').body.textContent || '').replace(/\s+/g, ' ');
       // the panel names the vehicle it's for; if it isn't this one, the vehicle didn't take

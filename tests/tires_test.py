@@ -10,6 +10,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 URL = 'file://' + os.path.join(ROOT, 'assets', 'web', 'index.html')
 MOCKS = open(os.path.join(ROOT, 'tests', 'trip_mocks.js')).read()
 READER = open(os.path.join(ROOT, 'assets', 'tirerack_worker.js')).read()
+assert 'controller.abort()' in READER and "new Error('timed out')" in READER, 'Tire Rack fetches must not hang forever'
 # Tire Rack's answers (made-up tires in its format)
 TR = r'''() => {
   window.__tr = [];
