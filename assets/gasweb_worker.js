@@ -6,6 +6,11 @@ async function (reqId, args) {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const started = Date.now(), rows = new Map(), prices = new Map();
   let loaded = false, responseRead = false, limited = false, rejected = 0;
+  let targetsComplete = false;
+  const targets = Array.isArray(args.targets) ? args.targets.slice(0,1000) : [];
+  // Only stable IDs permit early completion; coordinate guesses must not shorten discovery.
+  const complete = () => targets.length > 0 && targets.every(t => Array.from(rows.values()).some(r =>
+    prices.has(r.featureId) && (t.id && (r.placeId === t.id || r.id === t.id) || t.featureId && r.featureId === t.featureId)));
   const blocked = () => /\/sorry\/|consent\.google/.test(location.href) || /unusual traffic|verify (?:that )?you are human|access denied|before you continue to Google|not a robot/i.test(document.body && document.body.innerText || '');
   const price = (s) => {
     const m = /^\$(\d{1,2}\.\d{2,3})\s*\/\s*Regular$/i.exec(String(s || '').trim());
@@ -112,6 +117,7 @@ async function (reqId, args) {
       if (blocked()) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
       const feed=readRows();
       await readReply();
+      if(complete()){targetsComplete=true;break;}
       const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices)]);
       stable=now===last ? stable+1 : 0;last=now;
       if (feed && stable>=3) {
@@ -125,6 +131,6 @@ async function (reqId, args) {
     const priced=stores.filter(s=>s.prices.regular).length;
     send({stores,partial:true,code:!loaded?'unreadable':!priced?'no_prices':'limited',
       error:!loaded?'Google gas results could not be read':!priced?'Google provided no matching regular prices; stations are shown without prices':null,
-      detail:{read:stores.length,priced,responseRead,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,coverage:'Search results, not an exhaustive station catalog'}});
+      detail:{read:stores.length,priced,responseRead,targetsComplete,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}
 }

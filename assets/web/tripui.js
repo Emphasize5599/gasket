@@ -19,7 +19,7 @@
       var id = ++nid, timer;
       waiting[id] = function (res) { clearTimeout(timer); resolve(res); };
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
-      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && args[0] === 'gasweb' ? 45000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
+      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:2)?$/.test(args[0]) ? 45000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (timeout) timer = setTimeout(function () {
         window.onNativeResult(id, { error: (args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);

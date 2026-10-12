@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.106 - 2026-10-11 (keyless test branch only)
+- Faster saved-price refresh with two parallel readers and targeted early completion.
+- Shorter release notes; credits remain in project information.
+- Bug fixes.
+
 ## 0.0.105 - 2026-10-11 (keyless test branch only)
 - **Saved-trip price refresh.** Update matched regular prices from Google Maps web without spending Places or Routes calls. Keep saved stations, route geometry, other fuel grades and unmatched prices; persist refresh results separately from original discovery time.
 - **Separate Routes budget.** Default 9,500 monthly attempts for current Essentials routing, enforced atomically before network requests. Cached routes remain usable at the cap.

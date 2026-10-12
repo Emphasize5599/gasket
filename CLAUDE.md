@@ -2,6 +2,8 @@
 
 ## This branch: keyless experiment
 
+0.0.106 runs saved-price area reads on two dedicated native WebViews (`gasweb`, `gasweb2`), with shared restriction-stop scheduling and stable-ID target early completion. Area caches are scoped to the exact saved target set. Test release notes come from only the current CHANGELOG entry, never the full experiment document or credits.
+
 0.0.105 adds price-only refresh for saved regular-gas trips (`findStops('web')`, KeylessGas.refreshKnown): no Places or Routes calls, no new stations, retain unmatched prices and other grades, persist station price updates separately from original discovery time. At the Places cap, the saved trip's API rediscovery action falls back to this same known-station refresh. Routes has a separate default 9,500 cap enforced atomically in Native.computeRoute and checked after route-cache lookup in routesCall; its existing rcalls monthly counter remains separate and backup-compatible. The native gate regression is mandatory in CI after JDK installation.
 
 `test/keyless-regular-gas` builds a separate app (`com.bensanzone.fuelmap.keyless`, label Gasket Keyless Test), not a main release. MainActivity keeps its original Java package and imports the test package's generated R class. Do not merge that manifest/resource change blindly into main. `KEYLESS_EXPERIMENT.md` records scope, licensing and promotion gates. No Vela code/templates are bundled; retain Gasket's current license. The opt-in nearby regular mode skips paid Places searches entirely and never silently falls back to them. Routing/along-route search and other grades are unchanged. Signed test APKs are published by the build workflow to a separately named prerelease; ordinary main tags are not used for test builds.

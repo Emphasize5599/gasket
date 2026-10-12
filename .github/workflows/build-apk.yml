@@ -14,6 +14,7 @@ on:
       - tests/tirerack.test.js
       - tests/tires.test.js
       - tests/keylessgas.test.js
+      - tests/keyless-parallel.test.js
       - tests/picture-storage.test.js
       - tests/saved-prices.test.js
       - tests/routes-budget.test.js
@@ -42,6 +43,7 @@ jobs:
           node tests/tirerack.test.js
           node tests/picture-storage.test.js
           if [ -f tests/keylessgas.test.js ]; then node tests/keylessgas.test.js; fi
+          if [ -f tests/keyless-parallel.test.js ]; then node tests/keyless-parallel.test.js; fi
           if [ -f tests/saved-prices.test.js ]; then node tests/saved-prices.test.js; fi
           if [ -f tests/routes-limit.test.js ]; then node tests/routes-limit.test.js; fi
 
@@ -121,7 +123,10 @@ jobs:
             release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
             test "$release_sha" = "$GITHUB_SHA"
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "Gasket keyless test ${{ steps.version.outputs.name }}" --notes-file KEYLESS_EXPERIMENT.md --prerelease
+            ver="${{ steps.version.outputs.name }}"
+            awk -v v="$ver" 'index($0, "## " v " ") == 1 || $0 == "## " v { p = 1; next } p && /^## / { exit } p' CHANGELOG.md > notes.md
+            test -s notes.md
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Gasket keyless test $ver" --notes-file notes.md --prerelease
           fi
           if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx "$asset" >/dev/null; then
             gh release upload "$tag" "$asset"

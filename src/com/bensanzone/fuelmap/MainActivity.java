@@ -64,6 +64,7 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
+    private static boolean isGasWorker(String key) { return "gasweb".equals(key) || "gasweb2".equals(key); }
 
     private static final int REQ_LOC = 42;
     private static final String PREFS = "gasket";
@@ -160,6 +161,7 @@ public class MainActivity extends Activity {
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
         // Dedicated gas reader: never replaces an in-progress directions import.
         workers.put("gasweb", new SiteWorker("gasweb", "https://www.google.com/maps", "https://www.google.com/", true));
+        workers.put("gasweb2", new SiteWorker("gasweb2", "https://www.google.com/maps", "https://www.google.com/", true));
         // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
         workers.put("nhtsa", new SiteWorker("nhtsa", "https://www.nhtsa.gov/recalls", "https://www.nhtsa.gov/"));
         // Tire Rack: a car's factory tire size, and the tires sold in that size (read in the background)
@@ -168,7 +170,7 @@ public class MainActivity extends Activity {
         workers.put("brave", new SiteWorker("brave", "https://search.brave.com/", "https://search.brave.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
-            if (sw.key.equals("gmaps") || sw.key.equals("gasweb")) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
+            if (sw.key.equals("gmaps") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
             else root.addView(sw.view, new FrameLayout.LayoutParams(-1, -1));
         }
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
@@ -377,7 +379,7 @@ public class MainActivity extends Activity {
                 public void onPageFinished(WebView v, String url) {
                     if (readReq >= 0 && !url.equals(v.getUrl())) return; // a callback from the page we just left
                     String title = String.valueOf(v.getTitle()).toLowerCase(Locale.US);
-                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || ("gasweb".equals(key) && url.startsWith("https://consent.google.")) || title.contains("robot") || title.contains("access denied")
+                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || (isGasWorker(key) && url.startsWith("https://consent.google.")) || title.contains("robot") || title.contains("access denied")
                             || title.contains("captcha") || title.contains("unusual traffic");
                     ready = !blocked && url.startsWith(SiteWorker.this.origin);
                     if (verifying == SiteWorker.this && showReq >= 0) {
@@ -473,7 +475,7 @@ public class MainActivity extends Activity {
                     SiteWorker w = workers.get(key);
                     if (w != null && w.readReq == id) { w.finishRead(id, payload); return; }
                     // Ignore late/duplicate background replies. Visible reads and price workers use onSiteResult.
-                    if ("tirerack".equals(key) || "gasweb".equals(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
+                    if ("tirerack".equals(key) || isGasWorker(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
                     js("window.onSiteResult&&onSiteResult(" + q(key) + "," + id + ",JSON.parse(" + q(payload) + "))");
                 }
             });
@@ -1642,14 +1644,14 @@ public class MainActivity extends Activity {
             main.post(new Runnable() {
                 public void run() {
                     SiteWorker w = workers.get(key);
-                    String script = w != null ? asset(key + "_worker.js") : "";
+                    String script = w != null ? asset((isGasWorker(key) ? "gasweb" : key) + "_worker.js") : "";
                     String url;
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only these pages may be read this way
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
                             || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
-                            || ("gasweb".equals(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
+                            || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
                         return;
@@ -1671,7 +1673,7 @@ public class MainActivity extends Activity {
                             fw.ready = false; fw.view.stopLoading();
                         }
                     };
-                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : "gasweb".equals(key) ? 40000 : 90000);
+                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : isGasWorker(key) ? 40000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             String at = fw.view.getUrl();

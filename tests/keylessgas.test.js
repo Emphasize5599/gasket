@@ -33,14 +33,14 @@ assert.equal(K.updateKnown([savedStation,{...savedStation,id:'other'}],[w],P,123
 assert.equal(P.DEFAULTS.routesMonthlyCap,9500);
 const link=(id,name='Exxon',lng=-92.29)=>`<article role="article"><a aria-label="${name}" href="https://www.google.com/maps/place/${name}/data=!1s${id}!3d34.745!4d${lng}">${name}</a></article>`;
 const html='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'End of the list</div>';
-async function worker(pg,body,raw,status=200){
+async function worker(pg,body,raw,status=200,args={}){
   await pg.setContent(body);
   await pg.evaluate(({raw,status})=>{
     window.answers=[];window.GasketSite={result:(_,s)=>answers.push(JSON.parse(s))};
     performance.getEntriesByType=()=>[{name:'https://www.google.com/search?tbm=map&q=gas+stations'}];
     window.fetch=async()=>({ok:status===200,status,url:'https://www.google.com/search',text:async()=>raw});
   },{raw,status});
-  await pg.evaluate(s=>(0,eval)('('+s+')')(1,{}),script);
+  await pg.evaluate(({s,args})=>(0,eval)('('+s+')')(1,args),{s:script,args});
   await pg.waitForFunction(()=>answers.length);
   return pg.evaluate(()=>answers[0]);
 }
@@ -48,6 +48,10 @@ async function worker(pg,body,raw,status=200){
  const b=await chromium.launch({executablePath:process.env.CHROME||undefined});
  try{
   const pg=await b.newPage();
+  const targeted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'}]});
+  assert.equal(targeted.detail.targetsComplete,true,'finish without waiting for end of list when all stable-ID targets are priced');
+  const incomplete=await worker(pg,html,JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'},{id:'missing'}]});
+  assert.equal(incomplete.detail.targetsComplete,false,'one missing saved station prevents premature completion');
   const r=await worker(pg,html,")]}'\n"+JSON.stringify([['0x1:0x2',['$3.123/Regular','Escaped \\" ] bracket']],['0x3:0x4',['$4.56/Regular']]])+'\n/* trailing frame */');
   assert.equal(r.stores[0].prices.regular.price,3.123);assert.equal(r.stores[1].prices.regular.price,4.56);
   assert.equal(r.stores[0].prices.regular.updated,null);assert.equal(r.partial,true);

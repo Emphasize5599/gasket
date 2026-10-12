@@ -129,24 +129,32 @@
     if(busy)throw new Error('A keyless lookup is already running');
     busy=true;
     var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=[],errors=[],reads=0,blocked=false,start=Date.now();
-    var cached=groups.map(function(g){var key='known|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|');return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
-    // Cached areas cost no website load. New loads are serialized and bounded per batch.
+    var cached=groups.map(function(g){var key='known|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
+    // Two dedicated native readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
     try{
-      for(var i=0;i<ordered.length;i++){
-        var x=ordered[i],r,at;
-        if(onProgress)onProgress(i/ordered.length,'Refreshing saved prices · '+(i+1)+'/'+ordered.length+' areas');
+      var next=0,done=0,limited=false;
+      async function lane(key){while(next<ordered.length&&!blocked){
+        var x=ordered[next++],r,at;
         if(x.cache){r=x.cache.v;at=x.cache.t;}
         else{
-          if(reads>=12||Date.now()-start>=180000){errors.push('Batch limit reached; some saved areas were not checked. Run another refresh to continue.');break;}
-          if(reads)await new Promise(function(resolve){setTimeout(resolve,1200);});
-          reads++;r=await call('siteRead','gasweb',JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8))}));at=Date.now();
+          if(reads>=12||Date.now()-start>=180000){limited=true;break;}
+          reads++;
+          try{r=await call('siteRead',key,JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8)),targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId};})}));}
+          catch(e){r={error:e.message};}
+          at=Date.now();
           if(r.blocked){blocked=true;errors.push(r.error||'Google restricted the refresh');break;}
           if(r.error)errors.push(r.error);
+          // Cache is scoped to this exact target set, including early-complete replies.
           if(!r.error)A.KV.put('gasweb',x.key,r);
         }
         (r.stores||[]).forEach(function(w){rows.push(Object.assign({},w,{observedAt:at}));});
-      }
+        done++;
+        if(onProgress)onProgress(done/ordered.length,'Refreshing saved prices · '+done+'/'+ordered.length+' areas');
+      }}
+      if(onProgress)onProgress(0,'Refreshing saved prices · 0/'+ordered.length+' areas');
+      await Promise.all([lane('gasweb'),lane('gasweb2')]);
+      if(limited)errors.push('Batch limit reached; some saved areas were not checked. Run another refresh to continue.');
       // Overlapping areas can return the same Google station. Keep one row before matching.
       var web=Array.from(new Map(rows.map(function(w){return [w.placeId||w.featureId||w.id,w];})).values());
       var result=updateKnown(known,web,P,null);
