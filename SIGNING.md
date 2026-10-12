@@ -29,6 +29,7 @@ Back up the keystore and the password together. Without them, no update can ever
 
 ## Building
 
+- **Shared GitHub build (Codex or Claude, on `main`):** Add repository **Settings → Secrets and variables → Actions → New repository secret** entries named `KS_PASS` (the existing release key's password) and `GASKET_KEYSTORE_B64` (the existing keystore as base64). `.github/workflows/build-apk.yml` runs tests on pushes to `main`; with both secrets set, it signs with that key and uploads an APK artifact for download. It can also be run manually from Actions → Build signed APK → Run workflow, selecting `main`. Secret values are passed only to the configuration-check and signing steps, never printed or put in the repository. No new key is generated. If the secrets are absent, tests still run and the workflow reports that signing is not configured. Artifacts expire after seven days; APKs are not attached to GitHub Releases.
 - **Cloud sessions:** `./build.sh`. It reads `KS_PASS` and decodes `GASKET_KEYSTORE_B64` into a private temp file that's deleted when the build ends. New variables only reach sessions started after they were saved.
 - **Elsewhere:** `KS_PASS=… KEYSTORE=/path/to/gasket-release.jks ./build.sh`.
 
