@@ -462,7 +462,7 @@
       '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', S.speed.rule&&S.speed.rule.over!=null?S.speed.rule.over:0, 1) + num('tRuleCap', '…but no faster than (mph)', Garage.ruleCap(), 1) + '</div>' +
       '<div class="field"><div class="lbl">Keep me as slow as the trucks<small>Uses the large-truck limit where a state sets one lower than for cars — e.g. 70 on Arkansas Interstates (like I-57) posted 75. From state law as compiled by IIHS; no road database lists truck limits. Not covered: Illinois\' county truck limits.</small></div>' + sw('tTruck', !!S.speed.truck) + '</div>' +
       '</div><div class="card"><h3>Other routes</h3>' +
-      '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
+      '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. ' + (!S.apiKey || S.keylessRegular ? 'Without Google lookups: website discovery searches up to two other routes too, so finding stations takes longer.' : 'Uses Google lookups for each route checked (up to two others).') + '</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
     }
     if (k === ST_HAZ) return '<div id="tHz"></div>';
@@ -498,11 +498,24 @@
     }
     bindDeparture();
   }
-  /** Empty a date box so the phone's WebView redraws it too (setting value = '' alone can leave the picked date showing). */
-  function clearDt(el) {
-    if (!el) return;
-    el.blur(); el.value = ''; el.defaultValue = ''; el.removeAttribute('value');
-    var t = el.type; el.type = 'text'; el.type = t;
+  /** Empty a date box. The phone's WebView can keep drawing a picked date after value = '', so the box is swapped
+   *  for a brand-new empty one (same id and attributes, listeners bound again by `bind`). */
+  function clearDt(el, bind) {
+    if (!el) return null;
+    el.blur();
+    var fresh = document.createElement('input');
+    Array.prototype.forEach.call(el.attributes, function (at) { if (at.name !== 'value') fresh.setAttribute(at.name, at.value); });
+    fresh.type = 'datetime-local'; fresh.value = '';
+    el.parentNode.replaceChild(fresh, el);
+    if (bind) bind(fresh);
+    dtState();
+    return fresh;
+  }
+  /** "Now" / "Right away" look picked while their box is blank, so the answer shows even if the box draws oddly. */
+  function dtState() {
+    [['tDepart', 'tNow'], ['tBackAt', 'tBackNow']].forEach(function (p) {
+      var i = $(p[0]), b = $(p[1]); if (i && b) { b.classList.toggle('on', !i.value); b.setAttribute('aria-pressed', String(!i.value)); }
+    });
   }
   function bindRoute() {
     var t = S.trip;
@@ -511,14 +524,19 @@
       $(id).addEventListener('input', function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); renderStops(); });
       $(id).addEventListener('change', function () { autoRoutes(); });   // done typing (left the box): fetch once both are in
     });
-    var dEl = $('tDepart'), minNow = function () { var d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4); dEl.min = d.toISOString().slice(0, 16); };
-    minNow(); dEl.addEventListener('focus', minNow);
-    dEl.addEventListener('change', function () {
-      // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
-      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
-      collectSafe(); result = null;
-    });
-    $('tNow').onclick = function () { clearDt($('tDepart')); collectSafe(); result = null; };
+    var bindDepart = function (dEl) {
+      var minNow = function () { var d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4); dEl.min = d.toISOString().slice(0, 16); };
+      minNow(); dEl.addEventListener('focus', minNow);
+      dEl.addEventListener('change', function () {
+        // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
+        if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
+        collectSafe(); result = null; dtState();
+      });
+      dEl.addEventListener('input', dtState);
+    };
+    var bindBack = function (bEl) { bEl.addEventListener('change', function () { collectSafe(); dtState(); }); bEl.addEventListener('input', dtState); };
+    bindDepart($('tDepart')); bindBack($('tBackAt')); dtState();
+    $('tNow').onclick = function () { clearDt($('tDepart'), bindDepart); collectSafe(); result = null; };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
     $('tSrc').onclick = function (e) {
       var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
@@ -528,8 +546,7 @@
       route = null; model = null; replay = null; result = null; parsing = null; parsedEl().innerHTML = ''; renderInfo(); layer.clearLayers();
       if (S.trip.src === 'link' && $('tLink').value.trim()) readLink().then(autoRoutes);
     };
-    $('tBackNow').onclick = function () { clearDt($('tBackAt')); collectSafe(); };
-    $('tBackAt').addEventListener('change', function () { collectSafe(); });
+    $('tBackNow').onclick = function () { clearDt($('tBackAt'), bindBack); collectSafe(); };
     $('tRound').onchange = function () {
       collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip);
       if (route && syncReturn(route)) { model = null; replay = null; result = null; autoRoute = false; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
@@ -1448,28 +1465,11 @@
   function googleBrands() {
     return Object.keys(P.BRANDS).filter(function (k) { return S.brands[k] && !official(k); });
   }
-  function estLookups() {
-    if (!model || !S.apiKey || KIND() !== 'gas') return 0;
-    var n = T.chunks(model, 125).length;
-    altCompareList().forEach(function (k) { n += Math.max(1, Math.ceil((alts[k].distanceMeters || 0) / 1609.344 / 125)); });
-    return n * googleBrands().length;
-  }
   function renderInfo(keepMaps) {
     routeGate();
     var el = $('tRouteInfo'); if (!el) return;
     if (!model) { el.innerHTML = ''; alts = []; return; }
-    var need = model.galTo(model.totalMi);
-    var est = estLookups(), left = (Number(S.monthlyCap) || 0) - N.callsThisMonth();
-    var h = '<div class="card route-card">';
-    // the routes are picked on the next step (Hazards), on the big map with what's on each
-    var nLeg = hzLegs(), nOpt = 0; for (var li = 0; li < nLeg; li++) nOpt += hzAlts(li).length;
-    h += '<div class="sub-h">' + (nLeg > 1 ? nLeg + ' legs · ' + nOpt + ' route options' : nOpt + ' route option' + (nOpt === 1 ? '' : 's')) + '</div>' +
-      '<p class="lead small keep">Next: pick ' + (nLeg > 1 ? 'each leg\'s route' : 'your route') + ' on the map, with the weather and hazards along each one.</p>';
-    h += limBar(model, 'Speed limits', true);
-    if(alts[altSel]&&alts[altSel].websiteApproximate)h+='<div class="lead small keep">Website route · approximate '+A.qBtn('Website route points and total time are not full API turn-by-turn geometry or no-traffic timing. Detours and fuel/time estimates are less precise. Verify the route in Google Maps before driving. An API key is recommended for more reliable planning.')+'</div>';
-    var nOther = altCompareList().length;
-    h += A.gAttr('in-card') + '<div class="lead small'+(!S.apiKey||S.keylessRegular?' keep':'')+'">'+(!S.apiKey||S.keylessRegular?'Website discovery · slower, variable coverage '+A.qBtn('No API key required. Searches overlap along each route and scroll every result list. Websites can still omit stations or prices. An API key is recommended for faster, more reliable coverage.'):'Finding stations: '+(est?'about '+est+' Google lookups'+(nOther?' (your route + '+nOther+' others)':''):'no Google lookups'))+'.</div></div>';
-    el.innerHTML = h;
+    el.innerHTML = '';   // the routes, their weather and the lookup notes are on Hazards and Adjustments
   }
   /** A tap on a route option: highlighted at once; its route (long ones take a moment) is read right after. */
   var picking = false;
@@ -2479,10 +2479,10 @@
     if (window.__apiCount) window.__apiCount();
     if (onPlan(step) && !result) renderResults();
   }
-  async function findStops0(force) {
+  async function findStops0(force, noReplay) {
     var cap=Number(S.monthlyCap)||0,exhausted=cap>0&&N.callsThisMonth()>=cap;
     var webRefresh=force==='web';
-    var discovering=force==='discover'||force!==true&&(!S.apiKey||S.keylessRegular)&&!savedPriceReplay();
+    var discovering=force==='discover'||force!==true&&(!S.apiKey||S.keylessRegular)&&(noReplay||!savedPriceReplay());
     priceRefreshActive=webRefresh||discovering;priceCancelRequested=false;
     if(step===ST_DEPART&&webRefresh)renderStep();
     if ($('tsResults')) $('tsResults').innerHTML = skelStops('Finding stations');
@@ -2518,7 +2518,7 @@
       dbg.search.keyless=cloned.priceRefresh;
       if(webSummary.blocked)A.showSiteCheck(webSummary.blockedSite||'gasweb',webSummary.blockedSite==='walmart'?'Walmart':webSummary.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
     }
-    var rp = (force === true||force==='discover')&&!webRefresh ? null : replay, rpSt = null;
+    var rp = (force === true||force==='discover'||noReplay)&&!webRefresh ? null : replay, rpSt = null;
     if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null;   // saved for another kind of car (or EV stations: the finder's own cache covers them)
     if (rp) {
       // which route each saved station list was for (older saves: worked out from the saved route options)
@@ -2560,6 +2560,12 @@
         plan = pEst; opts = oEst; cands = oEst.cands; estUsed = pEst.stops.filter(function (x) { return x.c.est; }).length;
         LG.info('plan', 'Used ' + estUsed + ' station(s) with no posted price (nothing priced in reach)');
       }
+    }
+    // the saved trip's stations can't make this route work (another route than it searched, or too few in reach):
+    // find the stations along it, the same way a new trip would
+    if (!plan.ok && rp && !webRefresh && !rpSt.google.some(function (g) { return g.sig === altSig(alts[altSel]); })) {
+      LG.info('plan', 'The saved stations can\'t plan this route; finding stations along it', { candidates: cands.length, reachMi: plan.reachMi });
+      return findStops0(force, true);
     }
     LG.info('plan', plan.ok ? 'Planned ' + plan.stops.length + ' stop(s) in ' + (Date.now() - t0) + ' ms' : 'No workable plan', {
       candidates: cands.length, unpriced: unpriced, stale: stale, tooFar: plan.tooFar, reachMi: plan.reachMi,
@@ -2857,7 +2863,9 @@
     var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
     var list = hzAlts(hzLeg), sel = hzSel(hzLeg);
     if (!list.length) { el.innerHTML = '<div class="card empty-res">Get your routes first.</div>'; return; }
-    var h = '<p class="hz-notice">Hazards are projections from forecasts and active warnings. They can change with little warning: check again before you go.</p><div class="hz-opts">' + list.map(function (a, k) {
+    var h = '<p class="hz-notice">Hazards are projections from forecasts and active warnings. They can change with little warning: check again before you go.' +
+      (list[sel] && list[sel].websiteApproximate ? ' <span class="hz-approx">Website route · approximate ' + A.qBtn('Website route points and total time are not full API turn-by-turn geometry or no-traffic timing. Detours and fuel/time estimates are less precise. Verify the route in Google Maps before driving. An API key is recommended for more reliable planning.') + '</span>' : '') +
+      '</p><div class="hz-opts">' + list.map(function (a, k) {
       var e = hzCache.get(a), mi = Math.round((a.distanceMeters || 0) / 1609.344), sec = parseFloat(String(a.duration || '0')), chips;
       if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">Checking the weather along it…</span><span class="hz-bar"><i style="width:' + Math.round(Math.max(0.04, e && e.prog || 0) * 100) + '%"></i></span>';
       else if (e.st === 'error') chips = '<span class="hz-ld">couldn\'t check</span>';
@@ -3023,7 +3031,7 @@
     el.querySelectorAll('[data-nav]').forEach(function (b) {
       b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.station.id) ? '' : s.station.id, s.station.name); };
     });
-    if (A.bl) p.stops.forEach(function (s, i) { if (r.openStops && r.openStops[i]) A.bl.bind(s.c.station, 'ts' + i); });
+    if (A.bl) (p.stops || []).forEach(function (s, i) { if (r.openStops && r.openStops[i]) A.bl.bind(s.c.station, 'ts' + i); });
     el.querySelectorAll('[data-why]').forEach(function (b) {
       b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
     });
@@ -3561,5 +3569,5 @@
       for (var i = 0; i < leads.length; i++) for (var j = i + 1; j < leads.length; j++) if (Labels._segX(leads[i][0], leads[i][1], leads[j][0], leads[j][1])) cross++;
       return { pins: out, leads: leads.length, overRoute: over, crossings: cross };
     },
-    state: function () { return { route: route, model: model, result: result, busy: busy, step: step }; } };
+    state: function () { var nl = model ? hzLegs() : 0, no = 0; for (var i = 0; i < nl; i++) no += hzAlts(i).length; return { route: route, model: model, result: result, busy: busy, step: step, legs: nl, options: no }; } };
 })();

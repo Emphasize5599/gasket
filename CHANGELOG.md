@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.121 - 2026-10-12 (keyless test branch only)
+- **Route is shorter:** the summary tile under it is gone (routes are picked on Hazards; the "approximate website route" note moved there).
+- **"Now" and "Right away" work on the phone:** they swap in a fresh empty date box, and the button lights up while you're leaving now / heading back right away.
+- **Adjust no longer breaks on another route of a saved trip.** If the stations the trip already knows can't plan the route you picked, it finds stations along that route instead.
+- Parameters: the (?) on "Check Google's other routes too" says that without a key, website discovery searches those routes too.
+- Bug fixes.
+
 ## 0.0.120 - 2026-10-12 (keyless test branch only)
 - **Advice's tick boxes really hold the trip.** Unticking "I understand when to use recirculate" (or a due spare check) keeps every later step closed, however you get there.
 - **Adjustments refresh buttons are blue**, with a refresh icon. "Discover stations again" moved into a small ▾ menu on the No API button, since discovery already runs by itself.

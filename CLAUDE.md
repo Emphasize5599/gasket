@@ -4,6 +4,8 @@
 
 Everything on this branch is meant to be merged into `main` once the owner is satisfied with it; build new work here.
 
+0.0.121: Route has no summary tile (`renderInfo` leaves `#tRouteInfo` empty; `__trip.state()` gives `legs` / `options`; `.hz-approx` on Hazards). `clearDt(el, bind)` replaces the date box with a new empty one and rebinds; `dtState` lights `#tNow` / `#tBackNow` (`aria-pressed`) while blank. `findStops0(force, noReplay)`: a saved trip whose stations can't plan a route it never searched runs again without the replay (discovery / Google). `bindStops` tolerates a failed plan. Test: `tests/saved-other-route.test.js`.
+
 0.0.120: `renderStep` sends any step past Advisory back to it while `adviceDue()` (spare due or `Climate.ackDue`; not while `loadingTrip`). Refresh card: blue `.btn.primary` scans with `RF_ICON`; No API is a `.split-btn` whose `[data-split]` ▾ opens `.split-menu` holding `[data-trip-refresh="discover"]`. gasweb_worker: a `quiet` stop at the bottom sets `exhausted` (only truly cut-off lists count as partial).
 
 0.0.119: weather along a route = NWS hourly forecast (`/points/lat,lng` → `forecastHourly`, 156 h; KV `wx` keeps points 30 days, forecasts 45 min; `classifyNws` reads `shortForecast` + chance: storms ≥30%, rain ≥50% or likely/heavy, snow/ice ≥30%, fog, wind ≥30 mph), the words kept as `peak.text` / `peak.pop`; past it or on failure Open-Meteo `models=ncep_nbm_conus`, then its default. `stats.nws`, `stats.nwsErrors`.

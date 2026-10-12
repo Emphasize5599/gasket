@@ -191,9 +191,8 @@ with sync_playwright() as p:
         assert step(pg) == 3 and pg.locator('#tNext.dim').count() == 0 and pg.locator('.rt-ready #tRefreshRoutes').count() == 1, 'routes in by themselves: Next available'
         body = pg.evaluate('window.__routeBody')
         assert body['routeModifiers']['avoidTolls'] is True and body['origin']['location']['latLng']['latitude'] == 34.7695, body
-        print('  route:', ft(pg, '#tRouteInfo').replace('\n', ' | '))
         assert pg.evaluate('window.__finds') is None, 'link stops had exact coordinates: no lookups'
-        assert pg.locator('.alts-pick, .rmap').count() == 0 and '2 route options' in ft(pg, '#tRouteInfo'), 'routes are picked on the next step'
+        assert pg.locator('.alts-pick, .rmap, #tRouteInfo .card').count() == 0 and pg.evaluate('__trip.state().options') == 2, 'routes are picked on the next step'
         # changing an option (avoid ferries) brings the button back; nothing is looked up until it's tapped
         n0 = len(pg.evaluate('window.__routeBodies'))
         pg.click('#tAvoid [data-av="ferries"]'); pg.wait_for_timeout(800)
@@ -891,7 +890,7 @@ with sync_playwright() as p:
         bodies = pg.evaluate('window.__routeBodies')
         print('  leg requests:', [(b['origin'].get('location', b['origin']), b.get('computeAlternativeRoutes')) for b in bodies][:4])
         assert len([b for b in bodies if b.get('computeAlternativeRoutes')]) == 2 and not any(b.get('intermediates') for b in bodies), 'one request per leg, with options'
-        assert step(pg) == 3 and '2 legs · 4 route options' in ft(pg, '#tRouteInfo'), ft(pg, '#tRouteInfo')
+        assert step(pg) == 3 and pg.evaluate('[__trip.state().legs, __trip.state().options]') == [2, 4], pg.evaluate('[__trip.state().legs, __trip.state().options]')
         assert mi(pg) == 636, mi(pg)
         pg.evaluate("window.__app.S.trip.fuel = {mode: 'miles', miles: '80'}; window.__app.S.trip.milesLeft = '80'")
         # Hazards: one leg at a time, "Step 1/2" at the top; Next goes to the way back, then on
@@ -943,7 +942,7 @@ with sync_playwright() as p:
         txt = ft(pg, '#tParsed'); print('  round trip switch on:', txt.replace('\n', ' | '))
         assert pg.locator('#tParsed .nlist li').count() == 3 and 'Back to start' not in txt, txt
         getr(pg, 1200)
-        assert '2 legs' in ft(pg, '#tRouteInfo') and mi(pg) == 636, ft(pg, '#tRouteInfo')
+        assert pg.evaluate('__trip.state().legs') == 2 and mi(pg) == 636, mi(pg)
         assert pg.locator('#tBackBox:not(.hidden) #tBackAt').count() == 1, 'round trip: when you head back'
         pg.evaluate("document.querySelector('#tRound').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-l3-roundswitch.png')

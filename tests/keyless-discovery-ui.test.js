@@ -19,7 +19,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.fill('#tFrom','100 Main St, Testville');await p.fill('#tTo','200 Main St, Testville');
  await p.click('#tGetRoutes'); // restored installs deliberately do not automatically search on open
  await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
- assert.match(await p.innerText('#tRouteInfo'),/Website route · approximate/);
+ await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tHz .hz-approx');assert.match(await p.innerText('#tHz .hz-notice'),/Website route · approximate/);
  assert.equal(await p.evaluate(()=>new URL(__gmapsUrl).searchParams.get('avoid')),'tolls');
  await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
  assert.equal(await p.evaluate(()=>__paid),0);assert((await p.evaluate(()=>__web))>0);
