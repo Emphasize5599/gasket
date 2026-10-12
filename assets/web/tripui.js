@@ -7,8 +7,9 @@
 
   // ---------- persistent inputs ----------
   S.trip = Object.assign({ link: '', from: '', to: '', milesLeft: '', bufferMi: 40, fillUp: false, minSave: 1, timeValue: 0,
-    arrive: 'buffer', topUpMi: 1.0, returnTrip: false, linkSliders: true, slowMode: 'all', maxUnder: 5, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
+    arrive: 'buffer', topUpMi: 1.0, returnTrip: false, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
+  ['linkSliders','slowMode','maxUnder'].forEach(function(k){delete S.trip[k];});
 
   // ---------- native calls as promises ----------
   var nid = 900000, waiting = {};
@@ -19,8 +20,8 @@
       var id = ++nid, timer;
       waiting[id] = function (res) { clearTimeout(timer); resolve(res); };
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
-      var discovery=fn==='siteRead'&&/^gasweb(?:[2-4])?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
-      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-4])?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
+      var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|1[0-6])?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
+      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|1[0-6])?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (timeout) timer = setTimeout(function () {
         window.onNativeResult(id, { error: (args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
@@ -93,7 +94,7 @@
     var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'')+(!S.apiKey?' Add the recommended API key in Settings to use this option.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
       (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
-      '<div class="scan-launches"><div><button class="btn tonal" data-trip-refresh="web"'+(!web?' disabled':'')+'>No API</button>'+A.qBtn(webHelp)+'</div><div><button class="btn tonal" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>API</button>'+A.qBtn(apiHelp)+'</div></div><div class="scan-discover"><button class="btn tonal sm" data-trip-refresh="discover">Discover stations · No API</button>'+A.qBtn('Find additional stations in overlapping areas along this route, scrolling each website result list. Slower and less consistent than API discovery; a finished list does not guarantee every station is listed. Four readers, progress, ETA and Cancel. No paid fallback. Your brand filters still apply.')+'</div>')+'</div>';
+      '<div class="scan-launches"><div><button class="btn tonal" data-trip-refresh="web"'+(!web?' disabled':'')+'>No API</button>'+A.qBtn(webHelp)+'</div><div><button class="btn tonal" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>API</button>'+A.qBtn(apiHelp)+'</div></div><div class="scan-discover"><button class="btn tonal sm" data-trip-refresh="discover">Discover stations · No API</button>'+A.qBtn('Find additional stations in overlapping areas along this route, scrolling each website result list. Slower and less consistent than API discovery; a finished list does not guarantee every station is listed. '+KeylessGas.readerCount(A)+' readers (adjust in Settings), progress, ETA and Cancel. No paid fallback. Your brand filters still apply.')+'</div>')+'</div>';
   }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
@@ -224,6 +225,7 @@
     var e = stepEl(step), c = built[step];
     var fresh = !c || step === ST_DEPART || (onPlan(step) && (c.model !== model || c.result !== result));
     e.classList.remove('hidden'); shown = step;
+    if(step===ST_PARAMS&&$('tRuleCap')&&(!S.speed.rule||S.speed.rule.capAuto||S.speed.rule.cap==null))$('tRuleCap').value=Garage.ruleCap();
     if (fresh) {
       e.innerHTML = stepHtml(step);
       built[step] = { model: model, result: result };
@@ -444,12 +446,8 @@
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up within (mi)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '</div><div class="card"><h3>Cruising speed</h3>' +
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
-      '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', (S.speed.rule && S.speed.rule.over) || 9, 1) + num('tRuleCap', '…but no faster than (mph)', (S.speed.rule && S.speed.rule.cap) || 70, 1) + '</div>' +
+      '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', S.speed.rule&&S.speed.rule.over!=null?S.speed.rule.over:0, 1) + num('tRuleCap', '…but no faster than (mph)', Garage.ruleCap(), 1) + '</div>' +
       '<div class="field"><div class="lbl">Keep me as slow as the trucks<small>Uses the large-truck limit where a state sets one lower than for cars — e.g. 70 on Arkansas Interstates (like I-57) posted 75. From state law as compiled by IIHS; no road database lists truck limits. Not covered: Illinois\' county truck limits.</small></div>' + sw('tTruck', !!S.speed.truck) + '</div>' +
-      '<div class="field"><div class="lbl">Let the buffer and speed sliders adjust each other<small>On: a smaller buffer slows you down where needed, and faster speeds raise the buffer, so the tank never runs dry. Off: each slider just stops (grayed out) where the other one doesn\'t leave enough gas.</small></div>' + sw('tLinkSl', S.trip.linkSliders !== false) + '</div>' +
-      '<div id="tLinkBox"' + (S.trip.linkSliders !== false ? '' : ' class="hidden"') + '><div class="sub-h">When a smaller buffer needs slower driving</div>' +
-      '<div class="seg2" id="tSlowMode"><button data-sm="all" class="' + (S.trip.slowMode !== 'fastest' ? 'on' : '') + '">Slow all roads</button><button data-sm="fastest" class="' + (S.trip.slowMode === 'fastest' ? 'on' : '') + '">Fastest roads first</button></div>' +
-      '<div class="grid2">' + num('tMaxUnder', 'Max. under limit (mph)', S.trip.maxUnder != null ? S.trip.maxUnder : 5, 1, 'the slider never slows you more than this') + '<span></span></div></div>' +
       '</div><div class="card"><h3>Other routes</h3>' +
       '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
@@ -536,16 +534,16 @@
         if (after) after(); collectSafe(); again();
       };
     };
-    seg('tArrive', arriveHelp); seg('tMode'); seg('tSlowMode');
+    seg('tArrive', arriveHelp); seg('tMode');
     var ruleSave = function () {
-      S.speed.rule = { on: $('tRule').checked, over: Math.max(-10, Math.min(15, parseInt($('tRuleOver').value, 10) || 0)), cap: Math.max(40, Math.min(90, parseInt($('tRuleCap').value, 10) || 70)) };
+      var previous=S.speed.rule||{},autoCap=previous.capAuto===true||previous.cap==null;if(this.id==='tRuleCap')autoCap=false;
+      S.speed.rule = { on: $('tRule').checked, over: Math.max(-10, Math.min(15, parseInt($('tRuleOver').value, 10) || 0)), cap: Math.max(40, Math.min(90, parseInt($('tRuleCap').value, 10) || Garage.ruleCap())),capAuto:autoCap };
       $('tRuleBox').classList.toggle('hidden', !S.speed.rule.on); A.save();
       if (result) result.speedState = null;
       again();
     };
     $('tRule').onchange = ruleSave; $('tRuleOver').onchange = ruleSave; $('tRuleCap').onchange = ruleSave;
     $('tTruck').onchange = function () { S.speed.truck = this.checked; A.save(); LG.info('speed', 'Truck limits ' + (this.checked ? 'on' : 'off')); again(); };
-    $('tLinkSl').onchange = function () { collectSafe(); $('tLinkBox').classList.toggle('hidden', !S.trip.linkSliders); };
     $('tAltCmp').onchange = function () { $('tAltBox').classList.toggle('hidden', !this.checked); collectSafe(); again(); };
     ['tBuffer', 'tMinSave', 'tMaxMin', 'tTime', 'tTopMi', 'tTankPrice', 'tMaxUnder', 'tAltSave'].forEach(function (id) {
       if ($(id)) $(id).addEventListener('input', function () { collectSafe(); again(); });
@@ -655,9 +653,6 @@
     if (on('tRound') != null) t.returnTrip = on('tRound');
     if (segOn('tSrc', 'src')) t.src = segOn('tSrc', 'src');
     if (v('tDepart') != null) t.depart = v('tDepart') || '';
-    if (on('tLinkSl') != null) t.linkSliders = on('tLinkSl');
-    if (segOn('tSlowMode', 'sm')) t.slowMode = segOn('tSlowMode', 'sm');
-    if (v('tMaxUnder') != null) t.maxUnder = Math.max(0, Math.min(10, parseInt(v('tMaxUnder'), 10) || 0));
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
     if (v('tTankPrice') != null) t.tankPrice = v('tTankPrice').trim();
     if (v('tBuffer') != null) t.bufferMi = Math.max(0, parseFloat(v('tBuffer')) || 0);
@@ -2064,11 +2059,7 @@
   // ---------- buffer <-> cruising speed ----------
   // Stops are planned at the speeds you choose (extra gas for driving faster counted on every stretch), so you always
   // arrive at a station — and at the end — with at least your buffer. Faster speeds or a bigger buffer both need the
-  // stations closer together, so each can rule out the other: with "let the sliders adjust each other" off, the
-  // slider stops at the gray; with it on, a bigger buffer slows you down (all roads, or the fastest roads first, down
-  // to your limit under the posted speed) and faster speeds lower the buffer.
-  function linked() { return S.trip.linkSliders !== false; }
-  function floorOff() { return -Math.max(0, Math.min(10, S.trip.maxUnder != null ? +S.trip.maxUnder : 5)); }
+  // stations closer together. Each slider stops at its infeasible gray range; neither changes the other.
   /** Every posted-limit section of the route's major roads, in order ("keep me as slow as the trucks" applied). */
   function flatSecs(m) {
     var lim = m && m._lim, out = [];
@@ -2094,27 +2085,13 @@
     return o;
   }
   function canDo(mi, cx, offs) { return T.reachable(baseOpts(mi), ratesOf(cx, offs)); }
-  /** The planner's own answer (a quick plan) — used to confirm before the app changes your speeds or buffer for you. */
-  function planOk(mi, cx, offs) {
-    var o = Object.assign(baseOpts(mi), { model: T.withSpeeds(model, ratesOf(cx, offs)), lite: true });
-    return T.plan(o).ok;
-  }
-  function smallestBuf() { var sw = result.sweep; return sw && sw.length ? sw[0].mi : 5; }
-  function slowFor(mi, cx, offs) {
-    return T.slowDown({ secs: cx.secs, offsets: offs, all: cx.st.all || 0, mode: S.trip.slowMode === 'fastest' ? 'fastest' : 'all', floor: floorOff(), ruleOff: Garage.ruleOff,
-      ok: function (o) { return canDo(mi, cx, o) && planOk(mi, cx, o); },
-      failing: function () { return [{ a: 0, b: model.totalMi }]; } });
-  }
   /** Can the buffer slider go to this row? (rows are planned at your speeds; linked: after slowing as far as you allow) */
   function bufOk(x, cx) {
-    if (!x) return false;
-    if (x.ok) return true;
-    cx = cx === undefined ? speedCx() : cx;
-    return !!(cx && linked() && slowFor(x.mi, cx, cx.offs));
+    return !!(x&&x.ok);
   }
   /** Highest offset that still has a plan — at this buffer, or (linked) at the smallest buffer. Binary search. */
   function maxOffset(cx, set) {
-    var mi = linked() ? smallestBuf() : result.bufMi, lo = set(null), hi = 15;
+    var mi = result.bufMi, lo = set(null), hi = 15;
     if (!canDo(mi, cx, set(lo))) return lo;
     while (lo < hi) { var mid = Math.ceil((lo + hi) / 2); if (canDo(mi, cx, set(mid))) lo = mid; else hi = mid - 1; }
     return lo;
@@ -2132,16 +2109,7 @@
       },
       notes: function (mx, road) { return speedNotes(mx, road); },
       release: function () {
-        // re-plan the stops at the new speeds; too fast for this buffer -> (linked) the largest smaller buffer that works
-        var cx = speedCx(), r = result; if (!cx) return;
-        if (canDo(r.bufMi, cx, cx.offs)) { replan(); return; }
-        if (!linked()) { replan(); return; }
-        var mis = []; for (var v = r.bufMi - 1; v >= smallestBuf(); v--) mis.push(v);
-        var to = mis.filter(function (v) { return canDo(v, cx, cx.offs) && planOk(v, cx, cx.offs); })[0];
-        if (to == null) { replan(); return; }
-        LG.info('plan', 'Faster speeds: buffer ' + r.bufMi + ' → ' + to + ' mi');
-        toastMsg('Buffer lowered to ' + to + ' mi — the stations are too far apart for a bigger one at these speeds.');
-        replan(to);
+        replan(); // never change the selected buffer as a side effect of a speed change
       }
     };
   }
@@ -2172,8 +2140,8 @@
   function capTxt(v) { return v === 0 ? 'at or below the limit' : 'at ' + offTxt(v) + ' or less'; }
   function speedNotes(mx, road) {
     var out = [], b = bufLimits();
-    if (b && b.maxBuf != null) out.push('⚠ This speed keeps your buffer at ' + b.maxBuf + ' mi or less' + (linked() ? ', even slowing other roads as far as you allow' : '') + '.');
-    if (mx < 15) out.push(linked() ? '⚠ Even the smallest buffer can\'t cover going faster than ' + offTxt(mx) + ' here — the stations are too far apart.' : '⚠ Your ' + result.bufMi + '-mi buffer keeps this ' + capTxt(mx) + '.');
+    if (b && b.maxBuf != null) out.push('⚠ This speed keeps your buffer at ' + b.maxBuf + ' mi or less.');
+    if (mx < 15) out.push('⚠ Your ' + result.bufMi + '-mi buffer keeps this ' + capTxt(mx) + '.');
     return out;
   }
   function refreshBufBox() { if ($('tsBufBox')) { var y = tpBody().scrollTop; $('tsBufBox').outerHTML = bufBox(); bindBuf(); tpBody().scrollTop = y; } }
@@ -2313,8 +2281,8 @@
     if (!base.ok) base = cur;
     var pos = function (mi) { return ((mi - min) / (max - min) * 100).toFixed(2); };
     var bl = bufLimits(), warns = [];
-    if (bl && bl.maxBuf != null) warns.push('⚠ Your cruising speeds keep this at ' + bl.maxBuf + ' mi or less' + (linked() ? ', even slowing down as far as you allow (' + (-floorOff()) + ' under the limit)' : '') + '.');
-    if (bl && !linked()) {
+    if (bl && bl.maxBuf != null) warns.push('⚠ Your cruising speeds keep this at ' + bl.maxBuf + ' mi or less.');
+    if (bl) {
       var G0 = speedGuard(), st0 = bl.cx.st, at = st0.touched != null && st0.touched !== 'all' && bl.cx.secs[st0.touched] ? st0.touched : 'all';
       var mx0 = at === 'all' ? G0.maxAll() : G0.maxFor(at, bl.cx.offs);
       if (mx0 < 15) warns.push('⚠ This buffer keeps ' + (at === 'all' ? 'All roads' : 'that road (' + bl.cx.secs[at].limit + ' mph limit)') + ' ' + capTxt(mx0) + '.');
@@ -2374,19 +2342,6 @@
       if (x.mi === r.bufMi) { inp.value = x.mi; return; }
       LG.info('plan', 'Buffer slider: ' + r.bufMi + ' → ' + x.mi + ' mi', { ok: x.ok, net: x.net });
       if (!bufOk(x)) { inp.value = r.bufMi; fillRange(inp); $('tsBufVal').textContent = r.bufMi + ' mi'; $('tsBufCost').textContent = bufText(cur, base); toastMsg('No plan keeps ' + x.mi + ' mi at your speeds — the stations are too far apart.'); return; }
-      var cx = speedCx();
-      if (!x.ok && cx) {
-        // linked: slow down just enough that a plan keeps this bigger buffer
-        var sd = slowFor(x.mi, cx, cx.offs);
-        if (sd) {
-          sd.offsets.forEach(function (v, i) { cx.st.offsets[i] = v; });
-          cx.st.all = sd.all;
-          var slowed = sd.offsets.filter(function (v, i) { return v !== cx.offs[i]; }).length;
-          LG.info('plan', 'Smaller buffer: slowed ' + slowed + ' road section(s)', { mode: S.trip.slowMode || 'all', all: sd.all });
-          toastMsg(S.trip.slowMode === 'fastest' ? 'Slowed the fastest roads so you keep a ' + x.mi + '-mi buffer.' : 'All roads set to ' + offTxt(sd.all) + ' so you keep a ' + x.mi + '-mi buffer.');
-          replan(x.mi); return;
-        }
-      }
       setBuffer(x);
     };
     if ($('tsBufKeep')) $('tsBufKeep').onclick = function (e) { e.preventDefault(); S.trip.bufferMi = r.bufMi; A.save(); keepScroll(showResult); };

@@ -33,6 +33,7 @@ with sync_playwright() as p:
                   '|', ' '.join(pg.locator('#detail .note').all_inner_texts())[-70:])
             if label == 'M': pg.screenshot(path=f'{OUT}/{name}-0c-murphy.png')
             pg.click('#dClose')
+            pg.wait_for_selector('.leaflet-tooltip.mbub[data-brand="murphy"]', state='visible')   # bubbles are placed again just after the sheet closes
         pg.evaluate("window.__wmMock={blocked:true}; window.__app.fetchAround(34.7450,-92.2900)")
         pg.wait_for_timeout(500)
         assert pg.is_visible('#wmCheck'), 'verify banner'

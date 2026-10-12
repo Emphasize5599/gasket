@@ -266,17 +266,7 @@ assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
   // the most +N on the 75 road that still gets you to the stop
   let mx = 0; while (mx < 15 && at([mx + 1, 0]).ok) mx++;
   assert.ok(mx >= 1 && mx < 10, 'speed cap ' + mx);
-  // slowing down for it: all roads together, or the fastest (75) road first; never under the floor
-  const rule = (lim, v) => v;
-  const ok = (o) => at(o).ok, failing = (o) => at(o).bad;
-  const sa = T.slowDown({ secs, offsets: [10, 10], all: 10, mode: 'all', floor: -5, ruleOff: rule, ok, failing });
-  assert.ok(sa && sa.changed && sa.all === mx && sa.offsets.every((v) => v === mx), JSON.stringify(sa));
-  const sf = T.slowDown({ secs, offsets: [10, 10], all: 10, mode: 'fastest', floor: -5, ruleOff: rule, ok, failing });
-  assert.ok(sf && sf.offsets[0] === mx && sf.offsets[1] === 10, 'only the 75 road, on the stretch that ran short: ' + JSON.stringify(sf));
-  const tight = { ok: true, stops: [{ c: { d: 140 }, arriveGal: 0.01 }], arriveGal: 1 };
-  const okT = (o) => T.fuelCheck(tight, T.speedRates(secs, o, mpg, 25, 90), 283.5).ok;
-  assert.ok(T.slowDown({ secs, offsets: [12, 0], all: 0, mode: 'fastest', floor: 0, ruleOff: rule, ok: okT, failing: (o) => T.fuelCheck(tight, T.speedRates(secs, o, mpg, 25, 90), 283.5).bad }).offsets[0] === 0);
-  console.log('speed vs. tank: +' + mx + ' max on the 75 road with 0.6 gal to spare; all-roads slow to +' + sa.all + ', fastest-first', JSON.stringify(sf.offsets));
+  console.log('speed vs. tank: +' + mx + ' max on the 75 road with 0.6 gal to spare');
 }
 // ---- stops planned at your speeds: reachable() agrees with the planner ----
 {

@@ -834,33 +834,6 @@
     }
     return { ok: !bad.length, worst: worst, bad: bad };
   }
-  /**
-   * Slow down just enough for ok(offsets): either every road together (mode 'all': the "All roads" setting steps down)
-   * or the roads with the highest limits first (mode 'fastest': on the stretches that run short, one mph at a time).
-   * Never below floor (e.g. −5 = five under the limit). -> {offsets, all, changed} or null when even that isn't enough.
-   */
-  function slowDown(o) {
-    var offs = o.offsets.slice(), all = o.all || 0;
-    if (o.ok(offs)) return { offsets: offs, all: all, changed: false };
-    if (o.mode !== 'fastest') {
-      for (var v = Math.min(all, 15) - 1; v >= o.floor; v--) {
-        var t = o.secs.map(function (sc) { return o.ruleOff(sc.limit, v); });
-        if (o.ok(t)) return { offsets: t, all: v, changed: true };
-      }
-      return null;
-    }
-    for (var guard = 0; guard < 2000; guard++) {
-      var bad = o.failing(offs), cand = -1;
-      o.secs.forEach(function (sc, i) {
-        if (offs[i] <= o.floor || !bad.some(function (r) { return sc.to > r.a && sc.from < r.b; })) return;
-        if (cand < 0 || sc.limit > o.secs[cand].limit || (sc.limit === o.secs[cand].limit && offs[i] > offs[cand])) cand = i;
-      });
-      if (cand < 0) return null;
-      offs[cand]--;
-      if (o.ok(offs)) return { offsets: offs, all: all, changed: true };
-    }
-    return null;
-  }
 
   /** The route as you'll drive it: gas used includes the extra for your cruising speeds (rates from speedRates). */
   function withSpeeds(model, rates) {
@@ -899,7 +872,7 @@
     return false;
   }
 
-  var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, slowDown: slowDown, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
+  var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;

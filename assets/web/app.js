@@ -1096,6 +1096,8 @@
     var h = '<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>';
     if (onboarding) h += '<p class="lead">Start without an API key. Website searches are slower and coverage varies.</p>';
     h += '<div class="card"><h3>Station discovery</h3><div class="field"><div class="lbl">Prefer website discovery<small>Works without an API key for nearby and route searches. Scans overlapping areas and scrolls each result list. Slower and less consistent: websites can omit stations or prices, stall, or restrict access. No automatic paid fallback. Without a key this method is selected automatically; with a key you can choose either method.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
+    var workerAuto=KeylessGas.readerCount({S:{},N:N}),workerCount=KeylessGas.readerCount({S:S,N:N}),workerManual=Number(S.keylessWorkers)>=1;
+    h+='<div class="card"><h3>Website readers</h3><div class="field"><div class="lbl">Parallel workers<small>Default uses phone RAM: 4 on smaller/unknown devices, 6 around 8 GB, 8 around 12 GB, 12 around 16 GB. Low-memory devices default to 4. More readers can finish discovery sooner, but use more RAM and may trigger website restrictions. Up to 16 is available; it is not a guaranteed speedup. Active scans keep their starting count.</small></div><b id="workerValue">'+(workerManual?'':'Auto · ')+workerCount+'</b></div><input type="range" id="keylessWorkers" min="1" max="16" step="1" value="'+workerCount+'" data-manual="'+(workerManual?'yes':'no')+'" aria-label="Parallel website workers"><div class="lead small keep">1–16 readers · RAM-based default: '+workerAuto+'</div><button class="btn tonal sm" id="workerAuto">Use RAM default</button></div>';
     h += '<div class="card"><h3>Google API key · recommended</h3><p class="lead small">Optional. Faster station discovery and more reliable trip planning.</p>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
       '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
@@ -1173,6 +1175,8 @@
     var pg = $('settings'); pg.innerHTML = h; pg.classList.remove('hidden'); pg.scrollTop = 0; scrollHint(pg);
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
     $('sDone').onclick = function () { closeSettings(true); };
+    $('keylessWorkers').oninput=function(){this.dataset.manual='yes';$('workerValue').textContent=this.value;};
+    $('workerAuto').onclick=function(){$('keylessWorkers').value=workerAuto;$('keylessWorkers').dataset.manual='no';$('workerValue').textContent='Auto · '+workerAuto;};
     $('sLogView').onclick = function () { showLog(); };
     $('blOpen').onclick = openBlPage;
     $('licOpen').onclick = openLicPage;
@@ -1278,6 +1282,7 @@
     S.apiKey = $('apiKey').value.trim();
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
+    S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(16,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;
     S.citgoTier = $('citgoTier').value;
     S.samsMode = $('samsMode').value;
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));

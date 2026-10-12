@@ -107,8 +107,8 @@ async function worker(pg,body,raw,status=200,args={}){
   assert.equal(lifecycle.cooldown.errors.length,2);
   assert.equal(lifecycle.budget.calls,1);
   await ui.clock.install();await ui.clock.fastForward(30001);
-  await ui.evaluate(()=>{__app.N.siteRead=()=>{};window.__hangDone=false;KeylessGas.search(34.765,-92.30,8).then(r=>{window.__hangResult=r;__hangDone=true;});});
-  await ui.waitForFunction(()=>__osmCalls===2);
+  await ui.evaluate(()=>{__app.N.siteRead=()=>{window.__readStarted=true;};window.__readStarted=false;window.__hangDone=false;KeylessGas.search(34.765,-92.30,8).then(r=>{window.__hangResult=r;__hangDone=true;});});
+  await ui.waitForFunction(()=>__osmCalls===2&&__readStarted);   // the reader's deadline is set before the read starts
   await ui.clock.fastForward(46000);
   await ui.waitForFunction(()=>__hangDone);
   assert.match(await ui.evaluate(()=>__hangResult.errors.join(' ')),/timed out/);

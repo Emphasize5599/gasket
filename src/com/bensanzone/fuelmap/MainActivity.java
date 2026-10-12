@@ -3,6 +3,7 @@ import com.bensanzone.fuelmap.keyless.R;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
@@ -64,7 +65,7 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
-    private static boolean isGasWorker(String key) { return "gasweb".equals(key) || "gasweb2".equals(key) || "gasweb3".equals(key) || "gasweb4".equals(key); }
+    private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|1[0-6])?"); }
 
     private static final int REQ_LOC = 42;
     private static final String PREFS = "gasket";
@@ -175,10 +176,7 @@ public class MainActivity extends Activity {
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
         // Dedicated gas reader: never replaces an in-progress directions import.
-        workers.put("gasweb", new SiteWorker("gasweb", "https://www.google.com/maps", "https://www.google.com/", true));
-        workers.put("gasweb2", new SiteWorker("gasweb2", "https://www.google.com/maps", "https://www.google.com/", true));
-        workers.put("gasweb3", new SiteWorker("gasweb3", "https://www.google.com/maps", "https://www.google.com/", true));
-        workers.put("gasweb4", new SiteWorker("gasweb4", "https://www.google.com/maps", "https://www.google.com/", true));
+        // Gas readers are created lazily for the configured pool, not at startup.
         // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
         workers.put("nhtsa", new SiteWorker("nhtsa", "https://www.nhtsa.gov/recalls", "https://www.nhtsa.gov/"));
         // Tire Rack: a car's factory tire size, and the tires sold in that size (read in the background)
@@ -504,7 +502,14 @@ public class MainActivity extends Activity {
 
     private SiteWorker ensureWorker(String key) {
         SiteWorker old = workers.get(key);
-        if (old == null || old.view != null) return old;
+        if (old == null) {
+            if (!isGasWorker(key)) return null;
+            SiteWorker fresh = new SiteWorker(key, "https://www.google.com/maps", "https://www.google.com/", true);
+            workers.put(key, fresh);
+            root.addView(fresh.view, 0, new FrameLayout.LayoutParams(1280, 900));
+            return fresh;
+        }
+        if (old.view != null) return old;
         boolean desktop = isGasWorker(key) || "gmaps".equals(key);
         SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop);
         workers.put(key, fresh);
@@ -1288,6 +1293,30 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String appVersion() {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
+        }
+
+        @JavascriptInterface
+        public String memoryInfo() {
+            JSONObject result = new JSONObject();
+            try {
+                ActivityManager manager = (ActivityManager)getSystemService(Context.ACTIVITY_SERVICE);
+                ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
+                manager.getMemoryInfo(memory);
+                result.put("totalMem", memory.totalMem); result.put("availMem", memory.availMem);
+                result.put("lowMemory", memory.lowMemory || manager.isLowRamDevice());
+            } catch (Exception ignored) { }
+            return result.toString();
+        }
+
+        @JavascriptInterface
+        public void releaseGasReaders() {
+            main.post(new Runnable() { public void run() {
+                for (SiteWorker worker : workers.values()) {
+                    if (!isGasWorker(worker.key) || worker.readReq >= 0 || verifying == worker || worker.view == null) continue;
+                    worker.view.stopLoading(); root.removeView(worker.view); worker.view.destroy();
+                    worker.view = null; worker.ready = false;
+                }
+            }});
         }
 
         @JavascriptInterface

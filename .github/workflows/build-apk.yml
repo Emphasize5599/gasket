@@ -27,6 +27,10 @@ on:
       - tests/saved-prices.test.js
       - tests/routes-budget.test.js
       - tests/routes-limit.test.js
+      - tests/worker-pool.test.js
+      - tests/speed-settings.test.js
+      - tests/speed.test.js
+      - tests/trip.test.js
 
 permissions:
   contents: write

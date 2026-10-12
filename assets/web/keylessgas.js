@@ -103,16 +103,19 @@
       out.push(s);if(id)ids.set(id,s);var key=x+'|'+y;if(!bins.has(key))bins.set(key,[]);bins.get(key).push(s);
     });return out;
   }
-  var math={area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery};
+  function autoWorkers(memory){var gb=Number(memory&&memory.totalMem)/1073741824;return memory&&memory.lowMemory?4:gb>=15?12:gb>=11?8:gb>=7?6:4;}
+  function readerCount(A){var value=Number(A.S&&A.S.keylessWorkers);if(Number.isFinite(value)&&value>=1)return Math.min(16,Math.max(1,Math.round(value)));var memory={};try{memory=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');}catch(e){}return autoWorkers(memory);}
+  function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
+  var math={area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
-  var LANES=['gasweb','gasweb2','gasweb3','gasweb4'];
+  function releaseReaders(){var N=root.__app.N;if(N&&N.releaseGasReaders)N.releaseGasReaders();}
   function cancel(){
     if(!busy||typeof busy!=='object')return;
     busy.cancelled=true;busy.wake.forEach(function(f){f();});
     var N=root.__app.N;
-    if(N&&N.cancelSiteRead)LANES.concat(['walmart','murphy']).forEach(function(k){N.cancelSiteRead(k);});
+    if(N&&N.cancelSiteRead)(busy.lanes||readerKeys(readerCount(root.__app))).concat(['walmart','murphy']).forEach(function(k){N.cancelSiteRead(k);});
   }
   function call(name){return root.__trip.call.apply(null,[name].concat([].slice.call(arguments,1)));}
   function officialReader(control,onLoad,onError,onLabel){
@@ -161,7 +164,7 @@
   async function discover(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
-    var control={cancelled:false,wake:[]};busy=control;
+    var lanes=readerKeys(readerCount(A)),control={cancelled:false,wake:[],lanes:lanes};busy=control;
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
     try{
@@ -184,10 +187,10 @@
         if(root.PriceHistory)root.PriceHistory.observe(found);
         rows=dedupeDiscovery(rows.concat(found),P);details.push(r.detail||{});done++;report();
       }}
-      var finished=await Promise.all([chainWork,Promise.all(LANES.map(lane))]);
+      var finished=await Promise.all([chainWork,Promise.all(lanes.map(lane))]);
       rows=mergeOfficialDiscovery(rows,finished[0],P);recordObserved(rows);
       return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked||!!control.blocked,blockedSite:control.blockedSite||'gasweb',cancelled:control.cancelled,areas:areas.length,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
-    }finally{clearInterval(timer);busy=null;}
+    }finally{clearInterval(timer);busy=null;releaseReaders();}
   }
   async function search(lat,lng,radius){
     if(busy)throw new Error('A keyless gas lookup is already running');
@@ -232,8 +235,8 @@
   async function refreshKnown(known,onProgress,priority,grade){
     grade=grade||'regular';if(!root.__app.P.GRADES[grade])throw new Error('Unsupported fuel grade');
     if(busy)throw new Error('A keyless lookup is already running');
-    var control={cancelled:false,wake:[]};busy=control;
-    var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=new Map(),errors=[],reads=0,blocked=false,start=Date.now();
+    var A=root.__app,lanes=readerKeys(readerCount(A)),control={cancelled:false,wake:[],lanes:lanes};busy=control;
+    var P=A.P,groups=knownAreas(known,P,priority),rows=new Map(),errors=[],reads=0,blocked=false,start=Date.now();
     var buckets=new Map();known.forEach(function(s){var key=Math.floor(s.lat*50)+'|'+Math.floor(s.lng*50);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(s);});
     function nearby(w){var x=Math.floor(w.lat*50),y=Math.floor(w.lng*50);for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var candidates=buckets.get((x+dx)+'|'+(y+dy))||[];if(candidates.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w);}))return true;}return false;}
     var cached=groups.map(function(g){var key='known-v3|'+grade+'|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
@@ -244,7 +247,7 @@
       var average=samples?totalMs/samples:null,remaining=ordered.slice(next).filter(function(x){return !x.cache;}).length;
       var work=average==null?null:remaining*average;
       if(work!=null)active.forEach(function(t){work+=Math.max(1000,average-(Date.now()-t));});
-      var eta=work==null?null:Math.ceil(work/Math.min(LANES.length,remaining+active.size||1)/1000);
+      var eta=work==null?null:Math.ceil(work/Math.min(lanes.length,remaining+active.size||1)/1000);
       var text=control.cancelled?'Cancelling; keeping completed prices':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
       text+=' · '+(eta==null?'Estimating time…':eta>=60?'~'+Math.ceil(eta/60)+' min remaining':'~'+eta+' sec remaining');
       if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
@@ -296,7 +299,7 @@
         report();
       }}
       report();
-      await Promise.all(LANES.map(lane));
+      await Promise.all(lanes.map(lane));
       // Overlapping areas can return the same Google station. Keep one row before matching.
       var web=Array.from(rows.values());
       var result=updateKnown(known,web,P,null,grade);
@@ -309,14 +312,14 @@
       result.grade=grade;
       result.blockedSite=control.blockedSite;
       if(samples)A.KV.put('gasmeta','timing|'+grade,{averageAreaMs:Math.round(totalMs/samples),samples:samples,at:Date.now()});
-      if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,readerConcurrency:LANES.length,averageAreaMs:samples?Math.round(totalMs/samples):null,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
+      if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,readerConcurrency:lanes.length,averageAreaMs:samples?Math.round(totalMs/samples):null,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
       return result;
-    }finally{clearInterval(ticker);busy=null;}
+    }finally{clearInterval(ticker);busy=null;releaseReaders();}
   }
   function recordObserved(stations){if(!root.PriceHistory)return;root.PriceHistory.observe(stations.map(function(s){var prices={};Object.keys(s.prices||{}).forEach(function(g){if(s.prices[g].observedAt)prices[g]=s.prices[g];});return Object.assign({},s,{prices:prices});}));}
   function estimate(known,grade){
     var A=root.__app,groups=knownAreas(known,A.P),o=A.KV.get('gasmeta','timing|'+(grade||'regular')),ms=o&&o.v.averageAreaMs||10000;
-    return {areas:groups.length,seconds:Math.ceil(groups.length*ms/LANES.length/1000),measured:!!o,readers:LANES.length};
+    var readers=readerCount(A);return {areas:groups.length,seconds:Math.ceil(groups.length*ms/readers/1000),measured:!!o,readers:readers};
   }
   root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,cancel:cancel,estimate:estimate});
 })(typeof window!=='undefined'?window:globalThis);

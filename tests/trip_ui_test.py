@@ -505,22 +505,22 @@ with sync_playwright() as p:
         assert v == probe['maxAll'], 'slider stops at the edge of the gray'
         pg.evaluate("(() => { const i = document.getElementById('lgAll'); i.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(1500)
         r2 = pg.evaluate("(() => { const r = window.__trip.state().result; return {buf: r.bufMi, all: r.speedState.all, stops: r.plan.stops.length, net: +r.plan.totals.net.toFixed(2)}; })()"); print('  after release (linked):', r2)
-        assert pg.evaluate(arrive_ok), 'every station reached with at least the buffer, at these speeds'
-        # a bigger buffer at fast speeds: linked -> slows down (or stays) so a plan still exists
+        assert pg.evaluate(arrive_ok) and r2['buf'] == probe['buf'], 'speed change preserves the buffer'
+        # A bigger buffer stops at feasible marks without changing cruising speeds.
         try: pg.wait_for_selector('#tsBuf', state='attached', timeout=8000)
         except Exception: print('  JS errors so far:', errors[-3:], '| box:', ft(pg, '#tsBufBox')[:200]); raise
         pg.wait_for_timeout(400)
         pg.evaluate("(() => { const i = document.getElementById('tsBuf'); i.value = i.max; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(1500)
         r3 = pg.evaluate("(() => { const r = window.__trip.state().result; return {buf: r.bufMi, all: r.speedState.all}; })()"); print('  linked: buffer to the top ->', r3)
-        assert pg.evaluate(arrive_ok)
+        assert pg.evaluate(arrive_ok) and r3['all'] == r2['all'], 'buffer change preserves speeds'
         pg.wait_for_selector('#tsBufBox', state='attached', timeout=5000); pg.wait_for_timeout(300)
         print('  buffer box:', ft(pg, '#tsBufBox').replace('\n', ' | ')[:260], '| gray bands:', pg.locator('.buf-marks .bgray').count())
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-c1-speed-linked.png')
         # unlinked, big buffer: the speed slider stops at the gray, with a warning on both sides; the buffer's gray shows too
         settings(pg)
-        setchk(pg, '#tLinkSl', False); pg.fill('#tBuffer', '60'); pg.dispatch_event('#tBuffer', 'input'); pg.wait_for_timeout(200)
-        pg.evaluate("document.getElementById('tLinkSl').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+        assert pg.locator('#tLinkSl,#tLinkBox,#tSlowMode,#tMaxUnder').count() == 0
+        pg.fill('#tBuffer', '60'); pg.dispatch_event('#tBuffer', 'input'); pg.wait_for_timeout(200)
         pg.screenshot(path=f'{OUT}/{name}-c0-settings.png'); wide(pg, 'stop settings')
         adj(pg, 1200)
         if not pg.locator('#tsSpeed.exp').count(): pg.click('#lgTog'); pg.wait_for_timeout(300)
@@ -550,7 +550,7 @@ with sync_playwright() as p:
         lims = pg.evaluate("[...document.querySelectorAll('#tsSpeed .leg[data-leg] .lim')].map(e => +e.textContent)"); print('  sorted by limit, descending:', lims)
         assert lims == sorted(lims, reverse=True), lims
         pg.select_option('#lgSort', 'route'); pg.wait_for_timeout(200)
-        settings(pg); setchk(pg, '#tLinkSl', True); pg.fill('#tBuffer', '30'); pg.dispatch_event('#tBuffer', 'input')
+        settings(pg); pg.fill('#tBuffer', '30'); pg.dispatch_event('#tBuffer', 'input')
         adj(pg, 1200)
         pg.evaluate("(() => { const r = window.__trip.state().result; r.speedState.offsets = {}; r.speedState.all = 0; })()")
         pg.evaluate("(t) => { const S = window.__app.S, c = S.cars.filter(c => c.id === S.carId)[0] || S.cars[0]; c.tank = t; }", tank0)
@@ -812,7 +812,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-t8-loading.png')
         pg.wait_for_timeout(2600); pg.evaluate('window.__gmapsDelay = 0')
         urls = pg.evaluate('window.__gmapsUrls'); print('  Maps scan:', urls)
-        assert urls == ['https://www.google.com/maps/dir/34.7464809%2C-92.2895948/41.7640350%2C-72.6823870/'], 'route options read by exact spots'
+        assert urls == ['https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=34.7464809%2C-92.2895948&destination=41.7640350%2C-72.6823870&avoid=tolls'], 'route options read by exact spots, keeping avoid tolls'
         txt = ft(pg, '#tParsed'); print('  after reading the link:', txt.replace('\n', ' | '))
         assert '500 Woodlane St, Little Rock, AR 72201, USA' in txt and '210 Capitol Ave, Hartford, CT 06106, USA' in txt, txt
         assert 'Pick a route' not in txt and pg.locator('#tOptMap').count() == 0, 'no route picker before Get routes'

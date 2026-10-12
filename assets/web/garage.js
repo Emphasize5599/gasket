@@ -1194,11 +1194,12 @@
     var rule = S.speed.rule || {};
     if (v == null) { if (!rule.on) return 0; v = +rule.over || 0; }
     if (v < 0 || !capOn()) return v;
-    var cap = +rule.cap || 70;
+    var cap = ruleCap();
     return limit >= cap ? 0 : Math.max(0, Math.min(v, cap - limit));
   }
   /** "No faster than your top speed" (the toggle under All roads); on by default when you have a rule. */
   function capOn() { return S.speed.capOn != null ? !!S.speed.capOn : !!(S.speed.rule && S.speed.rule.on); }
+  function ruleCap(){var rule=S.speed.rule||{};if(!rule.capAuto&&Number(rule.cap)>0)return Math.max(40,Math.min(90,Math.round(Number(rule.cap))));var m=speedModel();return m?m.rec.speed:70;}
   /** This car's mpg-vs-speed curve (calibrated to your log) and the speed range used for trips; null without EPA data. */
   function speedFn() {
     var c = car(); if (!hasEpa(c) || kind(c) !== 'gas') return null;
@@ -1245,11 +1246,11 @@
     var helpHtml = 'Major roads — Interstates, U.S., state and county routes — with a slider for each stretch at one speed limit. Each starts at the limit (no extra cost). ' +
       (tot ? 'Limits: ' + Math.round((stt.hpms || 0) / tot * 100) + '% from the FHWA road inventory' + (stt.state ? ', ' + Math.round(stt.state / tot * 100) + '% state maximums' : '') + (stt.google ? ', ' + Math.round(stt.google / tot * 100) + '% Google\'s typical speed' : '') + '.' : '') +
       ' Cost uses the gas in your tank on each part.' + ' Stops are planned at these speeds, so you still reach every station with at least your buffer. The All roads slider sets every road, shown or hidden.';
-    h += '<div class="leg all"><div class="spd-warn hidden" id="lgWarnAll"></div><div class="leg-h"><span>All roads <b class="all-v" id="lgAllV"></b>' + ' <small>' + (rule.on ? 'rule: +' + (+rule.over || 0) + ', up to ' + (+rule.cap || 70) + ' mph · ' : '') + '<a href="#" id="lgRuleEdit">' + (rule.on ? 'change rule' : 'set a rule') + '</a></small>' + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
+    h += '<div class="leg all"><div class="spd-warn hidden" id="lgWarnAll"></div><div class="leg-h"><span>All roads <b class="all-v" id="lgAllV"></b>' + ' <small>' + (rule.on ? 'rule: +' + (+rule.over || 0) + ', up to ' + ruleCap() + ' mph · ' : '') + '<a href="#" id="lgRuleEdit">' + (rule.on ? 'change rule' : 'set a rule') + '</a></small>' + '</span><b class="leg-sub" id="lgAllSub"></b></div>' +
       '<div class="rng"><input type="range" min="-10" max="15" step="1" value="' + (st.all || 0) + '" id="lgAll" aria-label="Speed on all roads"><i class="gray" id="lgGrayAll"></i></div>' +
       '<div class="leg-scale"><span>−10 mph</span><span class="z" style="left:40%">limit</span><span>+15</span></div>' +
       // your rule's overrides, right where they apply: All roads follows them while they're on
-      '<div class="chips mini spd-ov" id="lgOv"><button type="button" data-ov="cap" class="' + (capOn() ? 'on' : '') + '">No faster than ' + (+rule.cap || 70) + ' mph</button>' +
+      '<div class="chips mini spd-ov" id="lgOv"><button type="button" data-ov="cap" class="' + (capOn() ? 'on' : '') + '">No faster than ' + ruleCap() + ' mph</button>' +
       '<button type="button" data-ov="truck" class="' + (S.speed.truck ? 'on' : '') + '">As slow as the trucks</button></div></div>';
     // the per-road sliders: collapsed until you open them; the chart, total and filters stay pinned only while open
     var nRoads = 0; (function () { var last = -1; roads.forEach(function (r) { if (r.ri !== last) { nRoads++; last = r.ri; } }); })();
@@ -1422,5 +1423,5 @@
   }
 
   window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
-    need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
+    need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

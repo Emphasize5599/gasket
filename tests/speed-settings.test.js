@@ -1,0 +1,36 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
+ const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.fill('#apiKey','TEST');await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{__app.N.memoryInfo=()=>JSON.stringify({totalMem:12*1073741824});__app.S.trip.fuel={mode:'miles',miles:'180'};__app.S.trip.milesLeft='180';__app.S.speed.rule={};});
+ await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'8');assert.match(await p.innerText('#workerValue'),/Auto/);
+ await p.locator('#keylessWorkers').fill('16');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),16);
+ await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'16');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),null);
+ await p.click('#btnTrip');await p.evaluate(()=>__trip.step(4));
+ assert.equal(await p.locator('#tLinkSl,#tLinkBox,#tSlowMode,#tMaxUnder').count(),0,'slider coupling UI is removed');
+ await p.check('#tRule');assert.equal(await p.inputValue('#tRuleOver'),'0');assert.equal(Number(await p.inputValue('#tRuleCap')),await p.evaluate(()=>Garage.speedModel().rec.speed));
+ await p.evaluate(()=>{Garage.car().type='suv';});await p.evaluate(()=>__trip.step(4));assert.equal(Number(await p.inputValue('#tRuleCap')),await p.evaluate(()=>Garage.speedModel().rec.speed),'automatic cap follows the current car');
+ await p.fill('#tRuleCap','77');await p.dispatchEvent('#tRuleCap','change');await p.fill('#tRuleOver','0');await p.dispatchEvent('#tRuleOver','change');await p.evaluate(()=>__trip.step(4));
+ assert.equal(await p.inputValue('#tRuleCap'),'77');assert.equal(await p.inputValue('#tRuleOver'),'0','zero is not replaced by the old +9 default');
+ assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(errors.length,0,errors.join('\n'));
+ await p.reload();if(await p.locator('#settings:not(.hidden) #sDone').count()){await p.fill('#apiKey','TEST');await p.click('#sDone');}await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{
+  const A=__app,S=A.S;S.trip.fuel={mode:'miles',miles:'180'};S.trip.milesLeft='180';S.trip.bufferMi=30;S.brands={exxon:true};S.speed.rule={on:false};
+  const alts=__mocks.route({origin:{placeId:'P-start'},destination:{placeId:'P-end'},computeAlternativeRoutes:true}).routes,m=Trip.buildRoute(alts[0],Garage.carModel());
+  const stations=[60,120,180,240,300].map((mi,i)=>{const pt=m.pointAt(mi);return {id:'test:'+i,name:'Exxon',brand:'exxon',lat:pt.lat,lng:pt.lng,address:i+' Main St',state:'AR',google:true,prices:{regular:{price:3.1+i*.1,updated:new Date().toISOString()}},detourMi:1,detourExact:true};});
+  const saved={route:{stops:[{label:'Start',address:'100 Main St',lat:m.pts[0].lat,lng:m.pts[0].lng},{label:'End',address:'200 Main St',lat:m.pts.at(-1).lat,lng:m.pts.at(-1).lng}]},alts,altSel:0,trip:{fuel:S.trip.fuel,milesLeft:'180',bufferMi:30,avoid:{}},stations:{official:[],google:[{k:0,list:stations}]},savedT:Date.now()};
+  A.KV.put('trips','trip|speed-test',saved);A.KV.put('trips','index',[{id:'speed-test',title:'Start → End',t:saved.savedT,mi:318,via:'Test route',n:5}]);
+  A.N.computeRoute=A.N.routeSearch=()=>{throw new Error('Saved-trip adjustment must not spend API calls');};
+ });
+ await p.click('#btnTrip');await p.click('[data-hist="speed-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
+ await p.evaluate(()=>__trip.step(5));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);await p.click('#lgTog');await p.waitForSelector('#lgAll');
+ const bufferBefore=await p.evaluate(()=>__trip.state().result.bufMi);
+ await p.locator('#lgAll').fill('5');await p.dispatchEvent('#lgAll','change');await p.waitForFunction(()=>!__trip.state().busy);
+ assert.equal(await p.evaluate(()=>__trip.state().result.bufMi),bufferBefore,'speed adjustment does not change the buffer');
+ await p.click('#tNext');await p.waitForSelector('#tsBuf');
+ const speedBefore=await p.evaluate(()=>JSON.stringify(__trip.state().result.speedState));
+ await p.locator('#tsBuf').fill('40');await p.dispatchEvent('#tsBuf','change');await p.waitForFunction(()=>!__trip.state().busy);
+ assert.equal(await p.evaluate(()=>JSON.stringify(__trip.state().result.speedState)),speedBefore,'buffer adjustment does not change speed offsets');
+ assert.equal(errors.length,0,errors.join('\n'));
+ console.log('320px settings and saved-trip controls: RAM/manual workers, zero offset, ideal/explicit caps, independent speed/buffer sliders and zero paid calls passed');
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

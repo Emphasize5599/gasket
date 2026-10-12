@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.112 - 2026-10-12 (keyless test branch only)
+- Going over the limit by default now starts at +0, and "no faster than" starts at your car's ideal cruising speed.
+- The "let the buffer and speed sliders adjust each other" option is gone: each slider stops at the gray where the other doesn't leave enough gas.
+- RAM-based website reader count, adjustable from 1 to 16 in Settings.
+- Lazy reader creation and idle-reader cleanup after scans.
+- Bug fixes.
+
 ## 0.0.111 - 2026-10-12 (keyless test branch only)
 - Walmart website prices fill keyless discovery and all-grade refreshes.
 - Faster tests with simulated worker clocks, parallel checks and cached build dependencies.
