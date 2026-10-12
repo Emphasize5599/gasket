@@ -32,3 +32,8 @@ assert.equal(C.label({ kind: 'weather', key: 'snow' }), 'Snowy'); assert.equal(C
 assert.deepEqual(C.situations('winter').map(w => w[0]), ['snow', 'ice', 'frost', 'fog']); assert.deepEqual(C.situations('summer').map(w => w[0]), ['rain', 'storm', 'heat', 'humid', 'smoke']);
 C.SEASONS.forEach(s => assert.ok(C.situations(s[0]).length >= 3, s[0])); assert.equal(C.label({ kind: 'custom', name: 'Road trip' }), 'Road trip');
 console.log('climate tests passed');
+const legacy={...C.starter('weather','frost',caps),temp:76,notes:'My answer'};
+const split=C.separateWeather([legacy]);assert.equal(split.length,3);assert.equal(new Set(split.map(p=>p.id)).size,3);
+split.find(p=>p.season==='winter').temp=80;assert.equal(split.find(p=>p.season==='fall').temp,76);assert.equal(legacy.temp,76);
+assert.equal(C.separateWeather(split),split,'migration is idempotent');
+const existing={...legacy,id:'existing',season:'winter',temp:71};assert.equal(C.separateWeather([legacy,existing]).find(p=>p.season==='winter').temp,71,'never overwrite a season-specific answer');

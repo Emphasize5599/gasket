@@ -19,7 +19,8 @@
       var id = ++nid, timer;
       waiting[id] = function (res) { clearTimeout(timer); resolve(res); };
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
-      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-4])?$/.test(args[0]) ? 45000 : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
+      var discovery=fn==='siteRead'&&/^gasweb(?:[2-4])?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
+      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-4])?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (timeout) timer = setTimeout(function () {
         window.onNativeResult(id, { error: (args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
@@ -78,20 +79,21 @@
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
     var button=e.target.closest('[data-trip-refresh]');if(!button||busy)return;
     if(button.dataset.tripRefresh==='web')findStops('web');
+    else if(button.dataset.tripRefresh==='discover')findStops('discover');
     else findStops(true);
   });
   function refreshCard(){
     if(KIND()!=='gas'||!model)return '';
     var saved=savedPriceReplay(),web=!!saved;
-    var capped=Number(S.monthlyCap)>0&&N.callsThisMonth()>=Number(S.monthlyCap);
+    var capped=Number(S.monthlyCap)>0&&N.callsThisMonth()>=Number(S.monthlyCap),apiUnavailable=capped||!S.apiKey;
     var known=saved?(saved.stations.official||[]).slice():[];if(saved)(saved.stations.google||[]).forEach(function(g){known=known.concat(g.list||[]);});
     web=web&&known.length>0;
     var estimate=KeylessGas.estimate(known,gradeOf()),minutes=Math.max(1,Math.ceil(estimate.seconds/60));
     var webHelp='Best for price refreshes at stations already saved with this trip. No Places or Routes calls. '+(web?'Estimated '+(estimate.seconds<60?'under a minute':'about '+minutes+' minutes')+' for '+estimate.areas+' areas with '+estimate.readers+' readers'+(estimate.measured?', based on recent scans':'; initial estimate, refined while scanning')+'. Cache reuse and website restrictions affect timing. ':'Find stations first or open a saved trip to estimate the refresh time. ')+'Only explicitly published fuel-grade prices are used; missing prices remain unchanged.';
-    var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'');
+    var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'')+(!S.apiKey?' Add the recommended API key in Settings to use this option.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
       (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
-      '<div class="scan-launches"><div><button class="btn tonal" data-trip-refresh="web"'+(!web?' disabled':'')+'>No API</button>'+A.qBtn(webHelp)+'</div><div><button class="btn tonal" data-trip-refresh="api"'+(capped?' disabled':'')+'>API</button>'+A.qBtn(apiHelp)+'</div></div>')+'</div>';
+      '<div class="scan-launches"><div><button class="btn tonal" data-trip-refresh="web"'+(!web?' disabled':'')+'>No API</button>'+A.qBtn(webHelp)+'</div><div><button class="btn tonal" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>API</button>'+A.qBtn(apiHelp)+'</div></div><div class="scan-discover"><button class="btn tonal sm" data-trip-refresh="discover">Discover stations · No API</button>'+A.qBtn('Find additional stations in overlapping areas along this route, scrolling each website result list. Slower and less consistent than API discovery; a finished list does not guarantee every station is listed. Four readers, progress, ETA and Cancel. No paid fallback. Your brand filters still apply.')+'</div>')+'</div>';
   }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
@@ -360,7 +362,7 @@
    */
   var autoRoute = !A.justRestored;
   function autoRoutes() {
-    if (!autoRoute || model || busy || step !== ST_ROUTE || !S.apiKey) return;
+    if (!autoRoute || model || busy || step !== ST_ROUTE) return;
     collectSafe();
     if (srcOf() === 'link' ? !(route && S.trip.link) || parsing : !(S.trip.from && S.trip.to)) return;
     if (document.querySelector('#tParsed .pick button')) return;
@@ -998,6 +1000,7 @@
   }
   /** Look up every stop that has only text (typed, or a link without exact coordinates). Returns false if you need to pick. */
   async function resolveStops(r, onProg, quiet) {
+    if(!S.apiKey)return true; // Maps' ordinary directions page resolves typed addresses without Places calls
     var me = A.me(), need = false, done = 0, n = r.stops.length;
     var tick = function () { done++; if (onProg) onProg(done / n); };
     // stops with an exact spot: fill in the full address, all at once
@@ -1094,6 +1097,7 @@
     var prev = r.legs && r.legs[i];
     if (prev && prev.key !== legKey(r, i)) prev = null;
     var sub = { stops: [r.stops[i], r.stops[i + 1]], avoid: r.avoid, mapsRoutes: prev && prev.mapsRoutes || null };
+    if(!S.apiKey){var wa=await websiteRoutes(sub);return {key:legKey(r,i),alts:wa,sel:Math.min(prev&&prev.sel||0,wa.length-1),mapsRoutes:sub.mapsRoutes};}
     var body = legBody(sub.stops[0], sub.stops[1]);
     var res = await routesCall(body);
     if (res.error) throw new Error('Leg ' + (i + 1) + ' (' + legName(r, i) + '): ' + res.error);
@@ -1160,7 +1164,6 @@
   async function go() {
     if (busy) return;
     collect();
-    if (!S.apiKey) { A.openSettings(false); return; }
     if (model) return;
     busy = true; routing = true; prog(0.03, 'Reading the link');
     LG.info('route', 'Get route pressed', { miles: S.trip.milesLeft, buffer: S.trip.bufferMi, car: Garage.car() });
@@ -1217,6 +1220,11 @@
         LG.info('route', 'Route ready (' + nL + ' legs, each routed on its own)', { legs: legs.map(function (L) { return { options: L.alts.map(function (a) { return a.description; }), picked: L.sel }; }), miles: Math.round(model.totalMi) });
       } else {
         prog(0.6, 'Asking Google for the route');
+        if(!S.apiKey){
+          alts=await websiteRoutes(r);altSel=r.routeIndex==null?0:alts.findIndex(function(a){return a.websiteOptionIndex===r.routeIndex;});altSure=false;
+          if(altSel<0)throw new Error('The selected website route has no usable geometry. Choose another route, retry, or add the recommended API key.');
+          rawRoute=alts[altSel];model=T.buildRoute(rawRoute,carModel());ensureLimits(model);
+        }else{
         var avoid = S.trip.avoid;
         var body = {
           origin: wp(r.stops[0]), destination: wp(r.stops[r.stops.length - 1]),
@@ -1244,6 +1252,7 @@
         model = T.buildRoute(rawRoute, carModel());
         ensureLimits(model);
         LG.info('route', 'Route ready', { options: alts.map(function (a) { return a.description; }), picked: altSel, sure: altSure, miles: Math.round(model.totalMi) });
+        }
       }
     } catch (e) {
       LG.error('route', e.message || String(e));
@@ -1293,11 +1302,13 @@
   }
   var scanning = {};     // Google Maps route scans in progress, by address (so a leg is never scanned twice at once)
   async function mapsOptions(r) {
-    if (r.mapsRoutes && r.mapsRoutes.length && r.mapsRoutes[0].pts) return r.mapsRoutes;
-    if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current; })) return r.mapsRoutes || null;
+    if (r.mapsRoutes && r.mapsRoutes.length && r.mapsRoutes[0].pts&&(S.apiKey||r.websiteAvoid===JSON.stringify(S.trip.avoid||{}))) return r.mapsRoutes;
+    if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current&&!A.me(); })) return r.mapsRoutes || null;
     // exact spots when known: Google Maps on a desktop page sometimes "can't find" a street-only name from a phone link
-    var place = function (s) { return s.lat != null ? s.lat.toFixed(7) + ',' + s.lng.toFixed(7) : (s.address || s.label); };
+    var place = function (s) { var p=s.current?A.me():s;return p.lat != null ? p.lat.toFixed(7) + ',' + p.lng.toFixed(7) : (s.address || s.label); };
     var url = 'https://www.google.com/maps/dir/' + encodeURIComponent(place(r.stops[0])) + '/' + encodeURIComponent(place(r.stops[1])) + '/';
+    var avoid=S.trip.avoid||{},avoidNames=['tolls','highways','ferries'].filter(function(k){return avoid[k];});
+    if(avoidNames.length)url='https://www.google.com/maps/dir/?api=1&travelmode=driving&origin='+encodeURIComponent(place(r.stops[0]))+'&destination='+encodeURIComponent(place(r.stops[1]))+'&avoid='+encodeURIComponent(avoidNames.join('|'));
     var o = A.KV.get('mapsopts', url, 2 * 3600e3), g;
     if (o) g = o.v;
     else {
@@ -1305,9 +1316,24 @@
       g = await scanning[url];
     }
     dbg.mapsOptionsPage = g && { href: g.href, title: g.title, error: g.error, routes: (g.routes || []).map(function (x) { return { via: x.via, miles: x.miles, minutes: x.minutes, pts: x.pts ? x.pts.length : 0 }; }) };
+    if(g&&g.blocked)A.showSiteCheck('gmaps','Google Maps');
     LG.info('route', 'Google Maps route options', dbg.mapsOptionsPage);
-    if (g && g.routes && g.routes.length) r.mapsRoutes = g.routes;
+    if (g && g.routes && g.routes.length){r.mapsRoutes = g.routes;r.websiteAvoid=JSON.stringify(avoid);}
     return r.mapsRoutes || null;
+  }
+  async function websiteRoutes(r){
+    var options=await mapsOptions(r),out=[];
+    (options||[]).forEach(function(m,optionIndex){
+      if(!Number.isFinite(m.miles)||m.miles<=0||!Number.isFinite(m.minutes)||m.minutes<=0||!Array.isArray(m.pts)||m.pts.length<6)return;
+      var pts=m.pts.filter(function(p){return Array.isArray(p)&&p.length===2&&Number.isFinite(p[0])&&Number.isFinite(p[1])&&Math.abs(p[0])<=85&&Math.abs(p[1])<=180;}).map(function(p){return {lat:p[0],lng:p[1]};});
+      var distance=0;for(var i=1;i<pts.length;i++)distance+=T.hav(pts[i-1],pts[i]);
+      if(pts.length!==m.pts.length||distance/m.miles<0.8||distance/m.miles>1.2)return;
+      if(r.stops.some(function(s,i){var expected=s.current?A.me():s;return expected&&expected.lat!=null&&T.hav(expected,i?pts[pts.length-1]:pts[0])>3;}))return;
+      out.push({description:m.via||'Website route',distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:[],websiteApproximate:true,websiteOptionIndex:optionIndex});
+    });
+    if(!out.length)throw new Error('The Maps website did not provide usable route geometry. Retry, paste a full Google Maps directions link, or add the recommended API key in Settings.');
+    var endpoints=T.decodePolyline(out[0].polyline.encodedPolyline);r.stops.forEach(function(s,i){if(s.lat==null){var p=i?endpoints[endpoints.length-1]:endpoints[0];s.lat=p.lat;s.lng=p.lng;}});
+    return out;
   }
   /** A route's points, decoded once (long trips have 100,000+). */
   function decoded(a) {
@@ -1379,6 +1405,7 @@
   }
   /** Routes API call, saved for a day (same request -> same route). */
   async function routesCall(body) {
+    if(!S.apiKey)return {error:'API routing needs the optional Google key.',code:'no_key'};
     var key = JSON.stringify(body), o = !freshRoutes && A.KV.get('routes2', key, 24 * 3600e3);
     if (o) return o.v;
     var cap=Number(S.routesMonthlyCap)||0,used=N.routeCallsThisMonth?N.routeCallsThisMonth():0;
@@ -1436,8 +1463,9 @@
       }).join('') + '</div>';
     }
     h += limBar(model, 'Speed limits', true);
+    if(alts[altSel]&&alts[altSel].websiteApproximate)h+='<div class="lead small keep">Website route · approximate '+A.qBtn('Website route points and total time are not full API turn-by-turn geometry or no-traffic timing. Detours and fuel/time estimates are less precise. Verify the route in Google Maps before driving. An API key is recommended for more reliable planning.')+'</div>';
     var nOther = altCompareList().length;
-    h += A.gAttr('in-card') + '<div class="lead small">Finding stations: ' + (est ? 'about ' + est + ' Google lookups' + (nOther ? ' (your route + ' + nOther + ' other' + (nOther === 1 ? '' : 's') + ')' : '') : 'no Google lookups') + '.</div></div>';
+    h += A.gAttr('in-card') + '<div class="lead small'+(!S.apiKey||S.keylessRegular?' keep':'')+'">'+(!S.apiKey||S.keylessRegular?'Website discovery · slower, variable coverage '+A.qBtn('No API key required. Searches overlap along each route and scroll every result list. Websites can still omit stations or prices. An API key is recommended for faster, more reliable coverage.'):'Finding stations: '+(est?'about '+est+' Google lookups'+(nOther?' (your route + '+nOther+' others)':''):'no Google lookups'))+'.</div></div>';
     el.innerHTML = h;
     el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
     el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
@@ -1686,6 +1714,7 @@
   async function gatherAll(models, pg, dbgS, force, replay, ks) {
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS);
     var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; });
+    var webDiscovery=force==='discover'||force!==true&&(!S.apiKey||S.keylessRegular);
     if (replay) {
       // a saved trip: the stations (with their prices) it found then — no lookups at all
       official = window.PriceHistoryRecovery?PriceHistoryRecovery(replay.official||[]):(replay.official || []).slice();
@@ -1717,7 +1746,7 @@
     if (!replay) try {
       // --- Google, along each route ---
       var jobs = [], skippedBack = 0;
-      if (S.apiKey) {
+      if (S.apiKey&&!webDiscovery) {
         var gb = googleBrands();
         models.forEach(function (m, mi) {
           T.chunks(m, 125).forEach(function (ch, ci) {
@@ -1748,9 +1777,22 @@
       };
       done.forEach(function (d) { d.results.forEach(function (r) { takeGoogle(jobs[d.job], r,d.at); }); });
       var tasks = [];
+      if(webDiscovery){
+        weight.google=1;
+        tasks.push(KeylessGas.discover(KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover').then(function(r){
+          dbgS.keyless={areas:r.areas,completed:r.completedAreas,stations:r.stations.length,websiteLoads:r.websiteLoads,cancelled:r.cancelled,blocked:r.blocked,apiCalls:0};
+          r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=3)perModel[i].push(s);});});
+          notes=notes.concat(r.errors||[]);if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
+          var incomplete=r.details.filter(function(d){return !d.exhausted;}).length;
+          if(incomplete)notes.push('Website discovery stopped before the list ended in '+incomplete+' areas; coverage is partial.');
+          if(r.blocked)A.showSiteCheck('gasweb','Google Maps web');
+          part.google=1;tick();
+        }));
+        if(priceCancelRequested)KeylessGas.cancel();
+      }
       if (todo.length) weight.google = 0.55;
-      if (A.siteOn('murphy')) weight.murphy = 0.15;
-      if (A.siteOn('walmart')) weight.walmart = 0.3;
+      if (!webDiscovery&&A.siteOn('murphy')) weight.murphy = 0.15;
+      if (!webDiscovery&&A.siteOn('walmart')) weight.walmart = 0.3;
       dbgSearch.googleLookups = todo.length; dbgSearch.googleSaved = done.length; dbgSearch.skippedWayBack = skippedBack;
       if (skippedBack) LG.info('stations', skippedBack + ' search piece(s) on the way back skipped — same roads as the way out');
       LG.info('stations', 'Searching along ' + models.length + ' route(s)', { googleLookups: todo.length, saved: done.length, walmart: A.siteOn('walmart'), murphy: A.siteOn('murphy'), force: !maxAge });
@@ -1774,7 +1816,7 @@
         }));
       }
       // --- Murphy USA (their store finder), one pass for all routes ---
-      if (A.siteOn('murphy')) {
+      if (!webDiscovery&&A.siteOn('murphy')) {
         var mpts = ptsUnion(50), mkey = mpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
         var mo = getKV('murphy', mkey, maxAge);
         var takeMurphy = function (stores,at) { (stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s){if(window.PriceHistory)PriceHistory.stamp(s,at);official.push(s);} }); };
@@ -1789,7 +1831,7 @@
         }));
       }
       // --- Walmart: which stores have fuel (kept a month), then today's prices for the ones near a route ---
-      if (A.siteOn('walmart')) tasks.push((async function () {
+      if (!webDiscovery&&A.siteOn('walmart')) tasks.push((async function () {
         var wpts = ptsUnion(40), wkey = wpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
         var no = KV.get('wmnodes', wkey, 30 * 24 * 3600e3), nodes;
         if (no) nodes = no.v;
@@ -2456,6 +2498,7 @@
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
   function findStops(force) {
+    if(force===true&&!S.apiKey)force='discover';
     if (busy || !model) return finding || Promise.resolve();
     return (finding = findStops1(force).finally(function () { finding = null; }));
   }
@@ -2470,7 +2513,8 @@
   async function findStops0(force) {
     var cap=Number(S.monthlyCap)||0,exhausted=cap>0&&N.callsThisMonth()>=cap;
     var webRefresh=force==='web';
-    priceRefreshActive=webRefresh;priceCancelRequested=false;
+    var discovering=force==='discover'||force!==true&&(!S.apiKey||S.keylessRegular)&&!savedPriceReplay();
+    priceRefreshActive=webRefresh||discovering;priceCancelRequested=false;
     if(step===ST_DEPART&&webRefresh)renderStep();
     if ($('tsResults')) $('tsResults').innerHTML = skelStops('Finding stations');
     if ($('taResults')) $('taResults').innerHTML = skelAdjust('Finding stations');
@@ -2505,7 +2549,7 @@
       dbg.search.keyless=cloned.priceRefresh;
       if(webSummary.blocked)A.showSiteCheck(webSummary.blockedSite||'gasweb',webSummary.blockedSite==='walmart'?'Walmart':webSummary.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
     }
-    var rp = force === true&&!webRefresh ? null : replay, rpSt = null;
+    var rp = (force === true||force==='discover')&&!webRefresh ? null : replay, rpSt = null;
     if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null;   // saved for another kind of car (or EV stations: the finder's own cache covers them)
     if (rp) {
       // which route each saved station list was for (older saves: worked out from the saved route options)
@@ -2703,7 +2747,7 @@
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
     if(priceRefreshActive)return skelStops('Refreshing saved prices');
     var p = r.plan;
-    var h = '<div class="card dep-route">' + numList(route.stops) + '</div>' +
+    var h = '<div class="card dep-route">' + numList(route.stops)+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' +
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
       '<div><b>' + fmtDur(model.durationSec) + '</b><span>driving</span></div>' +

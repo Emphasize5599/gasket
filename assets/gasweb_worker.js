@@ -5,6 +5,8 @@ async function (reqId, args) {
   const send = (r) => { if (!sent) { sent = true; GasketSite.result(reqId, JSON.stringify(r)); } };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const started = Date.now(), rows = new Map(), prices = new Map();
+  const discovery=args.mode==='discover',deadline=discovery?180000:30000;
+  let exhausted=false,stopReason='deadline',lastGrowth=Date.now();
   let loaded = false, responseRead = false, limited = false, rejected = 0;
   let targetsComplete = false;
   const requested=['regular','midgrade','premium','diesel'].includes(args.grade)?args.grade:'regular';
@@ -135,20 +137,25 @@ async function (reqId, args) {
   };
   try {
     let stable=0, last='', scrolls=0;
-    while (Date.now()-started < 30000) {
+    while (Date.now()-started < deadline) {
       if (blocked()) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
       const selecting=selectGrade();
       const feed=readRows();
       await readReply();
-      if(!selecting&&complete()){targetsComplete=true;break;}
+      if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
       const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices)]);
+      if(now!==last)lastGrowth=Date.now();
       stable=now===last ? stable+1 : 0;last=now;
       if (!selecting&&feed && stable>=3) {
-        if (scrolls>=3 || /end of the list/i.test(feed.innerText)) break;
+        if (/end of the list/i.test(feed.innerText)) {exhausted=true;stopReason='end';break;}
+        if (!discovery&&scrolls>=3) {stopReason='scroll_limit';break;}
+        if(discovery&&rows.size>=5000){stopReason='row_limit';break;}
         const before=feed.scrollTop;
         feed.scrollTop=feed.scrollHeight;
         // Scrolling the same exhausted/non-scrollable feed three times adds seconds but no rows.
-        if(Math.abs(feed.scrollTop-before)<1)break;
+        if(Math.abs(feed.scrollTop-before)<1&&!discovery){stopReason='stalled';break;}
+        if(discovery&&Date.now()-lastGrowth>12000){stopReason='stalled';break;}
+        if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
         scrolls++;stable=0;
       }
       await sleep(300);
@@ -157,7 +164,7 @@ async function (reqId, args) {
     const stores=Array.from(rows.values());
     const priced=stores.filter(s=>s.prices[requested]).length;
     send({stores,partial:true,code:!loaded?'unreadable':!priced?'no_prices':'limited',
-      error:!loaded?'Google gas results could not be read':!priced?'Google provided no matching '+requested+' prices; existing prices are retained':null,
-      detail:{read:stores.length,priced,responseRead,targetsComplete,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,coverage:'Search results, not an exhaustive station catalog'}});
+      error:!loaded?'Google gas results could not be read':!priced&&!discovery?'Google provided no matching '+requested+' prices; existing prices are retained':null,
+      detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}
 }

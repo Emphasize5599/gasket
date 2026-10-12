@@ -49,6 +49,10 @@ async function worker(pg,body,raw,status=200,args={}){
  const b=await chromium.launch({executablePath:process.env.CHROME||undefined});
  try{
   const pg=await b.newPage();
+  const paged='<div role="feed" style="height:120px;overflow:auto">'+link('0x1:0x2')+'<button onclick="window.pages=(window.pages||0)+1;var a=document.createElement(\'article\');a.setAttribute(\'role\',\'article\');a.innerHTML=\'<a aria-label=&quot;Exxon&quot; href=&quot;https://www.google.com/maps/place/Exxon/data=!1s0x1:0x\'+(pages+2).toString(16)+\'!3d34.745!4d-92.29&quot;>Exxon</a>\';this.before(a);if(pages===5){this.after(document.createTextNode(\'End of the list\'));this.remove();}">Load more results</button></div>';
+  const discovery=await worker(pg,paged,JSON.stringify([]),200,{mode:'discover',targets:[{featureId:'0x1:0x2'}]});
+  assert.equal(discovery.stores.length,6,'discovery loads all five additional pages, even with a matched target');
+  assert(discovery.detail.scrolls>=5);assert.equal(discovery.detail.exhausted,true);assert.equal(discovery.error,null,'unpriced stations are valid discovery results');
   for(const grade of ['regular','midgrade','premium','diesel']){
     const label={regular:'Regular',midgrade:'Midgrade',premium:'Premium',diesel:'Diesel'}[grade];
     const r=await worker(pg,html,JSON.stringify(['0x1:0x2','$4.12/'+label]),200,{grade});
@@ -107,16 +111,16 @@ async function worker(pg,body,raw,status=200,args={}){
   await ui.waitForFunction(()=>__hangDone);
   assert.match(await ui.evaluate(()=>__hangResult.errors.join(' ')),/timed out/);
   console.log('Actual lookup lifecycle: location/price cache reuse, cooldown, persistent source budget and lost-reply deadline passed');
-  await ui.evaluate(()=>{window.__paid=0;__app.N.search=()=>__paid++;__app.S.keylessRegular=true;__app.S.brands={exxon:true};__app.S.apiKey='TEST';__app.S.radiusMi=8;window.KeylessGas.search=async()=>({stations:[{id:'k',name:'Exxon',brand:'exxon',lat:34.745,lng:-92.29,prices:{regular:{price:3.12,updated:null}},google:true,source:'Google Maps web'}],errors:[]});});
+  await ui.evaluate(()=>{window.__paid=0;__app.N.search=()=>__paid++;__app.S.keylessRegular=true;__app.S.brands={exxon:true};__app.S.apiKey='TEST';__app.S.radiusMi=8;window.KeylessGas.discover=async()=>({stations:[{id:'k',name:'Exxon',brand:'exxon',lat:34.745,lng:-92.29,prices:{regular:{price:3.12,updated:null}},google:true,source:'Google Maps web'}],errors:[],details:[{exhausted:false}]});});
   await ui.click('#sDone');
   // Settings form overwrites S, so enable using the actual checkbox and leave the API key installed.
   await ui.click('#btnSettings');await ui.check('[data-k="keylessRegular"]');await ui.fill('#apiKey','TEST');await ui.click('#sDone');
   await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));
-  await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('keyless'));
+  await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('Website discovery'));
   assert.equal(await ui.evaluate(()=>__paid),0,'regular nearby mode must never silently consume paid lookups');
   assert.match(await ui.innerText('#rows'),/Exxon/);
-  assert.match(await ui.innerText('#status'),/No paid lookup fallback/);
-  await ui.evaluate(()=>{KeylessGas.search=async()=>{throw new Error('Google restricted test request');};});
+  assert.match(await ui.innerText('#status'),/partial/);
+  await ui.evaluate(()=>{KeylessGas.discover=async()=>{throw new Error('Google restricted test request');};});
   await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('restricted test'));
   assert.equal(await ui.evaluate(()=>__paid),0,'keyless failure must not invoke a paid fallback');
   await ui.evaluate(()=>{__app.S.grade='premium';});await ui.click('#btnRefresh');await ui.click('[data-refresh="api"]');

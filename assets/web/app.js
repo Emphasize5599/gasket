@@ -332,12 +332,13 @@
   var gStations = [], official = {}, errs = [];
   var pendingSources = 0, sitePending = {}, siteOk = {};
   function allOfficial() { var a = []; Object.keys(official).forEach(function (k) { a = a.concat(official[k] || []); }); return a; }
-  function fetchAround(lat, lng, bounds) {
+  function fetchAround(lat, lng, bounds, method) {
+    if(pending||$('mapPriceProgress'))return;
     $('btnArea').classList.add('hidden');
     $('wmCheck').classList.add('hidden');
     if (demo) { gStations = []; official = {}; receiveGoogle(window.demoPlaces(lat, lng), []); finish(lat, lng); return; }
     var sites = Object.keys(SITES).filter(siteOn);
-    var keyless = S.keylessRegular && S.grade === 'regular' && window.KeylessGas;
+    var keyless = method!=='api'&&(!S.apiKey||S.keylessRegular||method==='discover')&&window.KeylessGas;
     var useGoogle = !!S.apiKey && !keyless;
     if (!useGoogle && !keyless && !sites.length) { openSettings(true); return; }
     var b = bounds || bbox(lat, lng, S.radiusMi);
@@ -352,22 +353,28 @@
     } else gStations = [];
     if (keyless) {
       pendingSources++;
-      var keylessRadius = Math.min(Math.max(P.haversineMi(lat,lng,b[2],lng),2),15);
-      KeylessGas.search(lat,lng,keylessRadius).then(function(r){
+      var keylessRadius = Math.min(Math.max(P.haversineMi(lat,lng,b[2],lng),2),30),areas=[];
+      var dy=6/69,dx=6/(69.17*Math.cos(lat*Math.PI/180));
+      for(var y=-Math.ceil(keylessRadius/6);y<=Math.ceil(keylessRadius/6);y++)for(var x=-Math.ceil(keylessRadius/6);x<=Math.ceil(keylessRadius/6);x++){var a=KeylessGas.area(lat+y*dy,lng+x*dx,8);if(P.haversineMi(lat,lng,a.lat,a.lng)<=keylessRadius+3)areas.push(a);}
+      var panel=document.createElement('div');panel.id='mapPriceProgress';panel.className='map-price-progress card';
+      panel.innerHTML='<h3>Discover stations · No API</h3><div class="parse-load"><span class="pl">Starting…</span><span class="pbar"><i></i></span><span class="pct">0%</span></div><button class="btn tonal sm">Cancel</button>';
+      document.body.appendChild(panel);panel.querySelector('button').onclick=function(){KeylessGas.cancel();};
+      KeylessGas.discover(areas,function(f,text){panel.querySelector('.pl').textContent=text;panel.querySelector('i').style.width=Math.round(f*100)+'%';panel.querySelector('.pct').textContent=Math.round(f*100)+'%';},S.grade,false).then(function(r){
         if(id!==reqId)return;
-        gStations=r.stations.filter(function(s){return S.brands[s.brand];});
+        gStations=r.stations.filter(function(s){return S.brands[s.brand]&&P.haversineMi(lat,lng,s.lat,s.lng)<=keylessRadius;});
         errs=errs.concat(r.errors||[]);
-        if(r.detail&&r.detail.blocked){checkKey='gasweb';$('wmCheckTitle').textContent='Google Maps web wants a check';$('wmCheck').classList.remove('hidden');}
-        errs.push('Experimental keyless search: coverage may be incomplete; price update times are unknown. No paid lookup fallback was used.');
+        if(r.blocked)showSiteCheck('gasweb','Google Maps web');
+        if(r.cancelled)errs.push('Discovery cancelled; completed stations kept.');
+        else if((r.details||[]).some(function(d){return !d.exhausted;}))errs.push('Website discovery is partial; some lists did not finish.');
         sourceDone();
-      }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();});
+      }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();}).finally(function(){panel.remove();});
     }
     var radius = Math.min(Math.max(P.haversineMi(lat, lng, b[2], lng), 3), 30);
-    sites.forEach(function (k) {
+    (keyless?[]:sites).forEach(function (k) {
       pendingSources++; sitePending[k] = true;
       N.siteSearch(k, id, JSON.stringify({ lat: lat, lng: lng, radiusMi: radius, max: SITES[k].max }));
     });
-    Object.keys(SITES).forEach(function (k) { if (sites.indexOf(k) < 0) official[k] = []; });
+    Object.keys(SITES).forEach(function (k) { if (keyless||sites.indexOf(k) < 0) official[k] = []; });
     if (!pendingSources) { finish(lat, lng); }
   }
   var pendingCenter = null;
@@ -473,7 +480,7 @@
       $('bestLine').innerHTML = 'Best ' + gl + ' <span class="big">' + priceHtml(b.c.final) + '</span><br><b>' + esc(P.displayName(b.s)) + '</b>' +
         (b.dist != null ? ' · ' + b.dist.toFixed(1) + ' mi' : '');
     } else {
-      $('bestLine').innerHTML = stations.length ? 'No ' + gl + ' prices here yet' : (S.apiKey || demo || (S.keylessRegular && S.grade==='regular') ? 'No matching stations yet' : 'Walmart only — <b>add a Google key</b> for other brands');
+      $('bestLine').innerHTML = stations.length ? 'No ' + gl + ' prices here yet' : 'No matching stations yet';
     }
     var rows = list.slice().sort(function (a, b) {
       if (sortBy === 'dist') return (a.dist || 0) - (b.dist || 0);
@@ -1087,12 +1094,12 @@
     var mk = P.monthKey();
     var used = function (k) { return (S.citgoUsed || {})[k] === mk; };
     var h = '<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>';
-    if (onboarding) h += '<p class="lead">Walmart and Murphy USA prices come straight from their own sites — no key needed. For Sam\'s, Exxon, Mobil and CITGO, add a free Google Places API key (optional), or try the demo first.</p>';
-    h += '<div class="card"><h3>Experimental regular-gas lookup</h3><div class="field"><div class="lbl">Try keyless regular prices<small>Nearby map only, within 15 miles. Uses OpenStreetMap station locations and Google Maps web prices; sends the search area to both. Coverage is incomplete and price update times are unknown. No paid Places fallback. Other grades, routing and route-wide station searches still use your key.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
-    h += '<div class="card"><h3>Google Places API key (optional)</h3>' +
+    if (onboarding) h += '<p class="lead">Start without an API key. Website searches are slower and coverage varies.</p>';
+    h += '<div class="card"><h3>Station discovery</h3><div class="field"><div class="lbl">Prefer website discovery<small>Works without an API key for nearby and route searches. Scans overlapping areas and scrolls each result list. Slower and less consistent: websites can omit stations or prices, stall, or restrict access. No automatic paid fallback. Without a key this method is selected automatically; with a key you can choose either method.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
+    h += '<div class="card"><h3>Google API key · recommended</h3><p class="lead small">Optional. Faster station discovery and more reliable trip planning.</p>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
       '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
-      '<li><a href="#" data-url="https://console.cloud.google.com/apis/credentials">Create an API key</a>, restrict it to <b>Places API (New)</b> and to Android apps:</li></ol>' +
+      '<li>Enable <a href="#" data-url="https://console.cloud.google.com/apis/library/routes.googleapis.com">Routes API</a> for API trip planning. <a href="#" data-url="https://console.cloud.google.com/apis/credentials">Create an API key</a>, restrict it to <b>Places API (New)</b>, <b>Routes API</b> and Android apps:</li></ol>' +
       '<div class="mono">package: ' + esc(N.packageName()) + '<br>SHA-1: ' + esc(fmtSha(N.certFingerprint())) + '</div></details>' +
       '<div class="field"><div class="lbl">API calls this month<small>Each refresh uses one call per brand (~6). Free tier: 1,000/month.</small><div class="meter"><i style="width:' + Math.min(100, cap ? calls / cap * 100 : 0) + '%"></i></div></div><b>' + calls + (cap ? '/' + cap : '') + '</b></div>' +
       '<div class="field"><div class="lbl">Monthly safety cap<small>Stops lookups past this count. If you and someone else share one key, split it (e.g. 450 each).</small></div><input type="number" id="monthlyCap" min="0" step="50" value="' + cap + '"></div></div>';
@@ -1117,7 +1124,7 @@
       '<div class="field"><div class="lbl">Murphy USA (murphyusa.com)<small>Murphy\'s own store-finder map. Updated through the day.</small></div>' + sw('murphyDirect', S.murphyDirect !== false) + '</div>' +
       '<div class="field"><div class="lbl">Site checks<small>If a site asks “are you human?”, open it and complete the check yourself.</small></div>' +
       '<div class="btns"><button class="btn tonal sm" data-verify="walmart">Walmart</button><button class="btn tonal sm" data-verify="murphy">Murphy</button></div></div>' +
-      '<p class="lead" style="font-size:12.5px;margin:4px 0 10px">Google fills in the other brands (needs the key above). Official prices replace Google\'s when both exist.</p></div>';
+      '<p class="lead" style="font-size:12.5px;margin:4px 0 10px">Official prices supplement API discovery and saved-price refreshes. Website discovery needs no key.</p></div>';
     h += '<div class="card"><h3>Prices</h3>' +
       '<div class="field"><div class="lbl">Show prices to the cent<small>Rounded up — $3.199 shows as $3.20. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
     h += '<div class="card"><h3>Search</h3>' +
@@ -1309,14 +1316,14 @@
       var c=me||(lastFetch?lastFetch:map.getCenter());
       var previous=S.keylessRegular;S.keylessRegular=false;
       try{if(movedByUser&&!$('btnArea').classList.contains('hidden'))return $('btnArea').onclick();fetchAround(c.lat,c.lng);}finally{S.keylessRegular=previous;}
-    },refreshKnownMap,stations.length>0);
+    },refreshKnownMap,stations.length>0,function(){var c=me||lastFetch||map.getCenter();fetchAround(c.lat,c.lng,null,'discover');});
   };
-  function refreshMenu(anchor,api,web,allowWeb){
+  function refreshMenu(anchor,api,web,allowWeb,discover){
     var old=$('refreshMenu');if(old){old.remove();return;}
     var menu=document.createElement('div');menu.id='refreshMenu';menu.className='refresh-menu';menu.setAttribute('role','menu');
-    menu.innerHTML='<button data-refresh="web" role="menuitem"'+(!allowWeb?' disabled':'')+'>No API · known prices</button><button data-refresh="api" role="menuitem">API · discover stations</button><button data-refresh="close" role="menuitem">Close</button>';
+    menu.innerHTML='<button data-refresh="web" role="menuitem"'+(!allowWeb?' disabled':'')+'>No API · refresh saved prices</button><button data-refresh="discover" role="menuitem">No API · discover stations</button><div class="lead small">Slower · coverage varies '+qBtn('Website discovery scrolls each search result list in overlapping areas. It can miss stations or prices. An API key is recommended for faster, more reliable discovery.')+'</div><button data-refresh="api" role="menuitem"'+(!S.apiKey?' disabled':'')+'>API · discover stations</button><button data-refresh="close" role="menuitem">Close</button>';
     document.body.appendChild(menu);
-    menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();};
+    menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();if(b.dataset.refresh==='discover'&&discover)discover();};
     menu.querySelector('button:not(:disabled)').focus();
   }
   async function refreshKnownMap(){

@@ -101,8 +101,14 @@ with sync_playwright() as p:
         pg.click('.sub-page #clW_frost'); pg.wait_for_selector('.sub-page #cpTemp'); pg.click('.sub-back'); pg.wait_for_timeout(300)
         assert pg.locator('.sub-page #clW_frost.empty').count() == 0 and 'Defrost' in ft(pg, '.sub-page #clW_frost'), 'answered'
         pg.click('.sub-back'); pg.wait_for_timeout(300)
-        assert pg.locator('.sub-page').count() == 0 and '1 of 4 answered' in ft(pg, '#clX_winter') and '1 of 4 answered' in ft(pg, '#clX_fall'), 'frosty comes with fall too: the same answer'
+        assert pg.locator('.sub-page').count() == 0 and '1 of 4 answered' in ft(pg, '#clX_winter') and '0 of 4 answered' in ft(pg, '#clX_fall'), 'winter weather answers must not fill in fall'
         assert '0 of ' in ft(pg, '#clX_summer')
+        pg.click('#clX_fall'); pg.wait_for_selector('#clW_frost'); pg.click('#clW_frost'); pg.wait_for_selector('#cpTemp')
+        pg.fill('#cpTemp', '65'); pg.dispatch_event('#cpTemp', 'change')
+        values = [x for x in CL(pg)['presets'] if x['kind'] == 'weather' and x['key'] == 'frost']
+        assert next(x for x in values if x['season'] == 'winter')['temp'] == 74
+        assert next(x for x in values if x['season'] == 'fall')['temp'] == 65, 'fall edit is independent'
+        pg.click('#cpDiscard'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
         pg.click('#clX_summer'); pg.wait_for_selector('.sub-page #clW_heat'); pg.click('#clW_heat'); pg.wait_for_selector('#cpSeasonDefaults')
         assert pg.inner_text('#cpSeasonDefaults') == 'Use Summer defaults'
         pg.click('#cpSeasonDefaults')
@@ -130,7 +136,8 @@ with sync_playwright() as p:
         a = ft(pg, '#advClimate')
         assert 'Your Winter preset' not in a and pg.locator('#advClimate .adv-item.due').count() == 0
         if now == 'winter': assert 'This season: Winter' in a
-        if now in ('fall', 'winter', 'spring'): assert 'Frosty:' in a and 'Defrost' in a, 'this time of year\'s weather answers in Advice'
+        if now == 'winter': assert 'Frosty:' in a and 'Defrost' in a, 'winter weather answers in Advice'
+        elif now in ('fall','spring'): assert 'Frosty:' not in a, 'no winter weather answers borrowed by another season'
         pg.close()
     assert not errors, errors
     print('JS errors: none')

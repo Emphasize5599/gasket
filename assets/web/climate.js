@@ -12,6 +12,13 @@
     ['humid', 'Humid', ['summer']], ['smoke', 'Smoky or polluted', ['summer', 'fall']]];
   /** The situations that come with a season, in the order above. */
   function situations(s) { return WEATHER.filter(function (w) { return w[2].indexOf(s) >= 0; }); }
+  function separateWeather(presets){
+    var legacy=presets.filter(function(p){return p.kind==='weather'&&!p.season&&WEATHER.some(function(w){return w[0]===p.key;});});
+    if(!legacy.length)return presets;
+    var out=presets.filter(function(p){return legacy.indexOf(p)<0;});
+    legacy.forEach(function(p){var w=WEATHER.filter(function(w){return w[0]===p.key;})[0];w[2].forEach(function(sk){if(!out.some(function(q){return q.kind==='weather'&&q.key===p.key&&q.season===sk;}))out.push(Object.assign(JSON.parse(JSON.stringify(p)),{id:p.id+'-'+sk,season:sk}));});});
+    return out;
+  }
   var FLOW = [['face', 'Face'], ['bi', 'Face & feet'], ['feet', 'Feet'], ['mix', 'Feet & windshield'], ['defrost', 'Windshield']];
   /** The season for a date (northern hemisphere, by month). */
   function season(d) { var m = (d || new Date()).getMonth(); return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'fall' : 'winter'; }
@@ -67,6 +74,7 @@
     return a.filter(Boolean).join(' · ');
   }
   var ClimateMath = { situations: situations, title: title, recircOk: recircOk, season: season, starter: starter, warnings: warnings, line: line, label: label, SEASONS: SEASONS, WEATHER: WEATHER, FLOW: FLOW };
+  ClimateMath.separateWeather=separateWeather;
   root.ClimateMath = ClimateMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = ClimateMath;
   if (!root.document) return;                                   // Node: the rules only
@@ -87,8 +95,8 @@
   var TEXT = { recirc: RECIRC, dry: DRY, recircShort: SHORT, autoAir: AUTOAIR };
   function G() { return root.Garage; }
   function save() { A.save(); }
-  function cl(c) { c.climate = c.climate || {}; c.climate.caps = c.climate.caps || {}; c.climate.presets = c.climate.presets || []; return c.climate; }
-  function find(c, kind, key) { return cl(c).presets.filter(function (p) { return p.kind === kind && p.key === key; })[0]; }
+  function cl(c) { c.climate = c.climate || {}; c.climate.caps = c.climate.caps || {}; c.climate.presets = c.climate.presets || [];var split=separateWeather(c.climate.presets);if(split!==c.climate.presets){c.climate.presets=split;save();} return c.climate; }
+  function find(c, kind, key,sk) { return cl(c).presets.filter(function (p) { return p.kind === kind && p.key === key&&(kind!=='weather'||p.season===(sk||season())); })[0]; }
   function current(c) { return c && c.climate ? find(c, 'season', season()) : null; }
   function summary(c) {
     var x = c && c.climate, n = x && x.presets ? x.presets.length : 0, now = current(c);
@@ -108,11 +116,11 @@
     h += row('clCaps', '', 'Your car\'s controls', capsOn.length ? capsOn.join(', ') : 'Tell Gasket what your car has', capsOn.length ? '' : 'empty');
     h += '<h4 class="cl-h">Seasons</h4>';
     SEASONS.forEach(function (s) {
-      var p = find(c, 'season', s[0]), sit = situations(s[0]), done = sit.filter(function (w) { return find(c, 'weather', w[0]); });
+      var p = find(c, 'season', s[0]), sit = situations(s[0]), done = sit.filter(function (w) { return find(c, 'weather', w[0],s[0]); });
       h += row('clS_' + s[0], 'data-kind="season" data-key="' + s[0] + '"', EMOJI[s[0]] + ' ' + s[1] + (s[0] === now ? ' (now)' : ''), p ? line(p, caps) : 'Not set up yet', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '') + (s[0] === now ? ' now' : ''));
       // under each season: what you'd do in the weather it brings (snowy, frosty, rainy…)
       h += row('clX_' + s[0], 'data-wx="' + s[0] + '"', 'Adjust for special weather conditions', done.length + ' of ' + sit.length + ' answered · ' + sit.map(function (w) { return w[1]; }).join(', '),
-        'cl-wx' + (sit.some(function (w) { var q = find(c, 'weather', w[0]); return q && bad(q, caps); }) ? ' warn' : ''));
+        'cl-wx' + (sit.some(function (w) { var q = find(c, 'weather', w[0],s[0]); return q && bad(q, caps); }) ? ' warn' : ''));
     });
     var cu = x.presets.filter(function (p) { return p.kind === 'custom'; });
     h += '<h4 class="cl-h">Custom</h4>';
@@ -132,14 +140,15 @@
     var again = function () { openWeather(c, sk); };
     var fill = function () {
       var b = pg.querySelector('.sub-body'), caps = x.caps;
-      b.innerHTML = '<p class="lead small keep">What would you do if it\'s… Your answer for each one is used whenever that weather comes, in any season.</p>' +
-        situations(sk).map(function (w) { var p = find(c, 'weather', w[0]); return row('clW_' + w[0], 'data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); }).join('');
-      b.querySelectorAll('[data-key]').forEach(function (r) { r.onclick = function () { var p = find(c, 'weather', r.dataset.key); if (p) openPreset(c, p.id, false, again,sk); else add(c, 'weather', r.dataset.key, again,sk); }; });
+      b.innerHTML = '<p class="lead small keep">What would you do if it\'s… These answers apply only to '+esc(sn[1])+'.</p>' +
+        situations(sk).map(function (w) { var p = find(c, 'weather', w[0],sk); return row('clW_' + w[0], 'data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); }).join('');
+      b.querySelectorAll('[data-key]').forEach(function (r) { r.onclick = function () { var p = find(c, 'weather', r.dataset.key,sk); if (p) openPreset(c, p.id, false, again,sk); else add(c, 'weather', r.dataset.key, again,sk); }; });
     };
     A.subPage(EMOJI[sk] + ' ' + sn[1] + ': special weather', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
   function add(c, kind, key, back,seasonContext) {
     var x = cl(c), p = starter(kind, key, x.caps);
+    if(kind==='weather')p.season=seasonContext||season();
     if (kind === 'custom') p.name = 'My preset' + (x.presets.filter(function (q) { return q.kind === 'custom'; }).length ? ' ' + (x.presets.filter(function (q) { return q.kind === 'custom'; }).length + 1) : '');
     x.presets.push(p); LG.info('car', 'Climate preset added: ' + label(p)); changed(); openPreset(c, p.id, true, back,seasonContext);
   }
@@ -192,7 +201,7 @@
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
       if($('cpSeasonDefaults'))$('cpSeasonDefaults').onclick=set(function(){
         var defaults=find(c,'season',seasonContext)||starter('season',seasonContext,caps);
-        var identity={id:p.id,kind:p.kind,key:p.key,name:p.name};
+        var identity={id:p.id,kind:p.kind,key:p.key,name:p.name,season:p.season};
         Object.assign(p,JSON.parse(JSON.stringify(defaults)),identity);
       });
       b.querySelectorAll('.cl-ch').forEach(function (g) {

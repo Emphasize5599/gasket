@@ -18,7 +18,10 @@ with sync_playwright() as p:
         pg.wait_for_timeout(600)
         pg.screenshot(path=f'{OUT}/{name}-0-onboarding.png')
         assert pg.locator('input[data-k=autoRefresh]').count() == 1 and not pg.is_checked('input[data-k=autoRefresh]') and pg.evaluate('window.__app.S.autoRefresh') is False, 'no price search on opening by default'
-        pg.click('#sDone')   # no Google key: Walmart-only mode (mocked walmart.com answer)
+        # Exercise the existing API + official-source path; blank-key discovery has its own browser regression.
+        pg.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop')
+        pg.evaluate("window.__mocks={search:()=>({places:[],errors:[]})}")
+        pg.click('#sDone')
         pg.wait_for_timeout(900)
         pg.screenshot(path=f'{OUT}/{name}-0b-walmart-only.png')
         wm_pins = pg.locator('.leaflet-tooltip.mbub').count()

@@ -71,7 +71,7 @@ public class MainActivity extends Activity {
     private static final String PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.location,places.formattedAddress,"
-            + "places.addressComponents,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
+            + "places.addressComponents,places.types,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
 
     private WebView web;
     private boolean rendererRecoveryPending = false;
@@ -1747,7 +1747,9 @@ public class MainActivity extends Activity {
                             fw.ready = false; if (fw.view != null) fw.view.stopLoading();
                         }
                     };
-                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : isGasWorker(key) ? 40000 : 90000);
+                    boolean discoveryRead = false;
+                    try { discoveryRead = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
+                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;

@@ -19,7 +19,8 @@
     mobil: { name: 'Mobil', short: 'Mo', color: '#1652B5', query: 'Mobil',
       howTo: 'Walmart app → scan the pump QR → "Fuel up for less" → enter pump number.' },
     citgo: { name: 'CITGO', short: 'C', color: '#D3202F', query: 'CITGO',
-      howTo: 'Link Club CITGO in the Walmart app (Gas Savings). At the pump enter your Club CITGO Alt ID (phone #); both discounts apply.' }
+      howTo: 'Link Club CITGO in the Walmart app (Gas Savings). At the pump enter your Club CITGO Alt ID (phone #); both discounts apply.' },
+    other: { name:'Other stations',short:'G',color:'#52656b',query:'gas stations',howTo:'Use the posted pump price. No brand-specific membership discount is assumed.' }
   };
 
   var GRADES = {
@@ -50,7 +51,7 @@
     routesMonthlyCap: 9500,       // separate Essentials Routes budget (10,000 free/month)
     staleHours: 30,
     walmartDirect: true,
-    brands: { walmart: true, murphy: true, sams: true, exxon: true, mobil: true, citgo: true }
+    brands: { walmart: true, murphy: true, sams: true, exxon: true, mobil: true, citgo: true, other:true }
   };
 
   /** Brand from the station's name, or failing that from the brand website Google lists for it
@@ -94,6 +95,7 @@
   function normalize(place) {
     var name = place.displayName && place.displayName.text;
     var brand = detectBrand(name, place.websiteUri);
+    if(!brand&&(place.types||[]).includes('gas_station'))brand='other';
     if (!brand || !place.location) return null;
     if (place.businessStatus && place.businessStatus !== 'OPERATIONAL') return null;
     var prices = {};
@@ -231,7 +233,7 @@
       running = r3(running + amt);
     }
 
-    if (s.walmartPlus) {
+    if (s.walmartPlus&&b!=='other') {
       if (b === 'sams') {
         if (s.samsMode === 'minus10') add('Walmart+ discount', -0.10);
         else steps.push({ label: "Walmart+ → Sam's member price", amount: 0,

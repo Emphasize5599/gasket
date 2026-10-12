@@ -1,0 +1,41 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
+ const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
+ await p.addInitScript(()=>sessionStorage.setItem('standinRestored',JSON.stringify({s:JSON.stringify({setupDone:true,apiKey:''})})));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href+'#restored');await p.waitForSelector('#btnLocate.live');
+ await p.click('#btnSettings');assert.match(await p.innerText('#settings'),/Google API key · recommended/i);
+ assert.equal(await p.inputValue('#apiKey'),'');await p.click('#sDone');
+ await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{
+  window.__paid=0;window.__web=0;
+  ['search','placesFind','computeRoute','routeSearch'].forEach(k=>__app.N[k]=()=>{__paid++;throw Error('Unexpected paid request');});
+  const pts=Array.from({length:16},(_,i)=>[34.7+i*.01,-92.29]);
+  window.__gmapsAnswer={routes:[{via:'US-67 S',miles:Trip.hav({lat:34.7,lng:-92.29},{lat:34.85,lng:-92.29}),minutes:20,pts}]};
+  __app.S.trip.fuel={mode:'miles',miles:'180'};__app.S.trip.milesLeft='180';__app.S.trip.bufferMi=5;__app.S.brands={exxon:true,other:true};
+  __app.S.trip.avoid.tolls=true;
+  __app.N.siteRead=(id,key,json)=>{if(!/^gasweb(?:[2-4])?$/.test(key))return setTimeout(()=>onNativeResult(id,{error:'mock skip'}),1);__web++;const a=JSON.parse(json);if(a.mode!=='discover')throw Error('Wrong reader mode');setTimeout(()=>onNativeResult(id,{stores:[{id:'web:local',name:'Local Fuel',lat:34.775,lng:-92.29,address:'100 Main St, Testville',prices:{regular:{price:3.12}},source:'Google Maps web'}],detail:{exhausted:true}}),10);};
+ });
+ await p.click('#btnTrip');await p.evaluate(()=>__trip.step(3));await p.click('#tSrc [data-src="typed"]');
+ await p.fill('#tFrom','100 Main St, Testville');await p.fill('#tTo','200 Main St, Testville');
+ await p.click('#tGetRoutes'); // restored installs deliberately do not automatically search on open
+ await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
+ assert.match(await p.innerText('#tRouteInfo'),/Website route · approximate/);
+ assert.equal(await p.evaluate(()=>new URL(__gmapsUrl).searchParams.get('avoid')),'tolls');
+ await p.evaluate(()=>__trip.step(5));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
+ assert.equal(await p.evaluate(()=>__paid),0);assert((await p.evaluate(()=>__web))>0);
+ assert.equal(await p.isDisabled('#taResults [data-trip-refresh="api"]'),true);
+ assert.equal(await p.locator('#taResults [data-trip-refresh="discover"]').count(),1);
+ const stations=await p.evaluate(()=>PriceHistory.stations());assert(stations.some(s=>s.name==='Local Fuel'));
+ await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tpS7');
+ assert.equal(await p.locator('#tpS7 .price-refresh-card').count(),0);
+ assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ assert.equal(errors.length,0,errors.join('\n'));
+ const fresh=await b.newPage({viewport:{width:320,height:900}});await fresh.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
+ await fresh.waitForSelector('#btnLocate.live');
+ assert.match(await fresh.innerText('#settings'),/Start without an API key/);
+ await fresh.evaluate(()=>{window.__paid=0;__app.N.search=()=>__paid++;KeylessGas.discover=async()=>({stations:[{id:'local',brand:'other',name:'Local Fuel',lat:34.745,lng:-92.29,prices:{regular:{price:3.12,observedAt:Date.now()}}}],errors:[],details:[{exhausted:true}]});});
+ await fresh.click('#sDone');await fresh.waitForSelector('#settings',{state:'hidden'});await fresh.waitForFunction(()=>document.querySelector('#rows').textContent.includes('Local Fuel'));
+ assert.equal(await fresh.evaluate(()=>__app.S.apiKey),'');assert.equal(await fresh.evaluate(()=>__paid),0);
+ assert.equal(await fresh.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await fresh.close();
+ console.log('Blank-key setup, website routing, new-trip station discovery, all-brand history, no paid fallback and 320px UI passed');
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

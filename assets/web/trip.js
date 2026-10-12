@@ -777,8 +777,10 @@
       m += r.distanceMeters || 0; sec += parseDur(r.duration);
       (r.legs && r.legs.length ? r.legs : [{ distanceMeters: r.distanceMeters, duration: r.duration, steps: [] }]).forEach(function (l) { legs.push(l); });
     });
-    return { distanceMeters: m, duration: Math.round(sec) + 's', polyline: { encodedPolyline: encodePolyline(pts) }, legs: legs,
+    var joined={ distanceMeters: m, duration: Math.round(sec) + 's', polyline: { encodedPolyline: encodePolyline(pts) }, legs: legs,
       description: list.map(function (r) { return r.description || ''; }).filter(Boolean).join(' / ') };
+    if(list.some(function(r){return r.websiteApproximate;}))joined.websiteApproximate=true;
+    return joined;
   }
   /**
    * One Google Maps link per leg of a multi-stop trip, each with the fuel stops on that leg (Google Maps links take up
