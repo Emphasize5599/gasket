@@ -24,6 +24,8 @@ Before you leave, it checks the car too: open safety recalls on your VIN, tire t
 
 This branch builds **Gasket Keyless Test**, a separate installation. Enable **Try keyless regular prices** in Settings for nearby regular gas without paid Places calls. This is experimental, off by default, and does not replace keyed routing or other grades. See [scope, licensing and test plan](KEYLESS_EXPERIMENT.md). Regular Gasket 0.0.103 remains on main.
 
+In 0.0.105, saved trips have **Refresh saved prices — no API calls** in Stops. This updates matched regular prices at the existing stations while keeping discovery and geometry intact. New station discovery remains API-based. Routes has its own monthly safety cap, default 9,500; the Places cap remains 900.
+
 ## Download
 
 Open [GitHub Releases](https://github.com/Emphasize5599/gasket/releases) and choose `Gasket-0.0.<version>.apk` under Assets. This is the installable signed APK, not a ZIP. Source code archives and Actions artifacts are separate downloads.

@@ -2,6 +2,20 @@
 
 Branch: `test/keyless-regular-gas`. Regular release: 0.0.103 on main.
 
+## 0.0.105: saved-trip refresh and Routes limiter
+
+The main price-refresh workflow is now **saved-trip price refresh**, not complete keyless discovery. Open a saved gas trip, go to Stops, and tap **Refresh saved prices — no API calls**. It updates regular prices only at already-saved stations. It preserves IDs, coordinates, membership/discount flags, route geometry, detours and other fuel grades. Unmatched stations and their old/missing prices stay unchanged. The trip retains its original discovery timestamp, and per-price `observedAt` records when a web price was retrieved; it is not a pump-price update time.
+
+Matching prefers a stable Google place ID, then a one-to-one same-brand address/coordinate match (normalized street addresses within 0.1 miles, otherwise coordinates within 0.03 miles). Duplicate saved rows across route alternatives receive the same update; website-only stations are not added. Website results from overlapping areas are deduplicated first.
+
+Known stations are grouped into 8-mile searches, with planned stops prioritized, not one browser per station. Batches serialize at most 12 uncached area reads with 1.2-second spacing and stop starting reads after three minutes; the active read has its own deadline. Answers are reused for 15 minutes. A following batch can continue to uncached areas. Bot/consent restrictions stop the batch; the visible check never triggers an automatic paid search. Partial matches, unchanged stations and errors are reported. These boundaries limit traffic; they do not guarantee every saved station gets a fresh price.
+
+**Discover stations again (API)** remains a separate action for complete station discovery. On a saved regular-gas trip, that action switches to price-only website refresh if the Places cap is already exhausted. It never raises the existing Places cap. New trips and other fuel grades retain the existing discovery workflow.
+
+Settings has a separate **Monthly Routes safety cap**, default **9,500** against the current Compute Routes Essentials free allowance of 10,000. Current route requests use TRAFFIC_UNAWARE and at most ten intermediate waypoints (including eight-point alternative reconstruction). The JS adapter checks before new requests and the native gate reserves attempts atomically and persists them before sending. Cached/saved routes are usable at the cap. Route attempts use `rcalls_YYYY-MM`, separate from Places `calls_YYYY-MM`; backup restores retain the higher count. A zero cap explicitly disables the limit. Counts are per installation, not billing-account-wide; advanced features or shared keys need different budgets.
+
+Added tests execute the actual native reservation block against Java stubs, including concurrent requests at the boundary, blocked requests and failed persistence. Browser tests cover saved-trip refresh with zero paid calls, no new stations, other grades/geometry/detours preserved, price persistence on reopen, cache reuse, and capped-discovery fallback. A direct Routes adapter test checks cached routes at the cap and explicit unlimited mode.
+
 ## Scope and use
 
 The APK installs separately as **Gasket Keyless Test** (`com.bensanzone.fuelmap.keyless`), with the same signing key but separate data. The regular app is not replaced. A full backup from the regular app may be restored into the test app, including pictures; keep backups private because they include API keys.

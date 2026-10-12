@@ -1442,13 +1442,22 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void computeRoute(final int reqId, final String apiKey, final String bodyJson) {
+        public void computeRoute(final int reqId, final String apiKey, final String bodyJson, final int monthlyCap) {
             new Thread(new Runnable() {
                 public void run() {
                     JSONObject o = new JSONObject();
                     try {
                         String body = new JSONObject(bodyJson).toString();
-                        prefs().edit().putInt(routeMonthKey(), prefs().getInt(routeMonthKey(), 0) + 1).apply();
+                        // Reserve atomically before sending: simultaneous legs/alternative rebuilds
+                        // must not race past the separate Routes cap. Count attempts conservatively.
+                        synchronized (MainActivity.this) {
+                            int used=prefs().getInt(routeMonthKey(),0);
+                            if(monthlyCap>0&&used>=monthlyCap){
+                                o.put("error","Monthly Routes API cap reached ("+used+"/"+monthlyCap+"). Saved routes still work.");
+                                o.put("code","route_cap");reply(reqId,o);return;
+                            }
+                            if(!prefs().edit().putInt(routeMonthKey(),used+1).commit())throw new Exception("Could not save Routes usage; request stopped");
+                        }
                         o.put("body", googlePost(ROUTES_URL, apiKey, ROUTES_MASK, body, "Google Routes"));
                     } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
                     reply(reqId, o);

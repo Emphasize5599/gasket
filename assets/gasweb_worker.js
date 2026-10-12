@@ -77,7 +77,10 @@ async function (reqId, args) {
       const visible = t.split('\n').map(price).filter((p)=>p!==null);
       if(new Set(visible).size===1)prices.set(id[1].toLowerCase(),visible[0]);
       const website = card.querySelector('a[data-value="Website"]');
-      rows.set(id[1].toLowerCase(), {id:'web:'+id[1].toLowerCase(),featureId:id[1].toLowerCase(),name,lat,lng,mapsUri:href,website:website ? website.href : '',prices:{},google:true,source:'Google Maps web',address:''});
+      const placeId=/!19s([a-zA-Z0-9_-]{10,200})/.exec(href);
+      const addressLine=t.split('\n').find((line)=>/Gas station\s*·/i.test(line));
+      const address=addressLine?addressLine.split('·').pop().trim():'';
+      rows.set(id[1].toLowerCase(), {id:'web:'+id[1].toLowerCase(),featureId:id[1].toLowerCase(),placeId:placeId?placeId[1]:'',name,lat,lng,mapsUri:href,website:website ? website.href : '',prices:{},google:true,source:'Google Maps web',address});
     }
     return feed;
   };

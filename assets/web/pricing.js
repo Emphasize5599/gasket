@@ -47,6 +47,7 @@
     grade: 'regular',
     radiusMi: 8,
     monthlyCap: 900,
+    routesMonthlyCap: 9500,       // separate Essentials Routes budget (10,000 free/month)
     staleHours: 30,
     walmartDirect: true,
     brands: { walmart: true, murphy: true, sams: true, exxon: true, mobil: true, citgo: true }
@@ -217,7 +218,7 @@
     var gp = station.prices[grade];
     if (!gp) return null;
     s = s || DEFAULTS;
-    var steps = [{ label: 'Posted price (' + (station.source || 'Google') + ')', amount: gp.price, kind: 'base' }];
+    var steps = [{ label: 'Posted price (' + (gp.source || station.source || 'Google') + ')', amount: gp.price, kind: 'base' }];
     var notes = [];
     var running = gp.price;
     var b = station.brand;
@@ -265,7 +266,7 @@
 
     var updated = gp.updated ? new Date(gp.updated) : null;
     var ageH = updated ? ((now || new Date()) - updated) / 3.6e6 : null;
-    return { base: gp.price, final: r3(running), steps: steps, notes: notes, updated: updated,
+    return { base: gp.price, final: r3(running), steps: steps, notes: notes, updated: updated, source:gp.source||station.source,
       ageHours: ageH, stale: ageH == null || ageH > (s.staleHours || 24) };
   }
 

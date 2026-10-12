@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.105 - 2026-10-11 (keyless test branch only)
+- **Saved-trip price refresh.** Update matched regular prices from Google Maps web without spending Places or Routes calls. Keep saved stations, route geometry, other fuel grades and unmatched prices; persist refresh results separately from original discovery time.
+- **Separate Routes budget.** Default 9,500 monthly attempts for current Essentials routing, enforced atomically before network requests. Cached routes remain usable at the cap.
+- Bug fixes.
+
 ## 0.0.104 - 2026-10-11 (keyless test branch only)
 - **Optional keyless nearby regular prices.** OpenStreetMap locations and Google Maps web search prices, bounded and cached without a paid Places fallback. Coverage and unknown update times are explicitly labeled. Routes and other grades remain unchanged.
 - Separate test installation (`com.bensanzone.fuelmap.keyless`), preserving the regular app and its data.

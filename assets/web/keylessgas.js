@@ -45,7 +45,42 @@
     });
     return out;
   }
-  var math={area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge};
+  function knownKey(s){return (s.brand||'')+'|'+(s.id||[s.lat,s.lng,s.address].join('|'));}
+  function addressKey(s){return String(s||'').split(',')[0].toLowerCase().replace(/\b(street|road|avenue|boulevard|drive|highway)\b/g,function(w){return {street:'st',road:'rd',avenue:'ave',boulevard:'blvd',drive:'dr',highway:'hwy'}[w];}).replace(/[^a-z0-9]/g,'');}
+  function updateKnown(known,web,P,observedAt){
+    var unique=Array.from(new Map(known.map(function(s){return [knownKey(s),s];})).values()),updates=new Map();
+    var candidates=web.map(function(w){
+      var brand=P.detectBrand(w.name,w.website);
+      return unique.filter(function(s){
+        var distance=P.haversineMi(s.lat,s.lng,w.lat,w.lng);
+        if(!Number.isFinite(distance)||distance>0.1||brand&&brand!==s.brand)return false;
+        if(w.placeId&&w.placeId===s.id||w.featureId&&s.featureId===w.featureId||w.id&&w.id===s.id)return true;
+        if(brand!==s.brand)return false;
+        var sameAddress=addressKey(s.address)&&addressKey(s.address)===addressKey(w.address);
+        return sameAddress?distance<0.1:distance<0.03;
+      });
+    });
+    web.forEach(function(w,i){
+      var gp=w.prices&&w.prices.regular;
+      if(!gp||!Number.isFinite(gp.price)||gp.price<0.5||gp.price>20||candidates[i].length!==1)return;
+      var key=knownKey(candidates[i][0]);
+      if(candidates.filter(function(c){return c.some(function(s){return knownKey(s)===key;});}).length!==1)return;
+      updates.set(key,{price:gp.price,updated:null,observedAt:observedAt==null?(w.observedAt||null):observedAt,source:'Google Maps web'});
+    });
+    return {updated:updates.size,stations:known.map(function(s){
+      var copy=Object.assign({},s,{prices:Object.assign({},s.prices)}),price=updates.get(knownKey(s));
+      if(price){copy.prices.regular=price;copy.google=true;}
+      return copy;
+    })};
+  }
+  function knownAreas(known,P,priority){
+    var unique=Array.from(new Map(known.filter(function(s){return typeof s.lat==='number'&&typeof s.lng==='number';}).map(function(s){return [knownKey(s),s];})).values());
+    unique.sort(function(a,b){return (priority||[]).includes(b.id)-(priority||[]).includes(a.id);});
+    var groups=[];
+    unique.forEach(function(s){var group=groups.find(function(g){return P.haversineMi(g.lat,g.lng,s.lat,s.lng)<6;});if(!group){group={lat:s.lat,lng:s.lng,radius:8,stations:[]};groups.push(group);}group.stations.push(s);});
+    return groups;
+  }
+  var math={area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -90,5 +125,35 @@
       return result;
     }finally{busy=null;}
   }
-  root.KeylessGas=Object.assign(math,{search:search});
+  async function refreshKnown(known,onProgress,priority){
+    if(busy)throw new Error('A keyless lookup is already running');
+    busy=true;
+    var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=[],errors=[],reads=0,blocked=false,start=Date.now();
+    var cached=groups.map(function(g){var key='known|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|');return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
+    // Cached areas cost no website load. New loads are serialized and bounded per batch.
+    var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
+    try{
+      for(var i=0;i<ordered.length;i++){
+        var x=ordered[i],r,at;
+        if(onProgress)onProgress(i/ordered.length,'Refreshing saved prices · '+(i+1)+'/'+ordered.length+' areas');
+        if(x.cache){r=x.cache.v;at=x.cache.t;}
+        else{
+          if(reads>=12||Date.now()-start>=180000){errors.push('Batch limit reached; some saved areas were not checked. Run another refresh to continue.');break;}
+          if(reads)await new Promise(function(resolve){setTimeout(resolve,1200);});
+          reads++;r=await call('siteRead','gasweb',JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8))}));at=Date.now();
+          if(r.blocked){blocked=true;errors.push(r.error||'Google restricted the refresh');break;}
+          if(r.error)errors.push(r.error);
+          if(!r.error)A.KV.put('gasweb',x.key,r);
+        }
+        (r.stores||[]).forEach(function(w){rows.push(Object.assign({},w,{observedAt:at}));});
+      }
+      // Overlapping areas can return the same Google station. Keep one row before matching.
+      var web=Array.from(new Map(rows.map(function(w){return [w.placeId||w.featureId||w.id,w];})).values());
+      var result=updateKnown(known,web,P,null);
+      result.total=new Set(known.map(knownKey)).size;result.retained=result.total-result.updated;result.errors=errors;result.blocked=blocked;result.websiteLoads=reads;result.areas=groups.length;result.apiCalls=0;result.at=Date.now();
+      if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
+      return result;
+    }finally{busy=null;}
+  }
+  root.KeylessGas=Object.assign(math,{search:search,refreshKnown:refreshKnown});
 })(typeof window!=='undefined'?window:globalThis);

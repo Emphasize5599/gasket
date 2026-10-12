@@ -13,6 +13,7 @@
       loadSettings: function () { return mem.s || ''; }, saveSettings: function (j) { mem.s = j; },
       loadCache: function () { return mem.c || ''; }, saveCache: function (j) { mem.c = j; },
       callsThisMonth: function () { return 0; }, certFingerprint: function () { return 'BROWSER-TEST'; },
+      routeCallsThisMonth: function () { return 0; },
       packageName: function () { return 'com.bensanzone.fuelmap'; },
       locate: function () { setTimeout(function () { window.onLocation(34.7450, -92.2900, 30); }, 300); },
       haptic: function () {}, tick: function () {}, setStatusBarDark: function () {},
@@ -53,7 +54,7 @@
       saveCarImage: function (req, url, name) { window.__savedCarImage = { url: url, name: name }; setTimeout(function () { window.onNativeResult(req, window.__mocks && window.__mocks.saveCarImage || { path: 'Downloads/Gasket/' + name }); }, 30); },
       fetchIcon: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.icon; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 20); },
       fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa\.gov\/vehicles\/byYmmt/.test(url) ? window.__mocks.nhtsaPic : /commons\.wikimedia/.test(url) ? window.__mocks.commons : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); window.onNativeResult(req, m ? { body: JSON.stringify(m(url)) } : { error: 'offline' }); }, 50); },
-      computeRoute: function (req, key, body) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
+      computeRoute: function (req, key, body, cap) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
       search: function (req, key, queries, lat1, lng1, lat2, lng2) { window.__searchCalls = (window.__searchCalls || 0) + 1; setTimeout(function () { var m = window.__mocks && window.__mocks.search; window.onSearchResult(req, m ? m(JSON.parse(queries), [lat1, lng1, lat2, lng2]) : { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
     };
@@ -388,11 +389,13 @@
   window.onSiteBlocked = function (key) {
     if (pending && sitePending[key]) { sitePending[key] = false; siteNeedsCheck(key); sourceDone(); }
   };
-  window.onSiteVerified = function () {
+  window.onSiteVerified = function (key) {
+    if(key==='gasweb'){status('Google Maps check closed. Retry the website price refresh when ready.');return;}
     var c = pendingCenter || me || map.getCenter();
     fetchAround(c.lat, c.lng);
   };
   var checkKey = null;
+  function showSiteCheck(key,label){checkKey=key;$('wmCheckTitle').textContent=label+' wants a check';$('wmCheck').classList.remove('hidden');}
   function siteNeedsCheck(key) {
     errs.push(SITES[key].label + ' wants a quick “are you human?” check before showing prices.');
     checkKey = key;
@@ -668,7 +671,7 @@
     if (c) {
       var saved = c.base - c.final;
       h += '<div class="final"><span class="v">' + priceHtml(c.final) + '</span><span class="l">/gal ' + P.GRADES[S.grade].label.toLowerCase() + '<br>your price</span></div>';
-      h += '<div class="fresh' + (c.stale ? ' stale' : '') + '">' + (c.updated ? (s.source || 'Google') + ' price updated ' + ago(c.updated.getTime()) : 'Update time unknown') + (c.stale ? ' — may be out of date' : '') + '</div>';
+      h += '<div class="fresh' + (c.stale ? ' stale' : '') + '">' + (c.updated ? (c.source || s.source || 'Google') + ' price updated ' + ago(c.updated.getTime()) : 'Update time unknown') + (c.stale ? ' — may be out of date' : '') + '</div>';
       h += '<div class="bd">';
       c.steps.forEach(function (st) {
         h += '<div class="ln"><div class="k">' + esc(st.label) + (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</div><div class="a' + (st.amount < 0 ? ' neg' : '') + '">' +
@@ -1088,6 +1091,8 @@
       '<div class="mono">package: ' + esc(N.packageName()) + '<br>SHA-1: ' + esc(fmtSha(N.certFingerprint())) + '</div></details>' +
       '<div class="field"><div class="lbl">API calls this month<small>Each refresh uses one call per brand (~6). Free tier: 1,000/month.</small><div class="meter"><i style="width:' + Math.min(100, cap ? calls / cap * 100 : 0) + '%"></i></div></div><b>' + calls + (cap ? '/' + cap : '') + '</b></div>' +
       '<div class="field"><div class="lbl">Monthly safety cap<small>Stops lookups past this count. If you and someone else share one key, split it (e.g. 450 each).</small></div><input type="number" id="monthlyCap" min="0" step="50" value="' + cap + '"></div></div>';
+    var routeCalls=N.routeCallsThisMonth?N.routeCallsThisMonth():0;
+    h += '<div class="card"><h3>Routes API — separate budget</h3><div class="field"><div class="lbl">Routes calls this month<small>Saved routes use no new calls. Current routing uses Essentials features: 10,000 free/month. This device counter is separate from Places; shared keys/accounts need a shared budget.</small></div><b>'+routeCalls+'</b></div><div class="field"><div class="lbl">Monthly Routes safety cap<small>Default 9,500. Stops new route requests at this count; cached routes still work. 0 disables the cap. Advanced routing features have lower free allowances.</small></div><input type="number" id="routesMonthlyCap" min="0" step="100" value="'+S.routesMonthlyCap+'"></div></div>';
 
     h += '<div class="card"><h3>General</h3>' +
       '<div class="field"><div class="lbl">Ask before deleting<small>A confirmation before anything is deleted or removed — cars, mileage entries, saved trips, lists, the cache.</small></div>' + sw('confirmDeletes', S.confirmDeletes !== false) + '</div></div>';
@@ -1259,6 +1264,7 @@
     var hadKey = !!S.apiKey;
     S.apiKey = $('apiKey').value.trim();
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
+    S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
     S.citgoTier = $('citgoTier').value;
     S.samsMode = $('samsMode').value;
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));
@@ -1417,7 +1423,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };

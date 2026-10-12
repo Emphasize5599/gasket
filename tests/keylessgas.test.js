@@ -22,6 +22,15 @@ assert.equal(ambiguous.length,3);assert.equal(ambiguous[0].prices.regular,undefi
 const twin=K.merge(open,[w,{...w,id:'web:twin',lng:-92.2901,prices:{regular:{price:4.12,updated:null}}}],a,P);
 assert.equal(twin.length,3);assert.equal(twin[0].prices.regular,undefined,'two nearby same-brand Google pumps cannot overwrite one OSM station');
 console.log('Open-station normalization, bounds, deduplication, provenance and conservative matching passed');
+const savedStation={...w,id:'ChIJSavedStation0001',brand:'exxon',address:'100 Main Street, Testville, AR',state:'AR',wplus:false,detourMi:1.25,detourExact:true,prices:{regular:{price:3.99,updated:'2026-10-01T00:00:00Z'},premium:{price:4.99,updated:'2026-10-01T00:00:00Z'}}};
+const refreshed=K.updateKnown([savedStation],[{...w,placeId:savedStation.id,prices:{regular:{price:3.12}}},{...w,id:'unseen',lat:40}],P,123);
+assert.equal(refreshed.updated,1);assert.equal(refreshed.stations.length,1,'refresh must not discover/add website-only stations');
+assert.equal(refreshed.stations[0].prices.regular.price,3.12);assert.equal(refreshed.stations[0].prices.regular.updated,null);
+assert.equal(refreshed.stations[0].prices.regular.observedAt,123);
+assert.equal(refreshed.stations[0].prices.premium.price,4.99);assert.equal(refreshed.stations[0].wplus,false);assert.equal(refreshed.stations[0].detourMi,1.25);
+assert.equal(savedStation.prices.regular.price,3.99,'do not mutate the saved input');
+assert.equal(K.updateKnown([savedStation,{...savedStation,id:'other'}],[w],P,123).updated,0,'ambiguous nearby stations keep old prices');
+assert.equal(P.DEFAULTS.routesMonthlyCap,9500);
 const link=(id,name='Exxon',lng=-92.29)=>`<article role="article"><a aria-label="${name}" href="https://www.google.com/maps/place/${name}/data=!1s${id}!3d34.745!4d${lng}">${name}</a></article>`;
 const html='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'End of the list</div>';
 async function worker(pg,body,raw,status=200){
