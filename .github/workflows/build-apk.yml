@@ -34,6 +34,7 @@ on:
       - tests/limits.test.js
       - tests/discovery-log.test.js
       - tests/routewx.test.js
+      - tests/speed-nokey.test.js
 
 permissions:
   contents: write

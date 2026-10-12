@@ -223,12 +223,12 @@
     var b = tpBody();
     if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
     var e = stepEl(step), c = built[step];
-    var fresh = !c || step === ST_DEPART || (onPlan(step) && (c.model !== model || c.result !== result));
+    var fresh = !c || step === ST_DEPART || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));   // a key added or removed: cruising speed on or off
     e.classList.remove('hidden'); shown = step;
     if(step===ST_PARAMS&&$('tRuleCap')&&(!S.speed.rule||S.speed.rule.capAuto||S.speed.rule.cap==null))$('tRuleCap').value=Garage.ruleCap();
     if (fresh) {
       e.innerHTML = stepHtml(step);
-      built[step] = { model: model, result: result };
+      built[step] = { model: model, result: result, off: speedOff() };
       bindStep(step);
       b.scrollTop = 0;
     } else {
@@ -543,6 +543,7 @@
       again();
     };
     $('tRule').onchange = ruleSave; $('tRuleOver').onchange = ruleSave; $('tRuleCap').onchange = ruleSave;
+    if (speedOff()) grayOut($('tRule').closest('.card'));
     $('tTruck').onchange = function () { S.speed.truck = this.checked; A.save(); LG.info('speed', 'Truck limits ' + (this.checked ? 'on' : 'off')); again(); };
     $('tAltCmp').onchange = function () { $('tAltBox').classList.toggle('hidden', !this.checked); collectSafe(); again(); };
     ['tBuffer', 'tMinSave', 'tMaxMin', 'tTime', 'tTopMi', 'tTankPrice', 'tMaxUnder', 'tAltSave'].forEach(function (id) {
@@ -2044,6 +2045,7 @@
       onEditRule: function () { collectSafe(); step = ST_PARAMS; renderStep(); setTimeout(function () { var f = $('tRule') && $('tRule').closest('.field'); if (f) { f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.classList.add('pulse'); setTimeout(function () { f.classList.remove('pulse'); }, 1900); } }, 60); },
       onToggle: function (open) { sheetSize(); if (open) tpBody().scrollTop = 0; roadSelSoon(); },
       onTruck: function () { renderTripSpeed(); replan(); } });   // the truck limits change every road's limit: redraw and plan again
+    if (speedOff()) grayOut(el); else { el.classList.remove('spd-off'); var on0 = el.querySelector('.spd-off-note'); if (on0) on0.remove(); }
     if (!el._selObs) { el._selObs = new MutationObserver(roadSelSoon); el._selObs.observe(el, { childList: true }); }
     roadSelSoon();
     // first time the speeds are known (speed limits just arrived, or your rule): plan the stops at those speeds
@@ -2069,8 +2071,21 @@
     }); });
     return out;
   }
+  // Cruising speed needs the Routes API's turn-by-turn roads: without a key it's shown grayed out and plans use the limits
+  function speedOff() { return !S.apiKey; }
+  var SPEED_OFF = '<div class="spd-off-note">⚠ Cruising speed is off without a Google API key: website routes don\'t have the road details it needs. Add a key in Settings to turn it on.</div>';
+  // ...and the costs are rougher without a key: say so wherever totals show (Stops, Departure)
+  var COST_EST = '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate, many stations don\'t post prices online, and speeds are planned at the limits.</div>';
+  function grayOut(el) {
+    el.classList.add('spd-off');
+    var h3 = el.querySelector(':scope > h3');
+    if (!el.querySelector('.spd-off-note')) { if (h3) h3.insertAdjacentHTML('afterend', SPEED_OFF); else el.insertAdjacentHTML('afterbegin', SPEED_OFF); }
+    el.querySelectorAll('input, button, select, textarea').forEach(function (x) { x.disabled = true; });
+    el.querySelectorAll('a, [tabindex]').forEach(function (x) { x.setAttribute('aria-disabled', 'true'); x.tabIndex = -1; });
+    if (!el._offObs) { el._offObs = new MutationObserver(function () { if (speedOff()) grayOut(el); else { el._offObs.disconnect(); el._offObs = null; } }); el._offObs.observe(el, { childList: true, subtree: true }); }   // parts drawn later, too
+  }
   function speedCx() {
-    var r = result; if (!r || !window.Garage || !Garage.speedFn) return null;
+    var r = result; if (!r || speedOff() || !window.Garage || !Garage.speedFn) return null;
     var secs = flatSecs(model); if (!secs.length) return null;
     var sf = Garage.speedFn(); if (!sf) return null;
     var st = r.speedState = r.speedState || {}; st.offsets = st.offsets || {};
@@ -2529,7 +2544,7 @@
     if (step >= ST_ADJ) mapLoading('Choosing stops', 0.93);
     var startGal = startFuel(model);
     var opts = makeOpts(model, cands, startGal), planOffs = null;
-    var secs0 = flatSecs(model), sf0 = secs0.length && Garage.speedFn ? Garage.speedFn() : null;
+    var secs0 = flatSecs(model), sf0 = !speedOff() && secs0.length && Garage.speedFn ? Garage.speedFn() : null;
     if (sf0) {
       var offs0 = secs0.map(function (sc) { return Garage.ruleOff(sc.limit); });
       planOffs = offs0.join(',');
@@ -2650,6 +2665,7 @@
     } else {
       var t = p.totals;
       h += warnHtml;
+      if (speedOff()) h += COST_EST;
       var whyN = r.cands.length + ' priced station' + (r.cands.length === 1 ? '' : 's') + ' along your route' +
         (p.tooFar ? '; ' + p.tooFar + ' more were over ' + S.trip.maxDetourMin + ' min out of the way' : '') +
         (r.unpriced ? '; ' + r.unpriced + ' had no ' + gradeLabel(r.grade).toLowerCase() + ' price' : '') + '. Tap a stop for the cheaper stations it was weighed against.';
@@ -2718,7 +2734,7 @@
     h += '<div class="kpis four"><div><b>' + money(out.cost) + '</b><span>trip cost ' + A.qBtn(costQ) + '</span></div>' +
       '<div><b>' + money(out.spend) + '</b><span>' + (KIND() === 'ev' ? 'at chargers' : 'at the pump') + '</span></div>' +
       '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved ' + A.qBtn(saveQ) + '</span></div>' +
-      '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>';
+      '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>' + (speedOff() ? COST_EST : '');
     // only what to watch out for, briefly
     var w = [];
     var fd = futureDepart();
