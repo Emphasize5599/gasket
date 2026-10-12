@@ -41,9 +41,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-## us-atlas (U.S. state outlines)
+## us-atlas (U.S. state and county outlines)
 
-`assets/web/states.js` holds U.S. state outlines derived from us-atlas (https://github.com/topojson/us-atlas), which is built from the U.S. Census Bureau's cartographic boundary files. The Census Bureau data is a U.S. government work in the public domain. us-atlas is distributed under this license:
+`assets/web/states.js` and `assets/web/counties.js` hold U.S. state and county outlines derived from us-atlas (https://github.com/topojson/us-atlas), which is built from the U.S. Census Bureau's cartographic boundary files. The Census Bureau data is a U.S. government work in the public domain. us-atlas is distributed under this license:
 
 ```
 Copyright 2013-2019 Michael Bostock

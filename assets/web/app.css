@@ -1579,3 +1579,30 @@ body.legs-open .scroll-hint { display: none; }
 .spd-off > :not(.spd-off-note):not(h3) { opacity: .45; filter: grayscale(1); pointer-events: none; user-select: none; }
 .spd-off-note { font-size: 13px; line-height: 1.35; color: var(--warn); margin: 0 0 8px; overflow-wrap: anywhere; }
 .est-note { margin: 6px 2px 10px; }
+/* Hazards step: route options, hazard dots, the map's gray hazard tags, the "Step 1/2" pill */
+:root { --hzbub: #4a4f57; }
+.hz-opts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.hz-opt { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 9px 12px; border-radius: 14px; background: var(--surface); border: 2px solid var(--line); min-width: 0; }
+.hz-opt.on { border-color: var(--accent); }
+.hz-o1 { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
+.hz-o1 b { overflow-wrap: anywhere; }
+.hz-o1 span { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.hz-o2 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.hz-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 1.5px var(--surface); }
+.hz-n { margin-left: 4px; }
+.hz-ok { color: var(--save); font-weight: 600; }
+.wx-ic[style*="--hz"] { box-shadow: inset 0 -3px 0 var(--hz); border-radius: 4px; }
+.wx-t .wx-ev { color: var(--ink-2); }
+.leaflet-tooltip.hzbub { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 5px; border-radius: 999px; background: var(--hzbub); color: #fff;
+  border: 2px solid var(--hzbub); box-shadow: 0 2px 8px rgba(0,0,0,.28); font-weight: 700; font-size: 13px; white-space: nowrap; }
+.leaflet-tooltip.hzbub i { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; flex: none; }
+.hzbub.leaflet-tooltip-top::before { border-top-color: var(--hzbub); }
+.hzbub.leaflet-tooltip-bottom::before { border-bottom-color: var(--hzbub); }
+.hzbub.leaflet-tooltip-left::before { border-left-color: var(--hzbub); }
+.hzbub.leaflet-tooltip-right::before { border-right-color: var(--hzbub); }
+.hz-leg { position: fixed; z-index: 850; top: calc(var(--st) + 17px); left: 50%; transform: translateX(-50%); padding: 4px 14px; min-height: 30px; border-radius: 999px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 800; font-size: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  max-width: calc(100vw - 200px); text-align: center; line-height: 1.15; pointer-events: none; }
+.hz-leg small { font-weight: 600; font-size: 11px; color: var(--ink-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hz-leg.hidden { display: none; }
+.hz-note { font-size: 12px; color: var(--save); font-weight: 600; }

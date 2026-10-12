@@ -32,7 +32,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   });
   await p.click('#btnTrip');await p.click('[data-hist="saved-test"]');
   await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
-  await p.evaluate(()=>__trip.step(5));
+  await p.evaluate(()=>__trip.step(6));
   await p.waitForSelector('#taResults [data-trip-refresh="web"]');await p.waitForFunction(()=>!__trip.state().busy);
   const routeBefore=await p.evaluate(()=>JSON.stringify(__app.KV.get('trips','trip|saved-test').v.alts));
   assert.equal(await p.locator('#taResults .price-refresh-card .note,#taResults .price-refresh-card .seg').count(),0);
@@ -55,21 +55,21 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   assert.equal(first.saved.stations.google[0].list[0].prices.premium.price,4.99);
   assert.equal(first.saved.stations.google[0].list[0].detourMi,1.2);
   assert.equal(JSON.stringify(first.saved.alts),routeBefore);
-  await p.evaluate(()=>__trip.step(6));await p.waitForSelector('#tsResults');
+  await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tsResults');
   assert.match(await p.innerText('#tsResults'),/No new stations discovered/);
   assert.equal(await p.evaluate(()=>__trip.state().result.stale),1,'only the retained genuinely old price counts as old');
   assert.match(await p.innerText('#tsResults'),/unknown pump-update times/);
-  await p.evaluate(()=>__trip.step(5));
+  await p.evaluate(()=>__trip.step(6));
   assert.equal(await p.isDisabled('#taResults [data-trip-refresh="api"]'),true,'explicit API choice respects its cap');
   await p.click('#taResults [data-trip-refresh="web"]');await p.waitForFunction(()=>!__trip.state().busy);
   assert.equal(await p.evaluate(()=>__api.web),2,'cached area answers avoid duplicate website loads');
   assert.equal(await p.evaluate(()=>__api.places),0);
-  for(const step of [6,7]){
+  for(const step of [7,8]){
     await p.evaluate(step=>__trip.step(step),step);
     await p.waitForSelector('#tpS'+step);
     assert.equal(await p.locator('#tpS'+step+' .price-refresh-card').count(),0);
   }
-  await p.evaluate(()=>__trip.step(5));
+  await p.evaluate(()=>__trip.step(6));
   await p.evaluate(()=>{__app.KV.clear('gasweb');__app.N.siteRead=(id,key,args)=>{};__app.N.cancelSiteRead=key=>{window.__cancelKey=key;};});
   await p.click('#taResults [data-trip-refresh="web"]');
   await p.waitForSelector('#taResults [data-cancel-prices]');
@@ -81,7 +81,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   assert.equal(await p.evaluate(()=>PriceHistory.history({brand:'exxon',id:__originalStations[0].id},{grade:'regular'}).some(r=>r.price===3.12)),true);
   // Reopen the saved trip: refreshed prices and original discovery timestamp survive.
   await p.click('#tClose');await p.click('#btnTrip');await p.click('[data-hist="saved-test"]');
-  await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(6));
+  await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(7));
   await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
   assert.ok(await p.evaluate(()=>__trip.state().result.cands.some(c=>c.station.prices.regular.price===3.12)));
   assert.equal(await p.evaluate(()=>__api.places+__api.routes),0);

@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.116 - 2026-10-12 (keyless test branch only)
+- **New Hazards step, after Route.** You pick each leg's route here, on the big map (the panel takes a quarter of the screen): every option is drawn, with each hazard colored where and when you'd be in it, and labeled on the route you pick. Round trips and trips with stops in between go one leg at a time, with "Step 1/2" at the top. Route is now just where you enter the trip (with a "head back" time for round trips).
+- **Hazards are color-coded and say what they are.** Weather warnings are placed on the route by their own outline or by the counties they list (county outlines for all 50 states are built in), and vague ones like a "Special Weather Statement" are read by the on-phone AI so the map says "Dense fog" or "Strong storms". The list keeps the original notice.
+- Departure shows the hazards on your route without labels, and only your stops (no dots for the other stations). The weather card moved to Hazards.
+- Bug fixes.
+
 ## 0.0.115 - 2026-10-12 (keyless test branch only)
 - Cruising speed is off without a Google API key (website routes don't have the road details it needs): its controls stay on screen, grayed out, with a short note at the top, and stops are planned at the speed limits.
 - Without a key, Stops and Departure note that the costs are rough estimates.

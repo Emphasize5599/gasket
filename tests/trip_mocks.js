@@ -113,7 +113,10 @@
       (window.__nwsUrls = window.__nwsUrls || []).push(url);
       const flood = { properties: { id: 'tx-flood', event: 'Flood Warning', severity: 'Severe', onset: new Date(Date.now() - 3600e3).toISOString(), ends: new Date(Date.now() + 3 * 864e5).toISOString(), headline: 'Flood Warning for Testville County' } };
       const rip = { properties: { id: 'tx-rip', event: 'Rip Current Statement', severity: 'Moderate', onset: new Date().toISOString(), ends: new Date(Date.now() + 864e5).toISOString() } };
-      if (/area=TX/.test(url)) return { features: [flood, rip] };
+      flood.geometry = { type: 'Polygon', coordinates: [[[-97.6, 31.8], [-95.5, 31.8], [-95.5, 33.6], [-97.6, 33.6], [-97.6, 31.8]]] };   // a storm-based outline
+      const sws = { properties: { id: 'tx-sws', event: 'Special Weather Statement', severity: 'Moderate', onset: new Date(Date.now() - 3600e3).toISOString(), ends: new Date(Date.now() + 3 * 864e5).toISOString(),
+        description: 'Areas of dense fog have developed. Visibility will be reduced to a quarter mile or less at times.', areaDesc: 'Dallas', geocode: { SAME: ['048113'] } } };   // by county: Dallas County
+      if (/area=TX/.test(url)) return { features: [flood, rip, sws] };
       if (/area=/.test(url)) return { features: [] };
       const lng = +/point=[-\d.]+,(-?[\d.]+)/.exec(url)[1];
       return { features: lng < -95.5 ? [flood] : [] };

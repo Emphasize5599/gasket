@@ -21,13 +21,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
  assert.match(await p.innerText('#tRouteInfo'),/Website route · approximate/);
  assert.equal(await p.evaluate(()=>new URL(__gmapsUrl).searchParams.get('avoid')),'tolls');
- await p.evaluate(()=>__trip.step(5));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
+ await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
  assert.equal(await p.evaluate(()=>__paid),0);assert((await p.evaluate(()=>__web))>0);
  assert.equal(await p.isDisabled('#taResults [data-trip-refresh="api"]'),true);
  assert.equal(await p.locator('#taResults [data-trip-refresh="discover"]').count(),1);
  const stations=await p.evaluate(()=>PriceHistory.stations());assert(stations.some(s=>s.name==='Local Fuel'));
- await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tpS7');
- assert.equal(await p.locator('#tpS7 .price-refresh-card').count(),0);
+ await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tpS8');
+ assert.equal(await p.locator('#tpS8 .price-refresh-card').count(),0);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert.equal(errors.length,0,errors.join('\n'));
  const fresh=await b.newPage({viewport:{width:320,height:900}});await fresh.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);

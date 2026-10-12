@@ -51,7 +51,7 @@ with sync_playwright() as p:
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
         assert step(pg) == 1
         steps = pg.evaluate("[...document.querySelectorAll('#tpSteps [data-step] .lf')].map(e => e.textContent)")
-        assert steps == ['Garage', 'Advisory', 'Route', 'Parameters', 'Adjustments', 'Stops', 'Departure'], steps
+        assert steps == ['Garage', 'Advisory', 'Route', 'Hazards', 'Parameters', 'Adjustments', 'Stops', 'Departure'], steps
         nxt(pg); assert step(pg) == 2, 'Garage -> Advisory'
         car = pg.evaluate('window.Garage.car()'); print(' ', name, 'car:', car['year'], car['make'], car['model'], car.get('power'))
         # ---- no VIN: the recalls on record for the model, and how to check yours ----

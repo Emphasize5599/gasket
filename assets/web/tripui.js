@@ -158,8 +158,8 @@
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
-  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Adjustments', 'Stops', 'Departure'], step = 1;
-  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_PARAMS = 4, ST_ADJ = 5, ST_STOPS = 6, ST_DEPART = 7;
+  var STEPS = ['Garage', 'Advisory', 'Route', 'Hazards', 'Parameters', 'Adjustments', 'Stops', 'Departure'], step = 1;
+  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 4, ST_PARAMS = 5, ST_ADJ = 6, ST_STOPS = 7, ST_DEPART = 8;
   /** Adjustments and Stops both show the plan (and the map). */
   function onPlan(k) { return k === ST_ADJ || k === ST_STOPS; }
   function tpBody() { return $('tpBody'); }
@@ -203,19 +203,20 @@
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);
     show(pg, true);
-    var full = step < ST_ADJ;   // nothing to see on the map yet: Garage, Route and Parameters take the whole screen
-    // coming down to the map: the list starts at 75% of the screen (drag it anywhere from there) — straight away, not
-    // as a slide a busy screen could freeze halfway
-    if (!full && (!shown || shown < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
+    var full = step < ST_HAZ || step === ST_PARAMS;   // nothing to see on the map: Garage, Advisory, Route and Parameters take the whole screen
+    // coming down to the map: Hazards keeps the map big (the panel at 25%); the plan's list starts at 75% (drag it
+    // anywhere from there) — straight away, not as a slide a busy screen could freeze halfway
+    if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzLeg = shown > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
+    else if (!full && (!shown || shown < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
     if (step !== ST_DEPART && preDepartH != null) { if (!full && shown === ST_DEPART) pg.style.setProperty('--panel-h', preDepartH); preDepartH = null; }   // back from Departure: your height again
     if (!full && (pg.classList.contains('full') || !shown)) {
       pg.classList.add('snap'); requestAnimationFrame(function () { requestAnimationFrame(function () { pg.classList.remove('snap'); }); });
     }
     pg.classList.toggle('full', full); document.body.classList.toggle('trip-full', full);
-    if (!full && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
+    if (!full && step !== ST_HAZ && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
     if (full) mapLoaded();
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
-      var k = i + 1, sh = { Advisory: 'Advice', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
+      var k = i + 1, sh = { Advisory: 'Advice', Hazards: 'Hazards', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
       var attn = k === ST_ADVISORY && window.Advisory && Advisory.attention() > 0;   // something worth a look
       return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > reach() ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
@@ -223,7 +224,7 @@
     var b = tpBody();
     if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
     var e = stepEl(step), c = built[step];
-    var fresh = !c || step === ST_DEPART || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));   // a key added or removed: cruising speed on or off
+    var fresh = !c || step === ST_DEPART || step === ST_HAZ || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));   // a key added or removed: cruising speed on or off
     e.classList.remove('hidden'); shown = step;
     if(step===ST_PARAMS&&$('tRuleCap')&&(!S.speed.rule||S.speed.rule.capAuto||S.speed.rule.cap==null))$('tRuleCap').value=Garage.ruleCap();
     if (fresh) {
@@ -233,7 +234,6 @@
       b.scrollTop = 0;
     } else {
       b.scrollTop = scrolls[step] || 0;
-      if (step === ST_ROUTE) refitOptionMaps();
       if (step === ST_ADVISORY && window.Advisory && Advisory.wake) Advisory.wake();   // a car switch while it was hidden
     }
     // the big map: drawn after this frame paints, and only when its route or stops changed
@@ -242,9 +242,10 @@
     requestAnimationFrame(function () { setTimeout(function () {
       if (step !== k0) return;
       if (model && step >= ST_ADJ) { drawRoute(); if (!userMoved) fitRoute(false); }
+      hzSync();
       fitBtn(); sheetSize();
       if (step === ST_DEPART) fitDepart();
-      if (model && step >= ST_ADJ && !busy) mapLoaded();
+      if (model && (step >= ST_ADJ || step === ST_HAZ) && !busy) mapLoaded();
     }, 0); });
   }
   /** Departure: the panel only as tall as its content, and the whole route centered above it again. */
@@ -259,9 +260,6 @@
     userMoved = false;
     setTimeout(function () { if (step !== ST_DEPART) return; fitRoute(true); fitBtn(); placePinsSoon(); }, 260);
   }
-  function refitOptionMaps() {
-    Object.keys(rmaps).forEach(function (k) { var m = rmaps[k]; if (m._refit && document.body.contains(m.getContainer())) { m.invalidateSize(false); m._refit(); } });
-  }
   function navRender() {
     var nav = $('tpNav');
     if (loadingTrip) {   // a saved trip opening: say so where Next will be, and nothing else can be pressed yet
@@ -270,8 +268,8 @@
     }
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
-    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } closeLegs(); collectSafe(); step--; renderStep(); };
-    if ($('tNext')) $('tNext').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
+    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } closeLegs(); collectSafe(); step--; renderStep(); };
+    if ($('tNext')) $('tNext').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; } if (step === ST_HAZ && hzLeg < hzLegs() - 1) { hzGoLeg(hzLeg + 1); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
     if ($('tOpen')) $('tOpen').onclick = openMaps;
     routeGate(); backMode();
   }
@@ -424,6 +422,8 @@
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
       '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div>' +
+        '<div class="field col' + (t.returnTrip ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<small>When you\'ll start the way back, for the weather on that leg. Blank = right after you arrive.</small></div>' +
+        '<div class="dt-row"><input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"><button type="button" class="btn tonal sm" id="tBackNow">Right away</button></div></div>' +
         '<div class="field col"><div class="lbl">Leaving<small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Blank = now. Prices can change before you go.</small></div>' +
         '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
         '<div id="tRouteGo"></div></div>' +
@@ -452,6 +452,7 @@
       '<div class="field"><div class="lbl">Check Google\'s other routes too<small>Plans the trip on each other route Google suggests and tells you if one saves enough. Uses Google lookups for each route checked.</small></div>' + sw('tAltCmp', t.altCompare) + '</div>' +
       '<div class="grid2' + (t.altCompare ? '' : ' hidden') + '" id="tAltBox">' + num('tAltSave', 'Worth switching if it saves at least ($)', t.altMinSave, 1, 'for the whole trip') + '<span></span></div></div>';
     }
+    if (k === ST_HAZ) return '<div id="tHz"></div>';
     if (k === ST_ADJ) return '<div id="taResults"></div>';
     if (k === ST_STOPS) return '<div id="tsResults"></div>';
     return departureHtml();
@@ -474,6 +475,7 @@
       return;
     }
     if (k === ST_ROUTE) { bindRoute(); return; }
+    if (k === ST_HAZ) { renderHz(); hzLoadLeg(hzLeg); return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
     if (onPlan(k)) {
       renderResults();
@@ -507,8 +509,10 @@
       route = null; model = null; replay = null; result = null; parsing = null; parsedEl().innerHTML = ''; renderInfo(); layer.clearLayers();
       if (S.trip.src === 'link' && $('tLink').value.trim()) readLink().then(autoRoutes);
     };
+    $('tBackNow').onclick = function () { $('tBackAt').value = ''; collectSafe(); };
+    $('tBackAt').addEventListener('change', function () { collectSafe(); });
     $('tRound').onchange = function () {
-      collectSafe();
+      collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip);
       if (route && syncReturn(route)) { model = null; replay = null; result = null; autoRoute = false; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
       renderStops(); renderInfo();
     };
@@ -652,6 +656,7 @@
     if (segOn('tArrive', 'a')) t.arrive = segOn('tArrive', 'a');
     if (v('tTopMi') != null) t.topUpMi = Math.max(0, Math.round((parseFloat(v('tTopMi')) || 0) * 10) / 10);
     if (on('tRound') != null) t.returnTrip = on('tRound');
+    if (v('tBackAt') != null) t.backAt = v('tBackAt') || '';
     if (segOn('tSrc', 'src')) t.src = segOn('tSrc', 'src');
     if (v('tDepart') != null) t.depart = v('tDepart') || '';
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
@@ -1433,50 +1438,19 @@
   function renderInfo(keepMaps) {
     routeGate();
     var el = $('tRouteInfo'); if (!el) return;
-    var keepEls = {};
-    if (keepMaps) Object.keys(rmaps).forEach(function (id) { var c = rmaps[id].getContainer(); if (c && el.contains(c)) keepEls[id] = c; });
     if (!model) { el.innerHTML = ''; alts = []; return; }
     var need = model.galTo(model.totalMi);
     var est = estLookups(), left = (Number(S.monthlyCap) || 0) - N.callsThisMonth();
     var h = '<div class="card route-card">';
-    var legView = multiLeg(route) && route.legs && route.legs.length === route.stops.length - 1 && route.legs.every(function (L) { return L.alts; });
-    if (legView) {
-      h += '<div class="sub-h">Pick a route for each leg</div>';
-      route.legs.forEach(function (L, i) {
-        h += '<div class="leg-pick"><div class="leg-pick-h"><span class="leg-n">' + (i + 1) + '</span>' + arrowHtml(legName(route, i)) + '</div>' +
-          (L.alts.length > 1 ? '<div class="rmap" id="tRmap' + i + '"></div>' : '') + '<div class="alts-pick">' + L.alts.map(function (a, k) {
-            var mi = (a.distanceMeters || 0) / 1609.344, sec = parseFloat(String(a.duration || '0'));
-            return '<button data-leg="' + i + '" data-lk="' + k + '" class="' + (k === L.sel ? 'on' : '') + '"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b>' +
-              '<span>' + Math.round(mi) + ' mi · ' + fmtDur(sec) + (L.alts.length === 1 ? ' · Google\'s only route' : '') + '</span></button>';
-          }).join('') + '</div></div>';
-      });
-    } else if (alts.length > 1) {
-      h += '<div class="sub-h">Pick a route</div>' +
-        '<div class="rmap" id="tRmap"></div><div class="alts-pick">' + alts.map(function (a, k) {
-        var mi = (a.distanceMeters || 0) / 1609.344, sec = parseFloat(String(a.duration || '0'));
-        return '<button data-alt="' + k + '" class="' + (k === altSel ? 'on' : '') + '"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b>' +
-          '<span>' + Math.round(mi) + ' mi · ' + fmtDur(sec) + (k === altSel && pickedRoute(route) ? (altSure ? ' · ✓ same as in Google Maps' : ' · closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? ' · matches your link' : '')) + '</span></button>';
-      }).join('') + '</div>';
-    }
+    // the routes are picked on the next step (Hazards), on the big map with what's on each
+    var nLeg = hzLegs(), nOpt = 0; for (var li = 0; li < nLeg; li++) nOpt += hzAlts(li).length;
+    h += '<div class="sub-h">' + (nLeg > 1 ? nLeg + ' legs · ' + nOpt + ' route options' : nOpt + ' route option' + (nOpt === 1 ? '' : 's')) + '</div>' +
+      '<p class="lead small keep">Next: pick ' + (nLeg > 1 ? 'each leg\'s route' : 'your route') + ' on the map, with the weather and hazards along each one.</p>';
     h += limBar(model, 'Speed limits', true);
     if(alts[altSel]&&alts[altSel].websiteApproximate)h+='<div class="lead small keep">Website route · approximate '+A.qBtn('Website route points and total time are not full API turn-by-turn geometry or no-traffic timing. Detours and fuel/time estimates are less precise. Verify the route in Google Maps before driving. An API key is recommended for more reliable planning.')+'</div>';
     var nOther = altCompareList().length;
     h += A.gAttr('in-card') + '<div class="lead small'+(!S.apiKey||S.keylessRegular?' keep':'')+'">'+(!S.apiKey||S.keylessRegular?'Website discovery · slower, variable coverage '+A.qBtn('No API key required. Searches overlap along each route and scroll every result list. Websites can still omit stations or prices. An API key is recommended for faster, more reliable coverage.'):'Finding stations: '+(est?'about '+est+' Google lookups'+(nOther?' (your route + '+nOther+' others)':''):'no Google lookups'))+'.</div></div>';
     el.innerHTML = h;
-    el.querySelectorAll('[data-alt]').forEach(function (b) { b.onclick = function () { pickAlt(+b.dataset.alt); }; });
-    el.querySelectorAll('[data-leg]').forEach(function (b) { b.onclick = function () { pickLeg(+b.dataset.leg, +b.dataset.lk); }; });
-    var lineOf = function (a) { return { pts: thinAlt(a), time: fmtDur(parseFloat(String(a.duration || '0'))), miles: Math.round((a.distanceMeters || 0) / 1609.344).toLocaleString() + ' mi' }; };
-    // a map whose options didn't change is moved over as it is (just re-highlighted); the rest are drawn
-    var todo = [];
-    var put = function (id, list, sel, onPick) {
-      var ph = $(id); if (!ph) return;
-      var m0 = rmaps[id];
-      if (keepEls[id] && m0 && m0._nLines === list.length && m0._alts === list[0]) { ph.replaceWith(keepEls[id]); m0._onPick = onPick; todo.push(function () { m0._setSel(sel); }); }
-      else todo.push(function () { var m = optionsMap($(id), list.map(lineOf), sel, onPick); if (m) m._alts = list[0]; });
-    };
-    if (legView) route.legs.forEach(function (L, i) { put('tRmap' + i, L.alts, L.sel, function (k) { pickLeg(i, k); }); });
-    put('tRmap', alts, altSel, pickAlt);
-    todo.forEach(function (f) { f(); });
   }
   /** A tap on a route option: highlighted at once; its route (long ones take a moment) is read right after. */
   var picking = false;
@@ -2747,78 +2721,190 @@
     if (rn) w.push(rn);
     if (KIND() === 'h2') w.push('Hydrogen stations go offline often — check each one\'s live status before you count on it.');
     h += '<div class="warns">' + w.map(function (x) { return '<div class="note">' + esc(x) + '</div>'; }).join('') + '</div>';
-    h += wxHtml();
     h += '<p class="lead small keep center"><a href="#" id="tsReport">Troubleshooting report</a></p>';
     return h;
   }
 
-  // ---------- weather and air along the route (Departure): the forecast where and when you'll be, and what to do ----------
-  var wx = { sig: null, st: null };
-  function wxSig() {
-    var fd = futureDepart(), p = result && result.plan;
-    return [model.totalMi.toFixed(1), model.pts[0].lat.toFixed(4), model.pts[model.pts.length - 1].lng.toFixed(4), fd ? Math.round(fd.getTime() / 9e5) : 'now', p && p.ok ? p.stops.length : 0].join('|');
-  }
+  // ---------- step 4: Hazards — each leg's route, picked on the big map with the weather and hazards along each one ----------
+  // Every option for the leg is drawn; each hazard is a colored stretch where and when you'd be in it (RouteWx.forRoute),
+  // labeled on the chosen route only. Departure shows the chosen routes' stretches, without labels.
   function wxGet(url) {       // forecasts are kept 45 min, warnings 10 min
     var o = A.KV.get('wx', url, /weather\.gov/.test(url) ? 10 * 60e3 : 45 * 60e3);
     if (o) return Promise.resolve(o.v);
     return call('fetchJson', url).then(function (r) { if (r && r.body) A.KV.put('wx', url, r); return r; });
   }
-  function ensureWx(force) {
-    if (!model || !window.RouteWx) return;
-    var sig = wxSig();
-    if (!force && wx.sig === sig && (wx.st === 'loading' || (wx.st === 'done' && Date.now() - wx.t < 30 * 60e3))) return;
-    var p = result && result.plan, ev = KIND() === 'ev', t0 = Date.now();
-    var stops = p && p.ok ? p.stops.map(function (x) { return { mi: x.c.d, min: ev && x.c.kw ? Math.max(10, x.buyGal / x.c.kw * 60) : 10 }; }) : [];
-    var pts = RouteWx.samples(model, { depart: departAt().getTime(), stops: stops });
-    wx = { sig: sig, st: 'loading' }; refreshWx();
-    RouteWx.lookup(pts, wxGet, { stateAt: window.Limits && Limits.stateAt }).then(function (res) {
-      if (wx.sig !== sig) return;
-      wx = { sig: sig, st: 'done', t: Date.now(), res: res, xs: RouteWx.stretches(res.pts) };
-      LG.info('wx', 'Weather and air along the route in ' + (Date.now() - t0) + ' ms', { stats: res.stats, stretches: wx.xs.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.events.join('/') || x.peak]; }) });
-      refreshWx();
-    }).catch(function (e) { if (wx.sig !== sig) return; wx = { sig: sig, st: 'error', err: String(e && e.message || e) }; LG.warn('wx', 'Weather along the route failed', wx.err); refreshWx(); });
-  }
-  function refreshWx() { var el = $('tWx'); if (el) { el.outerHTML = wxHtml(); bindWx(); } }
-  function bindWx() { var r = $('tWxRetry'); if (r) r.onclick = function (e) { e.preventDefault(); ensureWx(true); }; }
   function wxWhen(a, b) {
     var day = function (t) { return new Date(t).toDateString(); }, multi = day(a) !== day(Date.now()) || day(b) !== day(a);
     var f = function (t, wd) { return new Date(t).toLocaleString([], wd ? { weekday: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' }); };
     return b - a < 10 * 60e3 ? 'around ' + f(a, multi) : f(a, multi) + '–' + f(b, day(b) !== day(a));
   }
-  function wxTitle(x) {
-    var K = RouteWx.KINDS[x.kind][0], pk = x.peak || {};
-    if (x.kind === 'alert') return x.events.join(' · ') || K;
-    if (x.kind === 'air') return (x.level >= 2 ? 'Unhealthy air' : 'Air unhealthy for sensitive groups') + (pk.aqi ? ' (AQI ' + pk.aqi + ')' : '');
-    if (x.kind === 'rain') return x.level >= 2 ? 'Heavy rain' : 'Rain';
-    if (x.kind === 'snow') return x.level >= 2 ? 'Heavy snow' : 'Snow';
-    if (x.kind === 'heat') return 'Heat' + (pk.tF != null ? ' (up to ' + Math.round(pk.tF) + '°F)' : '');
-    if (x.kind === 'cold') return 'Below freezing' + (pk.tF != null ? ' (down to ' + Math.round(pk.tF) + '°F)' : '');
-    if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : '');
-    return K;
+  var hzLeg = 0, hzLayer = L.layerGroup(), hzDepLayer = L.layerGroup(), hzLeaders = L.layerGroup(), hzTips = [], hzLines = [], hzCache = new WeakMap(), hzModels = new WeakMap(), countiesP = null;
+  if (!map.getPane('hzpane')) { var hzp = map.createPane('hzpane'); hzp.style.zIndex = 420; hzp.style.pointerEvents = 'none'; }
+  function legsMode() { return !!(multiLeg(route) && route.legs && route.legs.length && route.legs.every(function (L) { return L.alts; })); }
+  function hzLegs() { return legsMode() ? route.legs.length : (alts.length ? 1 : 0); }
+  function hzAlts(i) { return legsMode() ? (route.legs[i] || {}).alts || [] : alts; }
+  function hzSel(i) { return legsMode() ? (route.legs[i] || {}).sel || 0 : altSel; }
+  /** When you'd start leg i: when you leave, plus the legs before it (the way back: your "head back" time, if later). */
+  function hzDepart(i) {
+    var t = departAt().getTime();
+    for (var j = 0; j < i; j++) { var a = hzAlts(j)[hzSel(j)]; t += parseFloat(String(a && a.duration || '0')) * 1000; }
+    if (i > 0 && i === hzLegs() - 1 && S.trip.returnTrip && S.trip.backAt) { var b = new Date(S.trip.backAt).getTime(); if (b > t) t = b; }
+    return t;
   }
-  function wxHtml() {
-    var h = '<div class="card wx-card" id="tWx"><h3>Weather & air along the way</h3>';
-    if (!wx.st || wx.st === 'loading') return h + A.ldBar('Checking the forecast where and when you\'ll be') + '</div>';
-    if (wx.st === 'error') return h + '<p class="lead small keep">Couldn\'t get the forecast (' + esc(wx.err) + '). <a href="#" id="tWxRetry">Try again</a></p></div>';
+  function hzModel(a) { var m = hzModels.get(a); if (!m) { m = T.buildRoute(a, carModel()); hzModels.set(a, m); } return m; }
+  function loadCounties() {
+    if (window.US_COUNTIES) return Promise.resolve();
+    if (!countiesP) countiesP = new Promise(function (ok) { var sc = document.createElement('script'); sc.src = 'counties.js'; sc.onload = ok; sc.onerror = function () { countiesP = null; ok(); }; document.head.appendChild(sc); });
+    return countiesP;
+  }
+  function hzEntry(a, i) { var d = Math.round(hzDepart(i) / 6e4), e = hzCache.get(a); if (!e || e.d !== d) { e = { d: d, st: null }; hzCache.set(a, e); } return e; }
+  async function hzLoad(a, i) {
+    var e = hzEntry(a, i); if (e.st) return e;
+    e.st = 'loading'; var t0 = Date.now();
+    try {
+      var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties,
+        countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.compare });
+      e.st = 'done'; e.hz = r.hazards; e.stats = r.stats;
+      LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || ''].filter(function (v) { return v !== ''; }); }) });
+    } catch (err) { e.st = 'error'; e.err = String(err && err.message || err); LG.warn('wx', 'Hazards along a route failed', e.err); }
+    return e;
+  }
+  /** Look up every option on leg i (the chosen one first), redrawing as each comes in. */
+  async function hzLoadLeg(i) {
+    var list = hzAlts(i), sel = hzSel(i), order = list.map(function (_, k) { return k; }).sort(function (x, y) { return (y === sel) - (x === sel); });
+    for (var q = 0; q < order.length; q++) {
+      var e = hzEntry(list[order[q]], i); if (e.st === 'done' || e.st === 'loading') continue;
+      await hzLoad(list[order[q]], i);
+      if (step === ST_HAZ && hzLeg === i) { renderHz(); drawHaz(); }
+    }
+  }
+  async function hzChoose(k) {
+    var i = hzLeg; if (k === hzSel(i)) return;
+    if (legsMode()) await pickLeg(i, k); else await pickAlt(k);
+    if (step === ST_HAZ) { renderHz(); drawHaz(); }
+  }
+  function hzGoLeg(j) { collectSafe(); hzLeg = j; userMoved = false; renderHz(); drawHaz(); hzPill(); tpBody().scrollTop = 0; hzLoadLeg(j); }
+  /** The part of a route between two miles, as map points. */
+  function hzSlice(a, from, to) {
+    var m = hzModel(a), out = [], p0 = m.pointAt(from), last = -1;
+    out.push([p0.lat, p0.lng]);
+    for (var k = 0; k < m.pts.length; k++) { var c = m.cum[k]; if (c <= from || c >= to) continue; if (c - last >= 0.1) { out.push([m.pts[k].lat, m.pts[k].lng]); last = c; } }
+    var p1 = m.pointAt(to); out.push([p1.lat, p1.lng]);
+    return out;
+  }
+  function hzKinds(list) { var o = {}; (list || []).forEach(function (x) { o[x.kind] = Math.max(o[x.kind] || 0, x.level); }); return RouteWx.ORDER.filter(function (k) { return o[k]; }); }
+  function hzDot(k) { return '<i class="hz-dot" style="background:' + RouteWx.COLORS[k] + '" title="' + esc(RouteWx.KINDS[k][0]) + '"></i>'; }
+  function hzListHtml(xs, st) {
     var c = window.Garage && Garage.car(), tt = c && c.tires || {}, e = window.TireMath ? TireMath.estimate(tt) : null;
-    var ctx = { tread: e ? e.depth : null, tireType: tt.type, towing: !!tt.towMode };
-    var xs = wx.xs || [], st = wx.res.stats;
+    var ctx = { tread: e ? e.depth : null, tireType: tt.type, towing: !!tt.towMode }, h = '';
     if (!xs.length) h += '<p class="lead small keep">' + (st.weather ? 'Nothing to watch for: no storms, rain, snow, ice, fog, strong wind, extreme heat or cold, warnings or bad air forecast where and when you\'ll be.' : 'No forecast reaches that far ahead yet.') + '</p>';
     h += xs.map(function (x) {
       var sit = RouteWx.KINDS[x.kind][1], pr = sit && window.Climate && Climate.presetFor ? Climate.presetFor(c, sit, new Date(x.from)) : null;
       var lines = RouteWx.advice(x, Object.assign({ preset: pr }, ctx));
       var where = (x.toMi - x.fromMi < 1 ? 'around mile ' + Math.round(x.fromMi) : 'miles ' + Math.round(x.fromMi) + '–' + Math.round(x.toMi)) + ' · ' + wxWhen(x.from, x.to);
-      return '<details class="wx-x lv' + x.level + '"' + (x.level >= 2 ? ' open' : '') + '><summary><span class="wx-ic">' + RouteWx.KINDS[x.kind][2] + '</span><span class="wx-t"><b>' + esc(wxTitle(x)) + '</b><small>' + esc(where) + '</small></span></summary>' +
+      var notice = x.src === 'nws' && x.event !== RouteWx.title(x) ? '<small class="wx-ev">' + esc(x.event) + '</small>' : '';
+      return '<details class="wx-x lv' + x.level + '"' + (x.level >= 2 ? ' open' : '') + '><summary><span class="wx-ic" style="--hz:' + RouteWx.COLORS[x.kind] + '">' + RouteWx.KINDS[x.kind][2] + '</span><span class="wx-t"><b>' + esc(RouteWx.title(x)) + '</b>' + notice + '<small>' + esc(where) + '</small></span></summary>' +
         '<div class="wx-a">' + lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + '</div></details>';
     }).join('');
     var beyond = [];
     if (st.beyondWeather) beyond.push('the last ' + Math.round(st.beyondWeather / st.points * 100) + '% of the way is past the 16-day weather forecast');
     else if (st.beyondAir) beyond.push('the air forecast reaches about 5 days ahead, so the last ' + Math.round(st.beyondAir / st.points * 100) + '% of the way has no air reading yet');
     if (beyond.length) h += '<p class="lead small keep">Note: ' + esc(beyond.join('; ')) + '. Check again closer to the day.</p>';
-    return h + '<p class="wx-src">Weather data by Open-Meteo.com (CC BY 4.0; NOAA models) · Air: Copernicus Atmosphere Monitoring Service via Open-Meteo · Warnings: National Weather Service</p></div>';
+    return h;
+  }
+  function renderHz() {
+    var el = $('tHz'); if (!el) return;
+    var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
+    var list = hzAlts(hzLeg), sel = hzSel(hzLeg);
+    if (!list.length) { el.innerHTML = '<div class="card empty-res">Get your routes first.</div>'; return; }
+    var h = '<div class="hz-opts">' + list.map(function (a, k) {
+      var e = hzCache.get(a), mi = Math.round((a.distanceMeters || 0) / 1609.344), sec = parseFloat(String(a.duration || '0')), chips;
+      if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">checking…</span>';
+      else if (e.st === 'error') chips = '<span class="hz-ld">couldn\'t check</span>';
+      else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; }
+      // which one Google Maps had (your link), as before
+      var note = list.length === 1 ? 'Google\'s only route' : legsMode() ? '' : k === altSel && pickedRoute(route) ? (altSure ? '✓ same as in Google Maps' : 'closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? 'matches your link' : '');
+      return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +
+        (note ? '<span class="hz-note">' + esc(note) + '</span>' : '') + '<span class="hz-o2">' + chips + '</span></button>';
+    }).join('') + '</div>';
+    var e = hzCache.get(list[sel]);
+    h += '<div class="card wx-card" id="tWx"><h3>On this route</h3>';
+    if (!e || !e.st || e.st === 'loading') h += A.ldBar('Checking the forecast where and when you\'ll be');
+    else if (e.st === 'error') h += '<p class="lead small keep">Couldn\'t get the forecast (' + esc(e.err) + '). <a href="#" id="tHzRetry">Try again</a></p>';
+    else h += hzListHtml(e.hz, e.stats);
+    h += '<p class="wx-src">Weather data by Open-Meteo.com (CC BY 4.0; NOAA models) · Air: Copernicus Atmosphere Monitoring Service via Open-Meteo · Warnings: National Weather Service</p></div>';
+    el.innerHTML = h;
+    el.querySelectorAll('[data-hzk]').forEach(function (b) { b.onclick = function () { hzChoose(+b.dataset.hzk); }; });
+    if ($('tHzRetry')) $('tHzRetry').onclick = function (ev) { ev.preventDefault(); hzCache.delete(list[sel]); renderHz(); hzLoadLeg(hzLeg); };
+  }
+  /** The big map on Hazards: every option for this leg, hazards on each, labels on the chosen one. */
+  function drawHaz() {
+    if (map.hasLayer(layer)) map.removeLayer(layer);
+    hzLayer.clearLayers(); hzLeaders.clearLayers(); if (!map.hasLayer(hzLayer)) hzLayer.addTo(map); hzLayer.addLayer(hzLeaders);
+    hzTips = []; hzLines = [];
+    var list = hzAlts(hzLeg), sel = hzSel(hzLeg), all = [];
+    if (!list.length) return;
+    list.map(function (_, k) { return k; }).filter(function (k) { return k !== sel; }).concat([sel]).forEach(function (k) {
+      var a = list[k], on = k === sel, pts = thinAlt(a), pick = function () { hzChoose(k); };
+      hzLines.push({ pts: pts });
+      L.polyline(pts, { color: '#ffffff', weight: on ? 10 : 8, opacity: 0.95, interactive: false }).addTo(hzLayer);
+      L.polyline(pts, { color: on ? '#1a73e8' : ROUTE_GRAY, weight: on ? 6 : 5, opacity: 1 }).on('click', pick).addTo(hzLayer);
+      var e = hzCache.get(a);
+      if (e && e.st === 'done') e.hz.forEach(function (x) {
+        var seg = hzSlice(a, x.fromMi, x.toMi), col = RouteWx.COLORS[x.kind]; if (seg.length < 2) return;
+        L.polyline(seg, { color: col, weight: on ? 6 : 5, opacity: on ? 1 : 0.9, lineCap: 'butt' }).on('click', pick).addTo(hzLayer);
+        if (!on) return;
+        var cands = [0.5, 0.3, 0.7, 0.15, 0.85].map(function (f) { var q = seg[Math.min(seg.length - 1, Math.floor(f * (seg.length - 1)))]; return L.latLng(q[0], q[1]); });
+        var tip = L.tooltip({ permanent: true, direction: 'top', offset: [0, -6], className: 'hzbub', interactive: false, opacity: 1 })
+          .setLatLng(cands[0]).setContent('<i style="background:' + col + '"></i>' + RouteWx.KINDS[x.kind][2] + '<span>' + esc(RouteWx.title(x)) + '</span>');
+        hzLayer.addLayer(tip);
+        hzTips.push({ k: hzTips.length, cands: cands, tip: tip, color: col });
+      });
+      L.polyline(pts, { color: '#000', weight: 22, opacity: 0.001 }).on('click', pick).addTo(hzLayer);   // easier to tap
+      all = all.concat(pts);
+    });
+    var ep = thinAlt(list[sel]), mk = function (p, t) { L.marker(p, { icon: L.divIcon({ className: 'pin', html: '<div class="tend">' + t + '</div>', iconSize: null }), interactive: false }).addTo(hzLayer); };
+    mk(ep[0], 'A'); mk(ep[ep.length - 1], 'B');
+    var nb = L.latLngBounds(all);
+    if (!routeBounds || !routeBounds.equals(nb)) { routeBounds = nb; userMoved = false; }
+    if (!userMoved) fitRoute(false);
+    fitBtn(); placeHzSoon();
+  }
+  function placeHz() {
+    if (step !== ST_HAZ || !hzTips.length || !map.hasLayer(hzLayer)) return;
+    var sz = map.getSize(), cover = sheetCover(), st = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--st')) || 0;
+    var tops = Labels.rectsOf(map, Array.prototype.filter.call(document.querySelectorAll('.top .bar > *, #apiCount, #hzLeg'), function (e) { return getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'; }), 6);
+    placeLabels(map, hzTips, -1, hzLines, [{ x: 0, y: sz.y - cover, w: sz.x, h: cover }, { x: 0, y: 0, w: sz.x, h: st + 4 }].concat(tops), { leaders: hzLeaders, leaderPane: 'tleaders' });
+  }
+  var hzT = 0;
+  function placeHzSoon() { clearTimeout(hzT); hzT = setTimeout(placeHz, 30); }
+  map.on('zoomend moveend', function () { if (step === ST_HAZ) placeHzSoon(); });
+  /** Departure: the chosen routes' hazards on the route, no labels (looked up now if they weren't yet). */
+  function drawDepHaz() {
+    hzDepLayer.clearLayers(); if (!map.hasLayer(hzDepLayer)) hzDepLayer.addTo(map);
+    for (var i = 0; i < hzLegs(); i++) (function (i) {
+      var a = hzAlts(i)[hzSel(i)]; if (!a) return;
+      var e = hzEntry(a, i);
+      if (e.st !== 'done') { if (!e.st) hzLoad(a, i).then(function () { if (step === ST_DEPART) drawDepHaz(); }); return; }
+      e.hz.forEach(function (x) { var seg = hzSlice(a, x.fromMi, x.toMi); if (seg.length > 1) L.polyline(seg, { pane: 'hzpane', color: RouteWx.COLORS[x.kind], weight: 6, opacity: 0.95, lineCap: 'butt', interactive: false }).addTo(hzDepLayer); });
+    })(i);
+  }
+  /** "Step 1/2": which leg you're picking (round trips and trips with stops in between). */
+  function hzPill() {
+    var b = $('hzLeg');
+    if (!b) { b = document.createElement('div'); b.id = 'hzLeg'; b.className = 'hz-leg hidden'; document.body.appendChild(b); }
+    var on = step === ST_HAZ && document.body.classList.contains('trip-on') && hzLegs() > 1;
+    b.classList.toggle('hidden', !on);
+    if (on) b.innerHTML = 'Step ' + (hzLeg + 1) + '/' + hzLegs() + '<small>' + esc(String(legName(route, hzLeg)).replace(/<[^>]*>/g, '')) + '</small>';
+  }
+  /** Which hazard layers the map shows for this step (labels only while picking routes). */
+  function hzSync() {
+    var on = document.body.classList.contains('trip-on');
+    if (on && step === ST_HAZ) drawHaz(); else { if (map.hasLayer(hzLayer)) map.removeLayer(hzLayer); hzTips = []; }
+    if (on && step === ST_DEPART && model) drawDepHaz(); else if (map.hasLayer(hzDepLayer)) map.removeLayer(hzDepLayer);
+    hzPill();
   }
   function bindDeparture() {
-    ensureWx(); bindWx();
     if ($('tsReport')) $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(e); };
     if ($('tShare')) $('tShare').onclick = shareTrip;
     var b = $('tOpen'); if (b) b.disabled = !(result && result.plan.ok);
@@ -3111,7 +3197,7 @@
   if (window.ResizeObserver) { var roT = 0; new ResizeObserver(function () { clearTimeout(roT); roT = setTimeout(placePinsSoon, 120); }).observe($('trip')); }
   map.on('zoomend moveend', placePinsSoon);
   function drawRoute() {
-    var r0 = result, key = { model: model, result: r0, plan: r0 && r0.plan, top: r0 && r0.top, cands: r0 && r0.cands };
+    var r0 = result, key = { model: model, result: r0, plan: r0 && r0.plan, top: r0 && r0.top, cands: r0 && r0.cands, dep: step === ST_DEPART };
     if (map.hasLayer(layer) && Object.keys(key).every(function (x) { return drawn[x] === key[x]; })) return;
     drawn = key;
     layer.clearLayers();
@@ -3134,7 +3220,7 @@
       var dz = dotSize(map.getZoom());
       dots = [];
       result.cands.forEach(function (c) {
-        if (chosen[c.id]) return;
+        if (chosen[c.id] || step === ST_DEPART) return;           // Departure: only your stops (the rest is noise by then)
         var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.brand(c.station.brand).color, fillOpacity: 1 });
         dots.push(dot);
         dot
@@ -3208,7 +3294,7 @@
       document.body.appendChild(b);
       b.onclick = function () { userMoved = false; fitBtn(); fitRoute(true); };
     }
-    var on = userMoved && routeBounds && step >= ST_ADJ && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
+    var on = userMoved && routeBounds && (step >= ST_ADJ || step === ST_HAZ) && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
     b.classList.toggle('hidden', !on);
     if (on) b.style.bottom = (sheetCover() + 12) + 'px';
   }
@@ -3384,7 +3470,7 @@
     resetAdjust();
     closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ();
     layer.clearLayers(); drawn = {}; if (map.hasLayer(layer)) map.removeLayer(layer);
-    document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); A.render();
+    document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); hzSync(); A.render();
   }
   function endTrip() { closeTrip(); }
   function closeQ() { if (window.__closeQ) window.__closeQ(); }

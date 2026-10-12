@@ -24,7 +24,7 @@ with sync_playwright() as p:
     pg.click('#btnTrip'); pg.wait_for_timeout(400); pg.click('#tNext'); pg.wait_for_timeout(500); pg.click('#tNext'); pg.wait_for_timeout(500)   # Garage -> Advisory -> Route
     pg.fill('#tLink', LINK); pg.wait_for_timeout(800)
     pg.wait_for_function('!!window.__trip.state().model', timeout=15000); idle(pg)   # routes come by themselves
-    pg.click('#tNext'); pg.wait_for_timeout(400)
+    pg.click('#tNext'); pg.wait_for_timeout(400); pg.click('#tNext'); pg.wait_for_timeout(400)   # Route -> Hazards -> Parameters
     pg.click('#tFuelMode [data-fm="miles"]'); pg.fill('#tMiles', '70'); pg.fill('#tBuffer', '20')
     pg.click('#tNext'); idle(pg, 1500)
     st = pg.evaluate("(() => { const r = window.__trip.state().result; return { ok: r.plan.ok, est: r.estUsed, stops: r.plan.stops.map(s => [s.c.station.name, Math.round(s.c.d), s.c.price, !!s.c.est]) }; })()")

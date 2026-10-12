@@ -3,7 +3,7 @@
 Things the owner wants, saved for later. Add to it as ideas come up; take an item off when it ships.
 
 ## Trips
-- **Pollen along the route.** Weather and air along the way shipped in 0.0.114 (Open-Meteo, National Weather Service), but there's no free U.S. pollen forecast (Open-Meteo's covers Europe only; Google's Pollen API is paid). Add it if a free source turns up.
+- **Pollen along the route.** Weather and air along the way shipped in 0.0.114 (the Hazards step since 0.0.116) (Open-Meteo, National Weather Service), but there's no free U.S. pollen forecast (Open-Meteo's covers Europe only; Google's Pollen API is paid). Add it if a free source turns up.
 
 ## Hydrogen and electric cars
 - **In the main UI** since 0.0.100: the fuel-mode pill (⛽ / ⚡ / H₂) switches the top bar's selector, pins and list. Still to do there: picking plugs (CCS, NACS, CHAdeMO, J1772) from the pill's options, chargers and hydrogen stations in the same detail sheet as gas stations (price per kWh / kg, speed, open now), and Stops following the mode.

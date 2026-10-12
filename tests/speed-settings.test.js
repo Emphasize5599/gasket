@@ -6,11 +6,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'8');assert.match(await p.innerText('#workerValue'),/Auto/);
  await p.locator('#keylessWorkers').fill('16');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),16);
  await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'16');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),null);
- await p.click('#btnTrip');await p.evaluate(()=>__trip.step(4));
+ await p.click('#btnTrip');await p.evaluate(()=>__trip.step(5));
  assert.equal(await p.locator('#tLinkSl,#tLinkBox,#tSlowMode,#tMaxUnder').count(),0,'slider coupling UI is removed');
  await p.check('#tRule');assert.equal(await p.inputValue('#tRuleOver'),'0');assert.equal(Number(await p.inputValue('#tRuleCap')),await p.evaluate(()=>Garage.speedModel().rec.speed));
- await p.evaluate(()=>{Garage.car().type='suv';});await p.evaluate(()=>__trip.step(4));assert.equal(Number(await p.inputValue('#tRuleCap')),await p.evaluate(()=>Garage.speedModel().rec.speed),'automatic cap follows the current car');
- await p.fill('#tRuleCap','77');await p.dispatchEvent('#tRuleCap','change');await p.fill('#tRuleOver','0');await p.dispatchEvent('#tRuleOver','change');await p.evaluate(()=>__trip.step(4));
+ await p.evaluate(()=>{Garage.car().type='suv';});await p.evaluate(()=>__trip.step(5));assert.equal(Number(await p.inputValue('#tRuleCap')),await p.evaluate(()=>Garage.speedModel().rec.speed),'automatic cap follows the current car');
+ await p.fill('#tRuleCap','77');await p.dispatchEvent('#tRuleCap','change');await p.fill('#tRuleOver','0');await p.dispatchEvent('#tRuleOver','change');await p.evaluate(()=>__trip.step(5));
  assert.equal(await p.inputValue('#tRuleCap'),'77');assert.equal(await p.inputValue('#tRuleOver'),'0','zero is not replaced by the old +9 default');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(errors.length,0,errors.join('\n'));
  await p.reload();if(await p.locator('#settings:not(.hidden) #sDone').count()){await p.fill('#apiKey','TEST');await p.click('#sDone');}await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
@@ -23,7 +23,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   A.N.computeRoute=A.N.routeSearch=()=>{throw new Error('Saved-trip adjustment must not spend API calls');};
  });
  await p.click('#btnTrip');await p.click('[data-hist="speed-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
- await p.evaluate(()=>__trip.step(5));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);await p.click('#lgTog');await p.waitForSelector('#lgAll');
+ await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);await p.click('#lgTog');await p.waitForSelector('#lgAll');
  const bufferBefore=await p.evaluate(()=>__trip.state().result.bufMi);
  await p.locator('#lgAll').fill('5');await p.dispatchEvent('#lgAll','change');await p.waitForFunction(()=>!__trip.state().busy);
  assert.equal(await p.evaluate(()=>__trip.state().result.bufMi),bufferBefore,'speed adjustment does not change the buffer');

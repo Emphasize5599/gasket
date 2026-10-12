@@ -89,8 +89,9 @@ with sync_playwright() as p:
     pg.click('#tNext'); pg.wait_for_timeout(600); pg.click('#tNext'); pg.wait_for_timeout(600)   # Garage -> Advisory -> Route
     pg.fill('#tLink', LINK); pg.wait_for_timeout(1500)
     t0 = mark(pg); pg.wait_for_function('!!window.__trip.state().model', timeout=30000); idle(pg, 2000); res['get routes'] = worst(pg, t0, 'get routes')
-    t0 = mark(pg); pg.click('.alts-pick [data-alt="1"]'); pg.wait_for_timeout(2500); res['pick route'] = worst(pg, t0, 'pick another route')
-    t0 = mark(pg); pg.click('.alts-pick [data-alt="0"]'); pg.wait_for_timeout(2500); res['pick back'] = worst(pg, t0, 'pick route 1 again')
+    t0 = mark(pg); pg.click('#tNext'); pg.wait_for_timeout(2500); res['hazards'] = worst(pg, t0, 'Hazards: routes and their weather on the map')
+    t0 = mark(pg); pg.click('.hz-opt[data-hzk="1"]'); pg.wait_for_timeout(2500); res['pick route'] = worst(pg, t0, 'pick another route')
+    t0 = mark(pg); pg.click('.hz-opt[data-hzk="0"]'); pg.wait_for_timeout(2500); res['pick back'] = worst(pg, t0, 'pick route 1 again')
     pg.click('#tNext'); pg.wait_for_timeout(600)
     pg.click('#tFuelMode [data-fm="miles"]'); pg.fill('#tMiles', os.environ.get('MILES', '200')); pg.fill('#tBuffer', os.environ.get('BUF', '40'))
     t0 = mark(pg); pg.click('#tNext'); idle(pg, 3000); res['stops'] = worst(pg, t0, 'enter Stops (find stops)')
