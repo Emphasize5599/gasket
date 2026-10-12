@@ -6,7 +6,7 @@ async function (reqId, args) {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const started = Date.now(), rows = new Map(), prices = new Map();
   const discovery=args.mode==='discover',deadline=discovery?180000:30000;
-  let exhausted=false,stopReason='deadline',lastGrowth=Date.now();
+  let exhausted=false,stopReason='deadline',lastGrowth=Date.now(),firstFeedAt=0,firstReplyAt=0,replies=0;   // timings for the debug log
   let loaded = false, responseRead = false, limited = false, rejected = 0;
   let targetsComplete = false;
   const requested=['regular','midgrade','premium','diesel'].includes(args.grade)?args.grade:'regular';
@@ -92,7 +92,7 @@ async function (reqId, args) {
   const readRows = () => {
     const feed = document.querySelector('[role="feed"]');
     if (!feed) return null;
-    loaded = true;
+    loaded = true; if (!firstFeedAt) firstFeedAt = Date.now();
     limited = /limited view of Google Maps/i.test(document.body.innerText);
     for (const a of feed.querySelectorAll('a[href*="/maps/place/"][aria-label]')) {
       const href = a.href, id = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i.exec(href), point = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(href);
@@ -129,7 +129,7 @@ async function (reqId, args) {
           if (!r.ok) throw new Error('HTTP '+r.status);
           const raw = await r.text();
           if (raw.length > 5000000) throw new Error('Search response too large');
-          readPrices(raw); responseRead = true;
+          readPrices(raw); responseRead = true; replies++; if (!firstReplyAt) firstReplyAt = Date.now();
         })(),
         new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('Search response timed out'));},10000);})
       ]);
@@ -165,6 +165,6 @@ async function (reqId, args) {
     const priced=stores.filter(s=>s.prices[requested]).length;
     send({stores,partial:true,code:!loaded?'unreadable':!priced?'no_prices':'limited',
       error:!loaded?'Google gas results could not be read':!priced&&!discovery?'Google provided no matching '+requested+' prices; existing prices are retained':null,
-      detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,coverage:'Search results, not an exhaustive station catalog'}});
+      detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,firstFeedMs:firstFeedAt?firstFeedAt-started:null,firstReplyMs:firstReplyAt?firstReplyAt-started:null,lastGrowthMs:lastGrowth-started,replies,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}
 }

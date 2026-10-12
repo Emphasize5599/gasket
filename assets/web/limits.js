@@ -173,8 +173,21 @@
    * stretch across states or from rural to city can change). getJson(url) -> Promise<{body}|{error}>.
    * -> { roads: [{key, name, cls, from, to, mi, pieces: [{from, to, mi, limit, src, st, googleMph}]}], stats }
    */
+  /** A piece's limit: HPMS's reported one, else the state's maximum for that kind of road, else Google's typical speed. */
+  function settle(pc, road, hit, stats) {
+    pc.fsys = hit && hit.a ? +hit.a.f_system : (road.cls === 'interstate' ? 1 : 0);
+    if (hit && hit.limit) { pc.limit = hit.limit; pc.src = 'hpms'; stats.hpms++; }
+    else {
+      var v = fallback(pc.st, road, hit && hit.a, pc.googleMph);
+      if (v) { pc.limit = v; pc.src = 'state'; stats.state++; }
+      else { pc.limit = Math.max(25, Math.round(pc.googleMph / 5) * 5); pc.src = 'google'; stats.google++; }
+    }
+    pc.truck = truckLimit(pc.st, road.cls, pc.fsys, pc.limit);
+  }
   async function along(model, getJson, opts) {
     opts = opts || {};
+    // a route with no turn-by-turn text (read from the Maps website): find its roads from the road inventory instead
+    if (!model.segs.some(function (s) { return s.instr; })) return alongGeometry(model, getJson, opts);
     var rs = roads(model), todo = [], stats = { hpms: 0, state: 0, google: 0, errors: 0 };
     rs.forEach(function (r) {
       var n = Math.max(1, Math.ceil(r.mi / 5)), w = r.mi / n;   // a check every ~5 miles, so limit changes land close to where they are
@@ -208,14 +221,7 @@
         if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else hit = pickFor(j.features, road, pc.googleMph); } catch (e) { stats.errors++; } }
         else stats.errors++;
       }
-      pc.fsys = hit && hit.a ? +hit.a.f_system : (road.cls === 'interstate' ? 1 : 0);
-      if (hit && hit.limit) { pc.limit = hit.limit; pc.src = 'hpms'; stats.hpms++; }
-      else {
-        var v = fallback(pc.st, road, hit && hit.a, pc.googleMph);
-        if (v) { pc.limit = v; pc.src = 'state'; stats.state++; }
-        else { pc.limit = Math.max(25, Math.round(pc.googleMph / 5) * 5); pc.src = 'google'; stats.google++; }
-      }
-      pc.truck = truckLimit(pc.st, road.cls, pc.fsys, pc.limit);
+      settle(pc, road, hit, stats);
       pc.looked = true;
       done++; prog();
     }
@@ -251,6 +257,86 @@
     rs.forEach(function (r) { r.pieces.forEach(function (pc) { delete pc.road; delete pc.looked; }); r.sections = sections(r.pieces); });
     return { roads: rs, stats: stats };
   }
+  // ---------- routes without turn-by-turn text: which road each part is on, from the road inventory ----------
+  var SIGN_CLS = { 2: 'interstate', 3: 'us', 4: 'state', 6: 'county' };
+  /** The numbered road an HPMS segment belongs to, in the same form as roadOf: {key, name, cls, num} or null. */
+  function roadFromHpms(a, st) {
+    var cls = a && SIGN_CLS[+a.route_signing], num = a && String(a.route_number == null ? '' : a.route_number).replace(/^0+/, '');
+    if (!cls || !num) return null;
+    if (cls === 'county' && !(+a.f_system <= 4)) return null;       // only county roads that are real through routes
+    if (cls === 'interstate') return { key: 'I-' + num, name: 'I-' + num, cls: cls, num: num };
+    if (cls === 'us') return { key: 'US-' + num, name: 'US-' + num, cls: cls, num: num };
+    if (cls === 'state') return st ? { key: st + '-' + num, name: st + '-' + num, cls: cls, num: num } : { key: 'SR-' + num, name: 'State Hwy ' + num, cls: cls, num: num };
+    return { key: 'CR-' + num, name: 'County Rd ' + num, cls: cls, num: num };
+  }
+  /** The segment the route is on near a point: no ramps; the biggest road wins (an overpass is the rare exception, smoothed out later). */
+  function pickRoad(features, googleMph) {
+    var fs = (features || []).map(function (f) { return f.attributes || f; }).filter(function (a) { return +a.facility_type !== 4; });
+    if (!fs.length) return null;
+    var lim = function (a) { return +a.speed_limit >= 25 && +a.speed_limit <= 85 ? +a.speed_limit : null; };
+    fs.sort(function (a, b) { return (+a.f_system || 9) - (+b.f_system || 9) || (lim(a) == null) - (lim(b) == null) || Math.abs((lim(a) || 0) - googleMph) - Math.abs((lim(b) || 0) - googleMph); });
+    return { limit: lim(fs[0]), a: fs[0] };
+  }
+  /**
+   * Like along(), for a route that's only points and a total time: a check every ~5 miles (every third one first, then
+   * only between checks that differ), each naming the road and its limit; runs of the same numbered road become the
+   * stretches. A lone check on another road between two on the same one (a bridge, an overpass) is ignored.
+   */
+  async function alongGeometry(model, getJson, opts) {
+    var stats = { hpms: 0, state: 0, google: 0, errors: 0, geometry: true }, n = Math.max(1, Math.ceil(model.totalMi / 5)), w = model.totalMi / n, ps = [];
+    var mph = model.durationSec > 0 ? model.totalMi / (model.durationSec / 3600) : 55;
+    for (var k = 0; k < n; k++) ps.push({ from: k * w, to: (k + 1) * w, mi: w, googleMph: mph });
+    var done = 0, total = 0;
+    function prog() { if (opts.onProg) opts.onProg(done, Math.max(total, done)); }
+    async function look(pc) {
+      var p = model.pointAt((pc.from + pc.to) / 2);
+      pc.st = stateAt(p.lat, p.lng); pc.hit = null;
+      if (pc.st && opts.lookup !== false) {
+        var r = await getJson(hpmsUrl(pc.st, p.lat, p.lng));
+        if (r && r.body) { try { var j = JSON.parse(r.body); if (j.error) stats.errors++; else pc.hit = pickRoad(j.features, pc.googleMph); } catch (e) { stats.errors++; } }
+        else stats.errors++;
+      }
+      pc.road = pc.hit && roadFromHpms(pc.hit.a, pc.st);
+      pc.looked = true; done++; prog();
+    }
+    async function runAll(list) {
+      var i = 0, ws = [];
+      async function worker() { while (i < list.length) await look(list[i++]); }
+      for (var q = 0; q < Math.min(16, list.length); q++) ws.push(worker());
+      await Promise.all(ws);
+    }
+    var sig = function (pc) { return (pc.road ? pc.road.key : '-') + '|' + (pc.hit && pc.hit.limit) + '|' + pc.st; };
+    var coarse = ps.filter(function (pc, k) { return k % 3 === 0 || k === ps.length - 1; });
+    total = coarse.length + Math.ceil((ps.length - coarse.length) * 0.25);
+    await runAll(coarse);
+    var fill = [];
+    for (var a = 0; a < ps.length; a++) {
+      if (ps[a].looked) continue;
+      var L = null, R = null;
+      for (var b = a - 1; b >= 0 && !L; b--) if (ps[b].looked) L = ps[b];
+      for (var c = a + 1; c < ps.length && !R; c++) if (ps[c].looked) R = ps[c];
+      if (L && R && sig(L) === sig(R)) { ps[a].st = L.st; ps[a].hit = L.hit; ps[a].road = L.road; ps[a].copied = true; }
+      else fill.push(ps[a]);
+    }
+    total = done + fill.length; prog();
+    await runAll(fill);
+    stats.lookups = done;
+    // a single check on another road between two on the same road: the same road
+    for (var i = 1; i < ps.length - 1; i++) {
+      var pk = ps[i - 1].road, nk = ps[i + 1].road;
+      if (pk && nk && pk.key === nk.key && (!ps[i].road || ps[i].road.key !== pk.key)) { ps[i].road = pk; if (!ps[i].hit || !ps[i].hit.limit) ps[i].hit = ps[i - 1].hit; }
+    }
+    var rs = [], cur = null;
+    ps.forEach(function (pc) {
+      if (!pc.road) { cur = null; return; }
+      if (!cur || cur.key !== pc.road.key) { cur = { key: pc.road.key, name: pc.road.name, cls: pc.road.cls, num: pc.road.num, from: pc.from, to: pc.to, pieces: [] }; rs.push(cur); }
+      cur.to = pc.to;
+      settle(pc, cur, pc.hit, stats);
+      cur.pieces.push({ from: pc.from, to: pc.to, mi: pc.mi, googleMph: pc.googleMph, st: pc.st, limit: pc.limit, src: pc.src, fsys: pc.fsys, truck: pc.truck });
+    });
+    rs.forEach(function (r) { r.mi = r.to - r.from; r.sections = sections(r.pieces); });
+    return { roads: rs.filter(function (r) { return r.mi >= 2; }), stats: stats };
+  }
   /**
    * One section per posted limit: consecutive pieces with the same limit are joined; a single short reading that
    * differs from equal neighbors on both sides (e.g. 70 70 65 70 70 over 5-mile checks) is treated as noise.
@@ -274,6 +360,6 @@
     return (sig === 2 ? 'I-' : sig === 3 ? 'US-' : sig === 4 ? 'State ' : '') + a.route_number;
   }
 
-  var api = { TRUCK: TRUCK, truckLimit: truckLimit, MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, sections: sections, along: along, hpmsUrl: hpmsUrl };
+  var api = { TRUCK: TRUCK, truckLimit: truckLimit, MAX: MAX, CLASS: CLASS, stateAt: stateAt, pick: pick, pickFor: pickFor, stateMax: stateMax, roadOf: roadOf, roads: roads, sections: sections, along: along, roadFromHpms: roadFromHpms, pickRoad: pickRoad, hpmsUrl: hpmsUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Limits = api;
 })(this);

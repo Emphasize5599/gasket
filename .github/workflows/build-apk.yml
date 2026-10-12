@@ -31,6 +31,8 @@ on:
       - tests/speed-settings.test.js
       - tests/speed.test.js
       - tests/trip.test.js
+      - tests/limits.test.js
+      - tests/discovery-log.test.js
 
 permissions:
   contents: write

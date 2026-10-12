@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.113 - 2026-10-12 (keyless test branch only)
+- Cruising speed works on website routes (no API key): the major roads and their limits now come from the FHWA road inventory along the route, since website routes have no turn-by-turn text.
+- Detailed debug logging for website discovery: the area plan, progress every 50 areas, a per-area timing table (page load, list shown, last new row, stop reason, rows, new stations) and a summary of where the time went (lane use, idle tail, waiting after the last row, overlap between areas, phone memory).
+- Bug fixes.
+
 ## 0.0.112 - 2026-10-12 (keyless test branch only)
 - Going over the limit by default now starts at +0, and "no faster than" starts at your car's ideal cruising speed.
 - The "let the buffer and speed sliders adjust each other" option is gone: each slider stops at the gray where the other doesn't leave enough gas.

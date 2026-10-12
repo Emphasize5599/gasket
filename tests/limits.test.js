@@ -61,4 +61,27 @@ L.along(m, async (u) => { urls.push(u); return { body: JSON.stringify({ features
   assert.equal(legA.cost, 0); assert.equal(legA.minSaved, 0);
   assert.ok(legB.cost > 0 && legB.minSaved > 0, JSON.stringify(legB));
   console.log('limits tests passed —', urls.length, 'HPMS lookups;', res.stats, '| +5 mph over', Math.round(legB.mi), 'mi:', Math.round(legB.minSaved), 'min sooner for $' + legB.cost.toFixed(2));
+}).then(async () => {
+  // a website route (points + total time, no turn-by-turn text): roads come from the road inventory itself
+  const web = T.buildRoute({ distanceMeters: 300 * 1609.344, duration: Math.round(300 / 66 * 3600) + 's', polyline: { encodedPolyline: T.encodePolyline(line) }, legs: [] }, { city: 30, hwy: 38, comb: 33 });
+  const seen = [];
+  const res = await L.along(web, async (u) => {
+    seen.push(u);
+    const lng = +/geometry=(-?[\d.]+)/.exec(u)[1], mile = (-92.27 - lng) / 2.0 * 300;
+    const i30 = { speed_limit: 70, f_system: 1, route_signing: 2, route_number: 30 }, us67 = { speed_limit: 65, f_system: 3, route_signing: 3, route_number: 67 };
+    const local = { speed_limit: 35, f_system: 5, route_signing: 1 }, ramp = { speed_limit: 45, f_system: 1, facility_type: 4, route_signing: 2, route_number: 30 };
+    if (mile < 8) return { body: JSON.stringify({ features: [{ attributes: local }] }) };                            // town streets
+    if (mile < 150) return { body: JSON.stringify({ features: [{ attributes: local }, { attributes: ramp }, { attributes: i30 }] }) };   // the biggest road wins
+    if (mile > 151 && mile < 154) return { body: JSON.stringify({ features: [{ attributes: us67 }] }) };              // a lone reading elsewhere: noise
+    return { body: JSON.stringify({ features: [{ attributes: mile < 200 ? i30 : us67 }] }) };
+  }, {});
+  assert.ok(res.stats.geometry, 'website route: geometry mode');
+  assert.deepEqual(res.roads.map((r) => r.name), ['I-30', 'US-67'], JSON.stringify(res.roads.map((r) => [r.name, r.from, r.to])));
+  assert.ok(res.roads[0].from > 0 && res.roads[0].from < 15, 'town streets left out: ' + res.roads[0].from);
+  assert.ok(Math.abs(res.roads[0].to - 200) <= 5 && res.roads[1].to > 295, JSON.stringify(res.roads.map((r) => [r.from, r.to])));
+  assert.ok(res.roads[0].sections.every((x) => x.limit === 70) && res.roads[1].sections.every((x) => x.limit === 65));
+  assert.ok(seen.length < 60 + 10, 'every third check first, then only where they differ: ' + seen.length + ' of 60');
+  assert.equal(L.roadFromHpms({ route_signing: 4, route_number: '005' }, 'AR').key, 'AR-5');
+  assert.equal(L.roadFromHpms({ route_signing: 6, route_number: 12, f_system: 7 }, 'AR'), null, 'minor county roads are not stretches');
+  console.log('website route: ' + res.roads.map((r) => r.name + ' ' + Math.round(r.from) + '–' + Math.round(r.to)).join(', ') + ' from ' + seen.length + ' HPMS lookups');
 }).catch((e) => { console.error(e); process.exit(1); });
