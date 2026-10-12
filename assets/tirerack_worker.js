@@ -145,51 +145,134 @@ async function (reqId, args) {
   }
 
   if (args.step === 'list') {
-    const CAT = /(all-season|all season|summer|winter|snow|all-weather|all-terrain|mud-terrain|highway|touring|performance|ice)/i;
-    const seen = {}, out = [];
+    const CAT = /(?:all[ -]season|summer|winter|snow|all[ -]weather|all[ -]terrain|mud[ -]terrain|highway|touring|performance|ice|competition|trailer|spare)/i;
+    const stateKey = '__gasketTireCatalog';
+    let state = { id: reqId, started: Date.now(), tires: [], pages: [], expanded: false };
+    try { const old = JSON.parse(sessionStorage.getItem(stateKey) || 'null'); if (old && old.id === reqId) state = old; } catch (_) {}
+    const out = state.tires, seen = new Map(out.map((p) => [p.name.toLowerCase(), p]));
+    let requestedSize = '';
+    try {
+      const u = new URL(args.url || location.href), w = (u.searchParams.get('width') || '').replace(/\D/g, ''), r = u.searchParams.get('ratio'), d = u.searchParams.get('diameter');
+      if (w && r && d) requestedSize = w + '/' + r + 'R' + d;
+    } catch (_) {}
+    const persist = () => { try { sessionStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} };
+    const finish = (extra) => {
+      try { sessionStorage.removeItem(stateKey); } catch (_) {}
+      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 2 }, extra || {}));
+    };
+    const pageText = (doc) => {
+      if (doc === document) return text();
+      const copy = doc.body.cloneNode(true);
+      copy.querySelectorAll('script,style,template').forEach((e) => e.remove());
+      copy.querySelectorAll('p,div,li,br,h1,h2,h3,dt,dd,td,ul,ol,article,section').forEach((e) => {
+        e.before(copy.ownerDocument.createTextNode('\n'));
+        e.appendChild(copy.ownerDocument.createTextNode('\n'));
+      });
+      return copy.textContent || '';
+    };
+    const metadata = (t) => {
+      let m;
+      const size = /\bSize\s*:\s*((?:P|LT)?\d{3}\/\d{2}(?:Z?R|-)\d{2})/i.exec(t);
+      const u = /\bUTQG\s*:\s*(\d{2,4})\s*(AA|A|B|C)\s+(A|B|C)\b/i.exec(t);
+      let warranty = 0;
+      if ((m = /\b(\d{2,3}(?:\.\d+)?)\s*K\s*(?:mile|mi\b)[\s\S]{0,35}?(?:warranty|manufacturer)/i.exec(t))) warranty = Math.round(+m[1] * 1000);
+      else if ((m = /\b(\d{2,3},\d{3}|\d{5,6})[ -]*(?:mile|mi\b)[\s\S]{0,35}?(?:warranty|manufacturer)/i.exec(t))) warranty = +m[1].replace(/,/g, '');
+      return { size: size ? size[1].replace(/^(P|LT)/i, '').replace('-', 'R').toUpperCase() : '', utqg: u ? { tw: +u[1], trac: u[2].toUpperCase(), temp: u[3].toUpperCase() } : null, warrantyMi: warranty };
+    };
+    const add = (p) => {
+      if (!p.size || !p.type || (requestedSize && p.size !== requestedSize)) return;
+      const old = seen.get(p.name.toLowerCase());
+      if (old) { if (!old.utqg && p.utqg) old.utqg = p.utqg; if (!old.warrantyMi && p.warrantyMi) old.warrantyMi = p.warrantyMi; return; }
+      seen.set(p.name.toLowerCase(), p); out.push(p);
+    };
+    const product = (a) => {
+      try {
+        const u = new URL(a.getAttribute('href'), location.href);
+        const brand = u.searchParams.get('tireMake'), model = u.searchParams.get('tireModel');
+        return u.pathname === '/tires/tires.jsp' && brand && model ? { name: brand + ' ' + model, brand: brand, model: model } : null;
+      } catch (_) { return null; }
+    };
+    const readDOM = (doc) => {
+      let cards = 0;
+      // Read each product's own card. Link parameters supply names regardless of CSS capitals or split brand/model lines.
+      doc.querySelectorAll('a[href]').forEach((a) => {
+        const p = product(a); if (!p) return;
+        for (let box = a.parentElement; box && box !== doc.body; box = box.parentElement) {
+          const names = new Set(Array.from(box.querySelectorAll('a[href]')).map(product).filter(Boolean).map((x) => x.name.toLowerCase()));
+          if (names.size > 1) break; // never take a rating or warranty from a different tire
+          const t = doc === document ? box.innerText || box.textContent || '' : pageText({ body: box });
+          const meta = metadata(t); if (!meta.size) continue;
+          const category = Array.from(box.querySelectorAll('a')).filter((e) => !product(e)).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find((s) => s.length < 70 && CAT.test(s) && !/warranty|test|review|rating|chart|compare/i.test(s));
+          if (category) { cards++; add(Object.assign({}, p, meta, { type: category })); break; }
+        }
+      });
+      return cards;
+    };
     const readPage = (t) => {
       const L = t.split('\n').map((s) => s.trim()).filter(Boolean);
       for (let n = 0; n < L.length; n++) {
-        // a product starts with its name in capitals ("CONTINENTAL SECURECONTACT AW") and then its type
         const name = L[n], cat = L[n + 1] || '';
-        if (!/^[A-Z0-9][A-Z0-9 .&+'\-\/]{3,60}$/.test(name) || !/[A-Z]{3}/.test(name) || !CAT.test(cat) || cat.length > 60 || /^[A-Z0-9 \-]+$/.test(cat)) continue;
-        const p = { name: name, type: cat, size: '', utqg: null, warrantyMi: 0 };
-        for (let q = n + 2; q < Math.min(L.length, n + 80); q++) {
-          const l = L[q];
-          if (q > n + 2 && /^[A-Z0-9][A-Z0-9 .&+'\-\/]{3,60}$/.test(l) && CAT.test(L[q + 1] || '') && !/^[A-Z0-9 \-]+$/.test(L[q + 1] || '')) break;   // the next product
-          let m;
-          if (!p.size && (m = /^Size:\s*(\S+)/i.exec(l))) p.size = m[1];
-          if (!p.utqg && (m = /^UTQG:\s*(\d{2,4})\s+(AA|A|B|C)\s+(A|B|C)\b/i.exec(l))) p.utqg = { tw: +m[1], trac: m[2].toUpperCase(), temp: m[3].toUpperCase() };
-          if (!p.warrantyMi && (m = /(\d{2,3})K Mile Manufacturer/i.exec(l))) p.warrantyMi = +m[1] * 1000;
+        if (!/\s/.test(name) || name.length > 90 || !/^[a-z0-9][a-z0-9 .&+'®™\-\/]{3,89}$/i.test(name) || !CAT.test(cat) || cat.length > 70 || /chart|review|rating/i.test(cat)) continue;
+        let end = n + 2;
+        while (end < Math.min(L.length, n + 100)) {
+          if (end > n + 2 && CAT.test(L[end + 1] || '') && /^[a-z0-9][a-z0-9 .&+'®™\-\/]{3,89}$/i.test(L[end]) && !/chart|review|rating/i.test(L[end + 1])) break;
+          end++;
         }
-        if (p.size && !seen[name]) { seen[name] = 1; out.push(p); }     // a real product always lists its size
+        add(Object.assign({ name: name, type: cat }, metadata(L.slice(n + 2, end).join('\n'))));
       }
     };
-    let t = await settle((t) => /UTQG:/i.test(t) || /no tires|no results/i.test(t), 25000);
-    if (pageBlocked()) { send({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
-    readPage(t);
-    if (!out.length && !/no tires|no results/i.test(t)) { send({ error: 'Tire Rack tire list could not be read', code: 'unreadable', detail: { excerpt: t.slice(0, 240) } }); return; }
-    // more pages: follow "next" while there is one (at most 10 pages)
+    const read = (doc) => { if (!readDOM(doc)) readPage(pageText(doc)); };
+    const count = (t) => { const m = /(?:we have|showing)\s+(\d+)\s+tire models/i.exec(t); return m ? +m[1] : 0; };
+    let t = await settle((t) => /\bSize\s*:\s*(?:P|LT)?\d{3}\//i.test(t) || /no tires|no results/i.test(t), 20000);
+    if (pageBlocked()) { finish({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
+    // Use the site's actual page-size control instead of assuming all products are initially rendered.
+    const perPage = Array.from(document.querySelectorAll('select')).find((e) => /results.?per.?page|items.?per.?page|page.?size|^rpp$/i.test(e.name + ' ' + e.id) || /results per page/i.test((e.parentElement && e.parentElement.textContent || '').slice(0, 300)));
+    if (perPage && !state.expanded) {
+      state.expanded = true; persist();
+      const choices = Array.from(perPage.options).filter((o) => !o.disabled).sort((a, b) => (/all/i.test(b.textContent) ? 10000 : parseInt(b.textContent, 10) || 0) - (/all/i.test(a.textContent) ? 10000 : parseInt(a.textContent, 10) || 0));
+      const best = choices[0];
+      if (best && best.value !== perPage.value) {
+        perPage.value = best.value; perPage.dispatchEvent(new Event('change', { bubbles: true }));
+        const go = Array.from((perPage.parentElement || document).querySelectorAll('button,input[type="button"],input[type="submit"]')).find((e) => /^go$/i.test((e.textContent || e.value || '').trim()));
+        if (go) go.click();
+        await sleep(1200); // if it navigates, Android reinjects the reader and restores the per-request state
+      }
+    }
+    read(document);
+    const fingerprint = () => JSON.stringify(out);
+    let stable = 0, last = fingerprint();
+    // Allow lazy cards AND their metadata to arrive, including products with no UTQG (winter tires).
+    while (Date.now() - state.started < 35000 && stable < 2) {
+      if (pageBlocked()) { finish({ partial: !!out.length, blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await sleep(600); read(document);
+      const now = fingerprint(); stable = now === last ? stable + 1 : 0; last = now;
+    }
+    t = text();
+    if (!out.length && !/no tires|no results/i.test(t)) { finish({ error: 'Tire Rack tire list could not be read', code: 'unreadable', detail: { excerpt: t.slice(0, 240) } }); return; }
     let doc = document;
-    const visited = new Set([location.href]);
-    for (let page = 2; page <= 10 && Date.now() - started < 55000; page++) {
-      const next = Array.from(doc.querySelectorAll('a')).find((e) => /^(next(?: page)?|›|>|»)$/i.test((e.textContent || e.getAttribute('aria-label') || '').trim()) && e.getAttribute('href'));
+    if (!state.pages.includes(location.href)) state.pages.push(location.href);
+    for (let page = state.pages.length; page < 10 && Date.now() - state.started < 55000; page++) {
+      const next = Array.from(doc.querySelectorAll('a,button,input[type="button"]')).find((e) => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && (doc !== document || e.getClientRects().length) && (/^(next(?: page)?|load more|show more(?: tires)?|›|>|»)$/i.test((e.getAttribute('aria-label') || e.textContent || e.value || '').trim()) || e.getAttribute('rel') === 'next'));
       if (!next) break;
-      const url = new URL(next.getAttribute('href'), location.href);
-      if (url.origin !== location.origin || !url.pathname.startsWith('/tires/') || visited.has(url.href)) break;
-      visited.add(url.href);
       const before = out.length;
       try {
         await sleep(800);
-        doc = new DOMParser().parseFromString(await fetchText(url.href), 'text/html');
-        // Preserve block boundaries as newlines, as innerText does in the live page.
-        doc.querySelectorAll('p,div,li,br,h1,h2,h3').forEach((e) => e.appendChild(doc.createTextNode('\n')));
-        t = doc.body.textContent || '';
-      } catch (e) { send({ tires: out, partial: true, blocked: !!e.blocked, error: e.message, code: e.code, detail: e.detail }); return; }
-      readPage(t);
-      if (out.length === before) break;
+        const href = next.getAttribute('href');
+        if (href && !/^#|^javascript:/i.test(href)) {
+          const url = new URL(href, state.pages[state.pages.length - 1] || location.href);
+          if (url.origin !== location.origin || !url.pathname.startsWith('/tires/') || state.pages.includes(url.href)) break;
+          state.pages.push(url.href); persist();
+          doc = new DOMParser().parseFromString(await fetchText(url.href), 'text/html'); read(doc);
+        } else if (doc === document) {
+          persist(); next.click();
+          for (let n = 0; n < 16 && out.length === before; n++) { await sleep(500); if (pageBlocked()) throw Object.assign(new Error('Tire Rack restricted this page'), { blocked: true, code: 'blocked' }); read(document); }
+        } else break;
+      } catch (e) { finish({ partial: true, blocked: !!e.blocked, error: e.message, code: e.code, detail: e.detail }); return; }
+      if (out.length === before) { finish({ partial: true, code: 'incomplete', error: 'Tire Rack did not load the next results' }); return; }
     }
-    send({ tires: out.slice(0, 300), empty: out.length === 0 });
+    const expected = count(pageText(doc)) || count(text());
+    finish(expected > out.length ? { partial: true, code: 'incomplete', error: 'Only ' + out.length + ' of ' + expected + ' tire models could be read', detail: { expected: expected, read: out.length } } : {});
     return;
   }
   send({ error: 'unknown step' });

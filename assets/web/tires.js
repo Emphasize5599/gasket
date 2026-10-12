@@ -292,7 +292,7 @@
   var A = root.__app, S = A.S, N = A.N, $ = A.$, esc = A.esc, LG = root.FLog || { info: function () {}, warn: function () {} };
   var TR = 'https://www.tirerack.com/tires/';
   var TYPES = ['All-season', 'Touring all-season', 'Grand touring all-season', 'Performance all-season', 'All-weather (snow-rated)', 'Summer', 'Winter', 'All-terrain', 'Mud-terrain', 'Highway (trucks and SUVs)'];
-  var RETRY_H = 6, LIST_DAYS = 30;
+  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 2;
   var host = null, call = null, onChange = function () {}, busy = {}, open = {};
   function G() { return root.Garage; }
   function save() { A.save(); }
@@ -309,8 +309,8 @@
   function sizeUrl(c, v) { return TR + 'SelectTireSize.jsp?' + carQ(c, v); }
   function listUrl(c, size) {
     var m = /(\d{3})\/(\d{2})R(\d{2})/.exec(size); if (!m) return '';
-    var v = c.year ? ver(c) : null;
-    return TR + 'TireSearchResults.jsp?' + (v ? carQ(c, v) + '&' : '') + 'width=' + m[1] + '/&ratio=' + m[2] + '&diameter=' + m[3];
+    // The replacement catalog is by size. Vehicle cookies/clarifiers can otherwise narrow it to an OE subset.
+    return TR + 'TireSearchResults.jsp?width=' + m[1] + '/&ratio=' + m[2] + '&diameter=' + m[3];
   }
   function recent(x, h) { return x && Date.now() - x.t < h * 3600e3; }
   /** Every version known so far: [{model, clar}] (a model with no clarifiers is one version). */
@@ -417,16 +417,17 @@
     }
     if (t.size && !busy[c.id]) {
       var L = t.list;
-      if (L && L.size === t.size && (L.items && L.items.length ? Date.now() - L.t < LIST_DAYS * 864e5 : L.failed && recent(L, RETRY_H))) return;
+      if (L && L.size === t.size && (L.items && L.items.length && L.catalogVersion === CATALOG_VERSION ? (L.failed ? recent(L, RETRY_H) : Date.now() - L.t < LIST_DAYS * 864e5) : L.failed && recent(L, RETRY_H))) { if (fromList(L.items || [], t, true)) save(); return; }
       var url = listUrl(c, t.size); if (!url) return;
       var sz = t.size;
       busy[c.id] = 'list'; t.list = { size: sz, t: Date.now(), items: L && L.size === sz ? L.items : [] };
       tireRead({ url: url, step: 'list' }).then(function (r) {
         busy[c.id] = false; r = r || {};
         if (t.size !== sz) { lookup(c); return; }
-        if (r.tires && r.tires.length) { t.list = { size: sz, t: Date.now(), items: r.tires.map(function (x) { var s = split(x.name); return { name: x.name, brand: s.brand, model: s.model, type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; }) }; LG.info('car', 'Tire Rack: ' + r.tires.length + ' tires in ' + sz); }
+        if (r.tires && r.tires.length) { t.list = { size: sz, t: Date.now(), catalogVersion: CATALOG_VERSION, items: catalogItems(r.tires) }; LG.info('car', 'Tire Rack: ' + r.tires.length + ' tires in ' + sz); }
         else { t.list = { size: sz, t: Date.now(), items: (t.list && t.list.size === sz && t.list.items) || [], failed: r.empty ? 'none' : failure(r), error: r.error }; LG.info('car', 'Tire Rack tire list not read', t.list.failed); }
         if (r.partial) { t.list.failed = failure(r); t.list.error = r.error; t.list.partial = true; }
+        fromList(t.list.items || [], t, true);
         save(); redraw(c);
         if (t.size !== sz) lookup(c);          // the size changed while this was read (another version picked): look that one up
       });
@@ -610,13 +611,16 @@
   /** Type -> brand -> model from Tire Rack's list for a size (selects), or typed when there's no list. */
   function pickHtml(L, x, pre) {
     var types = L.length ? uniq(L.map(function (y) { return y.type; })).sort() : TYPES;
-    var inType = L.filter(function (y) { return !x.type || y.type === x.type; });
+    var inType = L.filter(function (y) { return !x.type || catalogKey(y.type) === catalogKey(x.type); });
     var brands = uniq(inType.map(function (y) { return y.brand; })).sort();
-    var models = inType.filter(function (y) { return y.brand === x.brand; }).map(function (y) { return y.model; }).sort();
-    var otherBrand = x.brand && brands.indexOf(x.brand) < 0, otherModel = x.model && models.indexOf(x.model) < 0;
-    return '<div class="tz-pick"><label class="nf"><span>Type' + A.qBtn(Q.type) + '</span><select id="' + pre + 'Type">' + opts(types, x.type, 'Type') + '</select></label>' +
-      '<label class="nf"><span>Brand</span>' + (otherBrand || !brands.length ? '<input type="text" id="' + pre + 'BrandT" maxlength="30" placeholder="Brand" value="' + esc(x.brand || '') + '">' : '<select id="' + pre + 'Brand">' + opts(brands, x.brand, 'Brand') + '</select>') + '</label>' +
-      '<label class="nf"><span>Model</span>' + (otherModel || otherBrand || !models.length ? '<input type="text" id="' + pre + 'ModelT" maxlength="40" placeholder="Model" value="' + esc(x.model || '') + '">' : '<select id="' + pre + 'Model">' + opts(models, x.model, 'Model') + '</select>') + '</label></div>';
+    var models = uniq(inType.filter(function (y) { return catalogKey(y.brand) === catalogKey(x.brand); }).map(function (y) { return y.model; })).sort();
+    var cur = function (list, val) { return list.find(function (s) { return catalogKey(s) === catalogKey(val); }) || val; };
+    var otherBrand = x.brandCustom || (x.brand && !brands.some(function (b) { return catalogKey(b) === catalogKey(x.brand); }));
+    var otherModel = x.modelCustom || (x.model && !models.some(function (m) { return catalogKey(m) === catalogKey(x.model); }));
+    var back = function (kind) { return '<button type="button" class="btn tonal sm" id="' + pre + kind + 'Catalog">Choose from catalog</button>'; };
+    return '<div class="tz-pick"><label class="nf"><span>Type' + A.qBtn(Q.type) + '</span><select id="' + pre + 'Type">' + opts(types, cur(types, x.type), 'Type') + '</select></label>' +
+      '<label class="nf"><span>Brand</span>' + (otherBrand || !brands.length ? '<input type="text" id="' + pre + 'BrandT" maxlength="30" placeholder="Brand" value="' + esc((x.brand || '').trim()) + '">' + (brands.length ? back('Brand') : '') : '<select id="' + pre + 'Brand">' + opts(brands, cur(brands, x.brand), 'Brand') + '</select>') + '</label>' +
+      '<label class="nf"><span>Model</span>' + (otherModel || otherBrand || !models.length ? '<input type="text" id="' + pre + 'ModelT" maxlength="40" placeholder="Model" value="' + esc((x.model || '').trim()) + '">' + (models.length ? back('Model') : '') : '<select id="' + pre + 'Model">' + opts(models, cur(models, x.model), 'Model') + '</select>') + '</label></div>';
   }
   /** The car's tire details: size (Tire Rack's factory size), type -> brand -> model, wear rating, warranty, fuel /10. */
   function carDetails(c, t) {
@@ -650,6 +654,7 @@
     if (busy[c.id] === 'list') h += window.__app.ldBar('Finding the tires made in ' + t.size);
     h += pickHtml(L, t, 'tz');
     if (t.size && t.list && t.list.failed) h += '<div class="lead small keep">' + (L.length ? 'The tire list may be incomplete.' : 'Couldn\'t get Tire Rack\'s list for ' + esc(t.size) + '. Type the brand and model, and the wear rating from the tire\'s side.') + '</div>';
+    if (t.size && L.length && !busy[c.id] && !t.list.failed) h += '<button type="button" class="btn tonal sm" id="tzRefresh">Refresh Tire Rack catalog</button>';
     h += '<div class="nf wide"><span>Wear rating' + q(Q.utqg) + '</span>' + utqgHtml(t.utqg, 'tz') + (t.utqgSrc === 'tirerack' ? '<div class="lead small keep">Wear rating and warranty from Tire Rack.</div>' : '') + '</div>';
     h += '<label class="nf wide"><span>Maker\'s mileage warranty' + q(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="tzWarranty" placeholder="e.g. 65000" value="' + esc(+t.warrantyMi > 0 ? t.warrantyMi : '') + '"></label>';
     var fs = fuel(t);
@@ -664,6 +669,7 @@
   /** A trailer's details: its name, axles and tires per axle, and its tires (size -> Tire Rack, wear rating, warranty). */
   function trailerForm(tr) {
     var L = sizeList(tr.size), p = 'tt' + tr.id + '_';
+    if (fromList(L, tr, true)) save();
     var h = '<label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>';
     h += '<div class="tz-cfg"><span>Axles</span><div class="chips mini">' + [1, 2, 3].map(function (n) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-axles="' + n + '" class="' + (tr.axles === n ? 'on' : '') + '">' + n + '</button>'; }).join('') + '</div>' +
       '<span>Tires per axle</span><div class="chips mini">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-per="' + o[0] + '" class="' + (tr.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
@@ -694,6 +700,7 @@
         var v = ver(c);
         N.openUrl(t.size ? listUrl(c, t.size) : v ? sizeUrl(c, v) : TR + 'brands');
       };
+      if (b.querySelector('#tzRefresh')) b.querySelector('#tzRefresh').onclick = set(function () { t.list = null; lookup(c); });
       if (b.querySelector('#tzVerSel')) b.querySelector('#tzVerSel').onchange = set(function () {
         var x = this.value; if (!x) return;
         if (t.sizeSrc === 'tirerack') { t.size = ''; t.sizeSrc = ''; t.list = null; }       // another version: its own factory size
@@ -764,16 +771,16 @@
   function sizeList(size, then) {
     size = normSize(size); if (!size) return [];
     if (sizeMem[size]) return sizeMem[size];
-    var kv = A.KV, o = kv && kv.get('trlist', size, LIST_DAYS * 864e5);
+    var kv = A.KV, cacheKey = 'v' + CATALOG_VERSION + '|' + size, o = kv && kv.get('trlist', cacheKey, LIST_DAYS * 864e5);
     if (o && o.v && o.v.length) return (sizeMem[size] = o.v);
     if (!sizeBusy[size] && call && N.siteRead) {
       sizeBusy[size] = true;
       tireRead({ url: listUrl({}, size), step: 'list' }).then(function (r) {
         sizeBusy[size] = false; r = r || {};
-        var items = (r.tires || []).map(function (x) { var s2 = split(x.name); return { name: x.name, brand: s2.brand, model: s2.model, type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; });
-        if (items.length) { sizeMem[size] = items; if (kv) kv.put('trlist', size, items); }
+        var items = catalogItems(r.tires || []);
+        if (items.length) { sizeMem[size] = items; if (kv && !r.partial) kv.put('trlist', cacheKey, items); }
         LG.info('car', 'Tire Rack: ' + items.length + ' tires in ' + size);
-        if (then) then(); else if (host && host.isConnected) draw();
+        if (then) then(); else if (host && host.isConnected) { draw(); if (subFill) subFill(); }
       });
     }
     return [];
@@ -784,23 +791,39 @@
     var y = CORNERS.filter(function (z) { return z.k === k; })[0]; return y ? y.name : k;
   }
   /** Picking a model from Tire Rack's list fills in its type, wear rating and warranty. */
-  function fromList(L, x) {
-    var y = L.filter(function (z) { return z.brand === x.brand && z.model === x.model && (!x.type || z.type === x.type); })[0];
-    if (y) { x.type = y.type; if (y.utqg) { x.utqg = Object.assign({}, y.utqg); x.utqgSrc = 'tirerack'; } if (y.warrantyMi) x.warrantyMi = y.warrantyMi; x.newDepth = 0; }
+  function catalogKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  function catalogItems(L) { return L.map(function (x) { var s = split(x.name); return { name: x.name, brand: x.brand || s.brand, model: x.model || s.model, type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; }); }
+  function fromList(L, x, blanksOnly) {
+    var before = JSON.stringify([x.type, x.brand, x.model, x.utqg, x.utqgSrc, x.warrantyMi, x.warrantySrc]);
+    var y = L.find(function (z) { return catalogKey(z.brand) === catalogKey(x.brand) && catalogKey(z.model) === catalogKey(x.model); });
+    if (y) {
+      x.type = y.type; x.brand = y.brand; x.model = y.model;
+      delete x.brandCustom; delete x.modelCustom;
+      if (y.utqg && (!blanksOnly || !x.utqg || (!x.utqg.tw && !x.utqg.trac && !x.utqg.temp))) { x.utqg = Object.assign({}, y.utqg); x.utqgSrc = 'tirerack'; }
+      if (y.warrantyMi && (!blanksOnly || !x.warrantyMi)) { x.warrantyMi = y.warrantyMi; x.warrantySrc = 'tirerack'; }
+      if (!blanksOnly) x.newDepth = 0;
+    }
+    return before !== JSON.stringify([x.type, x.brand, x.model, x.utqg, x.utqgSrc, x.warrantyMi, x.warrantySrc]);
+  }
+  function clearCatalogSpecs(x) {
+    if (x.utqgSrc === 'tirerack') { delete x.utqg; delete x.utqgSrc; }
+    if (x.warrantySrc !== 'user') { delete x.warrantyMi; delete x.warrantySrc; }
   }
   /** Type / brand / model / wear rating / warranty boxes (pre = their id prefix) for x (the car's tires, a trailer, or one tire). */
   function bindPick(root, pre, x, L, set) {
     var $$ = function (id) { return root.querySelector('#' + pre + id); };
-    if ($$('Type')) $$('Type').onchange = set(function () { x.type = this.value === '*' ? 'Other' : this.value; });
-    if ($$('Brand')) $$('Brand').onchange = set(function () { if (this.value === '*') { x.brand = ' '; } else { x.brand = this.value; x.model = ''; } });
-    if ($$('BrandT')) $$('BrandT').onchange = set(function () { x.brand = this.value.trim(); });
-    if ($$('Model')) $$('Model').onchange = set(function () { if (this.value === '*') { x.model = ' '; return; } x.model = this.value; fromList(L(), x); });
-    if ($$('ModelT')) $$('ModelT').onchange = set(function () { x.model = this.value.trim(); });
+    if ($$('Type')) $$('Type').onchange = set(function () { x.type = this.value === '*' ? 'Other' : this.value; delete x.brandCustom; delete x.modelCustom; if (x.type && !L().some(function (y) { return catalogKey(y.type) === catalogKey(x.type) && catalogKey(y.brand) === catalogKey(x.brand) && catalogKey(y.model) === catalogKey(x.model); })) { x.brand = ''; x.model = ''; clearCatalogSpecs(x); } });
+    if ($$('Brand')) $$('Brand').onchange = set(function () { clearCatalogSpecs(x); x.brandCustom = this.value === '*'; x.brand = x.brandCustom ? '' : this.value; x.model = ''; delete x.modelCustom; });
+    if ($$('BrandT')) $$('BrandT').onchange = set(function () { clearCatalogSpecs(x); x.brand = this.value.trim(); fromList(L(), x); });
+    if ($$('BrandCatalog')) $$('BrandCatalog').onclick = set(function () { x.brand = ''; x.model = ''; delete x.brandCustom; delete x.modelCustom; clearCatalogSpecs(x); });
+    if ($$('Model')) $$('Model').onchange = set(function () { clearCatalogSpecs(x); x.modelCustom = this.value === '*'; x.model = x.modelCustom ? '' : this.value; if (!x.modelCustom) fromList(L(), x); });
+    if ($$('ModelT')) $$('ModelT').onchange = set(function () { clearCatalogSpecs(x); x.model = this.value.trim(); fromList(L(), x); });
+    if ($$('ModelCatalog')) $$('ModelCatalog').onclick = set(function () { x.model = ''; delete x.modelCustom; clearCatalogSpecs(x); });
     var u = function () { x.utqg = Object.assign({}, x.utqg); x.utqgSrc = 'user'; return x.utqg; };
     if ($$('Tw')) $$('Tw').onchange = set(function () { u().tw = parseInt(this.value, 10) || ''; });
     if ($$('Trac')) $$('Trac').onchange = set(function () { u().trac = this.value; });
     if ($$('Temp')) $$('Temp').onchange = set(function () { u().temp = this.value; });
-    if ($$('Warranty')) $$('Warranty').onchange = set(function () { x.warrantyMi = Math.max(0, parseInt(this.value, 10) || 0); });
+    if ($$('Warranty')) $$('Warranty').onchange = set(function () { x.warrantyMi = Math.max(0, parseInt(this.value, 10) || 0); x.warrantySrc = 'user'; });
   }
   /**
    * One tire, by mileage (its own page): its miles, the maker's mileage warranty (filled in from its car's or trailer's
@@ -810,7 +833,9 @@
     var t = tires(c), p = positions(t).filter(function (y) { return y.k === k; })[0]; if (!p) return;
     var C = t.corners, x = C[k] = C[k] || {}, u = p.unit || {};
     var body = function () {
-      var w = warrantyOf(x, u), L = sizeList(x.size || u.size, function () { if (pg && pg.isConnected) fill(); });
+      var L = sizeList(x.size || u.size, function () { if (pg && pg.isConnected) fill(); });
+      if (fromList(L, x, true)) save();
+      var w = warrantyOf(x, u);
       return '<p class="lead small keep">Gasket estimates this tire\'s tread from how far it\'s gone against how far it\'s made to go. A coin test tells you for sure.</p>' +
         '<label class="nf wide"><span>Miles on this tire<span class="req" aria-label="required">*</span></span><input type="number" inputmode="numeric" min="0" step="1000" id="tpMiles" placeholder="e.g. 20000" value="' + esc(x.miles === '' || x.miles == null ? '' : x.miles) + '"></label>' +
         '<label class="nf wide"><span>Maker\'s mileage warranty<span class="req" aria-label="required">*</span>' + A.qBtn(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="tpWarranty" placeholder="' + esc(+u.warrantyMi > 0 ? u.warrantyMi : 'e.g. 60000') + '" value="' + esc(w || '') + '"></label>' +

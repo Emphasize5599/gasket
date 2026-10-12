@@ -49,7 +49,7 @@ BIG = '''() => { document.querySelectorAll('#gTires *').forEach(e => { if (!e.da
 def reader(pg, html, args, wait_ms=1500):
     pg.set_content(html)
     pg.evaluate('''([src, a]) => { window.__got = null; window.GasketSite = { result: (id, j) => { window.__got = JSON.parse(j); } }; (0, eval)('(' + src + ')')(1, a); }''', [READER, args])
-    pg.wait_for_timeout(wait_ms)
+    pg.wait_for_function('window.__got !== null', timeout=max(10000, wait_ms))
     return pg.evaluate('window.__got')
 
 with sync_playwright() as p:
@@ -76,7 +76,7 @@ with sync_playwright() as p:
         assert [r['step'] for r in reads] == ['models', 'clars', 'size', 'list'], 'models, then the likely model\'s versions, then the size, then the tires'
         assert reads[0]['make'] == 'Toyota' and reads[0]['year'] == 2020 and reads[1]['models'] == ['Corolla Hybrid'], 'only the model that is this car is asked about'
         assert reads[2]['url'] == 'https://www.tirerack.com/tires/SelectTireSize.jsp?autoMake=Toyota&autoYear=2020&autoModel=Corolla%20Hybrid&autoModClar=LE'
-        assert 'width=195/&ratio=65&diameter=15' in reads[3]['url'] and 'autoModel=Corolla%20Hybrid&autoModClar=LE&' in reads[3]['url']
+        assert 'width=195/&ratio=65&diameter=15' in reads[3]['url'] and 'autoModel=' not in reads[3]['url'], 'replacement tires are listed by size without vehicle/OE filters'
         assert T(pg)['trVer']['auto'] is True, 'matched from the trim'
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         assert ft(pg, '.sub-page h2') == 'Tire details'

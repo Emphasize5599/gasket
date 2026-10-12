@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.101 - 2026-10-11
+- **Tire catalog and warranty autofill.** Read Tire Rack's product cards, results-per-page selector and dynamically loaded pages so brands and models beyond the first results appear. Refresh older incomplete caches, preserve manual warranties, and fill ratings and mileage warranty for an existing or newly selected catalog tire.
+- Bug fixes.
+
 ## 0.0.100 - 2026-10-11
 - **Fuel-mode pill.** A pill at the left of the top bar switches the map between ⛽ Gas & diesel, ⚡ Electric and H₂ Hydrogen. The selector next to it follows: gas grades, charger speed (Fast / Level 2 / All) or hydrogen pressure (All / H70 / H35). Pins, the list, refresh and "Search this area" show chargers or hydrogen stations in those modes, and the mode follows your car when you pick one of another kind. The ⚡ button is gone; its options (hydrogen range shading) are under "EV & hydrogen options…" in the pill's menu.
 - Bug fixes.
