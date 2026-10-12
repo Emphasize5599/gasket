@@ -246,5 +246,7 @@
     return out;
   }
   window.addEventListener('garagechange', function () { if (host && host.isConnected) draw(); });
-  root.Climate = { ackDue: ackDue, setAck: setAck, render: render, summary: summary, advice: advice, current: current };
+  /** Your preset for a weather situation in the season of date d (for the weather along the route): {title, line, notes} or null. */
+  function presetFor(c, key, d) { if (!c || !c.climate) return null; var p = find(c, 'weather', key, season(d)); return p ? { title: title(p), line: line(p, c.climate.caps), notes: p.notes || '' } : null; }
+  root.Climate = { ackDue: ackDue, setAck: setAck, render: render, summary: summary, advice: advice, current: current, presetFor: presetFor };
 })(typeof window !== 'undefined' ? window : globalThis);

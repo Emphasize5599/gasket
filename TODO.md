@@ -3,8 +3,7 @@
 Things the owner wants, saved for later. Add to it as ideas come up; take an item off when it ships.
 
 ## Trips
-- **Weather along the route.** Forecast the conditions for each part of the drive at the time you'd be there (rain, snow, ice, fog, heat), and tie them to the climate presets ("If it's snowy…") and the tire advice.
-- **Polluted zones.** Find which stretches of the route have bad air (smoke, smog, heavy pollen) so Advice can say when recirculate makes sense, and for how long.
+- **Pollen along the route.** Weather and air along the way shipped in 0.0.114 (Open-Meteo, National Weather Service), but there's no free U.S. pollen forecast (Open-Meteo's covers Europe only; Google's Pollen API is paid). Add it if a free source turns up.
 
 ## Hydrogen and electric cars
 - **In the main UI** since 0.0.100: the fuel-mode pill (⛽ / ⚡ / H₂) switches the top bar's selector, pins and list. Still to do there: picking plugs (CCS, NACS, CHAdeMO, J1772) from the pill's options, chargers and hydrogen stations in the same detail sheet as gas stations (price per kWh / kg, speed, open now), and Stops following the mode.
@@ -12,3 +11,8 @@ Things the owner wants, saved for later. Add to it as ideas come up; take an ite
 
 ## Garage
 - **Car pictures:** NHTSA, Wikimedia Commons, the doodle, and Fuel API (owner's key, watermark as delivered) for factory colors, as of 0.0.86. A paid Fuel API plan would drop the FUEL watermark (COMPLIANCE.md #9). Doodles could get more detail (wheels, roof racks, two-tone).
+
+## Cowork session (needs a web browser)
+Work for a session that can open the sites themselves.
+- **Tire Rack drops tires from a size's list.** 195/65R15 read 77 tires but kept 70: 7 were rejected with "No product card with a size was found" (Continental ProContact TX ×2, Kumho Solus TA31, Bridgestone Ecopia EP422 Plus, Nexen N Priz AH8, Yokohama AVID S33D and S33B). Look at those products' cards on TireSearchResults.jsp and fix `tirerack_worker.js`'s card reading.
+- **Tire Rack versions lookup fails right after a list read.** For the next car looked up, step `clars` failed after 97 ms with "Failed to fetch" while the reader was still on the 195/65R15 results page (`https://www.tirerack.com/tires/TireSearchResults.jsp?...`). The ValidationServlet request probably needs the reader back on a page where it's allowed (or a fresh load) between steps.

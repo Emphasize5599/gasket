@@ -91,6 +91,33 @@
       }));
       return { Locations: locs, ShowServiceError: false };
     },
+    // weather and air along the route: heavy rain and a flood warning west of -95.5 (Texas), smoky air near -93.5
+    wx: (url) => {
+      (window.__wxUrls = window.__wxUrls || []).push(url);
+      const q = (k) => new URLSearchParams(url.split('?')[1]).get(k), lats = q('latitude').split(','), lngs = q('longitude').split(',');
+      const days = +q('forecast_days') || 1, t0 = new Date(); t0.setUTCHours(0, 0, 0, 0);
+      const time = Array.from({ length: days * 24 }, (_, i) => new Date(t0.getTime() + i * 3600e3).toISOString().slice(0, 16));
+      const one = (lat, lng) => { const wet = +lng < -95.5, n = time.length, f = (v) => Array(n).fill(v);
+        return { latitude: +lat, longitude: +lng, hourly: { time, weather_code: f(wet ? 65 : 1), temperature_2m: f(78), precipitation: f(wet ? 0.45 : 0), snowfall: f(0), visibility: f(20000), wind_gusts_10m: f(12) } }; };
+      const out = lats.map((la, i) => one(la, lngs[i])); return out.length === 1 ? out[0] : out;
+    },
+    aq: (url) => {
+      const q = (k) => new URLSearchParams(url.split('?')[1]).get(k), lats = q('latitude').split(','), lngs = q('longitude').split(',');
+      const days = +q('forecast_days') || 1, t0 = new Date(); t0.setUTCHours(0, 0, 0, 0);
+      const time = Array.from({ length: days * 24 }, (_, i) => new Date(t0.getTime() + i * 3600e3).toISOString().slice(0, 16));
+      const out = lats.map((la, i) => { const smoky = Math.abs(+lngs[i] + 93.5) < 0.6, f = (v) => Array(time.length).fill(v);
+        return { hourly: { time, us_aqi: f(smoky ? 162 : 35), us_aqi_pm2_5: f(smoky ? 162 : 30), us_aqi_ozone: f(smoky ? 60 : 35), dust: f(0) } }; });
+      return out.length === 1 ? out[0] : out;
+    },
+    nws: (url) => {
+      (window.__nwsUrls = window.__nwsUrls || []).push(url);
+      const flood = { properties: { id: 'tx-flood', event: 'Flood Warning', severity: 'Severe', onset: new Date(Date.now() - 3600e3).toISOString(), ends: new Date(Date.now() + 3 * 864e5).toISOString(), headline: 'Flood Warning for Testville County' } };
+      const rip = { properties: { id: 'tx-rip', event: 'Rip Current Statement', severity: 'Moderate', onset: new Date().toISOString(), ends: new Date(Date.now() + 864e5).toISOString() } };
+      if (/area=TX/.test(url)) return { features: [flood, rip] };
+      if (/area=/.test(url)) return { features: [] };
+      const lng = +/point=[-\d.]+,(-?[\d.]+)/.exec(url)[1];
+      return { features: lng < -95.5 ? [flood] : [] };
+    },
     hpms: (url) => {
       (window.__hpms = window.__hpms || []).push(url);
       const st = (url.match(/HPMS_FULL_(\w\w)_/) || [])[1];

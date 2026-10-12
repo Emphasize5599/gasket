@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.114 - 2026-10-12 (keyless test branch only)
+- **Weather and air along the way.** Departure shows what you'll drive through, where and when you'll be there: storms, rain, snow, ice, fog, strong wind, heat and cold (Open-Meteo's forecast, up to 16 days ahead), unhealthy air from smoke, smog or dust (Copernicus air-quality forecast, about 5 days ahead), and National Weather Service warnings. Each stretch says what to do: your climate preset for that weather, recirculate through bad air and back to fresh after, and tire advice from your tread and tire type.
+- **Spare tire read by the AI.** The rating model on the phone now reads Brave's answer (setting aside what the car doesn't have), so "no spare, it has a repair kit" is no longer read as a compact spare. An answer misread before is read again, and if you'd confirmed the wrong kind you're asked again.
+- Bug fixes.
+
 ## 0.0.113 - 2026-10-12 (keyless test branch only)
 - Cruising speed works on website routes (no API key): the major roads and their limits now come from the FHWA road inventory along the route, since website routes have no turn-by-turn text.
 - Detailed debug logging for website discovery: the area plan, progress every 50 areas, a per-area timing table (page load, list shown, last new row, stop reason, rows, new stations) and a summary of where the time went (lane use, idle tail, waiting after the last row, overlap between areas, phone memory).

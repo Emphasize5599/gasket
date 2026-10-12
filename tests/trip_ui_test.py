@@ -468,6 +468,15 @@ with sync_playwright() as p:
         assert pg.locator('.tp-step:not(.hidden) .nlist li').count() == 2 and 'trip cost' in dep and 'Trip cost is the' not in pg.inner_text('.tp-step:not(.hidden)')
         assert pg.locator('#tpNav #tOpen').count() == 1 and 'Google Maps' in ft(pg, '#tOpen')
         pg.screenshot(path=f'{OUT}/{name}-w4-departure.png')
+        # weather and air along the way: rain and a flood warning in Texas, smoky air in Arkansas (trip_mocks), with what to do
+        pg.wait_for_selector('#tWx .wx-x', timeout=10000)
+        wxt = ft(pg, '#tWx'); print('  weather along the way:', wxt.replace('\n', ' | ')[:500])
+        assert 'Heavy rain' in wxt and 'Flood Warning' in wxt and 'Unhealthy air (AQI 162)' in wxt and 'Recirculate through it' in wxt and 'National Weather Service' in wxt, wxt
+        assert 'Rip Current' not in wxt, 'only what matters on the road'
+        nws = pg.evaluate('window.__nwsUrls || []'); print('  NWS asks:', len(nws), [u.split('?')[1] for u in nws][:4])
+        assert any('area=TX' in u for u in nws) and all('area=' in u or float(u.split(',')[-1]) < -94 for u in nws), 'points asked only in the state with a warning'
+        pg.evaluate("document.getElementById('tWx').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
+        pg.screenshot(path=f'{OUT}/{name}-w5-weather.png'); wide(pg, 'weather card')
         ms = pg.evaluate('''() => { const t = []; for (const k of [6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7]) { const a = performance.now(); window.__trip.step(k); t.push(Math.round(performance.now() - a)); } return t; }''')
         print('  step switch ms (4,3,2,1,2,3,4,5):', ms); pg.wait_for_timeout(300); wide(pg, 'departure')
         pg.evaluate("window.__shared = null"); pg.click('#tShare'); pg.wait_for_timeout(200)

@@ -2731,10 +2731,78 @@
     if (rn) w.push(rn);
     if (KIND() === 'h2') w.push('Hydrogen stations go offline often — check each one\'s live status before you count on it.');
     h += '<div class="warns">' + w.map(function (x) { return '<div class="note">' + esc(x) + '</div>'; }).join('') + '</div>';
+    h += wxHtml();
     h += '<p class="lead small keep center"><a href="#" id="tsReport">Troubleshooting report</a></p>';
     return h;
   }
+
+  // ---------- weather and air along the route (Departure): the forecast where and when you'll be, and what to do ----------
+  var wx = { sig: null, st: null };
+  function wxSig() {
+    var fd = futureDepart(), p = result && result.plan;
+    return [model.totalMi.toFixed(1), model.pts[0].lat.toFixed(4), model.pts[model.pts.length - 1].lng.toFixed(4), fd ? Math.round(fd.getTime() / 9e5) : 'now', p && p.ok ? p.stops.length : 0].join('|');
+  }
+  function wxGet(url) {       // forecasts are kept 45 min, warnings 10 min
+    var o = A.KV.get('wx', url, /weather\.gov/.test(url) ? 10 * 60e3 : 45 * 60e3);
+    if (o) return Promise.resolve(o.v);
+    return call('fetchJson', url).then(function (r) { if (r && r.body) A.KV.put('wx', url, r); return r; });
+  }
+  function ensureWx(force) {
+    if (!model || !window.RouteWx) return;
+    var sig = wxSig();
+    if (!force && wx.sig === sig && (wx.st === 'loading' || (wx.st === 'done' && Date.now() - wx.t < 30 * 60e3))) return;
+    var p = result && result.plan, ev = KIND() === 'ev', t0 = Date.now();
+    var stops = p && p.ok ? p.stops.map(function (x) { return { mi: x.c.d, min: ev && x.c.kw ? Math.max(10, x.buyGal / x.c.kw * 60) : 10 }; }) : [];
+    var pts = RouteWx.samples(model, { depart: departAt().getTime(), stops: stops });
+    wx = { sig: sig, st: 'loading' }; refreshWx();
+    RouteWx.lookup(pts, wxGet, { stateAt: window.Limits && Limits.stateAt }).then(function (res) {
+      if (wx.sig !== sig) return;
+      wx = { sig: sig, st: 'done', t: Date.now(), res: res, xs: RouteWx.stretches(res.pts) };
+      LG.info('wx', 'Weather and air along the route in ' + (Date.now() - t0) + ' ms', { stats: res.stats, stretches: wx.xs.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.events.join('/') || x.peak]; }) });
+      refreshWx();
+    }).catch(function (e) { if (wx.sig !== sig) return; wx = { sig: sig, st: 'error', err: String(e && e.message || e) }; LG.warn('wx', 'Weather along the route failed', wx.err); refreshWx(); });
+  }
+  function refreshWx() { var el = $('tWx'); if (el) { el.outerHTML = wxHtml(); bindWx(); } }
+  function bindWx() { var r = $('tWxRetry'); if (r) r.onclick = function (e) { e.preventDefault(); ensureWx(true); }; }
+  function wxWhen(a, b) {
+    var day = function (t) { return new Date(t).toDateString(); }, multi = day(a) !== day(Date.now()) || day(b) !== day(a);
+    var f = function (t, wd) { return new Date(t).toLocaleString([], wd ? { weekday: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' }); };
+    return b - a < 10 * 60e3 ? 'around ' + f(a, multi) : f(a, multi) + '–' + f(b, day(b) !== day(a));
+  }
+  function wxTitle(x) {
+    var K = RouteWx.KINDS[x.kind][0], pk = x.peak || {};
+    if (x.kind === 'alert') return x.events.join(' · ') || K;
+    if (x.kind === 'air') return (x.level >= 2 ? 'Unhealthy air' : 'Air unhealthy for sensitive groups') + (pk.aqi ? ' (AQI ' + pk.aqi + ')' : '');
+    if (x.kind === 'rain') return x.level >= 2 ? 'Heavy rain' : 'Rain';
+    if (x.kind === 'snow') return x.level >= 2 ? 'Heavy snow' : 'Snow';
+    if (x.kind === 'heat') return 'Heat' + (pk.tF != null ? ' (up to ' + Math.round(pk.tF) + '°F)' : '');
+    if (x.kind === 'cold') return 'Below freezing' + (pk.tF != null ? ' (down to ' + Math.round(pk.tF) + '°F)' : '');
+    if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : '');
+    return K;
+  }
+  function wxHtml() {
+    var h = '<div class="card wx-card" id="tWx"><h3>Weather & air along the way</h3>';
+    if (!wx.st || wx.st === 'loading') return h + A.ldBar('Checking the forecast where and when you\'ll be') + '</div>';
+    if (wx.st === 'error') return h + '<p class="lead small keep">Couldn\'t get the forecast (' + esc(wx.err) + '). <a href="#" id="tWxRetry">Try again</a></p></div>';
+    var c = window.Garage && Garage.car(), tt = c && c.tires || {}, e = window.TireMath ? TireMath.estimate(tt) : null;
+    var ctx = { tread: e ? e.depth : null, tireType: tt.type, towing: !!tt.towMode };
+    var xs = wx.xs || [], st = wx.res.stats;
+    if (!xs.length) h += '<p class="lead small keep">' + (st.weather ? 'Nothing to watch for: no storms, rain, snow, ice, fog, strong wind, extreme heat or cold, warnings or bad air forecast where and when you\'ll be.' : 'No forecast reaches that far ahead yet.') + '</p>';
+    h += xs.map(function (x) {
+      var sit = RouteWx.KINDS[x.kind][1], pr = sit && window.Climate && Climate.presetFor ? Climate.presetFor(c, sit, new Date(x.from)) : null;
+      var lines = RouteWx.advice(x, Object.assign({ preset: pr }, ctx));
+      var where = (x.toMi - x.fromMi < 1 ? 'around mile ' + Math.round(x.fromMi) : 'miles ' + Math.round(x.fromMi) + '–' + Math.round(x.toMi)) + ' · ' + wxWhen(x.from, x.to);
+      return '<details class="wx-x lv' + x.level + '"' + (x.level >= 2 ? ' open' : '') + '><summary><span class="wx-ic">' + RouteWx.KINDS[x.kind][2] + '</span><span class="wx-t"><b>' + esc(wxTitle(x)) + '</b><small>' + esc(where) + '</small></span></summary>' +
+        '<div class="wx-a">' + lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + '</div></details>';
+    }).join('');
+    var beyond = [];
+    if (st.beyondWeather) beyond.push('the last ' + Math.round(st.beyondWeather / st.points * 100) + '% of the way is past the 16-day weather forecast');
+    else if (st.beyondAir) beyond.push('the air forecast reaches about 5 days ahead, so the last ' + Math.round(st.beyondAir / st.points * 100) + '% of the way has no air reading yet');
+    if (beyond.length) h += '<p class="lead small keep">Note: ' + esc(beyond.join('; ')) + '. Check again closer to the day.</p>';
+    return h + '<p class="wx-src">Weather data by Open-Meteo.com (CC BY 4.0; NOAA models) · Air: Copernicus Atmosphere Monitoring Service via Open-Meteo · Warnings: National Weather Service</p></div>';
+  }
   function bindDeparture() {
+    ensureWx(); bindWx();
     if ($('tsReport')) $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(e); };
     if ($('tShare')) $('tShare').onclick = shareTrip;
     var b = $('tOpen'); if (b) b.disabled = !(result && result.plan.ok);
@@ -2754,7 +2822,7 @@
         Math.round(x.toMi - x.fromMi).toLocaleString() + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small></span>' +
         '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>';
     }).join('');
-    pg.appendChild(box);
+    pg.appendChild(box); document.body.classList.add('legs-open');      // the "more below" arrow would sit on the links
     box.style.bottom = ($('tpNav').getBoundingClientRect().height + 6) + 'px';
     requestAnimationFrame(function () { box.classList.add('on'); });
     box.querySelectorAll('[data-legurl]').forEach(function (b) {
@@ -2767,7 +2835,7 @@
   function closeLegs() {
     var box = $('tLegs'); document.removeEventListener('pointerdown', outside, true);
     if (!box) return false;
-    box.classList.remove('on'); setTimeout(function () { box.remove(); }, 200);
+    box.classList.remove('on'); setTimeout(function () { box.remove(); }, 200); document.body.classList.remove('legs-open');
     return true;
   }
   /** A price bubble on the route was tapped: open the fuel-stop list on that stop's tile (or the top-up). */

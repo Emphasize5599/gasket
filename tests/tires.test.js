@@ -119,3 +119,27 @@ console.log('tire math tests passed');
   assert.deepStrictEqual(T.rankModels({ model: 'Escalade' }, ['Corolla']), [], 'not listed: nothing');
 }
 console.log('tire version matching ok');
+
+// ---- the spare from Brave's answer: clauses that say what the car has, read by the model (keywords when it can't load) ----
+{
+  const kitAnswer = 'The 2019 Honda Insight EX does not come with a spare tire from the factory; instead, it is equipped with a tire repair kit (often referred to as a "fix-a-flat" kit). Standard Equipment: The vehicle includes a sealant canister and an air compressor designed to temporarily repair minor punctur';
+  const compactAnswer = 'Yes, the 2014 Ford Edge SE comes with a spare tire. It is a compact, temporary spare tire (often called a "donut"), not a full-size spare or a tire repair kit. This compact spare is located under ';
+  const kia = 'No, the 2021 Kia Niro does not have a spare tire. It comes with a Tire Mobility Kit (sealant and compressor) instead of a spare.';
+  const tesla = 'The 2022 Tesla Model 3 does not come with a spare tire or a tire repair kit. Tesla recommends calling roadside assistance for a flat.';
+  let sc = T.spareClauses(kitAnswer);
+  assert.ok(sc.negSpare && !sc.pos.some((c) => /does not come/.test(c)) && sc.pos.some((c) => /repair kit/.test(c)), JSON.stringify(sc));
+  assert.equal(T.pickSpare(null, sc).kind, 'kit', 'no model: keywords in what it has (it used to read this as compact)');
+  sc = T.spareClauses(compactAnswer);
+  assert.ok(!sc.pos.some((c) => /full-size/.test(c)), 'what it is not is set aside');
+  assert.equal(T.pickSpare(null, sc).kind, 'compact');
+  sc = T.spareClauses(kia); assert.ok(sc.negSpare && !sc.pos.join(' ').includes('instead'), JSON.stringify(sc));
+  assert.equal(T.pickSpare(null, sc).kind, 'kit');
+  assert.equal(T.pickSpare(null, T.spareClauses(tesla)).kind, 'none', 'all it says is what it doesn\'t have');
+  // with the model's scores (like the real ones for these answers)
+  const s = (o) => Object.assign({ full: 0.4, compact: 0.4, kit: 0.4, runflat: 0.4, generic: 0.5 }, o);
+  assert.deepEqual(T.pickSpare([s({ compact: 0.796, generic: 0.624 }), s({ full: 0.52 })], T.spareClauses(compactAnswer)), { kind: 'compact', by: 'ai', score: 0.796 });
+  assert.equal(T.pickSpare([s({ compact: 0.59, generic: 0.595 })], { pos: ['includes a temporary compact spare tire, a jack and lug wrench'], negSpare: false }).kind, 'compact', 'close to "it has a spare" is still fine');
+  assert.deepEqual(T.pickSpare([s({ full: 0.542, generic: 0.563 })], { pos: ['Yes, it comes with a spare tire located in the trunk'], negSpare: false }), { kind: null, by: null, score: null }, 'just "it has a spare": you pick');
+  assert.equal(T.pickSpare([s({ kit: 0.644, generic: 0.507 })], T.spareClauses(kia)).by, 'ai');
+  console.log('spare tire reading ok');
+}

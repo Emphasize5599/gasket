@@ -33,6 +33,7 @@ on:
       - tests/trip.test.js
       - tests/limits.test.js
       - tests/discovery-log.test.js
+      - tests/routewx.test.js
 
 permissions:
   contents: write

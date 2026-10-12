@@ -839,9 +839,10 @@ public class MainActivity extends Activity {
     }
 
     // EPA mileage, OpenStreetMap places, FHWA speed limits, ExxonMobil's station finder, the DOE station finder (EV chargers,
-    // hydrogen), and NHTSA (VIN decoding, recalls)
+    // hydrogen), NHTSA (VIN decoding, recalls), and the weather and air along a route (Open-Meteo, the National Weather Service)
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "overpass-api.de", "geo.dot.gov", "www.exxon.com",
-            "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org"};
+            "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org",
+            "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
     private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "i.fuelapi.com"};

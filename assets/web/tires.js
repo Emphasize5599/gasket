@@ -281,8 +281,45 @@
     if (/(does not|doesn'?t|did not|didn'?t) (come with|have|include) (a )?spare|no spare tire/.test(t)) return 'none';
     return null;
   }
+  // ---------- the spare, read by the rating model (all-MiniLM) from Brave's answer ----------
+  // The model compares meaning, not words, but it can't read "not": so the answer is cut into clauses, the ones that say
+  // what the car doesn't have ("not a full-size spare", "instead of a spare") are set aside, and each remaining clause
+  // is compared with a few examples of each kind. Tested on real Brave answers (tests/tires.test.js has them).
+  var SPARE_EX = {
+    full: ['a full-size spare tire', 'a full-size matching spare wheel and tire', 'the spare is the same size as the other tires'],
+    compact: ['a compact temporary spare tire', 'a donut spare', 'a space-saver mini spare tire'],
+    kit: ['a tire repair kit with sealant and an air compressor', 'a tire sealant and inflator kit', 'a fix-a-flat tire mobility kit'],
+    runflat: ['run-flat tires', 'runflat tires with no spare', 'run-flat tires let you drive after a puncture'],
+    generic: ['it comes with a spare tire', 'the spare is located under the floor', 'a jack and lug wrench are included']
+  };
+  var SPARE_NEG = /\b(not|no|never|without|neither|nor)\b|n't\b/i;
+  var SPARE_INSTEAD = /\b(?:instead of|rather than|in place of)\s+(?:a|an|the)?\s*[\w -]*?\b(?:spare(?: tire)?|tire|wheel)\b/gi;
+  /** Brave's answer -> {pos: clauses saying what the car has, negSpare: it says there's no spare somewhere}. */
+  function spareClauses(text) {
+    var t = String(text || '').replace(/^answer with ai\s*/i, '');
+    SPARE_INSTEAD.lastIndex = 0; var instead = SPARE_INSTEAD.test(t); SPARE_INSTEAD.lastIndex = 0;
+    var cs = t.replace(SPARE_INSTEAD, ' ').replace(/\([^)]*\)/g, ' ').split(/[.;:!?]|,\s*(?=(?:instead|but|not|so|which|and it|while)\b)/i)
+      .map(function (x) { return x.replace(/\s+/g, ' ').trim(); }).filter(function (x) { return x.length > 6; }).slice(0, 8);
+    return { pos: cs.filter(function (c) { return !SPARE_NEG.test(c); }), negSpare: instead || cs.some(function (c) { return SPARE_NEG.test(c) && /spare/i.test(c); }) };
+  }
+  /**
+   * The kind from the model's scores ([{full, compact, kit, runflat, generic}] per clause, or null with no model) and the
+   * clauses: the model when it's sure (0.55+, and the clause isn't just "it has a spare"), else the words in what it
+   * has, else "no spare" when it says so, else null (you pick). -> {kind, by: 'ai' | 'words' | null, score}
+   */
+  function pickSpare(scores, sc) {
+    var best = null;
+    (scores || []).forEach(function (o) {
+      if (!o) return;
+      ['full', 'compact', 'kit', 'runflat'].forEach(function (k) { if (o[k] >= 0.55 && o[k] >= o.generic - 0.02 && (!best || o[k] > best.score)) best = { kind: k, by: 'ai', score: Math.round(o[k] * 1000) / 1000 }; });
+    });
+    if (best) return best;
+    var w = parseSpare(sc.pos.join('. '));
+    if (w && w !== 'none') return { kind: w, by: 'words', score: null };
+    return sc.negSpare || w === 'none' ? { kind: 'none', by: scores ? 'ai' : 'words', score: null } : { kind: null, by: null, score: null };
+  }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare, spareClauses: spareClauses, pickSpare: pickSpare, SPARE_EX: SPARE_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   root.TireMath = TireMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = TireMath;
@@ -441,7 +478,27 @@
   function spare(t) { t.spare = t.spare || {}; return t.spare; }
   function spareKey(c) { return G() && G().carKey ? G().carKey(c) : [c.year, c.make, base(c), c.trim || ''].join(' ').trim(); }
   function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent('Does the ' + spareKey(c) + ' come with a spare tire? Is it full-size, compact, or a tire repair kit?') + '&summary=1'; }
+  /** An answer read by the old keyword rules (before 0.0.114): read it again with the model. If that differs and you had
+   *  confirmed the old guess, you're asked again. Once per answer. */
+  var rechecking = {};
+  function spareRecheck(c) {
+    var t = tires(c), sp = spare(t), L = sp.lookup;
+    if (!L || !L.text || L.by || L.rechecked || rechecking[c.id]) return;
+    rechecking[c.id] = true;
+    readSpare(L.text).then(function (pick) {
+      rechecking[c.id] = false;
+      if (!pick.model) return;                                     // only the model's reading replaces the old one
+      L.rechecked = Date.now();
+      if (pick.kind && pick.kind !== L.guess) {
+        LG.info('car', 'Spare tire read again: ' + (L.guess || 'unknown') + ' → ' + pick.kind + ' (' + pick.by + ')', L.text.slice(0, 160));
+        if (sp.kind && sp.kind === L.guess) sp.kind = '';          // you'd confirmed the misread one: ask again
+        L.guess = pick.kind; L.by = pick.by;
+      }
+      save(); redraw(c); onChange();
+    });
+  }
   function spareLookup(c) {
+    spareRecheck(c);
     var t = tires(c), sp = spare(t), key = spareKey(c);
     if (!call || !N.siteRead || sp.kind || !key || !c.year || spareBusy[c.id]) return;
     var L = sp.lookup; if (L && L.key === key && (L.guess || recent(L, RETRY_H))) return;
@@ -450,12 +507,22 @@
     var ask = function () { return Promise.race([call('siteRead', 'brave', JSON.stringify({ url: spareUrl(c), bg: true, kind: 'spare' })), new Promise(function (ok) { setTimeout(function () { ok(null); }, 40000); })]); };
     (G().braveSerial ? G().braveSerial(ask) : ask()).then(function (r) {
       spareBusy[c.id] = false;
-      var g = r && r.text ? parseSpare(r.text) : null;
-      sp.lookup = { key: key, t: Date.now(), guess: g, failed: !g, src: r && r.src, text: r && r.text ? String(r.text).slice(0, 300) : '' };
-      LG.info('car', g ? 'Brave Search says the spare is: ' + g : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
-      save(); redraw(c); onChange();
+      return readSpare(r && r.text).then(function (pick) {
+        var g = pick.kind;
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: r && r.text ? String(r.text).slice(0, 300) : '' };
+        LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
+        save(); redraw(c); onChange();
+      });
     });
     redraw(c);
+  }
+  /** Brave's answer -> {kind, by, score}: each clause about what the car has, scored by the rating model (keywords if it can't load). */
+  function readSpare(text) {
+    var sc = spareClauses(text);
+    if (!text) return Promise.resolve({ kind: null, by: null, score: null });
+    if (!sc.pos.length || !root.Severity || !Severity.compare) return Promise.resolve(pickSpare(null, sc));
+    return sc.pos.reduce(function (p, c) { return p.then(function (acc) { return Severity.compare(c, SPARE_EX).then(function (o) { acc.push(o); return acc; }); }); }, Promise.resolve([]))
+      .then(function (scores) { var ok = scores.some(Boolean); return Object.assign(pickSpare(ok ? scores : null, sc), { model: ok }); }, function () { return pickSpare(null, sc); });
   }
   /** What the car has: what you said, else Brave's guess (marked), else ''. */
   function spareKind(t) { var sp = (t && t.spare) || {}; return sp.kind || (sp.lookup && sp.lookup.guess) || ''; }
