@@ -292,7 +292,7 @@
   var A = root.__app, S = A.S, N = A.N, $ = A.$, esc = A.esc, LG = root.FLog || { info: function () {}, warn: function () {} };
   var TR = 'https://www.tirerack.com/tires/';
   var TYPES = ['All-season', 'Touring all-season', 'Grand touring all-season', 'Performance all-season', 'All-weather (snow-rated)', 'Summer', 'Winter', 'All-terrain', 'Mud-terrain', 'Highway (trucks and SUVs)'];
-  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 3;
+  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 4;
   var host = null, call = null, onChange = function () {}, busy = {}, open = {};
   function G() { return root.Garage; }
   function save() { A.save(); }

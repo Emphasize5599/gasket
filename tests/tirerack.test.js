@@ -123,6 +123,20 @@ async function run() {
     assert.equal(variants.detail.uniqueModels,67);
     assert.equal(variants.partial,undefined,'duplicate model names must not produce a false incomplete warning');
     console.log('67 model names / 77 product variants retained without a false incomplete warning');
+    // Prius OE cards link to other SKUs of the SAME model inside the main card.
+    // These extra links used to stop climbing before we reached the size and category.
+    const oe = card('Continental','ProContact TX','Grand Touring All-Season','', '500 A A', '965HR5PCTXV2','91H')
+      .replace('</h2>', '</h2><aside>Other versions: <a href="/tires/tires.jsp?tireMake=Continental&tireModel=ProContact%20TX&partnum=965HR5PCTXV3">OE variant</a></aside>');
+    await start(pg, '<h1>We have 1 tire models in stock</h1>' + oe, {step:'list'});
+    const originalEquipment = await result(pg);
+    assert.equal(originalEquipment.tires.length,1);
+    assert.equal(originalEquipment.tires[0].partnum,'965HR5PCTXV2');
+    assert.equal(originalEquipment.tires[0].serviceDesc,'91H');
+    assert.equal(originalEquipment.partial,undefined);
+    // A shared model wrapper with two real size/rating blocks is NOT a single SKU.
+    await start(pg, '<h1>We have 2 tire models in stock</h1><section>'+ratingH+ratingT+'</section>', {step:'list'});
+    assert.deepEqual((await result(pg)).tires.map(t=>t.warrantyMi),[65000,75000]);
+    console.log('Prius OE cross-links and separate per-SKU metadata passed');
     await start(pg, `<h1>We have 2 tire models in stock</h1><div id="cards">${ratingH}</div><input id="nextImage" type="image" alt="Next page →">`, {step:'list'}, `document.getElementById('nextImage').onclick=()=>{document.getElementById('cards').insertAdjacentHTML('beforeend',${JSON.stringify(ratingT)});document.getElementById('nextImage').remove();};`);
     const rated = await result(pg);
     assert.equal(rated.tires.length,2,'next pages containing only another variant must still be retained');
@@ -220,7 +234,7 @@ async function run() {
     await catalogUI.evaluate(tires=>{
       __app.S.cars.push({id:'prius-catalog',name:'2016 Prius Two',year:2016,make:'Toyota',model:'Prius',trim:'Two',info:{},obs:{},entries:[],tires:{size:'195/65R15',sizeSrc:'user',type:'grand touring all-season',brand:'Cooper',model:'Endeavor',list:{size:'195/65R15',catalogVersion:2,failed:'incomplete',t:Date.now(),items:[{brand:'Continental',model:'SecureContact AW',type:'Grand Touring All-Season'}]}}});
       window.__catalogReads=[];
-      __app.N.siteRead=(id,key,json)=>{const args=JSON.parse(json); if(key==='tirerack') __catalogReads.push(args);setTimeout(()=>onNativeResult(id,key==='tirerack'?{tires:tires,catalogVersion:3}:{error:'test skip'}),100);};
+      __app.N.siteRead=(id,key,json)=>{const args=JSON.parse(json); if(key==='tirerack') __catalogReads.push(args);setTimeout(()=>onNativeResult(id,key==='tirerack'?{tires:tires,catalogVersion:4}:{error:'test skip'}),100);};
     },all.tires);
     await catalogUI.click('#btnTrip'); if(await catalogUI.locator('#tpNew').count()) await catalogUI.click('#tpNew');
     await catalogUI.evaluate(()=>{__app.S.carId='prius-catalog';Garage.redraw();});
@@ -248,7 +262,7 @@ async function run() {
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
     await catalogUI.fill('#tzWarranty','70000'); await catalogUI.dispatchEvent('#tzWarranty','change');
     await catalogUI.click('#tzRefresh');
-    await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===3);
+    await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===4);
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'70000','refresh must preserve a manually entered warranty');
     await catalogUI.evaluate(rows=>{
       const t=Garage.car().tires;t.list.items=rows; t.type='Grand Touring All-Season';t.brand='General';t.model='AltiMAX RT45';t.warrantySrc='tirerack';t.warrantyMi=65000;

@@ -15,7 +15,7 @@ on:
       - tests/tires.test.js
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: signed-apk-main
@@ -35,6 +35,7 @@ jobs:
           export NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules"
           node tests/tires.test.js
           node tests/tirerack.test.js
+          node tests/picture-storage.test.js
 
       - name: Check release signing configuration
         id: signing
@@ -72,12 +73,35 @@ jobs:
           bash build.sh
           test -s Gasket.apk
           apksigner verify --verbose Gasket.apk
+          cp Gasket.apk "Gasket-${{ steps.version.outputs.name }}.apk"
+
+      # Actions downloads are always ZIPs. Release assets keep the original APK extension.
+      - name: Publish direct APK download on the version's release
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.version.outputs.name }}"
+          for attempt in $(seq 1 12); do
+            if gh release view "$tag" >/dev/null 2>&1; then break; fi
+            sleep 5
+          done
+          gh release view "$tag" >/dev/null
+          release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
+          test "$release_sha" = "$GITHUB_SHA"
+          asset="Gasket-${{ steps.version.outputs.name }}.apk"
+          # Do not overwrite a previously shipped APK on a workflow rerun.
+          if gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx "$asset" >/dev/null; then
+            echo "APK already published; leaving it unchanged."
+          else
+            gh release upload "$tag" "$asset"
+          fi
 
       - name: Upload signed APK for download
         if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Gasket-${{ steps.version.outputs.name }}-signed
-          path: Gasket.apk
+          path: Gasket-${{ steps.version.outputs.name }}.apk
           if-no-files-found: error
           retention-days: 7

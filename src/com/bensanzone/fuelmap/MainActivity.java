@@ -101,6 +101,7 @@ public class MainActivity extends Activity {
 
         lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
+        migrateCarPictures();
         web = new WebView(this);
         web.setBackgroundColor(isDark() ? Color.rgb(16, 18, 22) : Color.rgb(242, 243, 245));
         WebSettings s = web.getSettings();
@@ -237,7 +238,31 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics"));
+
+    /** Pictures are user data, including imported images. Upgrade the old cache without
+     * overwriting a newer stored image or deleting the only copy if a move fails. */
+    private synchronized void migrateCarPictures() {
+        File oldDir = new File(getCacheDir(), "kv/carpics");
+        File newDir = new File(getFilesDir(), "kv/carpics");
+        File[] pictures = oldDir.listFiles();
+        if (pictures == null || (!newDir.exists() && !newDir.mkdirs())) return;
+        for (File old : pictures) {
+            if (!old.isFile() || !old.getName().matches("[a-f0-9]{40}")) continue;
+            File saved = new File(newDir, old.getName());
+            if (saved.exists()) { old.delete(); continue; }
+            if (old.renameTo(saved)) continue;
+            File tmp = new File(newDir, old.getName() + ".migrating");
+            try {
+                java.io.FileInputStream in = new java.io.FileInputStream(old);
+                java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+                try { byte[] buf = new byte[16384]; int n; while ((n = in.read(buf)) != -1) out.write(buf, 0, n); out.getFD().sync(); }
+                finally { try { in.close(); } finally { out.close(); } }
+                if (tmp.renameTo(saved)) old.delete();
+            } catch (Exception ignored) { /* Keep the cache copy and retry next start/backup. */ }
+            finally { tmp.delete(); }
+        }
+    }
     private static final String[] AI_FILES = { "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1/dist/",
             "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/" };
 
@@ -802,6 +827,10 @@ public class MainActivity extends Activity {
     private static final String COUNTER = "^[a-z]*calls_\\d{4}-\\d{2}$";
 
     private JSONObject writeBackup(String name) throws Exception {
+        migrateCarPictures();
+        File[] unmoved = new File(getCacheDir(), "kv/carpics").listFiles();
+        if (unmoved != null) for (File f : unmoved) if (f.isFile() && f.getName().matches("[a-f0-9]{40}"))
+            throw new Exception("Could not preserve all car pictures. Free some app storage and retry the backup.");
         android.content.ContentValues v = new android.content.ContentValues();
         v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
         v.put("mime_type", "application/json");

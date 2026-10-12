@@ -75,7 +75,7 @@
   // Lookups that can simply be fetched again (recalls, the NHTSA VIN check, versions, Tire Rack's lists, Brave's answers,
   // recall ratings) live in the app's cache, not its settings: Android's "Clear cache" empties them and they load again.
   // Settings, your cars and anything that cost a Google lookup stay in storage.
-  var CAR_CACHE = ['recalls', 'recallCheck', 'recallAuto', 'variants', 'tankLookup', 'pic'], TIRE_CACHE = ['list', 'sizeLookup', 'fuelNudge', 'tr', 'trims', 'fuelTrims'], lastLookups = '';
+  var CAR_CACHE = ['recalls', 'recallCheck', 'recallAuto', 'variants', 'tankLookup'], TIRE_CACHE = ['list', 'sizeLookup', 'fuelNudge', 'tr', 'trims', 'fuelTrims'], lastLookups = '';
   function splitLookups(o) {
     var cc = {};
     (o.cars || []).forEach(function (c) {
@@ -98,7 +98,8 @@
       lastLookups = r ? JSON.stringify(cc) : '';
       (S.cars || []).forEach(function (c) {
         var k = cc[c.id]; if (!k) return;
-        CAR_CACHE.forEach(function (f) { if (c[f] === undefined && k[f] !== undefined) c[f] = k[f]; });
+        // Upgrade photo metadata out of the old lookup cache; subsequent saves keep it with the car.
+        CAR_CACHE.concat(['pic']).forEach(function (f) { if (c[f] === undefined && k[f] !== undefined) c[f] = k[f]; });
         if (k.tires) {
           c.tires = c.tires || {};
           TIRE_CACHE.forEach(function (f) { if (c.tires[f] === undefined && k.tires[f] !== undefined) c.tires[f] = k.tires[f]; });
@@ -893,7 +894,7 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
-    CACHE_NS.concat(['trips', 'logos', 'lookups']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trips', 'logos', 'lookups', 'carpics']).forEach(function (ns) { KV.clear(ns); });
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(''); } catch (e) { }
     if (window.FLog) FLog.clear();
@@ -919,6 +920,7 @@
   /** Full backup: the native side writes every setting, saved answer, trip and lookup count straight to a file. */
   function fullBackup(btn) {
     if (!N.backupAll || !window.__trip) { toast('This needs the app.'); return; }
+    save(); // Include upgraded photo metadata and the current car edits before native streaming starts.
     btn.disabled = true; var lbl = btn.textContent; btn.textContent = 'Saving…';
     window.__trip.call('backupAll', 'gasket-full-backup-' + stamp() + '.json').then(function (r) {
       btn.disabled = false; btn.textContent = lbl;

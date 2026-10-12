@@ -20,6 +20,10 @@ Before you leave, it checks the car too: open safety recalls on your VIN, tire t
 
 <sub>Screenshots use demo prices and example cars.</sub>
 
+## Download
+
+Open [GitHub Releases](https://github.com/Emphasize5599/gasket/releases) and choose `Gasket-0.0.<version>.apk` under Assets. This is the installable signed APK, not a ZIP. Source code archives and Actions artifacts are separate downloads.
+
 ## What it does
 
 ### The map

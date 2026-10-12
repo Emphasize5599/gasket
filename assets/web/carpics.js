@@ -3,7 +3,7 @@
  * owner's Fuel API key, picking one of the trim's factory colors shows Fuel API's picture in it (EVOX's colorized set:
  * angles 001 / 014 / 032 only; NHTSA's is EVOX still shot 046, which has no color versions, so 032, the front three-quarter,
  * is the closest; demo keys' watermark is kept as is). Doodle mode: the app's own drawing of the body style, in the color
- * you pick. Photos are kept (KV 'carpics', cache) so each is
+ * you pick. Photos are kept (KV 'carpics', app storage, included in full backups) so each is
  * downloaded once. CarPicMath is pure and runs in Node for the tests. */
 (function (root) {
   'use strict';

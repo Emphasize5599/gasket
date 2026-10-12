@@ -1,7 +1,6 @@
 # A new version pushed to main is released automatically: when android:versionName in AndroidManifest.xml has no
 # GitHub Release yet, this tags the pushed commit v<versionName> and creates the release. The notes come from
-# CHANGELOG.md, and the only downloads are the source code archives GitHub attaches to every release.
-# No APK is built or uploaded.
+# CHANGELOG.md. The signed build workflow adds a directly downloadable APK after tests and signing pass.
 name: Release
 
 on:

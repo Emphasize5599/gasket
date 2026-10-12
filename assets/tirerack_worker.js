@@ -146,7 +146,7 @@ async function (reqId, args) {
 
   if (args.step === 'list') {
     const CAT = /(?:all[ -]season|summer|winter|snow|all[ -]weather|all[ -]terrain|mud[ -]terrain|highway|touring|performance|ice|competition|trailer|spare)/i;
-    const stateKey = '__gasketTireCatalogV3';
+    const stateKey = '__gasketTireCatalogV4';
     let state = { id: reqId, started: Date.now(), tires: [], pages: [], expanded: false, rejected: {} };
     try { const old = JSON.parse(sessionStorage.getItem(stateKey) || 'null'); if (old && old.id === reqId) state = old; } catch (_) {}
     const identity = (p) => p.partnum ? 'part:' + p.partnum : p.name.toLowerCase() + '|' + (p.serviceDesc || '') + '|' + (p.loadRange || '');
@@ -159,7 +159,7 @@ async function (reqId, args) {
     const persist = () => { try { sessionStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} };
     const finish = (extra) => {
       try { sessionStorage.removeItem(stateKey); } catch (_) {}
-      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 3,
+      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 4,
         detail: { expected: count(text()), read: out.length, uniqueModels: new Set(out.map((p) => p.name.toLowerCase())).size, pages: state.pages.length,
           perPage: state.perPage || null, rejected: Object.values(state.rejected || {}).slice(0, 12) } }, extra || {}));
     };
@@ -204,9 +204,18 @@ async function (reqId, args) {
         const p = product(a); if (!p) return;
         let reason = 'No product card with a size was found', excerpt = '';
         for (let box = a.parentElement; box && box !== doc.body; box = box.parentElement) {
-          const names = new Set(Array.from(box.querySelectorAll('a[href]')).map(product).filter(Boolean).map(identity));
-          if (names.size > 1) break; // never take a rating or warranty from a different tire
+          const products = Array.from(box.querySelectorAll('a[href]')).map(product).filter(Boolean);
+          const names = new Set(products.map((p) => p.name.toLowerCase()));
+          if (names.size > 1) break; // never take a rating or warranty from a different model
           const t = doc === document ? box.innerText || box.textContent || '' : pageText({ body: box });
+          if (new Set(products.map(identity)).size > 1) {
+            // A primary card also links to other OE variants. Those links are not independent
+            // cards. Read this card only for its heading's SKU and only when it has one size block.
+            // Multiple actual variant rows must still be parsed separately, with their own ratings.
+            const heading = box.querySelector('h1 a[href],h2 a[href],h3 a[href],h4 a[href]');
+            const lead = heading && product(heading);
+            if (!lead || identity(lead) !== identity(p) || (t.match(/\bSize\s*:/gi) || []).length !== 1) continue;
+          }
           const meta = metadata(t); if (!meta.size) continue;
           if (requestedSize && meta.size !== requestedSize) { reason = 'Different size: ' + meta.size; break; }
           const categoryText = (s) => s.length < 70 && CAT.test(s) && s.toLowerCase() !== p.name.toLowerCase() && !/warranty|test|review|rating|chart|compare/i.test(s);
