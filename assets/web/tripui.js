@@ -320,6 +320,7 @@
       }
       var pick = document.querySelector('#tParsed .pick button');
       if (pick) { flag(document.querySelector('#tParsed .pick'), 'pick', 'Pick the right address.'); return false; }
+      var tm = timesNeed(); if (tm) { flag($(tm.id), 'box', tm.msg); return false; }
       if (!model) { flag($('tGetRoutes'), 'pick'); return false; }   // the flashing button says it
       return true;
     }
@@ -358,7 +359,7 @@
     if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
     if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) return ST_ADVISORY;
     if (window.Climate && Climate.ackDue()) return ST_ADVISORY;
-    if (!model || document.querySelector('#tParsed .pick button')) return ST_ROUTE;
+    if (!model || document.querySelector('#tParsed .pick button') || timesNeed()) return ST_ROUTE;
     if (!hasFuel()) return ST_PARAMS;
     return ST_DEPART;
   }
@@ -434,11 +435,12 @@
       '<div id="tParsed"></div>' +
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
-      '<div class="field col"><div class="lbl">Leaving<small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Blank = now. Prices can change before you go.</small></div>' +
+      '<div class="field col"><div class="lbl">Leaving<span class="req" aria-label="required">*</span><small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Now fills in this minute. Prices can change before you go.</small></div>' +
         '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
       '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div>' +
-        '<div class="field col' + (t.returnTrip ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<small>When you\'ll start the way back, for the weather on that leg. Blank = right after you arrive.</small></div>' +
-        '<div class="dt-row"><input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"><button type="button" class="btn tonal sm" id="tBackNow">Right away</button></div></div>' +
+        '<div class="field' + (t.returnTrip ? '' : ' hidden') + '" id="tBackAutoBox"><div class="lbl">Head back right away<small>Starts the way back as soon as you arrive; the weather on that leg is worked out for then. Off: pick when you\'ll head back.</small></div>' + sw('tBackAuto', backAuto()) + '</div>' +
+        '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
+        '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
         '<div id="tRouteGo"></div></div>' +
         '<div id="tRouteInfo"></div>';
     }
@@ -498,25 +500,10 @@
     }
     bindDeparture();
   }
-  /** Empty a date box. The phone's WebView can keep drawing a picked date after value = '', so the box is swapped
-   *  for a brand-new empty one (same id and attributes, listeners bound again by `bind`). */
-  function clearDt(el, bind) {
-    if (!el) return null;
-    el.blur();
-    var fresh = document.createElement('input');
-    Array.prototype.forEach.call(el.attributes, function (at) { if (at.name !== 'value') fresh.setAttribute(at.name, at.value); });
-    fresh.type = 'datetime-local'; fresh.value = '';
-    el.parentNode.replaceChild(fresh, el);
-    if (bind) bind(fresh);
-    dtState();
-    return fresh;
-  }
-  /** "Now" / "Right away" look picked while their box is blank, so the answer shows even if the box draws oddly. */
-  function dtState() {
-    [['tDepart', 'tNow'], ['tBackAt', 'tBackNow']].forEach(function (p) {
-      var i = $(p[0]), b = $(p[1]); if (i && b) { b.classList.toggle('on', !i.value); b.setAttribute('aria-pressed', String(!i.value)); }
-    });
-  }
+  /** This minute, as a date box wants it (local time). */
+  function localNow() { var d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4); return d.toISOString().slice(0, 16); }
+  /** Head back right away (no time picked): on unless a time was picked and the switch turned off. */
+  function backAuto() { var t = S.trip; return t.backAuto != null ? !!t.backAuto : !t.backAt; }
   function bindRoute() {
     var t = S.trip;
     $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); readLink().then(autoRoutes); }, 400));
@@ -524,19 +511,18 @@
       $(id).addEventListener('input', function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); renderStops(); });
       $(id).addEventListener('change', function () { autoRoutes(); });   // done typing (left the box): fetch once both are in
     });
-    var bindDepart = function (dEl) {
-      var minNow = function () { var d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4); dEl.min = d.toISOString().slice(0, 16); };
-      minNow(); dEl.addEventListener('focus', minNow);
-      dEl.addEventListener('change', function () {
-        // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
-        if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
-        collectSafe(); result = null; dtState();
-      });
-      dEl.addEventListener('input', dtState);
+    var dEl = $('tDepart'), bEl = $('tBackAt'), minNow = function () { dEl.min = bEl.min = localNow(); };
+    minNow(); dEl.addEventListener('focus', minNow); bEl.addEventListener('focus', minNow);
+    dEl.addEventListener('change', function () {
+      // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
+      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
+      collectSafe(); result = null; gateTabs();
+    });
+    bEl.addEventListener('change', function () { collectSafe(); gateTabs(); });
+    $('tNow').onclick = function () {
+      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); result = null; gateTabs();
     };
-    var bindBack = function (bEl) { bEl.addEventListener('change', function () { collectSafe(); dtState(); }); bEl.addEventListener('input', dtState); };
-    bindDepart($('tDepart')); bindBack($('tBackAt')); dtState();
-    $('tNow').onclick = function () { clearDt($('tDepart'), bindDepart); collectSafe(); result = null; };
+    $('tBackAuto').onchange = function () { collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto()); gateTabs(); };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
     $('tSrc').onclick = function (e) {
       var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
@@ -546,9 +532,8 @@
       route = null; model = null; replay = null; result = null; parsing = null; parsedEl().innerHTML = ''; renderInfo(); layer.clearLayers();
       if (S.trip.src === 'link' && $('tLink').value.trim()) readLink().then(autoRoutes);
     };
-    $('tBackNow').onclick = function () { clearDt($('tBackAt'), bindBack); collectSafe(); };
     $('tRound').onchange = function () {
-      collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip);
+      collectSafe(); $('tBackAutoBox').classList.toggle('hidden', !S.trip.returnTrip); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto());
       if (route && syncReturn(route)) { model = null; replay = null; result = null; autoRoute = false; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
       renderStops(); renderInfo();
     };
@@ -673,6 +658,16 @@
   /** Where the route comes from: a Google Maps link, or addresses you type. */
   function srcOf() { var t = S.trip; return t.src === 'typed' || t.src === 'link' ? t.src : (!t.link && (t.from || t.to) ? 'typed' : 'link'); }
   /** When you're leaving: the saved time if it's still ahead, else now. */
+  /** Leaving (and, on a round trip without "right away", Head back) must be filled in, in the future, in order. */
+  function timesNeed() {
+    if (!futureDepart()) return { id: 'tDepart', msg: 'When are you leaving? (Now fills in this minute.)' };
+    if (S.trip.returnTrip && !backAuto()) {
+      var b = S.trip.backAt ? new Date(S.trip.backAt).getTime() : NaN;
+      if (isNaN(b)) return { id: 'tBackAt', msg: 'When will you head back?' };
+      if (b <= futureDepart().getTime()) return { id: 'tBackAt', msg: 'Head back after you leave.' };
+    }
+    return null;
+  }
   function futureDepart() { var d = S.trip.depart ? new Date(S.trip.depart) : null; return d && !isNaN(d) && d.getTime() > Date.now() - 600e3 ? d : null; }
   function departAt() { return futureDepart() || new Date(); }
   function isHere(x) { return /^(my|your) (current )?location$/i.test(String(x || '').trim()); }
@@ -692,6 +687,7 @@
     if (segOn('tArrive', 'a')) t.arrive = segOn('tArrive', 'a');
     if (v('tTopMi') != null) t.topUpMi = Math.max(0, Math.round((parseFloat(v('tTopMi')) || 0) * 10) / 10);
     if (on('tRound') != null) t.returnTrip = on('tRound');
+    if (on('tBackAuto') != null) t.backAuto = on('tBackAuto');
     if (v('tBackAt') != null) t.backAt = v('tBackAt') || '';
     if (segOn('tSrc', 'src')) t.src = segOn('tSrc', 'src');
     if (v('tDepart') != null) t.depart = v('tDepart') || '';
@@ -2779,7 +2775,7 @@
   function hzDepart(i) {
     var t = departAt().getTime();
     for (var j = 0; j < i; j++) { var a = hzAlts(j)[hzSel(j)]; t += parseFloat(String(a && a.duration || '0')) * 1000; }
-    if (i > 0 && i === hzLegs() - 1 && S.trip.returnTrip && S.trip.backAt) { var b = new Date(S.trip.backAt).getTime(); if (b > t) t = b; }
+    if (i > 0 && i === hzLegs() - 1 && S.trip.returnTrip && !backAuto() && S.trip.backAt) { var b = new Date(S.trip.backAt).getTime(); if (b > t) t = b; }
     return t;
   }
   function hzModel(a) { var m = hzModels.get(a); if (!m) { m = T.buildRoute(a, carModel()); hzModels.set(a, m); } return m; }

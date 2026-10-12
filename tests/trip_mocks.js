@@ -2,6 +2,8 @@
 (function () {
   // recirculate's advice already acknowledged (climate_test unticks it to check the gate)
   if (window.__app && window.__app.S) window.__app.S.recircAck = Date.now();
+  // Leaving is required: this minute, as Route's Now fills it in (route_ui unsets it to check the gate)
+  if (window.__app && window.__app.S) window.__app.S.trip.depart = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
   const A = [34.7695, -92.2671], B = [32.7767, -96.797];   // North Little Rock AR -> Dallas TX
   const total = 318;
   // the road bows south so it's about as long as its 318 miles (a straight line would be 294); points are spaced by distance,

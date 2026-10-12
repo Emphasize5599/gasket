@@ -644,7 +644,6 @@ details.hist summary small { margin-left: auto; color: var(--ink-2); font-weight
 .field input[type=datetime-local] { width: 100%; min-height: 46px; }
 .dt-row { display: flex; gap: 8px; align-items: center; }
 .dt-row input { flex: 1; min-width: 0; }
-.dt-row .btn.on { background: var(--accent); color: var(--accent-ink); }   /* blank box = leaving now / right away */
 .ideal-row { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
 .ideal-l { flex: none; }
 .ideal-l .ideal-big { margin: 0; line-height: 1.05; }

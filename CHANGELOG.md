@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.122 - 2026-10-12 (keyless test branch only)
+- **Leaving is required**, and **Now** fills in the current time.
+- **Head back right away** is a switch on round trips (on by default): no date to pick, the way back starts when you arrive. Turn it off and Head back becomes a required time after you leave.
+
 ## 0.0.121 - 2026-10-12 (keyless test branch only)
 - **Route is shorter:** the summary tile under it is gone (routes are picked on Hazards; the "approximate website route" note moved there).
 - **"Now" and "Right away" work on the phone:** they swap in a fresh empty date box, and the button lights up while you're leaving now / heading back right away.

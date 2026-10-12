@@ -200,14 +200,16 @@ with sync_playwright() as p:
         pg.click('#tAvoid [data-av="ferries"]'); pg.wait_for_timeout(300); getr(pg)
         print('  after Get routes:', pg.evaluate('!!window.__trip.state().model'), len(pg.evaluate('window.__routeBodies')), n0, pg.locator('#tGetRoutes').count(), ft(pg, '#tRouteGo'))
         assert pg.evaluate('!!window.__trip.state().model'), 'routes again'
-        # Leaving comes before Round trip; Now clears a picked time
+        # Leaving comes before Round trip; Now fills in this minute
         assert pg.locator('#tDepart').bounding_box()['y'] < pg.locator('#tRound').bounding_box()['y'], 'Leaving above Round trip'
         later = pg.evaluate("new Date(Date.now() + 864e5 - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16)")
         pg.fill('#tDepart', later); pg.dispatch_event('#tDepart', 'change'); pg.wait_for_timeout(100); assert pg.evaluate('window.__app.S.trip.depart') == later
-        pg.click('#tNow'); pg.wait_for_timeout(100); assert pg.input_value('#tDepart') == '' and pg.evaluate('window.__app.S.trip.depart') == '', 'Now clears it'
-        # leaving time: never in the past
+        # leaving time: never in the past (emptied, and Leaving is required)
         pg.evaluate("() => { const e = document.getElementById('tDepart'); e.value = '2020-01-01T08:00'; e.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(200)
-        assert pg.input_value('#tDepart') == '' and pg.get_attribute('#tDepart', 'min'), 'a past time is set to now'
+        assert pg.input_value('#tDepart') == '' and pg.get_attribute('#tDepart', 'min'), 'a past time is emptied'
+        # Now fills in this minute
+        pg.click('#tNow'); pg.wait_for_timeout(100); now = pg.input_value('#tDepart')
+        assert now and now == pg.evaluate('window.__app.S.trip.depart') and now < later, 'Now fills in this minute'
         # ---- Hazards: every route on the big map, what's along each one, the chosen one labeled ----
         nxt(pg); assert step(pg) == 4 and pg.locator('#trip.full').count() == 0, 'Hazards: on the map'
         pg.wait_for_function("document.querySelectorAll('#tHz .hz-opt .hz-dot, #tHz .hz-opt .hz-ok').length >= 2", timeout=15000); idle(pg, 400)
@@ -943,7 +945,10 @@ with sync_playwright() as p:
         assert pg.locator('#tParsed .nlist li').count() == 3 and 'Back to start' not in txt, txt
         getr(pg, 1200)
         assert pg.evaluate('__trip.state().legs') == 2 and mi(pg) == 636, mi(pg)
-        assert pg.locator('#tBackBox:not(.hidden) #tBackAt').count() == 1, 'round trip: when you head back'
+        assert pg.locator('#tBackAutoBox:not(.hidden) #tBackAuto:checked').count() == 1 and pg.locator('#tBackBox.hidden').count() == 1, 'round trip: heads back right away by default (no date box)'
+        setchk(pg, '#tBackAuto', False); pg.wait_for_timeout(150)
+        assert pg.locator('#tBackBox:not(.hidden) #tBackAt').count() == 1, 'off: when you head back'
+        setchk(pg, '#tBackAuto', True); pg.wait_for_timeout(150)
         pg.evaluate("document.querySelector('#tRound').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-l3-roundswitch.png')
         # saved and reopened, the round trip keeps its routes and the leg you picked: Garage straight to Departure
