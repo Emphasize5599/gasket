@@ -206,7 +206,7 @@
     var full = step < ST_HAZ || step === ST_PARAMS;   // nothing to see on the map: Garage, Advisory, Route and Parameters take the whole screen
     // coming down to the map: Hazards keeps the map big (the panel at 25%); the plan's list starts at 75% (drag it
     // anywhere from there) — straight away, not as a slide a busy screen could freeze halfway
-    if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzLeg = shown > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
+    if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzFitKey = null; hzLeg = shown > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
     else if (!full && (!shown || shown < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
     if (step !== ST_DEPART && preDepartH != null) { if (!full && shown === ST_DEPART) pg.style.setProperty('--panel-h', preDepartH); preDepartH = null; }   // back from Departure: your height again
     if (!full && (pg.classList.contains('full') || !shown)) {
@@ -421,11 +421,11 @@
       '<div id="tParsed"></div>' +
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
+      '<div class="field col"><div class="lbl">Leaving<small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Blank = now. Prices can change before you go.</small></div>' +
+        '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
       '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div>' +
         '<div class="field col' + (t.returnTrip ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<small>When you\'ll start the way back, for the weather on that leg. Blank = right after you arrive.</small></div>' +
         '<div class="dt-row"><input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"><button type="button" class="btn tonal sm" id="tBackNow">Right away</button></div></div>' +
-        '<div class="field col"><div class="lbl">Leaving<small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Blank = now. Prices can change before you go.</small></div>' +
-        '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
         '<div id="tRouteGo"></div></div>' +
         '<div id="tRouteInfo"></div>';
     }
@@ -485,6 +485,12 @@
     }
     bindDeparture();
   }
+  /** Empty a date box so the phone's WebView redraws it too (setting value = '' alone can leave the picked date showing). */
+  function clearDt(el) {
+    if (!el) return;
+    el.blur(); el.value = ''; el.defaultValue = ''; el.removeAttribute('value');
+    var t = el.type; el.type = 'text'; el.type = t;
+  }
   function bindRoute() {
     var t = S.trip;
     $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); readLink().then(autoRoutes); }, 400));
@@ -499,7 +505,7 @@
       if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
       collectSafe(); result = null;
     });
-    $('tNow').onclick = function () { $('tDepart').value = ''; collectSafe(); result = null; };
+    $('tNow').onclick = function () { clearDt($('tDepart')); collectSafe(); result = null; };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
     $('tSrc').onclick = function (e) {
       var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
@@ -509,7 +515,7 @@
       route = null; model = null; replay = null; result = null; parsing = null; parsedEl().innerHTML = ''; renderInfo(); layer.clearLayers();
       if (S.trip.src === 'link' && $('tLink').value.trim()) readLink().then(autoRoutes);
     };
-    $('tBackNow').onclick = function () { $('tBackAt').value = ''; collectSafe(); };
+    $('tBackNow').onclick = function () { clearDt($('tBackAt')); collectSafe(); };
     $('tBackAt').addEventListener('change', function () { collectSafe(); });
     $('tRound').onchange = function () {
       collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip);
@@ -2768,7 +2774,7 @@
     var e = hzEntry(a, i); if (e.st) return e;
     e.st = 'loading'; var t0 = Date.now();
     try {
-      var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties,
+      var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties, onProg: function (f) { e.prog = f; hzBars(); },
         countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.compare });
       e.st = 'done'; e.hz = r.hazards; e.stats = r.stats;
       LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || ''].filter(function (v) { return v !== ''; }); }) });
@@ -2777,19 +2783,34 @@
   }
   /** Look up every option on leg i (the chosen one first), redrawing as each comes in. */
   async function hzLoadLeg(i) {
-    var list = hzAlts(i), sel = hzSel(i), order = list.map(function (_, k) { return k; }).sort(function (x, y) { return (y === sel) - (x === sel); });
-    for (var q = 0; q < order.length; q++) {
-      var e = hzEntry(list[order[q]], i); if (e.st === 'done' || e.st === 'loading') continue;
-      await hzLoad(list[order[q]], i);
-      if (step === ST_HAZ && hzLeg === i) { renderHz(); drawHaz(); }
+    var list = hzAlts(i), sel = hzSel(i), order = list.map(function (_, k) { return k; }).sort(function (x, y) { return (y === sel) - (x === sel); }), q = 0;
+    async function lane() {     // two at a time (the chosen one first): states asked once are cached for the rest
+      while (q < order.length) {
+        var a = list[order[q++]], e = hzEntry(a, i); if (e.st === 'done' || e.st === 'loading') continue;
+        await hzLoad(a, i);
+        if (step === ST_HAZ && hzLeg === i) { renderHz(); drawHaz(); }
+      }
     }
+    await Promise.all([lane(), lane()]);
+  }
+  /** Each route tile's own progress bar, moved in place (no redraw). */
+  var hzBarT = 0;
+  function hzBars() {
+    if (hzBarT) return;
+    hzBarT = requestAnimationFrame(function () {
+      hzBarT = 0;
+      document.querySelectorAll('#tHz .hz-opt[data-hzk]').forEach(function (b) {
+        var a = hzAlts(hzLeg)[+b.dataset.hzk], e = a && hzCache.get(a), bar = b.querySelector('.hz-bar i'); if (!bar || !e) return;
+        bar.style.width = Math.round(Math.max(0.04, e.prog || 0) * 100) + '%';
+      });
+    });
   }
   async function hzChoose(k) {
     var i = hzLeg; if (k === hzSel(i)) return;
     if (legsMode()) await pickLeg(i, k); else await pickAlt(k);
     if (step === ST_HAZ) { renderHz(); drawHaz(); }
   }
-  function hzGoLeg(j) { collectSafe(); hzLeg = j; userMoved = false; renderHz(); drawHaz(); hzPill(); tpBody().scrollTop = 0; hzLoadLeg(j); }
+  function hzGoLeg(j) { collectSafe(); hzLeg = j; hzFitKey = null; userMoved = false; renderHz(); drawHaz(); hzPill(); tpBody().scrollTop = 0; hzLoadLeg(j); }
   /** The part of a route between two miles, as map points. */
   function hzSlice(a, from, to) {
     var m = hzModel(a), out = [], p0 = m.pointAt(from), last = -1;
@@ -2823,9 +2844,9 @@
     var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
     var list = hzAlts(hzLeg), sel = hzSel(hzLeg);
     if (!list.length) { el.innerHTML = '<div class="card empty-res">Get your routes first.</div>'; return; }
-    var h = '<div class="hz-opts">' + list.map(function (a, k) {
+    var h = '<p class="hz-notice">Hazards are projections from forecasts and active warnings. They can change with little warning: check again before you go.</p><div class="hz-opts">' + list.map(function (a, k) {
       var e = hzCache.get(a), mi = Math.round((a.distanceMeters || 0) / 1609.344), sec = parseFloat(String(a.duration || '0')), chips;
-      if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">checking…</span>';
+      if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">Checking the weather along it…</span><span class="hz-bar"><i style="width:' + Math.round(Math.max(0.04, e && e.prog || 0) * 100) + '%"></i></span>';
       else if (e.st === 'error') chips = '<span class="hz-ld">couldn\'t check</span>';
       else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; }
       // which one Google Maps had (your link), as before
@@ -2842,6 +2863,18 @@
     el.innerHTML = h;
     el.querySelectorAll('[data-hzk]').forEach(function (b) { b.onclick = function () { hzChoose(+b.dataset.hzk); }; });
     if ($('tHzRetry')) $('tHzRetry').onclick = function (ev) { ev.preventDefault(); hzCache.delete(list[sel]); renderHz(); hzLoadLeg(hzLeg); };
+    fitHz();
+  }
+  /** Like Departure: the panel just tall enough for the notice and the route tiles (the list below is a drag away). */
+  var hzFitKey = null;
+  function fitHz() {
+    var pg = $('trip'), body = tpBody(), opts = document.querySelector('#tHz .hz-opts'); if (step !== ST_HAZ || !pg || !body || !opts || pg.classList.contains('full')) return;
+    var key = hzLeg + '|' + opts.children.length + '|' + innerHeight; if (hzFitKey === key) return; hzFitKey = key;
+    var need = pg.getBoundingClientRect().height - body.clientHeight + (opts.getBoundingClientRect().bottom - body.getBoundingClientRect().top + body.scrollTop) + 12;
+    var h = Math.max(innerHeight * 0.2, Math.min(need, innerHeight * 0.6));
+    pg.style.setProperty('--panel-h', (h / innerHeight * 100).toFixed(2) + 'vh');
+    userMoved = false;
+    setTimeout(function () { if (step !== ST_HAZ) return; fitRoute(true); fitBtn(); placeHzSoon(); }, 260);
   }
   /** The big map on Hazards: every option for this leg, hazards on each, labels on the chosen one. */
   function drawHaz() {

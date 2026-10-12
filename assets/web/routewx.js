@@ -269,7 +269,9 @@
     var r2 = function (v) { return v.toFixed(2); }, groups = [];
     for (var g = 0; g < pts.length; g += 50) groups.push(pts.slice(g, g + 50));
     var coords = function (ps) { return 'latitude=' + ps.map(function (p) { return r2(p.lat); }).join(',') + '&longitude=' + ps.map(function (p) { return r2(p.lng); }).join(','); };
-    var get = async function (url) { var r = await getJson(url); if (!r || !r.body) { stats.errors++; return null; } return r.body; };
+    var done = 0, total = groups.length * 2 + 1, tell = function () { if (opts.onProg) opts.onProg(Math.min(0.97, done / total)); };
+    var get = async function (url) { var r = await getJson(url); done++; tell(); if (!r || !r.body) { stats.errors++; return null; } return r.body; };
+    tell();
     await pool(groups, 3, async function (ps) {
       var body = await get('https://api.open-meteo.com/v1/forecast?' + coords(ps) + '&hourly=weather_code,temperature_2m,precipitation,snowfall,visibility,wind_gusts_10m' +
         '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=GMT&forecast_days=' + days);
@@ -303,7 +305,7 @@
     if (opts.stateAt && opts.dense) {
       var byState = {};
       opts.dense.forEach(function (p) { var st = opts.stateAt(p.lat, p.lng); if (st) (byState[st] = byState[st] || []).push(p); });
-      var states = Object.keys(byState); stats.alertStates = states.length;
+      var states = Object.keys(byState); stats.alertStates = states.length; total += states.length - 1; tell();
       var seen = {};
       await pool(states, 4, async function (st) {
         var body = await get('https://api.weather.gov/alerts/active?area=' + st); if (!body) return;
@@ -314,7 +316,8 @@
       });
       stats.alerts = alerts.length;
       if (alerts.some(function (x) { return !(x.polys && x.polys.length); }) && opts.counties) await opts.counties();   // load the county outlines only when needed
-      for (var q = 0; q < alerts.length; q++) await digest(alerts[q], opts.compare);
+      total += alerts.length; tell();
+      for (var q = 0; q < alerts.length; q++) { await digest(alerts[q], opts.compare); done++; tell(); }
     }
     pts.forEach(function (p) { p.flags = classify(p.wx, p.aq); });
     return { pts: pts, stats: stats, alerts: alerts };

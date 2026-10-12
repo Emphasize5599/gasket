@@ -201,13 +201,20 @@ with sync_playwright() as p:
         pg.click('#tAvoid [data-av="ferries"]'); pg.wait_for_timeout(300); getr(pg)
         print('  after Get routes:', pg.evaluate('!!window.__trip.state().model'), len(pg.evaluate('window.__routeBodies')), n0, pg.locator('#tGetRoutes').count(), ft(pg, '#tRouteGo'))
         assert pg.evaluate('!!window.__trip.state().model'), 'routes again'
+        # Leaving comes before Round trip; Now clears a picked time
+        assert pg.locator('#tDepart').bounding_box()['y'] < pg.locator('#tRound').bounding_box()['y'], 'Leaving above Round trip'
+        later = pg.evaluate("new Date(Date.now() + 864e5 - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16)")
+        pg.fill('#tDepart', later); pg.dispatch_event('#tDepart', 'change'); pg.wait_for_timeout(100); assert pg.evaluate('window.__app.S.trip.depart') == later
+        pg.click('#tNow'); pg.wait_for_timeout(100); assert pg.input_value('#tDepart') == '' and pg.evaluate('window.__app.S.trip.depart') == '', 'Now clears it'
         # leaving time: never in the past
         pg.evaluate("() => { const e = document.getElementById('tDepart'); e.value = '2020-01-01T08:00'; e.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(200)
         assert pg.input_value('#tDepart') == '' and pg.get_attribute('#tDepart', 'min'), 'a past time is set to now'
         # ---- Hazards: every route on the big map, what's along each one, the chosen one labeled ----
         nxt(pg); assert step(pg) == 4 and pg.locator('#trip.full').count() == 0, 'Hazards: on the map'
-        ph = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  hazards panel:', round(ph, 2)); assert ph < 0.32, 'about a quarter of the screen'
         pg.wait_for_function("document.querySelectorAll('#tHz .hz-opt .hz-dot, #tHz .hz-opt .hz-ok').length >= 2", timeout=15000); idle(pg, 400)
+        fit = pg.evaluate("(() => { const t = document.getElementById('trip').getBoundingClientRect(), b = document.getElementById('tpBody').getBoundingClientRect(), o = [...document.querySelectorAll('#tHz .hz-opt')].pop().getBoundingClientRect(); return { ph: t.height / innerHeight, gap: b.bottom - o.bottom }; })()")
+        print('  hazards panel:', fit); assert fit['ph'] <= 0.6 and 0 <= fit['gap'] <= 24, 'the panel just fits the route tiles'
+        assert 'projections' in ft(pg, '#tHz .hz-notice') and 'change with little warning' in ft(pg, '#tHz .hz-notice'), 'the notice above the tiles'
         hz = ft(pg, '#tHz'); print('  hazards:', hz.replace('\n', ' | ')[:600])
         assert 'matches your link' in ft(pg, '.hz-opt.on'), 'route option from the link pre-selected'
         assert pg.locator('#hzLeg.hidden').count() == 1, 'one leg: no Step pill'

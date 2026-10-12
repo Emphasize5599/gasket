@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.118 - 2026-10-12 (keyless test branch only)
+- Route: Leaving comes before Round trip, and "Now" / "Right away" clear a picked time on the phone too.
+- Hazards: each route tile has its own progress bar while its weather is checked (two routes at a time), the panel fits itself to the route tiles, and a notice says hazards are projections that can change with little warning.
+- Bug fixes.
+
 ## 0.0.117 - 2026-10-12 (keyless test branch only)
 - **Faster website discovery along a route.** From a 2,600-mile round trip's log: the readers spent 45% of their time waiting for rows that never came, so a list that's at its bottom and quiet for 4 seconds now counts as done (long lists still get up to 12). Search areas are 10 miles apart instead of 6 (57% of rows were repeats). When the phone runs low on memory, readers past the first four step back and free their pages.
 - Without an API key, speed limits aren't looked up at all (cruising speed is off), so they don't compete with discovery.
