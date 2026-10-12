@@ -35,14 +35,16 @@ assert.equal(P.DEFAULTS.routesMonthlyCap,9500);
 const link=(id,name='Exxon',lng=-92.29)=>`<article role="article"><a aria-label="${name}" href="https://www.google.com/maps/place/${name}/data=!1s${id}!3d34.745!4d${lng}">${name}</a></article>`;
 const html='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'End of the list</div>';
 async function worker(pg,body,raw,status=200,args={}){
+  if(!pg.__fixtureClock){await pg.clock.install();pg.__fixtureClock=true;}
   await pg.setContent(body);
   await pg.evaluate(({raw,status})=>{
     window.answers=[];window.GasketSite={result:(_,s)=>answers.push(JSON.parse(s))};
     performance.getEntriesByType=()=>[{name:'https://www.google.com/search?tbm=map&q=gas+stations'}];
     window.fetch=async()=>({ok:status===200,status,url:'https://www.google.com/search',text:async()=>raw});
   },{raw,status});
-  await pg.evaluate(({s,args})=>(0,eval)('('+s+')')(1,args),{s:nativeScript,args});
-  await pg.waitForFunction(()=>answers.length);
+  await pg.evaluate(({s,args})=>{(0,eval)('('+s+')')(1,args);},{s:nativeScript,args});
+  for(let i=0;i<650&&!(await pg.evaluate(()=>answers.length));i++)await pg.clock.fastForward(300);
+  assert((await pg.evaluate(()=>answers.length))>0,'worker must settle within its simulated deadline');
   return pg.evaluate(()=>answers[0]);
 }
 (async()=>{
@@ -70,7 +72,7 @@ async function worker(pg,body,raw,status=200,args={}){
   assert.equal(ambiguousMatch.detail.targetsComplete,false,'ambiguous coordinates cannot shorten the scan');
   const exhausted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']));
   assert.equal(exhausted.stores.length,1);assert(exhausted.detail.elapsedMs<3000,'non-scrollable feed needs no repeated dummy scrolling');
-  console.log('Exhausted-feed reader measured '+exhausted.detail.elapsedMs+' ms; conservative coordinate completion passed');
+  console.log('Exhausted-feed reader '+exhausted.detail.elapsedMs+' ms simulated time; conservative coordinate completion passed');
   const targeted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'}]});
   assert.equal(targeted.detail.targetsComplete,true,'finish without waiting for end of list when all stable-ID targets are priced');
   const incomplete=await worker(pg,html,JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'},{id:'missing'}]});

@@ -1785,7 +1785,7 @@
           notes=notes.concat(r.errors||[]);if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
           var incomplete=r.details.filter(function(d){return !d.exhausted;}).length;
           if(incomplete)notes.push('Website discovery stopped before the list ended in '+incomplete+' areas; coverage is partial.');
-          if(r.blocked)A.showSiteCheck('gasweb','Google Maps web');
+          if(r.blocked)A.showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
           part.google=1;tick();
         }));
         if(priceCancelRequested)KeylessGas.cancel();

@@ -47,31 +47,33 @@
   }
   function knownKey(s){return (s.brand||'')+'|'+(s.id||[s.lat,s.lng,s.address].join('|'));}
   function addressKey(s){return String(s||'').split(',')[0].toLowerCase().replace(/\b(street|road|avenue|boulevard|drive|highway)\b/g,function(w){return {street:'st',road:'rd',avenue:'ave',boulevard:'blvd',drive:'dr',highway:'hwy'}[w];}).replace(/[^a-z0-9]/g,'');}
+  function officialRadius(w){return w.source==='walmart.com'?0.6:w.source==='murphyusa.com'?0.35:0.1;}
   function updateKnown(known,web,P,observedAt,grade){
     grade=grade||'regular';
     var unique=Array.from(new Map(known.map(function(s){return [knownKey(s),s];})).values()),updates=new Map();
     var candidates=web.map(function(w){
       var brand=P.detectBrand(w.name,w.website);
-      var stable=unique.filter(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1&&(!brand||brand===s.brand)&&(w.placeId&&w.placeId===s.id||w.featureId&&s.featureId===w.featureId||w.id&&w.id===s.id||w.wmStoreId&&(s.wmStoreId===w.wmStoreId||s.id==='wm-'+w.wmStoreId)||w.murphyStore&&s.murphyStore===w.murphyStore);});
+      var stable=unique.filter(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w)&&(!brand||brand===s.brand)&&(w.placeId&&w.placeId===s.id||w.featureId&&s.featureId===w.featureId||w.id&&w.id===s.id||w.wmStoreId&&(s.wmStoreId===w.wmStoreId||s.id==='wm-'+w.wmStoreId)||w.murphyStore&&s.murphyStore===w.murphyStore);});
       if(stable.length)return stable;
       return unique.filter(function(s){
+        if(w.wmStoreId&&s.wmStoreId&&String(w.wmStoreId)!==String(s.wmStoreId)||w.murphyStore&&s.murphyStore&&String(w.murphyStore)!==String(s.murphyStore))return false;
         var distance=P.haversineMi(s.lat,s.lng,w.lat,w.lng);
-        if(!Number.isFinite(distance)||distance>0.1||brand&&brand!==s.brand)return false;
+        if(!Number.isFinite(distance)||distance>officialRadius(w)||brand&&brand!==s.brand)return false;
         if(w.placeId&&w.placeId===s.id||w.featureId&&s.featureId===w.featureId||w.id&&w.id===s.id)return true;
         if(brand!==s.brand)return false;
         var sameAddress=addressKey(s.address)&&addressKey(s.address)===addressKey(w.address);
-        return sameAddress?distance<0.1:distance<0.03;
+        return sameAddress?distance<officialRadius(w):distance<(w.source==='walmart.com'?0.6:w.source==='murphyusa.com'?0.35:0.03);
       });
     });
     web.forEach(function(w,i){
       var aliases=candidates[i].length>1&&(w.wmStoreId&&candidates[i].every(function(s){return s.wmStoreId===w.wmStoreId||s.id==='wm-'+w.wmStoreId;})||w.murphyStore&&candidates[i].every(function(s){return s.murphyStore===w.murphyStore;}));
       if(candidates[i].length!==1&&!aliases)return;
       var prices={};Object.keys(P.GRADES).forEach(function(g){var gp=w.prices&&w.prices[g];if(!gp||!Number.isFinite(gp.price)||gp.price<0.5||gp.price>20)return;prices[g]={price:gp.price,updated:gp.updated||null,observedAt:observedAt==null?(gp.observedAt||w.observedAt||null):observedAt,source:gp.source||w.source||'Google Maps web'};});
-      candidates[i].forEach(function(s){var key=knownKey(s);if(candidates.filter(function(c){return c.some(function(other){return knownKey(other)===key;});}).length===1&&Object.keys(prices).length)updates.set(key,prices);});
+      candidates[i].forEach(function(s){var key=knownKey(s);if(candidates.filter(function(c){return c.some(function(other){return knownKey(other)===key;});}).length===1&&(Object.keys(prices).length||w.wmStoreId||w.murphyStore))updates.set(key,prices);});
     });
     return {updated:Array.from(updates.values()).filter(function(p){return p[grade];}).length,stations:known.map(function(s){
       var copy=Object.assign({},s,{prices:Object.assign({},s.prices)}),price=updates.get(knownKey(s));
-      if(price){Object.assign(copy.prices,price);if(Object.keys(price).some(function(g){return price[g].source==='Google Maps web';}))copy.google=true;}
+      if(price){Object.assign(copy.prices,price);var linked=web.filter(function(w,i){return candidates[i].some(function(t){return knownKey(t)===knownKey(s);});});if(linked.length===1)['wmStoreId','storeName','murphyStore'].forEach(function(k){if(linked[0][k]!=null)copy[k]=linked[0][k];});if(Object.keys(price).some(function(g){return price[g].source==='Google Maps web';}))copy.google=true;}
       return copy;
     })};
   }
@@ -113,15 +115,60 @@
     if(N&&N.cancelSiteRead)LANES.concat(['walmart','murphy']).forEach(function(k){N.cancelSiteRead(k);});
   }
   function call(name){return root.__trip.call.apply(null,[name].concat([].slice.call(arguments,1)));}
+  function officialReader(control,onLoad,onError,onLabel){
+    var A=root.__app,P=A.P,queues={},seenPrices=new Map(),seenNodes=new Map();
+    function stopped(){return control.cancelled||control.blocked;}
+    function read(key,args){
+      var promise=(queues[key]||Promise.resolve()).then(async function(){
+        if(stopped())return {cancelled:true};if(onLoad)onLoad();if(onLabel)onLabel(key==='walmart'?'Checking Walmart website prices':'Checking Murphy website prices');
+        var wake,stop=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);}),r;
+        try{r=await Promise.race([call('siteRead',key,JSON.stringify(args)),stop]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});}
+        if(r.blocked){control.blocked=true;control.blockedSite=key;}if(r.error&&onError)onError((key==='walmart'?'Walmart: ':'Murphy USA: ')+r.error);
+        return r;
+      });queues[key]=promise.catch(function(){});return promise;
+    }
+    function stamp(stores,normalize){var at=Date.now();return stores.map(normalize).filter(Boolean).map(function(s){Object.keys(s.prices||{}).forEach(function(g){if(!P.GRADES[g]||!Number.isFinite(s.prices[g].price)||s.prices[g].price<0.5||s.prices[g].price>20){delete s.prices[g];return;}s.prices[g].source=s.source;s.prices[g].observedAt=at;});return s;});}
+    return async function(known,areas,discovery,force){
+      var out=[],points=discovery?areas:known.filter(function(s){return s.brand==='walmart'&&!s.wmStoreId&&!/^wm-\d+$/.test(s.id||'');}),nodes=[];
+      if(!A.siteOn||A.siteOn('walmart')){
+        known.filter(function(s){return s.brand==='walmart'&&(s.wmStoreId||/^wm-\d+$/.test(s.id||''));}).forEach(function(s){nodes.push({id:String(s.wmStoreId||s.id.slice(3)),displayName:s.name,geoPoint:{latitude:s.lat,longitude:s.lng},address:{addressLineOne:s.address||'',state:s.state||''}});});
+        for(var pi=0;pi<points.length&&!stopped();pi+=40){
+          var batch=points.slice(pi,pi+40),key='keyless-nodes-v1|'+(discovery?8:5)+'|'+batch.map(function(p){return p.lat.toFixed(4)+','+p.lng.toFixed(4);}).join(';'),cache=!force&&A.KV.get('wmnodes',key,7*864e5),r=cache?cache.v:seenNodes.get(key);
+          if(!r){r=await read('walmart',{url:'https://www.walmart.com/store-finder',mode:'nodes',points:batch.map(function(p){return {lat:p.lat,lng:p.lng};}),radiusMi:discovery?8:5});if(!r.error&&!r.blocked&&!r.cancelled){seenNodes.set(key,r);if((r.nodes||[]).length)A.KV.put('wmnodes',key,r);}}
+          nodes=nodes.concat(r.nodes||[]);
+        }
+        nodes=Array.from(new Map(nodes.filter(function(n){var p=n.geoPoint||n.geo;return /^\d+$/.test(String(n.id))&&p&&Number.isFinite(p.latitude)&&Number.isFinite(p.longitude)&&(discovery?areas.some(function(a){return P.haversineMi(a.lat,a.lng,p.latitude,p.longitude)<=a.radius;}):known.some(function(s){return s.brand==='walmart'&&P.haversineMi(s.lat,s.lng,p.latitude,p.longitude)<=0.6;}));}).map(function(n){return [String(n.id),n];})).values());
+        var todo=[];nodes.forEach(function(n){var cached=seenPrices.get(String(n.id))||(!force&&A.KV.get('wmprice','keyless-v1|'+n.id,15*60000));if(cached)out.push(cached.v||cached);else todo.push(n);});
+        for(var wi=0;wi<todo.length&&!stopped();wi+=30){
+          var wb=todo.slice(wi,wi+30),wr=await read('walmart',{url:'https://www.walmart.com/store-finder',mode:'prices',nodes:wb});
+          var normalized=stamp(wr.stores||[],P.normalizeWalmart);out=out.concat(normalized);
+          normalized.forEach(function(s){seenPrices.set(s.wmStoreId,s);if(Object.keys(s.prices).length)A.KV.put('wmprice','keyless-v1|'+s.wmStoreId,s);});
+          recordObserved(discovery?normalized:updateKnown(known,normalized,P,null).stations);
+        }
+        if(discovery)nodes.forEach(function(n){if(!out.some(function(s){return s.wmStoreId===String(n.id);}))out.push(P.normalizeWalmart({id:n.id,name:n.displayName,address:n.address,geo:n.geoPoint||n.geo,fuel:{prices:[]}}));});
+      }
+      // Refresh existing Murphy rows too; discovery is scoped to Walmart here to keep this fix focused.
+      var mu=known.filter(function(s){return s.brand==='murphy';});
+      if(!A.siteOn||A.siteOn('murphy'))for(var mi=0;mi<mu.length&&!stopped();mi+=60){var mr=await read('murphy',{url:'https://service.murphydriverewards.com/mapmodule/',points:mu.slice(mi,mi+60).map(function(s){return {lat:s.lat,lng:s.lng};}),radiusMi:5,max:25});var ms=stamp(mr.stores||[],P.normalizeMurphy);out=out.concat(ms);recordObserved(updateKnown(known,ms,P,null).stations);}
+      return out.filter(Boolean);
+    };
+  }
+  function mergeOfficialDiscovery(known,official,P){
+    var updated=updateKnown(known,official,P,null).stations;
+    official.forEach(function(w){if(!updated.some(function(s){return w.wmStoreId&&s.wmStoreId===w.wmStoreId||w.murphyStore&&s.murphyStore===w.murphyStore||s.id===w.id;}))updated.push(w);});
+    return dedupeDiscovery(updated,P);
+  }
   async function discover(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
     var control={cancelled:false,wake:[]};busy=control;
-    var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer;
-    function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text='Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');if(onProgress)onProgress(areas.length?done/areas.length:1,text);}
+    var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
+    function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
     try{
       timer=setInterval(report,1000);report();
-      async function lane(key){while(next<areas.length&&!blocked&&!control.cancelled){
+      var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
+      var chainWork=chain([],areas,true,force).finally(function(){sourcesDone=true;report();});
+      async function lane(key){while(next<areas.length&&!blocked&&!control.blocked&&!control.cancelled){
         var a=areas[next++],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake;
         if(cache)r=cache.v;
         else{
@@ -131,14 +178,15 @@
           var at=Date.now();(r.stores||[]).forEach(function(s){Object.keys(s.prices||{}).forEach(function(g){s.prices[g].observedAt=at;});});
           if(!r.blocked&&!r.error&&r.detail&&r.detail.exhausted)A.KV.put('gasweb',cacheKey,r);
         }
-        if(r.blocked){blocked=true;errors.push(r.error||'Website restricted discovery');}
+        if(r.blocked){blocked=true;control.blocked=true;control.blockedSite=control.blockedSite||'gasweb';errors.push(r.error||'Website restricted discovery');}
         if(r.error&&!r.blocked)errors.push(r.error);
         var found=dedupeDiscovery((r.stores||[]).filter(function(s){return contains(s,a,P);}),P);
         if(root.PriceHistory)root.PriceHistory.observe(found);
         rows=dedupeDiscovery(rows.concat(found),P);details.push(r.detail||{});done++;report();
       }}
-      await Promise.all(LANES.map(lane));
-      return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked,cancelled:control.cancelled,areas:areas.length,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
+      var finished=await Promise.all([chainWork,Promise.all(LANES.map(lane))]);
+      rows=mergeOfficialDiscovery(rows,finished[0],P);recordObserved(rows);
+      return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked||!!control.blocked,blockedSite:control.blockedSite||'gasweb',cancelled:control.cancelled,areas:areas.length,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
     }finally{clearInterval(timer);busy=null;}
   }
   async function search(lat,lng,radius){
@@ -187,8 +235,8 @@
     var control={cancelled:false,wake:[]};busy=control;
     var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=new Map(),errors=[],reads=0,blocked=false,start=Date.now();
     var buckets=new Map();known.forEach(function(s){var key=Math.floor(s.lat*50)+'|'+Math.floor(s.lng*50);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(s);});
-    function nearby(w){var x=Math.floor(w.lat*50),y=Math.floor(w.lng*50);for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var candidates=buckets.get((x+dx)+'|'+(y+dy))||[];if(candidates.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1;}))return true;}return false;}
-    var cached=groups.map(function(g){var key='known-v2|'+grade+'|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
+    function nearby(w){var x=Math.floor(w.lat*50),y=Math.floor(w.lng*50);for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var candidates=buckets.get((x+dx)+'|'+(y+dy))||[];if(candidates.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w);}))return true;}return false;}
+    var cached=groups.map(function(g){var key='known-v3|'+grade+'|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
     // Four dedicated readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
     var next=0,done=0,samples=0,totalMs=0,active=new Map();
@@ -202,38 +250,22 @@
       if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
     }
     var ticker=setInterval(report,1000);
-    var sourceQueues={};
-    function read(key,args){if(control.cancelled||blocked)return Promise.resolve({cancelled:true});reads++;return call('siteRead',key,JSON.stringify(args));}
-    function officialRead(key,args){var promise=(sourceQueues[key]||Promise.resolve()).then(function(){return read(key,args);});sourceQueues[key]=promise.catch(function(){});return promise;}
+    var chain=officialReader(control,function(){reads++;},function(e){errors.push(e);});
+    function read(key,args){if(control.cancelled||blocked||control.blocked)return Promise.resolve({cancelled:true});reads++;return call('siteRead',key,JSON.stringify(args));}
     async function areaRead(x,key){
-      var official=[];
-      function takeOfficial(rows,normalize){var at=Date.now(),list=rows.map(normalize).filter(Boolean);list.forEach(function(s){Object.keys(s.prices).forEach(function(g){s.prices[g].observedAt=at;});});official=Array.from(new Map(official.concat(list).map(function(s){return [s.id,s];})).values());recordObserved(updateKnown(x.g.stations,official,P,null,grade).stations);}
-      if(grade!=='regular'){
-        var wm=x.g.stations.filter(function(s){return s.brand==='walmart'&&(s.wmStoreId||/^wm-\d+$/.test(s.id||''));});
-        if(!A.siteOn||A.siteOn('walmart'))for(var wi=0;wi<wm.length;wi+=30){
-          var wr=await officialRead('walmart',{url:'https://www.walmart.com/store-finder',mode:'prices',nodes:wm.slice(wi,wi+30).map(function(s){return {id:String(s.wmStoreId||s.id.slice(3)),displayName:s.name,geoPoint:{latitude:s.lat,longitude:s.lng},address:{addressLineOne:s.address||''}};})});
-          takeOfficial(wr.stores||[],P.normalizeWalmart);
-          if(wr.cancelled||wr.blocked)return Object.assign({},wr,{stores:official,blockedSite:'walmart'});if(wr.error)errors.push('Walmart: '+wr.error);
-        }
-        var mu=x.g.stations.filter(function(s){return s.brand==='murphy';});
-        if(!A.siteOn||A.siteOn('murphy'))for(var mi=0;mi<mu.length;mi+=60){
-          var mr=await officialRead('murphy',{url:'https://service.murphydriverewards.com/mapmodule/',points:mu.slice(mi,mi+60).map(function(s){return {lat:s.lat,lng:s.lng};}),radiusMi:5,max:25});
-          takeOfficial(mr.stores||[],P.normalizeMurphy);
-          if(mr.cancelled||mr.blocked)return Object.assign({},mr,{stores:official,blockedSite:'murphy'});if(mr.error)errors.push('Murphy USA: '+mr.error);
-        }
-        official=Array.from(new Map(official.map(function(s){return [s.id,s];})).values());
-      }
+      var official=x.g.stations.some(function(s){return s.brand==='walmart'||s.brand==='murphy';})?await chain(x.g.stations,[],false,false):[];
+      if(control.blocked)return {blocked:true,blockedSite:control.blockedSite,stores:official};
       if(control.cancelled||blocked)return {cancelled:true};
       var suppliedAt=Date.now(),complete=updateKnown(x.g.stations,official,P,suppliedAt,grade);
       if(official.length&&complete.updated===x.g.stations.length)return {stores:official};
       var gr=await read(key,{url:webUrl(area(x.g.lat,x.g.lng,8)),grade:grade,targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId,brand:s.brand,lat:s.lat,lng:s.lng,address:s.address};})});
       // Keep trusted official records separate; do not transfer a regular label to another grade.
       var supplied=new Set(complete.stations.filter(function(s){return s.prices&&s.prices[grade]&&s.prices[grade].observedAt===suppliedAt;}).map(knownKey));
-      var google=(gr.stores||[]).filter(function(w){return !x.g.stations.some(function(s){return supplied.has(knownKey(s))&&P.haversineMi(s.lat,s.lng,w.lat,w.lng)<0.1;});});
+      var google=(gr.stores||[]).filter(function(w){return !x.g.stations.some(function(s){return s.brand===(P.detectBrand(w.name,w.website)||w.brand)&&supplied.has(knownKey(s))&&P.haversineMi(s.lat,s.lng,w.lat,w.lng)<0.1;});});
       return Object.assign({},gr,{stores:official.concat(google),error:gr.code==='no_prices'&&official.some(function(s){return s.prices[grade];})?null:gr.error});
     }
     try{
-      async function lane(key){while(next<ordered.length&&!blocked&&!control.cancelled){
+      async function lane(key){while(next<ordered.length&&!blocked&&!control.blocked&&!control.cancelled){
         var x=ordered[next++],r,at;
         if(x.cache){r=x.cache.v;at=x.cache.t;}
         else{
@@ -255,8 +287,8 @@
         added.forEach(function(w){var id=w.placeId||w.featureId||w.id,old=rows.get(id);if(!old||old.observedAt<=at)rows.set(id,Object.assign({},w,{observedAt:at}));});
         // Flush successful observations after each area, not after a twenty-minute batch.
         if(root.PriceHistory&&added.length){
-          var localKnown=known.filter(function(s){return added.some(function(w){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1;});});
-          var localWeb=Array.from(rows.values()).filter(function(w){return localKnown.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1;});});
+          var localKnown=known.filter(function(s){return added.some(function(w){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w);});});
+          var localWeb=Array.from(rows.values()).filter(function(w){return localKnown.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w);});});
           var checkpoint=updateKnown(localKnown,localWeb,P,null,grade);
           recordObserved(checkpoint.stations);
         }

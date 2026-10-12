@@ -2,6 +2,12 @@
 
 Branch: `test/keyless-regular-gas`. Regular release: 0.0.103 on main.
 
+## 0.0.111: Walmart website prices and fast tests
+
+Walmart's own fuel finder and store-page prices now supplement keyless discovery even when Maps omits a station or its price. Fuel-capable nodes are read in batches of 40 (no total cutoff); distinct store price pages are read in batches of 30. Saved-price refresh runs official readers for regular too, resolves Walmart rows lacking `wmStoreId`, and keeps their original IDs, pump coordinates, discounts and detours. Unambiguous reciprocal same-brand matching accommodates Walmart's store-center/pump separation up to 0.6 miles, rejects conflicting IDs and ambiguous forecourts, and prefers explicit store links thereafter. Official grades win over Maps while missing grades remain unchanged. Completed observations enter history. Restriction checks identify Walmart, not Google; no paid fallback or challenge bypass. The live public Walmart probe hit a restriction, so fixture coverage is not proof of an on-phone successful website read.
+
+The release suite runs with three bounded jobs and simulated worker clocks, retaining parser, pagination, serialization, failure and deadline assertions. Local measurements: release suite 7.7s, full Node suite 9.8s. GitHub caches pinned browser dependencies and the checksum-verified compile platform; native reservation tests, compilation and signing verification stay required. Focused local changes use `node tests/run-node.js <names...>`; broader checks use `--release` or `--all`.
+
 ## 0.0.110: optional key and website discovery
 
 The Google key is recommended, not required. With no key, nearby and fresh trip station searches use website discovery automatically. With a key, the default remains API discovery unless **Prefer website discovery** is enabled. The map refresh menu and Adjustments offer an explicit **Discover stations · No API** action, separate from refreshing saved prices. Short “slower, variable coverage” guidance stays visible; details live behind (?). API selection is disabled without a key and never used automatically as a website fallback.

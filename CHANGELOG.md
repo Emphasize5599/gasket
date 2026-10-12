@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.111 - 2026-10-12 (keyless test branch only)
+- Walmart website prices fill keyless discovery and all-grade refreshes.
+- Faster tests with simulated worker clocks, parallel checks and cached build dependencies.
+- Bug fixes.
+
 ## 0.0.110 - 2026-10-12 (keyless test branch only)
 - Optional Google key with website station discovery and approximate website routing.
 - Full-list scrolling, four readers, progress, cancellation and duplicate detection.

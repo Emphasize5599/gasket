@@ -363,7 +363,7 @@
         if(id!==reqId)return;
         gStations=r.stations.filter(function(s){return S.brands[s.brand]&&P.haversineMi(lat,lng,s.lat,s.lng)<=keylessRadius;});
         errs=errs.concat(r.errors||[]);
-        if(r.blocked)showSiteCheck('gasweb','Google Maps web');
+        if(r.blocked)showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
         if(r.cancelled)errs.push('Discovery cancelled; completed stations kept.');
         else if((r.details||[]).some(function(d){return !d.exhausted;}))errs.push('Website discovery is partial; some lists did not finish.');
         sourceDone();

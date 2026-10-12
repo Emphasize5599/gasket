@@ -21,6 +21,8 @@ on:
       - tests/keyless-discovery.test.js
       - tests/keyless-discovery-ui.test.js
       - tests/climate.test.js
+      - tests/walmart-keyless.test.js
+      - tests/run-node.js
       - tests/picture-storage.test.js
       - tests/saved-prices.test.js
       - tests/routes-budget.test.js
@@ -40,24 +42,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test Tire Rack request lifecycle and failure UI
+      - name: Cache pinned browser test runtime
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/gasket-tests
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-gasket-playwright-1.63.0-headless-v1
+
+      - name: Prepare browser test runtime
         run: |
-          npm install --prefix "$RUNNER_TEMP/gasket-tests" playwright@1.63.0
-          "$RUNNER_TEMP/gasket-tests/node_modules/.bin/playwright" install --with-deps chromium
+          if [ '${{ steps.browser-cache.outputs.cache-hit }}' != 'true' ]; then
+            npm install --prefix "$RUNNER_TEMP/gasket-tests" playwright@1.63.0
+            "$RUNNER_TEMP/gasket-tests/node_modules/.bin/playwright" install chromium --only-shell
+          fi
           export NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules"
-          node tests/tires.test.js
-          node tests/tirerack.test.js
-          node tests/picture-storage.test.js
-          if [ -f tests/keylessgas.test.js ]; then node tests/keylessgas.test.js; fi
-          if [ -f tests/keyless-parallel.test.js ]; then node tests/keyless-parallel.test.js; fi
-          if [ -f tests/pricehistory.test.js ]; then node tests/pricehistory.test.js; fi
-          if [ -f tests/map-refresh.test.js ]; then node tests/map-refresh.test.js; fi
-          if [ -f tests/fuel-grades.test.js ]; then node tests/fuel-grades.test.js; fi
-          if [ -f tests/keyless-discovery.test.js ]; then node tests/keyless-discovery.test.js; fi
-          if [ -f tests/keyless-discovery-ui.test.js ]; then node tests/keyless-discovery-ui.test.js; fi
-          node tests/climate.test.js
-          if [ -f tests/saved-prices.test.js ]; then node tests/saved-prices.test.js; fi
-          if [ -f tests/routes-limit.test.js ]; then node tests/routes-limit.test.js; fi
+          # Hosted runners normally have the shared libraries. Install them only if a launch actually fails.
+          if ! node -e 'require("playwright").chromium.launch().then(b=>b.close()).catch(e=>{console.error(e.message);process.exit(1)})'; then
+            "$RUNNER_TEMP/gasket-tests/node_modules/.bin/playwright" install --with-deps chromium --only-shell
+          fi
+
+      - name: Run release regressions in parallel
+        run: NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules" TEST_JOBS=3 node tests/run-node.js --release
 
       - name: Check release signing configuration
         id: signing
@@ -72,12 +79,21 @@ jobs:
             echo "::notice::APK signing is not configured. Add repository Actions secrets KS_PASS and GASKET_KEYSTORE_B64 using the existing release key, then run this workflow on main. No replacement key will be generated."
           fi
 
+      - name: Cache checksum-pinned Android compile platform
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/platform-31.zip
+          key: gasket-android-platform-31-ca5bcaa565cb37e9d287051d6dd0e49a5426ec29
+
       - name: Install Android SDK tools and Java
         if: steps.signing.outputs.ready == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y android-sdk android-sdk-build-tools android-sdk-platform-23 openjdk-17-jdk-headless
-          curl --fail --location --retry 2 https://dl.google.com/android/repository/platform-31_r01.zip -o "$RUNNER_TEMP/platform-31.zip"
+          if [ ! -s "$RUNNER_TEMP/platform-31.zip" ]; then
+            curl --fail --location --retry 2 https://dl.google.com/android/repository/platform-31_r01.zip -o "$RUNNER_TEMP/platform-31.zip"
+          fi
           echo "ca5bcaa565cb37e9d287051d6dd0e49a5426ec29  $RUNNER_TEMP/platform-31.zip" | sha1sum -c -
           unzip -q "$RUNNER_TEMP/platform-31.zip" -d "$RUNNER_TEMP/gasket-platform"
           echo "ANDROID_JAR=$(find "$RUNNER_TEMP/gasket-platform" -name android.jar -print -quit)" >> "$GITHUB_ENV"

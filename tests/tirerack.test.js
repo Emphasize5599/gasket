@@ -12,14 +12,17 @@ const expression = native.split('\n').find(s => s.includes('w.readCall = "if('))
 const injection = new Function('script', 'reqId', 'argsJson', 'return ' + expression);
 const picker = { step: 'clars', make: 'Toyota', year: 2011, models: ['Sienna FWD'] };
 const base = '<h1>Tire Rack</h1><p>' + 'vehicle picker '.repeat(30) + '</p>';
+const fixtureClocks=new WeakSet();
 async function start(pg, html, args, setup = '') {
+  if(!fixtureClocks.has(pg)){await pg.clock.install();fixtureClocks.add(pg);}
   await pg.setContent(html);
   await pg.evaluate(setup || 'void 0');
   await pg.evaluate(() => { delete window.__gasketRead; window.answers = []; window.GasketSite = { result: (id, json) => answers.push({ id, ...JSON.parse(json) }) }; });
   await pg.evaluate(src => { (0, eval)(src); }, injection(worker, 123, JSON.stringify(args)));
 }
 async function result(pg) {
-  await pg.waitForFunction(() => answers.length > 0);
+  for(let i=0;i<120&&!(await pg.evaluate(()=>answers.length));i++)await pg.clock.fastForward(250);
+  assert((await pg.evaluate(()=>answers.length))>0,'reader must settle within its simulated deadline');
   return pg.evaluate(() => answers[0]);
 }
 async function run() {
@@ -68,7 +71,6 @@ async function run() {
       `window.fetch=async()=>({ok:true,status:200,text:()=>new Promise(()=>{})});`,
       `window.AbortController=undefined;window.fetch=()=>new Promise(()=>{});`
     ]) {
-      await pg.clock.install();
       await start(pg, base, picker, setup);
       await pg.clock.fastForward(18001);
       assert.equal(await pg.evaluate(() => answers[0] && answers[0].code), 'timeout');
@@ -81,7 +83,6 @@ async function run() {
 
     await start(pg, '<h1>2011 Toyota Sienna FWD LE V6</h1><h2>Factory Tire Size</h2><p>235/60-17</p><h2>Optional Tire Sizes</h2><p>235/55-18</p>', { step: 'size' });
     assert.deepEqual((await result(pg)).factory, ['235/60R17']);
-    await pg.clock.install();
     await start(pg, '<h2>Factory Tire Size</h2>', { step: 'size' });
     await pg.clock.fastForward(20500);
     assert.equal(await pg.evaluate(() => answers[0] && answers[0].code), 'unreadable');
