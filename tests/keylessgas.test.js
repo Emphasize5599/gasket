@@ -92,15 +92,15 @@ async function worker(pg,body,raw,status=200,args={}){
   await ui.click('#sDone');
   // Settings form overwrites S, so enable using the actual checkbox and leave the API key installed.
   await ui.click('#btnSettings');await ui.check('[data-k="keylessRegular"]');await ui.fill('#apiKey','TEST');await ui.click('#sDone');
-  await ui.click('#btnRefresh');
+  await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));
   await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('keyless'));
   assert.equal(await ui.evaluate(()=>__paid),0,'regular nearby mode must never silently consume paid lookups');
   assert.match(await ui.innerText('#rows'),/Exxon/);
   assert.match(await ui.innerText('#status'),/No paid lookup fallback/);
   await ui.evaluate(()=>{KeylessGas.search=async()=>{throw new Error('Google restricted test request');};});
-  await ui.click('#btnRefresh');await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('restricted test'));
+  await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('restricted test'));
   assert.equal(await ui.evaluate(()=>__paid),0,'keyless failure must not invoke a paid fallback');
-  await ui.evaluate(()=>{__app.S.grade='premium';});await ui.click('#btnRefresh');
+  await ui.evaluate(()=>{__app.S.grade='premium';});await ui.click('#btnRefresh');await ui.click('[data-refresh="api"]');
   assert.equal(await ui.evaluate(()=>__paid),1,'other grades keep the existing explicitly keyed path');
   await ui.close();
   console.log('320px UI: keyless toggle, nearby results and zero paid Places calls passed');

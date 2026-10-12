@@ -243,7 +243,7 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory"));
 
     /** Pictures are user data, including imported images. Upgrade the old cache without
      * overwriting a newer stored image or deleting the only copy if a move fails. */
@@ -845,7 +845,7 @@ public class MainActivity extends Activity {
     private static final String[] BACKUP_FILES = {"debug-log.json"};
     private static final String COUNTER = "^[a-z]*calls_\\d{4}-\\d{2}$";
 
-    private JSONObject writeBackup(String name) throws Exception {
+    private synchronized JSONObject writeBackup(String name) throws Exception {
         migrateCarPictures();
         File[] unmoved = new File(getCacheDir(), "kv/carpics").listFiles();
         if (unmoved != null) for (File f : unmoved) if (f.isFile() && f.getName().matches("[a-f0-9]{40}"))
@@ -1573,12 +1573,27 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void kvPut(String ns, String key, String value) {
+        public boolean kvPut(String ns, String key, String value) {
+            if ("pricehistory".equals(ns)) {
+                synchronized (MainActivity.this) {
+                    try {
+                        java.io.File f = kvFile(ns, key);
+                        java.io.File tmp = new java.io.File(f.getParentFile(), f.getName() + ".tmp");
+                        java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+                        try { out.write(value.getBytes("UTF-8")); } finally { out.close(); }
+                        if (!tmp.renameTo(f)) { tmp.delete(); return false; }
+                        return true;
+                    } catch (Exception ignored) { }
+                }
+                return false;
+            }
             try {
                 java.io.FileOutputStream o = new java.io.FileOutputStream(kvFile(ns, key));
                 o.write(value.getBytes("UTF-8"));
                 o.close();
+                return true;
             } catch (Exception ignored) { }
+            return false;
         }
 
         @JavascriptInterface
@@ -1682,6 +1697,20 @@ public class MainActivity extends Activity {
                     }, 5000);
                 }
             });
+        }
+
+        /** Cancel only price readers; late results are ignored by SiteBridge. */
+        @JavascriptInterface
+        public void cancelSiteRead(final String key) {
+            main.post(new Runnable() { public void run() {
+                SiteWorker w = workers.get(key);
+                if (!isGasWorker(key) || w == null || w.readReq < 0) return;
+                w.view.stopLoading();
+                w.finishRead(w.readReq, "{\"cancelled\":true}");
+                w.ready = false;
+                // Destroy the old reader's document and timers, not just its navigation.
+                w.view.loadUrl("about:blank");
+            }});
         }
 
         /** Open a page for the user to see (NHTSA's recall lookup for a VIN) and read its answer; replies via onSiteResult. */

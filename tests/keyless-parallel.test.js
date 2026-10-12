@@ -10,17 +10,34 @@ async function run(block){
     const args=JSON.parse(json);assert(args.targets.length);
     return new Promise(resolve=>pending.push(r=>{active.delete(key);resolve(r);}));
   }}};
-  vm.runInNewContext(source,{window,console,setTimeout,Date});
-  const known=Array.from({length:5},(_,i)=>({id:'saved'+i,brand:'exxon',lat:34+i,lng:-92,prices:{regular:{price:4}}}));
-  const task=window.KeylessGas.refreshKnown(known);
+  let now=Date.now();class Clock extends Date{static now(){return now;}}
+  vm.runInNewContext(source,{window,console,setTimeout,setInterval,clearInterval,Date:Clock});
+  const known=Array.from({length:20},(_,i)=>({id:'saved'+i,brand:'exxon',lat:34+i,lng:-92,prices:{regular:{price:4}}}));
+  const progress=[];
+  const task=window.KeylessGas.refreshKnown(known,(f,label,detail)=>progress.push({f,label,...detail}));
   assert.equal(calls.length,2,'start two areas before waiting for either');
   pending.shift()(block?{blocked:true,error:'Check required'}:{stores:[]});
   await new Promise(resolve=>setImmediate(resolve));
   if(block)assert.equal(calls.length,2,'restriction prevents scheduling another area');
-  while(pending.length){pending.shift()({stores:[]});await new Promise(resolve=>setImmediate(resolve));}
+  while(pending.length){now+=45000;pending.shift()({stores:[]});await new Promise(resolve=>setImmediate(resolve));}
   const result=await task;
-  assert.equal(peak,2);assert.equal(result.apiCalls,0);assert.equal(result.stations.length,5);
-  assert.equal(result.websiteLoads,block?2:5);assert.equal(result.blocked,block);
+  assert.equal(peak,2);assert.equal(result.apiCalls,0);assert.equal(result.stations.length,20);
+  assert.equal(result.websiteLoads,block?2:20);assert.equal(result.blocked,block);
+  if(!block){assert.equal(progress.at(-1).completed,20);assert.equal(progress.at(-1).f,1);assert(progress.some(p=>p.remainingSeconds>0),'ETA from measured durations');}
   if(!block){const cached=await window.KeylessGas.refreshKnown(known);assert.equal(cached.websiteLoads,0);}
 }
-(async()=>{await run(false);await run(true);console.log('Two-reader concurrency, per-lane isolation, restriction stop, retained stations and cache passed');})().catch(e=>{console.error(e);process.exit(1);});
+async function cancelled(){
+  const callbacks=[],calls=[],cache=new Map(),cancelled=[];
+  const window={document:{},__app:{P,KV:{get:(_,k)=>cache.get(k),put:(_,k,v)=>cache.set(k,{v,t:Date.now()})},N:{cancelSiteRead:k=>cancelled.push(k)}},__trip:{call:(fn,key,args)=>{calls.push(key);return new Promise(resolve=>callbacks.push(resolve));}}};
+  vm.runInNewContext(source,{window,console,setTimeout,setInterval,clearInterval,Date});
+  const known=Array.from({length:4},(_,i)=>({id:'saved'+i,brand:'exxon',lat:34+i,lng:-92,prices:{regular:{price:4}}}));
+  const task=window.KeylessGas.refreshKnown(known);
+  callbacks.shift()({stores:[{placeId:'saved0',name:'Exxon',lat:34,lng:-92,prices:{regular:{price:3.12}}}]});
+  await new Promise(r=>setImmediate(r));
+  window.KeylessGas.cancel();const result=await task;
+  assert.equal(result.cancelled,true);assert.equal(result.updated,1);assert.equal(result.stations[0].prices.regular.price,3.12);
+  assert.equal(calls.length,3);assert.deepEqual(cancelled,['gasweb','gasweb2']);
+  callbacks.forEach(resolve=>resolve({stores:[{placeId:'saved0',name:'Exxon',lat:34,lng:-92,prices:{regular:{price:1.12}}}]}));
+  await new Promise(r=>setImmediate(r));assert.equal(result.stations[0].prices.regular.price,3.12,'late cancelled results ignored');
+}
+(async()=>{await run(false);await run(true);await cancelled();console.log('Uncapped 20-area refresh, ETA, two readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});

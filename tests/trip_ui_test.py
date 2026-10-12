@@ -458,7 +458,7 @@ with sync_playwright() as p:
         db = ft(pg, '#tsDetBox'); print('  detour slider:', db.replace('\n', ' | ')[:200]); assert pg.locator('#tsDetBox input[type=range]').count() == 1 and 'min' in db
         nxt(pg); assert step(pg) == 6; nxt(pg); pg.wait_for_timeout(500)
         dh = pg.evaluate("document.getElementById('trip').getBoundingClientRect().height / innerHeight"); print('  departure panel:', round(dh, 2), pg.evaluate("[document.getElementById('tpS6').offsetHeight, document.getElementById('tpBody').clientHeight, document.getElementById('trip').style.cssText]"))
-        assert dh < 0.7, 'Departure: only as tall as it needs'
+        assert dh < 0.94 and pg.locator('#tpS7 .price-refresh-card').count() == 1, 'Departure: refresh card present without becoming full screen'
         df = ft(pg, '.dep-facts'); print('  departure tiles:', df.replace('\n', ' | '))
         assert pg.locator('.dep-facts > div').count() == 3 and 'miles' in df and 'driving' in df and 'fuel stop' in df and pg.locator('.dep-sum').count() == 0
         assert step(pg) == 7 and pg.locator('.kpis.four #tShare').count() == 1 and pg.locator('#tsDone, #tsEdit, #tsExport').count() == 0
@@ -558,8 +558,8 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__jobs') is None, 'saved search reused'
         stops(pg)
         sv = ft(pg, '.note.saved'); print('  second search:', sv)
-        assert 'Prices from' in sv and 'Get fresh prices' in sv
-        pg.click('#tsRefresh'); idle(pg, 600)
+        assert 'Prices from' in sv and pg.locator('#tsResults .price-refresh-card').count() == 1
+        pg.click('#tsResults [data-trip-refresh="api"]'); idle(pg, 600)
         assert pg.evaluate('window.__jobs') and pg.locator('.note.saved').count() == 0, 'fresh search'
         print('  refreshed with', len(pg.evaluate('window.__jobs')), 'Google lookups')
         adj(pg)

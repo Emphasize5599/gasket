@@ -383,7 +383,7 @@
     sitePending[key] = false;
     if (res.blocked) siteNeedsCheck(key);
     else if (res.error) errs.push(SITES[key].label + ' prices: ' + res.error);
-    else { official[key] = (res.stores || []).map(SITES[key].normalize).filter(Boolean); siteOk[key] = true; }
+    else { official[key] = (res.stores || []).map(SITES[key].normalize).filter(Boolean); if(window.PriceHistory){official[key].forEach(function(s){PriceHistory.stamp(s,Date.now());});PriceHistory.observe(official[key]);} siteOk[key] = true; }
     sourceDone();
   };
   window.onSiteBlocked = function (key) {
@@ -408,12 +408,14 @@
     finish(pendingCenter.lat, pendingCenter.lng);
   }
   function receiveGoogle(places, errors) {
-    var seen = {}, list = [];
+    var seen = {}, list = [],observations=[];
     places.forEach(function (p) {
       var s = P.normalize(p);
+      if(s&&!demo&&window.PriceHistory){PriceHistory.stamp(s,Date.now());observations.push(s);}
       if (!s || seen[s.id] || !S.brands[s.brand]) return;
       seen[s.id] = 1; list.push(s);
     });
+    if(window.PriceHistory&&observations.length)PriceHistory.observe(observations);
     if (list.length || !errors.length) gStations = list;
     errors.forEach(function (e) { errs.push(e); });
   }
@@ -421,6 +423,7 @@
     pending = 0;
     $('btnRefresh').classList.remove('spin');
     stations = P.mergeOfficial(gStations, allOfficial()).filter(function (s) { return S.brands[s.brand]; });
+    if(!demo&&window.PriceHistory)PriceHistory.observe(stations);
     lastFetch = { ts: Date.now(), lat: lat, lng: lng, demo: demo };
     if (!demo) N.saveCache(JSON.stringify({ lastFetch: lastFetch, g: gStations, o: official }));
     movedByUser = false;
@@ -911,7 +914,8 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
-    CACHE_NS.concat(['trips', 'logos', 'lookups', 'carpics', 'gasmeta']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
+    if(window.PriceHistory)PriceHistory.reset();
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(''); } catch (e) { }
     if (window.FLog) FLog.clear();
@@ -1138,6 +1142,7 @@
     h += '<div class="card"><h3>Bad CITGO stations</h3>' +
       '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
+      '<div class="field"><div class="lbl">Station price history<small>Posted prices are kept in app storage, not cache, with their source and timestamps. Full backups include this history; clearing cache does not remove it.</small></div></div>' +
       '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/Gasket you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
       '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div>' +
       '<div class="field col"><div class="lbl">Full backup (moving to a new install)<small class="keep">Everything, exactly as it is: settings <b>including your API keys</b>, cars, trips, all saved searches and prices, the bad CITGO list, the debug log and this month\'s Google lookup counts. Restoring replaces everything in the app, and lookup counts never go down, so your monthly cap still holds. Uses no lookups. Keep the file private — it has your keys.</small></div>' +
@@ -1299,10 +1304,38 @@
   };
   $('btnRefresh').onclick = function () {
     if (altMode() && window.AltFuel) return AltFuel.refresh(movedByUser);
-    var c = me || (lastFetch ? lastFetch : map.getCenter());
-    if (movedByUser && !$('btnArea').classList.contains('hidden')) return $('btnArea').onclick();
-    fetchAround(c.lat, c.lng);
+    refreshMenu(this,function(){
+      var c=me||(lastFetch?lastFetch:map.getCenter());
+      var previous=S.keylessRegular;S.keylessRegular=false;
+      try{if(movedByUser&&!$('btnArea').classList.contains('hidden'))return $('btnArea').onclick();fetchAround(c.lat,c.lng);}finally{S.keylessRegular=previous;}
+    },refreshKnownMap,S.grade==='regular'&&stations.length>0);
   };
+  function refreshMenu(anchor,api,web,allowWeb){
+    var old=$('refreshMenu');if(old){old.remove();return;}
+    var menu=document.createElement('div');menu.id='refreshMenu';menu.className='refresh-menu';menu.setAttribute('role','menu');
+    menu.innerHTML='<button data-refresh="web" role="menuitem"'+(!allowWeb?' disabled':'')+'>No API · known regular prices</button><button data-refresh="api" role="menuitem">API · discover stations</button><button data-refresh="close" role="menuitem">Close</button>';
+    document.body.appendChild(menu);
+    menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();};
+    menu.querySelector('button:not(:disabled)').focus();
+  }
+  async function refreshKnownMap(){
+    if(pending||$('mapPriceProgress'))return;
+    var panel=document.createElement('div');panel.id='mapPriceProgress';panel.className='map-price-progress card';
+    panel.innerHTML='<h3>Refresh station prices</h3><div class="parse-load"><span class="pl">Starting…</span><span class="pbar"><i></i></span><span class="pct">0%</span></div><button class="btn tonal sm">Cancel</button>';
+    document.body.appendChild(panel);panel.querySelector('button').onclick=function(){KeylessGas.cancel();};
+    var original=stations;
+    try{
+      var r=await KeylessGas.refreshKnown(original,function(f,label){panel.querySelector('.pl').textContent=label;panel.querySelector('i').style.width=Math.round(f*100)+'%';panel.querySelector('.pct').textContent=Math.round(f*100)+'%';});
+      if(stations!==original){status('Map changed; completed observations kept in price history.',true);return;}
+      stations=r.stations;
+      var by=new Map(stations.map(function(s){return [s.brand+'|'+s.id,s];}));
+      gStations=gStations.map(function(s){return by.get(s.brand+'|'+s.id)||s;});
+      Object.keys(official).forEach(function(k){official[k]=official[k].map(function(s){return by.get(s.brand+'|'+s.id)||s;});});
+      N.saveCache(JSON.stringify({lastFetch:lastFetch,g:gStations,o:official}));render();
+      status((r.cancelled?'Cancelled · ':'')+r.updated+'/'+r.total+' prices refreshed; '+r.retained+' unchanged. No API calls.',!!r.errors.length);
+      if(r.blocked)showSiteCheck('gasweb','Google Maps web');
+    }catch(e){status(e.message,true);}finally{panel.remove();}
+  }
   $('btnArea').onclick = function () {
     if (altMode() && window.AltFuel) { $('btnArea').classList.add('hidden'); return AltFuel.refresh(true); }
     var c = map.getCenter(), b = map.getBounds();
@@ -1339,7 +1372,7 @@
     get: function (ns, key, maxAgeMs) {
       try { if (!N.kvGet) return null; var s = N.kvGet(ns, key); if (!s) return null; var o = JSON.parse(s); return maxAgeMs && Date.now() - o.t > maxAgeMs ? null : o; } catch (e) { return null; }
     },
-    put: function (ns, key, v) { try { if (N.kvPut) N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v })); } catch (e) { } },
+    put: function (ns, key, v) { try { if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { } return false; },
     clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
   };
   // ---------- quiet UI: explanations live behind a small (?) instead of filling the screen ----------
@@ -1427,4 +1460,5 @@
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+  if(window.PriceHistory)setTimeout(function(){PriceHistory.seed().catch(function(e){if(window.FLog)FLog.warn('history','Price history seed failed',e.message);});},0);
 })();

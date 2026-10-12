@@ -15,6 +15,8 @@ on:
       - tests/tires.test.js
       - tests/keylessgas.test.js
       - tests/keyless-parallel.test.js
+      - tests/pricehistory.test.js
+      - tests/map-refresh.test.js
       - tests/picture-storage.test.js
       - tests/saved-prices.test.js
       - tests/routes-budget.test.js
@@ -44,6 +46,8 @@ jobs:
           node tests/picture-storage.test.js
           if [ -f tests/keylessgas.test.js ]; then node tests/keylessgas.test.js; fi
           if [ -f tests/keyless-parallel.test.js ]; then node tests/keyless-parallel.test.js; fi
+          if [ -f tests/pricehistory.test.js ]; then node tests/pricehistory.test.js; fi
+          if [ -f tests/map-refresh.test.js ]; then node tests/map-refresh.test.js; fi
           if [ -f tests/saved-prices.test.js ]; then node tests/saved-prices.test.js; fi
           if [ -f tests/routes-limit.test.js ]; then node tests/routes-limit.test.js; fi
 

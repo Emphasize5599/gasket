@@ -64,6 +64,30 @@
   var alts = [], altSel = 0, altSure = false;   // Google's route options for this trip
   var layer = L.layerGroup();
   var busy = false;
+  var priceRefreshActive=false;
+  var priceCancelRequested=false;
+  function savedPriceReplay(){
+    if(replay)return replay;
+    if(!result||!model||!alts[altSel])return null;
+    var id=histId(route),o=A.KV.get('trips','trip|'+id),v=o&&o.v;
+    if(!v||!v.stations||!(v.stations.google||[]).some(function(g){return (g.sig||v.alts&&v.alts[g.k]&&altSig(v.alts[g.k]))===altSig(alts[altSel]);}))return null;
+    return {id:id,t:v.savedT||o.t,stations:v.stations,alts:v.alts,partial:true};
+  }
+  document.addEventListener('click',function(e){
+    var cancel=e.target.closest('[data-cancel-prices]');
+    if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
+    var button=e.target.closest('[data-trip-refresh]');if(!button||busy)return;
+    if(button.dataset.tripRefresh==='web')findStops('web');
+    else findStops(true);
+  });
+  function refreshCard(){
+    if(KIND()!=='gas'||!model)return '';
+    var web=!!(savedPriceReplay()&&gradeOf()==='regular');
+    var capped=Number(S.monthlyCap)>0&&N.callsThisMonth()>=Number(S.monthlyCap);
+    return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
+      (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
+      '<p class="note">No API: known regular prices. API: station discovery.</p><div class="seg refresh-options"><button data-trip-refresh="web"'+(!web?' disabled':'')+'>No API · prices</button><button data-trip-refresh="api"'+(capped?' disabled':'')+'>API · discovery</button></div>'+(!web?'<p class="note">No-API refresh needs a saved regular-gas trip.</p>':'')+(capped?'<p class="note">Monthly Places cap reached.</p>':''))+'</div>';
+  }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
 
@@ -93,12 +117,12 @@
   function skelCard(title, body) { return '<div class="card skel"><div class="sk-h">' + esc(title) + '</div>' + (body || '') + '</div>'; }
   function skelRows(n) { var h = ''; for (var i = 0; i < n; i++) h += '<div class="sk-row"><span class="sk-dot"></span><span class="sk-lines"><span></span><span></span></span><span class="sk-price"></span></div>'; return h; }
   function skelStops(label) {
-    return skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', progBar(label) + skelRows(2)) +
+    return refreshCard()+skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', progBar(label) + skelRows(2)) +
       '<div class="gas-tiles skel-tiles">' + skelCard(KIND() === 'ev' ? 'Charge to leave with' : 'Gas to leave with', '<div class="sk-big"></div>') +
       skelCard(KIND() === 'ev' ? 'Charge when you arrive' : 'Gas when you arrive', '<div class="sk-big"></div>') + '</div>';
   }
   function skelAdjust(label) {
-    return tipBox() + skelCard('Buffer for this trip', progBar(label) + '<div class="sk-slider"></div>') +
+    return refreshCard()+tipBox() + skelCard('Buffer for this trip', progBar(label) + '<div class="sk-slider"></div>') +
       skelCard('Max. detour per stop', '<div class="sk-slider"></div>') + skelCard('Cruising speed', '<div class="sk-slider"></div>');
   }
   function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; b._sub = null; } routeGate(); if (typeof backMode === 'function') backMode(); }
@@ -1700,11 +1724,12 @@
       var todo = [], done = [];
       jobs.forEach(function (j, i) {
         var o = getKV('along', j.q + '|' + j.polyline, maxAge);
-        if (o) done.push({ job: i, results: use(o) }); else todo.push(i);
+        if (o) done.push({ job: i, results: use(o),at:o.t }); else todo.push(i);
       });
-      var takeGoogle = function (job, r) {
+      var takeGoogle = function (job, r, observedAt) {
+        var observations=[];
         (r.places || []).forEach(function (pl, k) {
-          var st = P.normalize(pl); if (!st || !S.brands[st.brand]) return;
+          var st = P.normalize(pl);if(st&&window.PriceHistory){PriceHistory.stamp(st,observedAt);observations.push(st);} if (!st || !S.brands[st.brand]) return;
           var sum = r.routingSummaries && r.routingSummaries[k];
           if (sum && sum.legs && sum.legs.length >= 2 && job.toMi != null) {
             // Google's road distance through the station minus the route's own distance for that piece = the detour.
@@ -1714,8 +1739,9 @@
           }
           perModel[job.m].push(st);
         });
+        if(window.PriceHistory)PriceHistory.observe(observations);
       };
-      done.forEach(function (d) { d.results.forEach(function (r) { takeGoogle(jobs[d.job], r); }); });
+      done.forEach(function (d) { d.results.forEach(function (r) { takeGoogle(jobs[d.job], r,d.at); }); });
       var tasks = [];
       if (todo.length) weight.google = 0.55;
       if (A.siteOn('murphy')) weight.murphy = 0.15;
@@ -1735,7 +1761,7 @@
           var failed = (res.errors || []).join(' | ');
           send.forEach(function (job, k) {
             var list = byJob[k] || [];
-            list.forEach(function (r) { takeGoogle(job, r); });
+            list.forEach(function (r) { takeGoogle(job, r,Date.now()); });
             // save every finished lookup, empty ones too (nothing there is an answer); skip ones that errored
             if (list.length || failed.indexOf(job.q + ':') < 0 && !/cap reached/i.test(failed))
               KV.put('along', job.q + '|' + job.polyline, list.map(function (r) { return { places: r.places, routingSummaries: r.routingSummaries }; }));
@@ -1746,15 +1772,15 @@
       if (A.siteOn('murphy')) {
         var mpts = ptsUnion(50), mkey = mpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
         var mo = getKV('murphy', mkey, maxAge);
-        var takeMurphy = function (stores) { (stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s) official.push(s); }); };
-        if (mo) { takeMurphy(use(mo)); part.murphy = 1; }
+        var takeMurphy = function (stores,at) { (stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s){if(window.PriceHistory)PriceHistory.stamp(s,at);official.push(s);} }); };
+        if (mo) { takeMurphy(use(mo),mo.t); part.murphy = 1; }
         else tasks.push(site('murphy', { points: mpts, radiusMi: 30, max: 25 }, 120000, function (d, t) { part.murphy = t ? d / t : 0; tick(); }).then(function (res) {
           part.murphy = 1; tick();
           dbgSearch.murphy = { stores: (res.stores || []).length, error: res.error, blocked: res.blocked };
           LG.info('stations', 'Murphy USA done', dbgSearch.murphy);
           if (res.error) notes.push('Murphy USA: ' + (res.blocked ? 'wants an “are you human?” check (Settings → Site checks)' : res.error));
           else { KV.put('murphy', mkey, res.stores || []); siteOk.push('Murphy USA'); }
-          takeMurphy(res.stores);
+          takeMurphy(res.stores,Date.now());
         }));
       }
       // --- Walmart: which stores have fuel (kept a month), then today's prices for the ones near a route ---
@@ -1773,7 +1799,7 @@
         part.walmart = 0.4; tick();
         var near = nodes.filter(function (n) { return n.geoPoint && nearAny(n.geoPoint.latitude, n.geoPoint.longitude); });
         var ask = [];
-        near.forEach(function (n) { var o = getKV('wmprice', String(n.id), maxAge); if (o) { var w = P.normalizeWalmart(use(o)); if (w) official.push(w); } else ask.push(n); });
+        near.forEach(function (n) { var o = getKV('wmprice', String(n.id), maxAge); if (o) { var w = P.normalizeWalmart(use(o)); if (w){if(window.PriceHistory)PriceHistory.stamp(w,o.t);official.push(w);} } else ask.push(n); });
         if (!ask.length) { part.walmart = 1; tick(); return; }
         label = 'Reading Walmart prices';
         var pr = await site('walmart', { mode: 'prices', nodes: ask }, 120000, function (d, t) { part.walmart = 0.4 + (t ? 0.6 * d / t : 0); tick(); });
@@ -1781,7 +1807,7 @@
         dbgSearch.walmartPrices = { asked: ask.length, saved: near.length - ask.length, got: (pr.stores || []).length, blocked: pr.blocked, error: pr.error };
         LG.info('stations', 'Walmart prices', dbgSearch.walmartPrices);
         if (pr.blocked) notes.push('Walmart: wants a “Robot or human?” check for some prices (Settings → Site checks)');
-        (pr.stores || []).forEach(function (w) { KV.put('wmprice', String(w.id), w); var s = P.normalizeWalmart(w); if (s) official.push(s); });
+        (pr.stores || []).forEach(function (w) { KV.put('wmprice', String(w.id), w); var s = P.normalizeWalmart(w); if (s){if(window.PriceHistory)PriceHistory.stamp(s,Date.now());official.push(s);} });
         if ((pr.stores || []).length) siteOk.unshift('Walmart');
       })());
       tick();
@@ -1790,6 +1816,7 @@
       notes = notes.map(function (n) { return /cap reached/i.test(n) ? A.capMsg(n, siteOk) : n; });
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
+    if(!replay&&window.PriceHistory){PriceHistory.observe(official);}
 
     // Exxon / Mobil stations that aren't in the Walmart+ program lose that discount
     try { var allSt = official.slice(); perModel.forEach(function (l) { allSt = allSt.concat(l); }); await xomCheck(allSt); } catch (e) { LG.warn('stations', 'Walmart+ check', String(e)); }
@@ -2427,15 +2454,19 @@
   async function findStops1(force) {
     busy = true;
     try { await findStops0(force); } catch (e) { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); result = null; }
-    busy = false; progEnd();
+    busy = false; priceRefreshActive=false;progEnd();
     if (!onPlan(step) || !result) mapLoaded();
     if (window.__apiCount) window.__apiCount();
     if (onPlan(step) && !result) renderResults();
   }
   async function findStops0(force) {
+    var cap=Number(S.monthlyCap)||0,exhausted=cap>0&&N.callsThisMonth()>=cap;
+    var webRefresh=force==='web';
+    priceRefreshActive=webRefresh;priceCancelRequested=false;
+    if(step===ST_DEPART&&webRefresh)renderStep();
     if ($('tsResults')) $('tsResults').innerHTML = skelStops('Finding stations');
     if ($('taResults')) $('taResults').innerHTML = skelAdjust('Finding stations');
-    prog(0.01, 'Finding stations');
+    prog(0.01, webRefresh?'Starting price refresh · Estimating time…':'Finding stations');
     LG.info('stations', 'Find the best stops pressed', { miles: Math.round(model.totalMi), points: model.pts.length, force: force === true });
     await new Promise(function (r) { setTimeout(r, 30); });
     var others = altCompareList();
@@ -2444,21 +2475,22 @@
     others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
     var okModels = models.filter(Boolean), okKs = [altSel].concat(others).filter(function (k, i) { return models[i]; });
     // Saved-trip refresh is price-only, including the old refresh action after Places runs out.
-    var cap=Number(S.monthlyCap)||0,exhausted=cap>0&&N.callsThisMonth()>=cap;
-    var webRefresh=force==='web'||force===true&&replay&&KIND()==='gas'&&gradeOf()==='regular'&&exhausted;
     var webSummary=null;
     if(webRefresh){
+      if(!replay)replay=savedPriceReplay();
       if(!replay||!replay.stations||KIND()!=='gas'||gradeOf()!=='regular')throw new Error('Website price refresh needs a saved regular-gas trip.');
       var refreshingReplay=replay;
       var cloned=JSON.parse(JSON.stringify(replay.stations)),known=cloned.official||[];
       (cloned.google||[]).forEach(function(g){known=known.concat(g.list||[]);});
       var priority=result&&result.plan&&result.plan.stops?result.plan.stops.map(function(s){return s.c.station.id;}):[];
-      webSummary=await KeylessGas.refreshKnown(known,function(f,label){prog(0.02+f*0.8,label);},priority);
+      var priceWork=KeylessGas.refreshKnown(known,function(f,label){prog(0.02+f*0.8,label);},priority);
+      if(priceCancelRequested)KeylessGas.cancel();
+      webSummary=await priceWork;
       if(replay!==refreshingReplay)throw new Error('The trip changed while prices were loading; no saved trip was overwritten.');
       var at=0;
       cloned.official=(cloned.official||[]).map(function(){return webSummary.stations[at++];});
       (cloned.google||[]).forEach(function(g){g.list=(g.list||[]).map(function(){return webSummary.stations[at++];});});
-      cloned.priceRefresh={updated:webSummary.updated,total:webSummary.total,retained:webSummary.retained,at:webSummary.at,websiteLoads:webSummary.websiteLoads,errors:webSummary.errors};
+      cloned.priceRefresh={updated:webSummary.updated,total:webSummary.total,retained:webSummary.retained,at:webSummary.at,websiteLoads:webSummary.websiteLoads,errors:webSummary.errors,cancelled:webSummary.cancelled};
       replay.stations=cloned;
       var saved=A.KV.get('trips','trip|'+replay.id);
       if(saved&&saved.v){saved.v.stations=cloned;A.KV.put('trips','trip|'+replay.id,saved.v);}
@@ -2483,7 +2515,7 @@
     else { try { saveTrip(ga.raw, okKs); } catch (e) { LG.warn('history', 'Couldn\'t save the trip', String(e)); } }
     var g = ga.per[0];
     var refreshInfo=webSummary||rp&&rp.stations.priceRefresh;
-    if(refreshInfo)g.notes.push('Website refresh: '+refreshInfo.updated+'/'+refreshInfo.total+' saved stations matched; '+refreshInfo.retained+' left unchanged. No new stations discovered; no Places or Routes API calls for that refresh. Pump-price update times are unknown.');
+    if(refreshInfo)g.notes.push((refreshInfo.cancelled?'Cancelled website refresh: ':'Website refresh: ')+refreshInfo.updated+'/'+refreshInfo.total+' saved stations matched; '+refreshInfo.retained+' left unchanged. No new stations discovered; no Places or Routes API calls for that refresh. Pump-price update times are unknown.');
     if(refreshInfo)g.notes=g.notes.concat(refreshInfo.errors||[]);
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
@@ -2537,7 +2569,7 @@
       LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
     }
     startSweep();
-    busy = false;
+    busy = false;priceRefreshActive=false;
     progEnd();
     await breathe();
     var t2 = Date.now();
@@ -2594,7 +2626,7 @@
         model ? '<div class="card empty-res">' + (need ? 'Your adjustments appear here once the stops are planned.' : 'Say how much is in your tank in Parameters.') + '</div>' : '');
       return;
     }
-    var p = r.plan, h = '', ah = tipBox();
+    var p = r.plan, h = refreshCard(), ah = refreshCard()+tipBox();
     // warnings first: what could go wrong on this trip
     var w = [];
     if (!p.ok) w.push({ err: 1, t: 'No plan keeps you above a ' + r.bufMi + '-mile buffer. ' + (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your range.') + ' Try a smaller buffer or check the miles left.' });
@@ -2603,8 +2635,7 @@
     if (r.stale) w.push({ t: r.stale + ' price' + (r.stale === 1 ? ' is' : 's are') + ' over ' + S.staleHours + ' hours old (marked).' });
     r.notes.forEach(function (n) { w.push({ t: n }); });
     var wm = $('wmCheck'); if (wm && !wm.classList.contains('hidden')) w.push({ t: $('wmCheckTitle').textContent + ' before its prices can load.', html: ' <a href="#" id="tsSiteCheck">Open</a>' });
-    if (r.cachedAgeMs > 0) w.push({ t: r.fromHistory ? 'Saved trip · original prices from ' + agoText(r.cachedAgeMs) + ' (no lookups used).' : 'Prices from ' + agoText(r.cachedAgeMs) + '.', html: ' <a href="#" id="tsRefresh">'+(r.fromHistory?'Discover stations again (API)':'Get fresh prices')+'</a>', cls: 'saved' });
-    if(r.fromHistory&&KIND()==='gas'&&r.grade==='regular')w.push({t:'Update regular prices at the stations already saved with this trip.',html:' <a href="#" id="tsWebRefresh">Refresh saved prices — no API calls</a>',cls:'saved'});
+    if (r.cachedAgeMs > 0) w.push({ t: r.fromHistory ? 'Saved trip · original discovery from ' + agoText(r.cachedAgeMs) + ' (no lookups used).' : 'Prices from ' + agoText(r.cachedAgeMs) + '.', cls: 'saved' });
     var warnHtml = w.length ? '<div class="warns pre">' + w.map(function (x) { return '<div class="' + (x.err ? 'msg err' : 'note') + (x.cls ? ' ' + x.cls : '') + '">' + esc(x.t) + (x.html || '') + '</div>'; }).join('') + '</div>' : '';
     if (!p.ok) {
       h += warnHtml + routeBox();
@@ -2662,8 +2693,9 @@
   var SHARE_ICON = '<svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.2 3.2 0 0 0 0-1.39l7.05-4.11A2.99 2.99 0 1 0 15 5c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z"/></svg>';
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
+    if(priceRefreshActive)return refreshCard();
     var p = r.plan;
-    var h = '<div class="card dep-route">' + numList(route.stops) + '</div>' +
+    var h = refreshCard()+'<div class="card dep-route">' + numList(route.stops) + '</div>' +
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
       '<div><b>' + fmtDur(model.durationSec) + '</b><span>driving</span></div>' +

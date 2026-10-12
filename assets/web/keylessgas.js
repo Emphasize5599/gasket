@@ -84,6 +84,12 @@
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
+  function cancel(){
+    if(!busy||typeof busy!=='object')return;
+    busy.cancelled=true;busy.wake.forEach(function(f){f();});
+    var N=root.__app.N;
+    if(N&&N.cancelSiteRead)['gasweb','gasweb2'].forEach(function(k){N.cancelSiteRead(k);});
+  }
   function call(name){return root.__trip.call.apply(null,[name].concat([].slice.call(arguments,1)));}
   async function search(lat,lng,radius){
     if(busy)throw new Error('A keyless gas lookup is already running');
@@ -114,7 +120,7 @@
       if(Date.now()-lastWeb<30000)errors.push('Google web lookup cooling down; wait 30 seconds');
       else{
         lastWeb=Date.now();
-        try{var g=await call('siteRead','gasweb',JSON.stringify({url:webUrl(a)}));web=g.stores||[];details.google=g.detail||{};if(g.error)errors.push(g.error);if(g.blocked)details.blocked=true;}
+        try{var g=await call('siteRead','gasweb',JSON.stringify({url:webUrl(a)}));web=g.stores||[];web.forEach(function(s){Object.keys(s.prices||{}).forEach(function(k){s.prices[k].observedAt=Date.now();});});details.google=g.detail||{};if(g.error)errors.push(g.error);if(g.blocked)details.blocked=true;}
         catch(e){errors.push('Google Maps web: '+e.message);}
       }
       var result={stations:merge(open,web,a,P),errors:errors,detail:details,partial:true};
@@ -127,21 +133,36 @@
   }
   async function refreshKnown(known,onProgress,priority){
     if(busy)throw new Error('A keyless lookup is already running');
-    busy=true;
+    var control={cancelled:false,wake:[]};busy=control;
     var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=[],errors=[],reads=0,blocked=false,start=Date.now();
     var cached=groups.map(function(g){var key='known|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
     // Two dedicated native readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
+    var next=0,done=0,samples=0,totalMs=0,active=new Map();
+    function report(){
+      var average=samples?totalMs/samples:null,remaining=ordered.slice(next).filter(function(x){return !x.cache;}).length;
+      var work=average==null?null:remaining*average;
+      if(work!=null)active.forEach(function(t){work+=Math.max(1000,average-(Date.now()-t));});
+      var eta=work==null?null:Math.ceil(work/Math.min(2,remaining+active.size||1)/1000);
+      var text=control.cancelled?'Cancelling; keeping completed prices':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
+      text+=' · '+(eta==null?'Estimating time…':eta>=60?'~'+Math.ceil(eta/60)+' min remaining':'~'+eta+' sec remaining');
+      if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
+    }
+    var ticker=setInterval(report,1000);
     try{
-      var next=0,done=0,limited=false;
-      async function lane(key){while(next<ordered.length&&!blocked){
+      async function lane(key){while(next<ordered.length&&!blocked&&!control.cancelled){
         var x=ordered[next++],r,at;
         if(x.cache){r=x.cache.v;at=x.cache.t;}
         else{
-          if(reads>=12||Date.now()-start>=180000){limited=true;break;}
           reads++;
-          try{r=await call('siteRead',key,JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8)),targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId};})}));}
+          var began=Date.now(),wake;
+          active.set(key,began);
+          var stopped=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);});
+          try{r=await Promise.race([call('siteRead',key,JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8)),targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId};})})),stopped]);}
           catch(e){r={error:e.message};}
+          finally{active.delete(key);control.wake=control.wake.filter(function(f){return f!==wake;});}
+          if(r.cancelled)break;
+          samples++;totalMs+=Date.now()-began;
           at=Date.now();
           if(r.blocked){blocked=true;errors.push(r.error||'Google restricted the refresh');break;}
           if(r.error)errors.push(r.error);
@@ -150,18 +171,22 @@
         }
         (r.stores||[]).forEach(function(w){rows.push(Object.assign({},w,{observedAt:at}));});
         done++;
-        if(onProgress)onProgress(done/ordered.length,'Refreshing saved prices · '+done+'/'+ordered.length+' areas');
+        report();
       }}
-      if(onProgress)onProgress(0,'Refreshing saved prices · 0/'+ordered.length+' areas');
+      report();
       await Promise.all([lane('gasweb'),lane('gasweb2')]);
-      if(limited)errors.push('Batch limit reached; some saved areas were not checked. Run another refresh to continue.');
       // Overlapping areas can return the same Google station. Keep one row before matching.
       var web=Array.from(new Map(rows.map(function(w){return [w.placeId||w.featureId||w.id,w];})).values());
       var result=updateKnown(known,web,P,null);
+      result.cancelled=control.cancelled;result.completedAreas=done;
+      if(root.PriceHistory){
+        root.PriceHistory.observe(result.stations.map(function(s){return Object.assign({},s,{prices:{}});}));
+        root.PriceHistory.observe(result.stations.filter(function(s){var p=s.prices&&s.prices.regular;return p&&p.source==='Google Maps web'&&p.observedAt;}).map(function(s){return Object.assign({},s,{prices:{regular:s.prices.regular}});}));
+      }
       result.total=new Set(known.map(knownKey)).size;result.retained=result.total-result.updated;result.errors=errors;result.blocked=blocked;result.websiteLoads=reads;result.areas=groups.length;result.apiCalls=0;result.at=Date.now();
       if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
       return result;
-    }finally{busy=null;}
+    }finally{clearInterval(ticker);busy=null;}
   }
-  root.KeylessGas=Object.assign(math,{search:search,refreshKnown:refreshKnown});
+  root.KeylessGas=Object.assign(math,{search:search,refreshKnown:refreshKnown,cancel:cancel});
 })(typeof window!=='undefined'?window:globalThis);

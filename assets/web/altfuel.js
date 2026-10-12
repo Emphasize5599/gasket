@@ -64,7 +64,7 @@
   function norm(f) {
     if (!f || f.latitude == null || f.longitude == null) return null;
     var ev = f.fuel_type_code === 'ELEC', pw = ev ? powerOf(f) : null;
-    return {
+    var station = {
       id: 'afdc' + f.id, afdcId: f.id, brand: ev ? 'ev' : 'h2', name: String(f.station_name || (ev ? 'EV charger' : 'Hydrogen station')).trim(),
       network: ev ? (NETS[f.ev_network] != null ? NETS[f.ev_network] : String(f.ev_network || '')) : '',
       address: [f.street_address, f.city, [f.state, f.zip].filter(Boolean).join(' ')].filter(Boolean).join(', '), state: f.state || '',
@@ -74,17 +74,19 @@
       hyPress: f.hy_pressures || [], hyLink: f.hy_status_link || '', retail: f.hy_is_retail, confirmed: f.date_last_confirmed || '',
       off: f.distance != null ? +f.distance : null, prices: {}
     };
+    return station;
   }
+  function normalizedRows(raw){var rows=raw.map(norm).filter(Boolean);if(window.PriceHistory)PriceHistory.observe(rows);return rows;}
 
   /** Every open, public hydrogen station (US and Canada), kept a week. force: fetch again now. */
   async function hydrogenAll(force) {
     var o = !force && KV.get('afdc', 'hy-all', WEEK);
-    if (o) return { list: o.v.map(norm).filter(Boolean), t: o.t };
+    if (o) return { list: normalizedRows(o.v), t: o.t };
     var j = await get('.json', { fuel_type: 'HY', status: 'E', access: 'public', country: 'all', limit: 'all' });
     var raw = j.fuel_stations || [];
     KV.put('afdc', 'hy-all', raw);
     LG.info('altfuel', 'Fetched ' + raw.length + ' hydrogen stations');
-    return { list: raw.map(norm).filter(Boolean), t: Date.now() };
+    return { list: normalizedRows(raw), t: Date.now() };
   }
   function plugParam(plugs) { return plugs && plugs.length ? plugs.join(',') : 'J1772COMBO,TESLA,CHADEMO'; }
   /** DC fast chargers within radius miles of a point that take one of these plugs, kept a week. */
@@ -92,12 +94,12 @@
     var lvl = LEVEL[speed] || 'dc_fast';
     var k = 'ev|' + lat.toFixed(2) + ',' + lng.toFixed(2) + '|' + Math.round(radiusMi) + '|' + plugParam(plugs) + (lvl === 'dc_fast' ? '' : '|' + lvl);
     var o = KV.get('afdc', k, WEEK);
-    if (o) return o.v.map(norm).filter(Boolean);
+    if (o) return normalizedRows(o.v);
     var j = await get('/nearest.json', { latitude: lat.toFixed(5), longitude: lng.toFixed(5), radius: Math.min(500, Math.round(radiusMi)), fuel_type: 'ELEC',
       ev_charging_level: lvl, ev_connector_type: lvl === 'dc_fast' ? plugParam(plugs) : (plugs && plugs.length ? plugParam(plugs.concat(['J1772'])) : ''), status: 'E', access: 'public', limit: 200 });
     var raw = j.fuel_stations || [];
     KV.put('afdc', k, raw);
-    return raw.map(norm).filter(Boolean);
+    return normalizedRows(raw);
   }
   /**
    * Stations within corridorMi of a route, for a trip: the route goes to the finder as a simplified line (a few hundred
@@ -122,6 +124,7 @@
       if (onProg) onProg((k + 1) / n);
     }
     var list = Object.keys(out).map(function (id) { return out[id]; });
+    if(window.PriceHistory)PriceHistory.observe(list);
     LG.info('altfuel', list.length + ' ' + (kind === 'ev' ? 'fast chargers' : 'hydrogen stations') + ' along the route');
     return list;
   }
@@ -359,7 +362,7 @@
   // stations already fetched come back on the map at start (no lookup)
   try {
     var o = KV.get('afdc', 'hy-all');
-    if (o && o.v) { h2List = o.v.map(norm).filter(Boolean); h2T = o.t; }
+    if (o && o.v) { h2List = normalizedRows(o.v); h2T = o.t; }
   } catch (e) { }
   window.addEventListener('garagechange', function () { if (h2On()) drawCoverage(); });
   // at start: the mode the app was left in (its stations, the selector)

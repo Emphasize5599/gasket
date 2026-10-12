@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.107 - 2026-10-11 (keyless test branch only)
+- Refresh cards in Adjustments, Stops and Departure, with API/no-API choices.
+- Uncapped website refresh with progress, estimated time remaining and Cancel.
+- Persistent station price history, included in full backups.
+- Bug fixes.
+
 ## 0.0.106 - 2026-10-11 (keyless test branch only)
 - Faster saved-price refresh with two parallel readers and targeted early completion.
 - Shorter release notes; credits remain in project information.

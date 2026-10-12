@@ -32,7 +32,7 @@ with sync_playwright() as p:
         if pg.locator('#settings:not(.hidden)').count() == 0: pg.click('#btnSettings'); pg.wait_for_timeout(300)
         pg.fill('#apiKey', KEY); pg.click('#sDone')
         pg.wait_for_timeout(600)
-        if pg.locator('#rows .row').count() == 0: pg.click('#btnRefresh'); pg.wait_for_timeout(900)
+        if pg.locator('#rows .row').count() == 0: pg.click('#btnRefresh'); pg.click('[data-refresh="api"]'); pg.wait_for_timeout(900)
         assert pg.locator('#rows .row').count() > 3, 'Google stations listed'
         st = gattr_style(pg, '#rows .gattr'); print(' ', name, 'list credit:', st)
         assert st and st['text'] == 'Google Maps' and 12 <= st['size'] <= 16 and st['weight'] == '400', st
