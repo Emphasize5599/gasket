@@ -51,10 +51,12 @@
     }
     function latest(s,grade){var m=get('station|'+key(s),null);return m&&m.latest&&m.latest[grade]||history(s,{grade:grade,limit:1})[0]||null;}
     function recover(stations){return stations.map(function(s){
-      var r=latest(s,'regular'),old=s.prices&&s.prices.regular;
-      var existing=old&&(old.observedAt||Date.parse(old.updated)||0)||0;
-      if(!r||r.source!=='Google Maps web'||!r.observedAt||r.observedAt<=existing)return s;
-      return Object.assign({},s,{prices:Object.assign({},s.prices,{regular:{price:r.price,source:r.source,updated:r.sourceUpdatedAt,observedAt:r.observedAt}})});
+      var prices=Object.assign({},s.prices),changed=false,meta=get('station|'+key(s),null);
+      ['regular','midgrade','premium','diesel'].forEach(function(g){var r=meta&&meta.latest?meta.latest[g]:meta?history(s,{grade:g,limit:1})[0]:null,old=prices[g],existing=old&&(old.observedAt||Date.parse(old.updated)||0)||0;
+        if(!r||!['Google Maps web','walmart.com','murphyusa.com'].includes(r.source)||!r.observedAt||r.observedAt<=existing)return;
+        prices[g]={price:r.price,source:r.source,updated:r.sourceUpdatedAt,observedAt:r.observedAt};changed=true;
+      });
+      return changed?Object.assign({},s,{prices:prices}):s;
     });}
     return {schema:1,key:key,observe:observe,stations:stations,history:history,stamp:stamp,latest:latest,recover:recover};
   }

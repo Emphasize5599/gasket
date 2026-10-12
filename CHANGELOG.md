@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.109 - 2026-10-12 (keyless test branch only)
+- Adjustments-only refresh controls with separate scan buttons and trip-based help.
+- No-API refresh handles all fuel grades and diesel where prices are published.
+- Correct price-age warnings and fuel-control layering.
+- Bug fixes.
+
 ## 0.0.108 - 2026-10-12 (keyless test branch only)
 - Special-weather presets can copy defaults from their parent season.
 - Mileage entries show their logging time.

@@ -265,9 +265,11 @@
     if (cb > 0) add(cb + '% card cash back', -running * cb / 100, 'Paid back later by your card, not at the pump.');
 
     var updated = gp.updated ? new Date(gp.updated) : null;
+    if(updated&&!Number.isFinite(updated.getTime()))updated=null;
     var ageH = updated ? ((now || new Date()) - updated) / 3.6e6 : null;
+    var observedAt=Number(gp.observedAt)>0?Number(gp.observedAt):null,observedAge=observedAt?((now||new Date())-observedAt)/3.6e6:null;
     return { base: gp.price, final: r3(running), steps: steps, notes: notes, updated: updated, source:gp.source||station.source,
-      ageHours: ageH, stale: ageH == null || ageH > (s.staleHours || 24) };
+      ageHours: ageH,ageUnknown:ageH==null,observedAt:observedAt,observedAgeHours:observedAge, stale: ageH==null?(observedAge==null||observedAge>(s.staleHours||24)):ageH>(s.staleHours||24) };
   }
 
   /** "$2.89⁹" style: dollars + cents, with the tenth-of-a-cent as superscript (like a pump sign). */

@@ -19,7 +19,7 @@
       var id = ++nid, timer;
       waiting[id] = function (res) { clearTimeout(timer); resolve(res); };
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
-      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-4])?$/.test(args[0]) ? 45000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
+      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-4])?$/.test(args[0]) ? 45000 : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (timeout) timer = setTimeout(function () {
         window.onNativeResult(id, { error: (args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
@@ -82,11 +82,16 @@
   });
   function refreshCard(){
     if(KIND()!=='gas'||!model)return '';
-    var web=!!(savedPriceReplay()&&gradeOf()==='regular');
+    var saved=savedPriceReplay(),web=!!saved;
     var capped=Number(S.monthlyCap)>0&&N.callsThisMonth()>=Number(S.monthlyCap);
+    var known=saved?(saved.stations.official||[]).slice():[];if(saved)(saved.stations.google||[]).forEach(function(g){known=known.concat(g.list||[]);});
+    web=web&&known.length>0;
+    var estimate=KeylessGas.estimate(known,gradeOf()),minutes=Math.max(1,Math.ceil(estimate.seconds/60));
+    var webHelp='Best for price refreshes at stations already saved with this trip. No Places or Routes calls. '+(web?'Estimated '+(estimate.seconds<60?'under a minute':'about '+minutes+' minutes')+' for '+estimate.areas+' areas with '+estimate.readers+' readers'+(estimate.measured?', based on recent scans':'; initial estimate, refined while scanning')+'. Cache reuse and website restrictions affect timing. ':'Find stations first or open a saved trip to estimate the refresh time. ')+'Only explicitly published fuel-grade prices are used; missing prices remain unchanged.';
+    var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
       (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
-      '<p class="note">No API: known regular prices. API: station discovery.</p><div class="seg refresh-options"><button data-trip-refresh="web"'+(!web?' disabled':'')+'>No API · prices</button><button data-trip-refresh="api"'+(capped?' disabled':'')+'>API · discovery</button></div>'+(!web?'<p class="note">No-API refresh needs a saved regular-gas trip.</p>':'')+(capped?'<p class="note">Monthly Places cap reached.</p>':''))+'</div>';
+      '<div class="scan-launches"><div><button class="btn tonal" data-trip-refresh="web"'+(!web?' disabled':'')+'>No API</button>'+A.qBtn(webHelp)+'</div><div><button class="btn tonal" data-trip-refresh="api"'+(capped?' disabled':'')+'>API</button>'+A.qBtn(apiHelp)+'</div></div>')+'</div>';
   }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
@@ -117,7 +122,7 @@
   function skelCard(title, body) { return '<div class="card skel"><div class="sk-h">' + esc(title) + '</div>' + (body || '') + '</div>'; }
   function skelRows(n) { var h = ''; for (var i = 0; i < n; i++) h += '<div class="sk-row"><span class="sk-dot"></span><span class="sk-lines"><span></span><span></span></span><span class="sk-price"></span></div>'; return h; }
   function skelStops(label) {
-    return refreshCard()+skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', progBar(label) + skelRows(2)) +
+    return skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', progBar(label) + skelRows(2)) +
       '<div class="gas-tiles skel-tiles">' + skelCard(KIND() === 'ev' ? 'Charge to leave with' : 'Gas to leave with', '<div class="sk-big"></div>') +
       skelCard(KIND() === 'ev' ? 'Charge when you arrive' : 'Gas when you arrive', '<div class="sk-big"></div>') + '</div>';
   }
@@ -1823,7 +1828,7 @@
     var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date(), goD = departAt();
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];
-      var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0, unp = [];
+      var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0, unknownTimes=0,oldObservations=0, unp = [];
       var mkCand = function (s, pr, price, calc, extra) {
         var est = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0);
         // trust Google's detour unless it's wildly off from the straight-line estimate (then the piece was routed differently),
@@ -1843,7 +1848,7 @@
           var pr = prs[pi];
           var c = P.compute(s, grade, S, nowD, new Date(goD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // day-based bonuses go by when you'll be there
           if (!c) { if (!pi) { unpriced++; unp.push({ s: s, prs: prs }); } break; }
-          if (c.stale && !pi) stale++;
+          if(!pi){if(c.ageHours!=null&&c.stale)stale++;if(c.ageUnknown){unknownTimes++;if(c.observedAgeHours>S.staleHours)oldObservations++;}}
           cands.push(mkCand(s, pr, c.final, c));
         }
       }
@@ -1861,7 +1866,10 @@
           });
         });
       }
-      per.push({ cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, unpricedCands: unpricedCands });
+      var ageNotes=notes.slice();
+      if(unknownTimes)ageNotes.push(unknownTimes+' prices have unknown pump-update times. A recent website retrieval does not establish when a price changed.');
+      if(oldObservations)ageNotes.push(oldObservations+' website prices were last retrieved over '+S.staleHours+' hours ago.');
+      per.push({ cands: cands, notes: ageNotes, unpriced: unpriced, stale: stale, grade: grade, unpricedCands: unpricedCands });
     }
     LG.debug('stations', 'Matched stations to ' + models.length + ' route(s) in ' + (Date.now() - t0) + ' ms', per.map(function (x) { return x.cands.length; }));
     return { per: per, cachedAgeMs: saved ? oldest : 0, raw: { official: official, google: perModel } };
@@ -2478,24 +2486,24 @@
     var webSummary=null;
     if(webRefresh){
       if(!replay)replay=savedPriceReplay();
-      if(!replay||!replay.stations||KIND()!=='gas'||gradeOf()!=='regular')throw new Error('Website price refresh needs a saved regular-gas trip.');
+      if(!replay||!replay.stations||KIND()!=='gas')throw new Error('Website price refresh needs a saved fuel trip.');
       var refreshingReplay=replay;
       var cloned=JSON.parse(JSON.stringify(replay.stations)),known=cloned.official||[];
       (cloned.google||[]).forEach(function(g){known=known.concat(g.list||[]);});
       var priority=result&&result.plan&&result.plan.stops?result.plan.stops.map(function(s){return s.c.station.id;}):[];
-      var priceWork=KeylessGas.refreshKnown(known,function(f,label){prog(0.02+f*0.8,label);},priority);
+      var priceWork=KeylessGas.refreshKnown(known,function(f,label){prog(0.02+f*0.8,label);},priority,gradeOf());
       if(priceCancelRequested)KeylessGas.cancel();
       webSummary=await priceWork;
       if(replay!==refreshingReplay)throw new Error('The trip changed while prices were loading; no saved trip was overwritten.');
       var at=0;
       cloned.official=(cloned.official||[]).map(function(){return webSummary.stations[at++];});
       (cloned.google||[]).forEach(function(g){g.list=(g.list||[]).map(function(){return webSummary.stations[at++];});});
-      cloned.priceRefresh={updated:webSummary.updated,total:webSummary.total,retained:webSummary.retained,at:webSummary.at,websiteLoads:webSummary.websiteLoads,errors:webSummary.errors,cancelled:webSummary.cancelled};
+      cloned.priceRefresh={updated:webSummary.updated,total:webSummary.total,retained:webSummary.retained,at:webSummary.at,websiteLoads:webSummary.websiteLoads,errors:webSummary.errors,cancelled:webSummary.cancelled,grade:webSummary.grade};
       replay.stations=cloned;
       var saved=A.KV.get('trips','trip|'+replay.id);
       if(saved&&saved.v){saved.v.stations=cloned;A.KV.put('trips','trip|'+replay.id,saved.v);}
       dbg.search.keyless=cloned.priceRefresh;
-      if(webSummary.blocked)A.showSiteCheck('gasweb','Google Maps web');
+      if(webSummary.blocked)A.showSiteCheck(webSummary.blockedSite||'gasweb',webSummary.blockedSite==='walmart'?'Walmart':webSummary.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
     }
     var rp = force === true&&!webRefresh ? null : replay, rpSt = null;
     if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null;   // saved for another kind of car (or EV stations: the finder's own cache covers them)
@@ -2515,7 +2523,7 @@
     else { try { saveTrip(ga.raw, okKs); } catch (e) { LG.warn('history', 'Couldn\'t save the trip', String(e)); } }
     var g = ga.per[0];
     var refreshInfo=webSummary||rp&&rp.stations.priceRefresh;
-    if(refreshInfo)g.notes.push((refreshInfo.cancelled?'Cancelled website refresh: ':'Website refresh: ')+refreshInfo.updated+'/'+refreshInfo.total+' saved stations matched; '+refreshInfo.retained+' left unchanged. No new stations discovered; no Places or Routes API calls for that refresh. Pump-price update times are unknown.');
+    if(refreshInfo)g.notes.push((refreshInfo.cancelled?'Cancelled website refresh: ':'Website refresh: ')+refreshInfo.updated+'/'+refreshInfo.total+' saved stations matched'+(refreshInfo.grade?' for '+refreshInfo.grade:'')+'; '+refreshInfo.retained+' left unchanged. No new stations discovered; no Places or Routes API calls for that refresh. Website retrieval is not a pump-price update timestamp.');
     if(refreshInfo)g.notes=g.notes.concat(refreshInfo.errors||[]);
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     prog(0.93, 'Choosing stops');
@@ -2626,7 +2634,7 @@
         model ? '<div class="card empty-res">' + (need ? 'Your adjustments appear here once the stops are planned.' : 'Say how much is in your tank in Parameters.') + '</div>' : '');
       return;
     }
-    var p = r.plan, h = refreshCard(), ah = refreshCard()+tipBox();
+    var p = r.plan, h = '', ah = refreshCard()+tipBox();
     // warnings first: what could go wrong on this trip
     var w = [];
     if (!p.ok) w.push({ err: 1, t: 'No plan keeps you above a ' + r.bufMi + '-mile buffer. ' + (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your range.') + ' Try a smaller buffer or check the miles left.' });
@@ -2693,9 +2701,9 @@
   var SHARE_ICON = '<svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.2 3.2 0 0 0 0-1.39l7.05-4.11A2.99 2.99 0 1 0 15 5c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z"/></svg>';
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
-    if(priceRefreshActive)return refreshCard();
+    if(priceRefreshActive)return skelStops('Refreshing saved prices');
     var p = r.plan;
-    var h = refreshCard()+'<div class="card dep-route">' + numList(route.stops) + '</div>' +
+    var h = '<div class="card dep-route">' + numList(route.stops) + '</div>' +
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
       '<div><b>' + fmtDur(model.durationSec) + '</b><span>driving</span></div>' +

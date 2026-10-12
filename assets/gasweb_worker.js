@@ -7,19 +7,34 @@ async function (reqId, args) {
   const started = Date.now(), rows = new Map(), prices = new Map();
   let loaded = false, responseRead = false, limited = false, rejected = 0;
   let targetsComplete = false;
+  const requested=['regular','midgrade','premium','diesel'].includes(args.grade)?args.grade:'regular';
+  const gradeLabel=s=>({'regular':'regular','regular unleaded':'regular','midgrade':'midgrade','mid-grade':'midgrade','mid grade':'midgrade','premium':'premium','premium unleaded':'premium','diesel':'diesel','truck diesel':'diesel','diesel #2':'diesel'})[String(s||'').trim().toLowerCase()]||null;
+  const money=s=>{const m=/^\$(\d{1,2}\.\d{2,3})$/.exec(String(s||'').trim());return m&&+m[1]>=0.5&&+m[1]<=20?+m[1]:null;};
+  const rowPrices=id=>{const p=prices.get(id)||{},out={};Object.keys(p).forEach(g=>{if(p[g]!=null)out[g]={price:p[g],updated:null};});return out;};
+  let gradeMenu=null,gradeAttempted=false,gradeOpenedAt=0;
+  const selectGrade=()=>{
+    if(requested==='regular'||gradeAttempted)return false;
+    const option=Array.from(document.querySelectorAll('[role="listbox"] [role="option"],[role="menu"] [role="menuitemradio"],[role="menu"] [role="menuitem"]')).find(e=>e.getClientRects().length&&!e.closest('[aria-hidden="true"]')&&gradeLabel(e.getAttribute('aria-label')||e.innerText)===requested);
+    if(option){option.click();gradeAttempted=true;readReply.last=null;return true;}
+    if(gradeMenu){if(Date.now()-gradeOpenedAt<2000)return true;gradeMenu.click();gradeAttempted=true;return false;}
+    gradeMenu=Array.from(document.querySelectorAll('button[aria-haspopup="listbox"],button[aria-haspopup="menu"],button[aria-haspopup="true"]')).find(e=>e.getClientRects().length&&(gradeLabel(e.getAttribute('aria-label'))||gradeLabel(e.innerText))==='regular');
+    if(gradeMenu){gradeMenu.click();gradeOpenedAt=Date.now();return true;}return false;
+  };
   const targets = Array.isArray(args.targets) && args.targets.length<=1000 ? args.targets : [];
   const complete = () => {
     if(!targets.length)return false;
     if(window.KeylessGas&&window.Pricing&&targets.every(t=>t.brand&&Number.isFinite(t.lat)&&Number.isFinite(t.lng))){
-      const priced=Array.from(rows.values()).map(r=>Object.assign({},r,{prices:prices.has(r.featureId)?{regular:{price:prices.get(r.featureId)}}:{}}));
-      return KeylessGas.updateKnown(targets,priced,Pricing,null).updated===targets.length;
+      const priced=Array.from(rows.values()).map(r=>Object.assign({},r,{prices:rowPrices(r.featureId)}));
+      return KeylessGas.updateKnown(targets,priced,Pricing,null,requested).updated===targets.length;
     }
-    return targets.every(t=>Array.from(rows.values()).some(r=>prices.has(r.featureId)&&(t.id&&(r.placeId===t.id||r.id===t.id)||t.featureId&&r.featureId===t.featureId)));
+    return targets.every(t=>Array.from(rows.values()).some(r=>rowPrices(r.featureId)[requested]&&(t.id&&(r.placeId===t.id||r.id===t.id)||t.featureId&&r.featureId===t.featureId)));
   };
   const blocked = () => /\/sorry\/|consent\.google/.test(location.href) || /unusual traffic|verify (?:that )?you are human|access denied|before you continue to Google|not a robot/i.test(document.body && document.body.innerText || '');
   const price = (s) => {
-    const m = /^\$(\d{1,2}\.\d{2,3})\s*\/\s*Regular$/i.exec(String(s || '').trim());
-    const p = m && +m[1]; return p >= 0.5 && p <= 20 ? p : null;
+    const text=String(s||'').trim(),m=/^(\$\d{1,2}\.\d{2,3})\s*\/\s*([a-z #0-9-]+)$/i.exec(text)||/^(\$\d{1,2}\.\d{2,3})\s+([a-z #0-9-]+)$/i.exec(text);
+    if(m){const g=gradeLabel(m[2]),v=money(m[1]);return g&&v!=null?{grade:g,value:v}:null;}
+    const reverse=/^([a-z #0-9-]+)\s+(\$\d{1,2}\.\d{2,3})$/i.exec(text);
+    if(reverse){const g=gradeLabel(reverse[1]),v=money(reverse[2]);return g&&v!=null?{grade:g,value:v}:null;}return null;
   };
   // Associate a label only with a subtree naming exactly ONE feature ID and ONE
   // regular price. Ambiguous parent collections must never cross-wire stations.
@@ -49,27 +64,28 @@ async function (reqId, args) {
     const candidates = new Map(); let nodes = 0;
     function walk(x, depth) {
       if (++nodes > 250000 || depth > 80) throw new Error('Search response too complex');
-      const ids = new Set(), values = new Set();
+      const ids = new Set(), values = new Map();
+      const add=(g,p)=>{if(!values.has(g))values.set(g,new Set());if(values.get(g).size<2)values.get(g).add(p);};
       if (typeof x === 'string') {
         if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(x)) ids.add(x.toLowerCase());
-        const p = price(x); if (p !== null) values.add(p);
+        const p = price(x); if (p !== null) add(p.grade,p.value);
       } else if (Array.isArray(x)) {
         for (const child of x) {
           const c = walk(child, depth + 1);
           for (const id of c.ids) if (ids.size < 2) ids.add(id);
-          for (const p of c.values) if (values.size < 2) values.add(p);
+          for (const [g,ps] of c.values) for(const p of ps)add(g,p);
         }
-        if (ids.size === 1 && values.size === 1) {
-          const id = Array.from(ids)[0], p = Array.from(values)[0];
-          const old = candidates.get(id);
-          if (old !== undefined && old !== p) candidates.set(id, null);
-          else if (!candidates.has(id)) candidates.set(id, p);
+        const labels=x.filter(v=>typeof v==='string'&&gradeLabel(v)),amounts=x.filter(v=>typeof v==='string'&&money(v)!=null);
+        if(labels.length===1&&amounts.length===1)add(gradeLabel(labels[0]),money(amounts[0]));
+        if (ids.size === 1) {
+          const id = Array.from(ids)[0];if(!candidates.has(id))candidates.set(id,{});const target=candidates.get(id);
+          for(const [g,ps] of values){if(ps.size!==1){target[g]=null;continue;}const p=Array.from(ps)[0];if(target[g]!==undefined&&target[g]!==p)target[g]=null;else if(target[g]===undefined)target[g]=p;}
         }
       }
       return { ids, values };
     }
     walk(tree, 0);
-    for (const [id, p] of candidates) if (p !== null) prices.set(id, p);
+    for (const [id, p] of candidates){const old=prices.get(id)||{};Object.assign(old,p);prices.set(id,old);}
   };
   const readRows = () => {
     const feed = document.querySelector('[role="feed"]');
@@ -84,8 +100,9 @@ async function (reqId, args) {
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
       const t = card.innerText || '';
       if (/permanently closed|temporarily closed/i.test(t)) continue;
-      const visible = t.split('\n').map(price).filter((p)=>p!==null);
-      if(new Set(visible).size===1)prices.set(id[1].toLowerCase(),visible[0]);
+      const visible = t.split('\n').map(price).filter((p)=>p!==null),vp={};
+      visible.forEach(p=>{if(vp[p.grade]===undefined)vp[p.grade]=p.value;else if(vp[p.grade]!==p.value)vp[p.grade]=null;});
+      if(visible.length)prices.set(id[1].toLowerCase(),Object.assign({},prices.get(id[1].toLowerCase()),vp));
       const website = card.querySelector('a[data-value="Website"]');
       const placeId=/!19s([a-zA-Z0-9_-]{10,200})/.exec(href);
       const addressLine=t.split('\n').find((line)=>/Gas station\s*·/i.test(line));
@@ -120,12 +137,13 @@ async function (reqId, args) {
     let stable=0, last='', scrolls=0;
     while (Date.now()-started < 30000) {
       if (blocked()) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
+      const selecting=selectGrade();
       const feed=readRows();
       await readReply();
-      if(complete()){targetsComplete=true;break;}
+      if(!selecting&&complete()){targetsComplete=true;break;}
       const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices)]);
       stable=now===last ? stable+1 : 0;last=now;
-      if (feed && stable>=3) {
+      if (!selecting&&feed && stable>=3) {
         if (scrolls>=3 || /end of the list/i.test(feed.innerText)) break;
         const before=feed.scrollTop;
         feed.scrollTop=feed.scrollHeight;
@@ -135,11 +153,11 @@ async function (reqId, args) {
       }
       await sleep(300);
     }
-    for (const row of rows.values()) if (prices.has(row.featureId)) row.prices.regular={price:prices.get(row.featureId),updated:null};
+    for (const row of rows.values()) row.prices=rowPrices(row.featureId);
     const stores=Array.from(rows.values());
-    const priced=stores.filter(s=>s.prices.regular).length;
+    const priced=stores.filter(s=>s.prices[requested]).length;
     send({stores,partial:true,code:!loaded?'unreadable':!priced?'no_prices':'limited',
-      error:!loaded?'Google gas results could not be read':!priced?'Google provided no matching regular prices; stations are shown without prices':null,
+      error:!loaded?'Google gas results could not be read':!priced?'Google provided no matching '+requested+' prices; existing prices are retained':null,
       detail:{read:stores.length,priced,responseRead,targetsComplete,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}
 }

@@ -6,6 +6,10 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   const s={id:'ChIJTestStation001',brand:'exxon',name:'Exxon',address:'100 Main St, Testville',lat:34.745,lng:-92.29,google:true,prices:{regular:{price:3.99,updated:null},premium:{price:4.99,updated:null}}};
   await p.addInitScript(s=>{sessionStorage.setItem('standinRestored',JSON.stringify({s:JSON.stringify({apiKey:'TEST',setupDone:true,brands:{exxon:true}}),c:JSON.stringify({lastFetch:{lat:s.lat,lng:s.lng,ts:Date.now()-100000},g:[s],o:{}})}));},s);
   await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
+  assert.equal(await p.evaluate(()=>document.querySelector('#btnMode').parentElement===document.querySelector('#grades').parentElement),true,'fuel controls share the same layer');
+  await p.click('#btnSettings');
+  assert.equal(await p.evaluate(()=>{const r=document.querySelector('#btnMode').getBoundingClientRect();return !!document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('#settings');}),true,'settings covers the fuel pill');
+  await p.click('#sDone');
   await p.evaluate(()=>{
     window.__paid=0;__app.N.search=()=>__paid++;__app.N.computeRoute=()=>__paid++;
     __app.N.siteRead=(id,key,json)=>{const s=__app.stations()[0];setTimeout(()=>onNativeResult(id,{stores:[{placeId:s.id,name:'Exxon',lat:s.lat,lng:s.lng,prices:{regular:{price:3.12}}}]}),10);};
@@ -26,7 +30,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await p.evaluate(()=>{__app.KV.clear('gasweb');__app.KV.clear('along');});
   assert.equal(await p.evaluate(()=>PriceHistory.history(__app.stations()[0]).length),count,'cache clear preserves price history');
   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await p.evaluate(()=>__app.S.grade='premium');await p.click('#btnRefresh');assert.equal(await p.isDisabled('[data-refresh="web"]'),true);await p.click('[data-refresh="close"]');
+  await p.evaluate(()=>__app.S.grade='premium');await p.click('#btnRefresh');assert.equal(await p.isDisabled('[data-refresh="web"]'),false);await p.click('[data-refresh="close"]');
   assert.equal(errors.length,0,errors.join('\n'));
   console.log('320px map pill: explicit choices, zero paid refresh, other grades, cancel, history and cache-clear retention passed');
  }finally{await browser.close();}

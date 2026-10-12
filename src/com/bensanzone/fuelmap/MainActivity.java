@@ -1721,6 +1721,8 @@ public class MainActivity extends Activity {
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only these pages may be read this way
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
+                            || ("walmart".equals(key) && url.equals("https://www.walmart.com/store-finder"))
+                            || ("murphy".equals(key) && url.equals("https://service.murphydriverewards.com/mapmodule/"))
                             || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
@@ -1762,7 +1764,7 @@ public class MainActivity extends Activity {
         public void cancelSiteRead(final String key) {
             main.post(new Runnable() { public void run() {
                 SiteWorker w = workers.get(key);
-                if (!isGasWorker(key) || w == null || w.view == null || w.readReq < 0) return;
+                if (!(isGasWorker(key) || "walmart".equals(key) || "murphy".equals(key)) || w == null || w.view == null || w.readReq < 0) return;
                 w.view.stopLoading();
                 w.finishRead(w.readReq, "{\"cancelled\":true}");
                 w.ready = false;

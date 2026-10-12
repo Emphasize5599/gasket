@@ -49,6 +49,16 @@ async function worker(pg,body,raw,status=200,args={}){
  const b=await chromium.launch({executablePath:process.env.CHROME||undefined});
  try{
   const pg=await b.newPage();
+  for(const grade of ['regular','midgrade','premium','diesel']){
+    const label={regular:'Regular',midgrade:'Midgrade',premium:'Premium',diesel:'Diesel'}[grade];
+    const r=await worker(pg,html,JSON.stringify(['0x1:0x2','$4.12/'+label]),200,{grade});
+    assert.equal(r.stores[0].prices[grade].price,4.12);assert.notEqual(r.code,'no_prices');
+  }
+  const all=await worker(pg,html,JSON.stringify(['0x1:0x2',['Regular','$3.12'],['Midgrade','$3.42'],['Premium','$3.72'],['Diesel','$3.89']]),200,{grade:'diesel'});
+  assert.equal(all.stores[0].prices.diesel.price,3.89);assert.equal(all.stores[0].prices.premium.price,3.72);
+  const different=await worker(pg,html,JSON.stringify([['0x1:0x2','$3.12/Regular'],['0x3:0x4','$3.89/Diesel']]),200,{grade:'diesel'});
+  assert.equal(different.stores[0].prices.diesel,undefined,'never borrow the neighboring station\'s diesel price');
+  assert.equal(different.stores[1].prices.diesel.price,3.89);
   const matched=await worker(pg,html,JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{id:'ApiIdNotInDom',brand:'exxon',lat:34.745,lng:-92.29}]});
   assert.equal(matched.detail.targetsComplete,true,'reuse exact final matcher when Maps omits the saved place ID');
   const duplicateHtml='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Exxon',-92.29001)+'End of the list</div>';

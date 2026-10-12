@@ -63,6 +63,12 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .refresh-menu button:hover { background: var(--surface-2); }
 .map-price-progress { position: fixed; z-index: 1100; left: 12px; right: 12px; top: calc(var(--st) + 110px); }
 .price-refresh-card .parse-load, .map-price-progress .parse-load { margin-bottom: 12px; }
+.scan-launches { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 14px 0; }
+.scan-launches > div { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.scan-launches .btn { flex: 1; min-width: 0; }
+.scan-launches button:disabled { opacity: .45; cursor: default; }
+.fuel-controls { display: flex; flex: 1; min-width: 0; gap: 8px; align-items: center; position: relative; z-index: 0; isolation: isolate; }
+body.trip-on .top .fuel-controls { display: none !important; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .status { display: inline-block; margin: 8px 0 0 4px; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; color: var(--ink-2);
   background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 1px 4px rgba(0,0,0,.12); pointer-events: auto; max-width: calc(100% - 8px); }

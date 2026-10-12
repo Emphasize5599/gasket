@@ -675,6 +675,7 @@
       var saved = c.base - c.final;
       h += '<div class="final"><span class="v">' + priceHtml(c.final) + '</span><span class="l">/gal ' + P.GRADES[S.grade].label.toLowerCase() + '<br>your price</span></div>';
       h += '<div class="fresh' + (c.stale ? ' stale' : '') + '">' + (c.updated ? (c.source || s.source || 'Google') + ' price updated ' + ago(c.updated.getTime()) : 'Update time unknown') + (c.stale ? ' — may be out of date' : '') + '</div>';
+      if(c.observedAt)h+='<div class="note">Price retrieved '+esc(ago(c.observedAt))+'. Retrieval time is not a pump-update time.</div>';
       h += '<div class="bd">';
       c.steps.forEach(function (st) {
         h += '<div class="ln"><div class="k">' + esc(st.label) + (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</div><div class="a' + (st.amount < 0 ? ' neg' : '') + '">' +
@@ -1308,12 +1309,12 @@
       var c=me||(lastFetch?lastFetch:map.getCenter());
       var previous=S.keylessRegular;S.keylessRegular=false;
       try{if(movedByUser&&!$('btnArea').classList.contains('hidden'))return $('btnArea').onclick();fetchAround(c.lat,c.lng);}finally{S.keylessRegular=previous;}
-    },refreshKnownMap,S.grade==='regular'&&stations.length>0);
+    },refreshKnownMap,stations.length>0);
   };
   function refreshMenu(anchor,api,web,allowWeb){
     var old=$('refreshMenu');if(old){old.remove();return;}
     var menu=document.createElement('div');menu.id='refreshMenu';menu.className='refresh-menu';menu.setAttribute('role','menu');
-    menu.innerHTML='<button data-refresh="web" role="menuitem"'+(!allowWeb?' disabled':'')+'>No API · known regular prices</button><button data-refresh="api" role="menuitem">API · discover stations</button><button data-refresh="close" role="menuitem">Close</button>';
+    menu.innerHTML='<button data-refresh="web" role="menuitem"'+(!allowWeb?' disabled':'')+'>No API · known prices</button><button data-refresh="api" role="menuitem">API · discover stations</button><button data-refresh="close" role="menuitem">Close</button>';
     document.body.appendChild(menu);
     menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();};
     menu.querySelector('button:not(:disabled)').focus();
@@ -1325,7 +1326,7 @@
     document.body.appendChild(panel);panel.querySelector('button').onclick=function(){KeylessGas.cancel();};
     var original=stations;
     try{
-      var r=await KeylessGas.refreshKnown(original,function(f,label){panel.querySelector('.pl').textContent=label;panel.querySelector('i').style.width=Math.round(f*100)+'%';panel.querySelector('.pct').textContent=Math.round(f*100)+'%';});
+      var r=await KeylessGas.refreshKnown(original,function(f,label){panel.querySelector('.pl').textContent=label;panel.querySelector('i').style.width=Math.round(f*100)+'%';panel.querySelector('.pct').textContent=Math.round(f*100)+'%';},[],S.grade);
       if(stations!==original){status('Map changed; completed observations kept in price history.',true);return;}
       stations=r.stations;
       var by=new Map(stations.map(function(s){return [s.brand+'|'+s.id,s];}));
@@ -1333,7 +1334,7 @@
       Object.keys(official).forEach(function(k){official[k]=official[k].map(function(s){return by.get(s.brand+'|'+s.id)||s;});});
       N.saveCache(JSON.stringify({lastFetch:lastFetch,g:gStations,o:official}));render();
       status((r.cancelled?'Cancelled · ':'')+r.updated+'/'+r.total+' prices refreshed; '+r.retained+' unchanged. No API calls.',!!r.errors.length);
-      if(r.blocked)showSiteCheck('gasweb','Google Maps web');
+      if(r.blocked)showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
     }catch(e){status(e.message,true);}finally{panel.remove();}
   }
   $('btnArea').onclick = function () {
