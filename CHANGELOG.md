@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.117 - 2026-10-12 (keyless test branch only)
+- **Faster website discovery along a route.** From a 2,600-mile round trip's log: the readers spent 45% of their time waiting for rows that never came, so a list that's at its bottom and quiet for 4 seconds now counts as done (long lists still get up to 12). Search areas are 10 miles apart instead of 6 (57% of rows were repeats). When the phone runs low on memory, readers past the first four step back and free their pages.
+- Without an API key, speed limits aren't looked up at all (cruising speed is off), so they don't compete with discovery.
+- Bug fixes.
+
 ## 0.0.116 - 2026-10-12 (keyless test branch only)
 - **New Hazards step, after Route.** You pick each leg's route here, on the big map (the panel takes a quarter of the screen): every option is drawn, with each hazard colored where and when you'd be in it, and labeled on the route you pick. Round trips and trips with stops in between go one leg at a time, with "Step 1/2" at the top. Route is now just where you enter the trip (with a "head back" time for round trips).
 - **Hazards are color-coded and say what they are.** Weather warnings are placed on the route by their own outline or by the counties they list (county outlines for all 50 states are built in), and vague ones like a "Special Weather Statement" are read by the on-phone AI so the map says "Dense fog" or "Strong storms". The list keeps the original notice.

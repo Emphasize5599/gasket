@@ -84,11 +84,13 @@
     unique.forEach(function(s){var group=groups.find(function(g){return P.haversineMi(g.lat,g.lng,s.lat,s.lng)<6;});if(!group){group={lat:s.lat,lng:s.lng,radius:8,stations:[]};groups.push(group);}group.stations.push(s);});
     return groups;
   }
+  // 8-mile searches every 10 miles: still overlapping (a 2,600-mile trip at 6 had 57% repeat rows and 74 areas adding nothing)
+  var SPACING=10;
   function discoveryAreas(models,T,P){
     var groups=[];
     var sampled=0,miles=0;
-    models.forEach(function(m){miles+=m.totalMi||0;T.samplePoints(m,6).forEach(function(p){sampled++;if(!groups.some(function(g){return P.haversineMi(g.lat,g.lng,p.lat,p.lng)<2;}))groups.push(area(p.lat,p.lng,8));});});
-    groups.plan={routeMi:Math.round(miles),sampled:sampled,merged:sampled-groups.length,spacingMi:6,radiusMi:8};   // for the debug log
+    models.forEach(function(m){miles+=m.totalMi||0;T.samplePoints(m,SPACING).forEach(function(p){sampled++;if(!groups.some(function(g){return P.haversineMi(g.lat,g.lng,p.lat,p.lng)<2;}))groups.push(area(p.lat,p.lng,8));});});
+    groups.plan={routeMi:Math.round(miles),sampled:sampled,merged:sampled-groups.length,spacingMi:SPACING,radiusMi:8};   // for the debug log
     return groups;
   }
   function dedupeDiscovery(stations,P){
@@ -204,7 +206,11 @@
       timer=setInterval(report,1000);report();
       var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
       var chainWork=chain([],areas,true,force).finally(function(){sourcesDone=true;officialMs=Date.now()-started;report();});
+      var memAt=0,memLow=false,quit=0;
+      function lowMem(){if(Date.now()-memAt>5000){memAt=Date.now();var m=memNow(A);memLow=!!(m&&(m.low||m.availMB<700));}return memLow;}
       async function lane(key){while(next<areas.length&&!blocked&&!control.blocked&&!control.cancelled){
+        // the phone running low on memory: readers past the first four stop taking areas (their pages are freed)
+        if(lanes.indexOf(key)>=4&&lowMem()){quit++;if(LG)LG.info('keyless','Low memory: a website reader steps back',{lane:lanes.indexOf(key),readersLeft:lanes.length-quit,mem:memNow(A)});releaseReaders();break;}
         var idx=next,a=areas[next++],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake,t0=Date.now();
         if(cache)r=cache.v;
         else{

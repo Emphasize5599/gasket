@@ -39,5 +39,14 @@ assert.equal(rep.areasAddingNothing,2);
   assert.equal(tables.reduce((a,l)=>a+l[2].rows.length,0),120,'every area in the table');
   tables.forEach(l=>assert.ok(JSON.stringify(l[2]).length<2000,'fits a DEBUG entry: '+JSON.stringify(l[2]).length));
   assert.equal(JSON.stringify(tables[0][2].rows[0].slice(7,10)),JSON.stringify(['end',3,20]));
+  // low on memory: readers past the first four step back (logged), and every area still gets done by the rest
+  const logs2=[],win2={document:{},FLog:{info:(a,m,x)=>logs2.push([m,x]),debug:()=>{}},
+    __app:{P,S:{keylessWorkers:8},siteOn:()=>false,N:{memoryInfo:()=>JSON.stringify({totalMem:8*2**30,availMem:500*2**20}),releaseGasReaders:()=>{win2.released=(win2.released||0)+1;}},KV:{get:()=>null,put:()=>true}},
+    __trip:{call:async()=>({stores:[],detail:{read:0,stopReason:'quiet',elapsedMs:10}})}};
+  vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window:win2,Date,setInterval,clearInterval,setTimeout,Promise});
+  await win2.KeylessGas.discover(areas.slice(0,40),null,'regular',true);
+  const stepped=logs2.filter(l=>l[0]==='Low memory: a website reader steps back');
+  assert.equal(stepped.length,4,'readers 5-8 step back');assert.ok(win2.released>=4,'their pages are freed');
+  assert.equal(logs2.find(l=>l[0]==='Discovery finished')[1].done,40,'the first four finish every area');
   console.log('Discovery log: report math, start/progress/finish entries and a '+tables.length+'-entry area table that fits passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

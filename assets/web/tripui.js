@@ -1942,6 +1942,12 @@
   // ---------- cruising speed per leg ----------
   var limCache = {};          // one lookup per route shape, shared by every model built from it
   function ensureLimits(m) {
+    if (m && m._lim && m._lim.stats && m._lim.stats.off && !speedOff()) m._lim = null;      // a key was added: look them up now
+    if (m && !m._lim && speedOff()) {       // cruising speed is off: no lookups, just one stand-in stretch so the (grayed) controls still show
+      var tot = m.totalMi, sec = { from: 0, to: tot, mi: tot, limit: 70, truck: 70, st: null, n: 1, hpms: 0, src: 'state' };
+      m._lim = { roads: [{ key: 'all', name: 'Major roads', cls: 'interstate', num: '', from: 0, to: tot, mi: tot, pieces: [sec], sections: [sec] }], stats: { off: 'no API key' } };
+      return;
+    }
     if (!m || (m._lim && m._lim !== 'loading')) return;
     var sig = m.pts.length + ':' + m.totalMi.toFixed(3) + ':' + m.pts[0].lat.toFixed(5);
     var hit = limCache[sig];
