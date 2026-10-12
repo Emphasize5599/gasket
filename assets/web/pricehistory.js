@@ -28,7 +28,10 @@
           var event='seen|'+id+'|'+(hash&63),seen=get(event,[]);
           if((at||updated)&&seen.includes(token))return;
           var page=Math.floor(meta.count/PAGE),rows=get('rows|'+id+'|'+page,[]).slice(0,meta.count%PAGE);
-          rows.push({schema:1,stationKey:id,grade:grade,price:p.price,currency:'USD',unit:'US gallon',source:source,sourceUpdatedAt:updated,observedAt:at,recordedAt:now});
+          var observation={schema:1,stationKey:id,grade:grade,price:p.price,currency:'USD',unit:'US gallon',source:source,sourceUpdatedAt:updated,observedAt:at,recordedAt:now};
+          rows.push(observation);
+          meta.latest=meta.latest||{};
+          if(!meta.latest[grade]||(at||0)>=(meta.latest[grade].observedAt||0))meta.latest[grade]=observation;
           put('rows|'+id+'|'+page,rows);meta.count++;meta.last[grade]=signature;changed=true;
           if(at||updated){seen.push(token);pendingSeen.push({key:event,value:seen});}
         });
@@ -46,12 +49,20 @@
       rows.sort(function(a,b){return (b.observedAt||b.recordedAt)-(a.observedAt||a.recordedAt);});
       return options.limit?rows.slice(0,options.limit):rows;
     }
-    return {schema:1,key:key,observe:observe,stations:stations,history:history,stamp:stamp};
+    function latest(s,grade){var m=get('station|'+key(s),null);return m&&m.latest&&m.latest[grade]||history(s,{grade:grade,limit:1})[0]||null;}
+    function recover(stations){return stations.map(function(s){
+      var r=latest(s,'regular'),old=s.prices&&s.prices.regular;
+      var existing=old&&(old.observedAt||Date.parse(old.updated)||0)||0;
+      if(!r||r.source!=='Google Maps web'||!r.observedAt||r.observedAt<=existing)return s;
+      return Object.assign({},s,{prices:Object.assign({},s.prices,{regular:{price:r.price,source:r.source,updated:r.sourceUpdatedAt,observedAt:r.observedAt}})});
+    });}
+    return {schema:1,key:key,observe:observe,stations:stations,history:history,stamp:stamp,latest:latest,recover:recover};
   }
   if(typeof module!=='undefined'&&module.exports)module.exports={create:create};
   if(!root.document)return;
   var db=null;
   function current(){return db||(db=create(root.__app.KV));}
+  root.PriceHistoryRecovery=function(stations){return current().recover(stations);};
   root.PriceHistory={stamp:stamp,observe:function(s,t){if(root.__app)try{current().observe(s,t);}catch(e){if(root.FLog)root.FLog.error('history',e.message);root.__app.status(e.message,true);}},stations:function(){return current().stations();},history:function(s,o){return current().history(s,o);},reset:function(){db=null;},seed:async function(){
     var A=root.__app;if(!A)return;current().observe(A.stations(),null);
     var idx=(A.KV.get('trips','index')||{}).v||[];

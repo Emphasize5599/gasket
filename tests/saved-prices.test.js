@@ -26,7 +26,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
     A.N.callsThisMonth=()=>900;A.N.routeCallsThisMonth=()=>9500;
     A.N.routeSearch=()=>{__api.places++;throw new Error('Unexpected paid station discovery');};
     A.N.computeRoute=()=>{__api.routes++;throw new Error('Unexpected paid route request');};
-    A.N.siteRead=(id,key,args)=>{if(!/^gasweb(?:2)?$/.test(key)){__api.other++;return setTimeout(()=>onNativeResult(id,{error:'mock skip'}),1);}
+    A.N.siteRead=(id,key,args)=>{if(!/^gasweb(?:[2-4])?$/.test(key)){__api.other++;return setTimeout(()=>onNativeResult(id,{error:'mock skip'}),1);}
       __api.web++;const s=__originalStations[0];setTimeout(()=>onNativeResult(id,{stores:[{id:'web:test',placeId:s.id,name:'Exxon',lat:s.lat,lng:s.lng,prices:{regular:{price:3.12}},source:'Google Maps web'},{id:'web:unseen',name:'Exxon',lat:0,lng:0,prices:{regular:{price:1.99}}}]}),1);
     };
   });

@@ -620,13 +620,19 @@
     var th = function (k, label) { return '<th><button type="button" data-sort="' + k + '" class="' + (logView.sort === k ? 'on' : '') + '">' + label + (logView.sort === k ? (logView.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>'; };
     var h = '<table class="log-tbl"><thead><tr>' + th('date', 'Date') + th('mpg', per) + th('kind', 'Driving') + th('speed', 'mph') + '<th></th></tr></thead><tbody>';
     h += rows.map(function (e) {
-      return '<tr class="log-row"><td>' + esc(fmtShort(e.date)) + '</td><td><b>' + (+e.mpg).toFixed(1) + '</b></td><td>' + esc(KIND_NAME[e.kind] || e.kind) + '</td><td>' + (e.speed ? e.speed : '—') + '</td>' +
+      return '<tr class="log-row"><td>' + esc(fmtShort(e.date)) + '<small class="log-time">'+esc(loggedTime(e))+'</small></td><td><b>' + (+e.mpg).toFixed(1) + '</b></td><td>' + esc(KIND_NAME[e.kind] || e.kind) + '</td><td>' + (e.speed ? e.speed : '—') + '</td>' +
         '<td><button class="x sm" data-del="' + esc(e.id) + '" aria-label="Delete entry">✕</button></td></tr>';
     }).join('');
     if (!rows.length) h += '<tr><td colspan="5" class="lf-none">No entries match the filter.</td></tr>';
     return h + '</tbody></table>';
   }
   function fmtShort(d) { try { var p = String(d).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }); } catch (e) { return d; } }
+  function loggedTime(e){
+    var legacy=/^e(\d{13})$/.exec(String(e.id||'')),at=Number(e.loggedAt)||(legacy?Number(legacy[1]):0);
+    if(!Number.isFinite(at)||at<1e12||at>Date.now()+864e5)return 'Time not recorded';
+    var d=new Date(at),day=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+    return 'Logged '+(day!==e.date?fmtShort(day)+' · ':'')+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+  }
   /** Sorting, filtering and deleting in the log (the table alone is redrawn, so the filter boxes keep your typing). */
   function bindLog(c) {
     var box = $('oLog'); if (!box) return;
@@ -781,7 +787,8 @@
       var mpg = parseFloat($('lMpg').value), sp = parseFloat($('lSpeed').value);
       if (!(mpg > 0 && mpg < 250)) { $('lMpg').focus(); return; }
       var d = $('lDate') && /^\d{4}-\d{2}-\d{2}$/.test($('lDate').value) && $('lDate').value <= today() ? $('lDate').value : today();
-      var e = { id: 'e' + Date.now(), date: d, mpg: r1(mpg), kind: $('lKind').value };
+      var loggedAt=Date.now();
+      var e = { id: 'e' + loggedAt, loggedAt:loggedAt, date: d, mpg: r1(mpg), kind: $('lKind').value };
       if (sp >= 5 && sp <= 120) e.speed = Math.round(sp);
       c.entries.push(e);
       LG.info('car', 'Logged mileage', e);

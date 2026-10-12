@@ -5,6 +5,7 @@ const {pathToFileURL}=require('node:url');
 const {chromium}=require('playwright');
 const K=require('../assets/web/keylessgas.js'),P=require('../assets/web/pricing.js');
 const root=path.resolve(__dirname,'..'),script=fs.readFileSync(path.join(root,'assets/gasweb_worker.js'),'utf8');
+const nativeScript='async function(reqId,args){\n'+fs.readFileSync(path.join(root,'assets/web/pricing.js'),'utf8')+'\n'+fs.readFileSync(path.join(root,'assets/web/keylessgas.js'),'utf8')+'\nreturn ('+script+')(reqId,args);}';
 const a=K.area(34.745,-92.29,8);
 assert.equal(K.area(34.745,-92.29,30).radius,15);
 for(const input of [[NaN,0,8],[90,0,8],[0,181,8],[0,0,-1]])assert.throws(()=>K.area(...input));
@@ -40,7 +41,7 @@ async function worker(pg,body,raw,status=200,args={}){
     performance.getEntriesByType=()=>[{name:'https://www.google.com/search?tbm=map&q=gas+stations'}];
     window.fetch=async()=>({ok:status===200,status,url:'https://www.google.com/search',text:async()=>raw});
   },{raw,status});
-  await pg.evaluate(({s,args})=>(0,eval)('('+s+')')(1,args),{s:script,args});
+  await pg.evaluate(({s,args})=>(0,eval)('('+s+')')(1,args),{s:nativeScript,args});
   await pg.waitForFunction(()=>answers.length);
   return pg.evaluate(()=>answers[0]);
 }
@@ -48,6 +49,14 @@ async function worker(pg,body,raw,status=200,args={}){
  const b=await chromium.launch({executablePath:process.env.CHROME||undefined});
  try{
   const pg=await b.newPage();
+  const matched=await worker(pg,html,JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{id:'ApiIdNotInDom',brand:'exxon',lat:34.745,lng:-92.29}]});
+  assert.equal(matched.detail.targetsComplete,true,'reuse exact final matcher when Maps omits the saved place ID');
+  const duplicateHtml='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Exxon',-92.29001)+'End of the list</div>';
+  const ambiguousMatch=await worker(pg,duplicateHtml,JSON.stringify([['0x1:0x2','$3.12/Regular'],['0x3:0x4','$3.14/Regular']]),200,{targets:[{id:'ApiIdNotInDom',brand:'exxon',lat:34.745,lng:-92.29}]});
+  assert.equal(ambiguousMatch.detail.targetsComplete,false,'ambiguous coordinates cannot shorten the scan');
+  const exhausted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']));
+  assert.equal(exhausted.stores.length,1);assert(exhausted.detail.elapsedMs<3000,'non-scrollable feed needs no repeated dummy scrolling');
+  console.log('Exhausted-feed reader measured '+exhausted.detail.elapsedMs+' ms; conservative coordinate completion passed');
   const targeted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'}]});
   assert.equal(targeted.detail.targetsComplete,true,'finish without waiting for end of list when all stable-ID targets are priced');
   const incomplete=await worker(pg,html,JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'},{id:'missing'}]});

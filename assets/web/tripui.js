@@ -19,7 +19,7 @@
       var id = ++nid, timer;
       waiting[id] = function (res) { clearTimeout(timer); resolve(res); };
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
-      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:2)?$/.test(args[0]) ? 45000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
+      var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-4])?$/.test(args[0]) ? 45000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (timeout) timer = setTimeout(function () {
         window.onNativeResult(id, { error: (args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
@@ -1683,10 +1683,10 @@
     var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; });
     if (replay) {
       // a saved trip: the stations (with their prices) it found then — no lookups at all
-      official = (replay.official || []).slice();
+      official = window.PriceHistoryRecovery?PriceHistoryRecovery(replay.official||[]):(replay.official || []).slice();
       perModel = (ks || []).map(function (k) {
         var sg = altSig(alts[k]), hit = (replay.google || []).filter(function (g) { return g.sig ? g.sig === sg : g.k === k; })[0];
-        if (hit) return hit.list.slice();
+        if (hit) return window.PriceHistoryRecovery?PriceHistoryRecovery(hit.list):hit.list.slice();
         // a route it didn't check then: every station it found, with Google's exact detours dropped (they were for another route)
         var all = []; (replay.google || []).forEach(function (g) { g.list.forEach(function (st) { var c = Object.assign({}, st); delete c.detourExact; delete c.detourMi; all.push(c); }); });
         return all;

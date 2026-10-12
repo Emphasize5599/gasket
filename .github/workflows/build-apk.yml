@@ -69,6 +69,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y android-sdk android-sdk-build-tools android-sdk-platform-23 openjdk-17-jdk-headless
+          curl --fail --location --retry 2 https://dl.google.com/android/repository/platform-31_r01.zip -o "$RUNNER_TEMP/platform-31.zip"
+          echo "ca5bcaa565cb37e9d287051d6dd0e49a5426ec29  $RUNNER_TEMP/platform-31.zip" | sha1sum -c -
+          unzip -q "$RUNNER_TEMP/platform-31.zip" -d "$RUNNER_TEMP/gasket-platform"
+          echo "ANDROID_JAR=$(find "$RUNNER_TEMP/gasket-platform" -name android.jar -print -quit)" >> "$GITHUB_ENV"
 
       - name: Read app version
         if: steps.signing.outputs.ready == 'true'

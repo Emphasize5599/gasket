@@ -4,7 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 SDK=/usr/lib/android-sdk
 BT=$SDK/build-tools/debian
-JAR=$SDK/platforms/android-23/android.jar
+JAR=${ANDROID_JAR:-$SDK/platforms/android-31/android.jar}
+RESOURCE_JAR=$SDK/platforms/android-23/android.jar
 OUT=build
 APK=Gasket.apk
 
@@ -31,12 +32,12 @@ fi
 
 rm -rf $OUT && mkdir -p $OUT/gen $OUT/classes
 
-aapt package -f -m -J $OUT/gen -M AndroidManifest.xml -S res -I $JAR
+aapt package -f -m -J $OUT/gen -M AndroidManifest.xml -S res -I $RESOURCE_JAR
 javac -nowarn -Xlint:none -source 8 -target 8 -bootclasspath $JAR -encoding UTF-8 \
   -d $OUT/classes $(find src $OUT/gen -name '*.java') 2>&1 | grep -v 'warning' || true
 test -f $OUT/classes/com/bensanzone/fuelmap/MainActivity.class
 java -jar $BT/lib/dx.jar --dex --min-sdk-version=26 --output=$OUT/classes.dex $OUT/classes
-aapt package -f -M AndroidManifest.xml -S res -A assets -I $JAR -F $OUT/unsigned.apk
+aapt package -f -M AndroidManifest.xml -S res -A assets -I $RESOURCE_JAR -F $OUT/unsigned.apk
 (cd $OUT && aapt add -f unsigned.apk classes.dex >/dev/null)
 zipalign -f -p 4 $OUT/unsigned.apk $OUT/aligned.apk
 

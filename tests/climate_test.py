@@ -89,6 +89,12 @@ with sync_playwright() as p:
         nosideways(pg, '.sub-page *', 'special weather page')
         pg.click('.sub-page #clW_fog'); pg.wait_for_selector('.sub-page #cpTemp')
         assert ft(pg, '.sub-page h2') == "If it's foggy" and 'on' in pg.get_attribute('[data-k="flow"] [data-v="defrost"]', 'class')
+        assert pg.inner_text('#cpSeasonDefaults') == 'Use Winter defaults'
+        assert pg.evaluate("document.querySelector('#cpSeasonDefaults').getBoundingClientRect().top < document.querySelector('#cpTemp').getBoundingClientRect().top")
+        winter = [x for x in CL(pg)['presets'] if x['kind'] == 'season' and x['key'] == 'winter'][0]
+        pg.click('#cpSeasonDefaults')
+        weather = [x for x in CL(pg)['presets'] if x['kind'] == 'weather' and x['key'] == 'fog'][0]
+        assert weather['temp'] == winter['temp'] and weather['air'] == winter['air'] and weather['kind'] == 'weather' and weather['key'] == 'fog'
         pg.click('#cpDiscard'); pg.wait_for_timeout(300)
         assert ft(pg, '.sub-page h2') == '❄️ Winter: special weather', 'closing an answer goes back to the season\'s list'
         assert not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('.sub-page #clW_fog.empty').count() == 1
@@ -97,6 +103,13 @@ with sync_playwright() as p:
         pg.click('.sub-back'); pg.wait_for_timeout(300)
         assert pg.locator('.sub-page').count() == 0 and '1 of 4 answered' in ft(pg, '#clX_winter') and '1 of 4 answered' in ft(pg, '#clX_fall'), 'frosty comes with fall too: the same answer'
         assert '0 of ' in ft(pg, '#clX_summer')
+        pg.click('#clX_summer'); pg.wait_for_selector('.sub-page #clW_heat'); pg.click('#clW_heat'); pg.wait_for_selector('#cpSeasonDefaults')
+        assert pg.inner_text('#cpSeasonDefaults') == 'Use Summer defaults'
+        pg.click('#cpSeasonDefaults')
+        heat = [x for x in CL(pg)['presets'] if x['kind'] == 'weather' and x['key'] == 'heat'][0]
+        assert heat['temp'] == 70 and heat['ac'] == 'on' and heat['flow'] == 'face', 'summer starter when no summer preset exists'
+        nosideways(pg, '.sub-page *', 'season defaults button')
+        pg.click('#cpDiscard'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
         pg.click('#clS_winter'); pg.wait_for_selector('.sub-page #cpTemp')
         pg.click('[data-k="air"] [data-v="fresh"]'); pg.wait_for_timeout(100); assert pg.locator('.cl-warn').count() == 0
         pg.click('[data-k="air"] [data-v="recirc"]'); pg.click('#cpDiscard'); pg.wait_for_timeout(200)

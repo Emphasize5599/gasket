@@ -134,14 +134,14 @@
       var b = pg.querySelector('.sub-body'), caps = x.caps;
       b.innerHTML = '<p class="lead small keep">What would you do if it\'s… Your answer for each one is used whenever that weather comes, in any season.</p>' +
         situations(sk).map(function (w) { var p = find(c, 'weather', w[0]); return row('clW_' + w[0], 'data-key="' + w[0] + '"', w[1] + '…', p ? line(p, caps) : 'Tap to answer', (p ? '' : 'empty') + (p && bad(p, caps) ? ' warn' : '')); }).join('');
-      b.querySelectorAll('[data-key]').forEach(function (r) { r.onclick = function () { var p = find(c, 'weather', r.dataset.key); if (p) openPreset(c, p.id, false, again); else add(c, 'weather', r.dataset.key, again); }; });
+      b.querySelectorAll('[data-key]').forEach(function (r) { r.onclick = function () { var p = find(c, 'weather', r.dataset.key); if (p) openPreset(c, p.id, false, again,sk); else add(c, 'weather', r.dataset.key, again,sk); }; });
     };
     A.subPage(EMOJI[sk] + ' ' + sn[1] + ': special weather', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
-  function add(c, kind, key, back) {
+  function add(c, kind, key, back,seasonContext) {
     var x = cl(c), p = starter(kind, key, x.caps);
     if (kind === 'custom') p.name = 'My preset' + (x.presets.filter(function (q) { return q.kind === 'custom'; }).length ? ' ' + (x.presets.filter(function (q) { return q.kind === 'custom'; }).length + 1) : '');
-    x.presets.push(p); LG.info('car', 'Climate preset added: ' + label(p)); changed(); openPreset(c, p.id, true, back);
+    x.presets.push(p); LG.info('car', 'Climate preset added: ' + label(p)); changed(); openPreset(c, p.id, true, back,seasonContext);
   }
   /** What the car's climate controls can do: decides which settings the presets show. */
   function openCaps(c) {
@@ -162,13 +162,14 @@
   function levels(max) { var a = [[0, 'Off']]; for (var i = 1; i <= max; i++) a.push([i, String(i)]); return a; }
   /** One preset, as its own page. Back keeps what you changed; at the bottom: Delete, and Discard changes (a new one goes away). */
   /** back: reopen the page this came from (a season's special weather) once it closes. */
-  function openPreset(c, id, isNew, back) {
+  function openPreset(c, id, isNew, back,seasonContext) {
     var x = cl(c), p = x.presets.filter(function (q) { return q.id === id; })[0]; if (!p) return;
     var snap = JSON.stringify(p), pg = null, close = null;
     var drop = function () { x.presets = x.presets.filter(function (q) { return q !== p; }); };
     var fill = function () {
       var b = pg.querySelector('.sub-body'), caps = x.caps, h = '', top = b.scrollTop;
       if (p.kind === 'custom') h += '<label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="cpName" value="' + esc(p.name || '') + '" placeholder="e.g. Road trip"></label>';
+      if(p.kind==='weather'&&seasonContext)h+='<button class="btn tonal" id="cpSeasonDefaults">Use '+esc(SEASONS.filter(function(s){return s[0]===seasonContext;})[0][1])+' defaults</button>';
       h += '<div class="cl-temps"><label class="nf wide"><span>' + (caps.dual ? 'Driver' : 'Temperature') + ' (°F)</span><input type="number" inputmode="numeric" min="55" max="90" id="cpTemp" value="' + esc(p.temp) + '"></label>' +
         (caps.dual ? '<label class="nf wide"><span>Passenger (°F)</span><input type="number" inputmode="numeric" min="55" max="90" id="cpTempP" value="' + esc(p.tempP) + '" placeholder="Same"></label>' : '') + '</div>';
       if (caps.auto) h += '<div class="nf wide"><span>Mode</span>' + chips('mode', [['auto', 'Auto'], ['manual', 'Manual']], p.mode) + '</div>';
@@ -189,6 +190,11 @@
       h += '<div class="tz-trbtns"><button type="button" class="btn tonal sm danger-sm" id="cpDel">Delete</button><button type="button" class="btn tonal sm caution" id="cpDiscard">Discard changes</button></div>';
       b.innerHTML = h; b.scrollTop = top;
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
+      if($('cpSeasonDefaults'))$('cpSeasonDefaults').onclick=set(function(){
+        var defaults=find(c,'season',seasonContext)||starter('season',seasonContext,caps);
+        var identity={id:p.id,kind:p.kind,key:p.key,name:p.name};
+        Object.assign(p,JSON.parse(JSON.stringify(defaults)),identity);
+      });
       b.querySelectorAll('.cl-ch').forEach(function (g) {
         g.querySelectorAll('[data-v]').forEach(function (btn) { btn.onclick = set(function () { var v = btn.dataset.v, k = g.dataset.k; p[k] = /^\d+$/.test(v) ? +v : v; if (k === 'mode' && v === 'manual' && p.fan === 'auto') p.fan = 3; if (k === 'mode' && v === 'auto') p.fan = 'auto'; }); });
       });

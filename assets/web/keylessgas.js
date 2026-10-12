@@ -84,11 +84,12 @@
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
+  var LANES=['gasweb','gasweb2','gasweb3','gasweb4'];
   function cancel(){
     if(!busy||typeof busy!=='object')return;
     busy.cancelled=true;busy.wake.forEach(function(f){f();});
     var N=root.__app.N;
-    if(N&&N.cancelSiteRead)['gasweb','gasweb2'].forEach(function(k){N.cancelSiteRead(k);});
+    if(N&&N.cancelSiteRead)LANES.forEach(function(k){N.cancelSiteRead(k);});
   }
   function call(name){return root.__trip.call.apply(null,[name].concat([].slice.call(arguments,1)));}
   async function search(lat,lng,radius){
@@ -134,16 +135,18 @@
   async function refreshKnown(known,onProgress,priority){
     if(busy)throw new Error('A keyless lookup is already running');
     var control={cancelled:false,wake:[]};busy=control;
-    var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=[],errors=[],reads=0,blocked=false,start=Date.now();
+    var A=root.__app,P=A.P,groups=knownAreas(known,P,priority),rows=new Map(),errors=[],reads=0,blocked=false,start=Date.now();
+    var buckets=new Map();known.forEach(function(s){var key=Math.floor(s.lat*50)+'|'+Math.floor(s.lng*50);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(s);});
+    function nearby(w){var x=Math.floor(w.lat*50),y=Math.floor(w.lng*50);for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var candidates=buckets.get((x+dx)+'|'+(y+dy))||[];if(candidates.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1;}))return true;}return false;}
     var cached=groups.map(function(g){var key='known|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
-    // Two dedicated native readers; never overlap requests on the same WebView.
+    // Four dedicated readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
     var next=0,done=0,samples=0,totalMs=0,active=new Map();
     function report(){
       var average=samples?totalMs/samples:null,remaining=ordered.slice(next).filter(function(x){return !x.cache;}).length;
       var work=average==null?null:remaining*average;
       if(work!=null)active.forEach(function(t){work+=Math.max(1000,average-(Date.now()-t));});
-      var eta=work==null?null:Math.ceil(work/Math.min(2,remaining+active.size||1)/1000);
+      var eta=work==null?null:Math.ceil(work/Math.min(LANES.length,remaining+active.size||1)/1000);
       var text=control.cancelled?'Cancelling; keeping completed prices':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
       text+=' · '+(eta==null?'Estimating time…':eta>=60?'~'+Math.ceil(eta/60)+' min remaining':'~'+eta+' sec remaining');
       if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
@@ -158,25 +161,33 @@
           var began=Date.now(),wake;
           active.set(key,began);
           var stopped=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);});
-          try{r=await Promise.race([call('siteRead',key,JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8)),targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId};})})),stopped]);}
+          try{r=await Promise.race([call('siteRead',key,JSON.stringify({url:webUrl(area(x.g.lat,x.g.lng,8)),targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId,brand:s.brand,lat:s.lat,lng:s.lng,address:s.address};})})),stopped]);}
           catch(e){r={error:e.message};}
           finally{active.delete(key);control.wake=control.wake.filter(function(f){return f!==wake;});}
-          if(r.cancelled)break;
+          if(r.cancelled){if(r.code==='renderer'){errors.push(r.error||'Website renderer stopped');cancel();}break;}
           samples++;totalMs+=Date.now()-began;
           at=Date.now();
           if(r.blocked){blocked=true;errors.push(r.error||'Google restricted the refresh');break;}
           if(r.error)errors.push(r.error);
           // Cache is scoped to this exact target set, including early-complete replies.
-          if(!r.error)A.KV.put('gasweb',x.key,r);
+          if(!r.error)A.KV.put('gasweb',x.key,Object.assign({},r,{stores:(r.stores||[]).filter(nearby)}));
         }
-        (r.stores||[]).forEach(function(w){rows.push(Object.assign({},w,{observedAt:at}));});
+        var added=(r.stores||[]).filter(nearby);
+        added.forEach(function(w){var id=w.placeId||w.featureId||w.id,old=rows.get(id);if(!old||old.observedAt<=at)rows.set(id,Object.assign({},w,{observedAt:at}));});
+        // Flush successful observations after each area, not after a twenty-minute batch.
+        if(root.PriceHistory&&added.length){
+          var localKnown=known.filter(function(s){return added.some(function(w){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1;});});
+          var localWeb=Array.from(rows.values()).filter(function(w){return localKnown.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=0.1;});});
+          var checkpoint=updateKnown(localKnown,localWeb,P,null);
+          root.PriceHistory.observe(checkpoint.stations.filter(function(s){var p=s.prices&&s.prices.regular;return p&&p.source==='Google Maps web'&&p.observedAt;}).map(function(s){return Object.assign({},s,{prices:{regular:s.prices.regular}});}));
+        }
         done++;
         report();
       }}
       report();
-      await Promise.all([lane('gasweb'),lane('gasweb2')]);
+      await Promise.all(LANES.map(lane));
       // Overlapping areas can return the same Google station. Keep one row before matching.
-      var web=Array.from(new Map(rows.map(function(w){return [w.placeId||w.featureId||w.id,w];})).values());
+      var web=Array.from(rows.values());
       var result=updateKnown(known,web,P,null);
       result.cancelled=control.cancelled;result.completedAreas=done;
       if(root.PriceHistory){
@@ -184,7 +195,7 @@
         root.PriceHistory.observe(result.stations.filter(function(s){var p=s.prices&&s.prices.regular;return p&&p.source==='Google Maps web'&&p.observedAt;}).map(function(s){return Object.assign({},s,{prices:{regular:s.prices.regular}});}));
       }
       result.total=new Set(known.map(knownKey)).size;result.retained=result.total-result.updated;result.errors=errors;result.blocked=blocked;result.websiteLoads=reads;result.areas=groups.length;result.apiCalls=0;result.at=Date.now();
-      if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
+      if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,readerConcurrency:LANES.length,averageAreaMs:samples?Math.round(totalMs/samples):null,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
       return result;
     }finally{clearInterval(ticker);busy=null;}
   }

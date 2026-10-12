@@ -7,10 +7,15 @@ async function (reqId, args) {
   const started = Date.now(), rows = new Map(), prices = new Map();
   let loaded = false, responseRead = false, limited = false, rejected = 0;
   let targetsComplete = false;
-  const targets = Array.isArray(args.targets) ? args.targets.slice(0,1000) : [];
-  // Only stable IDs permit early completion; coordinate guesses must not shorten discovery.
-  const complete = () => targets.length > 0 && targets.every(t => Array.from(rows.values()).some(r =>
-    prices.has(r.featureId) && (t.id && (r.placeId === t.id || r.id === t.id) || t.featureId && r.featureId === t.featureId)));
+  const targets = Array.isArray(args.targets) && args.targets.length<=1000 ? args.targets : [];
+  const complete = () => {
+    if(!targets.length)return false;
+    if(window.KeylessGas&&window.Pricing&&targets.every(t=>t.brand&&Number.isFinite(t.lat)&&Number.isFinite(t.lng))){
+      const priced=Array.from(rows.values()).map(r=>Object.assign({},r,{prices:prices.has(r.featureId)?{regular:{price:prices.get(r.featureId)}}:{}}));
+      return KeylessGas.updateKnown(targets,priced,Pricing,null).updated===targets.length;
+    }
+    return targets.every(t=>Array.from(rows.values()).some(r=>prices.has(r.featureId)&&(t.id&&(r.placeId===t.id||r.id===t.id)||t.featureId&&r.featureId===t.featureId)));
+  };
   const blocked = () => /\/sorry\/|consent\.google/.test(location.href) || /unusual traffic|verify (?:that )?you are human|access denied|before you continue to Google|not a robot/i.test(document.body && document.body.innerText || '');
   const price = (s) => {
     const m = /^\$(\d{1,2}\.\d{2,3})\s*\/\s*Regular$/i.exec(String(s || '').trim());
@@ -122,9 +127,13 @@ async function (reqId, args) {
       stable=now===last ? stable+1 : 0;last=now;
       if (feed && stable>=3) {
         if (scrolls>=3 || /end of the list/i.test(feed.innerText)) break;
-        feed.scrollTop=feed.scrollHeight;scrolls++;stable=0;
+        const before=feed.scrollTop;
+        feed.scrollTop=feed.scrollHeight;
+        // Scrolling the same exhausted/non-scrollable feed three times adds seconds but no rows.
+        if(Math.abs(feed.scrollTop-before)<1)break;
+        scrolls++;stable=0;
       }
-      await sleep(600);
+      await sleep(300);
     }
     for (const row of rows.values()) if (prices.has(row.featureId)) row.prices.regular={price:prices.get(row.featureId),updated:null};
     const stores=Array.from(rows.values());

@@ -128,6 +128,8 @@ with sync_playwright() as p:
         assert pg.locator('#oAdd[open]').count() == 0, 'adding an entry is its own menu, closed'
         pg.click('#oAdd summary'); pg.wait_for_timeout(100)
         pg.fill('#lMpg', '52'); pg.select_option('#lKind', 'highway'); pg.fill('#lSpeed', '72'); pg.click('#lAdd'); pg.wait_for_timeout(400)
+        assert pg.evaluate('window.Garage.car().entries[0].loggedAt > 0')
+        assert 'Logged ' in ft(pg, '#oLog .log-time') and ':' in ft(pg, '#oLog .log-time')
         lg = ft(pg, '.log-list'); sp = ft(pg, '#tSpeed'); print('  log:', lg.replace('\n', ' | '), '||', [l for l in sp.split('\n') if 'Calibrated' in l])
         assert '52.0' in lg and '72' in lg and 'Highway' in lg and 'Calibrated from 1 of your entries' in sp
         pg.fill('#lMpg', '61'); pg.select_option('#lKind', 'mixed'); pg.fill('#lDate', '2026-01-15'); pg.click('#lAdd'); pg.wait_for_timeout(300)   # no speed, an earlier day: still fine

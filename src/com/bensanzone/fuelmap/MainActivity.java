@@ -64,7 +64,7 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
-    private static boolean isGasWorker(String key) { return "gasweb".equals(key) || "gasweb2".equals(key); }
+    private static boolean isGasWorker(String key) { return "gasweb".equals(key) || "gasweb2".equals(key) || "gasweb3".equals(key) || "gasweb4".equals(key); }
 
     private static final int REQ_LOC = 42;
     private static final String PREFS = "gasket";
@@ -74,6 +74,13 @@ public class MainActivity extends Activity {
             + "places.addressComponents,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
 
     private WebView web;
+    private boolean rendererRecoveryPending = false;
+    private void recoverRendererUi() {
+        if (rendererRecoveryPending) return;
+        rendererRecoveryPending = true;
+        getIntent().putExtra("rendererRecovery", true);
+        main.post(new Runnable() { public void run() { recreate(); } });
+    }
     /** Off-screen pages on each chain's own site, used to read that chain's official prices
      *  (see assets/<key>_worker.js). Each runs the same requests the site's own store finder makes. */
     private FrameLayout root;
@@ -138,6 +145,14 @@ public class MainActivity extends Activity {
                 if (pendingInsets != null) js(pendingInsets);
                 if (pendingShare != null) { js(pendingShare); pendingShare = null; }
             }
+            @Override
+            public boolean onRenderProcessGone(WebView gone, android.webkit.RenderProcessGoneDetail detail) {
+                pageReady = false;
+                root.removeView(gone); gone.destroy();
+                if (web == gone) web = null;
+                recoverRendererUi();
+                return true;
+            }
         });
         web.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override
@@ -162,6 +177,8 @@ public class MainActivity extends Activity {
         // Dedicated gas reader: never replaces an in-progress directions import.
         workers.put("gasweb", new SiteWorker("gasweb", "https://www.google.com/maps", "https://www.google.com/", true));
         workers.put("gasweb2", new SiteWorker("gasweb2", "https://www.google.com/maps", "https://www.google.com/", true));
+        workers.put("gasweb3", new SiteWorker("gasweb3", "https://www.google.com/maps", "https://www.google.com/", true));
+        workers.put("gasweb4", new SiteWorker("gasweb4", "https://www.google.com/maps", "https://www.google.com/", true));
         // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
         workers.put("nhtsa", new SiteWorker("nhtsa", "https://www.nhtsa.gov/recalls", "https://www.nhtsa.gov/"));
         // Tire Rack: a car's factory tire size, and the tires sold in that size (read in the background)
@@ -190,7 +207,9 @@ public class MainActivity extends Activity {
         });
         setContentView(root);
         applyBarIconColors();
-        web.loadUrl("file:///android_asset/web/index.html");
+        boolean recoveringRenderer = getIntent().getBooleanExtra("rendererRecovery", false);
+        getIntent().removeExtra("rendererRecovery");
+        web.loadUrl("file:///android_asset/web/index.html" + (recoveringRenderer ? "#restored" : ""));
         handleShare(getIntent());
     }
 
@@ -331,7 +350,8 @@ public class MainActivity extends Activity {
 
     class SiteWorker {
         final String key, home, origin;
-        final WebView view;
+        WebView view;
+        int completedReads = 0;
         boolean ready = false;
         final List<String> queue = new ArrayList<String>();
 
@@ -345,6 +365,20 @@ public class MainActivity extends Activity {
             readReq = -1; readCall = null;
             if (readDeadline != null) main.removeCallbacks(readDeadline);
             readDeadline = null;
+            if (isGasWorker(key) && view != null && verifying != this) {
+                view.stopLoading(); view.loadUrl("about:blank"); view.clearHistory(); ready = false;
+                completedReads++;
+                if (completedReads % 8 == 0) {
+                    final SiteWorker old = this;
+                    main.post(new Runnable() { public void run() {
+                        if (old.readReq >= 0 || verifying == old || workers.get(old.key) != old || old.view == null) return;
+                        // Only WebView RAM resource cache; never cookies, lookup answers or app storage.
+                        old.view.clearCache(false);
+                        root.removeView(old.view); old.view.destroy(); old.view = null;
+                        ensureWorker(old.key);
+                    }});
+                }
+            }
             js("window.onNativeResult&&onNativeResult(" + reqId + ",JSON.parse(" + q(json) + "))");
         }
 
@@ -372,6 +406,7 @@ public class MainActivity extends Activity {
                     // a background read (siteRead) starts its reader as soon as the page is drawn: some pages (NHTSA's)
                     // keep loading in the background for a long time, and the reader waits for its answer by itself
                     if (verifying == SiteWorker.this || readReq < 0 || !url.startsWith(SiteWorker.this.origin) || !url.equals(v.getUrl())) return;
+                    if (isGasWorker(key)) v.clearHistory();
                     runRead();
                 }
 
@@ -422,18 +457,28 @@ public class MainActivity extends Activity {
                         ready = false;
                     }
                 }
+                @Override
+                public boolean onRenderProcessGone(WebView gone, android.webkit.RenderProcessGoneDetail detail) {
+                    root.removeView(gone); gone.destroy();
+                    if (view == gone) view = null;
+                    ready = false; queue.clear();
+                    if (readReq >= 0) finishRead(readReq, "{\"cancelled\":true,\"code\":\"renderer\",\"error\":\"Website renderer stopped; completed prices were retained. Retry when ready.\"}");
+                    if (verifying == SiteWorker.this) { verifying = null; recoverRendererUi(); }
+                    return true;
+                }
             });
         }
 
         /** A background read's reader, on the page as it is now (a page that reloads itself gets it again). */
         void runRead() {
-            if (readCall == null) return;
+            if (readCall == null || view == null) return;
             // The document guards by request ID. A previous request or a callback from the old document must not
             // consume the new request; a real page reload needs the reader again because its JS was destroyed.
             view.evaluateJavascript(readCall, null);
         }
 
         void runQueue() {
+            if (view == null) return;
             for (String call : queue) view.evaluateJavascript(call, null);
             queue.clear();
         }
@@ -455,6 +500,16 @@ public class MainActivity extends Activity {
                 view.loadUrl(home);
             }
         }
+    }
+
+    private SiteWorker ensureWorker(String key) {
+        SiteWorker old = workers.get(key);
+        if (old == null || old.view != null) return old;
+        boolean desktop = isGasWorker(key) || "gmaps".equals(key);
+        SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop);
+        workers.put(key, fresh);
+        root.addView(fresh.view, 0, new FrameLayout.LayoutParams(desktop ? 1280 : -1, desktop ? 900 : -1));
+        return fresh;
     }
 
     public class SiteBridge {
@@ -1632,7 +1687,7 @@ public class MainActivity extends Activity {
         public void siteSearch(final String key, final int reqId, final String argsJson) {
             main.post(new Runnable() {
                 public void run() {
-                    SiteWorker w = workers.get(key);
+                    SiteWorker w = ensureWorker(key);
                     if (w == null) return;
                     String script = asset(key + "_worker.js");
                     if (script.length() == 0) return;
@@ -1658,8 +1713,10 @@ public class MainActivity extends Activity {
         public void siteRead(final int reqId, final String key, final String argsJson) {
             main.post(new Runnable() {
                 public void run() {
-                    SiteWorker w = workers.get(key);
+                    SiteWorker w = ensureWorker(key);
                     String script = w != null ? asset((isGasWorker(key) ? "gasweb" : key) + "_worker.js") : "";
+                    // Reuse the exact application matcher, not a weaker price/coordinate heuristic.
+                    if (isGasWorker(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/pricing.js") + "\n" + asset("web/keylessgas.js") + "\nreturn (" + script + ")(reqId,args);}";
                     String url;
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only these pages may be read this way
@@ -1685,12 +1742,13 @@ public class MainActivity extends Activity {
                         public void run() {
                             if (fw.readReq != fr) return;
                             fw.finishRead(fr, "{\"error\":\"Site lookup timed out\",\"code\":\"timeout\"}");
-                            fw.ready = false; fw.view.stopLoading();
+                            fw.ready = false; if (fw.view != null) fw.view.stopLoading();
                         }
                     };
                     main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : isGasWorker(key) ? 40000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
+                            if (fw.view == null) return;
                             String at = fw.view.getUrl();
                             if (fw.readReq == fr && verifying != fw && at != null && at.startsWith(fw.origin)) fw.runRead();
                         }
@@ -1704,7 +1762,7 @@ public class MainActivity extends Activity {
         public void cancelSiteRead(final String key) {
             main.post(new Runnable() { public void run() {
                 SiteWorker w = workers.get(key);
-                if (!isGasWorker(key) || w == null || w.readReq < 0) return;
+                if (!isGasWorker(key) || w == null || w.view == null || w.readReq < 0) return;
                 w.view.stopLoading();
                 w.finishRead(w.readReq, "{\"cancelled\":true}");
                 w.ready = false;
@@ -1718,7 +1776,7 @@ public class MainActivity extends Activity {
         public void siteShow(final int reqId, final String key, final String argsJson) {
             main.post(new Runnable() {
                 public void run() {
-                    SiteWorker w = workers.get(key);
+                    SiteWorker w = ensureWorker(key);
                     String script = w != null ? asset(key + "_worker.js") : "";
                     String url;
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
@@ -1739,7 +1797,7 @@ public class MainActivity extends Activity {
         public void siteVerify(final String key) {
             main.post(new Runnable() {
                 public void run() {
-                    SiteWorker w = workers.get(key);
+                    SiteWorker w = ensureWorker(key);
                     if (w != null) startVerify(w);
                 }
             });

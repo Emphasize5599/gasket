@@ -19,4 +19,10 @@ const broken=create({get:KV.get,put:(ns,k,v)=>fail&&k.startsWith('station|exxon|
 const failure={id:'failure',brand:'exxon',prices:{regular:{price:3,observedAt:2000}}};
 assert.throws(()=>broken.observe([failure]),/could not be saved/);fail=false;broken.observe([failure]);
 assert.equal(broken.history(failure).length,1,'retry repairs an interrupted append without losing or duplicating the observation');
+const crashStation={id:'crash-resume',brand:'exxon',prices:{regular:{price:4},premium:{price:5}}};
+db.observe([{...crashStation,prices:{regular:{price:3.21,source:'Google Maps web',observedAt:4000}}}]);
+db=create(KV);const recovered=db.recover([crashStation])[0];
+assert.equal(recovered.prices.regular.price,3.21);assert.equal(recovered.prices.premium.price,5,'recover only completed posted regular prices');
+assert.equal(crashStation.prices.regular.price,4,'do not mutate the saved original');
+assert.equal(db.recover([{...crashStation,prices:{regular:{price:4.12,observedAt:5000}}}])[0].prices.regular.price,4.12,'do not replace newer data with an older checkpoint');
 console.log('Persistent station registry, all grades, 300+ observations, restart, cache deduplication, queries and backup namespace passed');

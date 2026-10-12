@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.108 - 2026-10-12 (keyless test branch only)
+- Special-weather presets can copy defaults from their parent season.
+- Mileage entries show their logging time.
+- Faster no-API refresh with four readers and fewer unnecessary waits.
+- Reader memory cleanup and incremental price saving for long scans.
+- Bug fixes.
+
 ## 0.0.107 - 2026-10-11 (keyless test branch only)
 - Refresh cards in Adjustments, Stops and Departure, with API/no-API choices.
 - Uncapped website refresh with progress, estimated time remaining and Cancel.
