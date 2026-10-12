@@ -292,7 +292,7 @@
   var A = root.__app, S = A.S, N = A.N, $ = A.$, esc = A.esc, LG = root.FLog || { info: function () {}, warn: function () {} };
   var TR = 'https://www.tirerack.com/tires/';
   var TYPES = ['All-season', 'Touring all-season', 'Grand touring all-season', 'Performance all-season', 'All-weather (snow-rated)', 'Summer', 'Winter', 'All-terrain', 'Mud-terrain', 'Highway (trucks and SUVs)'];
-  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 2;
+  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 3;
   var host = null, call = null, onChange = function () {}, busy = {}, open = {};
   function G() { return root.Garage; }
   function save() { A.save(); }
@@ -417,7 +417,7 @@
     }
     if (t.size && !busy[c.id]) {
       var L = t.list;
-      if (L && L.size === t.size && (L.items && L.items.length && L.catalogVersion === CATALOG_VERSION ? (L.failed ? recent(L, RETRY_H) : Date.now() - L.t < LIST_DAYS * 864e5) : L.failed && recent(L, RETRY_H))) { if (fromList(L.items || [], t, true)) save(); return; }
+      if (L && L.size === t.size && L.catalogVersion === CATALOG_VERSION && (L.items && L.items.length ? (L.failed ? recent(L, RETRY_H) : Date.now() - L.t < LIST_DAYS * 864e5) : L.failed && recent(L, RETRY_H))) { if (fromList(L.items || [], t, true)) save(); return; }
       var url = listUrl(c, t.size); if (!url) return;
       var sz = t.size;
       busy[c.id] = 'list'; t.list = { size: sz, t: Date.now(), items: L && L.size === sz ? L.items : [] };
@@ -425,7 +425,7 @@
         busy[c.id] = false; r = r || {};
         if (t.size !== sz) { lookup(c); return; }
         if (r.tires && r.tires.length) { t.list = { size: sz, t: Date.now(), catalogVersion: CATALOG_VERSION, items: catalogItems(r.tires) }; LG.info('car', 'Tire Rack: ' + r.tires.length + ' tires in ' + sz); }
-        else { t.list = { size: sz, t: Date.now(), items: (t.list && t.list.size === sz && t.list.items) || [], failed: r.empty ? 'none' : failure(r), error: r.error }; LG.info('car', 'Tire Rack tire list not read', t.list.failed); }
+        else { t.list = { size: sz, t: Date.now(), catalogVersion: CATALOG_VERSION, items: (t.list && t.list.size === sz && t.list.items) || [], failed: r.empty ? 'none' : failure(r), error: r.error }; LG.info('car', 'Tire Rack tire list not read', t.list.failed); }
         if (r.partial) { t.list.failed = failure(r); t.list.error = r.error; t.list.partial = true; }
         fromList(t.list.items || [], t, true);
         save(); redraw(c);
@@ -613,14 +613,26 @@
     var types = L.length ? uniq(L.map(function (y) { return y.type; })).sort() : TYPES;
     var inType = L.filter(function (y) { return !x.type || catalogKey(y.type) === catalogKey(x.type); });
     var brands = uniq(inType.map(function (y) { return y.brand; })).sort();
-    var models = uniq(inType.filter(function (y) { return catalogKey(y.brand) === catalogKey(x.brand); }).map(function (y) { return y.model; })).sort();
+    var modelRows = inType.filter(function (y) { return catalogKey(y.brand) === catalogKey(x.brand); });
+    var models = uniq(modelRows.map(function (y) { return y.model; })).sort();
+    var modelOpts = [];
+    models.forEach(function (name) {
+      var rows = modelRows.filter(function (y) { return y.model === name; });
+      if (rows.length > 1 && rows.every(function (y) { return y.partnum; })) rows.forEach(function (y) {
+        modelOpts.push({ v: 'part:' + y.partnum, l: name + ' — ' + [y.serviceDesc, y.loadRange].filter(Boolean).join(' ') });
+      });
+      else modelOpts.push(name);
+    });
     var cur = function (list, val) { return list.find(function (s) { return catalogKey(s) === catalogKey(val); }) || val; };
+    var modelValue = x.catalogPart && modelOpts.some(function (o) { return o.v === 'part:' + x.catalogPart; }) ? 'part:' + x.catalogPart : cur(models, x.model);
+    var chooseVariant = x.model && !modelOpts.some(function (o) { return (typeof o === 'string' ? o : o.v) === modelValue; }) && models.some(function (m) { return catalogKey(m) === catalogKey(x.model); });
+    if (chooseVariant) modelValue = '';
     var otherBrand = x.brandCustom || (x.brand && !brands.some(function (b) { return catalogKey(b) === catalogKey(x.brand); }));
     var otherModel = x.modelCustom || (x.model && !models.some(function (m) { return catalogKey(m) === catalogKey(x.model); }));
     var back = function (kind) { return '<button type="button" class="btn tonal sm" id="' + pre + kind + 'Catalog">Choose from catalog</button>'; };
     return '<div class="tz-pick"><label class="nf"><span>Type' + A.qBtn(Q.type) + '</span><select id="' + pre + 'Type">' + opts(types, cur(types, x.type), 'Type') + '</select></label>' +
       '<label class="nf"><span>Brand</span>' + (otherBrand || !brands.length ? '<input type="text" id="' + pre + 'BrandT" maxlength="30" placeholder="Brand" value="' + esc((x.brand || '').trim()) + '">' + (brands.length ? back('Brand') : '') : '<select id="' + pre + 'Brand">' + opts(brands, cur(brands, x.brand), 'Brand') + '</select>') + '</label>' +
-      '<label class="nf"><span>Model</span>' + (otherModel || otherBrand || !models.length ? '<input type="text" id="' + pre + 'ModelT" maxlength="40" placeholder="Model" value="' + esc((x.model || '').trim()) + '">' + (models.length ? back('Model') : '') : '<select id="' + pre + 'Model">' + opts(models, cur(models, x.model), 'Model') + '</select>') + '</label></div>';
+      '<label class="nf"><span>Model</span>' + (otherModel || otherBrand || !models.length ? '<input type="text" id="' + pre + 'ModelT" maxlength="40" placeholder="Model" value="' + esc((x.model || '').trim()) + '">' + (models.length ? back('Model') : '') : '<select id="' + pre + 'Model">' + opts(modelOpts, modelValue, chooseVariant ? 'Choose rating for ' + x.model : 'Model') + '</select>') + '</label></div>';
   }
   /** The car's tire details: size (Tire Rack's factory size), type -> brand -> model, wear rating, warranty, fuel /10. */
   function carDetails(c, t) {
@@ -792,10 +804,17 @@
   }
   /** Picking a model from Tire Rack's list fills in its type, wear rating and warranty. */
   function catalogKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-  function catalogItems(L) { return L.map(function (x) { var s = split(x.name); return { name: x.name, brand: x.brand || s.brand, model: x.model || s.model, type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; }); }
+  function catalogItems(L) { return L.map(function (x) { var s = split(x.name); return { name: x.name, brand: x.brand || s.brand, model: x.model || s.model, partnum: x.partnum || '', serviceDesc: x.serviceDesc || '', loadRange: x.loadRange || '', type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; }); }
   function fromList(L, x, blanksOnly) {
     var before = JSON.stringify([x.type, x.brand, x.model, x.utqg, x.utqgSrc, x.warrantyMi, x.warrantySrc]);
-    var y = L.find(function (z) { return catalogKey(z.brand) === catalogKey(x.brand) && catalogKey(z.model) === catalogKey(x.model); });
+    var matches = L.filter(function (z) { return catalogKey(z.brand) === catalogKey(x.brand) && catalogKey(z.model) === catalogKey(x.model); });
+    var y = x.catalogPart ? matches.find(function (z) { return z.partnum === x.catalogPart; }) : matches[0];
+    if (!x.catalogPart && matches.length > 1) {
+      // Keep the type and common facts, but don't choose a variant's differing warranty or rating on the owner's behalf.
+      y = Object.assign({}, y);
+      if (matches.some(function (z) { return z.warrantyMi !== y.warrantyMi; })) { y.warrantyMi = 0; if (x.warrantySrc === 'tirerack') { delete x.warrantyMi; delete x.warrantySrc; } }
+      if (matches.some(function (z) { return JSON.stringify(z.utqg) !== JSON.stringify(y.utqg); })) { y.utqg = null; if (x.utqgSrc === 'tirerack') { delete x.utqg; delete x.utqgSrc; } }
+    }
     if (y) {
       x.type = y.type; x.brand = y.brand; x.model = y.model;
       delete x.brandCustom; delete x.modelCustom;
@@ -812,13 +831,13 @@
   /** Type / brand / model / wear rating / warranty boxes (pre = their id prefix) for x (the car's tires, a trailer, or one tire). */
   function bindPick(root, pre, x, L, set) {
     var $$ = function (id) { return root.querySelector('#' + pre + id); };
-    if ($$('Type')) $$('Type').onchange = set(function () { x.type = this.value === '*' ? 'Other' : this.value; delete x.brandCustom; delete x.modelCustom; if (x.type && !L().some(function (y) { return catalogKey(y.type) === catalogKey(x.type) && catalogKey(y.brand) === catalogKey(x.brand) && catalogKey(y.model) === catalogKey(x.model); })) { x.brand = ''; x.model = ''; clearCatalogSpecs(x); } });
-    if ($$('Brand')) $$('Brand').onchange = set(function () { clearCatalogSpecs(x); x.brandCustom = this.value === '*'; x.brand = x.brandCustom ? '' : this.value; x.model = ''; delete x.modelCustom; });
-    if ($$('BrandT')) $$('BrandT').onchange = set(function () { clearCatalogSpecs(x); x.brand = this.value.trim(); fromList(L(), x); });
-    if ($$('BrandCatalog')) $$('BrandCatalog').onclick = set(function () { x.brand = ''; x.model = ''; delete x.brandCustom; delete x.modelCustom; clearCatalogSpecs(x); });
-    if ($$('Model')) $$('Model').onchange = set(function () { clearCatalogSpecs(x); x.modelCustom = this.value === '*'; x.model = x.modelCustom ? '' : this.value; if (!x.modelCustom) fromList(L(), x); });
-    if ($$('ModelT')) $$('ModelT').onchange = set(function () { clearCatalogSpecs(x); x.model = this.value.trim(); fromList(L(), x); });
-    if ($$('ModelCatalog')) $$('ModelCatalog').onclick = set(function () { x.model = ''; delete x.modelCustom; clearCatalogSpecs(x); });
+    if ($$('Type')) $$('Type').onchange = set(function () { x.type = this.value === '*' ? 'Other' : this.value; delete x.brandCustom; delete x.modelCustom; if (x.type && !L().some(function (y) { return catalogKey(y.type) === catalogKey(x.type) && catalogKey(y.brand) === catalogKey(x.brand) && catalogKey(y.model) === catalogKey(x.model); })) { x.brand = ''; x.model = ''; delete x.catalogPart; clearCatalogSpecs(x); } });
+    if ($$('Brand')) $$('Brand').onchange = set(function () { clearCatalogSpecs(x); delete x.catalogPart; x.brandCustom = this.value === '*'; x.brand = x.brandCustom ? '' : this.value; x.model = ''; delete x.modelCustom; });
+    if ($$('BrandT')) $$('BrandT').onchange = set(function () { clearCatalogSpecs(x); delete x.catalogPart; x.brand = this.value.trim(); fromList(L(), x); });
+    if ($$('BrandCatalog')) $$('BrandCatalog').onclick = set(function () { x.brand = ''; x.model = ''; delete x.brandCustom; delete x.modelCustom; delete x.catalogPart; clearCatalogSpecs(x); });
+    if ($$('Model')) $$('Model').onchange = set(function () { clearCatalogSpecs(x); delete x.catalogPart; x.modelCustom = this.value === '*'; x.model = x.modelCustom ? '' : this.value; if (this.value.indexOf('part:') === 0) { x.catalogPart = this.value.slice(5); var row = L().find(function (y) { return y.partnum === x.catalogPart; }); x.model = row ? row.model : ''; } if (!x.modelCustom) fromList(L(), x); });
+    if ($$('ModelT')) $$('ModelT').onchange = set(function () { clearCatalogSpecs(x); delete x.catalogPart; x.model = this.value.trim(); fromList(L(), x); });
+    if ($$('ModelCatalog')) $$('ModelCatalog').onclick = set(function () { x.model = ''; delete x.modelCustom; delete x.catalogPart; clearCatalogSpecs(x); });
     var u = function () { x.utqg = Object.assign({}, x.utqg); x.utqgSrc = 'user'; return x.utqg; };
     if ($$('Tw')) $$('Tw').onchange = set(function () { u().tw = parseInt(this.value, 10) || ''; });
     if ($$('Trac')) $$('Trac').onchange = set(function () { u().trac = this.value; });

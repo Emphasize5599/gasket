@@ -146,10 +146,11 @@ async function (reqId, args) {
 
   if (args.step === 'list') {
     const CAT = /(?:all[ -]season|summer|winter|snow|all[ -]weather|all[ -]terrain|mud[ -]terrain|highway|touring|performance|ice|competition|trailer|spare)/i;
-    const stateKey = '__gasketTireCatalog';
-    let state = { id: reqId, started: Date.now(), tires: [], pages: [], expanded: false };
+    const stateKey = '__gasketTireCatalogV3';
+    let state = { id: reqId, started: Date.now(), tires: [], pages: [], expanded: false, rejected: {} };
     try { const old = JSON.parse(sessionStorage.getItem(stateKey) || 'null'); if (old && old.id === reqId) state = old; } catch (_) {}
-    const out = state.tires, seen = new Map(out.map((p) => [p.name.toLowerCase(), p]));
+    const identity = (p) => p.partnum ? 'part:' + p.partnum : p.name.toLowerCase() + '|' + (p.serviceDesc || '') + '|' + (p.loadRange || '');
+    const out = state.tires, seen = new Map(out.map((p) => [identity(p), p]));
     let requestedSize = '';
     try {
       const u = new URL(args.url || location.href), w = (u.searchParams.get('width') || '').replace(/\D/g, ''), r = u.searchParams.get('ratio'), d = u.searchParams.get('diameter');
@@ -158,7 +159,9 @@ async function (reqId, args) {
     const persist = () => { try { sessionStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} };
     const finish = (extra) => {
       try { sessionStorage.removeItem(stateKey); } catch (_) {}
-      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 2 }, extra || {}));
+      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 3,
+        detail: { expected: count(text()), read: out.length, uniqueModels: new Set(out.map((p) => p.name.toLowerCase())).size, pages: state.pages.length,
+          perPage: state.perPage || null, rejected: Object.values(state.rejected || {}).slice(0, 12) } }, extra || {}));
     };
     const pageText = (doc) => {
       if (doc === document) return text();
@@ -174,22 +177,24 @@ async function (reqId, args) {
       let m;
       const size = /\bSize\s*:\s*((?:P|LT)?\d{3}\/\d{2}(?:Z?R|-)\d{2})/i.exec(t);
       const u = /\bUTQG\s*:\s*(\d{2,4})\s*(AA|A|B|C)\s+(A|B|C)\b/i.exec(t);
+      const service = /(?:Serv\.?\s*Desc\.?|Service Description)\s*:\s*(\d{2,3}(?:\/\d{2,3})?\s*\(?[A-Z]\)?)/i.exec(t);
+      const load = /Load Range\s*:\s*([a-z0-9]+)/i.exec(t);
       let warranty = 0;
       if ((m = /\b(\d{2,3}(?:\.\d+)?)\s*K\s*(?:mile|mi\b)[\s\S]{0,35}?(?:warranty|manufacturer)/i.exec(t))) warranty = Math.round(+m[1] * 1000);
       else if ((m = /\b(\d{2,3},\d{3}|\d{5,6})[ -]*(?:mile|mi\b)[\s\S]{0,35}?(?:warranty|manufacturer)/i.exec(t))) warranty = +m[1].replace(/,/g, '');
-      return { size: size ? size[1].replace(/^(P|LT)/i, '').replace('-', 'R').toUpperCase() : '', utqg: u ? { tw: +u[1], trac: u[2].toUpperCase(), temp: u[3].toUpperCase() } : null, warrantyMi: warranty };
+      return { size: size ? size[1].replace(/^(P|LT)/i, '').replace('-', 'R').toUpperCase() : '', serviceDesc: service ? service[1].replace(/\s/g, '').toUpperCase() : '', loadRange: load ? load[1].toUpperCase() : '', utqg: u ? { tw: +u[1], trac: u[2].toUpperCase(), temp: u[3].toUpperCase() } : null, warrantyMi: warranty };
     };
     const add = (p) => {
       if (!p.size || !p.type || (requestedSize && p.size !== requestedSize)) return;
-      const old = seen.get(p.name.toLowerCase());
+      const key = identity(p), old = seen.get(key);
       if (old) { if (!old.utqg && p.utqg) old.utqg = p.utqg; if (!old.warrantyMi && p.warrantyMi) old.warrantyMi = p.warrantyMi; return; }
-      seen.set(p.name.toLowerCase(), p); out.push(p);
+      seen.set(key, p); out.push(p);
     };
     const product = (a) => {
       try {
         const u = new URL(a.getAttribute('href'), location.href);
         const brand = u.searchParams.get('tireMake'), model = u.searchParams.get('tireModel');
-        return u.pathname === '/tires/tires.jsp' && brand && model ? { name: brand + ' ' + model, brand: brand, model: model } : null;
+        return u.pathname === '/tires/tires.jsp' && brand && model ? { name: brand + ' ' + model, brand: brand, model: model, partnum: u.searchParams.get('partnum') || '' } : null;
       } catch (_) { return null; }
     };
     const readDOM = (doc) => {
@@ -197,14 +202,21 @@ async function (reqId, args) {
       // Read each product's own card. Link parameters supply names regardless of CSS capitals or split brand/model lines.
       doc.querySelectorAll('a[href]').forEach((a) => {
         const p = product(a); if (!p) return;
+        let reason = 'No product card with a size was found', excerpt = '';
         for (let box = a.parentElement; box && box !== doc.body; box = box.parentElement) {
-          const names = new Set(Array.from(box.querySelectorAll('a[href]')).map(product).filter(Boolean).map((x) => x.name.toLowerCase()));
+          const names = new Set(Array.from(box.querySelectorAll('a[href]')).map(product).filter(Boolean).map(identity));
           if (names.size > 1) break; // never take a rating or warranty from a different tire
           const t = doc === document ? box.innerText || box.textContent || '' : pageText({ body: box });
           const meta = metadata(t); if (!meta.size) continue;
-          const category = Array.from(box.querySelectorAll('a')).filter((e) => !product(e)).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find((s) => s.length < 70 && CAT.test(s) && !/warranty|test|review|rating|chart|compare/i.test(s));
-          if (category) { cards++; add(Object.assign({}, p, meta, { type: category })); break; }
+          if (requestedSize && meta.size !== requestedSize) { reason = 'Different size: ' + meta.size; break; }
+          const categoryText = (s) => s.length < 70 && CAT.test(s) && s.toLowerCase() !== p.name.toLowerCase() && !/warranty|test|review|rating|chart|compare/i.test(s);
+          let category = Array.from(box.querySelectorAll('a')).filter((e) => !product(e)).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find(categoryText);
+          if (!category) category = Array.from(box.querySelectorAll('[class*="category" i],[class*="tiretype" i],[data-category]')).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find(categoryText);
+          if (!category) category = t.split('\n').map((s) => s.trim().replace(/^Tire Category\s*:\s*/i, '')).find((s) => categoryText(s) && /^(?:(?:grand|standard|crossover|highway|ultra|high|max|extreme|street|track|on[ -]road|off[ -]road|commercial|rugged|light truck|performance|studless|studdable|winter|temporary|special)|all[ -])/i.test(s));
+          if (category) { cards++; add(Object.assign({}, p, meta, { type: category })); delete state.rejected[identity(p)]; break; }
+          reason = 'Category missing'; excerpt = t.replace(/\s+/g, ' ').slice(0, 240);
         }
+        if (!Array.from(seen.values()).some((x) => (p.partnum && x.partnum === p.partnum) || (!p.partnum && x.name.toLowerCase() === p.name.toLowerCase()))) state.rejected[identity(p)] = { name: p.name, partnum: p.partnum, reason: reason, excerpt: excerpt };
       });
       return cards;
     };
@@ -222,12 +234,13 @@ async function (reqId, args) {
       }
     };
     const read = (doc) => { if (!readDOM(doc)) readPage(pageText(doc)); };
-    const count = (t) => { const m = /(?:we have|showing)\s+(\d+)\s+tire models/i.exec(t); return m ? +m[1] : 0; };
+    const count = (t) => { const m = /(?:we have|showing)\s+(\d+)\s+tire models|showing\s+\d+\s*[-–]\s*\d+\s+of\s+(\d+)/i.exec(t); return m ? +(m[1] || m[2]) : 0; };
     let t = await settle((t) => /\bSize\s*:\s*(?:P|LT)?\d{3}\//i.test(t) || /no tires|no results/i.test(t), 20000);
     if (pageBlocked()) { finish({ blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
     // Use the site's actual page-size control instead of assuming all products are initially rendered.
     const perPage = Array.from(document.querySelectorAll('select')).find((e) => /results.?per.?page|items.?per.?page|page.?size|^rpp$/i.test(e.name + ' ' + e.id) || /results per page/i.test((e.parentElement && e.parentElement.textContent || '').slice(0, 300)));
     if (perPage && !state.expanded) {
+      state.perPage = { name: perPage.name, id: perPage.id, value: perPage.value, options: Array.from(perPage.options).map((o) => ({ value: o.value, text: o.textContent.trim() })) };
       state.expanded = true; persist();
       const choices = Array.from(perPage.options).filter((o) => !o.disabled).sort((a, b) => (/all/i.test(b.textContent) ? 10000 : parseInt(b.textContent, 10) || 0) - (/all/i.test(a.textContent) ? 10000 : parseInt(a.textContent, 10) || 0));
       const best = choices[0];
@@ -242,7 +255,7 @@ async function (reqId, args) {
     const fingerprint = () => JSON.stringify(out);
     let stable = 0, last = fingerprint();
     // Allow lazy cards AND their metadata to arrive, including products with no UTQG (winter tires).
-    while (Date.now() - state.started < 35000 && stable < 2) {
+    while (Date.now() - state.started < 35000 && stable < (count(text()) > out.length ? 6 : 2)) {
       if (pageBlocked()) { finish({ partial: !!out.length, blocked: true, code: 'blocked', error: 'Tire Rack restricted this page' }); return; }
       window.scrollTo(0, document.documentElement.scrollHeight);
       await sleep(600); read(document);
@@ -253,7 +266,7 @@ async function (reqId, args) {
     let doc = document;
     if (!state.pages.includes(location.href)) state.pages.push(location.href);
     for (let page = state.pages.length; page < 10 && Date.now() - state.started < 55000; page++) {
-      const next = Array.from(doc.querySelectorAll('a,button,input[type="button"]')).find((e) => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && (doc !== document || e.getClientRects().length) && (/^(next(?: page)?|load more|show more(?: tires)?|›|>|»)$/i.test((e.getAttribute('aria-label') || e.textContent || e.value || '').trim()) || e.getAttribute('rel') === 'next'));
+      const next = Array.from(doc.querySelectorAll('a,button,input[type="button"],input[type="image"]')).find((e) => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && (doc !== document || e.getClientRects().length) && (/^(?:(?:go to )?next(?: page)?(?:\s*[›>»→])?|load more|show more(?: tires)?|›|>|»|→)$/i.test((e.getAttribute('aria-label') || e.getAttribute('title') || e.getAttribute('alt') || e.textContent || e.value || (e.querySelector('img') && e.querySelector('img').alt) || '').trim()) || e.getAttribute('rel') === 'next'));
       if (!next) break;
       const before = out.length;
       try {
@@ -272,7 +285,8 @@ async function (reqId, args) {
       if (out.length === before) { finish({ partial: true, code: 'incomplete', error: 'Tire Rack did not load the next results' }); return; }
     }
     const expected = count(pageText(doc)) || count(text());
-    finish(expected > out.length ? { partial: true, code: 'incomplete', error: 'Only ' + out.length + ' of ' + expected + ' tire models could be read', detail: { expected: expected, read: out.length } } : {});
+    const rejected = Object.values(state.rejected).filter((p) => p.reason.indexOf('Different size:') !== 0);
+    finish(expected > out.length ? { partial: true, code: 'incomplete', error: 'Only ' + out.length + ' of ' + expected + ' tire options could be read' } : !expected && rejected.length ? { partial: true, code: 'incomplete', error: rejected.length + ' product cards could not be read' } : {});
     return;
   }
   send({ error: 'unknown step' });

@@ -89,7 +89,7 @@ async function run() {
     pg.on('pageerror', e => errors.push(e.message));
     await start(pg, '<p>No tires found</p>', { step: 'list' });
     assert.equal((await result(pg)).empty, true);
-    const card = (brand, model, type, warranty, utqg = '680 A A') => `<article class="tire"><h2><a href="https://www.tirerack.com/tires/tires.jsp?tireMake=${encodeURIComponent(brand)}&tireModel=${encodeURIComponent(model)}"><span>${brand}</span><br><span>${model}</span></a></h2><a href="/tires/types/tiretype.jsp">${type}</a><ul><li>Size: <span>195/65R15</span></li>${utqg ? `<li>UTQG: <span>${utqg}</span></li>` : ''}</ul><a>${warranty}</a></article>`;
+    const card = (brand, model, type, warranty, utqg = '680 A A', part = '', service = '') => `<article class="tire"><h2><a href="https://www.tirerack.com/tires/tires.jsp?tireMake=${encodeURIComponent(brand)}&tireModel=${encodeURIComponent(model)}${part ? '&partnum='+part : ''}"><span>${brand}</span><br><span>${model}</span></a></h2>${utqg ? `<a href="/tires/types/tiretype.jsp">${type}</a>` : `<span class="category">${type}</span>`}<ul><li>Size: <span>195/65R15</span></li>${service ? `<li>Serv. Desc: ${service}</li><li>Load Range: SL</li>` : ''}${utqg ? `<li>UTQG: <span>${utqg}</span></li>` : ''}</ul><a>${warranty}</a></article>`;
     const continental = card('Continental','SecureContact AW','Grand Touring All-Season','60K Mile Manufacturer\'s Warranty','700 A A');
     const cooper = card('Cooper','Endeavor','Grand Touring All-Season','65,000-mile<br>Manufacturer\'s Warranty');
     const winter = card('Bridgestone','Blizzak WS90','Studless Ice & Snow','',null);
@@ -113,6 +113,20 @@ async function run() {
     assert.equal((await result(pg)).tires.length,2);
     await start(pg, `<h1>We have 78 tire models in stock</h1>${continental}`, {step:'list'});
     assert.equal((await result(pg)).code,'incomplete');
+    const ratingH = card('General','AltiMAX RT45','Grand Touring All-Season','65K Mile Manufacturer\'s Warranty','600 A A','rt45h','91H');
+    const ratingT = card('General','AltiMAX RT45','Grand Touring All-Season','75K Mile Manufacturer\'s Warranty','600 A B','rt45t','91T');
+    const rows67 = Array.from({length:67},(_,i)=>card('TestBrand','Test Model '+i,'Grand Touring All-Season','60K Mile Manufacturer\'s Warranty','600 A A','test'+i+'h','91H'));
+    const variants10 = Array.from({length:10},(_,i)=>card('TestBrand','Test Model '+i,'Grand Touring All-Season','70K Mile Manufacturer\'s Warranty','600 A B','test'+i+'t','91T'));
+    await start(pg, '<h1>We have 77 tire models in stock</h1>'+rows67.join('')+variants10.join(''), {step:'list'});
+    const variants = await result(pg);
+    assert.equal(variants.tires.length,77);
+    assert.equal(variants.detail.uniqueModels,67);
+    assert.equal(variants.partial,undefined,'duplicate model names must not produce a false incomplete warning');
+    console.log('67 model names / 77 product variants retained without a false incomplete warning');
+    await start(pg, `<h1>We have 2 tire models in stock</h1><div id="cards">${ratingH}</div><input id="nextImage" type="image" alt="Next page →">`, {step:'list'}, `document.getElementById('nextImage').onclick=()=>{document.getElementById('cards').insertAdjacentHTML('beforeend',${JSON.stringify(ratingT)});document.getElementById('nextImage').remove();};`);
+    const rated = await result(pg);
+    assert.equal(rated.tires.length,2,'next pages containing only another variant must still be retained');
+    assert.deepEqual(rated.tires.map(t=>t.serviceDesc),['91H','91T']);
     console.log('split product names, results-per-page, AJAX buttons, linked pages and Cooper 65,000-mile warranty passed');
     assert.equal(errors.length, 0, errors.join('\n'));
     await pg.close();
@@ -204,9 +218,9 @@ async function run() {
     await catalogUI.fill('#apiKey','AIzaSyTESTKEY0123456789abcdefghijklmnop'); await catalogUI.click('#sDone');
     await catalogUI.evaluate(fs.readFileSync(path.join(root,'tests/trip_mocks.js'),'utf8'));
     await catalogUI.evaluate(tires=>{
-      __app.S.cars.push({id:'prius-catalog',name:'2016 Prius Two',year:2016,make:'Toyota',model:'Prius',trim:'Two',info:{},obs:{},entries:[],tires:{size:'195/65R15',sizeSrc:'user',type:'grand touring all-season',brand:'Cooper',model:'Endeavor',list:{size:'195/65R15',t:Date.now(),items:[{brand:'Continental',model:'SecureContact AW',type:'Grand Touring All-Season'}]}}});
+      __app.S.cars.push({id:'prius-catalog',name:'2016 Prius Two',year:2016,make:'Toyota',model:'Prius',trim:'Two',info:{},obs:{},entries:[],tires:{size:'195/65R15',sizeSrc:'user',type:'grand touring all-season',brand:'Cooper',model:'Endeavor',list:{size:'195/65R15',catalogVersion:2,failed:'incomplete',t:Date.now(),items:[{brand:'Continental',model:'SecureContact AW',type:'Grand Touring All-Season'}]}}});
       window.__catalogReads=[];
-      __app.N.siteRead=(id,key,json)=>{const args=JSON.parse(json); if(key==='tirerack') __catalogReads.push(args);setTimeout(()=>onNativeResult(id,key==='tirerack'?{tires:tires,catalogVersion:2}:{error:'test skip'}),100);};
+      __app.N.siteRead=(id,key,json)=>{const args=JSON.parse(json); if(key==='tirerack') __catalogReads.push(args);setTimeout(()=>onNativeResult(id,key==='tirerack'?{tires:tires,catalogVersion:3}:{error:'test skip'}),100);};
     },all.tires);
     await catalogUI.click('#btnTrip'); if(await catalogUI.locator('#tpNew').count()) await catalogUI.click('#tpNew');
     await catalogUI.evaluate(()=>{__app.S.carId='prius-catalog';Garage.redraw();});
@@ -234,8 +248,20 @@ async function run() {
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
     await catalogUI.fill('#tzWarranty','70000'); await catalogUI.dispatchEvent('#tzWarranty','change');
     await catalogUI.click('#tzRefresh');
-    await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===2);
+    await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===3);
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'70000','refresh must preserve a manually entered warranty');
+    await catalogUI.evaluate(rows=>{
+      const t=Garage.car().tires;t.list.items=rows; t.type='Grand Touring All-Season';t.brand='General';t.model='AltiMAX RT45';t.warrantySrc='tirerack';t.warrantyMi=65000;
+      Garage.redraw();
+    },rated.tires);
+    await catalogUI.click('.sub-back'); await catalogUI.click('#tzDet');
+    await catalogUI.waitForSelector('#tzModel option[value="part:rt45h"]', {state:'attached'});
+    assert.equal(await catalogUI.inputValue('#tzWarranty'),'','differing variants require an explicit rating selection');
+    await catalogUI.selectOption('#tzModel','part:rt45h');
+    assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
+    await catalogUI.selectOption('#tzModel','part:rt45t');
+    assert.equal(await catalogUI.inputValue('#tzWarranty'),'75000');
+    assert.equal(await catalogUI.inputValue('#tzTemp'),'B');
     assert.equal(errors.length,0,errors.join('\n'));
     await catalogUI.close();
     console.log('Prius Cooper Endeavor selectors, stale cache refresh, case matching and warranty autofill passed');

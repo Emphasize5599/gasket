@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.102 - 2026-10-11
+- **Complete tire options.** Keep separate Tire Rack product variants instead of merging different speed/load ratings under one model name. The model selector distinguishes ratings and fills the matching warranty and wear rating. Read plain-text categories and image pagination controls, and log rejected cards for incomplete catalogs.
+- Bug fixes.
+
 ## 0.0.101 - 2026-10-11
 - **Tire catalog and warranty autofill.** Read Tire Rack's product cards, results-per-page selector and dynamically loaded pages so brands and models beyond the first results appear. Refresh older incomplete caches, preserve manual warranties, and fill ratings and mileage warranty for an existing or newly selected catalog tire.
 - Bug fixes.

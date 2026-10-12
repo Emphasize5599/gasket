@@ -376,7 +376,7 @@ with sync_playwright() as p:
     r = reader(pg, LISTPAGE, {'step': 'list'}); print('  list reader:', r)
     tz = {x['name']: x for x in r['tires']}
     assert list(tz) == ['CONTINENTAL SECURECONTACT AW', 'BRIDGESTONE BLIZZAK WS90', 'MICHELIN DEFENDER2'], list(tz)
-    assert tz['CONTINENTAL SECURECONTACT AW'] == {'name': 'CONTINENTAL SECURECONTACT AW', 'type': 'Grand Touring All-Season', 'size': '195/65R15', 'utqg': {'tw': 700, 'trac': 'A', 'temp': 'A'}, 'warrantyMi': 60000}
+    assert tz['CONTINENTAL SECURECONTACT AW'] == {'name': 'CONTINENTAL SECURECONTACT AW', 'type': 'Grand Touring All-Season', 'size': '195/65R15', 'serviceDesc': '', 'loadRange': 'SL', 'utqg': {'tw': 700, 'trac': 'A', 'temp': 'A'}, 'warrantyMi': 60000}
     assert tz['BRIDGESTONE BLIZZAK WS90']['utqg'] is None and tz['BRIDGESTONE BLIZZAK WS90']['type'] == 'Studless Ice & Snow'
     assert tz['MICHELIN DEFENDER2']['utqg'] == {'tw': 820, 'trac': 'A', 'temp': 'B'} and tz['MICHELIN DEFENDER2']['warrantyMi'] == 80000
     assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'list'}).get('blocked')
