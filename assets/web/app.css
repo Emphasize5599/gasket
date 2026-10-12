@@ -1518,3 +1518,27 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .cl-row.now { border-color: rgba(120, 140, 170, .3); } }
 :root[data-theme="light"] .cl-row.now { border-color: rgba(120, 140, 170, .3); }
 @media (prefers-reduced-motion: reduce) { .cl-row.now::before { animation: none; background: var(--cl-glow); opacity: .25; } }
+/* the fuel mode: a pill left of the top bar's selector (⛽ gas & diesel, ⚡ electric, H₂ hydrogen) and its little menu */
+.mode-pill { flex: none; width: 44px; height: 48px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 19px; font-weight: 800; display: grid; place-items: center; color: var(--ink); padding: 0; }
+.mode-pill.m-ev { color: #f2b705; } .mode-pill.m-h2 { color: #2f9ae0; font-size: 15px; letter-spacing: -.5px; }
+.mode-menu { position: fixed; z-index: 1200; min-width: 236px; max-width: calc(100vw - 16px); background: var(--surface); border-radius: 16px; box-shadow: 0 8px 28px rgba(0, 0, 0, .35); padding: 6px; display: flex; flex-direction: column; animation: mmIn .14s ease-out; }
+@keyframes mmIn { from { opacity: 0; transform: translateY(-4px); } }
+.mode-menu button { display: flex; align-items: center; gap: 10px; text-align: left; padding: 9px 10px; border-radius: 12px; color: var(--ink); }
+.mode-menu button.on { background: var(--surface-2); }
+.mode-menu button > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.mode-menu b { font-size: 14.5px; } .mode-menu small { font-size: 12px; color: var(--ink-2); }
+.mode-menu .mi { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-weight: 800; font-size: 16px; }
+.mode-menu .mi.m-ev { color: #f2b705; } .mode-menu .mi.m-h2 { color: #2f9ae0; font-size: 13px; }
+.mode-menu .mm-opts { border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; margin-top: 4px; font-size: 13.5px; color: var(--accent); font-weight: 600; justify-content: center; }
+#rows .af-ic { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #fff; }
+#rows .af-ic.ev { background: #f2b705; color: #222; } #rows .af-ic.h2 { background: #2f9ae0; }
+.af-src { font-size: 11.5px; color: var(--ink-2); text-align: center; padding: 8px 0 4px; }
+@media (max-width: 360px) { .mode-pill { width: 38px; font-size: 17px; } .top .icon { width: 44px; height: 44px; } .top .seg button { font-size: 13px; padding: 0 2px; } }
+.seg .g-short { display: none; }
+@media (max-width: 380px) { .seg .g-long { display: none; } .seg .g-short { display: inline; } }
+.top-sub { display: flex; align-items: flex-start; gap: 8px; }
+.top-sub .status { flex: 0 1 auto; min-width: 0; }
+.top-sub .apic { margin: 8px 0 0 auto; }
+/* in a trip the bar keeps only Settings: the lookup count goes back to its left end, the fuel pill hides */
+body.trip-on .top .mode-pill { display: none; }
+body.trip-on .top-sub .apic { position: absolute; left: 12px; top: calc(var(--st) + 17px); margin: 0; }

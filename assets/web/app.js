@@ -183,11 +183,46 @@
   map.on('zoomend moveend resize', function () { placeBubsSoon(); });
 
   // ---------- grade selector ----------
+  // ---------- fuel mode: gas & diesel, electric or hydrogen (the pill left of the top bar's selector) ----------
+  var MODES = [['gas', '⛽', 'Gas & diesel', 'Station prices after your discounts'], ['ev', '⚡', 'Electric', 'Chargers for your plug'], ['h2', 'H₂', 'Hydrogen', 'Fuel-cell stations and what\'s in reach']];
+  function altMode() { return S.fuelMode === 'ev' || S.fuelMode === 'h2'; }
+  function syncPill() {
+    var b = $('btnMode'), m = MODES.filter(function (x) { return x[0] === (S.fuelMode || 'gas'); })[0] || MODES[0];
+    if (!b) return; b.textContent = m[1]; b.className = 'mode-pill m-' + m[0]; b.setAttribute('aria-label', 'Fuel: ' + m[2].toLowerCase());
+  }
+  function setMode(m) {
+    m = m === 'ev' || m === 'h2' ? m : 'gas';
+    if ((S.fuelMode || 'gas') === m) return;
+    S.fuelMode = m; save(); if (window.FLog) FLog.info('app', 'Fuel mode: ' + m);
+    closeDetail(); syncPill(); buildGrades(); render();
+    if (window.AltFuel) AltFuel.modeChanged();
+  }
+  function openModeMenu() {
+    var old = $('modeMenu'); if (old) { old.remove(); return; }
+    var r = $('btnMode').getBoundingClientRect(), cur = S.fuelMode || 'gas';
+    var mm = document.createElement('div'); mm.id = 'modeMenu'; mm.className = 'mode-menu'; mm.setAttribute('role', 'menu');
+    mm.style.top = Math.round(r.bottom + 6) + 'px'; mm.style.left = Math.round(Math.max(8, r.left)) + 'px';
+    mm.innerHTML = MODES.map(function (x) { return '<button type="button" role="menuitemradio" aria-checked="' + (x[0] === cur) + '" class="' + (x[0] === cur ? 'on' : '') + '" data-mode="' + x[0] + '"><span class="mi m-' + x[0] + '">' + x[1] + '</span><span><b>' + x[2] + '</b><small>' + x[3] + '</small></span></button>'; }).join('') +
+      '<button type="button" class="mm-opts" data-mode-opts="1">EV & hydrogen options…</button>';
+    document.body.appendChild(mm);
+    var close = function () { mm.remove(); document.removeEventListener('pointerdown', away, true); };
+    var away = function (e) { if (!mm.contains(e.target) && e.target !== $('btnMode')) close(); };
+    setTimeout(function () { document.addEventListener('pointerdown', away, true); }, 0);
+    mm.onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return; close();
+      if (b.dataset.modeOpts) { if (window.AltFuel) AltFuel.open(); return; }
+      setMode(b.dataset.mode);
+    };
+  }
+  $('btnMode').onclick = openModeMenu;
   function buildGrades() {
     var g = $('grades'); g.innerHTML = '';
+    syncPill();
+    if (altMode() && window.AltFuel) { AltFuel.seg(g); return; }   // electric: charger speed; hydrogen: pressure
     Object.keys(P.GRADES).forEach(function (k) {
       var b = document.createElement('button');
       b.textContent = k === 'midgrade' ? 'Mid' : k === 'premium' ? 'Prem' : P.GRADES[k].label;
+      if (k === 'regular') b.innerHTML = '<span class="g-long">' + P.GRADES[k].label + '</span><span class="g-short">Reg</span>';   // short on narrow phones
       b.className = S.grade === k ? 'on' : '';
       b.onclick = function () { S.grade = k; save(); buildGrades(); render(); if (selectedId) openDetail(selectedId); };
       g.appendChild(b);
@@ -399,6 +434,10 @@
   function shown(x) { return x.c || !S.hideUnpriced || x.s.id === selectedId; }
   function render() {
     syncMain();
+    if (altMode() && window.AltFuel) {   // chargers / hydrogen stations take the gas stations' place on the map and in the list
+      dotLayer.clearLayers(); AltFuel.renderList($('bestLine'), $('rows'));
+      syncMapGAttr(); sizeSheet(); return;
+    }
     var list = enriched().filter(shown);
     var priced = list.filter(function (x) { return x.c; }).sort(function (a, b) { return a.c.final - b.c.final; });
     var bestIds = {}, bestVal = priced.length ? priced[0].c.final : null;
@@ -432,6 +471,7 @@
   }
   $('rows').addEventListener('click', function (e) {
     var r = e.target.closest('.row'); if (!r) return;
+    if (r.dataset.af && window.AltFuel) { AltFuel.focus(r.dataset.af); return; }
     var s = byId(r.dataset.id); if (!s) return;
     map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14));
     openDetail(s.id);
@@ -1235,11 +1275,13 @@
     N.locate();
   };
   $('btnRefresh').onclick = function () {
+    if (altMode() && window.AltFuel) return AltFuel.refresh(movedByUser);
     var c = me || (lastFetch ? lastFetch : map.getCenter());
     if (movedByUser && !$('btnArea').classList.contains('hidden')) return $('btnArea').onclick();
     fetchAround(c.lat, c.lng);
   };
   $('btnArea').onclick = function () {
+    if (altMode() && window.AltFuel) { $('btnArea').classList.add('hidden'); return AltFuel.refresh(true); }
     var c = map.getCenter(), b = map.getBounds();
     // cap the box at ~25 mi each way so a zoomed-out map doesn't return a random sample
     var cap = bbox(c.lat, c.lng, 25);
@@ -1358,7 +1400,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };

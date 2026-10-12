@@ -14,7 +14,11 @@
   var BASE = 'https://developer.nlr.gov/api/alt-fuel-stations/v1';
   var WEEK = 7 * 24 * 3600e3;
   var ROAD = 1.3;             // roads are ~30% longer than a straight line (typical detour index)
-  S.alt = Object.assign({ h2Show: false, h2Cov: true, h2Range: '', evShow: false }, S.alt || {});
+  S.alt = Object.assign({ h2Cov: true, h2Range: '', evSpeed: 'dc', h2Press: 'all' }, S.alt || {});
+  // the fuel mode (the top bar's pill, app.js) decides what's on the map: chargers in ⚡, hydrogen stations in H₂
+  function evOn() { return S.fuelMode === 'ev'; }
+  function h2On() { return S.fuelMode === 'h2'; }
+  var LEVEL = { dc: 'dc_fast', l2: '2', all: 'all' };
 
   function key() { return String(S.nrelKey || '').trim() || 'DEMO_KEY'; }
   function call() { return window.__trip.call.apply(null, arguments); }
@@ -84,12 +88,13 @@
   }
   function plugParam(plugs) { return plugs && plugs.length ? plugs.join(',') : 'J1772COMBO,TESLA,CHADEMO'; }
   /** DC fast chargers within radius miles of a point that take one of these plugs, kept a week. */
-  async function evNear(lat, lng, radiusMi, plugs) {
-    var k = 'ev|' + lat.toFixed(2) + ',' + lng.toFixed(2) + '|' + Math.round(radiusMi) + '|' + plugParam(plugs);
+  async function evNear(lat, lng, radiusMi, plugs, speed) {
+    var lvl = LEVEL[speed] || 'dc_fast';
+    var k = 'ev|' + lat.toFixed(2) + ',' + lng.toFixed(2) + '|' + Math.round(radiusMi) + '|' + plugParam(plugs) + (lvl === 'dc_fast' ? '' : '|' + lvl);
     var o = KV.get('afdc', k, WEEK);
     if (o) return o.v.map(norm).filter(Boolean);
     var j = await get('/nearest.json', { latitude: lat.toFixed(5), longitude: lng.toFixed(5), radius: Math.min(500, Math.round(radiusMi)), fuel_type: 'ELEC',
-      ev_charging_level: 'dc_fast', ev_connector_type: plugParam(plugs), status: 'E', access: 'public', limit: 200 });
+      ev_charging_level: lvl, ev_connector_type: lvl === 'dc_fast' ? plugParam(plugs) : (plugs && plugs.length ? plugParam(plugs.concat(['J1772'])) : ''), status: 'E', access: 'public', limit: 200 });
     var raw = j.fuel_stations || [];
     KV.put('afdc', k, raw);
     return raw.map(norm).filter(Boolean);
@@ -148,10 +153,11 @@
     return h;
   }
   function plugName(p) { return { J1772COMBO: 'CCS', TESLA: 'NACS (Tesla)', CHADEMO: 'CHAdeMO', J1772: 'J1772', J3271: 'MCS' }[p] || p; }
+  var marks = {};
   function drawDots(list, layer, color) {
     layer.clearLayers();
     list.forEach(function (s) {
-      var m = L.circleMarker([s.lat, s.lng], { renderer: renderer, radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 });
+      var m = marks[s.id] = L.circleMarker([s.lat, s.lng], { renderer: renderer, radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 });
       m.bindPopup(stationHtml(s), { className: 'af-popup', maxWidth: 260 });
       m.on('popupopen', function (e) {
         var el = e.popup.getElement(); if (!el) return;
@@ -200,7 +206,7 @@
   });
   function drawCoverage() {
     if (cov) { map.removeLayer(cov); cov = null; }
-    if (!S.alt.h2Show || !S.alt.h2Cov || !h2List.length) { legend(); return; }
+    if (!h2On() || !S.alt.h2Cov || !h2List.length) { legend(); return; }
     panes();
     cov = new Cov({ pane: 'afcov', rangeMi: h2Range().mi, st: h2List.map(function (s) { return { lat: s.lat, lng: s.lng }; }), updateWhenZooming: false, keepBuffer: 1 });
     cov.addTo(map);
@@ -208,7 +214,7 @@
   }
   function legend() {
     var el = $('afLegend');
-    var on = S.alt.h2Show && S.alt.h2Cov && h2List.length;
+    var on = h2On() && S.alt.h2Cov && h2List.length;
     if (!on) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('div'); el.id = 'afLegend'; el.className = 'af-legend'; document.body.appendChild(el); }
     var r = h2Range();
@@ -217,13 +223,13 @@
   function showH2() {
     panes();
     if (!h2Layer) h2Layer = L.layerGroup().addTo(map);
-    if (S.alt.h2Show) drawDots(h2List, h2Layer, P.ALT.h2.color); else h2Layer.clearLayers();
+    if (h2On()) drawDots(h2Shown(), h2Layer, P.ALT.h2.color); else h2Layer.clearLayers();
     drawCoverage();
   }
   function showEv() {
     panes();
     if (!evLayer) evLayer = L.layerGroup().addTo(map);
-    if (S.alt.evShow) drawDots(evList, evLayer, P.ALT.ev.color); else evLayer.clearLayers();
+    if (evOn()) drawDots(evList, evLayer, P.ALT.ev.color); else evLayer.clearLayers();
   }
   function carPlugs() { var G = window.Garage, c = G && G.car(); return c && G.kind(c) === 'ev' ? G.plugs(c) : null; }
 
@@ -236,13 +242,13 @@
       '<div class="af-sec"><div class="af-t"><span class="af-ic h2">H₂</span><b>Hydrogen (fuel cell)</b></div>' +
       '<button class="btn tonal" id="afH2Get">' + (h2List.length ? 'Fetch all hydrogen stations again' : 'Fetch all hydrogen stations') + '</button>' +
       '<div class="af-msg" id="afH2Msg">' + (h2List.length ? h2List.length + ' open public stations' + (ago ? ' · fetched ' + esc(ago) : '') : 'Every open public station in the U.S. and Canada — one free lookup.') + '</div>' +
-      '<div class="field"><div class="lbl">Show on the map</div>' + swHtml('afH2Show', S.alt.h2Show) + '</div>' +
+
       '<div class="field"><div class="lbl">Shade what\'s out of reach<small>Yellow: no station within half your range — you couldn\'t get back. Gray: none within your whole range. Straight-line distance × 1.3 for roads, so it\'s a rough guide.</small></div>' + swHtml('afH2Cov', S.alt.h2Cov) + '</div>' +
       '<div class="field"><div class="lbl">Range on a full tank (mi)<small id="afRangeSrc">blank = ' + esc(r.src) + (parseFloat(S.alt.h2Range) > 0 ? '' : ' (' + r.mi + ' mi)') + '</small></div><input type="number" inputmode="numeric" id="afRange" min="50" max="900" step="10" value="' + esc(S.alt.h2Range || '') + '" placeholder="' + r.mi + '"></div></div>' +
       '<div class="af-sec"><div class="af-t"><span class="af-ic ev">⚡</span><b>EV fast chargers</b></div>' +
-      '<button class="btn tonal" id="afEvGet">Find fast chargers in this area</button>' +
+      '<button class="btn tonal" id="afEvGet">Find chargers in this area</button>' +
       '<div class="af-msg" id="afEvMsg">' + (evList.length ? evList.length + ' found' : 'DC fast chargers (Level 3) around the middle of the map') + ' · ' + (plugs ? 'plugs your car takes: ' + esc(plugs.map(plugName).join(', ')) : 'any plug') + '</div>' +
-      '<div class="field"><div class="lbl">Show on the map</div>' + swHtml('afEvShow', S.alt.evShow) + '</div></div>' +
+      '</div>' +
       '<p class="lead small keep">From the U.S. Department of Energy\'s station finder (Alternative Fuels Data Center). Stations can be down without notice — hydrogen especially; check the live status before you go.</p></div>';
     document.body.appendChild(bg);
     requestAnimationFrame(function () { bg.classList.add('on'); });
@@ -250,17 +256,15 @@
     bg.onclick = function (e) { if (e.target === bg) close(); };
     $('afX').onclick = close;
     var sw = function (id, k, fn) { bg.querySelector('[data-af="' + id + '"]').onchange = function () { S.alt[k] = this.checked; A.save(); fn(); }; };
-    sw('afH2Show', 'h2Show', function () { if (S.alt.h2Show && !h2List.length) $('afH2Get').click(); else showH2(); });
     sw('afH2Cov', 'h2Cov', drawCoverage);
-    sw('afEvShow', 'evShow', function () { if (S.alt.evShow && !evList.length) $('afEvGet').click(); else showEv(); });
     $('afRange').onchange = function () { var v = parseFloat(this.value); S.alt.h2Range = v > 0 ? String(Math.round(v)) : ''; A.save(); drawCoverage(); };
     $('afH2Get').onclick = async function () {
       var b = this; b.disabled = true; $('afH2Msg').textContent = 'Fetching…'; $('afH2Msg').classList.remove('err');
       try {
         var res = await hydrogenAll(true); h2List = res.list; h2T = res.t;
-        S.alt.h2Show = true; A.save(); var cb = bg.querySelector('[data-af="afH2Show"]'); if (cb) cb.checked = true;
+        A.setMode('h2');
         $('afH2Msg').textContent = h2List.length + ' open public stations · just now';
-        showH2();
+        showH2(); A.rebuild();
         if (h2List.length) { close(); map.fitBounds(L.latLngBounds(h2List.map(function (s) { return [s.lat, s.lng]; })).pad(0.1)); }
       } catch (e) { $('afH2Msg').textContent = e.message; $('afH2Msg').classList.add('err'); }
       b.disabled = false; b.textContent = 'Fetch all hydrogen stations again';
@@ -269,29 +273,98 @@
       var b = this, c = map.getCenter(), bd = map.getBounds(), rad = Math.max(10, Math.min(150, P.haversineMi(c.lat, c.lng, bd.getNorth(), bd.getEast())));
       b.disabled = true; $('afEvMsg').textContent = 'Finding…'; $('afEvMsg').classList.remove('err');
       try {
-        evList = await evNear(c.lat, c.lng, rad, carPlugs());
-        S.alt.evShow = true; A.save(); var cb = bg.querySelector('[data-af="afEvShow"]'); if (cb) cb.checked = true;
+        evList = await evNear(c.lat, c.lng, rad, carPlugs(), S.alt.evSpeed); evArea = { lat: c.lat, lng: c.lng };
+        A.setMode('ev');
         $('afEvMsg').textContent = evList.length + ' fast charger' + (evList.length === 1 ? '' : 's') + ' within ' + Math.round(rad) + ' mi';
-        showEv(); if (evList.length) close();
+        showEv(); A.rebuild(); if (evList.length) close();
       } catch (e) { $('afEvMsg').textContent = e.message; $('afEvMsg').classList.add('err'); }
       b.disabled = false;
     };
   }
   function swHtml(id, on) { return '<label class="switch"><input type="checkbox" data-af="' + id + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
 
-  // the ⚡ button on the main map
-  var fab = document.createElement('button');
-  fab.className = 'fab af-fab'; fab.id = 'btnAlt'; fab.setAttribute('aria-label', 'EV chargers and hydrogen stations');
-  fab.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>';
-  fab.onclick = openPanel;
-  document.body.appendChild(fab);
+  // ---------- the fuel mode's part of the main screen: the top bar's selector, the list, refresh ----------
+  var evArea = null, busy = false;
+  function h2Shown() { return S.alt.h2Press === 'all' ? h2List : h2List.filter(function (s) { return (s.hyPress || []).join(' ').indexOf(S.alt.h2Press) >= 0; }); }
+  /** The top bar's selector in ⚡ / H₂ mode: charger speed, or hydrogen pressure. */
+  function seg(el) {
+    var ev = evOn(), opts = ev ? [['dc', 'Fast'], ['l2', 'Level 2'], ['all', 'All']] : [['all', 'All'], ['H70', 'H70'], ['H35', 'H35']], cur = ev ? S.alt.evSpeed : S.alt.h2Press;
+    el.innerHTML = '';
+    opts.forEach(function (o) {
+      var b = document.createElement('button'); b.textContent = o[1]; b.className = cur === o[0] ? 'on' : '';
+      b.setAttribute('aria-label', ev ? (o[0] === 'dc' ? 'DC fast chargers' : o[0] === 'l2' ? 'Level 2 chargers' : 'All chargers') : (o[0] === 'all' ? 'All hydrogen stations' : o[1] + ' (' + (o[0] === 'H70' ? '700' : '350') + ' bar)'));
+      b.onclick = function () {
+        if (ev) { if (S.alt.evSpeed === o[0]) return; S.alt.evSpeed = o[0]; A.save(); A.rebuild(); refresh(false); }
+        else { S.alt.h2Press = o[0]; A.save(); showH2(); A.rebuild(); }
+      };
+      el.appendChild(b);
+    });
+  }
+  function here() { var me = A.me && A.me(); return me ? { lat: me.lat, lng: me.lng } : map.getCenter(); }
+  /** Refresh: chargers around you (area: around the middle of the map, as far as it shows, 10–150 mi), or every hydrogen station again. */
+  async function refresh(area) {
+    if (busy) return; busy = true;
+    var rb = $('btnRefresh'); if (rb) rb.classList.add('spin');
+    try {
+      if (evOn()) {
+        var c = area ? map.getCenter() : here(), bd = map.getBounds();
+        var rad = area ? Math.max(10, Math.min(150, P.haversineMi(c.lat, c.lng, bd.getNorth(), bd.getEast()))) : 25;
+        A.status && A.status('Finding chargers…');
+        evList = await evNear(c.lat, c.lng, rad, carPlugs(), S.alt.evSpeed); evArea = { lat: c.lat, lng: c.lng };
+        LG.info('altfuel', 'Chargers: ' + evList.length + ' (' + S.alt.evSpeed + ')');
+        showEv();
+      } else if (h2On()) {
+        A.status && A.status('Fetching hydrogen stations…');
+        var res = await hydrogenAll(h2List.length > 0);   // a week's list is used first; ↻ with stations shown fetches again
+        h2List = res.list; h2T = res.t;
+        showH2();
+      }
+    } catch (e) { A.status && A.status(e.message); LG.warn('altfuel', 'Station finder', e.message); }
+    busy = false; if (rb) rb.classList.remove('spin');
+    A.rebuild();
+  }
+  /** The bottom line and list in ⚡ / H₂ mode: nearest first. */
+  function renderList(best, rows) {
+    var ev = evOn(), list = ev ? evList : h2Shown(), c = here();
+    var withD = list.map(function (s) { return { s: s, d: P.haversineMi(c.lat, c.lng, s.lat, s.lng) }; }).sort(function (a, b) { return a.d - b.d; });
+    var what = ev ? (S.alt.evSpeed === 'dc' ? 'fast charger' : S.alt.evSpeed === 'l2' ? 'Level 2 charger' : 'charger') : 'hydrogen station';
+    if (withD.length) best.innerHTML = 'Nearest ' + what + ' <span class="big">' + withD[0].d.toFixed(1) + ' mi</span><br><b>' + esc(withD[0].s.name) + '</b> · ' + withD.length + ' ' + (ev ? 'here' : 'open');
+    else best.innerHTML = busy ? 'Finding ' + what + 's…' : ev ? 'No ' + what + 's here yet. Tap ↻ to look around you' : 'Tap ↻ to fetch every hydrogen station';
+    rows.innerHTML = withD.length ? withD.slice(0, 120).map(function (x) {
+      var s = x.s, sub = ev ? [s.network, s.dc ? s.dc + ' fast · ' + (s.kwEst ? '~' : '') + s.kw + ' kW' : s.l2 ? s.l2 + ' Level 2' : ''].filter(Boolean).join(' · ') : ((s.hyPress || []).join(' · ') || 'hydrogen');
+      return '<button class="row" data-af="' + esc(s.id) + '"><span class="af-ic ' + (ev ? 'ev' : 'h2') + '">' + (ev ? '⚡' : 'H₂') + '</span>' +
+        '<span class="mid"><div class="nm">' + esc(s.name) + '</div><div class="sub">' + x.d.toFixed(1) + ' mi · ' + esc(sub) + '</div></span>' +
+        '<span class="pr"><div class="o" style="text-decoration:none">' + esc(ev && s.pricing ? (s.pricing.length > 18 ? s.pricing.slice(0, 17) + '…' : s.pricing) : '') + '</div></span></button>';
+    }).join('') + '<div class="af-src">Stations: U.S. Department of Energy (AFDC)</div>' : '<div class="empty">' + (ev ? 'Chargers' : 'Hydrogen stations') + ' will appear here.</div>';
+  }
+  function focus(id) {
+    var m = marks[id]; if (!m) return;
+    map.setView(m.getLatLng(), Math.max(map.getZoom(), 13)); setTimeout(function () { m.openPopup(); }, 250);
+  }
+  /** The mode changed (the pill): show its stations, fetching once if there are none yet (a free lookup). */
+  function modeChanged() {
+    showEv(); showH2();
+    if (evOn() && !evList.length) refresh(false);
+    else if (h2On() && !h2List.length) refresh(false);
+  }
+  // a car of another kind picked in the Garage: the mode follows it (⚡ for an EV, H₂ for a fuel cell, ⛽ otherwise)
+  var lastKind = null;
+  window.addEventListener('garagechange', function () {
+    var G = window.Garage, c = G && G.car(); if (!c) return;
+    var k = G.kind(c), m = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas';
+    if (lastKind !== null && lastKind !== m) A.setMode(m);
+    lastKind = m;
+  });
+
   // stations already fetched come back on the map at start (no lookup)
   try {
     var o = KV.get('afdc', 'hy-all');
-    if (o && o.v) { h2List = o.v.map(norm).filter(Boolean); h2T = o.t; if (S.alt.h2Show) setTimeout(showH2, 0); }
+    if (o && o.v) { h2List = o.v.map(norm).filter(Boolean); h2T = o.t; }
   } catch (e) { }
-  window.addEventListener('garagechange', function () { if (S.alt.h2Show) drawCoverage(); });
+  window.addEventListener('garagechange', function () { if (h2On()) drawCoverage(); });
+  // at start: the mode the app was left in (its stations, the selector)
+  setTimeout(function () { var G = window.Garage, c = G && G.car(); if (c) { var k = G.kind(c); lastKind = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas'; } if (A.altMode()) { showEv(); showH2(); A.rebuild(); } }, 0);
 
   window.AltFuel = { hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
-    open: openPanel, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD };
+    open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD };
 })();

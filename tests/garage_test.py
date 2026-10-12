@@ -213,15 +213,20 @@ with sync_playwright() as p:
         fc = pg.evaluate('window.Garage.car()'); print('  H2:', fc['power'], fc['epa'], fc['tank'], pg.evaluate('window.Garage.rangeMi()'))
         assert fc['power'] == 'h2' and fc['tank'] == 5.6 and abs(pg.evaluate('window.Garage.rangeMi()') - 74 * 5.6) < 8
         assert 'mi/kg' in ft(pg, '.g-econ').lower() and 'Hydrogen tank (kg)' in ft(pg, '.g-edit')
-        # ---- the map panel: every hydrogen station, and what's out of reach for this car ----
+        # ---- the fuel-mode pill: picking the Mirai switched the map to hydrogen, which fetched every station ----
         pg.click('#tClose'); pg.wait_for_timeout(300)
-        pg.click('#btnAlt'); pg.wait_for_timeout(300)
-        assert pg.locator('#afPick').count() == 1; pg.screenshot(path=f'{OUT}/{name}-af0-panel.png'); wide(pg, 'af panel')
-        pg.click('#afH2Get'); pg.wait_for_timeout(900)
+        pg.wait_for_function("window.__app.S.fuelMode === 'h2' && window.AltFuel.h2().length > 0", timeout=5000); pg.wait_for_timeout(300)
+        assert 'H' in pg.text_content('#btnMode') and pg.locator('#btnMode.m-h2').count() == 1
+        segs = [b.strip() for b in pg.locator('#grades button').all_text_contents()]; print('  H2 selector:', segs); assert segs == ['All', 'H70', 'H35']
         assert any('fuel_type=HY' in u and 'limit=all' in u for u in pg.evaluate('window.__afdc'))
         assert all('DEMO_KEY' in u for u in pg.evaluate('window.__afdc')), 'shared key when you have none'
         n = pg.evaluate('window.AltFuel.h2().length'); lg = ft(pg, '#afLegend'); print('  H2 stations:', n, '| legend:', lg.replace('\n', ' | '))
         assert n == 5 and pg.evaluate('!!window.AltFuel.coverage()') and '207 mi' in lg and '413 mi' in lg
+        assert pg.locator('#rows .row[data-af]').count() == 5 and 'hydrogen station' in ft(pg, '#bestLine').lower()
+        pg.click('#btnMode'); pg.wait_for_timeout(200)
+        assert pg.locator('#modeMenu [data-mode]').count() == 3; pg.screenshot(path=f'{OUT}/{name}-af0-menu.png'); wide(pg, 'mode menu')
+        pg.click('#modeMenu [data-mode-opts]'); pg.wait_for_timeout(300); wide(pg, 'af options')
+        pg.click('#afX'); pg.wait_for_timeout(250)
         pg.wait_for_timeout(800)
         tiles = pg.evaluate("document.querySelectorAll('.leaflet-afcov-pane canvas').length"); print('  coverage tiles:', tiles); assert tiles > 0
         # pixel check: far from any station is gray, next to one is clear
@@ -229,17 +234,22 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-af1-coverage.png'); wide(pg, 'coverage')
         pg.evaluate("window.__app.map.setView([39.5, -98.5], 4, { animate: false })"); pg.wait_for_timeout(900)
         pg.screenshot(path=f'{OUT}/{name}-af2-coverage-us.png')
-        pg.evaluate("window.__app.S.alt.h2Range = '120'"); pg.click('#btnAlt'); pg.wait_for_timeout(300)
+        pg.evaluate("window.__app.S.alt.h2Range = '120'"); pg.click('#btnMode'); pg.wait_for_timeout(200); pg.click('#modeMenu [data-mode-opts]'); pg.wait_for_timeout(300)
         assert pg.input_value('#afRange') == '120'; pg.fill('#afRange', ''); pg.dispatch_event('#afRange', 'change'); pg.wait_for_timeout(200)
         assert '207 mi' in ft(pg, '#afLegend')
-        # EV chargers in the area, for the EV's plug
+        pg.click('#afX'); pg.wait_for_timeout(250)
+        # ⚡ mode: chargers around you for the EV's plug; the selector picks the speed
         pg.evaluate("(id) => { window.__app.S.carId = id; }", ev_id)
-        pg.click('#afX'); pg.wait_for_timeout(250); pg.click('#btnAlt'); pg.wait_for_timeout(300)
-        pg.click('#afEvGet'); pg.wait_for_timeout(700)
+        pg.click('#btnMode'); pg.wait_for_timeout(200); pg.click('#modeMenu [data-mode="ev"]'); pg.wait_for_timeout(800)
         u = [x for x in pg.evaluate('window.__afdc') if 'nearest.json' in x][-1]; print('  EV near:', u.split('?')[1][:200])
         assert 'ev_charging_level=dc_fast' in u and 'ev_connector_type=TESLA' in u
-        pg.click('#afH2Show') if pg.locator('#afH2Show').count() else None
-        pg.wait_for_timeout(200)
+        segs = [b.strip() for b in pg.locator('#grades button').all_text_contents()]; print('  EV selector:', segs); assert segs == ['Fast', 'Level 2', 'All']
+        pg.locator('#grades button', has_text='Level 2').click(); pg.wait_for_timeout(800)
+        u = [x for x in pg.evaluate('window.__afdc') if 'nearest.json' in x][-1]; assert 'ev_charging_level=2' in u, u
+        pg.screenshot(path=f'{OUT}/{name}-af3-ev.png'); wide(pg, 'ev mode')
+        # back to gas: the grades again
+        pg.click('#btnMode'); pg.wait_for_timeout(200); pg.click('#modeMenu [data-mode="gas"]'); pg.wait_for_timeout(300)
+        assert pg.locator('#grades button').count() == 4 and pg.locator('#rows .row[data-af]').count() == 0
         # ---- a trip in the EV: chargers along the route, kWh, charging time ----
         pg.click('#btnTrip'); pg.wait_for_timeout(400)
         if pg.locator('#tpNew').count(): pg.click('#tpNew'); pg.wait_for_timeout(300)
