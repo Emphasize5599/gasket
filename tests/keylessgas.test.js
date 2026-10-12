@@ -19,6 +19,8 @@ assert.equal(merged.length,1);assert.equal(merged[0].prices.regular.price,3.123)
 assert.deepEqual(open[0].prices,{},'do not mutate cached station locations');
 const ambiguous=K.merge([open[0],{...open[0],id:'other',lng:-92.2901}],[w],a,P);
 assert.equal(ambiguous.length,3);assert.equal(ambiguous[0].prices.regular,undefined,'never assign a price across ambiguous pumps');
+const twin=K.merge(open,[w,{...w,id:'web:twin',lng:-92.2901,prices:{regular:{price:4.12,updated:null}}}],a,P);
+assert.equal(twin.length,3);assert.equal(twin[0].prices.regular,undefined,'two nearby same-brand Google pumps cannot overwrite one OSM station');
 console.log('Open-station normalization, bounds, deduplication, provenance and conservative matching passed');
 const link=(id,name='Exxon',lng=-92.29)=>`<article role="article"><a aria-label="${name}" href="https://www.google.com/maps/place/${name}/data=!1s${id}!3d34.745!4d${lng}">${name}</a></article>`;
 const html='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'End of the list</div>';

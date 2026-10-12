@@ -36,7 +36,8 @@
       if(!brand||!contains(w,a,P))return;
       var candidates=out.filter(function(o){return o.brand===brand&&P.haversineMi(o.lat,o.lng,w.lat,w.lng)<0.06;});
       // Ambiguous matches remain distinct rather than transferring a price to the wrong pump.
-      if(candidates.length===1){
+      var uniqueWeb=candidates.length===1 && web.filter(function(other){return P.detectBrand(other.name,other.website)===brand&&P.haversineMi(candidates[0].lat,candidates[0].lng,other.lat,other.lng)<0.06;}).length===1;
+      if(uniqueWeb){
         var o=candidates[0];
         if(w.prices&&w.prices.regular){o.prices.regular=w.prices.regular;o.source=w.source;o.google=true;}
         o.mapsUri=w.mapsUri;

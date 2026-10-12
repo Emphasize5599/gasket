@@ -17,7 +17,7 @@ For paid API comparisons in this separate installation, an Android-restricted Go
 - Walmart and Murphy direct-source readers remain available and override matched web prices.
 - Search results are NOT an exhaustive station catalog. OSM can miss stations, brands, addresses or recent closures. Google may omit prices or omit stations. Missing prices remain missing.
 - Only explicit USD `/Regular` labels are accepted. Premium, diesel, prices without a grade, implausible values and ambiguous ID/price associations are rejected. Google's US price update time is unknown; retrieval time is not represented as a pump-price update time.
-- OSM node/way duplicates collapse only within 0.025 miles of the same brand. Price transfer requires one same-brand OSM candidate within 0.06 miles; ambiguous candidates retain separate Google rows. No nearest-station guessing across brands. The experiment is US-focused.
+- OSM node/way duplicates collapse only within 0.025 miles of the same brand. Price transfer requires a one-to-one match between same-brand OSM and Google candidates within 0.06 miles; ambiguous candidates in either direction retain separate Google rows. No nearest-station guessing across brands. The experiment is US-focused.
 
 ## License decision
 
