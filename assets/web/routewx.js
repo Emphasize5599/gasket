@@ -50,8 +50,8 @@
     rain: '#26a69a', fog: '#bcaaa4', wind: '#c0ca33', heat: '#ef6c00', cold: '#5c6bc0', air: '#6d4c41' };   // none close to the route's blue or the other routes' gray
   /** One point's forecast hour -> {kind: level (1 watch, 2 bad)} plus the numbers behind it. wx/aq: that hour's values. */
   function classify(wx, aq) {
-    var f = {};
-    if (wx) {
+    var f = wx && wx.src === 'nws' ? classifyNws(wx) : {};
+    if (wx && wx.src !== 'nws') {
       var c = +wx.code, p = +wx.precip || 0, s = +wx.snow || 0, t = wx.tF, v = wx.visM, g = +wx.gust || 0;
       if (c >= 95) f.storm = 2;
       if ([56, 57, 66, 67].indexOf(c) >= 0 || (p >= 0.01 && t != null && t <= 32 && !s && !(c >= 71 && c <= 77) && c !== 85 && c !== 86)) f.ice = 2;
@@ -84,13 +84,14 @@
         if (lv) {
           if (!cur) { cur = { kind: k, level: lv, fromMi: p.mi, toMi: p.mi, from: p.eta, to: p.eta, peak: {}, events: [] }; out.push(cur); }
           cur.toMi = p.mi; cur.to = p.eta; cur.level = Math.max(cur.level, lv); gap = 0;
-          var w = p.wx || {}, q = p.aq || {};
-          if (k === 'air' && (cur.peak.aqi == null || q.aqi > cur.peak.aqi)) cur.peak = { aqi: q.aqi, cause: airCause(q) };
-          if (k === 'heat' && !(cur.peak.tF >= w.tF)) cur.peak = { tF: w.tF };
-          if (k === 'cold' && !(cur.peak.tF <= w.tF)) cur.peak = { tF: w.tF };
-          if (k === 'wind' && !(cur.peak.gust >= w.gust)) cur.peak = { gust: w.gust };
-          if ((k === 'rain' || k === 'storm') && !(cur.peak.precip >= w.precip)) cur.peak = { precip: w.precip };
-          if (k === 'snow' && !(cur.peak.snow >= w.snow)) cur.peak = { snow: w.snow };
+          var w = p.wx || {}, q = p.aq || {}, pk = cur.peak;
+          if (k === 'air' && (pk.aqi == null || q.aqi > pk.aqi)) { pk.aqi = q.aqi; pk.cause = airCause(q); }
+          if (k === 'heat' && !(pk.tF >= w.tF)) pk.tF = w.tF;
+          if (k === 'cold' && !(pk.tF <= w.tF)) pk.tF = w.tF;
+          if (k === 'wind') { if (w.gust != null && !(pk.gust >= w.gust)) pk.gust = w.gust; if (w.wind != null && !(pk.wind >= w.wind)) pk.wind = w.wind; }
+          if ((k === 'rain' || k === 'storm') && w.precip != null && !(pk.precip >= w.precip)) pk.precip = w.precip;
+          if (k === 'snow' && w.snow != null && !(pk.snow >= w.snow)) pk.snow = w.snow;
+          if (k !== 'air' && w.src === 'nws' && w.text && (pk.pop == null || (w.pop || 0) > pk.pop)) { pk.text = w.text; pk.pop = w.pop; }   // the NWS forecast's own words
           if (k === 'alert') (p.alerts || []).forEach(function (a) { if (cur.events.indexOf(a.event) < 0) cur.events.push(a.event); if (a.level > cur.level) cur.level = a.level; });
         } else if (cur && ++gap > 1) { cur = null; gap = 0; }
       });
@@ -109,6 +110,7 @@
   function advice(x, ctx) {
     ctx = ctx || {};
     var a = [], d = ctx.tread, k = x.kind, long = x.to - x.from > HOUR;
+    if (x.peak && x.peak.text && x.src !== 'nws') a.push('National Weather Service forecast: ' + x.peak.text + (x.peak.pop ? ' (' + x.peak.pop + '% chance)' : '') + '.');
     if (k === 'tornado') a.push('Don\'t drive into it. Wait it out in a sturdy building, or take another route.');
     if (k === 'flood') a.push('Turn around, don\'t drown: never drive into water over the road. Six inches can stall a car, a foot can float it.');
     if (k === 'tropical') a.push('Avoid it if you can: flooding, downed trees and strong gusts. If you must go, slow down and keep out of standing water.');
@@ -257,6 +259,32 @@
     for (var q = 0; q < Math.min(n, items.length); q++) ws.push(w());
     await Promise.all(ws);
   }
+  /** "10 to 15 mph" -> 15 (the most it says). */
+  function windMph(s) { var m = String(s || '').match(/\d+/g); return m ? Math.max.apply(null, m.map(Number)) : null; }
+  /** A point's NWS hourly forecast periods: /points (which grid square, kept 30 days) then that square's hourly forecast. */
+  async function nwsHourly(p, getJson, stats) {
+    try {
+      var r = await getJson('https://api.weather.gov/points/' + p.lat.toFixed(4) + ',' + p.lng.toFixed(4));
+      var url = r && r.body && JSON.parse(r.body).properties.forecastHourly; if (!url) throw new Error('no grid');
+      var h = await getJson(url); if (!h || !h.body) throw new Error('no forecast');
+      return JSON.parse(h.body).properties.periods || null;
+    } catch (e) { stats.nwsErrors = (stats.nwsErrors || 0) + 1; return null; }
+  }
+  /** The NWS forecast's words for an hour -> {kind: level}: thunderstorms, freezing rain / sleet, snow, rain, fog, wind. */
+  function classifyNws(w) {
+    var f = {}, t = String(w.text || '').toLowerCase(), pop = w.pop == null ? null : +w.pop;
+    var some = pop == null || pop >= 30, likely = pop == null || pop >= 50 || /likely|heavy/.test(t);
+    if (/thunder|t-storm/.test(t) && some) f.storm = (pop != null && pop >= 60) || /severe|likely/.test(t) ? 2 : 1;
+    if (/freezing (rain|drizzle)|sleet|\bice\b/.test(t) && some) f.ice = 2;
+    else if (/snow|blizzard/.test(t) && some) f.snow = /heavy snow|blizzard/.test(t) ? 2 : 1;
+    if (!f.snow && !f.ice && /rain|showers|drizzle/.test(t) && likely && !(f.storm && !/heavy/.test(t))) f.rain = /heavy/.test(t) ? 2 : 1;
+    if (/fog/.test(t)) f.fog = /dense/.test(t) ? 2 : 1;
+    if (w.wind >= 40) f.wind = 2; else if (w.wind >= 30 || /\bwindy\b/.test(t)) f.wind = 1;
+    var tF = w.tF;
+    if (tF != null && tF >= 100) f.heat = 2; else if (tF != null && tF >= 93) f.heat = 1;
+    if (tF != null && tF <= 0) f.cold = 2; else if (tF != null && tF <= 20) f.cold = 1;
+    return f;
+  }
   /**
    * Fill each point with its forecast hour (wx), air (aq), alerts and flags. getJson(url) -> Promise<{body}|{error}>;
    * opts.stateAt(lat, lng) -> 'AR' (for the alerts). -> {pts, stats}
@@ -269,23 +297,49 @@
     var r2 = function (v) { return v.toFixed(2); }, groups = [];
     for (var g = 0; g < pts.length; g += 50) groups.push(pts.slice(g, g + 50));
     var coords = function (ps) { return 'latitude=' + ps.map(function (p) { return r2(p.lat); }).join(',') + '&longitude=' + ps.map(function (p) { return r2(p.lng); }).join(','); };
-    var done = 0, total = groups.length * 2 + 1, tell = function () { if (opts.onProg) opts.onProg(Math.min(0.97, done / total)); };
+    var done = 0, total = groups.length + 1, tell = function () { if (opts.onProg) opts.onProg(Math.min(0.97, done / total)); };
     var get = async function (url) { var r = await getJson(url); done++; tell(); if (!r || !r.body) { stats.errors++; return null; } return r.body; };
     tell();
-    await pool(groups, 3, async function (ps) {
-      var body = await get('https://api.open-meteo.com/v1/forecast?' + coords(ps) + '&hourly=weather_code,temperature_2m,precipitation,snowfall,visibility,wind_gusts_10m' +
-        '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=GMT&forecast_days=' + days);
-      if (!body) return;
-      try {
-        list(body).forEach(function (d, k) {
-          var p = ps[k], h = d && d.hourly; if (!p || !h) return;
-          var i = hourIdx(h.time, p.eta); if (i < 0) { stats.beyondWeather++; return; }
-          // Open-Meteo's snowfall is in inches of snow (not water) when precipitation_unit=inch
-          p.wx = { code: h.weather_code[i], tF: h.temperature_2m[i], precip: h.precipitation[i], snow: h.snowfall[i], visM: h.visibility ? h.visibility[i] : null, gust: h.wind_gusts_10m[i] };
-          stats.weather++;
-        });
-      } catch (e) { stats.errors++; }
+    // weather: the National Weather Service's hourly forecast (its forecasters' own, about 6.5 days) at each point;
+    // later than that, or where it fails, Open-Meteo: the National Blend of Models (what NWS starts from), else its default
+    var nwsEnd = now + 156 * HOUR, near = pts.filter(function (p) { return p.eta < nwsEnd; });
+    total += near.length; tell();
+    stats.nws = 0;
+    await pool(near, 4, async function (p) {
+      var hourly = await nwsHourly(p, getJson, stats); done++; tell(); if (!hourly) return;
+      var per = hourly.filter(function (x) { return Date.parse(x.startTime) <= p.eta && p.eta < Date.parse(x.endTime); })[0];
+      if (!per) return;
+      p.wx = { src: 'nws', text: per.shortForecast || '', pop: per.probabilityOfPrecipitation ? per.probabilityOfPrecipitation.value : null,
+        tF: per.temperatureUnit === 'C' ? per.temperature * 9 / 5 + 32 : per.temperature, wind: windMph(per.windSpeed) };
+      stats.weather++; stats.nws++;
     });
+    var om = async function (ps, model) {
+      var gs = []; for (var g2 = 0; g2 < ps.length; g2 += 50) gs.push(ps.slice(g2, g2 + 50));
+      var left = [];
+      await pool(gs, 3, async function (qs) {
+        var body = await get('https://api.open-meteo.com/v1/forecast?' + coords(qs) + '&hourly=weather_code,temperature_2m,precipitation,snowfall,visibility,wind_gusts_10m' +
+          '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch' + (model ? '&models=' + model : '') + '&timezone=GMT&forecast_days=' + days);
+        if (!body) { left = left.concat(qs); return; }
+        try {
+          list(body).forEach(function (d, k) {
+            var p = qs[k], h = d && d.hourly; if (!p || !h) return;
+            var i = hourIdx(h.time, p.eta);
+            if (i < 0 || (h.weather_code[i] == null && h.precipitation[i] == null)) { left.push(p); return; }
+            // Open-Meteo's snowfall is in inches of snow (not water) when precipitation_unit=inch
+            p.wx = { src: model ? 'nbm' : 'om', code: h.weather_code[i], tF: h.temperature_2m[i], precip: h.precipitation[i], snow: h.snowfall ? h.snowfall[i] : null, visM: h.visibility ? h.visibility[i] : null, gust: h.wind_gusts_10m ? h.wind_gusts_10m[i] : null };
+            stats.weather++;
+          });
+        } catch (e) { stats.errors++; left = left.concat(qs); }
+      });
+      return left;
+    };
+    var rest = pts.filter(function (p) { return !p.wx; });
+    if (rest.length) {
+      total += Math.ceil(rest.length / 50) * 2; tell();
+      var stillLeft = await om(rest, 'ncep_nbm_conus');
+      if (stillLeft.length) stillLeft = await om(stillLeft, null);
+      stats.beyondWeather = stillLeft.length;
+    }
     var airDays = Math.min(5, days);
     await pool(groups, 3, async function (ps) {
       var body = await get('https://air-quality-api.open-meteo.com/v1/air-quality?' + coords(ps) + '&hourly=us_aqi,us_aqi_pm2_5,us_aqi_ozone,dust&timezone=GMT&forecast_days=' + airDays);
@@ -348,10 +402,10 @@
     if (x.kind === 'snow') return x.level >= 2 ? 'Heavy snow' : 'Snow';
     if (x.kind === 'heat') return 'Heat' + (pk.tF != null ? ' (up to ' + Math.round(pk.tF) + '°F)' : '');
     if (x.kind === 'cold') return 'Below freezing' + (pk.tF != null ? ' (down to ' + Math.round(pk.tF) + '°F)' : '');
-    if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : '');
+    if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : pk.wind ? ' (up to ' + Math.round(pk.wind) + ' mph)' : '');
     return KINDS[x.kind][0];
   }
-  var api = { timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire,
+  var api = { timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
     forRoute: forRoute, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;

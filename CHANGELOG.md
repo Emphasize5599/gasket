@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.119 - 2026-10-12 (keyless test branch only)
+- **Weather from the National Weather Service.** Hazards now use the NWS's own hourly forecast (its forecasters' wording, like "Thunderstorms Likely" or "Freezing Rain", with the chance) for the next 6½ days, and the list shows it. Past that, or if the NWS doesn't answer, Open-Meteo's National Blend of Models. Air quality still comes from Copernicus.
+- Bug fixes.
+
 ## 0.0.118 - 2026-10-12 (keyless test branch only)
 - Route: Leaving comes before Round trip, and "Now" / "Right away" clear a picked time on the phone too.
 - Hazards: each route tile has its own progress bar while its weather is checked (two routes at a time), the panel fits itself to the route tiles, and a notice says hazards are projections that can change with little warning.

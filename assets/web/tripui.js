@@ -2740,8 +2740,8 @@
   // ---------- step 4: Hazards — each leg's route, picked on the big map with the weather and hazards along each one ----------
   // Every option for the leg is drawn; each hazard is a colored stretch where and when you'd be in it (RouteWx.forRoute),
   // labeled on the chosen route only. Departure shows the chosen routes' stretches, without labels.
-  function wxGet(url) {       // forecasts are kept 45 min, warnings 10 min
-    var o = A.KV.get('wx', url, /weather\.gov/.test(url) ? 10 * 60e3 : 45 * 60e3);
+  function wxGet(url) {       // forecasts are kept 45 min, warnings 10 min, which NWS grid square a point is in 30 days
+    var o = A.KV.get('wx', url, /weather\.gov\/points\//.test(url) ? 30 * 864e5 : /weather\.gov\/alerts/.test(url) ? 10 * 60e3 : 45 * 60e3);
     if (o) return Promise.resolve(o.v);
     return call('fetchJson', url).then(function (r) { if (r && r.body) A.KV.put('wx', url, r); return r; });
   }
@@ -2859,7 +2859,7 @@
     if (!e || !e.st || e.st === 'loading') h += A.ldBar('Checking the forecast where and when you\'ll be');
     else if (e.st === 'error') h += '<p class="lead small keep">Couldn\'t get the forecast (' + esc(e.err) + '). <a href="#" id="tHzRetry">Try again</a></p>';
     else h += hzListHtml(e.hz, e.stats);
-    h += '<p class="wx-src">Weather data by Open-Meteo.com (CC BY 4.0; NOAA models) · Air: Copernicus Atmosphere Monitoring Service via Open-Meteo · Warnings: National Weather Service</p></div>';
+    h += '<p class="wx-src">Weather and warnings: National Weather Service · Past its 6½-day forecast: weather data by Open-Meteo.com (CC BY 4.0; NOAA\'s National Blend of Models) · Air: Copernicus Atmosphere Monitoring Service via Open-Meteo</p></div>';
     el.innerHTML = h;
     el.querySelectorAll('[data-hzk]').forEach(function (b) { b.onclick = function () { hzChoose(+b.dataset.hzk); }; });
     if ($('tHzRetry')) $('tHzRetry').onclick = function (ev) { ev.preventDefault(); hzCache.delete(list[sel]); renderHz(); hzLoadLeg(hzLeg); };

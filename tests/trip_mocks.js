@@ -117,6 +117,13 @@
       const sws = { properties: { id: 'tx-sws', event: 'Special Weather Statement', severity: 'Moderate', onset: new Date(Date.now() - 3600e3).toISOString(), ends: new Date(Date.now() + 3 * 864e5).toISOString(),
         description: 'Areas of dense fog have developed. Visibility will be reduced to a quarter mile or less at times.', areaDesc: 'Dallas', geocode: { SAME: ['048113'] } } };   // by county: Dallas County
       if (/area=TX/.test(url)) return { features: [flood, rip, sws] };
+      // the hourly forecast: which grid square (by longitude), then its hours (heavy rain west of -95.5)
+      if (/\/points\//.test(url)) { const lng = +url.split('/points/')[1].split(',')[1]; return { properties: { forecastHourly: 'https://api.weather.gov/gridpoints/TST/' + Math.round(-lng * 100) + ',1/forecast/hourly' } }; }
+      if (/forecast\/hourly/.test(url)) {
+        const wet = +/TST\/(\d+)/.exec(url)[1] / 100 > 95.5, t0 = new Date(); t0.setUTCMinutes(0, 0, 0);
+        return { properties: { periods: Array.from({ length: 156 }, (_, i) => ({ startTime: new Date(t0.getTime() + i * 3600e3).toISOString(), endTime: new Date(t0.getTime() + (i + 1) * 3600e3).toISOString(),
+          temperature: 78, temperatureUnit: 'F', windSpeed: '5 mph', shortForecast: wet ? 'Heavy Rain' : 'Mostly Sunny', probabilityOfPrecipitation: { value: wet ? 90 : 0 } })) } };
+      }
       if (/area=/.test(url)) return { features: [] };
       const lng = +/point=[-\d.]+,(-?[\d.]+)/.exec(url)[1];
       return { features: lng < -95.5 ? [flood] : [] };

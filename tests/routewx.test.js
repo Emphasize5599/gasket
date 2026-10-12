@@ -57,6 +57,16 @@ for (const [fips, lat, lng, name] of [['48113', 32.7767, -96.797, 'Dallas'], ['0
   assert.ok(!W.inPolys(US_COUNTIES['48113'], lat, lng) || fips === '48113', name + ' not in Dallas County');
 }
 assert.ok(Object.keys(US_COUNTIES).length > 3200, 'all 50 states');
+// the NWS hourly forecast's words
+const N = (text, pop, tF, wind) => W.classifyNws({ text, pop, tF: tF == null ? 70 : tF, wind: wind || 5 });
+assert.deepEqual(N('Chance Showers And Thunderstorms', 40), { storm: 1 });
+assert.deepEqual(N('Thunderstorms Likely', 70), { storm: 2 });
+assert.deepEqual(N('Freezing Rain', 60, 30), { ice: 2 });
+assert.deepEqual(N('Patchy Fog', 0), { fog: 1 }); assert.deepEqual(N('Areas Of Dense Fog', 0), { fog: 2 });
+assert.deepEqual(N('Slight Chance Rain Showers', 20), {}, 'a slight chance is not a hazard');
+assert.deepEqual(N('Heavy Rain', 90), { rain: 2 }); assert.deepEqual(N('Light Snow Likely', 60, 28), { snow: 1 });
+assert.deepEqual(N('Sunny', 0, 101), { heat: 2 }); assert.deepEqual(N('Windy', 0, 60, 35), { wind: 1 });
+assert.equal(W.windMph('10 to 35 mph'), 35); assert.equal(W.windMph(''), null);
 // alerts: what they are (by name, or read from their text), and where they are (outline or counties)
 assert.deepEqual(W.digestKnown('Flash Flood Warning'), { kind: 'flood', label: 'Flash flooding' });
 assert.deepEqual(W.digestKnown('Winter Storm Watch'), { kind: 'snow', label: 'Snow and ice' });
@@ -112,5 +122,26 @@ assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geoco
   assert.equal(rain.fromMi, 0, 'widened to cover the road between forecast points');
   assert.equal(W.title(rain), 'Heavy rain'); assert.equal(W.title(tw), 'Tornado');
   assert.ok(W.COLORS.tornado && W.COLORS.rain !== W.COLORS.snow);
+  // with the weather service answering: its hourly forecast for the next ~6.5 days, Open-Meteo (the Blend of Models) after
+  const u2 = [], far = Date.now() + 6.4 * 864e5;
+  const res2 = await W.forRoute(m, async (u) => {
+    u2.push(u);
+    if (/\/points\//.test(u)) { const [la, lo] = u.split('/points/')[1].split(','); return { body: JSON.stringify({ properties: { forecastHourly: 'https://api.weather.gov/gridpoints/TST/' + Math.round(-lo * 10) + ',1/forecast/hourly' } }) }; }
+    if (/forecast\/hourly/.test(u)) {
+      const x = +/TST\/(\d+)/.exec(u)[1] / 10, t0 = new Date(); t0.setUTCMinutes(0, 0, 0);
+      const periods = Array.from({ length: 156 }, (_, i) => ({ startTime: new Date(t0.getTime() + i * 3600e3).toISOString(), endTime: new Date(t0.getTime() + (i + 1) * 3600e3).toISOString(),
+        temperature: 66, temperatureUnit: 'F', windSpeed: '5 to 10 mph', shortForecast: x < 93 ? 'Heavy Rain' : 'Sunny', probabilityOfPrecipitation: { value: x < 93 ? 90 : 0 } }));
+      return { body: JSON.stringify({ properties: { periods } }) };
+    }
+    if (/air-quality/.test(u)) return { error: 'offline' };
+    if (/open-meteo/.test(u)) { assert.match(u, /models=ncep_nbm_conus/, 'past the NWS forecast: the National Blend of Models first'); const n = new URLSearchParams(u.split('?')[1]).get('longitude').split(',').length;
+      return { body: JSON.stringify(Array.from({ length: n }, () => ({ hourly: hourly(16 * 24, (k) => ({ weather_code: fill(k, 1), temperature_2m: fill(k, 70), precipitation: fill(k, 0), snowfall: fill(k, 0), visibility: fill(k, 20000), wind_gusts_10m: fill(k, 10) })) }))) }; }
+    return { error: 'offline' };
+  }, { depart: far });
+  assert.ok(res2.stats.nws > 0 && res2.stats.nws < res2.stats.points, 'the first part from the NWS forecast, the rest past it: ' + JSON.stringify(res2.stats));
+  assert.ok(u2.some((u) => /models=ncep_nbm_conus/.test(u)));
+  const r2 = res2.hazards.find((x) => x.kind === 'rain');
+  assert.ok(r2 && r2.level === 2 && r2.peak.text === 'Heavy Rain' && r2.peak.pop === 90, JSON.stringify(r2));
+  assert.match(W.advice(r2, {}).join(' '), /National Weather Service forecast: Heavy Rain \(90% chance\)/);
   console.log('route hazards: ' + urls.length + ' requests (' + states.join(', ') + '); ' + res.hazards.map((x) => x.kind + ' ' + Math.round(x.fromMi) + '–' + Math.round(x.toMi)).join(', '));
 })().catch((e) => { console.error(e); process.exitCode = 1; });

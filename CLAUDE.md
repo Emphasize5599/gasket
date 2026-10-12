@@ -4,6 +4,8 @@
 
 Everything on this branch is meant to be merged into `main` once the owner is satisfied with it; build new work here.
 
+0.0.119: weather along a route = NWS hourly forecast (`/points/lat,lng` → `forecastHourly`, 156 h; KV `wx` keeps points 30 days, forecasts 45 min; `classifyNws` reads `shortForecast` + chance: storms ≥30%, rain ≥50% or likely/heavy, snow/ice ≥30%, fog, wind ≥30 mph), the words kept as `peak.text` / `peak.pop`; past it or on failure Open-Meteo `models=ncep_nbm_conus`, then its default. `stats.nws`, `stats.nwsErrors`.
+
 0.0.118: Route's Leaving sits above Round trip; `clearDt` empties a date box (blur, value / defaultValue, type swap so the WebView redraws). Hazards: `hzLoadLeg` runs two options at a time, `RouteWx.forRoute` reports `opts.onProg(f)` per request, `hzBars` moves each tile's `.hz-bar` in place; `fitHz` sizes the panel to `.hz-notice` + `.hz-opts` (20–60%, once per leg / tile count); tiles keep one height while checking.
 
 0.0.117 (from a 288-area, 16-reader log: 45% of reader time after the last new row, 57% repeat rows, free memory 4.3 GB → 310 MB): the gas reader stops a discovery list at its bottom after 4 s without new rows (`stopReason` `quiet`; 12 s otherwise), `discoveryAreas` samples every 10 mi (`SPACING`), and lanes past the first four leave when `Native.memoryInfo` is low (< 700 MB or lowMemory; logged, pages released). No key: `ensureLimits` skips HPMS and uses one stand-in stretch.

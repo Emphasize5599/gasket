@@ -223,7 +223,8 @@ with sync_playwright() as p:
         assert 'Rip Current' not in hz, 'only what matters on the road'
         tags = pg.evaluate("[...document.querySelectorAll('.leaflet-tooltip.hzbub')].map(e => e.innerText)"); print('  map tags:', tags)
         assert tags and any('Unhealthy air' in t for t in tags) and pg.locator('.leaflet-overlay-pane path[stroke="#6d4c41"]').count() >= 2, 'labels on the chosen route; smoke colored on both routes'
-        nws = pg.evaluate('window.__nwsUrls || []'); assert nws and all('area=' in u for u in nws), 'warnings: one ask per state, no per-point lookups'
+        nws = pg.evaluate('window.__nwsUrls || []'); assert any('area=' in u for u in nws) and not any('alerts/active?point=' in u for u in nws), 'warnings: one ask per state, no per-point lookups'
+        assert any('forecast/hourly' in u for u in nws) and 'National Weather Service forecast: Heavy Rain (90% chance)' in hz, 'the weather from the NWS hourly forecast'
         pg.screenshot(path=f'{OUT}/{name}-t1b-routes.png'); wide(pg, 'hazards')
         pg.click('.hz-opt[data-hzk="0"]'); pg.wait_for_timeout(300)
         assert mi(pg) == 318 and pg.locator('.hz-opt[data-hzk="0"].on').count() == 1
