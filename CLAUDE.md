@@ -1,5 +1,9 @@
 # Gasket
 
+## This branch: keyless experiment
+
+`test/keyless-regular-gas` builds a separate app (`com.bensanzone.fuelmap.keyless`, label Gasket Keyless Test), not a main release. MainActivity keeps its original Java package and imports the test package's generated R class. Do not merge that manifest/resource change blindly into main. `KEYLESS_EXPERIMENT.md` records scope, licensing and promotion gates. No Vela code/templates are bundled; retain Gasket's current license. The opt-in nearby regular mode skips paid Places searches entirely and never silently falls back to them. Routing/along-route search and other grades are unchanged. Signed test APKs are published by the build workflow to a separately named prerelease; ordinary main tags are not used for test builds.
+
 A personal Android app (formerly Fuel+ Map) that maps gas stations from the brands its owner's discounts cover. It shows the price after discounts and plans the cheapest fuel stops for a Google Maps route. Application ID `com.bensanzone.fuelmap`. Alpha; it is published only once there's a beta release candidate.
 
 Ideas saved for later (weather along the route, polluted zones, hydrogen / EV, car pictures) are in `TODO.md`; add to it when the owner asks to keep something for later.

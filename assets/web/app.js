@@ -336,8 +336,9 @@
     $('wmCheck').classList.add('hidden');
     if (demo) { gStations = []; official = {}; receiveGoogle(window.demoPlaces(lat, lng), []); finish(lat, lng); return; }
     var sites = Object.keys(SITES).filter(siteOn);
-    var useGoogle = !!S.apiKey;
-    if (!useGoogle && !sites.length) { openSettings(true); return; }
+    var keyless = S.keylessRegular && S.grade === 'regular' && window.KeylessGas;
+    var useGoogle = !!S.apiKey && !keyless;
+    if (!useGoogle && !keyless && !sites.length) { openSettings(true); return; }
     var b = bounds || bbox(lat, lng, S.radiusMi);
     var id = ++reqId; pending = id; errs = [];
     pendingSources = 0; sitePending = {}; siteOk = {};
@@ -348,6 +349,18 @@
       var queries = Object.keys(P.BRANDS).filter(function (k) { return S.brands[k]; }).map(function (k) { return P.BRANDS[k].query; });
       if (queries.length) { pendingSources++; N.search(id, S.apiKey, JSON.stringify(queries), b[0], b[1], b[2], b[3], Number(S.monthlyCap) || 0); }
     } else gStations = [];
+    if (keyless) {
+      pendingSources++;
+      var keylessRadius = Math.min(Math.max(P.haversineMi(lat,lng,b[2],lng),2),15);
+      KeylessGas.search(lat,lng,keylessRadius).then(function(r){
+        if(id!==reqId)return;
+        gStations=r.stations.filter(function(s){return S.brands[s.brand];});
+        errs=errs.concat(r.errors||[]);
+        if(r.detail&&r.detail.blocked){checkKey='gasweb';$('wmCheckTitle').textContent='Google Maps web wants a check';$('wmCheck').classList.remove('hidden');}
+        errs.push('Experimental keyless search: coverage may be incomplete; price update times are unknown. No paid lookup fallback was used.');
+        sourceDone();
+      }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();});
+    }
     var radius = Math.min(Math.max(P.haversineMi(lat, lng, b[2], lng), 3), 30);
     sites.forEach(function (k) {
       pendingSources++; sitePending[k] = true;
@@ -454,7 +467,7 @@
       $('bestLine').innerHTML = 'Best ' + gl + ' <span class="big">' + priceHtml(b.c.final) + '</span><br><b>' + esc(P.displayName(b.s)) + '</b>' +
         (b.dist != null ? ' · ' + b.dist.toFixed(1) + ' mi' : '');
     } else {
-      $('bestLine').innerHTML = stations.length ? 'No ' + gl + ' prices here yet' : (S.apiKey || demo ? 'No matching stations yet' : 'Walmart only — <b>add a Google key</b> for other brands');
+      $('bestLine').innerHTML = stations.length ? 'No ' + gl + ' prices here yet' : (S.apiKey || demo || (S.keylessRegular && S.grade==='regular') ? 'No matching stations yet' : 'Walmart only — <b>add a Google key</b> for other brands');
     }
     var rows = list.slice().sort(function (a, b) {
       if (sortBy === 'dist') return (a.dist || 0) - (b.dist || 0);
@@ -465,7 +478,7 @@
         '<span class="mid"><div class="nm">' + esc(P.displayName(x.s)) + '</div><div class="sub">' + (x.dist != null ? x.dist.toFixed(1) + ' mi · ' : '') + esc(shortAddr(x.s.address)) +
         (x.c && x.c.stale ? ' · <span style="color:var(--warn)">stale</span>' : '') + '</div></span>' +
         '<span class="pr">' + (x.c ? '<div class="f' + (bestIds[x.s.id] ? ' best' : '') + '">' + priceHtml(x.c.final) + '</div><div class="o">' + priceHtml(x.c.base) + '</div>' : '<div class="o" style="text-decoration:none">no price</div>') + '</span></button>';
-    }).join('') + (rows.some(function (x) { return x.s.google; }) ? gAttr() : '') : '<div class="empty">Stations will appear here.</div>';
+    }).join('') + (rows.some(function (x) { return x.s.google; }) ? gAttr() : '') + (rows.some(function(x){return x.s.osm;}) ? '<div class="gattr"><a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors · ODbL</a></div>' : '') : '<div class="empty">Stations will appear here.</div>';
     syncMapGAttr();
     refreshStatus();
     sizeSheet();
@@ -679,6 +692,7 @@
     h += '<div class="actions"><button class="btn primary" id="dNav"><svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>Directions in Google Maps</button>' +
       '<div class="btn-row"><button class="btn tonal" id="dOther">Other maps app</button><button class="btn tonal" id="dPlace">' + (s.wmStoreId ? 'Walmart store page' : 'Google listing') + '</button></div></div>';
     if (s.google) h += gAttr('in-detail');
+    if (s.osm) h += '<div class="gattr"><a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors · ODbL</a></div>';
     var d = $('detail'); d.innerHTML = h; d.classList.remove('hidden'); d.scrollTop = 0;
     $('btnLocate').classList.add('hidden'); $('btnTrip').classList.add('hidden'); if ($('btnAlt')) $('btnAlt').classList.add('hidden');
     $('listSheet').classList.add('hidden');
@@ -854,7 +868,7 @@
     $('dBlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) { BL.remove(e); $('dClose').onclick(); } }); };
   }
 
-  var CACHE_NS = ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin'];
+  var CACHE_NS = ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb'];
   function askDeleteBl() {
     var n = BL.list().length; if (!n) { deleteBl(); return Promise.resolve(false); }
     return confirmDel({ title: 'Delete your bad CITGO list?', body: 'All ' + n + ' station' + (n === 1 ? '' : 's') + ' will get the Walmart+ discount again.', action: 'Delete' })
@@ -894,7 +908,7 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
-    CACHE_NS.concat(['trips', 'logos', 'lookups', 'carpics']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trips', 'logos', 'lookups', 'carpics', 'gasmeta']).forEach(function (ns) { KV.clear(ns); });
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(''); } catch (e) { }
     if (window.FLog) FLog.clear();
@@ -1066,6 +1080,7 @@
     var used = function (k) { return (S.citgoUsed || {})[k] === mk; };
     var h = '<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>';
     if (onboarding) h += '<p class="lead">Walmart and Murphy USA prices come straight from their own sites — no key needed. For Sam\'s, Exxon, Mobil and CITGO, add a free Google Places API key (optional), or try the demo first.</p>';
+    h += '<div class="card"><h3>Experimental regular-gas lookup</h3><div class="field"><div class="lbl">Try keyless regular prices<small>Nearby map only, within 15 miles. Uses OpenStreetMap station locations and Google Maps web prices; sends the search area to both. Coverage is incomplete and price update times are unknown. No paid Places fallback. Other grades, routing and route-wide station searches still use your key.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
     h += '<div class="card"><h3>Google Places API key (optional)</h3>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
       '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +

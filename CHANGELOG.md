@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.104 - 2026-10-11 (keyless test branch only)
+- **Optional keyless nearby regular prices.** OpenStreetMap locations and Google Maps web search prices, bounded and cached without a paid Places fallback. Coverage and unknown update times are explicitly labeled. Routes and other grades remain unchanged.
+- Separate test installation (`com.bensanzone.fuelmap.keyless`), preserving the regular app and its data.
+- Bug fixes.
+
 ## 0.0.103 - 2026-10-11
 - **Keep car pictures.** Downloaded and imported pictures live in app storage and travel with full backups; upgrade preserves existing cached images and photo metadata.
 - **Direct APK downloads.** Signed APKs are available on each GitHub release without unpacking an Actions ZIP.

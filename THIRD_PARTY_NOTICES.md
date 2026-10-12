@@ -2,6 +2,12 @@
 
 Gasket is licensed under the Source First License 1.1 (see `LICENSE.md`). That license covers Gasket's own code only. The third-party parts below keep their own licenses.
 
+## Experimental OpenStreetMap station data
+
+The keyless test branch queries fuel-station locations from OpenStreetMap via Overpass. Data © OpenStreetMap contributors, available under the Open Database License (ODbL): https://www.openstreetmap.org/copyright . Station attribution is shown in the experimental map's station details and results. No Overpass server software is bundled.
+
+Vela (https://github.com/PimpinPumpkin/Vela), GPL-3.0, was researched for feasibility. No Vela code, libraries, calibration files or request templates are incorporated; see KEYLESS_EXPERIMENT.md for the independent implementation and direct-reuse licensing gate.
+
 ## Leaflet 1.9.4
 
 Bundled as `assets/web/lib/leaflet.js` and `assets/web/lib/leaflet.css`. https://leafletjs.com

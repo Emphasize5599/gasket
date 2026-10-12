@@ -1,4 +1,5 @@
 package com.bensanzone.fuelmap;
+import com.bensanzone.fuelmap.keyless.R;
 
 import android.Manifest;
 import android.app.Activity;
@@ -157,6 +158,8 @@ public class MainActivity extends Activity {
         workers.put("walmart", new SiteWorker("walmart", "https://www.walmart.com/store-finder", "https://www.walmart.com/"));
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
+        // Dedicated gas reader: never replaces an in-progress directions import.
+        workers.put("gasweb", new SiteWorker("gasweb", "https://www.google.com/maps", "https://www.google.com/", true));
         // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
         workers.put("nhtsa", new SiteWorker("nhtsa", "https://www.nhtsa.gov/recalls", "https://www.nhtsa.gov/"));
         // Tire Rack: a car's factory tire size, and the tires sold in that size (read in the background)
@@ -165,7 +168,7 @@ public class MainActivity extends Activity {
         workers.put("brave", new SiteWorker("brave", "https://search.brave.com/", "https://search.brave.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
-            if (sw.key.equals("gmaps")) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
+            if (sw.key.equals("gmaps") || sw.key.equals("gasweb")) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
             else root.addView(sw.view, new FrameLayout.LayoutParams(-1, -1));
         }
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
@@ -238,7 +241,7 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta"));
 
     /** Pictures are user data, including imported images. Upgrade the old cache without
      * overwriting a newer stored image or deleting the only copy if a move fails. */
@@ -374,7 +377,7 @@ public class MainActivity extends Activity {
                 public void onPageFinished(WebView v, String url) {
                     if (readReq >= 0 && !url.equals(v.getUrl())) return; // a callback from the page we just left
                     String title = String.valueOf(v.getTitle()).toLowerCase(Locale.US);
-                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || title.contains("robot") || title.contains("access denied")
+                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || ("gasweb".equals(key) && url.startsWith("https://consent.google.")) || title.contains("robot") || title.contains("access denied")
                             || title.contains("captcha") || title.contains("unusual traffic");
                     ready = !blocked && url.startsWith(SiteWorker.this.origin);
                     if (verifying == SiteWorker.this && showReq >= 0) {
@@ -470,7 +473,7 @@ public class MainActivity extends Activity {
                     SiteWorker w = workers.get(key);
                     if (w != null && w.readReq == id) { w.finishRead(id, payload); return; }
                     // Ignore late/duplicate background replies. Visible reads and price workers use onSiteResult.
-                    if ("tirerack".equals(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
+                    if ("tirerack".equals(key) || "gasweb".equals(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
                     js("window.onSiteResult&&onSiteResult(" + q(key) + "," + id + ",JSON.parse(" + q(payload) + "))");
                 }
             });
@@ -775,7 +778,7 @@ public class MainActivity extends Activity {
 
     // EPA mileage, OpenStreetMap places, FHWA speed limits, ExxonMobil's station finder, the DOE station finder (EV chargers,
     // hydrogen), and NHTSA (VIN decoding, recalls)
-    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "geo.dot.gov", "www.exxon.com",
+    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "overpass-api.de", "geo.dot.gov", "www.exxon.com",
             "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
@@ -793,7 +796,21 @@ public class MainActivity extends Activity {
         // OpenStreetMap's usage policy asks apps to identify themselves
         c.setRequestProperty("User-Agent", userAgent());
         int st = c.getResponseCode();
-        String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
+        String body;
+        if ("overpass-api.de".equals(new URL(url).getHost())) {
+            // Bound shared-service responses before allocating a huge JSON string in the WebView.
+            InputStream in = st >= 400 ? c.getErrorStream() : c.getInputStream();
+            if (in == null) { c.disconnect(); throw new Exception("HTTP " + st); }
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            try {
+                byte[] buf = new byte[16384]; int n;
+                while ((n = in.read(buf)) != -1) {
+                    if (bytes.size() + n > 1000000) throw new Exception("Area response too large; search a smaller area");
+                    bytes.write(buf, 0, n);
+                }
+                body = bytes.toString("UTF-8");
+            } finally { try { in.close(); } finally { c.disconnect(); } }
+        } else body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
         if (st >= 400) throw new Exception("HTTP " + st);
         return body;
     }
@@ -1622,7 +1639,8 @@ public class MainActivity extends Activity {
                     // only these pages may be read this way
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
                             || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"))
-                            || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"));
+                            || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
+                            || ("gasweb".equals(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
                         return;
@@ -1644,7 +1662,7 @@ public class MainActivity extends Activity {
                             fw.ready = false; fw.view.stopLoading();
                         }
                     };
-                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : 90000);
+                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : "gasweb".equals(key) ? 40000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             String at = fw.view.getUrl();

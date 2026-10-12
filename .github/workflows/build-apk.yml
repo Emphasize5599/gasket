@@ -3,7 +3,7 @@ name: Build signed APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, test/keyless-regular-gas]
     paths:
       - .github/workflows/build-apk.yml
       - AndroidManifest.xml
@@ -13,17 +13,19 @@ on:
       - assets/**
       - tests/tirerack.test.js
       - tests/tires.test.js
+      - tests/keylessgas.test.js
+      - tests/picture-storage.test.js
 
 permissions:
   contents: write
 
 concurrency:
-  group: signed-apk-main
+  group: signed-apk-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/keyless-regular-gas'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +38,7 @@ jobs:
           node tests/tires.test.js
           node tests/tirerack.test.js
           node tests/picture-storage.test.js
+          if [ -f tests/keylessgas.test.js ]; then node tests/keylessgas.test.js; fi
 
       - name: Check release signing configuration
         id: signing
@@ -77,7 +80,7 @@ jobs:
 
       # Actions downloads are always ZIPs. Release assets keep the original APK extension.
       - name: Publish direct APK download on the version's release
-        if: steps.signing.outputs.ready == 'true'
+        if: steps.signing.outputs.ready == 'true' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -94,6 +97,24 @@ jobs:
           if gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx "$asset" >/dev/null; then
             echo "APK already published; leaving it unchanged."
           else
+            gh release upload "$tag" "$asset"
+          fi
+
+      - name: Publish separate experimental APK download
+        if: steps.signing.outputs.ready == 'true' && github.ref == 'refs/heads/test/keyless-regular-gas'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="keyless-test-v${{ steps.version.outputs.name }}"
+          asset="Gasket-${{ steps.version.outputs.name }}-keyless-test.apk"
+          cp Gasket.apk "$asset"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
+            test "$release_sha" = "$GITHUB_SHA"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Gasket keyless test ${{ steps.version.outputs.name }}" --notes-file KEYLESS_EXPERIMENT.md --prerelease
+          fi
+          if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx "$asset" >/dev/null; then
             gh release upload "$tag" "$asset"
           fi
 

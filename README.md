@@ -20,6 +20,10 @@ Before you leave, it checks the car too: open safety recalls on your VIN, tire t
 
 <sub>Screenshots use demo prices and example cars.</sub>
 
+## Keyless test branch
+
+This branch builds **Gasket Keyless Test**, a separate installation. Enable **Try keyless regular prices** in Settings for nearby regular gas without paid Places calls. This is experimental, off by default, and does not replace keyed routing or other grades. See [scope, licensing and test plan](KEYLESS_EXPERIMENT.md). Regular Gasket 0.0.103 remains on main.
+
 ## Download
 
 Open [GitHub Releases](https://github.com/Emphasize5599/gasket/releases) and choose `Gasket-0.0.<version>.apk` under Assets. This is the installable signed APK, not a ZIP. Source code archives and Actions artifacts are separate downloads.
