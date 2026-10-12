@@ -78,11 +78,15 @@
   document.addEventListener('click',function(e){
     var cancel=e.target.closest('[data-cancel-prices]');
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
+    var dd=e.target.closest('[data-split]');
+    if(dd){var menu=dd.closest('.price-refresh-card').querySelector('.split-menu'),open=menu.classList.toggle('hidden')===false;dd.setAttribute('aria-expanded',String(open));return;}
+    if(!e.target.closest('.split-menu'))document.querySelectorAll('.split-menu:not(.hidden)').forEach(function(m){m.classList.add('hidden');});
     var button=e.target.closest('[data-trip-refresh]');if(!button||busy)return;
     if(button.dataset.tripRefresh==='web')findStops('web');
     else if(button.dataset.tripRefresh==='discover')findStops('discover');
     else findStops(true);
   });
+  var RF_ICON='<svg class="rf-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
   function refreshCard(){
     if(KIND()!=='gas'||!model)return '';
     var saved=savedPriceReplay(),web=!!saved;
@@ -94,7 +98,12 @@
     var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'')+(!S.apiKey?' Add the recommended API key in Settings to use this option.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
       (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
-      '<div class="scan-launches"><div><button class="btn tonal" data-trip-refresh="web"'+(!web?' disabled':'')+'>No API</button>'+A.qBtn(webHelp)+'</div><div><button class="btn tonal" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>API</button>'+A.qBtn(apiHelp)+'</div></div><div class="scan-discover"><button class="btn tonal sm" data-trip-refresh="discover">Discover stations · No API</button>'+A.qBtn('Find additional stations in overlapping areas along this route, scrolling each website result list. Slower and less consistent than API discovery; a finished list does not guarantee every station is listed. '+KeylessGas.readerCount(A)+' readers (adjust in Settings), progress, ETA and Cancel. No paid fallback. Your brand filters still apply.')+'</div>')+'</div>';
+      '<div class="scan-launches"><div><span class="split-btn"><button class="btn primary" data-trip-refresh="web"'+(!web?' disabled':'')+'>'+RF_ICON+'No API</button>'+
+        '<button type="button" class="btn primary split-dd" data-split aria-haspopup="menu" aria-expanded="false" aria-label="More No API options">▾</button></span>'+A.qBtn(webHelp)+'</div>'+
+        '<div><button class="btn primary" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>'+RF_ICON+'API</button>'+A.qBtn(apiHelp)+'</div></div>'+
+        // finding stations already ran when the trip was planned: doing it again is a "force" option, tucked under No API
+        '<div class="split-menu hidden" role="menu"><button type="button" role="menuitem" data-trip-refresh="discover"><b>Discover stations again · No API</b>'+
+        '<small>Searches the whole route from scratch for stations (it already ran when you planned the trip). Slower: overlapping website searches, '+KeylessGas.readerCount(A)+' readers (Settings), progress, Cancel. No paid fallback; your brand filters still apply.</small></button></div>')+'</div>';
   }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
@@ -197,8 +206,12 @@
     STEPS.forEach(function (n, i) { var e = $('tpS' + (i + 1)); if (e) e.remove(); });
     built = {}; scrolls = {}; shown = 0;
   }
+  /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
+  function adviceDue() { return !!((window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
     freshModel();
+    var held = step > ST_ADVISORY && !loadingTrip && adviceDue();
+    if (held) { LG.info('trip', 'Held at Advice: ' + STEPS[step - 1] + ' waits for its tick boxes'); step = ST_ADVISORY; setTimeout(function () { ready(ST_ADVISORY); }, 350); }
     if (window.__apiCount) window.__apiCount();
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);

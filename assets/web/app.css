@@ -1613,3 +1613,11 @@ body.legs-open .scroll-hint { display: none; }
 .hz-o2 { flex-wrap: nowrap; min-height: 18px; white-space: nowrap; overflow: hidden; }
 .hz-o2 .hz-ld { flex: none; }
 .hz-o2 .hz-bar { flex: 1 1 40px; min-width: 40px; margin: 0 0 0 6px; }
+.split-btn { flex: 1; display: flex; min-width: 0; }
+.split-btn .btn { border-radius: 999px 0 0 999px; flex: 1; min-width: 0; }
+.split-btn .split-dd { flex: none; width: 38px; padding: 0; border-radius: 0 999px 999px 0; border-left: 1px solid rgba(255,255,255,.35); }
+.scan-launches .btn .rf-ic { width: 18px; height: 18px; fill: currentColor; vertical-align: -4px; margin-right: 6px; }
+.split-menu { margin: -4px 0 10px; padding: 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.split-menu button { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px; color: var(--ink); }
+.split-menu button small { color: var(--ink-2); font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.split-menu.hidden { display: none; }

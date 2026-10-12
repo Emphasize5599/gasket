@@ -34,6 +34,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{__app.S.apiKey='TEST';});await p.evaluate(()=>__trip.step(6));await p.waitForSelector('#tsSpeed');
  assert.equal(await p.locator('#tsSpeed.spd-off, #tsSpeed .spd-off-note').count(),0,'a key turns it back on');
  await p.evaluate(()=>__trip.step(8));assert.equal(await p.locator('.est-note').count(),0,'no rough-cost note with a key');
+ // Advice's tick boxes hold every later step until they're ticked
+ await p.evaluate(()=>{__app.S.recircAck=0;__trip.step(7);});await p.waitForFunction(()=>__trip.state().step===2);
+ await p.evaluate(()=>{__app.S.recircAck=Date.now();__trip.step(7);});await p.waitForFunction(()=>__trip.state().step===7);
  assert.equal(errors.length,0,errors.join('\n'));
  console.log('no API key: cruising speed shown grayed out with a warning, planned at the limits; back on with a key');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

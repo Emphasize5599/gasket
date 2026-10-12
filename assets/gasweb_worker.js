@@ -156,7 +156,7 @@ async function (reqId, args) {
         if(Math.abs(feed.scrollTop-before)<1&&!discovery){stopReason='stalled';break;}
         // a list that's at its bottom and quiet for 4 s is done (most are short: a dozen rows, two scrolls); 12 s otherwise
         const atBottom=feed.scrollTop+feed.clientHeight>=feed.scrollHeight-4;
-        if(discovery&&Date.now()-lastGrowth>(atBottom&&scrolls>=1?4000:12000)){stopReason=atBottom?'quiet':'stalled';break;}
+        if(discovery&&Date.now()-lastGrowth>(atBottom&&scrolls>=1?4000:12000)){stopReason=atBottom?'quiet':'stalled';if(atBottom)exhausted=true;break;}   // scrolled to the bottom and nothing more came: the list ended without saying so
         if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
         scrolls++;stable=0;
       }

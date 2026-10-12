@@ -40,7 +40,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   assert.match(help[0],/Best for price refreshes.*Estimated.*2 areas/);assert.match(help[1],/station discovery along a new route.*very quickly/);
   const layout=await p.evaluate(()=>{
     const card=document.querySelector('#taResults .price-refresh-card');card.style.fontSize='130%';
-    const bounds=card.getBoundingClientRect(),buttons=[...card.querySelectorAll('button')].map(b=>b.getBoundingClientRect());
+    const bounds=card.getBoundingClientRect(),buttons=[...card.querySelectorAll('button')].filter(b=>b.offsetParent).map(b=>b.getBoundingClientRect());   // the closed ▾ menu's item has no box
     const ok=buttons.every(b=>b.left>=bounds.left&&b.right<=bounds.right)&&card.scrollWidth<=card.clientWidth;
     card.style.fontSize='';return ok;
   });

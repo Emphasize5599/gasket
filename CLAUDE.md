@@ -4,6 +4,8 @@
 
 Everything on this branch is meant to be merged into `main` once the owner is satisfied with it; build new work here.
 
+0.0.120: `renderStep` sends any step past Advisory back to it while `adviceDue()` (spare due or `Climate.ackDue`; not while `loadingTrip`). Refresh card: blue `.btn.primary` scans with `RF_ICON`; No API is a `.split-btn` whose `[data-split]` ▾ opens `.split-menu` holding `[data-trip-refresh="discover"]`. gasweb_worker: a `quiet` stop at the bottom sets `exhausted` (only truly cut-off lists count as partial).
+
 0.0.119: weather along a route = NWS hourly forecast (`/points/lat,lng` → `forecastHourly`, 156 h; KV `wx` keeps points 30 days, forecasts 45 min; `classifyNws` reads `shortForecast` + chance: storms ≥30%, rain ≥50% or likely/heavy, snow/ice ≥30%, fog, wind ≥30 mph), the words kept as `peak.text` / `peak.pop`; past it or on failure Open-Meteo `models=ncep_nbm_conus`, then its default. `stats.nws`, `stats.nwsErrors`.
 
 0.0.118: Route's Leaving sits above Round trip; `clearDt` empties a date box (blur, value / defaultValue, type swap so the WebView redraws). Hazards: `hzLoadLeg` runs two options at a time, `RouteWx.forRoute` reports `opts.onProg(f)` per request, `hzBars` moves each tile's `.hz-bar` in place; `fitHz` sizes the panel to `.hz-notice` + `.hz-opts` (20–60%, once per leg / tile count); tiles keep one height while checking.

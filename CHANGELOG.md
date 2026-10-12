@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.120 - 2026-10-12 (keyless test branch only)
+- **Advice's tick boxes really hold the trip.** Unticking "I understand when to use recirculate" (or a due spare check) keeps every later step closed, however you get there.
+- **Adjustments refresh buttons are blue**, with a refresh icon. "Discover stations again" moved into a small ▾ menu on the No API button, since discovery already runs by itself.
+- **No false "coverage is partial" warning.** A website list that scrolls to its bottom and stops growing counts as finished (and is cached), so only lists that were really cut short are reported.
+- Bug fixes.
+
 ## 0.0.119 - 2026-10-12 (keyless test branch only)
 - **Weather from the National Weather Service.** Hazards now use the NWS's own hourly forecast (its forecasters' wording, like "Thunderstorms Likely" or "Freezing Rain", with the chance) for the next 6½ days, and the list shows it. Past that, or if the NWS doesn't answer, Open-Meteo's National Blend of Models. Air quality still comes from Copernicus.
 - Bug fixes.

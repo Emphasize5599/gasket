@@ -25,6 +25,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>__paid),0);assert((await p.evaluate(()=>__web))>0);
  assert.equal(await p.isDisabled('#taResults [data-trip-refresh="api"]'),true);
  assert.equal(await p.locator('#taResults [data-trip-refresh="discover"]').count(),1);
+ assert.equal(await p.isVisible('#taResults [data-trip-refresh="discover"]'),false,'force rediscovery sits in the No API dropdown');
+ assert.match(await p.getAttribute('#taResults [data-trip-refresh="web"]','class'),/primary/,'scan buttons are blue');
+ await p.click('#taResults [data-split]');assert.equal(await p.isVisible('#taResults [data-trip-refresh="discover"]'),true);
+ assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'open dropdown fits');
+ await p.click('#taResults h3, #taResults .card-title, #taResults',{position:{x:5,y:5}}).catch(()=>{});
  const stations=await p.evaluate(()=>PriceHistory.stations());assert(stations.some(s=>s.name==='Local Fuel'));
  await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tpS8');
  assert.equal(await p.locator('#tpS8 .price-refresh-card').count(),0);

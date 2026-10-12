@@ -57,7 +57,7 @@ async function worker(pg,body,raw,status=200,args={}){
   assert(discovery.detail.scrolls>=5);assert.equal(discovery.detail.exhausted,true);assert.equal(discovery.error,null,'unpriced stations are valid discovery results');
   // a short list with no end marker: done once it's at the bottom and quiet for 4 s, not after the full 12 s
   const short=await worker(pg,'<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'</div>',JSON.stringify([]),200,{mode:'discover'});
-  assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);
+  assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);assert.equal(short.detail.exhausted,true,'a quiet list at its bottom counts as finished (no partial-coverage warning, cacheable)');
   for(const grade of ['regular','midgrade','premium','diesel']){
     const label={regular:'Regular',midgrade:'Midgrade',premium:'Premium',diesel:'Diesel'}[grade];
     const r=await worker(pg,html,JSON.stringify(['0x1:0x2','$4.12/'+label]),200,{grade});
