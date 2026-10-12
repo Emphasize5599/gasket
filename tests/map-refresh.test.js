@@ -5,7 +5,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   const p=await browser.newPage({viewport:{width:320,height:800}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
   const s={id:'ChIJTestStation001',brand:'exxon',name:'Exxon',address:'100 Main St, Testville',lat:34.745,lng:-92.29,google:true,prices:{regular:{price:3.99,updated:null},premium:{price:4.99,updated:null}}};
   await p.addInitScript(s=>{sessionStorage.setItem('standinRestored',JSON.stringify({s:JSON.stringify({apiKey:'TEST',setupDone:true,brands:{exxon:true}}),c:JSON.stringify({lastFetch:{lat:s.lat,lng:s.lng,ts:Date.now()-100000},g:[s],o:{}})}));},s);
-  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
+  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href+'#restored');
+  await p.waitForSelector('#btnLocate.live'); // finish the stand-in startup location/status callback before scanning
   assert.equal(await p.evaluate(()=>document.querySelector('#btnMode').parentElement===document.querySelector('#grades').parentElement),true,'fuel controls share the same layer');
   await p.click('#btnSettings');
   assert.equal(await p.evaluate(()=>{const r=document.querySelector('#btnMode').getBoundingClientRect();return !!document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('#settings');}),true,'settings covers the fuel pill');
