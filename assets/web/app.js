@@ -333,7 +333,7 @@
   var pendingSources = 0, sitePending = {}, siteOk = {};
   function allOfficial() { var a = []; Object.keys(official).forEach(function (k) { a = a.concat(official[k] || []); }); return a; }
   function fetchAround(lat, lng, bounds, method) {
-    if(pending||$('mapPriceProgress'))return;
+    if(pending||job)return;
     $('btnArea').classList.add('hidden');
     $('wmCheck').classList.add('hidden');
     if (demo) { gStations = []; official = {}; receiveGoogle(window.demoPlaces(lat, lng), []); finish(lat, lng); return; }
@@ -356,10 +356,8 @@
       var keylessRadius = Math.min(Math.max(P.haversineMi(lat,lng,b[2],lng),2),30),areas=[];
       var dy=6/69,dx=6/(69.17*Math.cos(lat*Math.PI/180));
       for(var y=-Math.ceil(keylessRadius/6);y<=Math.ceil(keylessRadius/6);y++)for(var x=-Math.ceil(keylessRadius/6);x<=Math.ceil(keylessRadius/6);x++){var a=KeylessGas.area(lat+y*dy,lng+x*dx,8);if(P.haversineMi(lat,lng,a.lat,a.lng)<=keylessRadius+3)areas.push(a);}
-      var panel=document.createElement('div');panel.id='mapPriceProgress';panel.className='map-price-progress card';
-      panel.innerHTML='<h3>Discover stations · No API</h3><div class="parse-load"><span class="pl">Starting…</span><span class="pbar"><i></i></span><span class="pct">0%</span></div><button class="btn tonal sm">Cancel</button>';
-      document.body.appendChild(panel);panel.querySelector('button').onclick=function(){KeylessGas.cancel();};
-      KeylessGas.discover(areas,function(f,text){panel.querySelector('.pl').textContent=text;panel.querySelector('i').style.width=Math.round(f*100)+'%';panel.querySelector('.pct').textContent=Math.round(f*100)+'%';},S.grade,false).then(function(r){
+      jobStart({kind:'map',label:'Discovering stations · No API',cancel:function(){KeylessGas.cancel();}});
+      KeylessGas.discover(areas,function(f,text){jobProg(f,text);},S.grade,false).then(function(r){
         if(id!==reqId)return;
         gStations=r.stations.filter(function(s){return S.brands[s.brand]&&P.haversineMi(lat,lng,s.lat,s.lng)<=keylessRadius;});
         errs=errs.concat(r.errors||[]);
@@ -367,7 +365,7 @@
         if(r.cancelled)errs.push('Discovery cancelled; completed stations kept.');
         else if((r.details||[]).some(function(d){return !d.exhausted;}))errs.push('Website discovery is partial; some lists did not finish.');
         sourceDone();
-      }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();}).finally(function(){panel.remove();});
+      }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();}).finally(function(){jobEnd();});
     }
     var radius = Math.min(Math.max(P.haversineMi(lat, lng, b[2], lng), 3), 30);
     (keyless?[]:sites).forEach(function (k) {
@@ -899,13 +897,14 @@
       var bg = document.createElement('div'); bg.className = 'cfm-bg'; bg.id = 'cfm';
       bg.innerHTML = '<div class="cfm" role="alertdialog" aria-modal="true" aria-labelledby="cfmT"><div class="cfm-t" id="cfmT">' + esc(o.title || 'Delete?') + '</div>' +
         (o.body ? '<div class="cfm-b">' + o.body + '</div>' : '') +
-        '<div class="cfm-btns"><button class="btn tonal" id="cfmNo">Cancel</button><button class="btn cfm-go" id="cfmYes">' + esc(o.action || 'Delete') + '</button></div>' +
+        '<div class="cfm-btns"><button class="btn tonal" id="cfmNo">' + esc(o.no || 'Cancel') + '</button><button class="btn ' + (o.goClass || 'cfm-go') + '" id="cfmYes">' + esc(o.action || 'Delete') + '</button></div>' +
         (o.always ? '' : '<div class="cfm-hint">Turn these off in Settings → General.</div>') + '</div>';
       document.body.appendChild(bg);
       requestAnimationFrame(function () { bg.classList.add('on'); });
       var done = function (v) { window.__cfmClose = null; bg.classList.remove('on'); setTimeout(function () { bg.remove(); }, 160); resolve(v); };
-      window.__cfmClose = function () { done(false); };
-      bg.onclick = function (e) { if (e.target === bg) done(false); };
+      // three: a tap outside or Back is "neither" (null), apart from the No button (false)
+      window.__cfmClose = function () { done(o.three ? null : false); };
+      bg.onclick = function (e) { if (e.target === bg) done(o.three ? null : false); };
       $('cfmNo').onclick = function () { done(false); };
       $('cfmYes').onclick = function () { done(true); };
     });
@@ -1323,6 +1322,54 @@
       try{if(movedByUser&&!$('btnArea').classList.contains('hidden'))return $('btnArea').onclick();fetchAround(c.lat,c.lng);}finally{S.keylessRegular=previous;}
     },refreshKnownMap,stations.length>0,function(){var c=me||lastFetch||map.getCenter();fetchAround(c.lat,c.lng,null,'discover');});
   };
+  // ---------- one station search or price update at a time, which can run in the background ----------
+  // A job: {kind: 'trip' | 'map', label, cancel(), inline() (true while its own screen shows its progress)}. While one
+  // runs, body.job-on grays out what would change its data or start another search (grades, fuel mode, refresh, search
+  // this area, settings, other trips); the status bar (#jobBar) shows its progress with a ✕ to cancel. Progress is
+  // drawn at most once a frame, so the work never makes the screen or touch lag.
+  var job = null, jobRaf = 0, jobDoneT = 0;
+  var JOB_LOCKS = ['btnMode', 'btnRefresh', 'btnArea', 'btnSettings'];
+  function jobStart(o) {
+    clearTimeout(jobDoneT);
+    job = Object.assign({ frac: 0, text: o.label || 'Working…' }, o);
+    document.body.classList.add('job-on');
+    JOB_LOCKS.concat(job.locks || []).forEach(function (id) { var b = $(id); if (b) b.disabled = true; });
+    document.body.classList.toggle('job-map', job.kind === 'map');
+    if ($('refreshMenu')) $('refreshMenu').remove();
+    jobDraw(); return job;
+  }
+  function jobProg(f, text) {
+    if (!job) return;
+    if (f != null) job.frac = Math.max(0, Math.min(1, f)); if (text) job.text = text;
+    if (!jobRaf) jobRaf = requestAnimationFrame(function () { jobRaf = 0; jobDraw(); });
+  }
+  /** done: {text, action, onAction} shown for a few seconds (e.g. "Stops are ready · Open"), or nothing. */
+  function jobEnd(done) {
+    var locks = JOB_LOCKS.concat(job && job.locks || []);
+    job = null; document.body.classList.remove('job-on', 'job-map');
+    locks.forEach(function (id) { var b = $(id); if (b) b.disabled = false; });
+    var bar = $('jobBar'); if (!bar) return;
+    if (done && done.text) {
+      bar.className = 'job-bar done'; bar.innerHTML = '<span class="jb-t">' + esc(done.text) + '</span>' + (done.action ? '<button class="btn primary sm jb-go">' + esc(done.action) + '</button>' : '') + '<button class="jb-x" aria-label="Close">✕</button>';
+      bar.querySelector('.jb-x').onclick = function () { bar.classList.add('hidden'); };
+      if (done.action) bar.querySelector('.jb-go').onclick = function () { bar.classList.add('hidden'); done.onAction(); };
+      jobDoneT = setTimeout(function () { bar.classList.add('hidden'); }, 10000);
+    } else bar.classList.add('hidden');
+  }
+  function jobDraw() {
+    var bar = $('jobBar');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'jobBar'; bar.setAttribute('role', 'status'); document.body.appendChild(bar); }
+    if (!job) { bar.classList.add('hidden'); return; }
+    if (!bar.querySelector('.pbar') || bar.classList.contains('done')) {
+      bar.className = 'job-bar';
+      bar.innerHTML = '<span class="jb-t"></span><span class="pbar"><i></i></span><span class="pct"></span><button class="jb-x" aria-label="Cancel">✕</button>';
+      bar.querySelector('.jb-x').onclick = function () { if (job && job.cancel) { bar.querySelector('.jb-t').textContent = 'Cancelling…'; job.cancelling = true; job.cancel(); } };
+    }
+    bar.classList.toggle('hidden', !!(job.inline && job.inline()));
+    if (!job.cancelling) bar.querySelector('.jb-t').textContent = job.text;
+    bar.querySelector('.pbar i').style.width = Math.round(job.frac * 100) + '%';
+    bar.querySelector('.pct').textContent = Math.round(job.frac * 100) + '%';
+  }
   function refreshMenu(anchor,api,web,allowWeb,discover){
     var old=$('refreshMenu');if(old){old.remove();return;}
     var menu=document.createElement('div');menu.id='refreshMenu';menu.className='refresh-menu';menu.setAttribute('role','menu');
@@ -1333,17 +1380,15 @@
       row('api','Discover stations · API',!S.apiKey,'Finds the stations around here with Google\'s Places API: fast and complete, but it counts toward your monthly lookups.'+(!S.apiKey?' Add the recommended API key in Settings to use this.':''));
     document.body.appendChild(menu);
     var away=function(e){if(menu.contains(e.target)||anchor.contains(e.target)||e.target.closest('.qpop'))return;menu.remove();document.removeEventListener('pointerdown',away,true);};
-    setTimeout(function(){document.addEventListener('pointerdown',away,true);},0);
+    document.addEventListener('pointerdown',away,true);   // opened on click: this tap's pointerdown is already past
     menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();document.removeEventListener('pointerdown',away,true);if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();if(b.dataset.refresh==='discover'&&discover)discover();};
   }
   async function refreshKnownMap(){
-    if(pending||$('mapPriceProgress'))return;
-    var panel=document.createElement('div');panel.id='mapPriceProgress';panel.className='map-price-progress card';
-    panel.innerHTML='<h3>Refresh station prices</h3><div class="parse-load"><span class="pl">Starting…</span><span class="pbar"><i></i></span><span class="pct">0%</span></div><button class="btn tonal sm">Cancel</button>';
-    document.body.appendChild(panel);panel.querySelector('button').onclick=function(){KeylessGas.cancel();};
+    if(pending||job)return;
+    jobStart({kind:'map',label:'Refreshing prices · No API',cancel:function(){KeylessGas.cancel();}});
     var original=stations;
     try{
-      var r=await KeylessGas.refreshKnown(original,function(f,label){panel.querySelector('.pl').textContent=label;panel.querySelector('i').style.width=Math.round(f*100)+'%';panel.querySelector('.pct').textContent=Math.round(f*100)+'%';},[],S.grade);
+      var r=await KeylessGas.refreshKnown(original,function(f,label){jobProg(f,label);},[],S.grade);
       if(stations!==original){status('Map changed; completed observations kept in price history.',true);return;}
       stations=r.stations;
       var by=new Map(stations.map(function(s){return [s.brand+'|'+s.id,s];}));
@@ -1352,7 +1397,7 @@
       N.saveCache(JSON.stringify({lastFetch:lastFetch,g:gStations,o:official}));render();
       status((r.cancelled?'Cancelled · ':'')+r.updated+'/'+r.total+' prices refreshed; '+r.retained+' unchanged. No API calls.',!!r.errors.length);
       if(r.blocked)showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
-    }catch(e){status(e.message,true);}finally{panel.remove();}
+    }catch(e){status(e.message,true);}finally{jobEnd();}
   }
   $('btnArea').onclick = function () {
     if (altMode() && window.AltFuel) { $('btnArea').classList.add('hidden'); return AltFuel.refresh(true); }
@@ -1477,6 +1522,6 @@
   window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
   if(window.PriceHistory)setTimeout(function(){PriceHistory.seed().catch(function(e){if(window.FLog)FLog.warn('history','Price history seed failed',e.message);});},0);
 })();

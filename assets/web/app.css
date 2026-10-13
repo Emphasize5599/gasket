@@ -63,8 +63,7 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .refresh-menu .btn { height: auto; min-height: 48px; padding: 8px 14px; font-size: 15px; line-height: 1.2; white-space: normal; }
 .refresh-menu .btn:disabled { opacity: .45; }
 .refresh-menu .qi { margin: 0; }
-.map-price-progress { position: fixed; z-index: 1100; left: 12px; right: 12px; top: calc(var(--st) + 110px); }
-.price-refresh-card .parse-load, .map-price-progress .parse-load { margin-bottom: 12px; }
+.price-refresh-card .parse-load { margin-bottom: 12px; }
 .scan-launches { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto; align-items: center; column-gap: 8px; row-gap: 10px; margin: 14px 0; }
 /* each (?) sits in its own column, the same gap on both sides: centered between its button and the next */
 .scan-launches .qi { margin: 0; }
@@ -1629,3 +1628,18 @@ body.legs-open .scroll-hint { display: none; }
 .hz-approx { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
 .hz-ai { border-left: 3px solid var(--accent); padding-left: 8px; }
 .wx-ai { display: block; color: var(--accent); font-size: 12px; font-weight: 600; }
+
+/* a station search or price update: its status bar (under the top bar on the map; in the empty space above the step
+   tabs in a full-screen menu), and the controls that would change its data grayed out while it runs */
+.job-bar { position: fixed; z-index: 1150; left: 12px; right: 12px; top: calc(var(--st) + 104px); display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 6px 6px 6px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); font-size: 13.5px; }
+.job-bar.hidden { display: none; }
+body.trip-full .job-bar { top: calc(var(--st) + 6px); left: 12px; right: 12px; box-shadow: none; border: 1px solid var(--line); }
+.job-bar .jb-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.job-bar .pbar { flex: 0 1 90px; min-width: 40px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.job-bar .pbar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+.job-bar .pct { flex: none; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12px; min-width: 32px; text-align: right; }
+.job-bar .jb-x { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); font-size: 16px; }
+.job-bar .jb-go { flex: none; height: 36px; padding: 0 14px; }
+body.job-on #grades, body.job-on #btnMode, body.job-on #btnRefresh, body.job-on #btnArea, body.job-on #btnSettings,
+body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist-row, body.job-on .tp-steps .job-lock { opacity: .4; pointer-events: none; filter: grayscale(1); }

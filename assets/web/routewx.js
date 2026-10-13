@@ -185,12 +185,12 @@
   var AI_LABEL = { tropical: 'Tropical storm', storm: 'Strong storms', tornado: 'Tornado threat', flood: 'Flooding', rain: 'Heavy rain', snow: 'Snow', ice: 'Ice', fog: 'Dense fog', wind: 'High wind', heat: 'Extreme heat', cold: 'Extreme cold', air: 'Smoke or dust' };
   /** Read a vague alert: compare(text, groups) -> Promise<{group: score}|null> (Severity.compare), else its words. */
   var DIGEST_MS = 4000;
-  async function digest(a, compare) {
+  async function digest(a, compare, ms) {
     if (!a.vague) return a;
     // the model gets a few seconds at most (it may be busy rating recalls); its words read the alert otherwise
     var txt = (a.headline + '. ' + a.text).slice(0, 300), sc = compare ? await Promise.race([
       compare(txt, ALERT_EX).catch(function () { return null; }),
-      new Promise(function (r) { setTimeout(function () { r(null); }, DIGEST_MS); })]) : null;
+      new Promise(function (r) { setTimeout(function () { r(null); }, ms || DIGEST_MS); })]) : null;
     // no answer from the model (not loaded yet, busy or failed): its words for now, marked so it can be read again
     a.aiPending = !sc;
     if (sc) {
@@ -377,7 +377,7 @@
       stats.alerts = alerts.length;
       if (alerts.some(function (x) { return !(x.polys && x.polys.length); }) && opts.counties) await opts.counties();   // load the county outlines only when needed
       total += alerts.length; tell();
-      for (var q = 0; q < alerts.length; q++) { await digest(alerts[q], opts.compare); done++; tell(); }
+      for (var q = 0; q < alerts.length; q++) { await digest(alerts[q], opts.compare, opts.digestMs); done++; tell(); }
     }
     pts.forEach(function (p) { p.flags = classify(p.wx, p.aq); });
     return { pts: pts, stats: stats, alerts: alerts };

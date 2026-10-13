@@ -113,6 +113,7 @@
   function prog(frac, label) {
     var pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
     lastProg = { pct: pct, label: label };
+    if (busy && A.job && A.job() && A.job().kind === 'trip') A.jobProg(frac, label);
     var b = $(routing ? 'tGetRoutes' : 'tNext'); if (!b) return;
     b.classList.add('busy');
     b.innerHTML = '<span class="pfill" style="width:' + pct + '%"></span><span class="plab">' + esc(label) + ' · ' + pct + '%</span>';
@@ -148,6 +149,7 @@
   // the big map, grayed out with a progress bar while the route and stops are drawn (shows only past 0.75 s)
   var mapLd = null;
   function mapLoading(label, frac) {
+    if ($('trip') && $('trip').classList.contains('hidden')) { mapLoaded(); return; }   // in the background: the map stays free to use
     if (!mapLd || !mapLd.live) mapLd = A.loader(document.body, label, { fixed: true });
     mapLd.el.style.top = '0'; mapLd.el.style.bottom = Math.round(sheetCover()) + 'px';
     mapLd.set(frac == null ? null : frac, label);
@@ -184,11 +186,11 @@
     pg.innerHTML = '<div class="tp-grab" id="tpGrab"><span></span></div>' +
       '<div class="tp-head"><div class="tp-steps" id="tpSteps"></div><button class="x" id="tClose" aria-label="Close">✕</button></div>' +
       '<div class="tp-body" id="tpBody"></div><div class="tp-nav" id="tpNav"></div>';
-    $('tClose').onclick = closeTrip;
+    $('tClose').onclick = function () { leaveAsk(closeTrip); };
     A.scrollHint(tpBody());
     $('tpSteps').onclick = function (e) {
       var b = e.target.closest('[data-step]'); if (!b) return;
-      var k = +b.dataset.step; if (k === step) return;
+      var k = +b.dataset.step; if (k === step || jobLocked(k)) return;
       if (k < step) { collectSafe(); step = k; renderStep(); } else advance(k);
     };
     panelDrag(pg);
@@ -210,6 +212,7 @@
   function adviceDue() { return !!((window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
     freshModel();
+    setTimeout(function () { if (A.jobDraw && A.job && A.job()) A.jobDraw(); }, 0);   // its status bar shows unless this step shows the search itself
     var held = step > ST_ADVISORY && !loadingTrip && adviceDue();
     if (held) { LG.info('trip', 'Held at Advice: ' + STEPS[step - 1] + ' waits for its tick boxes'); step = ST_ADVISORY; setTimeout(function () { ready(ST_ADVISORY); }, 350); }
     if (window.__apiCount) window.__apiCount();
@@ -281,7 +284,7 @@
     }
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
-    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } closeLegs(); collectSafe(); step--; renderStep(); };
+    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } if (jobLocked(step - 1)) return; leaveAsk(function () { closeLegs(); collectSafe(); step--; renderStep(); }); };
     if ($('tNext')) $('tNext').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; } if (step === ST_HAZ && hzLeg < hzLegs() - 1) { hzGoLeg(hzLeg + 1); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
     if ($('tOpen')) $('tOpen').onclick = openMaps;
     routeGate(); backMode();
@@ -367,7 +370,8 @@
   /** Step tabs past what you can reach are grayed out (pressing one still goes as far as it can and points at what's missing). */
   function gateTabs() {
     var r = reach();
-    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > r); });
+    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > r); b.classList.toggle('job-lock', jobLocked(+b.dataset.step)); b.disabled = jobLocked(+b.dataset.step); });
+    var bk = $('tBack'); if (bk) { var lockBack = jobLocked(step - 1) && !speedMode() && !(step === ST_HAZ && hzLeg > 0); bk.disabled = lockBack; bk.classList.toggle('job-lock', lockBack); }
   }
   /**
    * Routes are fetched by themselves whenever the Route step has a link or both addresses and every stop is settled.
@@ -2472,10 +2476,50 @@
     if (busy || !model) return finding || Promise.resolve();
     return (finding = findStops1(force).finally(function () { finding = null; }));
   }
+  // ---------- a station search as a job: it can run in the background, or be cancelled ----------
+  var bgJob = false, jobCancel = false, searchCancelled = false;
+  /** Is the trip panel showing this search's own progress (its plan steps, or Departure's price refresh)? */
+  function tripShowsJob() {
+    var pg = $('trip');
+    return !!(pg && !pg.classList.contains('hidden') && document.body.classList.contains('trip-on') && (onPlan(step) || (step === ST_DEPART && priceRefreshActive)));
+  }
+  function cancelSearch() {
+    if (!busy) return;
+    jobCancel = true; priceCancelRequested = true; if (window.KeylessGas) KeylessGas.cancel();
+    LG.info('stations', 'Search cancelled');
+  }
+  /** Leaving the step that shows a running search (Back, the ✕): cancel it, or keep it running in the background. */
+  function leaveAsk(go) {
+    if (!busy || loadingTrip || !tripShowsJob()) { go(); return; }
+    A.confirmDel({ always: true, three: true, title: 'Still finding stations', body: 'Cancel the search, or let it run in the background while you use the rest of the app. Anything that would change it is grayed out until it finishes.',
+      no: 'Cancel search', action: 'Run in background', goClass: 'primary' }).then(function (v) {
+      if (v === null) return;      // tapped outside: stay
+      if (v) { bgJob = true; LG.info('stations', 'Search left running in the background'); } else cancelSearch();
+      go(); if (A.jobDraw) A.jobDraw();
+    });
+  }
+  /** Steps that would change what a running search uses (the car, the route): closed while it runs. */
+  function jobLocked(k) { return busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ); }
   async function findStops1(force) {
-    busy = true;
-    try { await findStops0(force); } catch (e) { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); result = null; }
+    busy = true; jobCancel = false; searchCancelled = false; bgJob = false;
+    // the map's own search around you gives way: the trip needs the website readers
+    if (A.job && A.job() && A.job().kind === 'map') {
+      LG.info('stations', 'The map\'s station search stops for the trip\'s'); A.job().cancel();
+      for (var w = 0; w < 100 && A.job(); w++) await new Promise(function (r) { setTimeout(r, 100); });
+    }
+    if (A.jobStart) A.jobStart({ kind: 'trip', label: 'Finding stations', cancel: cancelSearch, inline: tripShowsJob });
+    gateTabs();
+    try { await findStops0(force); }
+    catch (e) {
+      if (jobCancel) { searchCancelled = true; LG.info('stations', 'Search stopped: ' + (e.message || e)); }
+      else { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); }
+      result = null;
+    }
     busy = false; priceRefreshActive=false;progEnd();
+    var shown = tripShowsJob();
+    if (A.jobEnd) A.jobEnd(shown ? null : searchCancelled ? { text: 'Station search cancelled' } :
+      result && result.plan ? { text: jobCancel ? 'Search cancelled · planned with the stations found so far' : result.plan.ok ? 'Your stops are ready' : 'Stations found; no plan works yet', action: 'Open', onAction: function () { if (document.body.classList.contains('trip-on')) { step = ST_ADJ; renderStep(); } else openTrip(ST_ADJ); } } : null);
+    bgJob = false; gateTabs();
     if (!onPlan(step) || !result) mapLoaded();
     if (window.__apiCount) window.__apiCount();
     if (onPlan(step) && !result) renderResults();
@@ -2533,6 +2577,8 @@
     }
     if (rp) LG.info('stations', 'Using the stations saved with this trip (' + agoText(Date.now() - rp.t) + ') — no lookups');
     var ga = await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force === true, rpSt, okKs);
+    // cancelled: website discovery hands back what it finished (planned with, and noted); anything else stops here
+    if (jobCancel && !(dbg.search.keyless && dbg.search.keyless.cancelled) && !webRefresh) throw new Error('cancelled while finding stations');
     if (rp) ga.cachedAgeMs = Date.now() - rp.t;
     else { try { saveTrip(ga.raw, okKs); } catch (e) { LG.warn('history', 'Couldn\'t save the trip', String(e)); } }
     var g = ga.per[0];
@@ -2624,6 +2670,7 @@
   // ---------- step 3 (Stops): the plan ----------
   /** Redraw whatever step is showing with the current plan. */
   function showResult() {
+    if ($('trip') && $('trip').classList.contains('hidden')) return;    // finished in the background: shown when the trip opens again
     document.body.classList.add('trip-on');
     if (onPlan(step) && ($('tsResults') || $('taResults'))) { renderResults(); drawSoon(); }
     else if (step === ST_DEPART) renderStep();
@@ -2651,7 +2698,8 @@
     if (!r) {
       var need = hasFuel();
       put(model ? '<div class="card empty-res">' + (need ? 'Stops appear here.' : 'Say how much is in your tank in Parameters.') + '</div>' : '',
-        model ? '<div class="card empty-res">' + (need ? 'Your adjustments appear here once the stops are planned.' : 'Say how much is in your tank in Parameters.') + '</div>' : '');
+        model ? '<div class="card empty-res">' + (searchCancelled ? 'Station search cancelled. <button class="btn primary sm" id="tFindAgain">Find stations</button>' : need ? 'Your adjustments appear here once the stops are planned.' : 'Say how much is in your tank in Parameters.') + '</div>' : '');
+      if ($('tFindAgain')) $('tFindAgain').onclick = function () { searchCancelled = false; findStops(); };
       return;
     }
     var p = r.plan, h = '', ah = refreshCard()+tipBox();
@@ -2795,9 +2843,11 @@
     e.st = 'loading'; var t0 = Date.now();
     try {
       var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties, onProg: function (f) { e.prog = f; hzBars(); },
-        countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.state && Severity.state() === 'ready' ? Severity.compare : null });   // never waits for the model to load
+        countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.state && Severity.state() === 'ready' ? Severity.compare : null,   // never waits for the model to load
+        digestMs: e.aiTry ? 60000 : null });    // the re-read once the model is ready: it may be queued behind recalls, so it gets a minute
       e.st = 'done'; e.hz = r.hazards; e.stats = r.stats;
-      if (!aiCan()) { e.stats.aiPending = 0; e.hz.forEach(function (x) { x.aiPending = false; }); }   // no model coming: the wording is the answer
+      // no model coming, or it already had its one re-read: the wording is the answer (never read again and again)
+      if (!aiCan() || e.aiTry) { if (e.stats.aiPending) LG.info('wx', 'Warnings kept as read from their wording', { pending: e.stats.aiPending }); e.stats.aiPending = 0; e.hz.forEach(function (x) { x.aiPending = false; }); }
       if (e.stats.aiPending) hzAiWatch(a, i);
       LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || ''].filter(function (v) { return v !== ''; }); }) });
     } catch (err) { e.st = 'error'; e.err = String(err && err.message || err); LG.warn('wx', 'Hazards along a route failed', e.err); }
@@ -2818,7 +2868,7 @@
       LG.info('wx', 'The model is ready: reading ' + todo.length + ' route(s) warnings again');
       for (var k = 0; k < todo.length; k++) {
         var e = hzCache.get(todo[k].a); if (!e || e.st !== 'done' || !e.stats.aiPending) continue;
-        e.st = null; await hzLoad(todo[k].a, todo[k].i);   // its forecasts and warnings are cached: only the reading is redone
+        e.st = null; e.aiTry = 1; await hzLoad(todo[k].a, todo[k].i);   // its forecasts and warnings are cached: only the reading is redone, once
         if (step === ST_HAZ && hzLeg === todo[k].i) { renderHz(); drawHaz(); }
       }
     }, 2000);
@@ -3164,7 +3214,10 @@
   }
   function closePicker() { var bg = $('tripPick'); if (!bg) return false; bg.remove(); return true; }
   /** A fresh trip: keep the car and your settings, forget the route. */
+  /** Another trip (new, saved or shared from Maps) while a search runs would pull its route away from under it. */
+  function jobBlocks() { if (!busy || loadingTrip) return false; A.toast('Finish or cancel the station search first (the bar at the top).'); return true; }
   function newTrip(link) {
+    if (jobBlocks()) return;
     resetAdjust();
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
@@ -3174,6 +3227,7 @@
     openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
   }
   async function openSaved(id) {
+    if (jobBlocks()) return;
     if (busy) return;
     resetAdjust();
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
@@ -3552,16 +3606,22 @@
   }
   function closeTrip() {
     resetAdjust();
-    closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ();
+    closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ(); mapLoaded();
     layer.clearLayers(); drawn = {}; if (map.hasLayer(layer)) map.removeLayer(layer);
     document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); hzSync(); A.render();
+    if (A.jobDraw && A.job && A.job()) A.jobDraw();
   }
   function endTrip() { closeTrip(); }
   function closeQ() { if (window.__closeQ) window.__closeQ(); }
   window.__tripBack = function () {
     if (closePicker()) return true;
     if (closeLegs()) return true;
-    if (!$('trip').classList.contains('hidden')) { if (speedMode()) { leaveSpeedMode(); return true; } if (step > 1) { collectSafe(); step--; renderStep(); } else closeTrip(); return true; }
+    if (!$('trip').classList.contains('hidden')) {
+      if (speedMode()) { leaveSpeedMode(); return true; }
+      if (step > 1 && !jobLocked(step - 1)) leaveAsk(function () { collectSafe(); step--; renderStep(); });
+      else leaveAsk(closeTrip);     // the step before is closed while a search runs: Back leaves the trip instead
+      return true;
+    }
     return false;
   };
   $('btnTrip').onclick = function () { tripPicker(); };

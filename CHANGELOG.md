@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.126 - 2026-10-13 (keyless test branch only)
+- **Station searches and price updates can run in the background.** Leaving one (✕, Back or the phone's Back) asks whether to cancel it or keep it running. In the background, a status bar shows its progress with a ✕ to cancel (on the map under the top bar, and in the empty space above the step tabs in full-screen menus), and anything that would change it is grayed out: the car, route and hazards steps, grades, fuel mode, refresh, settings and other trips. When it finishes, the bar offers to open your stops.
+- The map's own search shows in the same bar, and gives way when you start a trip search.
+- **No more hazard loop:** warnings the AI couldn't get to are read again once, with time to finish, then kept as worded.
+- Bug fixes.
+
 ## 0.0.125 - 2026-10-13 (keyless test branch only)
 - **Website routes follow the roads.** Without a key, a route's line now comes from the Google Maps page's own full drawing (thousands of points, simplified to about 10 m) instead of a few dozen points, so the map, detours, hazards and speed-by-road stretches line up with the real roads.
 - **Main map refresh menu:** the same blue buttons as the trip, each with its (?) beside it; no Close button (tap anywhere else).

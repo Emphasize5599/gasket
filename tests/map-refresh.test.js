@@ -24,8 +24,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.equal(await p.evaluate(()=>__app.stations()[0].prices.premium.price),4.99);
   const count=await p.evaluate(()=>PriceHistory.history(__app.stations()[0]).length);assert(count>=3);
   await p.evaluate(()=>{__app.KV.clear('gasweb');__app.N.siteRead=()=>{};});
-  await p.click('#btnRefresh');await p.click('[data-refresh="web"]');await p.waitForSelector('#mapPriceProgress button');
-  await p.click('#mapPriceProgress button');await p.waitForSelector('#mapPriceProgress',{state:'detached'});
+  await p.click('#btnRefresh');await p.click('[data-refresh="web"]');await p.waitForSelector('#jobBar:not(.hidden) .jb-x');
+  await p.click('#jobBar .jb-x');await p.waitForFunction(()=>!document.body.classList.contains('job-on'));
   assert.match(await p.innerText('#status'),/Cancelled/);
   assert.equal(await p.evaluate(()=>PriceHistory.history(__app.stations()[0]).length),count,'cancel without completed reads does not invent observations');
   await p.evaluate(()=>{__app.KV.clear('gasweb');__app.KV.clear('along');});
