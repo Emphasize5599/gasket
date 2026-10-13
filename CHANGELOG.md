@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.135 - 2026-10-13 (keyless test branch only)
+- Smooth touch axle dragging, clearer dual-tire controls and consistent trailer spacing.
+- Bug fixes.
+
 ## 0.0.134 - 2026-10-13 (keyless test branch only)
 - Trailer tire selector and movable, order-preserving axle visual.
 - Bug fixes.

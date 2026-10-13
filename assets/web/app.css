@@ -1270,6 +1270,7 @@ body.trip-on .af-fab, body.trip-on .af-legend { display: none; }
   background: color-mix(in srgb, var(--surface-2) 88%, transparent); border: 1px solid var(--line); color: var(--ink); box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
   opacity: .9; transition: opacity .2s; }
 .scroll-hint.hidden { display: none; }
+.scroll-hint.sub-hint { z-index:1011; }
 .scroll-hint svg { width: 22px; height: 22px; fill: currentColor; transition: transform .2s; }
 .scroll-hint.up svg { transform: rotate(180deg); }
 /* a recall still being rated: a bar along the bottom of its tile, following the rating model */
@@ -1381,7 +1382,7 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .sub-bar h2 { font-size: 18px; margin: 0; line-height: 1.25; min-width: 0; }
 .sub-back { flex: none; width: 40px; height: 40px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--surface-2); border: 0; color: var(--ink); }
 .sub-back svg { width: 24px; height: 24px; fill: currentColor; }
-.sub-body { padding: 4px 2px 16px; }
+.sub-body { padding: 4px 2px calc(var(--sb) + 60px); }
 .page.sub-page { display:flex; flex-direction:column; overflow:hidden; padding-bottom:0; }
 .sub-page > .sub-bar { position:relative; top:auto; flex:none; }
 .sub-page > .sub-body { flex:1; min-height:0; overflow:auto; --tile-top:0px; scroll-padding-top:8px; }
@@ -1407,11 +1408,31 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .tz-c > span { min-width:0; white-space:normal; overflow:visible; flex-wrap:wrap; }
 .size-edit { display:flex; align-items:center; gap:4px; }.size-edit input { flex:1; min-width:0; }.size-edit button { flex:none; width:40px; height:40px; border-radius:12px; background:var(--surface-2); }
 .tz-cfg { justify-items:stretch; align-items:center; text-align:left; }.tz-cfg .chips { justify-content:flex-start; min-width:0; }
-.tz-tr-visual { margin:12px 0; }
-.tz-tr-visual svg { display:block; width:160px; max-width:100%; height:270px; margin:0 auto; }
-.tz-tr-visual [data-tr-axle] { touch-action:none; cursor:ns-resize; }
-.tz-axle-hit { fill:transparent; }
-.tz-tr-visual [data-tr-axle]:focus .tz-axle-hit { fill:var(--accent); fill-opacity:.15; stroke:var(--accent); }
+.page.sub-page.trailer-page { padding-left:16px; padding-right:16px; }
+.trailer-page > .sub-bar { margin:0; }
+.trailer-page > .sub-body { padding:12px 0 calc(var(--sb) + 60px); }
+.trailer-form, .trailer-common, .tz-tr-tires { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+.trailer-form > *, .trailer-common > * { margin:0; }
+.trailer-form .nf.wide { padding-top:0; }
+.trailer-common > .tz-pick { gap:12px; }
+.trailer-form .lead.small { margin:0; }
+.trailer-form .tz-tr-visual > .lead.small { margin:8px 0 0; }
+.trailer-form .nf input, .trailer-form .nf select { padding:10px 12px; }
+.trailer-form > .tz-cfg { margin:0; }
+.trailer-form > .tz-trbtns { margin:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.trailer-form > .tz-trbtns .btn { margin:0; width:100%; }
+.trailer-form > .tz-trbtns .caution { grid-column:1 / -1; }
+.tz-tr-side { min-width:0; }
+.tz-tr-side-label { font-size:13px; color:var(--ink-2); margin-bottom:6px; }
+.tz-tr-side:not(.dual) .tz-gl { grid-template-columns:minmax(0,1fr); }
+.tz-tr-visual { margin:0; }
+.tz-tr-diagram { position:relative; width:200px; height:388px; max-width:100%; margin:0 auto; }
+.tz-tr-diagram > svg { display:block; width:100%; height:100%; pointer-events:none; }
+.tz-tr-visual [data-tr-axle] { position:absolute; top:0; left:0; width:100%; height:44px; padding:0; margin:0; border:0; border-radius:8px; background:transparent; touch-action:none; cursor:ns-resize; user-select:none; -webkit-user-select:none; transition:none; }
+.tz-tr-visual [data-tr-axle] > svg { display:block; width:100%; height:44px; pointer-events:none; }
+.tz-tr-visual [data-tr-axle]:focus-visible, .tz-tr-visual [data-dragging] { background:color-mix(in srgb,var(--accent) 10%,transparent); outline:1px solid var(--accent); }
+.tz-drag-arrows { fill:none; stroke:var(--ink-2); stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
+.tz-tr-visual > p { margin:8px 0 0; }
 .tz-tr-visual .tz-trn { font-size:12px; fill:var(--ink); font-weight:700; paint-order:stroke; stroke:var(--surface); stroke-width:3px; }
 .need, input.need, select.need { outline:none !important; }
 .req { color:#d93025; padding-left:3px; font-weight:800; }

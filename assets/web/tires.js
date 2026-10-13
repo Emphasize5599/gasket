@@ -875,47 +875,66 @@
   function trailerVisual(tr) {
     var t=tires(G().car()), P=trailerPositions(t,tr), h='';
     axlePositions(tr).forEach(function(v,i){
-      h+='<g data-tr-axle="'+i+'" transform="translate(0 '+(64+v*180)+')" tabindex="0" role="slider" aria-label="Axle '+(i+1)+' position, front to rear" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(v*100)+'">'+
-        '<rect x="10" y="-12" width="140" height="24" class="tz-axle-hit"/><line x1="20" y1="0" x2="140" y2="0" class="tz-axle"/>';
+      h+='<button type="button" data-tr-axle="'+i+'" style="transform:translateY('+(42+v*300)+'px)" role="slider" aria-label="Axle '+(i+1)+' position, front to rear" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(v*100)+'"><svg viewBox="0 -22 200 44" aria-hidden="true">'+
+        '<line x1="20" y1="0" x2="180" y2="0" class="tz-axle"/>';
       P.filter(function(p){return p.k.indexOf(tr.id+':a'+(i+1))===0;}).forEach(function(p,j){
-        var x=(tr.per===4?[20,32,128,140]:[32,128])[j], d=depthAt(t,p);
+        var x=(tr.per===4?[20,32,168,180]:[32,168])[j], d=depthAt(t,p);
         h+='<g class="tz-w"><rect x="'+(x-5)+'" y="-8" width="10" height="16" rx="2.5" style="fill:'+(d!=null?hue(depthGood(d)):'var(--line)')+'"/></g>';
       });
-      h+='<text x="80" y="4" text-anchor="middle" class="tz-trn">'+(i+1)+'</text></g>';
+      h+='<path d="M77 -8 L81 -12 L85 -8 M77 8 L81 12 L85 8 M115 -8 L119 -12 L123 -8 M115 8 L119 12 L123 8" class="tz-drag-arrows"/><text x="100" y="4" text-anchor="middle" class="tz-trn">'+(i+1)+'</text></svg></button>';
     });
-    return '<div class="tz-tr-visual"><svg viewBox="0 0 160 270" aria-label="Trailer viewed from above, front at top">'+
-      '<path d="M80 4 L80 24 M80 24 L46 42 M80 24 L114 42" class="tz-hitch"/><rect x="38" y="40" width="84" height="218" rx="6" class="il-body"/>'+h+'</svg><p class="lead small keep">Drag an axle forward or back. Axles cannot pass each other. Arrow keys also move a focused axle.</p></div>';
+    return '<div class="tz-tr-visual"><div class="tz-tr-diagram"><svg viewBox="0 0 200 388" role="img" aria-label="Trailer viewed from above, front at top">'+
+      '<path d="M100 4 L100 24 M100 24 L66 42 M100 24 L134 42" class="tz-hitch"/><rect x="58" y="40" width="84" height="338" rx="6" class="il-body"/></svg>'+h+'</div><p class="lead small keep">Drag an axle forward or back. Axles cannot pass each other.</p></div>';
   }
-  function bindTrailerVisual(b,tr) {
-    var svg=b.querySelector('.tz-tr-visual svg');
+  /** Touch targets are HTML buttons, not SVG groups. Paint at most once per frame; save only on release. */
+  function bindTrailerVisual(b,tr,done) {
+    var diagram=b.querySelector('.tz-tr-diagram'), dispose=[];
     b.querySelectorAll('[data-tr-axle]').forEach(function(g){
-      var i=+g.dataset.trAxle, drag=null;
-      var update=function(v){var p=moveAxle(tr,i,v);g.setAttribute('transform','translate(0 '+(64+p[i]*180)+')');g.setAttribute('aria-valuenow',Math.round(p[i]*100));};
-      g.onpointerdown=function(e){if(e.button!==0)return;e.preventDefault();g.focus();drag={id:e.pointerId,old:tr.axlePositions&&tr.axlePositions.slice()};g.dataset.dragging='true';g.setPointerCapture(e.pointerId);};
-      g.onpointermove=function(e){if(!drag||drag.id!==e.pointerId)return;var pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var local=pt.matrixTransform(svg.getScreenCTM().inverse());update((local.y-64)/180);};
-      var end=function(e){if(!drag||drag.id!==e.pointerId)return;var old=drag.old;drag=null;delete g.dataset.dragging;if(e.type==='pointercancel'){if(old)tr.axlePositions=old;else delete tr.axlePositions;update(axlePositions(tr)[i]);}save();onChange();};
+      var i=+g.dataset.trAxle, drag=null, frame=0;
+      var paint=function(v){g.style.transform='translateY('+(42+v*300)+'px)';g.setAttribute('aria-valuenow',Math.round(v*100));};
+      var flush=function(){frame=0;if(drag)paint(moveAxle(drag.draft,i,drag.start+(drag.y-drag.y0)/drag.scale/300)[i]);};
+      g.onpointerdown=function(e){if(e.button!==0||drag||diagram.querySelector('[data-dragging]'))return;e.preventDefault();g.dataset.dragging='true';g.focus({preventScroll:true});var p=axlePositions(tr);drag={id:e.pointerId,y0:e.clientY,y:e.clientY,start:p[i],scale:diagram.getBoundingClientRect().height/388,draft:{axles:tr.axles,axlePositions:p}};g.setPointerCapture(e.pointerId);};
+      g.onpointermove=function(e){if(!drag||drag.id!==e.pointerId)return;e.preventDefault();drag.y=e.clientY;if(!frame)frame=requestAnimationFrame(flush);};
+      var end=function(e){if(!drag||drag.id!==e.pointerId)return;if(frame)cancelAnimationFrame(frame);frame=0;
+        var commit=e.type==='pointerup';if(commit){drag.y=e.clientY;flush();tr.axlePositions=drag.draft.axlePositions.slice();}else paint(axlePositions(tr)[i]);
+        drag=null;delete g.dataset.dragging;if(g.hasPointerCapture(e.pointerId))g.releasePointerCapture(e.pointerId);if(commit)save();done();};
       g.onpointerup=end;g.onpointercancel=end;g.onlostpointercapture=end;
-      g.onkeydown=function(e){var step={ArrowUp:-.025,ArrowLeft:-.025,ArrowDown:.025,ArrowRight:.025}[e.key];if(step==null)return;e.preventDefault();update(axlePositions(tr)[i]+step);save();onChange();};
+      g.onkeydown=function(e){var step={ArrowUp:-.025,ArrowLeft:-.025,ArrowDown:.025,ArrowRight:.025}[e.key];if(step==null||drag)return;e.preventDefault();paint(moveAxle(tr,i,axlePositions(tr)[i]+step)[i]);save();done();};
+      dispose.push(function(){if(frame)cancelAnimationFrame(frame);drag=null;});
     });
+    return function(){dispose.forEach(function(stop){stop();});};
+  }
+  function trailerTireRows(tr) {
+    var t=tires(G().car()), P=trailerPositions(t,tr), h='<div class="tz-tr-tires">';
+    for(var a=1;a<=(tr.axles||1);a++)['driver','passenger'].forEach(function(side){
+      var dual=tr.per===4, prefix=tr.id+':a'+a, keys=dual?(side==='driver'?['lo','li']:['ro','ri']):(side==='driver'?['l']:['r']);
+      h+='<section class="tz-tr-side'+(dual?' dual':'')+'"><div class="tz-tr-side-label">'+esc((tr.name||'Trailer')+', axle '+a+', '+side+' side')+(!dual&&needs(t,P.filter(function(pos){return pos.k===prefix+keys[0];})[0]).length?'<span class="req">*</span>':'')+'</div><div class="tz-gl">';
+      keys.forEach(function(s,j){var p=P.filter(function(pos){return pos.k===prefix+s;})[0];
+        h+='<div class="nf tz-c">'+(dual?'<span>'+(j===0?'Outer':'Inner')+(needs(t,p).length?'<span class="req">*</span>':'')+'</span>':'')+'<button type="button" class="tz-tire" data-tr-tire="'+esc(p.k)+'" aria-label="Specify '+esc(p.name)+'">Specify '+GO+'</button></div>';
+      });h+='</div></section>';
+    });
+    return h+'</div>';
   }
   function trailerForm(tr) {
     var L = sizeList(tr.size), p = 'tt' + tr.id + '_';
     if (fromList(L, tr, true)) save();
-    var h = '<label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>';
+    var h = '<div class="trailer-form"><label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>';
     h += '<div class="tz-cfg"><span>Axles</span><div class="chips mini">' + [1, 2, 3].map(function (n) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-axles="' + n + '" class="' + (tr.axles === n ? 'on' : '') + '">' + n + '</button>'; }).join('') + '</div>' +
       '<span>Tires per axle</span><div class="chips mini">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-per="' + o[0] + '" class="' + (tr.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
     h += '<label class="nf wide"><span>Size' + A.qBtn('Printed on the tire\'s side: for example <b>ST205/75R15</b> (ST = special trailer).') + '</span><input type="text" maxlength="20" autocapitalize="characters" id="' + p + 'Size" placeholder="e.g. 205/75R15" value="' + esc(tr.size || '') + '"></label>';
     h += '<div class="seg2" id="ttSame" aria-label="Trailer tires">'+[[false,'All the same'],[true,'Different tires']].map(function(o){return '<button type="button" data-tr-split="'+o[0]+'" aria-pressed="'+(!!tr.split===o[0])+'" class="'+(!!tr.split===o[0]?'on':'')+'">'+o[1]+'</button>';}).join('')+'</div>';
     h += trailerVisual(tr);
     if (!tr.split) {
+    h += '<div class="trailer-common">';
     if (tr.size && sizeBusy[tr.size]) h += window.__app.ldBar('Finding the tires made in ' + tr.size);
     h += pickHtml(L, tr, p);
     h += '<div class="nf wide"><span>Wear rating' + A.qBtn(Q.utqg) + '</span>' + utqgHtml(tr.utqg, p) + '</div>';
     h += '<label class="nf wide"><span>Maker\'s mileage warranty' + A.qBtn(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="' + p + 'Warranty" placeholder="e.g. 40000" value="' + esc(+tr.warrantyMi > 0 ? tr.warrantyMi : '') + '"></label>';
+    h += '</div>';
     }
-    if(tr.split)h+='<div class="tz-gl">'+trailerPositions(tires(G().car()),tr).map(function(pos){return '<div class="nf tz-c"><span>'+esc(pos.name)+(needs(tires(G().car()),pos).length?'<span class="req">*</span>':'')+'</span><button type="button" class="tz-tire" data-tr-tire="'+esc(pos.k)+'">Specify this tire '+GO+'</button></div>';}).join('')+'</div>';
+    if(tr.split)h+=trailerTireRows(tr);
     h += '<div class="tz-trbtns"><button type="button" class="btn tonal sm danger-sm" id="ttDel">Delete</button><button type="button" class="btn tonal sm" id="ttUnhook">Unhook</button><button type="button" class="btn tonal sm caution" id="ttDiscard">Discard changes</button></div>';
-    return h;
+    return h+'</div>';
   }
   var subFill = null;      // the submenu on screen, redrawn when a lookup it shows comes back
   /** The car's tire details, as its own page. */
@@ -964,17 +983,21 @@
   function openTrailer(c, id, isNew) {
     var t = tires(c), tr = (t.trailers || []).filter(function (x) { return x.id === id; })[0]; if (!tr) return;
     var mine = function () { var o = {}; Object.keys(t.corners || {}).forEach(function (k) { if (k.indexOf(id + ':') === 0) o[k] = t.corners[k]; }); return o; };
-    var snap = JSON.stringify({ tr: tr, corners: mine() }), pg = null, close = null;
+    var snap = JSON.stringify({ tr: tr, corners: mine() }), pg = null, close = null, stopDrag=null, pendingFill=false, filling=false;
     var drop = function () { t.trailers = t.trailers.filter(function (x) { return x !== tr; }); Object.keys(mine()).forEach(function (k) { delete t.corners[k]; }); };
     var fill = function () {
-      var b = pg.querySelector('.sub-body'); if(b.querySelector('[data-dragging]'))return; b.innerHTML = trailerForm(tr);
+      var b = pg.querySelector('.sub-body'); if(filling)return;if(b.querySelector('[data-dragging]')){pendingFill=true;return;}pendingFill=false;filling=true;
+      try {
+      // Removing a focused edited input can fire change synchronously inside innerHTML. Commit it before replacement.
+      if(b.contains(document.activeElement))document.activeElement.blur();
+      if(stopDrag)stopDrag();b.innerHTML = trailerForm(tr);
       var p = 'tt' + tr.id + '_', $$ = function (x) { return b.querySelector('#' + p + x); };
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
       $$('Name').onchange = set(function () { tr.name = this.value.trim() || tr.name; pg.querySelector('.sub-bar h2').textContent = 'Trailer tire details · ' + tr.name; });
       $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
       bindPick(b, p, tr, function () { return sizeList(tr.size); }, set);
       b.querySelectorAll('[data-tr-split]').forEach(function(button){button.onclick=set(function(){tr.split=button.dataset.trSplit==='true';t.corners=t.corners||{};if(!t.corners.mode)t.corners.mode='miles';});});
-      bindTrailerVisual(b,tr);
+      stopDrag=bindTrailerVisual(b,tr,function(){if(pendingFill)fill();onChange();});
       b.querySelectorAll('[data-tr-tire]').forEach(function(button){button.onclick=function(){openTire(c,button.dataset.trTire,function(){openTrailer(c,tr.id,false);});};});
       b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; tr.axlePositions=axlePositions(tr); }); });
       b.querySelectorAll('[data-per]').forEach(function (x) { x.onclick = set(function () { tr.per = +x.dataset.per; }); });
@@ -989,8 +1012,9 @@
         (A.confirmDel ? A.confirmDel({ title: 'Delete ' + (tr.name || 'this trailer') + '?', body: 'Its tires go with it.', action: 'Delete' }) : Promise.resolve(true)).then(function (ok) { if (!ok) return; drop(); save(); close(); });
       };
       if (A.qify) A.qify(b);
+      } finally { filling=false; }
     };
-    close = A.subPage('Trailer tire details · ' + (tr.name || 'Trailer'), '', function (b) { pg = b.closest('.sub-page'); subFill = fill; fill(); return function () { subFill = null; draw(); onChange(); }; });
+    close = A.subPage('Trailer tire details · ' + (tr.name || 'Trailer'), '', function (b) { pg = b.closest('.sub-page'); pg.classList.add('trailer-page');subFill = fill; fill(); return function () { if(stopDrag)stopDrag();subFill = null; draw(); onChange(); }; });
   }
   /** The trailers not hooked up: hook one up, or open it. */
   function openSaved(c) {

@@ -1045,7 +1045,7 @@
   function scrollHint(sc) {
     if (!sc || sc._hint) return;
     var b = document.createElement('button');
-    b.type = 'button'; b.className = 'scroll-hint hidden'; b.setAttribute('aria-label', 'More below');
+    b.type = 'button'; b.className = 'scroll-hint hidden'+(sc.classList.contains('sub-body')?' sub-hint':''); b.setAttribute('aria-label', 'More below');
     b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></svg>';
     document.body.appendChild(b); sc._hint = b;
     var up = false, raf = 0, lastTop = 0, goingUp = false;
@@ -1060,7 +1060,8 @@
       // back to the top: near the end (phones stop a little short of it), or heading back up after a screen or more
       up = below <= Math.max(48, sc.clientHeight * 0.12) || (goingUp && sc.scrollTop > sc.clientHeight);
       b.classList.toggle('up', up); b.setAttribute('aria-label', up ? 'Back to the top' : 'More below');
-      b.style.top = Math.round(r.bottom - 34 - 10) + 'px'; b.style.left = Math.round(r.left + r.width / 2 - 17) + 'px';   // bottom center, just inside the edge (clear of the Back / Next bar), off the chevrons on the right
+      var inset=sc.classList.contains('sub-body')?(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sb'))||0):0;
+      b.style.top = Math.round(r.bottom - inset - 34 - 10) + 'px'; b.style.left = Math.round(r.left + r.width / 2 - 17) + 'px';   // subpages also clear Android's gesture/three-button bar
     };
     var soon = function () { if (!raf) raf = requestAnimationFrame(update); };
     sc.addEventListener('scroll', soon, { passive: true });
