@@ -282,4 +282,15 @@ assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
   if (pFast.ok) pFast.stops.forEach((st) => assert.ok(st.arriveGal >= o.bufferGal - 0.11, 'every stop reached with the buffer, at +15'));
   console.log('planned at speeds: at the limit ok=' + T.plan(o).ok + ', +15 ok=' + pFast.ok);
 }
+// a round trip of website routes (no turn-by-turn steps): each leg ends where its own miles say, so stops split by leg
+{
+  const out = [], back = []; for (let i = 0; i <= 200; i++) { out.push({ lat: 36, lng: -86 + 4 * i / 200 }); back.push({ lat: 36, lng: -82 - 4 * i / 200 }); }
+  const web = (p, mi) => ({ distanceMeters: mi * 1609.344, duration: Math.round(mi / 60 * 3600) + 's', polyline: { encodedPolyline: T.encodePolyline(p) }, legs: [] });
+  const j = T.joinRoutes([web(out, 230), web(back, 230)]), m = T.buildRoute(j, { city: 20, hwy: 30, comb: 24 });
+  assert.equal(m.legEnds.length, 2); assert.ok(Math.abs(m.legEnds[0] - 230) < 1, 'leg 1 ends at its 230 mi: ' + m.legEnds[0]);
+  const st = (d) => ({ c: { d, lat: 36, lng: -84, station: { name: 'Exxon', id: 'x' + d } } });
+  const legs = T.exportLegs({ stops: [{ label: 'Start', address: '100 Main St' }, { label: 'Turnaround', address: '200 Main St' }, { label: 'Start', address: '100 Main St' }] }, [st(100), st(200), st(300), st(420)], m);
+  assert.deepEqual(legs.map((l) => l.fuelStops), [2, 2], 'two stops on each way');
+  assert.ok(Math.abs(legs[0].toMi - 230) < 1 && Math.abs(legs[1].toMi - legs[1].fromMi - 230) < 1, 'each leg its own miles');
+}
 console.log('trip tests passed (1,000-mile / 300-station plan in ' + ms + ' ms, ' + p.stops.length + ' stops, saves $' + p.savings.toFixed(2) + ')');

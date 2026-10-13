@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.123 - 2026-10-13 (keyless test branch only)
+- **Trips with stops in between, on website routes (no API key), know where each leg ends.** Every leg used to count as mile 0, so Departure put all the fuel stops on the last leg ("0 mi · no fuel stops" on the way there), and the per-leg detours and tank tiles were off too.
+
 ## 0.0.122 - 2026-10-12 (keyless test branch only)
 - **Leaving is required**, and **Now** fills in the current time.
 - **Head back right away** is a switch on round trips (on by default): no date to pick, the way back starts when you arrive. Turn it off and Head back becomes a required time after you leave.

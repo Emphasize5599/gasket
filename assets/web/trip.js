@@ -213,6 +213,7 @@
     }
     var segs = [], at = 0, tAt = 0, legEnds = [];
     (r.legs || []).forEach(function (leg) {
+      var start = at;
       (leg.steps || []).forEach(function (st) {
         var mi = (st.distanceMeters || 0) / M_PER_MI, sec = parseDur(st.staticDuration);
         if (mi <= 0) return;
@@ -220,6 +221,16 @@
         segs.push({ from: at, to: at + mi, gpm: gpmAt(mph), t0: tAt, t1: tAt + sec, mph: mph, instr: st.navigationInstruction && st.navigationInstruction.instructions || '' });
         at += mi; tAt += sec;
       });
+      // a leg with no turn-by-turn steps (website routes): one stretch at its own length and time, so the stops
+      // between legs still fall where they are
+      if (at === start) {
+        var lmi = (leg.distanceMeters || 0) / M_PER_MI, lsec = parseDur(leg.duration);
+        if (lmi > 0) {
+          var lmph = lsec > 0 ? lmi / (lsec / 3600) : 50;
+          segs.push({ from: at, to: at + lmi, gpm: gpmAt(lmph), t0: tAt, t1: tAt + (lsec || lmi / 50 * 3600), mph: lmph, instr: '' });
+          at += lmi; tAt += lsec || lmi / 50 * 3600;
+        }
+      }
       legEnds.push(at);
     });
     if (!segs.length) {
