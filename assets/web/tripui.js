@@ -510,7 +510,7 @@
       return;
     }
     if (k === ST_ROUTE) { bindRoute(); return; }
-    if (k === ST_HAZ) { renderHz(); hzLoadLeg(hzLeg); return; }
+    if (k === ST_HAZ) { renderHz(); hzPreload(); return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
     if (onPlan(k)) {
       renderResults();
@@ -538,11 +538,11 @@
       // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
       if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
       S.trip.departNow = false;      // a time you picked: it stays put
-      collectSafe(); result = null; gateTabs();
+      collectSafe(); result = null; gateTabs();if(model&&futureDepart())hzPreload();
     });
-    bEl.addEventListener('change', function () { collectSafe(); gateTabs(); });
+    bEl.addEventListener('change', function () { collectSafe(); gateTabs();if(model&&futureDepart())hzPreload(); });
     $('tNow').onclick = function () {
-      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); S.trip.departNow = true; A.save(); result = null; gateTabs();
+      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); S.trip.departNow = true; A.save(); result = null; gateTabs();if(model)hzPreload();
     };
     $('tBackAuto').onchange = function () { collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto()); gateTabs(); };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
@@ -2900,7 +2900,7 @@
     var key=timing.join('|')+'|'+(S.trip.returnTrip&&!backAuto()?S.trip.backAt||'':'');
     if (!e || e.live !== live || e.timeKey!==key || (live ? Math.abs(e.d-d)>=10 : e.d!==d)) { e = { d: d, live:live, timeKey:key, st: null }; hzCache.set(a, e); } return e; }
   function hzWarm() { if (aiCan() && Severity.state()==='idle') Severity.compare('warm up', {a:['warm up']}); }
-  async function hzPreload() { hzWarm();var owner=route; for(var i=0;i<hzLegs()&&route===owner;i++) await hzLoadLeg(i); }
+  async function hzPreload() { hzWarm();var owner=route,next=0,count=hzLegs();async function lane(){while(next<count&&route===owner)await hzLoadLeg(next++);}await Promise.all([lane(),lane(),lane()]); }
   async function hzLoad(a, i) {
     var e = hzEntry(a, i); if (e.st) return e;
     e.st = 'loading'; var t0 = Date.now();
@@ -3011,7 +3011,7 @@
       var e = hzCache.get(a), mi = Math.round((a.distanceMeters || 0) / 1609.344), sec = parseFloat(String(a.duration || '0')), chips;
       if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">Checking the weather along it…</span><span class="hz-bar"><i style="width:' + Math.round(Math.max(0.04, e && e.prog || 0) * 100) + '%"></i></span>';
       else if (e.st === 'error') chips = '<span class="hz-ld">couldn\'t check</span>';
-      else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; if(e.aiRating)chips+='<span class="hz-ld">AI rating warnings…</span>'; }
+      else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; if(e.aiRating||e.stats.aiPending)chips+='<span class="hz-ai-note">⚠ AI still rating warnings…</span>'; }
       // which one Google Maps had (your link), as before
       var note = list.length === 1 ? 'Google\'s only route' : legsMode() ? '' : k === altSel && pickedRoute(route) ? (altSure ? '✓ same as in Google Maps' : 'closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? 'matches your link' : '');
       return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +
@@ -3554,7 +3554,8 @@
     modeSnap = null; sheetSize(); backMode();
   }
   /** Discard: back to the speeds (and buffer) you had when you opened the per-road sliders. */
-  function discardSpeedMode() {
+  async function discardSpeedMode() {
+    if(!await A.confirmDiscard())return;
     var snap = modeSnap, r = result;
     if (snap && r) {
       var st = r.speedState = r.speedState || {};

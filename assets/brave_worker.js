@@ -6,7 +6,7 @@ async function (reqId, args) {
   // args.kind 'spare' asks about the spare tire instead: {text, src} (the AI answer's words; the app reads which kind).
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const flat = (s) => (s || '').replace(/\s+/g, ' ');
+  const flat = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const text = () => flat(document.body && document.body.innerText);
   const refused = (t) => /captcha|unusual traffic|are you a robot|verify you are (a )?human|too many requests/i.test(t + ' ' + document.title);
   // Brave ends its AI answer with this line; the answer is the smallest block of the page that holds it

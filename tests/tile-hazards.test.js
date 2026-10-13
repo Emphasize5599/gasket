@@ -4,11 +4,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
   // A real submenu scroll container at enlarged text: stick, collide, then pass.
-  await p.evaluate(()=>__app.subPage('Tile headers','<div class="card" id="testTile"><h3>First tile</h3><div style="height:700px">Contents</div></div><div class="card"><h3>Next tile</h3><div style="height:700px">More contents</div></div>',body=>{body.style.fontSize='130%';}));
+  await p.evaluate(()=>__app.subPage('Tile headers','<div class="card" id="testTile"><h3>First tile</h3><div style="height:700px">Contents</div></div><div class="card"><h3>Next tile</h3><div style="height:1200px">More contents</div></div>',body=>{body.style.fontSize='130%';}));
   await p.waitForFunction(()=>{const page=document.querySelector('.sub-page');return parseFloat(page.style.getPropertyValue('--sub-head-h'))===page.querySelector('.sub-bar').getBoundingClientRect().height;});
-  const geometry=await p.evaluate(()=>{const page=document.querySelector('.sub-page'),tile=document.querySelector('#testTile'),h=tile.querySelector('h3'),bar=page.querySelector('.sub-bar');page.style.scrollBehavior='auto';page.scrollTop=200;return new Promise(r=>requestAnimationFrame(()=>{const top=h.getBoundingClientRect().top,target=bar.getBoundingClientRect().bottom;page.scrollTop=tile.offsetTop+tile.offsetHeight-30;requestAnimationFrame(()=>r({top,target,passed:h.getBoundingClientRect().top<target-10,bounded:h.getBoundingClientRect().bottom<=tile.getBoundingClientRect().bottom+1,overflow:page.scrollWidth>page.clientWidth}));}));});
+  const geometry=await p.evaluate(()=>{const page=document.querySelector('.sub-body'),tile=document.querySelector('#testTile'),h=tile.querySelector('h3'),bar=document.querySelector('.sub-bar');page.style.scrollBehavior='auto';page.scrollTop=200;return new Promise(r=>requestAnimationFrame(()=>{const top=h.getBoundingClientRect().top,target=page.getBoundingClientRect().top+parseFloat(getComputedStyle(page).paddingTop);page.scrollTop=tile.getBoundingClientRect().bottom-page.getBoundingClientRect().top+page.scrollTop-30;requestAnimationFrame(()=>r({top,target,passed:h.getBoundingClientRect().top<target-10,bounded:h.getBoundingClientRect().bottom<=tile.getBoundingClientRect().bottom+1,overflow:page.scrollWidth>page.clientWidth,clear:page.getBoundingClientRect().top>=bar.getBoundingClientRect().bottom}));}));});
   assert.ok(Math.abs(geometry.top-geometry.target)<3,JSON.stringify(geometry));assert.ok(geometry.passed&&geometry.bounded,JSON.stringify(geometry));assert.equal(geometry.overflow,false);
-  if(process.env.UI_SHOT&&width===320){await p.evaluate(()=>document.querySelector('.sub-page').scrollTop=200);await p.screenshot({path:process.env.UI_SHOT});}
+  assert.equal(geometry.clear,true);
+  if(process.env.UI_SHOT&&width===320){await p.evaluate(()=>document.querySelector('.sub-body').scrollTop=200);await p.screenshot({path:process.env.UI_SHOT});}
   await p.click('.sub-back');
   await p.evaluate(()=>{
    const A=__app,S=A.S;S.trip.departNow=true;const alts=__mocks.route({origin:{placeId:'P-start'},destination:{placeId:'P-end'},computeAlternativeRoutes:true}).routes,m=Trip.buildRoute(alts[0],Garage.carModel());
@@ -21,8 +22,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   });
   await p.click('#btnTrip');await p.click('[data-hist="hazards"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.departNow=true;__trip.step(4);});await p.waitForFunction(()=>__reads===2);
   await p.evaluate(()=>{const original=Date.now;Date.now=()=>original()+65000;__trip.step(4);});assert.equal(await p.evaluate(()=>__reads),2,'Now advancing one minute retains completed hazard checks');
-  await p.evaluate(()=>{__ai='ready';});await p.waitForFunction(()=>__ratings===1);assert.match(await p.innerText('#tHz'),/AI rating warnings/);
-  await p.evaluate(()=>__finishRating());await p.waitForFunction(()=>__ratings===2);await p.evaluate(()=>__finishRating());await p.waitForFunction(()=>!document.querySelector('#tHz').textContent.includes('AI rating warnings'));
+  await p.evaluate(()=>{__ai='ready';});await p.waitForFunction(()=>__ratings===1);assert.match(await p.innerText('#tHz'),/AI still rating warnings/);
+  await p.evaluate(()=>__finishRating());await p.waitForFunction(()=>__ratings===2);await p.evaluate(()=>__finishRating());await p.waitForFunction(()=>!document.querySelector('#tHz').textContent.includes('AI still rating warnings'));
   await p.evaluate(()=>__trip.step(4));assert.equal(await p.evaluate(()=>__reads),2,'AI rating does not repeat network checks');assert.equal(await p.evaluate(()=>__ratings),2,'each completed entry gets one AI pass');
   assert.equal(errors.length,0,errors.join('\n'));await p.close();
  }

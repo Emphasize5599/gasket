@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.131 - 2026-10-13 (keyless test branch only)
+- Consistent blue tile headings and unobstructed submenus.
+- Safer car editing and confirmed discard actions.
+- Easier tire selection, spare storage location and clearer tread estimates.
+- Future-leg hazards load concurrently with yellow AI progress notices.
+- Bug fixes.
+
 ## 0.0.130 - 2026-10-13 (keyless test branch only)
 - Tile headings stay visible while scrolling their tile.
 - Earlier background hazard checks with a distinct AI-rating stage.

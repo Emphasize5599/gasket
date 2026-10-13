@@ -1065,8 +1065,9 @@
     var soon = function () { if (!raf) raf = requestAnimationFrame(update); };
     sc.addEventListener('scroll', soon, { passive: true });
     window.addEventListener('resize', soon);
-    if (window.ResizeObserver) new ResizeObserver(soon).observe(sc);
-    if (window.MutationObserver) new MutationObserver(soon).observe(sc, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'open'] });
+    var ro=window.ResizeObserver?new ResizeObserver(soon):null,mo=window.MutationObserver?new MutationObserver(soon):null;
+    if(ro)ro.observe(sc);if(mo)mo.observe(sc,{ childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'open'] });
+    b._dispose=function(){sc.removeEventListener('scroll',soon);window.removeEventListener('resize',soon);if(ro)ro.disconnect();if(mo)mo.disconnect();if(raf)cancelAnimationFrame(raf);b.remove();delete sc._hint;};
     b.onclick = function () { sc.scrollTo({ top: up ? 0 : sc.scrollTop + Math.round(sc.clientHeight * 0.8), behavior: 'smooth' }); };
     soon();
     return { update: soon };
@@ -1083,10 +1084,10 @@
     document.body.appendChild(pg);
     var header=pg.querySelector('.sub-bar'),resize=new ResizeObserver(function(){pg.style.setProperty('--sub-head-h',header.getBoundingClientRect().height+'px');});resize.observe(header);
     var stop = null;
-    var close = function () { resize.disconnect(); if (stop) try { stop(); } catch (e) { } if (pg._hint) pg._hint.remove(); pg.remove(); window.__subClose = null; };
+    var close = function () { resize.disconnect(); if (stop) try { stop(); } catch (e) { } var hint=pg.querySelector('.sub-body')._hint;if(hint)hint._dispose();pg.remove(); window.__subClose = null; };
     window.__subClose = close;
     pg.querySelector('.sub-back').onclick = close;
-    qify(pg); scrollHint(pg);
+    qify(pg); scrollHint(pg.querySelector('.sub-body'));
     if (onOpen) stop = onOpen(pg.querySelector('.sub-body')) || null;
     return close;
   }
@@ -1533,5 +1534,6 @@
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+  window.__app.confirmDiscard=function(){return confirmDel({always:true,title:'Discard changes?',body:'Your changes in this editor will be undone.',action:'Discard changes',goClass:'tonal caution'});};
   if(window.PriceHistory)setTimeout(function(){PriceHistory.seed().catch(function(e){if(window.FLog)FLog.warn('history','Price history seed failed',e.message);});},0);
 })();

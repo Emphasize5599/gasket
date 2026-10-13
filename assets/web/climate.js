@@ -213,7 +213,7 @@
       if ($('cpTempP')) $('cpTempP').onchange = set(function () { p.tempP = num(this.value); });
       if ($('cpName')) $('cpName').onchange = set(function () { p.name = this.value.trim() || p.name; pg.querySelector('.sub-bar h2').textContent = label(p); });
       $('cpNotes').onchange = function () { p.notes = this.value.trim(); save(); };
-      $('cpDiscard').onclick = function () { if (isNew) drop(); else { var o = JSON.parse(snap); Object.keys(p).forEach(function (k) { delete p[k]; }); Object.assign(p, o); } save(); close(); };
+      $('cpDiscard').onclick = async function () { if(!await A.confirmDiscard())return;if (isNew) drop(); else { var o = JSON.parse(snap); Object.keys(p).forEach(function (k) { delete p[k]; }); Object.assign(p, o); } save(); close(); };
       $('cpDel').onclick = function () {
         A.confirmDel({ title: 'Delete "' + title(p) + '"?', action: 'Delete' }).then(function (ok) { if (!ok) return; drop(); LG.info('car', 'Climate preset deleted'); save(); close(); });
       };

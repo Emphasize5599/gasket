@@ -95,7 +95,7 @@ with sync_playwright() as p:
         pg.click('#cpSeasonDefaults')
         weather = [x for x in CL(pg)['presets'] if x['kind'] == 'weather' and x['key'] == 'fog'][0]
         assert weather['temp'] == winter['temp'] and weather['air'] == winter['air'] and weather['kind'] == 'weather' and weather['key'] == 'fog'
-        pg.click('#cpDiscard'); pg.wait_for_timeout(300)
+        pg.click('#cpDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(300)
         assert ft(pg, '.sub-page h2') == '❄️ Winter: special weather', 'closing an answer goes back to the season\'s list'
         assert not any(x['key'] == 'fog' for x in CL(pg)['presets']) and pg.locator('.sub-page #clW_fog.empty').count() == 1
         pg.click('.sub-page #clW_frost'); pg.wait_for_selector('.sub-page #cpTemp'); pg.click('.sub-back'); pg.wait_for_timeout(300)
@@ -108,17 +108,17 @@ with sync_playwright() as p:
         values = [x for x in CL(pg)['presets'] if x['kind'] == 'weather' and x['key'] == 'frost']
         assert next(x for x in values if x['season'] == 'winter')['temp'] == 74
         assert next(x for x in values if x['season'] == 'fall')['temp'] == 65, 'fall edit is independent'
-        pg.click('#cpDiscard'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
+        pg.click('#cpDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
         pg.click('#clX_summer'); pg.wait_for_selector('.sub-page #clW_heat'); pg.click('#clW_heat'); pg.wait_for_selector('#cpSeasonDefaults')
         assert pg.inner_text('#cpSeasonDefaults') == 'Use Summer defaults'
         pg.click('#cpSeasonDefaults')
         heat = [x for x in CL(pg)['presets'] if x['kind'] == 'weather' and x['key'] == 'heat'][0]
         assert heat['temp'] == 70 and heat['ac'] == 'on' and heat['flow'] == 'face', 'summer starter when no summer preset exists'
         nosideways(pg, '.sub-page *', 'season defaults button')
-        pg.click('#cpDiscard'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
+        pg.click('#cpDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
         pg.click('#clS_winter'); pg.wait_for_selector('.sub-page #cpTemp')
         pg.click('[data-k="air"] [data-v="fresh"]'); pg.wait_for_timeout(100); assert pg.locator('.cl-warn').count() == 0
-        pg.click('[data-k="air"] [data-v="recirc"]'); pg.click('#cpDiscard'); pg.wait_for_timeout(200)
+        pg.click('[data-k="air"] [data-v="recirc"]'); pg.click('#cpDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
         assert [x for x in CL(pg)['presets'] if x['key'] == 'winter'][0]['air'] == 'recirc', 'Discard changes: back to how it was when the page opened'
         pg.click('#clS_winter'); pg.wait_for_selector('.sub-page #cpTemp'); pg.click('[data-k="air"] [data-v="fresh"]'); pg.click('.sub-back'); pg.wait_for_timeout(200)
         # ---- a custom preset, renamed, then deleted ----

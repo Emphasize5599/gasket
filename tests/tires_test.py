@@ -21,7 +21,7 @@ TR = r'''() => {
     { name: 'BRIDGESTONE BLIZZAK WS90', type: 'Studless Ice & Snow', size: '195/65R15', utqg: null, warrantyMi: 0 } ];
   window.__brave = [];
   window.__mocks.siteRead = (key, args) => {
-    if (key === 'brave' && args.kind === 'spare') { window.__brave.push(args); return { text: 'The ' + decodeURIComponent(args.url).replace(/.*Does the (.*) come with.*/, '$1') + ' comes with a compact temporary spare tire under the cargo floor.', src: 'ai' }; }
+    if (key === 'brave' && args.kind === 'spare') { window.__brave.push(args); return { text: 'The ' + new URL(args.url).searchParams.get('q').replace(/^Does the /,'').split(' have a factory spare tire?')[0] + ' comes with a compact temporary spare tire under the cargo floor.', src: 'ai' }; }
     if (key !== 'tirerack') return { error: 'No Native bridge' };
     window.__tr.push(args);
     if (window.__trMode === 'blocked') return { blocked: true };
@@ -84,9 +84,9 @@ with sync_playwright() as p:
         types = opts(pg, '#tzType'); print('  types:', types)
         assert types == ['Type', 'Grand Touring All-Season', 'Standard Touring All-Season', 'Studless Ice & Snow', 'Other…']
         pg.select_option('#tzType', 'Standard Touring All-Season'); pg.wait_for_timeout(200)
-        assert opts(pg, '#tzBrand') == ['Brand', 'Bridgestone', 'Michelin', 'Other…'], 'only brands with that type'
+        assert opts(pg, '#tzBrand') == ['Brand', 'Bridgestone', 'Continental', 'Michelin', 'Other…'], 'all brands remain available regardless of type'
         pg.select_option('#tzBrand', 'Bridgestone'); pg.wait_for_timeout(200)
-        assert opts(pg, '#tzModel') == ['Model', 'ECOPIA EP422 PLUS', 'Other…'], 'the Blizzak is a snow tire'
+        assert opts(pg, '#tzModel') == ['Model', 'BLIZZAK WS90', 'ECOPIA EP422 PLUS', 'Other…'], 'snow and touring models remain available'
         pg.select_option('#tzModel', 'ECOPIA EP422 PLUS'); pg.wait_for_timeout(250)
         t = T(pg); print('  picked:', t['brand'], t['model'], t['utqg'], t['warrantyMi'])
         assert t['utqg'] == {'tw': 680, 'trac': 'A', 'temp': 'B'} and t['utqgSrc'] == 'tirerack' and t['warrantyMi'] == 65000
@@ -103,7 +103,7 @@ with sync_playwright() as p:
         assert col[0].startswith('10/10 rgb(') and col[3].startswith('B rgb('), col
         # the spare: Brave Search's answer, to confirm
         pg.wait_for_function("window.__brave.length > 0", timeout=4000); pg.wait_for_timeout(200)
-        assert 'Does%20the%202020%20Toyota%20Corolla%20Hybrid%20LE%20come%20with%20a%20spare%20tire' in pg.evaluate('window.__brave[0].url')
+        assert 'Does%20the%202020%20Toyota%20Corolla%20Hybrid%20LE%20have%20a%20factory%20spare%20tire' in pg.evaluate('window.__brave[0].url')
         assert 'Compact (temporary) spare' in ft(pg, '.tz-guess') and pg.locator('.tz-air').count() == 0, 'Brave\'s guess alone: no air check yet'
         pg.click('#tzSpareYes'); pg.wait_for_timeout(200)
         assert T(pg)['spare']['kind'] == 'compact' and pg.locator('.tz-guess').count() == 0 and pg.input_value('#tzSpare') == 'compact'
@@ -207,7 +207,7 @@ with sync_playwright() as p:
         assert pg.locator('.sub-page').count() == 0, 'the last one hooked up: the list closes'
         assert pg.locator('.tz-pic .tz-w').count() == 14 and pg.locator('#tzMiss').count() == 1
         pg.screenshot(path=f'{OUT}/{name}-t2b-trailer.png')
-        pg.click('#tzDiscard'); pg.wait_for_timeout(200)
+        pg.click('#tzDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
         assert pg.locator('#tzMiss').count() == 0 and pg.locator('.tz-pic .tz-w').count() == 12 and pg.locator('#tzSaved').count() == 1, 'back to the last complete set (the second trailer, unhooked)'
         assert pg.evaluate("window.Garage.car().tires.trailers[1].hooked") is False
         # Discard changes: back to how it was when the page opened
@@ -216,7 +216,7 @@ with sync_playwright() as p:
         assert pg.locator('.tz-pic .tz-w').count() == 8
         o = pg.evaluate(OVER); pg.evaluate(BIG.replace('#gTires *', '.sub-page *')); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'trailer page sideways: ' + str(o)
-        pg.click('#ttDiscard'); pg.wait_for_timeout(200)
+        pg.click('#ttDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
         assert pg.evaluate("window.Garage.car().tires.trailers[0].axles") == 2 and pg.locator('.tz-pic .tz-w').count() == 12 and pg.evaluate("window.Garage.car().tires.corners['%s:a2ro'].depth" % tid) == 2
         # Delete: from Saved trailers → Edit
         pg.click('#tzSaved'); pg.wait_for_selector('.sub-page [data-edit]'); pg.click('[data-edit="%s"]' % t2); pg.wait_for_selector('.sub-page #ttDel')
@@ -237,7 +237,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-t2d-tire.png')
         pg.click('.sub-back'); pg.wait_for_timeout(200)
         assert '30,000 mi · 65k warranty' in ft(pg, '[data-tire="lf"]') and pg.locator('[data-tire].need').count() == 3
-        pg.click('#tzDiscard'); pg.wait_for_timeout(200)
+        pg.click('#tzDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
         assert pg.locator('[data-tire]').count() == 0 and pg.locator('[data-corner]').count() == 4, 'discarded: back to the measured set'
         # ---- dual rear wheels: a heavy pickup nothing settles shows the switch; a VIN that says DRW turns it on ----
         pg.evaluate("() => { const c = window.Garage.car(); window.__keep = { type: c.type, epaId: c.epaId, epa: c.epa }; c.type = 'truck'; delete c.epaId; c.epa = null; window.Garage.redraw(); }"); pg.wait_for_timeout(300)

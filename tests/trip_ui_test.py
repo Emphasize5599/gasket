@@ -369,7 +369,7 @@ with sync_playwright() as p:
         adj(pg)
         pg.wait_for_selector('#tsSpeed .leg', timeout=5000)
         assert pg.locator('#tsSpeed .leg[data-leg]').count() == 0 and pg.locator('#tsSpeed.exp').count() == 0, 'road sliders start collapsed'
-        assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") != 'sticky', 'not pinned while collapsed'
+        assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") == 'sticky', 'tile heading remains anchored while collapsed'
         pg.click('#lgTog'); pg.wait_for_timeout(300)
         assert pg.locator('#tsSpeed.exp').count() == 1 and pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") == 'sticky'
         assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .adj-tools')).position") == 'sticky', 'filters pinned while open'
@@ -470,7 +470,7 @@ with sync_playwright() as p:
         off0 = pg.evaluate("JSON.stringify(window.__trip.state().result.speedState.offsets)")
         pg.evaluate("(() => { const r = document.querySelector('#tsSpeed .leg[data-mi] input[type=range]'); r.value = +r.value + 3; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); })()"); pg.wait_for_timeout(600)
         assert pg.evaluate("JSON.stringify(window.__trip.state().result.speedState.offsets)") != off0, 'speed changed'
-        pg.click('#tBack'); pg.wait_for_timeout(600)
+        pg.click('#tBack'); pg.click('#cfmYes'); pg.wait_for_timeout(600)
         assert step(pg) == 6 and pg.evaluate("JSON.stringify(window.__trip.state().result.speedState.offsets)") == off0 and pg.locator('#tsSpeed.exp').count() == 0, 'Discard restores the speeds'
         assert pg.inner_text('#tBack') == 'Back' and pg.evaluate("getComputedStyle(document.getElementById('tpSteps')).display") != 'none', 'out of the submenu'
         pg.click('#lgTog'); pg.wait_for_timeout(300); pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(300)
@@ -601,7 +601,7 @@ with sync_playwright() as p:
         bt = ft(pg, '#tsBufBox'); print('  buffer box:', bt.replace('\n', ' | '))
         sweep = pg.evaluate("window.__trip.state().result.sweep.map(x => [x.mi, x.ok, x.net && +x.net.toFixed(2), x.mark])")
         print('  sweep:', sweep)
-        assert pg.input_value('#tsBuf') == '30' and 'Buffer for this trip' in bt
+        assert pg.input_value('#tsBuf') == '30' and 'buffer for this trip' in bt.lower()
         pg.screenshot(path=f'{OUT}/{name}-t2b-buffer.png')
         marks = [x for x in sweep if x[3] and x[0] < 30]
         if marks:
@@ -621,12 +621,12 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__alongRoutes') == {'I-30': True, 'US-67': True}, pg.evaluate('window.__alongRoutes')
         print('  compare:', pg.evaluate("JSON.stringify((window.__trip.state().result.routes||[]).map(e=>[e.k, e.res.plan.ok, e.res.plan.totals && e.res.plan.totals.net]))"), pg.evaluate("document.querySelector('.tp-step:not(.hidden)') && document.querySelector('.tp-step:not(.hidden)').innerText.slice(0,300)"))
         rb = ft(pg, '.routebox'); print('  route box:', rb.replace('\n', ' | '))
-        assert 'Cheaper route: via I-30 W' in rb, rb
+        assert 'cheaper route: via i-30 w' in rb.lower(), rb
         pg.evaluate("document.querySelector('.routebox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2c-otherroute.png')
         pg.click('.routebox [data-route="0"]'); pg.wait_for_timeout(400)
         after = ft(pg, '.tp-step:not(.hidden)'); print('  switched:', mi(pg), '|', [l for l in after.split('\n') if 'Also checked' in l])
-        assert mi(pg) == 318 and 'via US-67 S and I-30 W' in after and 'Cheaper route' not in after
+        assert mi(pg) == 318 and 'via us-67 s and i-30 w' in after.lower() and 'cheaper route' not in after.lower()
         goto(pg, 8); dn = ft(pg, '.tp-step:not(.hidden) .warns'); print('  departure notes:', dn.replace('\n', ' | ')); assert 'avoid tolls' in dn and len(dn) < 200; goto(pg, 6)
         pg.evaluate("window.__cheapI30 = false"); settings(pg); setchk(pg, '#tAltCmp', False)
         goto(pg, 4); pg.click('.hz-opt[data-hzk="1"]'); pg.wait_for_timeout(300); stops(pg)

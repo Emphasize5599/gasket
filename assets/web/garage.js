@@ -176,7 +176,8 @@
   function fmtPer(v) { return kind() === 'gas' ? Math.round(v) : (Math.round(v * 10) / 10).toFixed(1); }
 
   // ---------- page ----------
-  var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false;
+  var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false,editSnap=null;
+  function editorOk(c){return !!(c&&(c.year&&c.make&&c.model||String(c.name||'').trim()));}
   // the VIN is the car's identity: dots like a password until you tap the eye
   var vinShown = false;
   var EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>';
@@ -212,8 +213,9 @@
   };
   function draw0() {
     var c = car(), U = units(c), k = kind(c);
-    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><button class="btn tonal sm" id="gEdit">' + (editing ? 'Done' : 'Edit') + '</button></div>' + carousel(c);
-    if (editing) h += editPanel(c);
+    if(editing&&(!editSnap||editSnap.id!==c.id))editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};
+    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><button class="btn tonal sm" id="gEdit"'+(editing&&!editorOk(c)?' disabled':'')+'>' + (editing ? 'Done' : 'Edit') + '</button></div>' + carousel(c);
+    if (editing) h += editPanel(c)+'<button class="btn tonal sm caution" id="gDiscard">Discard changes</button>';
     h += '</div>';
     h += '<div class="card spd" id="tSpeed"></div>';
     h += '<div class="card g-econ"><h3>' + U.econ + '</h3>';
@@ -682,8 +684,10 @@
     host.querySelectorAll('[data-car]').forEach(function (b) {
       b.onclick = function () {
         if (b.dataset.car === '+') {
+          var previous=S.carId;
           var nc = { id: 'c' + Date.now(), name: '', trim: '', type: 'car', power: 'gas', grade: '', tank: '', tankSrc: '', obs: {}, entries: [], epa: null, info: {} };
           S.cars.push(nc); S.carId = nc.id; editing = true;
+          editSnap={id:nc.id,before:JSON.stringify(nc),previous:previous,isNew:true};
         } else { S.carId = b.dataset.car; editing = false; }
         LG.info('car', 'Selected ' + shortName(car()));
         draw(); changed();
@@ -692,7 +696,8 @@
     host.querySelectorAll('[data-rmcar]').forEach(function (b) {
       b.onclick = function (e) { e.stopPropagation(); var x = S.cars.filter(function (y) { return y.id === b.dataset.rmcar; })[0]; if (x) removeCar(x); };
     });
-    $('gEdit').onclick = function () { editing = !editing; draw(); };
+    $('gEdit').onclick = function () { if(editing&&!editorOk(c))return;if(!editing)editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};else editSnap=null;editing = !editing; draw(); };
+    if($('gDiscard'))$('gDiscard').onclick=function(){A.confirmDiscard().then(function(ok){if(!ok||!editSnap||editSnap.id!==c.id)return;var snap=editSnap;if(snap.isNew){S.cars=S.cars.filter(function(x){return x.id!==c.id;});S.carId=S.cars.some(function(x){return x.id===snap.previous;})?snap.previous:S.cars[0].id;}else{Object.keys(c).forEach(function(k){delete c[k];});Object.assign(c,JSON.parse(snap.before));}editSnap=null;editing=false;draw();changed();});};
     if (editing) {
       if ($('gVinGo')) {
         $('gVinGo').onclick = function () { lookupVin(c, $('gVin').value); };
@@ -703,6 +708,7 @@
         $('gVin').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); lookupVin(c, this.value); } };
       }
       if ($('gName')) $('gName').onchange = function () { c.name = this.value.trim(); draw(); save(); };
+      if($('gName'))$('gName').oninput=function(){$('gEdit').disabled=!this.value.trim()&&!(c.year&&c.make&&c.model);};
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
@@ -979,8 +985,10 @@
     if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { vMsg('A VIN is 17 letters and numbers (never I, O or Q).', true); return; }
     if (vin === c.vin && c.vinDecodeRev===130 && hasEpa(c) && c.epaId) { vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
     vMsg('Decoding…');
+    var epoch=editSnap;
     try {
       var r = await call('fetchJson', VPIC + 'DecodeVinValuesExtended/' + vin + '?format=json');
+      if(epoch&&editSnap!==epoch||S.cars.indexOf(c)<0)return;
       if (r.error) throw new Error(r.error);
       var R = (JSON.parse(r.body).Results || [])[0] || {};
       var d = fromVpic(R);
