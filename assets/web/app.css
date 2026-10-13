@@ -1634,7 +1634,7 @@ body.legs-open .scroll-hint { display: none; }
 .job-bar { position: fixed; z-index: 1150; left: 12px; right: 12px; top: calc(var(--st) + 104px); display: flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 6px 6px 6px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); font-size: 13.5px; }
 .job-bar.hidden { display: none; }
-body.trip-full .job-bar { top: calc(var(--st) + 6px); left: 12px; right: 12px; box-shadow: none; border: 1px solid var(--line); }
+body.trip-full .job-bar { top: calc(var(--st) + 2px); left: 12px; right: 12px; min-height: 0; height: 44px; padding-top: 0; padding-bottom: 0; box-shadow: none; border: 1px solid var(--line); }   /* 10px clear of the step tabs below */
 .job-bar .jb-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .job-bar .pbar { flex: 0 1 90px; min-width: 40px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .job-bar .pbar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
@@ -1643,3 +1643,5 @@ body.trip-full .job-bar { top: calc(var(--st) + 6px); left: 12px; right: 12px; b
 .job-bar .jb-go { flex: none; height: 36px; padding: 0 14px; }
 body.job-on #grades, body.job-on #btnMode, body.job-on #btnRefresh, body.job-on #btnArea, body.job-on #btnSettings,
 body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist-row, body.job-on .tp-steps .job-lock { opacity: .4; pointer-events: none; filter: grayscale(1); }
+.tz-tip { margin: 6px 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.tz-tip small { color: var(--ink-2); }

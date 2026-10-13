@@ -209,7 +209,7 @@
     built = {}; scrolls = {}; shown = 0;
   }
   /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
-  function adviceDue() { return !!((window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
+  function adviceDue() { return !!((window.Tires && Tires.airDue && Tires.airDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
     freshModel();
     setTimeout(function () { if (A.jobDraw && A.job && A.job()) A.jobDraw(); }, 0);   // its status bar shows unless this step shows the search itself
@@ -292,7 +292,17 @@
   /** Go forward to step `to`, one step at a time, stopping at the first requirement that isn't met. */
   var jumpTo = 0;   // a step tab pressed while a saved trip was opening: gone to once it's open
   async function advance(to) {
-    if (busy) { if (loadingTrip) jumpTo = to; return; }
+    if (busy && loadingTrip) { jumpTo = to; return; }
+    if (busy) {
+      // a search runs: Advisory → Parameters (or Adjustments) still go, checking the steps between without opening them
+      if (jobLocked(to) || to > ST_ADJ) return;
+      collectSafe();
+      for (var s0 = step; s0 < to; s0++) {
+        if (s0 === ST_ADVISORY || s0 === ST_PARAMS) { if (!(await ready(s0))) return; }
+        else if (s0 === ST_ROUTE && (!model || timesNeed())) return;
+      }
+      step = to; renderStep(); return;
+    }
     collectSafe(); freshModel();
     while (step < to) {
       var ok = await ready(step);
@@ -310,6 +320,7 @@
     }
     if (k === ST_ADVISORY) {
       // a spare to air up: tick it in Advisory first (it stays ticked for 30 days, saved trips included)
+      if (window.Tires && Tires.tiresDue && Tires.tiresDue(Garage.car())) { flag(document.querySelector('#advTires [data-tchk="tires"]') ? document.querySelector('#advTires [data-tchk="tires"]').closest('.adv-chk') : $('advTires'), 'pick', 'Set your tires to their cold pressure, then tick it.'); return false; }
       if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) { flag(document.querySelector('#advTires .adv-chk') || $('advTires'), 'pick', 'Check your spare\'s air, then tick it.'); return false; }
       // recirculate's downsides: acknowledged once
       if (window.Climate && Climate.ackDue()) { flag(document.querySelector('#advClimate .adv-chk') || $('advClimate'), 'pick', 'Read about recirculate, then tick it.'); return false; }
@@ -360,7 +371,7 @@
   function reach() {
     if (loadingTrip) return ST_GARAGE;
     if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
-    if (window.Tires && Tires.spareDue && Tires.spareDue(Garage.car())) return ST_ADVISORY;
+    if (window.Tires && Tires.airDue && Tires.airDue(Garage.car())) return ST_ADVISORY;
     if (window.Climate && Climate.ackDue()) return ST_ADVISORY;
     if (!model || document.querySelector('#tParsed .pick button') || timesNeed()) return ST_ROUTE;
     if (!hasFuel()) return ST_PARAMS;
@@ -2498,8 +2509,9 @@
       go(); if (A.jobDraw) A.jobDraw();
     });
   }
-  /** Steps that would change what a running search uses (the car, the route): closed while it runs. */
-  function jobLocked(k) { return busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ); }
+  /** Steps closed while a search runs: the ones that would change what it uses (the car, the route), and Stops and
+   *  Departure, whose answers it's about to change (Adjustments shows its progress). */
+  function jobLocked(k) { return busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
   async function findStops1(force) {
     busy = true; jobCancel = false; searchCancelled = false; bgJob = false;
     // the map's own search around you gives way: the trip needs the website readers
@@ -3363,7 +3375,8 @@
         dots.push(dot);
         dot
           .bindPopup('<b>' + esc(P.displayName(c.station)) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
-            (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : '')).addTo(layer);
+            (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : ''));
+        if (!dotsHidden) dot.addTo(layer);
       });
       if (result.top) chosen[result.top.c.id] = 'T';
       // the chosen stops: a dot on the station and a price bubble beside it that moves out of the way of the roads
@@ -3466,8 +3479,11 @@
     var st = result && result.speedState || {};
     return { offsets: JSON.parse(JSON.stringify(st.offsets || {})), all: st.all, bufMi: result ? result.bufMi : null };
   }
+  var dotsHidden = false;
   function backMode() {
     var on = speedMode(), pg = $('trip');
+    // adjusting speed by road: only the route, its stretches and your stops on the map (the other stations are noise there)
+    if (on !== dotsHidden) { dotsHidden = on; dots.forEach(function (d) { if (on) layer.removeLayer(d); else if (!layer.hasLayer(d)) layer.addLayer(d); }); }
     if (on && !modeSnap) modeSnap = snapSpeeds();
     if (!on && !inMode) modeSnap = null;
     if (pg) pg.classList.toggle('submode', on);
@@ -3640,6 +3656,8 @@
       if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();
     }, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
+    /** For tests: the other stations' dots on the map now (not your stops). */
+    otherDots: function () { return dots.filter(function (d) { return layer.hasLayer(d); }).length; },
     placeMs: function () { var t0 = performance.now(); placePins(); return Math.round(performance.now() - t0); },
     /** For tests: each stop bubble's box, its line (if any) and whether it's the short form; plus how many cover the route. */
     pins: function () {

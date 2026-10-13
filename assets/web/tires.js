@@ -290,8 +290,14 @@
     compact: ['a compact temporary spare tire', 'a donut spare', 'a space-saver mini spare tire'],
     kit: ['a tire repair kit with sealant and an air compressor', 'a tire sealant and inflator kit', 'a fix-a-flat tire mobility kit'],
     runflat: ['run-flat tires', 'runflat tires with no spare', 'run-flat tires let you drive after a puncture'],
-    generic: ['it comes with a spare tire', 'the spare is located under the floor', 'a jack and lug wrench are included']
+    generic: ['it comes with a spare tire', 'the spare is located under the floor', 'a jack and lug wrench are included'],
+    // not what it has: a spare you can buy or add (the tip under "What your car has"), room left for one
+    optional: ['owners can buy a spare tire separately', 'a spare tire is available as an optional accessory', 'the car has room for a spare but none is included']
   };
+  // "it doesn't come with a spare" (not "not a full-size spare"): then only a kit, run-flats or nothing can be the answer
+  var SPARE_NONE = /\b(?:does not|doesn'?t|did not|didn'?t|do not|don'?t|will not|won'?t)\s+(?:come|ship)?\s*(?:standard\s+|equipped\s+)?(?:with|include|have)\s+(?:a\s+|an\s+)?spare\b|\bno spare(?: tire)?\b|\bwithout a spare\b|\b(?:instead of|rather than|in place of)\s+(?:a\s+)?spare\b|\bomit(?:s|ted)?\s+(?:the\s+)?(?:spare|tire itself)/i;
+  // a spare you could have anyway: buy it separately, an option, room and mounts for one
+  var SPARE_OPT = /\b(?:purchase|buy|order|add)\w*\b[^.]{0,40}\b(?:separately|spare)\b|available as an? (?:optional|option|accessory|extra)|\boptional (?:spare|accessory)|can be (?:added|purchased|bought|ordered)|(?:desire|want|need) a spare|aftermarket|designated space|threaded receptor|(?:room|space|well) for a spare|donor|sourced from/i;
   var SPARE_NEG = /\b(not|no|never|without|neither|nor)\b|n't\b/i;
   var SPARE_INSTEAD = /\b(?:instead of|rather than|in place of)\s+(?:a|an|the)?\s*[\w -]*?\b(?:spare(?: tire)?|tire|wheel)\b/gi;
   /** Brave's answer -> {pos: clauses saying what the car has, negSpare: it says there's no spare somewhere}. */
@@ -300,7 +306,17 @@
     SPARE_INSTEAD.lastIndex = 0; var instead = SPARE_INSTEAD.test(t); SPARE_INSTEAD.lastIndex = 0;
     var cs = t.replace(SPARE_INSTEAD, ' ').replace(/\([^)]*\)/g, ' ').split(/[.;:!?]|,\s*(?=(?:instead|but|not|so|which|and it|while)\b)/i)
       .map(function (x) { return x.replace(/\s+/g, ' ').trim(); }).filter(function (x) { return x.length > 6; }).slice(0, 8);
-    return { pos: cs.filter(function (c) { return !SPARE_NEG.test(c); }), negSpare: instead || cs.some(function (c) { return SPARE_NEG.test(c) && /spare/i.test(c); }) };
+    var opt = cs.filter(function (c) { return !SPARE_NEG.test(c) && SPARE_OPT.test(c); });
+    return { pos: cs.filter(function (c) { return !SPARE_NEG.test(c) && opt.indexOf(c) < 0; }), opt: opt, noSpare: SPARE_NONE.test(t),
+      runflat: /\brun[- ]?flat/i.test(t) && !/\b(?:not|no|without)\s+(?:\w+\s+)?run[- ]?flat/i.test(t),     // "run-flat tires and no spare" is one clause the model never sees
+      negSpare: instead || cs.some(function (c) { return SPARE_NEG.test(c) && /spare/i.test(c); }) };
+  }
+  /** The tip under "What your car has": what it says about getting a spare anyway (buying one, its size, where to find one). */
+  function spareTip(sc) {
+    var xs = (sc.opt || []).filter(function (c) { return /\b(?:purchase|buy|order|add|optional|option|accessory|aftermarket|donor|sourced|size)\b/i.test(c); });
+    if (!xs.length) return '';
+    var tip = xs.slice(0, 2).join('. ').replace(/^(?:while|but|however|although)\s+/i, '');
+    return tip.charAt(0).toUpperCase() + tip.slice(1) + '.';
   }
   /**
    * The kind from the model's scores ([{full, compact, kit, runflat, generic}] per clause, or null with no model) and the
@@ -308,18 +324,21 @@
    * has, else "no spare" when it says so, else null (you pick). -> {kind, by: 'ai' | 'words' | null, score}
    */
   function pickSpare(scores, sc) {
-    var best = null;
+    var best = null, kinds = sc.noSpare ? ['kit', 'runflat'] : ['full', 'compact', 'kit', 'runflat'];
     (scores || []).forEach(function (o) {
       if (!o) return;
-      ['full', 'compact', 'kit', 'runflat'].forEach(function (k) { if (o[k] >= 0.55 && o[k] >= o.generic - 0.02 && (!best || o[k] > best.score)) best = { kind: k, by: 'ai', score: Math.round(o[k] * 1000) / 1000 }; });
+      if (o.optional != null && o.optional >= Math.max(o.full, o.compact, o.kit, o.runflat)) return;    // about a spare it could have, not one it has
+      kinds.forEach(function (k) { if (o[k] >= 0.55 && o[k] >= o.generic - 0.02 && (!best || o[k] > best.score)) best = { kind: k, by: 'ai', score: Math.round(o[k] * 1000) / 1000 }; });
     });
     if (best) return best;
     var w = parseSpare(sc.pos.join('. '));
+    if (w && sc.noSpare && kinds.indexOf(w) < 0) w = null;      // "doesn't come with a spare": a mention of one isn't the answer
     if (w && w !== 'none') return { kind: w, by: 'words', score: null };
-    return sc.negSpare || w === 'none' ? { kind: 'none', by: scores ? 'ai' : 'words', score: null } : { kind: null, by: null, score: null };
+    if (sc.noSpare && sc.runflat) return { kind: 'runflat', by: 'words', score: null };
+    return sc.noSpare || sc.negSpare || w === 'none' ? { kind: 'none', by: scores ? 'ai' : 'words', score: null } : { kind: null, by: null, score: null };
   }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare, spareClauses: spareClauses, pickSpare: pickSpare, SPARE_EX: SPARE_EX,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, SPARE_EX: SPARE_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   root.TireMath = TireMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = TireMath;
@@ -509,7 +528,7 @@
       spareBusy[c.id] = false;
       return readSpare(r && r.text).then(function (pick) {
         var g = pick.kind;
-        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: r && r.text ? String(r.text).slice(0, 300) : '' };
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: r && r.text ? String(r.text).slice(0, 300) : '', tip: pick.tip || '' };
         LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
         save(); redraw(c); onChange();
       });
@@ -520,15 +539,24 @@
   function readSpare(text) {
     var sc = spareClauses(text);
     if (!text) return Promise.resolve({ kind: null, by: null, score: null });
-    if (!sc.pos.length || !root.Severity || !Severity.compare) return Promise.resolve(pickSpare(null, sc));
+    if (!sc.pos.length || !root.Severity || !Severity.compare) return Promise.resolve(Object.assign(pickSpare(null, sc), { tip: spareTip(sc) }));
     return sc.pos.reduce(function (p, c) { return p.then(function (acc) { return Severity.compare(c, SPARE_EX).then(function (o) { acc.push(o); return acc; }); }); }, Promise.resolve([]))
-      .then(function (scores) { var ok = scores.some(Boolean); return Object.assign(pickSpare(ok ? scores : null, sc), { model: ok }); }, function () { return pickSpare(null, sc); });
+      .then(function (scores) {
+        var ok = scores.some(Boolean);
+        // the AI's own reading of which clauses are about a spare the car could have (bought separately, an option)
+        scores.forEach(function (o, i) { if (o && o.optional >= 0.55 && o.optional >= Math.max(o.full, o.compact, o.kit, o.runflat) && sc.opt.indexOf(sc.pos[i]) < 0) sc.opt.push(sc.pos[i]); });
+        return Object.assign(pickSpare(ok ? scores : null, sc), { model: ok, tip: spareTip(sc) });
+      }, function () { return Object.assign(pickSpare(null, sc), { tip: spareTip(sc) }); });
   }
   /** What the car has: what you said, else Brave's guess (marked), else ''. */
   function spareKind(t) { var sp = (t && t.spare) || {}; return sp.kind || (sp.lookup && sp.lookup.guess) || ''; }
   var SPARE_NAME = { full: 'Full-size spare', compact: 'Compact (temporary) spare', kit: 'Repair kit, no spare', runflat: 'Run-flat tires, no spare', none: 'No spare' };
   var AIR_DAYS = 30;
   function airedOk(t) { var a = t && t.spare && t.spare.aired; return a && Date.now() - a < AIR_DAYS * 864e5; }
+  /** The spare you've said the car has ('' until you pick one: Brave's guess alone never asks for an air check). */
+  function confirmedSpare(t) { return (t && t.spare && t.spare.kind) || ''; }
+  function tiresAiredOk(t) { if (root.__mocks && root.__mocks.tireAir) return true; var a = t && t.airedAt; return a && Date.now() - a < AIR_DAYS * 864e5; }
+  function setTiresAired(c, on) { var t = tires(c); t.airedAt = on ? Date.now() : 0; LG.info('car', on ? 'Tires set to their cold pressure' : 'Tire pressure: unchecked'); save(); redraw(c); onChange(); }
   function setAired(c, on) { var t = tires(c), sp = spare(t); sp.aired = on ? Date.now() : 0; LG.info('car', on ? 'Spare tire aired up' : 'Spare tire air: unchecked'); save(); redraw(c); onChange(); }
 
   // ---------- fuel economy /10: the rules, nudged a point by the rating model from the tire's name ----------
@@ -655,8 +683,10 @@
     if (!kind && guess) h += '<div class="tz-guess">Brave Search says: <b>' + esc(SPARE_NAME[guess]) + '</b>. <button class="btn tonal sm" id="tzSpareYes">That\'s right</button></div>';
     h += '<label class="nf wide"><span>What your car has' + q(Q.spare) + '</span><select id="tzSpare"><option value="">' + (guess && !kind ? 'Not confirmed yet' : 'Not sure') + '</option>' +
       ['full', 'compact', 'kit', 'runflat', 'none'].map(function (k) { return '<option value="' + k + '"' + (kind === k ? ' selected' : '') + '>' + SPARE_NAME[k] + '</option>'; }).join('') + '</select></label>';
+    var k1 = kind || guess;
+    if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tz-tip"><b>Tip</b> · ' + esc(sp.lookup.tip) + ' <small>(from Brave Search\'s answer, read by the on-phone AI)</small></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Look under the trunk floor (or under a truck\'s bed), or in the owner\'s manual.</div>';
-    var k2 = kind || guess;
+    var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
     if (k2 === 'full' || k2 === 'compact') h += '<div class="tz-air ' + (airedOk(t) ? 'ok' : 'due') + '">' + (airedOk(t) ? 'Air checked ' + new Date(sp.aired).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. Next check by ' + new Date(sp.aired + AIR_DAYS * 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '.' :
       'Its air hasn\'t been checked this month. Check it' + (k2 === 'compact' ? ' (compact spares usually need 60 psi)' : '') + ', then tick it in Advice.') + '</div>';
     else if (k2 === 'kit' || k2 === 'none') h += '<div class="tz-air due">No spare: have a plan for a flat. Roadside assistance (your insurer or the car maker may include it), the kit\'s pump charged and working, and your phone charged.</div>';
@@ -1315,23 +1345,32 @@
     if (t.tread && t.tread.mode !== 'measure' && !(t.corners && t.corners.split) && (t.tread.rotated === 'no' || t.tread.rotated === 'sometimes'))
       out.push({ level: 'info', title: 'Rotate your tires', text: 'Moving them to different corners every 5,000 to 7,500 miles makes them wear evenly and last longer.' });
     if (t.utqg && (t.utqg.trac === 'B' || t.utqg.trac === 'C')) out.push({ level: 'info', title: 'Wet roads', text: 'Your tires\' traction grade is ' + t.utqg.trac + ', below the A most tires have. Leave extra room to stop in the rain.' });
-    // the spare: air it up every month (and before trips); no spare: a plan
-    var k = spareKind(t);
+    // the tires: set to their cold pressure every month (Advisory's Next waits for the tick)
+    out.unshift({ level: tiresAiredOk(t) ? 'done' : 'warn', title: 'Tire pressure', text: (tiresAiredOk(t) ? 'Set ' + new Date(t.airedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. ' : '') +
+      'Tires lose about 1 psi a month, and more in the cold. Check them cold (before driving, or after a few hours parked) and fill them to the pressure on the sticker in the driver\'s door jamb, not the maximum printed on the tire.',
+      check: { id: 'tires', label: 'I set my tires to their cold pressure', on: !!tiresAiredOk(t) } });
+    // the spare: air it up every month (and before trips), once you've said the car has one; no spare: a plan
+    var k = confirmedSpare(t);
     if (k === 'full' || k === 'compact') out.push({ level: airedOk(t) ? 'done' : 'warn', title: 'Spare tire air', text: (airedOk(t) ? 'Checked ' + new Date(t.spare.aired).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. ' : '') +
       'A spare loses air sitting in the trunk. Check it every month and before long drives' + (k === 'compact' ? ': compact spares usually need 60 psi (it\'s on the spare\'s side), and they\'re for about 70 miles at up to 50 mph.' : ', to the same pressure as your other tires.'), check: { id: 'spare', label: 'I aired up my spare', on: !!airedOk(t) } });
     else if (k === 'kit' || k === 'none') out.push({ level: 'warn', nodot: true, title: 'No spare tire', text: (k === 'kit' ? 'Your car has a repair kit instead: it fixes small punctures in the tread, not sidewall cuts or blowouts. ' : '') + 'Have a plan for a flat: roadside assistance (your insurer or the car maker may include it), and your phone charged.' });
     else if (k === 'runflat') out.push({ level: 'info', title: 'Run-flat tires', text: 'No spare: after a puncture you can drive about 50 miles at up to 50 mph to get it fixed. Have a plan for a sidewall cut or a blowout.' });
+    else if (spareKind(t)) out.push({ level: 'info', title: 'Spare tire', text: 'Brave Search says: ' + SPARE_NAME[spareKind(t)] + '. Confirm it in Garage → Tires (look under the trunk floor).' });
     else out.push({ level: 'info', title: 'Spare tire', text: 'Does your car have one? Look under the trunk floor, then set it in Garage → Tires so Gasket can remind you to keep it aired up.' });
     return out;
   }
   /** One line for the Departure step about the spare, or ''. */
   function departureNote(c) {
-    var t = c && c.tires || {}, k = spareKind(t);
+    var t = c && c.tires || {}, k = confirmedSpare(t);
     if ((k === 'full' || k === 'compact') && !airedOk(t)) return 'Check your spare tire\'s air before you go (it hasn\'t been checked this month).';
     if (k === 'kit' || k === 'none') return 'Your car has no spare tire: have a plan for a flat (roadside assistance, phone charged).';
     return '';
   }
   /** A spare that needs its monthly air check ticked before a trip goes on (Advisory's Next waits for it). */
-  function spareDue(c) { var t = c && c.tires || {}, k = spareKind(t); return (k === 'full' || k === 'compact') && !airedOk(t); }
-  root.Tires = { missing: function (c) { return missing(c && c.tires); }, duallyState: duallyState, spareDue: spareDue, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
+  function spareDue(c) { var t = c && c.tires || {}, k = confirmedSpare(t); return (k === 'full' || k === 'compact') && !airedOk(t); }
+  /** The monthly cold-pressure tick for the tires themselves. */
+  function tiresDue(c) { return !tiresAiredOk(c && c.tires || {}); }
+  /** Anything on Advice still to tick for the tires (Advisory's Next waits for it). */
+  function airDue(c) { return spareDue(c) || tiresDue(c); }
+  root.Tires = { missing: function (c) { return missing(c && c.tires); }, duallyState: duallyState, spareDue: spareDue, tiresDue: tiresDue, airDue: airDue, setTiresAired: setTiresAired, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
 })(typeof window !== 'undefined' ? window : globalThis);

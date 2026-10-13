@@ -36,7 +36,12 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     // 1. a search on its own screen: no status bar (the step shows it); the steps that would change it are closed
     await discover();
     assert.equal(await p.locator('#jobBar:not(.hidden)').count(), 0, 'Adjustments shows its own progress');
-    assert.deepEqual(await p.evaluate(() => [1, 3, 4].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, true, true], 'Garage, Route, Hazards closed while it runs');
+    assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, true, true, false, true, true],
+      'Garage, Route, Hazards (they would change it) and Stops, Departure (it is about to change them) closed while it runs');
+    // Advice and Parameters still open, and Advice's tab row goes on to Parameters
+    await p.click('#tpSteps [data-step="2"]'); await p.waitForFunction(() => __trip.state().step === 2);
+    await p.click('#tpSteps [data-step="5"]'); await p.waitForFunction(() => __trip.state().step === 5);
+    assert.ok((await st()).busy, 'still searching'); await p.click('#tpSteps [data-step="6"]'); await p.waitForFunction(() => __trip.state().step === 6);
     await p.click('#tpSteps [data-step="3"]', { force: true }); assert.equal((await st()).step, 6, 'a closed step cannot be opened');
 
     // 2. ✕ asks; a tap outside the question keeps you here, with the search still running
@@ -75,7 +80,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     // in a full-screen menu the bar sits in the empty space above the step tabs
     await p.evaluate(() => { document.getElementById('trip').classList.add('full'); document.body.classList.add('trip-full'); __app.jobDraw(); });
     const fit = await p.evaluate(() => { const r = document.getElementById('jobBar').getBoundingClientRect(), h = document.querySelector('.tp-head').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, tabs: h.top }; });
-    console.log('  full screen:', JSON.stringify(fit)); assert.ok(fit.top >= 0 && fit.bottom <= fit.tabs + 1, 'above the step tabs');
+    console.log('  full screen:', JSON.stringify(fit)); assert.ok(fit.top >= 0 && fit.bottom <= fit.tabs - 8, 'above the step tabs, with room between');
     if (shots) await p.screenshot({ path: shots + '/bg-full.png' });
     await p.evaluate(() => { document.getElementById('trip').classList.remove('full'); document.body.classList.remove('trip-full'); });
 

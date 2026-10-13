@@ -4,6 +4,14 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.127 - 2026-10-13 (keyless test branch only)
+- **The spare tire is read right.** "Doesn't come with a spare" now wins over any mention of one (room for it, buy one separately), so cars with a repair kit no longer show up as having a spare. When the answer says you can get a spare anyway, a tip under "What your car has" says so (with its size, when given).
+- **Air checks follow what you picked:** the spare's monthly air check only comes up once you've chosen a full-size or compact spare.
+- **New in Advice: tire pressure.** A monthly tick for setting your tires to their cold pressure (the sticker in the driver's door jamb); the trip waits for it like the others.
+- During a background station search, Stops and Departure are grayed out too, and Advice → Parameters works.
+- Speed by road shows only your route and stops on the map, not every other station.
+- Bug fixes.
+
 ## 0.0.126 - 2026-10-13 (keyless test branch only)
 - **Station searches and price updates can run in the background.** Leaving one (✕, Back or the phone's Back) asks whether to cancel it or keep it running. In the background, a status bar shows its progress with a ✕ to cancel (on the map under the top bar, and in the empty space above the step tabs in full-screen menus), and anything that would change it is grayed out: the car, route and hazards steps, grades, fuel mode, refresh, settings and other trips. When it finishes, the bar offers to open your stops.
 - The map's own search shows in the same bar, and gives way when you start a trip search.

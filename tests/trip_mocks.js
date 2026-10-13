@@ -161,4 +161,6 @@
       fuel: { metadata: { dateCreated: now }, prices: [{ name: 'UNLEAD', displayName: 'Unleaded', price: 3.019 }, { name: 'PREMIUM', displayName: 'Premium', price: 3.769 }] } })) }; }
     return null;
   };
+  // the tires' monthly cold-pressure tick counts as done (tests that check that gate turn this off)
+  window.__mocks.tireAir = true;
 })();

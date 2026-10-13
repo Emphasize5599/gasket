@@ -373,6 +373,7 @@ with sync_playwright() as p:
         pg.click('#lgTog'); pg.wait_for_timeout(300)
         assert pg.locator('#tsSpeed.exp').count() == 1 and pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .spd-stick')).position") == 'sticky'
         assert pg.evaluate("getComputedStyle(document.querySelector('#tsSpeed .adj-tools')).position") == 'sticky', 'filters pinned while open'
+        dots_in = pg.evaluate("window.__trip.otherDots()"); assert pg.locator('#trip.submode').count() == 0 or dots_in == 0, 'speed by road: no other stations on the map'
         order = pg.evaluate("[...document.querySelectorAll('#tsSpeed .leg.all, #tsSpeed .road-tog, #tsSpeed .adj-tools, #tsSpeed .road-g')].map(e => e.className.split(' ')[0])")
         print('  speed card order:', order[:4]); assert order[:3] == ['leg', 'road-tog', 'adj-tools'] and order[3] == 'road-g'
         pg.evaluate("document.getElementById('tsSpeed').scrollIntoView({block:'start'})"); pg.wait_for_timeout(200)
@@ -383,6 +384,7 @@ with sync_playwright() as p:
         assert pg.evaluate('window.__hpms.length') > 5 and all('HPMS_FULL_' in u for u in pg.evaluate('window.__hpms'))
         pg.click('#lgTog'); pg.wait_for_timeout(1000)   # out of the submenu: no selector, the whole route again
         assert pg.locator('#spdSel:not(.hidden)').count() == 0 and pg.locator('#trip.submode').count() == 0
+        dots_out = pg.evaluate("window.__trip.otherDots()"); print('  station dots, speed by road / after:', dots_in, dots_out); assert dots_out > 0, 'back from speed by road: the other stations again'
         frame = "(() => { const sh = document.getElementById('trip').getBoundingClientRect(); let lo = 1e9, hi = -1e9, l = 1e9, r = -1e9; document.querySelectorAll('.leaflet-overlay-pane path').forEach(p => { const b = p.getBoundingClientRect(); if (b.width + b.height < 5) return; lo = Math.min(lo, b.top); hi = Math.max(hi, b.bottom); l = Math.min(l, b.left); r = Math.max(r, b.right); }); return {sheetTop: Math.round(sh.top), sheetH: Math.round(sh.height), routeTop: Math.round(lo), routeBottom: Math.round(hi), left: Math.round(l), right: Math.round(r), W: innerWidth, tall: document.getElementById('trip').classList.contains('tall')}; })()"
         fr = pg.evaluate(frame); print('  route framing (speed section):', fr)
         assert fr['sheetH'] > 0.6 * pg.evaluate('innerHeight'), 'Stops panel at 75%'

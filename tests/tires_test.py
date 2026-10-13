@@ -104,9 +104,10 @@ with sync_playwright() as p:
         # the spare: Brave Search's answer, to confirm
         pg.wait_for_function("window.__brave.length > 0", timeout=4000); pg.wait_for_timeout(200)
         assert 'Does%20the%202020%20Toyota%20Corolla%20Hybrid%20LE%20come%20with%20a%20spare%20tire' in pg.evaluate('window.__brave[0].url')
-        assert 'Compact (temporary) spare' in ft(pg, '.tz-guess') and "hasn't been checked" in ft(pg, '.tz-air'), ft(pg, '#gTiresIn')
+        assert 'Compact (temporary) spare' in ft(pg, '.tz-guess') and pg.locator('.tz-air').count() == 0, 'Brave\'s guess alone: no air check yet'
         pg.click('#tzSpareYes'); pg.wait_for_timeout(200)
         assert T(pg)['spare']['kind'] == 'compact' and pg.locator('.tz-guess').count() == 0 and pg.input_value('#tzSpare') == 'compact'
+        assert "hasn't been checked" in ft(pg, '.tz-air'), 'picked: now its air is asked for'
         # ---- tread: estimated from miles and rotation, or measured ----
         pg.fill('#tzMiles', '30000'); pg.dispatch_event('#tzMiles', 'change'); pg.wait_for_timeout(150)
         pg.select_option('#tzRot', 'yes'); pg.wait_for_timeout(200)
@@ -132,6 +133,13 @@ with sync_playwright() as p:
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
         pg.select_option('#tzDepth', '8'); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzTrac')
         pg.select_option('#tzTrac', 'A'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
+        # ---- Advisory: the tires' cold pressure, ticked once a month; Next waits for it ----
+        pg.evaluate("window.__mocks.tireAir = false"); pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(300)
+        assert 'Tire pressure' in ft(pg, '#advTires') and 'driver\'s door jamb' in ft(pg, '#advTires') and pg.locator('[data-tchk="tires"]:checked').count() == 0
+        pg.click('#tNext'); pg.wait_for_timeout(100)
+        assert pg.evaluate('window.__trip.state().step') == 2 and pg.locator('#advTires .adv-chk.pulse [data-tchk="tires"]').count() == 1, 'Next waits for the tire pressure (its box pulses first)'
+        pg.check('[data-tchk="tires"]'); pg.wait_for_timeout(250)
+        assert T(pg)['airedAt'] > 0 and 'Set ' in ft(pg, '#advTires')
         # ---- Advisory: the spare's air, ticked once a month (until then: a red dot) ----
         pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(300)
         at = ft(pg, '#advTires'); print('  advisory, spare:', at.replace('\n', ' | '))
@@ -149,6 +157,12 @@ with sync_playwright() as p:
         assert pg.locator('#tpSteps [data-step="3"].dim').count() == 0, 'ticked: the steps open up'
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
         assert 'Air checked' in ft(pg, '.tz-air')
+        # a car without a spare, whose answer says you can buy one: the tip under "What your car has" (and no air check)
+        pg.evaluate("() => { const sp = window.Garage.car().tires.spare; window.__sp0 = JSON.stringify(sp); sp.kind = 'kit'; sp.lookup = Object.assign({}, sp.lookup, { guess: 'kit', tip: 'Owners who desire a spare can purchase one separately, with the correct temporary spare size being T125/70D17.' }); window.dispatchEvent(new Event('garagechange')); }")
+        pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(200); pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
+        assert 'T125/70D17' in ft(pg, '.tz-tip') and pg.locator('.tz-air.ok').count() == 0, ft(pg, '#gTiresIn')
+        pg.evaluate("() => { Object.assign(window.Garage.car().tires.spare, JSON.parse(window.__sp0)); window.dispatchEvent(new Event('garagechange')); }")
+        pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(200); pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
         # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive) ----
         pg.check('#tzSplit'); pg.wait_for_timeout(200)
         for k, d in (('lf', '8'), ('rf', '8'), ('lr', '6'), ('rr', '6')): pg.select_option('[data-corner="%s"]' % k, d); pg.wait_for_timeout(120)

@@ -141,5 +141,19 @@ console.log('tire version matching ok');
   assert.equal(T.pickSpare([s({ compact: 0.59, generic: 0.595 })], { pos: ['includes a temporary compact spare tire, a jack and lug wrench'], negSpare: false }).kind, 'compact', 'close to "it has a spare" is still fine');
   assert.deepEqual(T.pickSpare([s({ full: 0.542, generic: 0.563 })], { pos: ['Yes, it comes with a spare tire located in the trunk'], negSpare: false }), { kind: null, by: null, score: null }, 'just "it has a spare": you pick');
   assert.equal(T.pickSpare([s({ kit: 0.644, generic: 0.507 })], T.spareClauses(kia)).by, 'ai');
+  // "doesn't come with a spare" outweighs a mention of one (room for it, buy one separately); those become the tip
+  const corolla = 'The 2020 Toyota Corolla Hybrid LE does not come with a spare tire from the factory. Instead, it is equipped with a tire repair kit (often referred to as "fix-a-flat") stored in the trunk. While the vehicle has a designated space and threaded receptor for a spare tire in the trunk, Toyota omitted the tire itself to reduce weight and cost. Owners who desire a spare can purchase one separately, with the correct temporary spare size being T125/70D17. Compatible donor parts can often be sourced from other Toyota models, such as the 12th-generation Corolla or the 2012–2023 Prius.';
+  sc = T.spareClauses(corolla);
+  assert.ok(sc.noSpare && sc.opt.length === 3 && !sc.pos.some((c) => /designated|purchase|donor/.test(c)), JSON.stringify(sc));
+  assert.equal(T.pickSpare(null, sc).kind, 'kit');
+  // the model scored "room for a spare" as full-size (0.672): that clause is set aside, and full / compact can't win anyway
+  assert.equal(T.pickSpare(sc.pos.map(() => s({ kit: 0.7, generic: 0.4 })), sc).kind, 'kit');
+  assert.equal(T.pickSpare([s({ full: 0.672, generic: 0.6 })], { pos: ['it has a designated space for a spare tire'], opt: [], noSpare: true, negSpare: true }).kind, 'none', 'no spare: a full-size score is not the answer');
+  assert.equal(T.pickSpare([s({ full: 0.66, optional: 0.71, generic: 0.6 })], { pos: ['a spare can be bought'], opt: [], noSpare: false, negSpare: false }).kind, null, 'the model reads it as optional: not what it has');
+  assert.match(T.spareTip(sc), /^Owners who desire a spare can purchase one separately, with the correct temporary spare size being T125\/70D17\. Compatible donor parts/);
+  const mustang = 'The 2005 Ford Mustang does not come standard with a spare tire; instead, it is typically equipped with a tire repair and inflator kit. A spare tire is available as an optional accessory, but it is excluded if the vehicle is equipped with the Performance Package.';
+  sc = T.spareClauses(mustang); assert.equal(T.pickSpare(null, sc).kind, 'kit', 'it used to read the optional spare as compact'); assert.equal(T.spareTip(sc), 'A spare tire is available as an optional accessory.');
+  assert.equal(T.pickSpare(null, T.spareClauses('The 2020 BMW 330i comes with run-flat tires and no spare tire. A spare tire kit is available as a dealer accessory.')).kind, 'runflat');
+  sc = T.spareClauses(compactAnswer); assert.equal(sc.noSpare, false, '"not a full-size spare" is not "no spare"'); assert.equal(T.spareTip(sc), '');
   console.log('spare tire reading ok');
 }
