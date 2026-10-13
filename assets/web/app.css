@@ -1398,6 +1398,9 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .wx-ai, .hz-opt .hz-ai-note { color:var(--warn); }
 .tread-general { color:var(--warn); border-left:3px solid var(--warn); padding-left:8px; font-size:13px; }
 details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-index:3; background:var(--surface); color:var(--accent); }
+.sub-body details > summary { position:sticky; top:0; z-index:2; background:var(--surface); color:var(--accent); }
+.sub-body details > summary small { white-space:normal; overflow:visible; }
+.sub-body .rec-tag { align-self:flex-start; width:fit-content; }
 .gc-image-actions { display:flex; align-items:stretch; justify-content:center; gap:6px; width:100%; }
 .gc-image-actions > span { display:flex; align-items:center; flex:1; min-width:0; }
 .gc-image-actions .gc-recreate { flex:1; min-width:0; width:auto; margin:0; padding:7px 4px; font-size:11px; white-space:normal; }
