@@ -65,6 +65,24 @@
   }
   /** The trailers whose tires count: in tow mode, the ones hooked up. */
   function hooked(t) { return t && t.towMode ? (t.trailers || []).filter(function (x) { return x.hooked; }) : []; }
+  /** Editing a saved trailer must not hook it up or add its tires to the trip. */
+  function trailerPositions(t,tr) { return positions({towMode:true,corners:t.corners,trailers:[Object.assign({},tr,{hooked:true})]}).filter(function(p){return p.trailer===tr.id;}); }
+  /** Front-to-back normalized axle positions. Identity stays at the same index, never sorted/relabelled. */
+  function axlePositions(tr) {
+    var n = Math.max(1, Math.min(3, +tr.axles || 1)), old = tr.axlePositions || [], out = [];
+    for (var i = 0; i < n; i++) {
+      var v = Number.isFinite(old[i]) ? old[i] : .6 + i * .15;
+      out.push(Math.max(i ? out[i - 1] + .15 : 0, Math.min(1 - (n - i - 1) * .15, v)));
+    }
+    return out;
+  }
+  function moveAxle(tr, index, value) {
+    var p = axlePositions(tr);
+    if (index < 0 || index >= p.length || !Number.isFinite(value)) return p;
+    p[index] = Math.max(index ? p[index - 1] + .15 : 0, Math.min(index + 1 < p.length ? p[index + 1] - .15 : 1, value));
+    tr.axlePositions = p;
+    return p;
+  }
   /**
    * Older saves: 0.0.69–0.0.74 kept dual and trailer tires as a free list (they become the dually's inner tires and a
    * trailer), 0.0.75 kept one trailer as corners.trailer (it becomes the first trailer in the list, hooked up).
@@ -393,6 +411,7 @@
   });return inside!==under?(inside?'inside':'under'):'';}
   function locationName(v){return v==='inside'?'Dedicated storage inside the vehicle':v==='under'?'Under the vehicle':'';}
   TireMath.generalized=generalized;TireMath.spareLocation=spareLocation;
+  TireMath.axlePositions=axlePositions;TireMath.moveAxle=moveAxle;
   root.TireMath = TireMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = TireMath;
   if (!root.document) return;                                   // Node: the math only
@@ -853,6 +872,32 @@
   }
   function trSummary(tr) { return [tr.axles + ' axle' + (tr.axles > 1 ? 's' : '') + ' × ' + tr.per + ' tires', tr.size, tr.brand ? tr.brand + (tr.model ? ' ' + tr.model : '') : ''].filter(Boolean).join(' · '); }
   /** A trailer's details: its name, axles and tires per axle, and its tires (size -> Tire Rack, wear rating, warranty). */
+  function trailerVisual(tr) {
+    var t=tires(G().car()), P=trailerPositions(t,tr), h='';
+    axlePositions(tr).forEach(function(v,i){
+      h+='<g data-tr-axle="'+i+'" transform="translate(0 '+(64+v*180)+')" tabindex="0" role="slider" aria-label="Axle '+(i+1)+' position, front to rear" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(v*100)+'">'+
+        '<rect x="10" y="-12" width="140" height="24" class="tz-axle-hit"/><line x1="20" y1="0" x2="140" y2="0" class="tz-axle"/>';
+      P.filter(function(p){return p.k.indexOf(tr.id+':a'+(i+1))===0;}).forEach(function(p,j){
+        var x=(tr.per===4?[20,32,128,140]:[32,128])[j], d=depthAt(t,p);
+        h+='<g class="tz-w"><rect x="'+(x-5)+'" y="-8" width="10" height="16" rx="2.5" style="fill:'+(d!=null?hue(depthGood(d)):'var(--line)')+'"/></g>';
+      });
+      h+='<text x="80" y="4" text-anchor="middle" class="tz-trn">'+(i+1)+'</text></g>';
+    });
+    return '<div class="tz-tr-visual"><svg viewBox="0 0 160 270" aria-label="Trailer viewed from above, front at top">'+
+      '<path d="M80 4 L80 24 M80 24 L46 42 M80 24 L114 42" class="tz-hitch"/><rect x="38" y="40" width="84" height="218" rx="6" class="il-body"/>'+h+'</svg><p class="lead small keep">Drag an axle forward or back. Axles cannot pass each other. Arrow keys also move a focused axle.</p></div>';
+  }
+  function bindTrailerVisual(b,tr) {
+    var svg=b.querySelector('.tz-tr-visual svg');
+    b.querySelectorAll('[data-tr-axle]').forEach(function(g){
+      var i=+g.dataset.trAxle, drag=null;
+      var update=function(v){var p=moveAxle(tr,i,v);g.setAttribute('transform','translate(0 '+(64+p[i]*180)+')');g.setAttribute('aria-valuenow',Math.round(p[i]*100));};
+      g.onpointerdown=function(e){if(e.button!==0)return;e.preventDefault();g.focus();drag={id:e.pointerId,old:tr.axlePositions&&tr.axlePositions.slice()};g.dataset.dragging='true';g.setPointerCapture(e.pointerId);};
+      g.onpointermove=function(e){if(!drag||drag.id!==e.pointerId)return;var pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var local=pt.matrixTransform(svg.getScreenCTM().inverse());update((local.y-64)/180);};
+      var end=function(e){if(!drag||drag.id!==e.pointerId)return;var old=drag.old;drag=null;delete g.dataset.dragging;if(e.type==='pointercancel'){if(old)tr.axlePositions=old;else delete tr.axlePositions;update(axlePositions(tr)[i]);}save();onChange();};
+      g.onpointerup=end;g.onpointercancel=end;g.onlostpointercapture=end;
+      g.onkeydown=function(e){var step={ArrowUp:-.025,ArrowLeft:-.025,ArrowDown:.025,ArrowRight:.025}[e.key];if(step==null)return;e.preventDefault();update(axlePositions(tr)[i]+step);save();onChange();};
+    });
+  }
   function trailerForm(tr) {
     var L = sizeList(tr.size), p = 'tt' + tr.id + '_';
     if (fromList(L, tr, true)) save();
@@ -860,12 +905,15 @@
     h += '<div class="tz-cfg"><span>Axles</span><div class="chips mini">' + [1, 2, 3].map(function (n) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-axles="' + n + '" class="' + (tr.axles === n ? 'on' : '') + '">' + n + '</button>'; }).join('') + '</div>' +
       '<span>Tires per axle</span><div class="chips mini">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-per="' + o[0] + '" class="' + (tr.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
     h += '<label class="nf wide"><span>Size' + A.qBtn('Printed on the tire\'s side: for example <b>ST205/75R15</b> (ST = special trailer).') + '</span><input type="text" maxlength="20" autocapitalize="characters" id="' + p + 'Size" placeholder="e.g. 205/75R15" value="' + esc(tr.size || '') + '"></label>';
+    h += '<div class="seg2" id="ttSame" aria-label="Trailer tires">'+[[false,'All the same'],[true,'Different tires']].map(function(o){return '<button type="button" data-tr-split="'+o[0]+'" aria-pressed="'+(!!tr.split===o[0])+'" class="'+(!!tr.split===o[0]?'on':'')+'">'+o[1]+'</button>';}).join('')+'</div>';
+    h += trailerVisual(tr);
+    if (!tr.split) {
     if (tr.size && sizeBusy[tr.size]) h += window.__app.ldBar('Finding the tires made in ' + tr.size);
     h += pickHtml(L, tr, p);
     h += '<div class="nf wide"><span>Wear rating' + A.qBtn(Q.utqg) + '</span>' + utqgHtml(tr.utqg, p) + '</div>';
     h += '<label class="nf wide"><span>Maker\'s mileage warranty' + A.qBtn(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="' + p + 'Warranty" placeholder="e.g. 40000" value="' + esc(+tr.warrantyMi > 0 ? tr.warrantyMi : '') + '"></label>';
-    h+='<div class="field"><div class="lbl">Trailer tires are not all the same</div><label class="switch"><input type="checkbox" id="ttSplit"'+(tr.split?' checked':'')+'><span></span></label></div>';
-    if(tr.split)h+='<div class="tz-gl">'+positions(tires(G().car())).filter(function(pos){return pos.trailer===tr.id;}).map(function(pos){return '<div class="nf tz-c"><span>'+esc(pos.name)+(needs(tires(G().car()),pos).length?'<span class="req">*</span>':'')+'</span><button type="button" class="tz-tire" data-tr-tire="'+esc(pos.k)+'">Specify this tire '+GO+'</button></div>';}).join('')+'</div>';
+    }
+    if(tr.split)h+='<div class="tz-gl">'+trailerPositions(tires(G().car()),tr).map(function(pos){return '<div class="nf tz-c"><span>'+esc(pos.name)+(needs(tires(G().car()),pos).length?'<span class="req">*</span>':'')+'</span><button type="button" class="tz-tire" data-tr-tire="'+esc(pos.k)+'">Specify this tire '+GO+'</button></div>';}).join('')+'</div>';
     h += '<div class="tz-trbtns"><button type="button" class="btn tonal sm danger-sm" id="ttDel">Delete</button><button type="button" class="btn tonal sm" id="ttUnhook">Unhook</button><button type="button" class="btn tonal sm caution" id="ttDiscard">Discard changes</button></div>';
     return h;
   }
@@ -919,15 +967,16 @@
     var snap = JSON.stringify({ tr: tr, corners: mine() }), pg = null, close = null;
     var drop = function () { t.trailers = t.trailers.filter(function (x) { return x !== tr; }); Object.keys(mine()).forEach(function (k) { delete t.corners[k]; }); };
     var fill = function () {
-      var b = pg.querySelector('.sub-body'); b.innerHTML = trailerForm(tr);
+      var b = pg.querySelector('.sub-body'); if(b.querySelector('[data-dragging]'))return; b.innerHTML = trailerForm(tr);
       var p = 'tt' + tr.id + '_', $$ = function (x) { return b.querySelector('#' + p + x); };
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
       $$('Name').onchange = set(function () { tr.name = this.value.trim() || tr.name; pg.querySelector('.sub-bar h2').textContent = 'Trailer tire details · ' + tr.name; });
       $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
       bindPick(b, p, tr, function () { return sizeList(tr.size); }, set);
-      b.querySelector('#ttSplit').onchange=set(function(){tr.split=this.checked;t.corners=t.corners||{};if(!t.corners.mode)t.corners.mode='miles';});
+      b.querySelectorAll('[data-tr-split]').forEach(function(button){button.onclick=set(function(){tr.split=button.dataset.trSplit==='true';t.corners=t.corners||{};if(!t.corners.mode)t.corners.mode='miles';});});
+      bindTrailerVisual(b,tr);
       b.querySelectorAll('[data-tr-tire]').forEach(function(button){button.onclick=function(){openTire(c,button.dataset.trTire,function(){openTrailer(c,tr.id,false);});};});
-      b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; }); });
+      b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; tr.axlePositions=axlePositions(tr); }); });
       b.querySelectorAll('[data-per]').forEach(function (x) { x.onclick = set(function () { tr.per = +x.dataset.per; }); });
       b.querySelector('#ttUnhook').onclick = function () { tr.hooked = false; LG.info('car', 'Trailer unhooked and saved: ' + tr.name); save(); close(); };
       b.querySelector('#ttDiscard').onclick = async function () {
@@ -1028,7 +1077,9 @@
    * tire details) and whether it's been rotated, all required; optionally its size, to pick it from Tire Rack's list.
    */
   function openTire(c, k, back) {
-    var t = tires(c), p = positions(t).filter(function (y) { return y.k === k; })[0]; if (!p) return;
+    var t = tires(c), p = positions(t).filter(function (y) { return y.k === k; })[0];
+    if(!p)(t.trailers||[]).some(function(tr){p=trailerPositions(t,tr).filter(function(y){return y.k===k;})[0];return !!p;});
+    if (!p) return;
     var C = t.corners, x = C[k] = C[k] || {}, u = p.unit || {};
     var body = function () {
       var L = t.list&&t.list.size===(x.size||u.size)&&t.list.items?t.list.items:sizeList(x.size || u.size, function () { if (pg && pg.isConnected) fill(); });
@@ -1400,11 +1451,11 @@
     else h += wheel('lr', 44, 84) + wheel('rr', 96, 84);
     var H = 116, top = 108;
     hooked(t).forEach(function (tr) {        // each trailer hooked up, one behind the other
-      var len = 32 + (tr.axles || 1) * 24, y0 = top + 16;
+      var len = tr.axlePositions ? 200 : 32 + (tr.axles || 1) * 24, y0 = top + 16;
       h += '<line x1="70" y1="' + top + '" x2="70" y2="' + (y0 + 2) + '" class="tz-hitch"/><rect x="38" y="' + y0 + '" width="64" height="' + len + '" rx="4" class="il-body"/>' +
         '<text x="70" y="' + (y0 + 13) + '" text-anchor="middle" class="tz-trn">' + esc(String(tr.name || 'Trailer').slice(0, 14)) + '</text>';
       for (var a = 1; a <= (tr.axles || 1); a++) {
-        var y = y0 + len - 14 - ((tr.axles || 1) - a) * 24, b = tr.id + ':a' + a;
+        var y = tr.axlePositions ? y0 + 24 + axlePositions(tr)[a-1] * (len-38) : y0 + len - 14 - ((tr.axles || 1) - a) * 24, b = tr.id + ':a' + a;
         h += '<line x1="' + (tr.per === 4 ? 20 : 32) + '" y1="' + y + '" x2="' + (tr.per === 4 ? 120 : 108) + '" y2="' + y + '" class="tz-axle"/>';
         h += tr.per === 4 ? wheel(b + 'lo', 20, y) + wheel(b + 'li', 32, y) + wheel(b + 'ri', 108, y) + wheel(b + 'ro', 120, y) : wheel(b + 'l', 32, y) + wheel(b + 'r', 108, y);
       }

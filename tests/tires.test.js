@@ -169,3 +169,13 @@ console.log('tire version matching ok');
   assert.equal(T.spareLead(live), 'kit'); assert.equal(T.leadTip(live), 'Owners can add a spare tire to the 2020 Hybrid LE, as the trunk well has sufficient space.');
   console.log('spare tire reading ok');
 }
+
+{
+  const tr={id:'example',hooked:true,axles:3,per:2}, t={towMode:true,trailers:[tr]};
+  const keys=T.positions(t).map(p=>p.k);
+  assert.deepEqual(T.axlePositions(tr),[.6,.75,.9]);
+  for(let i=0;i<3;i++)for(const v of [-100,100,NaN]){const p=T.moveAxle(tr,i,v);assert.ok(p[0]>=0&&p[2]<=1);assert.ok(p[1]-p[0]>=.149&&p[2]-p[1]>=.149);assert.deepEqual(T.positions(t).map(p=>p.k),keys);}
+  tr.axlePositions=[1,-1,1];assert.ok(T.axlePositions(tr)[1]>T.axlePositions(tr)[0]);
+  tr.axles=1;assert.equal(T.axlePositions(tr).length,1);tr.axles=3;assert.equal(T.axlePositions(tr).length,3);
+  console.log('Trailer axle bounds, spacing and stable tire identities passed');
+}

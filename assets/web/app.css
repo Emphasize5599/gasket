@@ -1406,7 +1406,13 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .gc-image-actions .gc-recreate { flex:1; min-width:0; width:auto; margin:0; padding:7px 4px; font-size:11px; white-space:normal; }
 .tz-c > span { min-width:0; white-space:normal; overflow:visible; flex-wrap:wrap; }
 .size-edit { display:flex; align-items:center; gap:4px; }.size-edit input { flex:1; min-width:0; }.size-edit button { flex:none; width:40px; height:40px; border-radius:12px; background:var(--surface-2); }
-.tz-cfg { grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); justify-items:center; align-items:center; text-align:center; }.tz-cfg .chips { justify-content:center; min-width:0; }
+.tz-cfg { justify-items:stretch; align-items:center; text-align:left; }.tz-cfg .chips { justify-content:flex-start; min-width:0; }
+.tz-tr-visual { margin:12px 0; }
+.tz-tr-visual svg { display:block; width:160px; max-width:100%; height:270px; margin:0 auto; }
+.tz-tr-visual [data-tr-axle] { touch-action:none; cursor:ns-resize; }
+.tz-axle-hit { fill:transparent; }
+.tz-tr-visual [data-tr-axle]:focus .tz-axle-hit { fill:var(--accent); fill-opacity:.15; stroke:var(--accent); }
+.tz-tr-visual .tz-trn { font-size:12px; fill:var(--ink); font-weight:700; paint-order:stroke; stroke:var(--surface); stroke-width:3px; }
 .need, input.need, select.need { outline:none !important; }
 .req { color:#d93025; padding-left:3px; font-weight:800; }
 .app-picker { position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; padding:calc(var(--st) + 16px) 16px calc(var(--sb) + 16px); }
