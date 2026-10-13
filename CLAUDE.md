@@ -4,6 +4,8 @@
 
 Everything on this branch is meant to be merged into `main` once the owner is satisfied with it; build new work here.
 
+0.0.124: `gmaps_worker` `steps(r, head)` reads each route's turn-by-turn steps from the page's `/maps/preview/directions` answer (`r[1][0][1][g][1][j][0]`: `[2][0]` meters, `[3][0]` seconds, `[14]` text parts), kept only when they sum to the route (±2%); `websiteRoutes` makes them Routes-API-shaped steps (`websiteSteps`). `speedOff(m)` = no key and no `instr` segments, so cruising speed works keyless when steps came. `RouteWx.digest` waits at most `DIGEST_MS` (4 s) for the model and marks `aiPending`; tripui passes `compare` only when `Severity.state() === 'ready'`, notes pending warnings (`.hz-ai`, `.wx-ai`) and re-reads them when the model is ready (`hzAiWatch`). Refresh card: one grid row (`.scan-launches`: button, (?), button, (?)); `.split-menu` holds `button.btn.primary[data-trip-refresh="discover"]` + (?). Tests: `gmaps-steps.test.js`, `speed-nokey` (steps part).
+
 0.0.123: `buildRoute` gives a leg with no steps (website routes, `joinRoutes`' stand-in legs) one segment from its own `distanceMeters` / `duration`, so `legEnds` (and `exportLegs`, `legModels`, arrive tiles) are right; tested in `trip.test.js`.
 
 0.0.122: Leaving is required (`timesNeed()` in `ready(ST_ROUTE)` and `reach()`; `futureDepart()` = within 10 min past or later); `#tNow` fills `localNow()`. Round trip: switch `#tBackAuto` (`S.trip.backAuto`, `backAuto()` defaults to on when no `backAt`); off shows `#tBackBox`, a required time after Leaving. `trip_mocks.js` sets `S.trip.depart` to this minute.

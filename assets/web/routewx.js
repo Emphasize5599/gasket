@@ -184,9 +184,15 @@
   };
   var AI_LABEL = { tropical: 'Tropical storm', storm: 'Strong storms', tornado: 'Tornado threat', flood: 'Flooding', rain: 'Heavy rain', snow: 'Snow', ice: 'Ice', fog: 'Dense fog', wind: 'High wind', heat: 'Extreme heat', cold: 'Extreme cold', air: 'Smoke or dust' };
   /** Read a vague alert: compare(text, groups) -> Promise<{group: score}|null> (Severity.compare), else its words. */
+  var DIGEST_MS = 4000;
   async function digest(a, compare) {
     if (!a.vague) return a;
-    var txt = (a.headline + '. ' + a.text).slice(0, 300), sc = compare ? await compare(txt, ALERT_EX).catch(function () { return null; }) : null;
+    // the model gets a few seconds at most (it may be busy rating recalls); its words read the alert otherwise
+    var txt = (a.headline + '. ' + a.text).slice(0, 300), sc = compare ? await Promise.race([
+      compare(txt, ALERT_EX).catch(function () { return null; }),
+      new Promise(function (r) { setTimeout(function () { r(null); }, DIGEST_MS); })]) : null;
+    // no answer from the model (not loaded yet, busy or failed): its words for now, marked so it can be read again
+    a.aiPending = !sc;
     if (sc) {
       var best = Object.keys(sc).sort(function (x, y) { return sc[y] - sc[x]; })[0];
       if (sc[best] >= 0.35) { a.kind = best; a.label = AI_LABEL[best]; a.by = 'ai'; return a; }
@@ -240,7 +246,7 @@
       dense.forEach(function (p) {
         var hit = p.eta >= a.from - HOUR && p.eta <= a.to + HOUR && inPolys(area, p.lat, p.lng);
         if (hit) {
-          if (!cur) { cur = { kind: a.kind, level: a.level, fromMi: p.mi, toMi: p.mi, from: p.eta, to: p.eta, src: 'nws', event: a.event, label: a.label, headline: a.headline, area: a.area, id: a.id, by: a.by, events: [a.event], peak: {} }; out.push(cur); }
+          if (!cur) { cur = { kind: a.kind, level: a.level, fromMi: p.mi, toMi: p.mi, from: p.eta, to: p.eta, src: 'nws', event: a.event, label: a.label, headline: a.headline, area: a.area, id: a.id, by: a.by, aiPending: !!a.aiPending, events: [a.event], peak: {} }; out.push(cur); }
           cur.toMi = p.mi; cur.to = p.eta; gap = 0;
         } else if (cur && ++gap > 2) { cur = null; gap = 0; }
       });
@@ -391,6 +397,7 @@
     var al = alertStretches(dense, res.alerts || [], opts.countyOf);
     var hz = wx.concat(al).sort(function (a, b) { return a.fromMi - b.fromMi || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind); });
     res.stats.hazards = hz.length;
+    res.stats.aiPending = al.filter(function (x) { return x.aiPending; }).length;   // warnings on this road the model hasn't read yet
     return { hazards: hz, stats: res.stats, alerts: res.alerts || [] };
   }
   /** A hazard's short name for the map and the list: "Heavy rain", "Tornado", "Unhealthy air (AQI 162)". */

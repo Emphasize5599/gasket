@@ -98,12 +98,12 @@
     var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'')+(!S.apiKey?' Add the recommended API key in Settings to use this option.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
       (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
-      '<div class="scan-launches"><div><span class="split-btn"><button class="btn primary" data-trip-refresh="web"'+(!web?' disabled':'')+'>'+RF_ICON+'No API</button>'+
-        '<button type="button" class="btn primary split-dd" data-split aria-haspopup="menu" aria-expanded="false" aria-label="More No API options">▾</button></span>'+A.qBtn(webHelp)+'</div>'+
-        '<div><button class="btn primary" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>'+RF_ICON+'API</button>'+A.qBtn(apiHelp)+'</div></div>'+
+      '<div class="scan-launches"><span class="split-btn"><button class="btn primary" data-trip-refresh="web"'+(!web?' disabled':'')+'>'+RF_ICON+'No API</button>'+
+        '<button type="button" class="btn primary split-dd" data-split aria-haspopup="true" aria-expanded="false" aria-label="More No API options">▾</button></span>'+A.qBtn(webHelp)+
+        '<button class="btn primary" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>'+RF_ICON+'API</button>'+A.qBtn(apiHelp)+
         // finding stations already ran when the trip was planned: doing it again is a "force" option, tucked under No API
-        '<div class="split-menu hidden" role="menu"><button type="button" role="menuitem" data-trip-refresh="discover"><b>Discover stations again · No API</b>'+
-        '<small>Searches the whole route from scratch for stations (it already ran when you planned the trip). Slower: overlapping website searches, '+KeylessGas.readerCount(A)+' readers (Settings), progress, Cancel. No paid fallback; your brand filters still apply.</small></button></div>')+'</div>';
+        '<div class="split-menu hidden"><button type="button" class="btn primary" data-trip-refresh="discover">'+RF_ICON+'Discover stations</button>'+
+        A.qBtn('Searches the whole route again for stations, without the API (it already ran when you planned the trip). Slower: overlapping website searches, '+KeylessGas.readerCount(A)+' readers (Settings), with progress and Cancel. No paid fallback; your brand filters still apply.')+'</div></div>')+'</div>';
   }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
@@ -1362,7 +1362,10 @@
       var distance=0;for(var i=1;i<pts.length;i++)distance+=T.hav(pts[i-1],pts[i]);
       if(pts.length!==m.pts.length||distance/m.miles<0.8||distance/m.miles>1.2)return;
       if(r.stops.some(function(s,i){var expected=s.current?A.me():s;return expected&&expected.lat!=null&&T.hav(expected,i?pts[pts.length-1]:pts[0])>3;}))return;
-      out.push({description:m.via||'Website route',distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:[],websiteApproximate:true,websiteOptionIndex:optionIndex});
+      // its turn-by-turn steps (road names, each stretch's length and time), when Maps sent all of them
+      var steps=Array.isArray(m.steps)?m.steps.filter(function(x){return Array.isArray(x)&&Number.isFinite(x[0])&&x[0]>=0&&Number.isFinite(x[1]);}).map(function(x){return {distanceMeters:x[0],staticDuration:Math.round(x[1])+'s',navigationInstruction:{instructions:String(x[2]||'')}};}):[];
+      var legs=steps.length?[{distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',steps:steps}]:[];
+      out.push({description:m.via||'Website route',distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:legs,websiteApproximate:true,websiteSteps:steps.length>0,websiteOptionIndex:optionIndex});
     });
     if(!out.length)throw new Error('The Maps website did not provide usable route geometry. Retry, paste a full Google Maps directions link, or add the recommended API key in Settings.');
     var endpoints=T.decodePolyline(out[0].polyline.encodedPolyline);r.stops.forEach(function(s,i){if(s.lat==null){var p=i?endpoints[endpoints.length-1]:endpoints[0];s.lat=p.lat;s.lng=p.lng;}});
@@ -1957,8 +1960,8 @@
   // ---------- cruising speed per leg ----------
   var limCache = {};          // one lookup per route shape, shared by every model built from it
   function ensureLimits(m) {
-    if (m && m._lim && m._lim.stats && m._lim.stats.off && !speedOff()) m._lim = null;      // a key was added: look them up now
-    if (m && !m._lim && speedOff()) {       // cruising speed is off: no lookups, just one stand-in stretch so the (grayed) controls still show
+    if (m && m._lim && m._lim.stats && m._lim.stats.off && !speedOff(m)) m._lim = null;      // a key was added: look them up now
+    if (m && !m._lim && speedOff(m)) {       // cruising speed is off: no lookups, just one stand-in stretch so the (grayed) controls still show
       var tot = m.totalMi, sec = { from: 0, to: tot, mi: tot, limit: 70, truck: 70, st: null, n: 1, hpms: 0, src: 'state' };
       m._lim = { roads: [{ key: 'all', name: 'Major roads', cls: 'interstate', num: '', from: 0, to: tot, mi: tot, pieces: [sec], sections: [sec] }], stats: { off: 'no API key' } };
       return;
@@ -2067,10 +2070,12 @@
     return out;
   }
   // Cruising speed needs the Routes API's turn-by-turn roads: without a key it's shown grayed out and plans use the limits
-  function speedOff() { return !S.apiKey; }
-  var SPEED_OFF = '<div class="spd-off-note">⚠ Cruising speed is off without a Google API key: website routes don\'t have the road details it needs. Add a key in Settings to turn it on.</div>';
+  /** Cruising speed needs the roads of the route: Google's answer with a key, or without one the turn-by-turn steps the
+   *  Google Maps website sent for it (it sometimes sends only part of them for an alternative). */
+  function speedOff(m) { m = m || model; return !S.apiKey && !(m && m.segs && m.segs.some(function (s) { return s.instr; })); }
+  var SPEED_OFF = '<div class="spd-off-note">⚠ Cruising speed is off for this route: without a Google API key it needs the turn-by-turn directions from the Google Maps website, and Maps didn\'t send them for this route. Try another route, or add a key in Settings.</div>';
   // ...and the costs are rougher without a key: say so wherever totals show (Stops, Departure)
-  var COST_EST = '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate, many stations don\'t post prices online, and speeds are planned at the limits.</div>';
+  function costEst() { return S.apiKey ? '' : '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate' + (speedOff() ? ', many stations don\'t post prices online, and speeds are planned at the limits.' : ' and many stations don\'t post prices online.') + '</div>'; }
   function grayOut(el) {
     el.classList.add('spd-off');
     var h3 = el.querySelector(':scope > h3');
@@ -2666,7 +2671,7 @@
     } else {
       var t = p.totals;
       h += warnHtml;
-      if (speedOff()) h += COST_EST;
+      h += costEst();
       var whyN = r.cands.length + ' priced station' + (r.cands.length === 1 ? '' : 's') + ' along your route' +
         (p.tooFar ? '; ' + p.tooFar + ' more were over ' + S.trip.maxDetourMin + ' min out of the way' : '') +
         (r.unpriced ? '; ' + r.unpriced + ' had no ' + gradeLabel(r.grade).toLowerCase() + ' price' : '') + '. Tap a stop for the cheaper stations it was weighed against.';
@@ -2735,7 +2740,7 @@
     h += '<div class="kpis four"><div><b>' + money(out.cost) + '</b><span>trip cost ' + A.qBtn(costQ) + '</span></div>' +
       '<div><b>' + money(out.spend) + '</b><span>' + (KIND() === 'ev' ? 'at chargers' : 'at the pump') + '</span></div>' +
       '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved ' + A.qBtn(saveQ) + '</span></div>' +
-      '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>' + (speedOff() ? COST_EST : '');
+      '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>' + costEst();
     // only what to watch out for, briefly
     var w = [];
     var fd = futureDepart();
@@ -2790,11 +2795,33 @@
     e.st = 'loading'; var t0 = Date.now();
     try {
       var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties, onProg: function (f) { e.prog = f; hzBars(); },
-        countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.compare });
+        countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.state && Severity.state() === 'ready' ? Severity.compare : null });   // never waits for the model to load
       e.st = 'done'; e.hz = r.hazards; e.stats = r.stats;
+      if (!aiCan()) { e.stats.aiPending = 0; e.hz.forEach(function (x) { x.aiPending = false; }); }   // no model coming: the wording is the answer
+      if (e.stats.aiPending) hzAiWatch(a, i);
       LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || ''].filter(function (v) { return v !== ''; }); }) });
     } catch (err) { e.st = 'error'; e.err = String(err && err.message || err); LG.warn('wx', 'Hazards along a route failed', e.err); }
     return e;
+  }
+  /** Can the on-phone model still read warnings (not failed, not missing)? */
+  function aiCan() { return !!(window.Severity && Severity.state && Severity.state() !== 'failed' && !(window.__mocks && __mocks.severity)); }
+  /** Routes whose warnings were read by their wording while the model was busy: read again once it's ready. */
+  var hzAiWait = [], hzAiT = 0, hzAiKick = false;
+  function hzAiWatch(a, i) {
+    hzAiWait.push({ a: a, i: i });
+    if (hzAiT) return;
+    hzAiT = setInterval(async function () {
+      if (!aiCan()) { clearInterval(hzAiT); hzAiT = 0; hzAiWait.forEach(function (w) { var e = hzCache.get(w.a); if (e && e.stats) { e.stats.aiPending = 0; (e.hz || []).forEach(function (x) { x.aiPending = false; }); } }); hzAiWait = []; if (step === ST_HAZ) renderHz(); return; }
+      if (Severity.state() !== 'ready') { if (!hzAiKick && Severity.state() === 'idle') { hzAiKick = true; Severity.compare('warm up', { a: ['warm up'] }); } return; }
+      clearInterval(hzAiT); hzAiT = 0;
+      var todo = hzAiWait; hzAiWait = [];
+      LG.info('wx', 'The model is ready: reading ' + todo.length + ' route(s) warnings again');
+      for (var k = 0; k < todo.length; k++) {
+        var e = hzCache.get(todo[k].a); if (!e || e.st !== 'done' || !e.stats.aiPending) continue;
+        e.st = null; await hzLoad(todo[k].a, todo[k].i);   // its forecasts and warnings are cached: only the reading is redone
+        if (step === ST_HAZ && hzLeg === todo[k].i) { renderHz(); drawHaz(); }
+      }
+    }, 2000);
   }
   /** Look up every option on leg i (the chosen one first), redrawing as each comes in. */
   async function hzLoadLeg(i) {
@@ -2845,9 +2872,10 @@
       var lines = RouteWx.advice(x, Object.assign({ preset: pr }, ctx));
       var where = (x.toMi - x.fromMi < 1 ? 'around mile ' + Math.round(x.fromMi) : 'miles ' + Math.round(x.fromMi) + '–' + Math.round(x.toMi)) + ' · ' + wxWhen(x.from, x.to);
       var notice = x.src === 'nws' && x.event !== RouteWx.title(x) ? '<small class="wx-ev">' + esc(x.event) + '</small>' : '';
-      return '<details class="wx-x lv' + x.level + '"' + (x.level >= 2 ? ' open' : '') + '><summary><span class="wx-ic" style="--hz:' + RouteWx.COLORS[x.kind] + '">' + RouteWx.KINDS[x.kind][2] + '</span><span class="wx-t"><b>' + esc(RouteWx.title(x)) + '</b>' + notice + '<small>' + esc(where) + '</small></span></summary>' +
+      return '<details class="wx-x lv' + x.level + '"' + (x.level >= 2 ? ' open' : '') + '><summary><span class="wx-ic" style="--hz:' + RouteWx.COLORS[x.kind] + '">' + RouteWx.KINDS[x.kind][2] + '</span><span class="wx-t"><b>' + esc(RouteWx.title(x)) + '</b>' + (x.aiPending ? '<small class="wx-ai">AI still summarizing…</small>' : '') + notice + '<small>' + esc(where) + '</small></span></summary>' +
         '<div class="wx-a">' + lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + '</div></details>';
     }).join('');
+    if (st.aiPending) h = '<p class="lead small keep hz-ai">The on-phone AI is still summarizing ' + (st.aiPending === 1 ? 'a warning' : st.aiPending + ' warnings') + ' on this route. Until it\'s done, ' + (st.aiPending === 1 ? 'it\'s' : 'they\'re') + ' sorted by ' + (st.aiPending === 1 ? 'its' : 'their') + ' wording; this updates by itself.</p>' + h;
     var beyond = [];
     if (st.beyondWeather) beyond.push('the last ' + Math.round(st.beyondWeather / st.points * 100) + '% of the way is past the 16-day weather forecast');
     else if (st.beyondAir) beyond.push('the air forecast reaches about 5 days ahead, so the last ' + Math.round(st.beyondAir / st.points * 100) + '% of the way has no air reading yet');

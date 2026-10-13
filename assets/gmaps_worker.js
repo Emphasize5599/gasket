@@ -45,9 +45,24 @@ async function (reqId, args) {
         const L = cum[cum.length - 1] || 1, thin = [];
         for (let k = 0, j = 0; k <= 2000; k++) { const want = L * k / 2000; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
         return { via: String(head[1] || ''), miles: head[2] ? head[2][0] / 1609.344 : null, minutes: head[3] ? head[3][0] / 60 : null,
-          pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) };
+          pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]), steps: steps(r, head) };
       }).filter((x) => x.pts.length > 5);
     } catch (e) { return []; }
+  }
+  /** The route's turn-by-turn steps as Maps lists them: [meters, seconds, "Take exit 143A to merge onto I-40 W…"] (the
+   *  distance is what you drive after that instruction). Only when they add up to the whole route: Maps sometimes
+   *  sends just the first few steps of an alternative. */
+  function steps(r, head) {
+    try {
+      const out = [];
+      ((r[1] && r[1][0] && r[1][0][1]) || []).forEach((g) => (g[1] || []).forEach((x) => {
+        const s = x && x[0]; if (!s || !s[2] || typeof s[2][0] !== 'number') return;
+        const text = (s[14] || []).map((p) => (p && p[1] && typeof p[1][0] === 'string' ? p[1][0] : '')).join('').trim();
+        out.push([s[2][0], s[3] && typeof s[3][0] === 'number' ? s[3][0] : 0, text]);
+      }));
+      const m = out.reduce((a, s) => a + s[0], 0), total = head[2] && head[2][0];
+      return total && out.length && Math.abs(m - total) <= total * 0.02 ? out : null;
+    } catch (e) { return null; }
   }
   /** DOM list (Maps' order and names as shown) + the points from the data, matched by length. */
   async function withPaths(r) {
@@ -55,7 +70,7 @@ async function (reqId, args) {
     if (!r.length) return ps;
     r.forEach((x) => {
       let best = null; ps.forEach((p) => { const dd = Math.abs(p.miles - x.miles); if (dd < x.miles * 0.01 && (!best || dd < Math.abs(best.miles - x.miles))) best = p; });
-      if (best) { x.pts = best.pts; if (!x.minutes) x.minutes = best.minutes; }
+      if (best) { x.pts = best.pts; x.steps = best.steps; if (!x.minutes) x.minutes = best.minutes; }
     });
     return r;
   }

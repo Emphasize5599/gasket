@@ -81,6 +81,11 @@ assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geoco
   assert.deepEqual([sws.kind, sws.label, sws.by], ['storm', 'Strong storms', 'ai']);
   const sws2 = W.alertOf({ properties: { event: 'Special Weather Statement', description: 'Patchy dense fog this morning.' } });
   await W.digest(sws2, null); assert.deepEqual([sws2.kind, sws2.by], ['fog', 'words']);
+  assert.equal(sws2.aiPending, true, 'no model: marked as still to be summarized'); assert.equal(sws.aiPending, false);
+  // a model that's busy (never answers): its words after a few seconds, never a hang
+  const sws3 = W.alertOf({ properties: { event: 'Special Weather Statement', description: 'Patchy dense fog this morning.' } }), t3 = Date.now();
+  await W.digest(sws3, () => new Promise(() => {}));
+  assert.ok(Date.now() - t3 < 5000, 'gave up waiting: ' + (Date.now() - t3) + ' ms'); assert.deepEqual([sws3.kind, sws3.by, sws3.aiPending], ['fog', 'words', true]);
 
   // where: a county alert, a storm-based outline, and one that's over before you get there
   const box = (x0, y0, x1, y1) => [[[x0, y0, x1, y0, x1, y1, x0, y1, x0, y0]]];
