@@ -49,7 +49,7 @@
 
   // ---------- reading NHTSA's VIN page: in the background like the price sites (siteRead), or shown to you (siteShow).
   // The page does its own checks as in any browser; nothing is ever solved or got around. ----------
-  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, READER = 2, autoBusy = {};
+  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, READER = 2, autoBusy = {}, autoRetried = {};
   /** Check the VIN by itself when there's no check from the last week (and no failed try in the last few hours). */
   function autoCheck(c) {
     if (!c || !c.vin || !call || !N.siteRead || autoBusy[c.id]) return;
@@ -64,6 +64,12 @@
       LG.info('car', 'Background VIN check took ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
       if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
         c.recallAuto = { vin: vin, t: Date.now(), failed: true, r: READER }; save();
+        // NHTSA's page sometimes just errors ("an unknown error occurred"): one more try a little later, by itself
+        // (never after a check on the page: that waits for you)
+        if (!(r && (r.blocked || r.refused)) && !autoRetried[c.id + vin]) {
+          autoRetried[c.id + vin] = true; LG.info('car', 'Trying the VIN check again in 20 s');
+          setTimeout(function () { if (c.vin === vin) { c.recallAuto = null; autoCheck(c); } }, 20000);
+        }
         LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA\'s lookup turned the hidden window down (its invisible reCAPTCHA): ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in a minute');
       } else record(c, vin, r, true);
       if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }

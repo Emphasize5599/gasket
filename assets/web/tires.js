@@ -297,7 +297,7 @@
   // "it doesn't come with a spare" (not "not a full-size spare"): then only a kit, run-flats or nothing can be the answer
   var SPARE_NONE = /\b(?:does not|doesn'?t|did not|didn'?t|do not|don'?t|will not|won'?t)\s+(?:come|ship)?\s*(?:standard\s+|equipped\s+)?(?:with|include|have)\s+(?:a\s+|an\s+)?spare\b|\bno spare(?: tire)?\b|\bwithout a spare\b|\b(?:instead of|rather than|in place of)\s+(?:a\s+)?spare\b|\bomit(?:s|ted)?\s+(?:the\s+)?(?:spare|tire itself)/i;
   // a spare you could have anyway: buy it separately, an option, room and mounts for one
-  var SPARE_OPT = /\b(?:purchase|buy|order|add)\w*\b[^.]{0,40}\b(?:separately|spare)\b|available as an? (?:optional|option|accessory|extra)|\boptional (?:spare|accessory)|can be (?:added|purchased|bought|ordered)|(?:desire|want|need) a spare|aftermarket|designated space|threaded receptor|(?:room|space|well) for a spare|donor|sourced from/i;
+  var SPARE_OPT = /\b(?:purchase|buy|order|add)\w*\b[^.]{0,40}\b(?:separately|spare)\b|available as an? (?:\w+ )?(?:optional|option|accessory|extra)|if you buy|recessed well|well (?:where|for)|spare (?:tire )?well|can be (?:installed|fitted)|\boptional (?:spare|accessory)|can be (?:added|purchased|bought|ordered)|(?:desire|want|need) a spare|aftermarket|designated space|threaded receptor|(?:room|space|well) for a spare|donor|sourced from/i;
   var SPARE_NEG = /\b(not|no|never|without|neither|nor)\b|n't\b/i;
   var SPARE_INSTEAD = /\b(?:instead of|rather than|in place of)\s+(?:a|an|the)?\s*[\w -]*?\b(?:spare(?: tire)?|tire|wheel)\b/gi;
   /** Brave's answer -> {pos: clauses saying what the car has, negSpare: it says there's no spare somewhere}. */
@@ -311,12 +311,42 @@
       runflat: /\brun[- ]?flat/i.test(t) && !/\b(?:not|no|without)\s+(?:\w+\s+)?run[- ]?flat/i.test(t),     // "run-flat tires and no spare" is one clause the model never sees
       negSpare: instead || cs.some(function (c) { return SPARE_NEG.test(c) && /spare/i.test(c); }) };
   }
-  /** The tip under "What your car has": what it says about getting a spare anyway (buying one, its size, where to find one). */
-  function spareTip(sc) {
-    var xs = (sc.opt || []).filter(function (c) { return /\b(?:purchase|buy|order|add|optional|option|accessory|aftermarket|donor|sourced|size)\b/i.test(c); });
-    if (!xs.length) return '';
-    var tip = xs.slice(0, 2).join('. ').replace(/^(?:while|but|however|although)\s+/i, '');
-    return tip.charAt(0).toUpperCase() + tip.slice(1) + '.';
+  // ---------- the tip under "What your car has": a spare the car could have anyway ----------
+  var BULB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>';
+  // The on-phone model can't write, but it can tell which of these the answer says (and the words back it up); the tip
+  // is then said in a few words of the app's own, so it's short and never sounds like you'd give up trunk space.
+  var TIP_EX = {
+    well: ['the car has a dedicated spare tire well and mount in the trunk', 'there is a built-in space and hold-down bolt for a spare tire', 'the trunk has a spot made for a spare tire'],
+    buy: ['you can buy a spare tire separately', 'a spare tire is available as an optional accessory', 'owners can purchase a spare tire kit from the dealer'],
+    donor: ['a spare from another model of the same brand fits', 'compatible spare wheels can be sourced from other models', 'donor parts from other cars can be used']
+  };
+  var TIP_WORDS = { well: /designated space|threaded receptor|spare (?:tire )?well|recessed well|hold[- ]down|(?:room|space|spot|well) (?:for|where) (?:a|the|an?)?\s*(?:\w+ )?spare|dedicated space/i,
+    buy: /\b(?:purchase|buy|order)\w*\b|optional|accessory|aftermarket|available|can be installed/i, donor: /donor|sourced from|from other (?:\w+ )?models|compatible/i };
+  /** The facts its clauses state: {well, buy, donor, size}. scores: the model's {well, buy, donor} per opt clause, or null. */
+  function tipFacts(sc, scores) {
+    var f = {}, txt = (sc.opt || []).join('. ');
+    (sc.opt || []).forEach(function (c, i) {
+      var o = scores && scores[i];
+      Object.keys(TIP_WORDS).forEach(function (k) {
+        // the words decide alone without the model; with it, the model has to agree (or be sure on its own)
+        // the built-in spot needs its words (a wrong one would promise trunk space that isn't there); the others: the
+        // model when it's sure and that's the clause's main point, or the words with the model not against them
+        var w = TIP_WORDS[k].test(c), m = o ? o[k] : null, top = o && m >= Math.max(o.well, o.buy, o.donor);
+        if (m == null ? w : k === 'well' ? (w && m >= 0.4) : ((top && m >= 0.62) || (w && m >= 0.4))) f[k] = true;
+      });
+    });
+    var sz = /\b(T?\d{3}\/\d{2}\s?[A-Z]?\d{2})\b/.exec(txt); if (sz) f.size = sz[1].replace(/\s/g, '');
+    return f;
+  }
+  /** The tip, in a sentence or two: "The trunk has a built-in spot for a spare, just no tire. You can add a temporary spare (T125/70D17)." */
+  function spareTip(sc, scores) {
+    var f = tipFacts(sc, scores), out = [];
+    if (!f.well && !f.buy && !f.donor) return '';
+    if (f.well) out.push('The trunk has a built-in spot for a spare, just no tire in it.');
+    var opt = /optional|accessory|dealer/i.test((sc.opt || []).join(' '));
+    if (f.buy || f.size) out.push('You can add ' + (f.size ? 'a temporary spare (' + f.size + ')' : 'a spare') + (opt && !f.size ? ' as an optional accessory' : '') + (f.donor ? ', or a matching one from another model' : '') + '.');
+    else if (f.donor) out.push('A matching spare from another model can fit.');
+    return out.join(' ');
   }
   /**
    * The kind from the model's scores ([{full, compact, kit, runflat, generic}] per clause, or null with no model) and the
@@ -337,8 +367,23 @@
     if (sc.noSpare && sc.runflat) return { kind: 'runflat', by: 'words', score: null };
     return sc.noSpare || sc.negSpare || w === 'none' ? { kind: 'none', by: scores ? 'ai' : 'words', score: null } : { kind: null, by: null, score: null };
   }
+  var SPARE_LEAD = /^\s*(?:answer with ai\s*)?(?:[*_#>\s]*)(full[- ]size spare|compact (?:temporary )?spare|temporary spare|repair kit|tire repair kit|run[- ]flat tires|no spare)\b/i;
+  /** The answer's first phrase, when Brave followed the question's format -> kind, else null. */
+  function spareLead(text) {
+    var m = SPARE_LEAD.exec(String(text || '')); if (!m) return null;
+    var w = m[1].toLowerCase();
+    return /full/.test(w) ? 'full' : /compact|temporary/.test(w) ? 'compact' : /kit/.test(w) ? 'kit' : /run/.test(w) ? 'runflat' : 'none';
+  }
+  /** Its own short sentence about adding a spare (the tip in the AI's words), when it wrote one. */
+  function leadTip(text) {
+    // its sentences, not its headings ("Adding a Spare Tire" sits on a line of its own)
+    var ss = String(text || '').replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); })
+      .filter(function (x) { return /[.!?]$/.test(x); }).slice(1, 5);
+    var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:add|added|buy|bought|purchas\w*|install\w*|available|optional|accessory|fit|fits|size)\b/i.test(x) && x.length <= 180; })[0];
+    return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
+  }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, SPARE_EX: SPARE_EX,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   root.TireMath = TireMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = TireMath;
@@ -496,7 +541,10 @@
   var spareBusy = {};
   function spare(t) { t.spare = t.spare || {}; return t.spare; }
   function spareKey(c) { return G() && G().carKey ? G().carKey(c) : [c.year, c.make, base(c), c.trim || ''].join(' ').trim(); }
-  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent('Does the ' + spareKey(c) + ' come with a spare tire? Is it full-size, compact, or a tire repair kit?') + '&summary=1'; }
+  // Brave's answer is written by its AI from this question, so the question says how to answer: a fixed first phrase
+  // (read for sure below), and the tip in its own short words. Answers that don't follow it are still read as before.
+  var SPARE_ASK = ' come with a spare tire from the factory? Start your answer with exactly one of: Full-size spare, Compact spare, Repair kit, Run-flat tires, No spare. If it has no spare, add one short sentence on whether a spare can be added and its size.';
+  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent('Does the ' + spareKey(c) + SPARE_ASK) + '&summary=1'; }
   /** An answer read by the old keyword rules (before 0.0.114): read it again with the model. If that differs and you had
    *  confirmed the old guess, you're asked again. Once per answer. */
   var rechecking = {};
@@ -516,19 +564,23 @@
       save(); redraw(c); onChange();
     });
   }
-  function spareLookup(c) {
-    spareRecheck(c);
+  /** shown: Brave's page opened for you to see (the "See Brave's answer" button), and its answer read the same way. */
+  function spareLookup(c, shown) {
+    if (!shown) spareRecheck(c);
     var t = tires(c), sp = spare(t), key = spareKey(c);
-    if (!call || !N.siteRead || sp.kind || !key || !c.year || spareBusy[c.id]) return;
-    var L = sp.lookup; if (L && L.key === key && (L.guess || recent(L, RETRY_H))) return;
+    if (!call || !key || !c.year || spareBusy[c.id]) return;
+    if (shown ? !N.siteShow : (!N.siteRead || sp.kind)) { if (shown && N.openUrl) N.openUrl(spareUrl(c)); return; }
+    var L = sp.lookup; if (!shown && L && L.key === key && (L.guess || recent(L, RETRY_H))) return;
+    var prev = sp.lookup;
     spareBusy[c.id] = true; sp.lookup = { key: key, t: Date.now() };
-    LG.info('car', 'Asking Brave Search about the spare tire', key);
-    var ask = function () { return Promise.race([call('siteRead', 'brave', JSON.stringify({ url: spareUrl(c), bg: true, kind: 'spare' })), new Promise(function (ok) { setTimeout(function () { ok(null); }, 40000); })]); };
-    (G().braveSerial ? G().braveSerial(ask) : ask()).then(function (r) {
+    LG.info('car', 'Asking Brave Search about the spare tire' + (shown ? ' (shown to you)' : ''), key);
+    var ask = function () { return Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: spareUrl(c), bg: !shown, kind: 'spare' })), new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]); };
+    (shown ? ask() : G().braveSerial ? G().braveSerial(ask) : ask()).then(function (r) {
       spareBusy[c.id] = false;
+      if (shown && !(r && r.text)) { sp.lookup = prev; save(); redraw(c); return; }   // closed before an answer: keep what it said before
       return readSpare(r && r.text).then(function (pick) {
         var g = pick.kind;
-        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: r && r.text ? String(r.text).slice(0, 300) : '', tip: pick.tip || '' };
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: r && r.text ? String(r.text).slice(0, 1200) : '', tip: pick.tip || '', tipV: 2 };
         LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
         save(); redraw(c); onChange();
       });
@@ -537,6 +589,13 @@
   }
   /** Brave's answer -> {kind, by, score}: each clause about what the car has, scored by the rating model (keywords if it can't load). */
   function readSpare(text) {
+    // the format the question asks for: its first phrase says the kind, its next sentence is the tip
+    var lead = spareLead(text);
+    if (lead === 'none') { var w0 = parseSpare(text); if (w0 === 'kit' || w0 === 'runflat') lead = w0; }   // "No spare. … a repair kit instead"
+    if (lead) {
+      var lt = lead === 'full' || lead === 'compact' ? '' : leadTip(text);
+      return Promise.resolve({ kind: lead, by: 'answer', score: null, tip: lt || spareTip(spareClauses(text)) });
+    }
     var sc = spareClauses(text);
     if (!text) return Promise.resolve({ kind: null, by: null, score: null });
     if (!sc.pos.length || !root.Severity || !Severity.compare) return Promise.resolve(Object.assign(pickSpare(null, sc), { tip: spareTip(sc) }));
@@ -545,7 +604,11 @@
         var ok = scores.some(Boolean);
         // the AI's own reading of which clauses are about a spare the car could have (bought separately, an option)
         scores.forEach(function (o, i) { if (o && o.optional >= 0.55 && o.optional >= Math.max(o.full, o.compact, o.kit, o.runflat) && sc.opt.indexOf(sc.pos[i]) < 0) sc.opt.push(sc.pos[i]); });
-        return Object.assign(pickSpare(ok ? scores : null, sc), { model: ok, tip: spareTip(sc) });
+        var pick = Object.assign(pickSpare(ok ? scores : null, sc), { model: ok });
+        if (!ok || !sc.opt.length) return Object.assign(pick, { tip: spareTip(sc) });
+        // which facts the "you could have a spare" clauses state, read by the model
+        return sc.opt.reduce(function (p, c) { return p.then(function (acc) { return Severity.compare(c, TIP_EX).then(function (o) { acc.push(o); return acc; }); }); }, Promise.resolve([]))
+          .then(function (ts) { return Object.assign(pick, { tip: spareTip(sc, ts.some(Boolean) ? ts : null) }); }, function () { return Object.assign(pick, { tip: spareTip(sc) }); });
       }, function () { return Object.assign(pickSpare(null, sc), { tip: spareTip(sc) }); });
   }
   /** What the car has: what you said, else Brave's guess (marked), else ''. */
@@ -680,12 +743,15 @@
     var sp = spare(t), kind = sp.kind, guess = sp.lookup && sp.lookup.guess;
     h += '<div class="sub-h tz-h">Spare tire</div>';
     if (spareBusy[c.id]) h += window.__app.ldBar('Asking Brave Search about the spare');
-    if (!kind && guess) h += '<div class="tz-guess">Brave Search says: <b>' + esc(SPARE_NAME[guess]) + '</b>. <button class="btn tonal sm" id="tzSpareYes">That\'s right</button></div>';
+    var showBtn = '<button class="btn tonal sm" id="tzSpareShow"' + (spareBusy[c.id] ? ' disabled' : '') + '>See Brave\'s answer</button>';
+    if (!kind && guess) h += '<div class="tz-guess">Brave Search says: <b>' + esc(SPARE_NAME[guess]) + '</b>. <span class="tz-gbtns"><button class="btn tonal sm" id="tzSpareYes">That\'s right</button>' + showBtn + '</span></div>';
     h += '<label class="nf wide"><span>What your car has' + q(Q.spare) + '</span><select id="tzSpare"><option value="">' + (guess && !kind ? 'Not confirmed yet' : 'Not sure') + '</option>' +
       ['full', 'compact', 'kit', 'runflat', 'none'].map(function (k) { return '<option value="' + k + '"' + (kind === k ? ' selected' : '') + '>' + SPARE_NAME[k] + '</option>'; }).join('') + '</select></label>';
     var k1 = kind || guess;
-    if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tz-tip"><b>Tip</b> · ' + esc(sp.lookup.tip) + ' <small>(from Brave Search\'s answer, read by the on-phone AI)</small></div>';
-    if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Look under the trunk floor (or under a truck\'s bed), or in the owner\'s manual.</div>';
+    // a tip from before tips were short: said again the short way, from the answer it kept
+    if (sp.lookup && sp.lookup.tip && sp.lookup.tipV !== 2 && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 2; }
+    if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
+    if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Look under the trunk floor (or under a truck\'s bed), or in the owner\'s manual. ' + showBtn + '</div>';
     var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
     if (k2 === 'full' || k2 === 'compact') h += '<div class="tz-air ' + (airedOk(t) ? 'ok' : 'due') + '">' + (airedOk(t) ? 'Air checked ' + new Date(sp.aired).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. Next check by ' + new Date(sp.aired + AIR_DAYS * 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '.' :
       'Its air hasn\'t been checked this month. Check it' + (k2 === 'compact' ? ' (compact spares usually need 60 psi)' : '') + ', then tick it in Advice.') + '</div>';
@@ -1011,6 +1077,7 @@
     if ($('tzSaved')) $('tzSaved').onclick = function () { openSaved(c); };
     // the spare
     $('tzSpare').onchange = set(function () { spare(t).kind = this.value; LG.info('car', 'Spare tire: ' + (this.value || 'not sure')); });
+    if ($('tzSpareShow')) $('tzSpareShow').onclick = function () { spareLookup(c, true); };
     if ($('tzSpareYes')) $('tzSpareYes').onclick = set(function () { spare(t).kind = spare(t).lookup.guess; LG.info('car', 'Spare tire confirmed: ' + spare(t).kind); });
   }
   window.addEventListener('garagechange', function () { var c = G() && G().car(); if (c && host && host.isConnected) { lookup(c); spareLookup(c); draw(); } });

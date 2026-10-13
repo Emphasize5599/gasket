@@ -720,7 +720,12 @@ with sync_playwright() as p:
         idle(pg, 1200)
         assert step(pg) == 1 and pg.locator('#tripPick').count() == 0, 'a saved trip opens at the Garage'
         assert pg.evaluate('!!window.__trip.state().model'), 'its route is ready behind the Garage'
-        assert pg.locator('#tpSteps .dim').count() == 0 and pg.locator('#tpNav .opening').count() == 0, 'opened: every step can be reached'
+        # opened again: when you're leaving this time is asked again (Route), so the steps after it wait for that
+        assert pg.evaluate("window.__app.S.trip.depart") == '' and pg.locator('#tpSteps .dim').count() == 5 and pg.locator('#tpNav .opening').count() == 0, 'opened: Leaving asked again'
+        pg.click('#tpSteps [data-step="8"]'); pg.wait_for_function('window.__trip.state().step === 3', timeout=15000)
+        assert pg.locator('#tDepart.need').count() == 1, 'stopped at Route, at Leaving'
+        pg.click('#tNow'); pg.wait_for_timeout(150)
+        assert pg.evaluate("window.__app.S.trip.departNow") is True and pg.locator('#tpSteps .dim').count() == 0, 'Now: every step can be reached'
         pg.click('#tpSteps [data-step="8"]'); pg.wait_for_function('window.__trip.state().step === 8', timeout=15000)
         print('  saved trip: Garage straight to Departure')
         stops(pg, 1200)
@@ -960,6 +965,7 @@ with sync_playwright() as p:
         sel = pg.evaluate("window.__trip.state().route.legs.map(L => L.sel)")
         stops(pg, 1200); pg.click('#tClose'); pg.wait_for_timeout(200)
         pg.click('#btnTrip'); pg.wait_for_timeout(400); pg.click('[data-hist]'); idle(pg, 1200)
+        pg.evaluate("window.__app.S.trip.departNow = true")   # (reopened: when you're leaving is asked again)
         n0 = pg.evaluate("FLog.entries().length")
         pg.click('#tpSteps [data-step="8"]'); pg.wait_for_function('window.__trip.state().step === 8', timeout=15000)
         ms = [e['m'] for e in pg.evaluate("FLog.entries()")[n0:]]

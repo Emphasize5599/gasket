@@ -4,6 +4,15 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.128 - 2026-10-13 (keyless test branch only)
+- **Typed addresses can have stops in between:** "+ Add a stop" between From and To (each stop its own leg, like a Maps link's).
+- **VIN lookups fill the car in once:** the year / make / model / engine boxes no longer empty and refill themselves; looking up the same VIN again leaves them alone. The NHTSA VIN check tries again by itself if NHTSA's page errors.
+- **"Now" means leaving now:** it stays current while you look around. A reopened saved trip asks when you're leaving again.
+- **Spare tire:** Brave's AI is asked to answer in a fixed way and to write the tip itself in one short sentence; the tip looks like the app's other tips. "See Brave's answer" opens its page for you.
+- **Status bar:** wraps on the map, a short line in full-screen menus, "Preparing…" before the first area is done, and a ✕ on Adjustments' own progress too.
+- **Search this area** uses fewer website readers and the areas nearest the middle, so the map stays smooth while it runs.
+- Bug fixes.
+
 ## 0.0.127 - 2026-10-13 (keyless test branch only)
 - **The spare tire is read right.** "Doesn't come with a spare" now wins over any mention of one (room for it, buy one separately), so cars with a repair kit no longer show up as having a spare. When the answer says you can get a spare anyway, a tip under "What your car has" says so (with its size, when given).
 - **Air checks follow what you picked:** the spare's monthly air check only comes up once you've chosen a full-size or compact spare.

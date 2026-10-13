@@ -1635,7 +1635,8 @@ body.legs-open .scroll-hint { display: none; }
   min-height: 44px; padding: 6px 6px 6px 14px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); font-size: 13.5px; }
 .job-bar.hidden { display: none; }
 body.trip-full .job-bar { top: calc(var(--st) + 2px); left: 12px; right: 12px; min-height: 0; height: 44px; padding-top: 0; padding-bottom: 0; box-shadow: none; border: 1px solid var(--line); }   /* 10px clear of the step tabs below */
-.job-bar .jb-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.job-bar .jb-t { flex: 1 1 auto; min-width: 0; color: var(--ink); line-height: 1.3; overflow-wrap: anywhere; }   /* on the map: wraps */
+body.trip-full .job-bar .jb-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* full screen: one short line */
 .job-bar .pbar { flex: 0 1 90px; min-width: 40px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .job-bar .pbar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
 .job-bar .pct { flex: none; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12px; min-width: 32px; text-align: right; }
@@ -1645,3 +1646,8 @@ body.job-on #grades, body.job-on #btnMode, body.job-on #btnRefresh, body.job-on 
 body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist-row, body.job-on .tp-steps .job-lock { opacity: .4; pointer-events: none; filter: grayscale(1); }
 .tz-tip { margin: 6px 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .tz-tip small { color: var(--ink-2); }
+.epa-grid.filling select { opacity: .55; pointer-events: none; transition: opacity .2s; }
+.prog-load .pl-x { flex: none; width: 32px; height: 32px; margin-left: 4px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); font-size: 15px; }
+.price-refresh-card .prog-load .pl-x { display: none; }   /* the card has its own Cancel */
+.via-add { margin: 2px 0 12px; }
+.via-row .via-x { color: var(--ink-2); font-size: 15px; }

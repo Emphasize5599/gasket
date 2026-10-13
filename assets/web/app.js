@@ -356,6 +356,9 @@
       var keylessRadius = Math.min(Math.max(P.haversineMi(lat,lng,b[2],lng),2),30),areas=[];
       var dy=6/69,dx=6/(69.17*Math.cos(lat*Math.PI/180));
       for(var y=-Math.ceil(keylessRadius/6);y<=Math.ceil(keylessRadius/6);y++)for(var x=-Math.ceil(keylessRadius/6);x<=Math.ceil(keylessRadius/6);x++){var a=KeylessGas.area(lat+y*dy,lng+x*dx,8);if(P.haversineMi(lat,lng,a.lat,a.lng)<=keylessRadius+3)areas.push(a);}
+      // the map is in use meanwhile: a few readers, and the areas nearest the middle (a zoomed-out view would be a hundred pages)
+      areas.sort(function(a1,a2){return P.haversineMi(lat,lng,a1.lat,a1.lng)-P.haversineMi(lat,lng,a2.lat,a2.lng);});
+      var areaCut=areas.length>MAP_AREAS;if(areaCut)areas=areas.slice(0,MAP_AREAS);areas.maxLanes=4;
       jobStart({kind:'map',label:'Discovering stations · No API',cancel:function(){KeylessGas.cancel();}});
       KeylessGas.discover(areas,function(f,text){jobProg(f,text);},S.grade,false).then(function(r){
         if(id!==reqId)return;
@@ -363,6 +366,7 @@
         errs=errs.concat(r.errors||[]);
         if(r.blocked)showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
         if(r.cancelled)errs.push('Discovery cancelled; completed stations kept.');
+        if(areaCut)errs.push('Searched the middle of the map; zoom in, or move the map, for more.');
         else if((r.details||[]).some(function(d){return !d.exhausted;}))errs.push('Website discovery is partial; some lists did not finish.');
         sourceDone();
       }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();}).finally(function(){jobEnd();});
@@ -1327,7 +1331,7 @@
   // runs, body.job-on grays out what would change its data or start another search (grades, fuel mode, refresh, search
   // this area, settings, other trips); the status bar (#jobBar) shows its progress with a ✕ to cancel. Progress is
   // drawn at most once a frame, so the work never makes the screen or touch lag.
-  var job = null, jobRaf = 0, jobDoneT = 0;
+  var job = null, jobRaf = 0, jobDoneT = 0, MAP_AREAS = 24;
   var JOB_LOCKS = ['btnMode', 'btnRefresh', 'btnArea', 'btnSettings'];
   function jobStart(o) {
     clearTimeout(jobDoneT);
@@ -1356,6 +1360,11 @@
       jobDoneT = setTimeout(function () { bar.classList.add('hidden'); }, 10000);
     } else bar.classList.add('hidden');
   }
+  /** The status bar's words in a full-screen menu, where it's one line: "Stations 12/170 · ~5 min". */
+  function jobShort(t) {
+    return String(t || '').replace(/^Discovering stations/, 'Stations').replace(/^Refreshing (?:saved )?prices/, 'Prices').replace(/^Checking (\w+(?: \w+)?) website prices/, '$1 prices')
+      .replace(/ areas to (?:search|check)/, ' areas').replace(/(\d+\/\d+) areas/, '$1').replace(/ · Estimating time…/, '').replace(/ remaining/, ' left').replace(/^Finding stations$/, 'Stations');
+  }
   function jobDraw() {
     var bar = $('jobBar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'jobBar'; bar.setAttribute('role', 'status'); document.body.appendChild(bar); }
@@ -1366,7 +1375,7 @@
       bar.querySelector('.jb-x').onclick = function () { if (job && job.cancel) { bar.querySelector('.jb-t').textContent = 'Cancelling…'; job.cancelling = true; job.cancel(); } };
     }
     bar.classList.toggle('hidden', !!(job.inline && job.inline()));
-    if (!job.cancelling) bar.querySelector('.jb-t').textContent = job.text;
+    if (!job.cancelling) bar.querySelector('.jb-t').textContent = document.body.classList.contains('trip-full') ? jobShort(job.text) : job.text;
     bar.querySelector('.pbar i').style.width = Math.round(job.frac * 100) + '%';
     bar.querySelector('.pct').textContent = Math.round(job.frac * 100) + '%';
   }

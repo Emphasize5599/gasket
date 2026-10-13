@@ -194,7 +194,12 @@
     if (matching) { drawLater = true; return; }   // a VIN match is filling the pickers: redraw once it's done
     if (!host || drawing) return;
     drawing = true;
+    // the year / make / model / engine pickers you (or a VIN) already filled: kept as they are, not emptied and filled
+    // again one by one (each step waits on the EPA, so the boxes flickered and could end up half-filled)
+    var grid = $('eYear') && $('eYear').value && $('eYear').closest('.epa-grid'), keepFor = S.carId;
     try { settle(host); draw0(); } finally { drawing = false; }
+    var fresh = grid && keepFor === S.carId && $('eYear') && !$('eYear').value && $('eYear').closest('.epa-grid');
+    if (fresh) fresh.replaceWith(grid);
   }
   // Your car (the buttons; details behind Edit), best cruising speed, fuel economy, observed mileage, about this car.
   var obsOpen = false, infoOpen = false, tiresOpen = false, climOpen = false;
@@ -707,7 +712,8 @@
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
       $('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
-      if ($('tEpa').open && !matching) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); }   // (a VIN match fills them itself)
+      // (a VIN match fills them itself; a redraw that kept the filled pickers has nothing to fill)
+      setTimeout(function () { if ($('tEpa') && $('tEpa').open && !matching && $('eYear') && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } }, 0);
       if ($('gRemove')) $('gRemove').onclick = function () { removeCar(c); };
     }
     // about this car
@@ -943,6 +949,7 @@
   async function lookupVin(c, raw) {
     var vin = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { vMsg('A VIN is 17 letters and numbers (never I, O or Q).', true); return; }
+    if (vin === c.vin && hasEpa(c) && c.epaId) { vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
     vMsg('Decoding…');
     try {
       var r = await call('fetchJson', VPIC + 'DecodeVinValuesExtended/' + vin + '?format=json');
@@ -983,7 +990,9 @@
   var matching = false, drawLater = false;   // a VIN match is filling the pickers: a redraw mustn't replace them under it
   async function epaMatch(c, lead) {
     matching = true;
-    try { await epaMatch0(c, lead); } finally { matching = false; if (drawLater) { drawLater = false; draw(); } }
+    var dim = function (on) { var g = $('eYear') && $('eYear').closest('.epa-grid'); if (g) g.classList.toggle('filling', on); };   // filled in for you: not yet yours to change
+    dim(true);
+    try { await epaMatch0(c, lead); } finally { matching = false; dim(false); if (drawLater) { drawLater = false; draw(); } }
   }
   async function epaMatch0(c, lead) {
     var say = function (m) { var el = $('eMsg'); if (el) { el.innerHTML = m; el.classList.remove('err'); } };

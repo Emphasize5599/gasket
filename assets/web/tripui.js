@@ -78,6 +78,8 @@
   document.addEventListener('click',function(e){
     var cancel=e.target.closest('[data-cancel-prices]');
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
+    var cx=e.target.closest('[data-cancel-search]');
+    if(cx){cancelSearch();document.querySelectorAll('[data-cancel-search]').forEach(function(b){b.disabled=true;});document.querySelectorAll('.prog-load .pl').forEach(function(l){l.textContent='Cancelling…';});return;}
     var dd=e.target.closest('[data-split]');
     if(dd){var menu=dd.closest('.price-refresh-card').querySelector('.split-menu'),open=menu.classList.toggle('hidden')===false;dd.setAttribute('aria-expanded',String(open));return;}
     if(!e.target.closest('.split-menu'))document.querySelectorAll('.split-menu:not(.hidden)').forEach(function(m){m.classList.add('hidden');});
@@ -130,7 +132,8 @@
    */
   function progBar(label) {   // starts where the work already is (prog() keeps it moving)
     var pct = busy ? lastProg.pct : 0, l = busy && lastProg.label ? lastProg.label : label;
-    return '<div class="parse-load prog-load"><span class="pl">' + esc(l) + '</span><span class="pbar"><i style="width:' + pct + '%"></i></span><span class="pct">' + pct + '%</span></div>';
+    return '<div class="parse-load prog-load"><span class="pl">' + esc(l) + '</span><span class="pbar"><i style="width:' + pct + '%"></i></span><span class="pct">' + pct + '%</span>' +
+      (busy && !loadingTrip ? '<button type="button" class="pl-x" data-cancel-search aria-label="Cancel the search">✕</button>' : '') + '</div>';
   }
   function skelCard(title, body) { return '<div class="card skel"><div class="sk-h">' + esc(title) + '</div>' + (body || '') + '</div>'; }
   function skelRows(n) { var h = ''; for (var i = 0; i < n; i++) h += '<div class="sk-row"><span class="sk-dot"></span><span class="sk-lines"><span></span><span></span></span><span class="sk-price"></span></div>'; return h; }
@@ -446,12 +449,13 @@
       '<textarea id="tLink" rows="2" placeholder="https://maps.app.goo.gl/…" spellcheck="false">' + esc(t.link) + '</textarea></div></div>' +
       '<div id="tSrcTyped"' + (src === 'typed' ? '' : ' class="hidden"') + '>' +
       '<div class="field col"><div class="lbl">From<span class="req" aria-label="required">*</span></div><span class="in-btn"><input type="text" id="tFrom" placeholder="Address or place" value="' + esc(t.from) + '"><button type="button" id="tHere" aria-label="Use my location"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg></button></span></div>' +
+      '<div id="tVia">' + viaHtml() + '</div>' +
       '<div class="field col"><div class="lbl">To<span class="req" aria-label="required">*</span></div><input type="text" id="tTo" placeholder="Address or place" value="' + esc(t.to) + '"></div></div>' +
       '<div id="tParsed"></div>' +
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
       '<div class="field col"><div class="lbl">Leaving<span class="req" aria-label="required">*</span><small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Now fills in this minute. Prices can change before you go.</small></div>' +
-        '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
+        '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(S.trip.departNow ? localNow() : futureDepart() ? S.trip.depart : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
       '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div>' +
         '<div class="field' + (t.returnTrip ? '' : ' hidden') + '" id="tBackAutoBox"><div class="lbl">Head back right away<small>Starts the way back as soon as you arrive; the weather on that leg is worked out for then. Off: pick when you\'ll head back.</small></div>' + sw('tBackAuto', backAuto()) + '</div>' +
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
@@ -522,6 +526,7 @@
   function bindRoute() {
     var t = S.trip;
     $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); readLink().then(autoRoutes); }, 400));
+    bindVia();
     ['tFrom', 'tTo'].forEach(function (id) {
       $(id).addEventListener('input', function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); renderStops(); });
       $(id).addEventListener('change', function () { autoRoutes(); });   // done typing (left the box): fetch once both are in
@@ -531,11 +536,12 @@
     dEl.addEventListener('change', function () {
       // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
       if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
+      S.trip.departNow = false;      // a time you picked: it stays put
       collectSafe(); result = null; gateTabs();
     });
     bEl.addEventListener('change', function () { collectSafe(); gateTabs(); });
     $('tNow').onclick = function () {
-      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); result = null; gateTabs();
+      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); S.trip.departNow = true; A.save(); result = null; gateTabs();
     };
     $('tBackAuto').onchange = function () { collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto()); gateTabs(); };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
@@ -683,7 +689,14 @@
     }
     return null;
   }
-  function futureDepart() { var d = S.trip.depart ? new Date(S.trip.depart) : null; return d && !isNaN(d) && d.getTime() > Date.now() - 600e3 ? d : null; }
+  // "Now" means leaving now, however long you look around first: kept at this minute until you pick a time yourself
+  setInterval(function () {
+    if (!S.trip.departNow) return;
+    S.trip.depart = localNow();
+    var d = $('tDepart'); if (d && document.activeElement !== d) d.value = S.trip.depart;
+  }, 20000);
+  function futureDepart() {
+    if (S.trip.departNow) return new Date(); var d = S.trip.depart ? new Date(S.trip.depart) : null; return d && !isNaN(d) && d.getTime() > Date.now() - 600e3 ? d : null; }
   function departAt() { return futureDepart() || new Date(); }
   function isHere(x) { return /^(my|your) (current )?location$/i.test(String(x || '').trim()); }
   function sw(id, on) { return '<label class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
@@ -696,7 +709,7 @@
     var t = S.trip, v = function (id) { var e = $(id); return e ? e.value : null; }, on = function (id) { var e = $(id); return e ? e.checked : null; };
     var segOn = function (id, attr) { var e = $(id); var b = e && e.querySelector('.on'); return b ? b.dataset[attr] : null; };
     if (v('tLink') != null) t.link = v('tLink').trim();
-    if (v('tFrom') != null) { t.from = v('tFrom').trim(); t.to = v('tTo').trim(); }
+    if (v('tFrom') != null) { t.from = v('tFrom').trim(); t.to = v('tTo').trim(); t.via = viaList(); }
     if ($('tAvoid')) Array.prototype.forEach.call($('tAvoid').children, function (b) { t.avoid[b.dataset.av] = b.classList.contains('on'); });
     if (segOn('tMode', 'm')) t.fillUp = segOn('tMode', 'm') === 'fill';
     if (segOn('tArrive', 'a')) t.arrive = segOn('tArrive', 'a');
@@ -1080,7 +1093,34 @@
     if (!to) return null;
     if (!from) return null;
     var mk = function (t) { return { address: t, label: t, short: T.shortLabel(t) }; };
-    return { stops: [isHere(from) ? { current: true, label: 'Your location' } : mk(from), mk(to)], avoid: {}, mode: 'drive', typed: true };
+    var via = viaList().filter(Boolean).map(mk);      // stops in between, in order (each its own leg, like a link's)
+    return { stops: [isHere(from) ? { current: true, label: 'Your location' } : mk(from)].concat(via, [mk(to)]), avoid: {}, mode: 'drive', typed: true };
+  }
+  // ---------- stops in between, for typed addresses ----------
+  var MAX_VIA = 8;
+  function viaList() { var ins = document.querySelectorAll('#tVia .via-in'); return ins.length ? Array.prototype.map.call(ins, function (e) { return e.value.trim(); }) : (S.trip.via || []).slice(); }
+  function viaHtml() {
+    var v = S.trip.via || [];
+    return v.map(function (x, i) {
+      return '<div class="field col via-row"><div class="lbl">Stop ' + (i + 1) + '</div><span class="in-btn"><input type="text" class="via-in" data-via="' + i + '" placeholder="Address or place" value="' + esc(x) + '">' +
+        '<button type="button" class="via-x" data-via-x="' + i + '" aria-label="Remove stop ' + (i + 1) + '">✕</button></span></div>';
+    }).join('') + (v.length < MAX_VIA ? '<button type="button" class="btn tonal sm via-add" id="tViaAdd">+ Add a stop</button>' : '');
+  }
+  /** A stop added, removed or retyped: the route is looked up again (once you've left the box). */
+  function viaChanged() { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); renderStops(); }
+  function bindVia() {
+    var box = $('tVia'); if (!box) return;
+    box.querySelectorAll('.via-in').forEach(function (inp) {
+      inp.addEventListener('input', function () { S.trip.via = viaList(); A.save(); viaChanged(); });
+      inp.addEventListener('change', function () { autoRoutes(); });
+    });
+    box.querySelectorAll('[data-via-x]').forEach(function (b) {
+      b.onclick = function () { var v = viaList(); v.splice(+b.dataset.viaX, 1); S.trip.via = v; A.save(); box.innerHTML = viaHtml(); bindVia(); viaChanged(); autoRoutes(); };
+    });
+    if ($('tViaAdd')) $('tViaAdd').onclick = function () {
+      var v = viaList(); v.push(''); S.trip.via = v; box.innerHTML = viaHtml(); bindVia();
+      var ins = box.querySelectorAll('.via-in'); if (ins.length) ins[ins.length - 1].focus();
+    };
   }
   function wp(s) {
     if (s.current) {
@@ -3167,7 +3207,7 @@
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
-      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel },
+      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel },
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
     var idx = histIndex().filter(function (x) { return x.id !== id; });
@@ -3233,7 +3273,7 @@
     resetAdjust();
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
-    S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
+    S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.via = []; S.trip.returnTrip = false; if (link) S.trip.src = 'link';
     if (link) autoRoute = true;   // a link shared from Google Maps: its routes come by themselves
     A.save();
     openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
@@ -3244,7 +3284,8 @@
     resetAdjust();
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
-    Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
+    S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
+    Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
     if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();
     route = v.route; alts = v.alts;

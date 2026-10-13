@@ -208,13 +208,13 @@
   async function discover(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
-    var lanes=readerKeys(readerCount(A)),control={cancelled:false,wake:[],lanes:lanes};busy=control;
+    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||16)),control={cancelled:false,wake:[],lanes:lanes};busy=control;   // (a map search keeps it to a few readers: you're using the map meanwhile)
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
     if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,grade:grade,force:!!force,mem:mem0});
     function progressLog(){if(!LG||done%50)return;var recent=recs.slice(-50).filter(function(r){return !r.cache;}),el=Date.now()-started;
       LG.info('keyless','Discovery progress',{done:done,of:areas.length,elapsedS:Math.round(el/1000),areasPerMin:+(done/(el/60000)).toFixed(1),recentAreaMs:recent.length?Math.round(recent.reduce(function(a,r){return a+r.ms;},0)/recent.length):null,stations:rows.length,mem:memNow(A)});}
-    function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
+    function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:!done?'Preparing… · '+areas.length+' areas to search':'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
     try{
       timer=setInterval(report,1000);report();
       var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
@@ -310,7 +310,7 @@
       var work=average==null?null:remaining*average;
       if(work!=null)active.forEach(function(t){work+=Math.max(1000,average-(Date.now()-t));});
       var eta=work==null?null:Math.ceil(work/Math.min(lanes.length,remaining+active.size||1)/1000);
-      var text=control.cancelled?'Cancelling; keeping completed prices':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
+      var text=control.cancelled?'Cancelling; keeping completed prices':!done?'Preparing… · '+ordered.length+' areas to check':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
       text+=' · '+(eta==null?'Estimating time…':eta>=60?'~'+Math.ceil(eta/60)+' min remaining':'~'+eta+' sec remaining');
       if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
     }
