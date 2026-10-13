@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.132 - 2026-10-13 (keyless test branch only)
+- Styled selectors, date dialogs and vehicle image controls.
+- Correct Tires header anchoring and required-field markers.
+- Improved individual tire lookup and trailer tire editing.
+- Tow mode reveals controls without opening a submenu.
+- Bug fixes.
+
 ## 0.0.131 - 2026-10-13 (keyless test branch only)
 - Consistent blue tile headings and unobstructed submenus.
 - Safer car editing and confirmed discard actions.

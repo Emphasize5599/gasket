@@ -257,8 +257,8 @@ async function run() {
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'','switching models must clear the previous automatic warranty');
     await catalogUI.selectOption('#tzType','Grand Touring All-Season');
     await catalogUI.selectOption('#tzBrand','*'); await catalogUI.click('#tzBrandCatalog');
-    await catalogUI.selectOption('#tzBrand','Cooper'); await catalogUI.selectOption('#tzModel','*');
-    await catalogUI.fill('#tzModelT','endeavor'); await catalogUI.dispatchEvent('#tzModelT','change');
+    await catalogUI.selectOption('#tzBrand','Cooper'); await catalogUI.selectOption('#tzModel','Endeavor');
+    assert.equal(await catalogUI.locator('#tzModelT').count(),0,'model is dropdown-only');
     assert.equal(await catalogUI.inputValue('#tzModel'),'Endeavor');
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
     await catalogUI.fill('#tzWarranty','70000'); await catalogUI.dispatchEvent('#tzWarranty','change');

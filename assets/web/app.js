@@ -1535,5 +1535,35 @@
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
   window.__app.confirmDiscard=function(){return confirmDel({always:true,title:'Discard changes?',body:'Your changes in this editor will be undone.',action:'Discard changes',goClass:'tonal caution'});};
+  // Keep Android's native select/date dialogs out of app-owned forms. OS file,
+  // permission and sharing panels remain system-owned.
+  function appPicker(control){
+    if(control.disabled||window.__pickerClose)return;
+    var label=control.closest('label,.field'),title=label&&(label.querySelector('span,.lbl')||label).textContent.split('*')[0].trim()||control.getAttribute('aria-label')||'Choose';
+    var overlay=document.createElement('div');overlay.className='app-picker';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',title);
+    overlay.innerHTML='<div class="app-picker-card"><div class="app-picker-head"><b>'+esc(title)+'</b><button type="button" aria-label="Close">✕</button></div><div class="app-picker-body"></div></div>';
+    var body=overlay.querySelector('.app-picker-body'),prior=document.activeElement;
+    var close=function(){document.removeEventListener('keydown',keys,true);overlay.remove();window.__pickerClose=null;if(prior&&prior.isConnected)prior.focus({preventScroll:true});};window.__pickerClose=close;
+    function keys(e){if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){var list=Array.from(overlay.querySelectorAll('button:not(:disabled),input:not(:disabled)')),i=list.indexOf(document.activeElement);e.preventDefault();list[(i+(e.shiftKey?-1:1)+list.length)%list.length].focus();}}
+    overlay.addEventListener('click',function(e){if(e.target===overlay)close();});overlay.querySelector('.app-picker-head button').onclick=close;document.addEventListener('keydown',keys,true);
+    function commit(value){var target=control.isConnected?control:control.id&&document.getElementById(control.id);if(!target){close();return;}target.value=value;target.dispatchEvent(new Event('input',{bubbles:true}));target.dispatchEvent(new Event('change',{bubbles:true}));close();}
+    if(control.tagName==='SELECT'){
+      if(control.options.length>12){var search=document.createElement('input');search.type='search';search.placeholder='Filter options';search.setAttribute('aria-label','Filter options');body.appendChild(search);search.oninput=function(){body.querySelectorAll('[data-option]').forEach(function(row){row.hidden=!row.textContent.toLowerCase().includes(search.value.toLowerCase());});};}
+      Array.from(control.children).forEach(function(child){var options=child.tagName==='OPTGROUP'?Array.from(child.children):[child];if(child.tagName==='OPTGROUP'){var heading=document.createElement('h3');heading.textContent=child.label;body.appendChild(heading);}options.forEach(function(option){var button=document.createElement('button');button.type='button';button.dataset.option=option.value;button.textContent=option.textContent;button.className=option.selected?'chosen':'';button.disabled=option.disabled||child.disabled;button.setAttribute('aria-selected',String(option.selected));button.onclick=function(){commit(option.value);};body.appendChild(button);});});
+    }else{
+      var date=new Date(control.value||Date.now()),fields=control.type==='datetime-local'?['Year','Month','Day','Hour','Minute']:['Year','Month','Day'];
+      var values=[date.getFullYear(),date.getMonth()+1,date.getDate(),date.getHours(),date.getMinutes()];
+      body.innerHTML='<div class="picker-date">'+fields.map(function(name,i){return '<label class="nf"><span>'+name+'</span><input type="number" data-date="'+i+'" value="'+values[i]+'" min="'+(i===0?1900:i<3?1:0)+'" max="'+[2200,12,31,23,59][i]+'"></label>';}).join('')+'</div><p class="picker-error"></p><button type="button" class="btn primary" data-apply>Apply</button><button type="button" class="btn tonal" data-clear>Clear</button>';
+      body.querySelector('[data-clear]').onclick=function(){commit('');};body.querySelector('[data-apply]').onclick=function(){var v=Array.from(body.querySelectorAll('[data-date]')).map(function(input){return Number(input.value);}),d=new Date(v[0],v[1]-1,v[2],v[3]||0,v[4]||0),pad=function(n){return String(n).padStart(2,'0');};if(d.getFullYear()!==v[0]||d.getMonth()!==v[1]-1||d.getDate()!==v[2]||(fields.length===5&&(d.getHours()!==v[3]||d.getMinutes()!==v[4]))){body.querySelector('.picker-error').textContent='Enter a valid date and time.';return;}commit(v[0]+'-'+pad(v[1])+'-'+pad(v[2])+(fields.length===5?'T'+pad(v[3])+':'+pad(v[4]):''));};
+    }
+    document.body.appendChild(overlay);(overlay.querySelector('.chosen,input,button')||overlay).focus();
+  }
+  function pickerTarget(e){return e.target.closest('select,input[type="date"],input[type="datetime-local"]');}
+  document.addEventListener('pointerdown',function(e){var control=pickerTarget(e);if(control&&!control.disabled){e.preventDefault();}},true);
+  document.addEventListener('click',function(e){var control=pickerTarget(e);if(control&&!control.disabled){e.preventDefault();e.stopPropagation();appPicker(control);}},true);
+  document.addEventListener('keydown',function(e){var control=pickerTarget(e);if(control&&['Enter',' ','ArrowDown'].includes(e.key)){e.preventDefault();appPicker(control);}},true);
+  var nativeBack=window.onBack;window.onBack=function(){if(window.__pickerClose){window.__pickerClose();return true;}return nativeBack();};
+  var markRequired=function(){document.querySelectorAll('.need,input[required],select[required]').forEach(function(control){var parent=control.closest('label,.nf,.field'),label=parent&&parent.querySelector('span:first-child,.lbl');if(label&&!label.querySelector('.req')){var star=document.createElement('span');star.className='req';star.textContent='*';star.setAttribute('aria-label','required');label.appendChild(star);}});};
+  new MutationObserver(markRequired).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','required']});markRequired();
   if(window.PriceHistory)setTimeout(function(){PriceHistory.seed().catch(function(e){if(window.FLog)FLog.warn('history','Price history seed failed',e.message);});},0);
 })();

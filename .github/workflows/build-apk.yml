@@ -41,6 +41,7 @@ on:
       - tests/nhtsa-reader.test.js
       - tests/editor-tires.test.js
       - tests/hazard-prefetch.test.js
+      - tests/styled-tire-flow.test.js
       - tests/background-search.test.js
 
 permissions:

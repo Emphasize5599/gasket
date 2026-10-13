@@ -187,18 +187,19 @@
   /** The kept photo to show (a data URL), or null (still coming, none, or doodle mode). */
   function generatedKey(c) { return c && c.id ? 'generated|' + c.id : null; }
   function hasGenerated(c) { return !!(c && stored(generatedKey(c))); }
+  function imageDialog(text,ask){return root.__app.confirmDel({always:true,title:'Vehicle image',body:root.__app.esc(text),action:ask?'Continue':'OK',no:ask?'Cancel':'Close',goClass:'primary'});}
   function src(c) { var g = c && stored(generatedKey(c)); if (g) return g; var k = c && imgKey(c); return k ? stored(k) : null; }
   function importGenerated(c) {
     if (!c || !c.id) return Promise.resolve();
     return call('pickImageFile').then(function (r) {
       if (!r || r.cancelled) return;
-      if (r.error) { if (root.alert) root.alert('Could not import image: ' + r.error); return; }
+      if (r.error) { imageDialog('Could not import image: ' + r.error); return; }
       var data = r.dataUrl || '';
-      if (!/^data:image\/(webp|png|jpe?g);base64,/i.test(data)) { if (root.alert) root.alert('Please choose a PNG, JPEG, or WebP image.'); return; }
+      if (!/^data:image\/(webp|png|jpe?g);base64,/i.test(data)) { imageDialog('Please choose a PNG, JPEG, or WebP image.'); return; }
       keep(generatedKey(c), data);
       told(c);
       if (root.FLog) root.FLog.info('car', 'Imported a generated image for ' + (c.name || c.id));
-    }).catch(function (e) { if (root.alert) root.alert('Could not open image picker: ' + String(e && e.message || e)); });
+    }).catch(function (e) { imageDialog('Could not open image picker: ' + String(e && e.message || e)); });
   }
   function clearGenerated(c) {
     if (!c) return;
@@ -287,24 +288,24 @@
       return r;
     });
   }
-  function recreate(c) {
+  async function recreate(c) {
     if (!c) return;
     var prompt = recreationPrompt(c);
     var setup = stored('chatgptSetup');
-    if (!setup && !root.confirm('First, sign in to ChatGPT in the browser that opens. Gasket will remember that setup was completed, but cannot verify whether your session later expires. Continue?')) return;
-    if (!root.confirm('Gasket will download the selected Fuel API vehicle image to Downloads/Gasket so you can attach that exact image in ChatGPT. Your recreation prompt will also be copied to the clipboard. Continue?')) return;
+    if (!setup && !await imageDialog('First, sign in to ChatGPT in the browser that opens. Gasket will remember that setup was completed, but cannot verify whether your session later expires. Continue?',true)) return;
+    if (!await imageDialog('Gasket will download the selected Fuel API vehicle image to Downloads/Gasket so you can attach that exact image in ChatGPT. Your recreation prompt will also be copied to the clipboard. Continue?',true)) return;
     if (!setup) keep('chatgptSetup', '1');
     try { if (root.Native && root.Native.copyText) root.Native.copyText(prompt); } catch (e) {}
     if (root.FLog) root.FLog.info('car', 'Downloading Fuel API source image before opening ChatGPT');
-    downloadFuelImage(c).then(function (r) {
-      if (root.alert) root.alert('Source image saved to ' + (r.path || 'Downloads/Gasket') + '. Your recreation prompt is copied. In ChatGPT, attach that downloaded image and paste the prompt.');
+    downloadFuelImage(c).then(async function (r) {
+      await imageDialog('Source image saved to ' + (r.path || 'Downloads/Gasket') + '. Your recreation prompt is copied. In ChatGPT, attach that downloaded image and paste the prompt.');
       try {
         if (root.Native && root.Native.openUrl) root.Native.openUrl('https://chatgpt.com/');
         else root.open('https://chatgpt.com/', '_blank');
       } catch (e) {}
       if (root.FLog) root.FLog.info('car', 'Opened ChatGPT for image recreation');
     }).catch(function (e) {
-      if (root.alert) root.alert('Could not download the Fuel API image: ' + String(e && e.message || e) + '\nYour prompt is copied to the clipboard. Check your Fuel API key and try again.');
+      imageDialog('Could not download the Fuel API image: ' + String(e && e.message || e) + '\nYour prompt is copied to the clipboard. Check your Fuel API key and try again.');
       if (root.FLog) root.FLog.warn('car', 'Fuel API source image download failed', String(e && e.message || e));
     });
   }
