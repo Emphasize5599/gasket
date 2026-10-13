@@ -152,12 +152,25 @@
   function officialReader(control,onLoad,onError,onLabel){
     var A=root.__app,P=A.P,queues={},seenPrices=new Map(),seenNodes=new Map();
     function stopped(){return control.cancelled||control.blocked;}
-    function read(key,args){
+    // A read that runs out of time (the phone busy with the gas readers) is split in half and read again, down to one
+    // item, before it counts as an error: a timeout is the page being slow, not a check.
+    async function readSplit(key,args,field,outField){
+      var r=await read(key,args,true),list=args[field]||[];
+      if(!(r&&r.code==='timeout')||list.length<2||stopped()){if(r&&r.code==='timeout'&&onError)onError((key==='walmart'?'Walmart: ':'Murphy USA: ')+r.error);return r;}
+      if(root.FLog)root.FLog.info('keyless',(key==='walmart'?'Walmart':'Murphy USA')+' read timed out: trying it in two halves',{items:list.length});
+      var half=Math.ceil(list.length/2),a=Object.assign({},args),b=Object.assign({},args);a[field]=list.slice(0,half);b[field]=list.slice(half);
+      var ra=await readSplit(key,a,field,outField),rb=await readSplit(key,b,field,outField),both={};
+      both[outField]=(ra[outField]||[]).concat(rb[outField]||[]);
+      if(ra.blocked||rb.blocked)both.blocked=true;if(ra.cancelled||rb.cancelled)both.cancelled=true;
+      if(ra.error&&rb.error)both.error=ra.error;
+      return both;
+    }
+    function read(key,args,quietTimeout){
       var promise=(queues[key]||Promise.resolve()).then(async function(){
         if(stopped())return {cancelled:true};if(onLoad)onLoad();if(onLabel)onLabel(key==='walmart'?'Checking Walmart website prices':'Checking Murphy website prices');
         var wake,stop=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);}),r;
         try{r=await Promise.race([call('siteRead',key,JSON.stringify(args)),stop]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});}
-        if(r.blocked){control.blocked=true;control.blockedSite=key;}if(r.error&&onError)onError((key==='walmart'?'Walmart: ':'Murphy USA: ')+r.error);
+        if(r.blocked){control.blocked=true;control.blockedSite=key;}if(r.error&&onError&&!(quietTimeout&&r.code==='timeout'))onError((key==='walmart'?'Walmart: ':'Murphy USA: ')+r.error);
         return r;
       });queues[key]=promise.catch(function(){});return promise;
     }
@@ -166,15 +179,15 @@
       var out=[],points=discovery?areas:known.filter(function(s){return s.brand==='walmart'&&!s.wmStoreId&&!/^wm-\d+$/.test(s.id||'');}),nodes=[];
       if(!A.siteOn||A.siteOn('walmart')){
         known.filter(function(s){return s.brand==='walmart'&&(s.wmStoreId||/^wm-\d+$/.test(s.id||''));}).forEach(function(s){nodes.push({id:String(s.wmStoreId||s.id.slice(3)),displayName:s.name,geoPoint:{latitude:s.lat,longitude:s.lng},address:{addressLineOne:s.address||'',state:s.state||''}});});
-        for(var pi=0;pi<points.length&&!stopped();pi+=40){
-          var batch=points.slice(pi,pi+40),key='keyless-nodes-v1|'+(discovery?8:5)+'|'+batch.map(function(p){return p.lat.toFixed(4)+','+p.lng.toFixed(4);}).join(';'),cache=!force&&A.KV.get('wmnodes',key,7*864e5),r=cache?cache.v:seenNodes.get(key);
-          if(!r){r=await read('walmart',{url:'https://www.walmart.com/store-finder',mode:'nodes',points:batch.map(function(p){return {lat:p.lat,lng:p.lng};}),radiusMi:discovery?8:5});if(!r.error&&!r.blocked&&!r.cancelled){seenNodes.set(key,r);if((r.nodes||[]).length)A.KV.put('wmnodes',key,r);}}
+        for(var pi=0;pi<points.length&&!stopped();pi+=20){
+          var batch=points.slice(pi,pi+20),key='keyless-nodes-v1|'+(discovery?8:5)+'|'+batch.map(function(p){return p.lat.toFixed(4)+','+p.lng.toFixed(4);}).join(';'),cache=!force&&A.KV.get('wmnodes',key,7*864e5),r=cache?cache.v:seenNodes.get(key);
+          if(!r){r=await readSplit('walmart',{url:'https://www.walmart.com/store-finder',mode:'nodes',points:batch.map(function(p){return {lat:p.lat,lng:p.lng};}),radiusMi:discovery?8:5},'points','nodes');if(!r.error&&!r.blocked&&!r.cancelled){seenNodes.set(key,r);if((r.nodes||[]).length)A.KV.put('wmnodes',key,r);}}
           nodes=nodes.concat(r.nodes||[]);
         }
         nodes=Array.from(new Map(nodes.filter(function(n){var p=n.geoPoint||n.geo;return /^\d+$/.test(String(n.id))&&p&&Number.isFinite(p.latitude)&&Number.isFinite(p.longitude)&&(discovery?areas.some(function(a){return P.haversineMi(a.lat,a.lng,p.latitude,p.longitude)<=a.radius;}):known.some(function(s){return s.brand==='walmart'&&P.haversineMi(s.lat,s.lng,p.latitude,p.longitude)<=0.6;}));}).map(function(n){return [String(n.id),n];})).values());
         var todo=[];nodes.forEach(function(n){var cached=seenPrices.get(String(n.id))||(!force&&A.KV.get('wmprice','keyless-v1|'+n.id,15*60000));if(cached)out.push(cached.v||cached);else todo.push(n);});
-        for(var wi=0;wi<todo.length&&!stopped();wi+=30){
-          var wb=todo.slice(wi,wi+30),wr=await read('walmart',{url:'https://www.walmart.com/store-finder',mode:'prices',nodes:wb});
+        for(var wi=0;wi<todo.length&&!stopped();wi+=15){
+          var wb=todo.slice(wi,wi+15),wr=await readSplit('walmart',{url:'https://www.walmart.com/store-finder',mode:'prices',nodes:wb},'nodes','stores');
           var normalized=stamp(wr.stores||[],P.normalizeWalmart);out=out.concat(normalized);
           normalized.forEach(function(s){seenPrices.set(s.wmStoreId,s);if(Object.keys(s.prices).length)A.KV.put('wmprice','keyless-v1|'+s.wmStoreId,s);});
           recordObserved(discovery?normalized:updateKnown(known,normalized,P,null).stations);

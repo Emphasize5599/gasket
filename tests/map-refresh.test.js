@@ -31,7 +31,12 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await p.evaluate(()=>{__app.KV.clear('gasweb');__app.KV.clear('along');});
   assert.equal(await p.evaluate(()=>PriceHistory.history(__app.stations()[0]).length),count,'cache clear preserves price history');
   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await p.evaluate(()=>__app.S.grade='premium');await p.click('#btnRefresh');assert.equal(await p.isDisabled('[data-refresh="web"]'),false);await p.click('[data-refresh="close"]');
+  await p.evaluate(()=>__app.S.grade='premium');await p.click('#btnRefresh');assert.equal(await p.isDisabled('[data-refresh="web"]'),false);
+  // blue buttons, each with its (?) beside it; no Close: a tap elsewhere closes it
+  const lay=await p.evaluate(()=>{const m=document.getElementById('refreshMenu'),bs=[...m.querySelectorAll('.btn.primary')],qs=[...m.querySelectorAll('.qi')];return {n:bs.length,q:qs.length,close:!!m.querySelector('[data-refresh="close"]'),fit:m.getBoundingClientRect().right<=innerWidth,beside:bs.every((b,i)=>{const a=b.getBoundingClientRect(),c=qs[i].getBoundingClientRect();return c.left>=a.right&&Math.abs((c.top+c.bottom)/2-(a.top+a.bottom)/2)<2;})};});
+  assert.deepEqual(lay,{n:3,q:3,close:false,fit:true,beside:true});
+  if(process.env.SHOT)await p.screenshot({path:process.env.SHOT+'/menu.png'});
+  await p.mouse.click(40,600);await p.waitForSelector('#refreshMenu',{state:'detached'});
   assert.equal(errors.length,0,errors.join('\n'));
   console.log('320px map pill: explicit choices, zero paid refresh, other grades, cancel, history and cache-clear retention passed');
  }finally{await browser.close();}

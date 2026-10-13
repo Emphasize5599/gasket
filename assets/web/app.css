@@ -59,8 +59,10 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 #btnRefresh::after { content: '▾'; font-size: 10px; }
 .log-time { display: block; font-size: 11px; color: var(--ink-2); white-space: normal; overflow-wrap: anywhere; margin-top: 3px; }
 .refresh-menu { position: fixed; z-index: 2200; right: 12px; top: calc(var(--st) + 64px); max-width: calc(100vw - 24px); background: var(--surface); box-shadow: var(--shadow); border-radius: 18px; padding: 8px; }
-.refresh-menu button { display: block; text-align: left; width: 100%; padding: 12px; border-radius: 999px; }
-.refresh-menu button:hover { background: var(--surface-2); }
+.refresh-menu { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 10px; padding: 12px; width: 300px; }
+.refresh-menu .btn { height: auto; min-height: 48px; padding: 8px 14px; font-size: 15px; line-height: 1.2; white-space: normal; }
+.refresh-menu .btn:disabled { opacity: .45; }
+.refresh-menu .qi { margin: 0; }
 .map-price-progress { position: fixed; z-index: 1100; left: 12px; right: 12px; top: calc(var(--st) + 110px); }
 .price-refresh-card .parse-load, .map-price-progress .parse-load { margin-bottom: 12px; }
 .scan-launches { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto; align-items: center; column-gap: 8px; row-gap: 10px; margin: 14px 0; }

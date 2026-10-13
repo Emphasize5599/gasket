@@ -1326,10 +1326,15 @@
   function refreshMenu(anchor,api,web,allowWeb,discover){
     var old=$('refreshMenu');if(old){old.remove();return;}
     var menu=document.createElement('div');menu.id='refreshMenu';menu.className='refresh-menu';menu.setAttribute('role','menu');
-    menu.innerHTML='<button data-refresh="web" role="menuitem"'+(!allowWeb?' disabled':'')+'>No API · refresh saved prices</button><button data-refresh="discover" role="menuitem">No API · discover stations</button><div class="lead small">Slower · coverage varies '+qBtn('Website discovery scrolls each search result list in overlapping areas. It can miss stations or prices. An API key is recommended for faster, more reliable discovery.')+'</div><button data-refresh="api" role="menuitem"'+(!S.apiKey?' disabled':'')+'>API · discover stations</button><button data-refresh="close" role="menuitem">Close</button>';
+    // the same blue buttons as the trip's refresh card, each with its (?) beside it; a tap anywhere else closes it
+    var row=function(k,label,off,help){return '<button class="btn primary" data-refresh="'+k+'" role="menuitem"'+(off?' disabled':'')+'>'+label+'</button>'+qBtn(help);};
+    menu.innerHTML=row('web','Refresh prices · No API',!allowWeb,'Updates the prices of the stations already on the map from the Google Maps website, Walmart and Murphy USA. No API calls.'+(!allowWeb?' Nothing on the map to refresh yet.':''))+
+      row('discover','Discover stations · No API',false,'Finds the stations around here from the Google Maps website. Slower: it scrolls each result list in overlapping areas and can miss stations or prices. An API key is recommended for faster, more reliable discovery.')+
+      row('api','Discover stations · API',!S.apiKey,'Finds the stations around here with Google\'s Places API: fast and complete, but it counts toward your monthly lookups.'+(!S.apiKey?' Add the recommended API key in Settings to use this.':''));
     document.body.appendChild(menu);
-    menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();if(b.dataset.refresh==='discover'&&discover)discover();};
-    menu.querySelector('button:not(:disabled)').focus();
+    var away=function(e){if(menu.contains(e.target)||anchor.contains(e.target)||e.target.closest('.qpop'))return;menu.remove();document.removeEventListener('pointerdown',away,true);};
+    setTimeout(function(){document.addEventListener('pointerdown',away,true);},0);
+    menu.onclick=function(e){var b=e.target.closest('[data-refresh]');if(!b||b.disabled)return;menu.remove();document.removeEventListener('pointerdown',away,true);if(b.dataset.refresh==='web')web();if(b.dataset.refresh==='api')api();if(b.dataset.refresh==='discover'&&discover)discover();};
   }
   async function refreshKnownMap(){
     if(pending||$('mapPriceProgress'))return;

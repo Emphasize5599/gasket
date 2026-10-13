@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.125 - 2026-10-13 (keyless test branch only)
+- **Website routes follow the roads.** Without a key, a route's line now comes from the Google Maps page's own full drawing (thousands of points, simplified to about 10 m) instead of a few dozen points, so the map, detours, hazards and speed-by-road stretches line up with the real roads.
+- **Main map refresh menu:** the same blue buttons as the trip, each with its (?) beside it; no Close button (tap anywhere else).
+- **Walmart lookups no longer time out** on long trips: smaller batches, and a slow batch is read again in halves before it counts as an error.
+
 ## 0.0.124 - 2026-10-13 (keyless test branch only)
 - **Turn-by-turn directions without an API key.** The Google Maps website's own directions (road names, each stretch's miles and time) are now read for each route, so website routes know their roads like API routes do, and **cruising speed works without a key** on any route Maps sent them for.
 - **Hazards no longer hang** waiting for the on-phone AI. Warnings are sorted by their wording at once; while the AI is still summarizing, the list says so and updates by itself when it's done.

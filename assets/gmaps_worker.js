@@ -33,21 +33,65 @@ async function (reqId, args) {
       if (!e) return [];
       const t = await (await fetch(e.name, { credentials: 'include', cache: 'force-cache' })).text();
       const d = JSON.parse(t.slice(t.indexOf('\n') + 1));
-      const list = (d && d[0] && d[0][1]) || [];
-      return list.map((r) => {
-        const head = r[0] || [], pts = [];
-        (function walk(x) {
-          if (!Array.isArray(x)) return;
-          if (x.length === 4 && x[0] === null && x[1] === null && typeof x[2] === 'number' && typeof x[3] === 'number') { pts.push([x[2], x[3]]); return; }
-          x.forEach(walk);
-        })(r[1]);
+      const list = (d && d[0] && d[0][1]) || [], lines = (d && d[0] && d[0][7]) || [];
+      return list.map((r, idx) => {
+        const head = r[0] || [];
+        let pts = line(lines[idx], head);
+        if (!pts) {         // no full line: the steps' own points (a few per turn)
+          pts = [];
+          (function walk(x) {
+            if (!Array.isArray(x)) return;
+            if (x.length === 4 && x[0] === null && x[1] === null && typeof x[2] === 'number' && typeof x[3] === 'number') { pts.push([x[2], x[3]]); return; }
+            x.forEach(walk);
+          })(r[1]);
+        }
         const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + hav(pts[i - 1], pts[i]));
-        const L = cum[cum.length - 1] || 1, thin = [];
-        for (let k = 0, j = 0; k <= 2000; k++) { const want = L * k / 2000; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
+        const L = cum[cum.length - 1] || 1;
+        let thin = [];
+        if (pts.length > 2000 || pts.full) thin = pts;     // the full line, already simplified
+        else for (let k = 0, j = 0; k <= 2000; k++) { const want = L * k / 2000; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
         return { via: String(head[1] || ''), miles: head[2] ? head[2][0] / 1609.344 : null, minutes: head[3] ? head[3][0] / 60 : null,
           pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]), steps: steps(r, head) };
       }).filter((x) => x.pts.length > 5);
     } catch (e) { return []; }
+  }
+  /** The route's whole line, as the page draws it: [lat × 1e7 steps, lng × 1e7 steps, …] added up point by point. Kept
+   *  only when it's as long as the route, then simplified to about 10 m (a turn's shape stays, straight road thins out
+   *  to a point every quarter mile), at most 25,000 points. */
+  function line(g, head) {
+    try {
+      if (!g || !Array.isArray(g[0]) || !Array.isArray(g[1]) || g[0].length !== g[1].length || g[0].length < 10) return null;
+      let la = 0, ln = 0; const pts = g[0].map((v, k) => { la += v; ln += g[1][k]; return [la / 1e7, ln / 1e7]; });
+      let L = 0; for (let k = 1; k < pts.length; k++) L += hav(pts[k - 1], pts[k]);
+      const want = head[2] && head[2][0] / 1609.344;
+      if (!want || Math.abs(L - want) > want * 0.03) return null;
+      let tol = 0.0001, out = simplify(pts, tol);
+      while (out.length > 25000) { tol *= 2; out = simplify(pts, tol); }
+      out = out.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]); out.full = true;
+      return out;
+    } catch (e) { return null; }
+  }
+  /** Douglas–Peucker in degrees (longitude scaled by the latitude), without recursion. */
+  function simplify(pts, tol) {
+    const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+    const kx = Math.cos(pts[0][0] * Math.PI / 180), stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      const [a, b] = stack.pop(); let far = -1, fd = 0;
+      const ax = pts[a][1] * kx, ay = pts[a][0], dx = pts[b][1] * kx - ax, dy = pts[b][0] - ay, L2 = dx * dx + dy * dy || 1e-18;
+      for (let i = a + 1; i < b; i++) {
+        const px = pts[i][1] * kx - ax, py = pts[i][0] - ay, t = Math.max(0, Math.min(1, (px * dx + py * dy) / L2));
+        const ex = px - t * dx, ey = py - t * dy, dd = ex * ex + ey * ey;
+        if (dd > fd) { fd = dd; far = i; }
+      }
+      if (far > 0 && fd > tol * tol) { keep[far] = 1; stack.push([a, far], [far, b]); }
+    }
+    // and a point at least every quarter mile, so short stretches of a straight road still have points of their own
+    const out = []; let since = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (i) since += hav(pts[i - 1], pts[i]);
+      if (keep[i] || since >= 0.25) { out.push(pts[i]); since = 0; }
+    }
+    return out;
   }
   /** The route's turn-by-turn steps as Maps lists them: [meters, seconds, "Take exit 143A to merge onto I-40 W…"] (the
    *  distance is what you drive after that instruction). Only when they add up to the whole route: Maps sometimes
