@@ -140,8 +140,7 @@
   }
   /** Rate the recalls not rated yet (loading the model the first time); calls done() after each group that's in.
    *  One run at a time: recalls asked for while it runs join the queue (a redraw asking again adds nothing). In the
-   *  background worker, a few at once and straight on while Advisory is on screen (a pause between groups when it
-   *  isn't); in the page, one at a time with a pause (a long one when Advisory isn't on screen). */
+   *  background worker, a few at once without foreground-only delays; the page fallback yields between texts. */
   var queue = [], queued = {}, dones = [], running = false;
   var watching = function () { return true; };    // Advisory says whether it's on screen (focus)
   function rate(list, done) {
@@ -165,7 +164,7 @@
         if (!queue.length || mock) break;
         if (root.__app && root.__app.save) root.__app.save();
         tell();                                                                           // show the ones done so far
-        await rest(mode === 'worker' ? (watching() ? 0 : 2500) : (watching() ? 250 : 6000));
+        await rest(mode === 'worker' ? 0 : 250); // worker batches continue in the background; page fallback still yields
       }
       finish();
     })().catch(function (e) { if (root.FLog) root.FLog.warn('car', 'Couldn\'t load the recall rating model', String(e && e.message || e)); finish(); });

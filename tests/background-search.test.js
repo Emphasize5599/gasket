@@ -38,6 +38,8 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     await discover();
     assert.equal(await p.locator('#jobBar:not(.hidden)').count(), 0, 'Adjustments shows its own progress');
     assert.ok(await p.locator('#taResults .prog-load [data-cancel-search]:visible').count() >= 1, 'with its own ✕');
+    assert.equal(await p.locator('#taResults .card.skel .prog-load').count(),0,'buffer/detour skeletons do not repeat station discovery progress');
+    assert.equal(await p.locator('#taResults .price-refresh-card .prog-load').count(),1,'scan progress belongs in the refresh tile');
     assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, true, true, false, true, true],
       'Garage, Route, Hazards (they would change it) and Stops, Departure (it is about to change them) closed while it runs');
     // Advice and Parameters still open, and Advice's tab row goes on to Parameters

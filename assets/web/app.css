@@ -170,6 +170,20 @@ body.trip-on .top .fuel-controls { display: none !important; }
 .page .lead { color: var(--ink-2); margin: 0 0 14px; }
 .card { background: var(--surface); border-radius: 22px; padding: 6px 16px; margin: 12px 0; }
 .card h3 { margin: 12px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--accent); }
+/* Tile headings stick within their own tile, never beyond its bottom edge. */
+.page { --tile-top: var(--st); }
+.tp-body { --tile-top: 0px; }
+.card > h3, .card > .g-top, .bufbox > .tb-h, .routebox > .tb-h,
+.topbox > .tb-h, .spdbox > .tb-h, .card > .sk-h {
+  position: sticky; top: var(--tile-top, 0px); z-index: 2; background: var(--surface);
+  padding-top: 8px; padding-bottom: 8px; box-shadow: 0 6px 8px -8px rgba(0,0,0,.35);
+}
+.tile-header, .card > .sec-row, .card > details > summary, .stop > .s-top {
+  position: sticky; top: var(--tile-top,0px); z-index: 2; background: var(--surface); padding-top: 6px; padding-bottom: 6px;
+}
+.bufbox, .routebox, .topbox, .spdbox { background: var(--surface); }
+.ideal > .ideal-h { position: sticky; top: var(--tile-top,0px); z-index: 2; background: var(--surface-2); padding: 6px 0; }
+.sub-body { --tile-top: calc(var(--st) + var(--sub-head-h, 44px)); }
 .field { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
 .field:last-child { border-bottom: 0; }
 .field .lbl { flex: 1; min-width: 0; }
@@ -1363,7 +1377,7 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .vin-eye svg { width: 22px; height: 22px; fill: currentColor; }
 /* a submenu: its own page with a Back bar */
 .page.sub-page { z-index: 1010; padding-top: calc(var(--st) + 4px); }
-.sub-bar { position: sticky; top: calc(-1 * var(--st) - 4px); z-index: 2; display: flex; align-items: center; gap: 6px; background: var(--bg); padding: 6px 0 8px; margin: 0 -2px; }
+.sub-bar { position: sticky; top: var(--st); z-index: 4; display: flex; align-items: center; gap: 6px; background: var(--bg); padding: 6px 0 8px; margin: 0 -2px; }
 .sub-bar h2 { font-size: 18px; margin: 0; line-height: 1.25; min-width: 0; }
 .sub-back { flex: none; width: 40px; height: 40px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--surface-2); border: 0; color: var(--ink); }
 .sub-back svg { width: 24px; height: 24px; fill: currentColor; }
@@ -1648,6 +1662,7 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .tz-tip small { color: var(--ink-2); }
 .epa-grid.filling select { opacity: .55; pointer-events: none; transition: opacity .2s; }
 .prog-load .pl-x { flex: none; width: 32px; height: 32px; margin-left: 4px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); font-size: 15px; }
-.price-refresh-card .prog-load .pl-x { display: none; }   /* the card has its own Cancel */
+.price-refresh-card .prog-load .pl-x { display: grid; }   /* this tile owns scan progress and cancellation */
+.hz-opt .hz-o2:has(.hz-ld) { flex-wrap: wrap; white-space: normal; }
 .via-add { margin: 2px 0 12px; }
 .via-row .via-x { color: var(--ink-2); font-size: 15px; }

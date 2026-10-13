@@ -99,7 +99,7 @@
     var webHelp='Best for price refreshes at stations already saved with this trip. No Places or Routes calls. '+(web?'Estimated '+(estimate.seconds<60?'under a minute':'about '+minutes+' minutes')+' for '+estimate.areas+' areas with '+estimate.readers+' readers'+(estimate.measured?', based on recent scans':'; initial estimate, refined while scanning')+'. Cache reuse and website restrictions affect timing. ':'Find stations first or open a saved trip to estimate the refresh time. ')+'Only explicitly published fuel-grade prices are used; missing prices remain unchanged.';
     var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'')+(!S.apiKey?' Add the recommended API key in Settings to use this option.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
-      (priceRefreshActive?progBar('Refreshing saved prices')+'<button class="btn tonal sm" data-cancel-prices>Cancel</button>':
+      (busy?progBar(priceRefreshActive?'Refreshing saved prices':'Discovering stations'):
       '<div class="scan-launches"><span class="split-btn"><button class="btn primary" data-trip-refresh="web"'+(!web?' disabled':'')+'>'+RF_ICON+'No API</button>'+
         '<button type="button" class="btn primary split-dd" data-split aria-haspopup="true" aria-expanded="false" aria-label="More No API options">▾</button></span>'+A.qBtn(webHelp)+
         '<button class="btn primary" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>'+RF_ICON+'API</button>'+A.qBtn(apiHelp)+
@@ -143,7 +143,7 @@
       skelCard(KIND() === 'ev' ? 'Charge when you arrive' : 'Gas when you arrive', '<div class="sk-big"></div>') + '</div>';
   }
   function skelAdjust(label) {
-    return refreshCard()+tipBox() + skelCard('Buffer for this trip', progBar(label) + '<div class="sk-slider"></div>') +
+    return refreshCard()+tipBox() + skelCard('Buffer for this trip', '<div class="sk-slider"></div>') +
       skelCard('Max. detour per stop', '<div class="sk-slider"></div>') + skelCard('Cruising speed', '<div class="sk-slider"></div>');
   }
   function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; b._sub = null; } routeGate(); if (typeof backMode === 'function') backMode(); }
@@ -402,6 +402,7 @@
   }
   async function getRoutes() {
     if (busy) return;
+    hzWarm();
     collectSafe();
     if (srcOf() === 'link') { if (!S.trip.link) { flag($('tLink'), 'box', 'Paste a Google Maps directions link.'); return; } }
     else {
@@ -1349,6 +1350,7 @@
     busy = false; routing = false; freshRoutes = false;
     progEnd();
     renderInfo();
+    if (model) hzPreload();
   }
   function carModel() { return Garage.carModel(); }
 
@@ -2860,10 +2862,12 @@
   // ---------- step 4: Hazards — each leg's route, picked on the big map with the weather and hazards along each one ----------
   // Every option for the leg is drawn; each hazard is a colored stretch where and when you'd be in it (RouteWx.forRoute),
   // labeled on the chosen route only. Departure shows the chosen routes' stretches, without labels.
+  var wxFlight=new Map();
   function wxGet(url) {       // forecasts are kept 45 min, warnings 10 min, which NWS grid square a point is in 30 days
     var o = A.KV.get('wx', url, /weather\.gov\/points\//.test(url) ? 30 * 864e5 : /weather\.gov\/alerts/.test(url) ? 10 * 60e3 : 45 * 60e3);
     if (o) return Promise.resolve(o.v);
-    return call('fetchJson', url).then(function (r) { if (r && r.body) A.KV.put('wx', url, r); return r; });
+    if(wxFlight.has(url))return wxFlight.get(url);
+    var pending=call('fetchJson', url).then(function (r) { if (r && r.body) A.KV.put('wx', url, r); return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
   }
   function wxWhen(a, b) {
     var day = function (t) { return new Date(t).toDateString(); }, multi = day(a) !== day(Date.now()) || day(b) !== day(a);
@@ -2889,7 +2893,14 @@
     if (!countiesP) countiesP = new Promise(function (ok) { var sc = document.createElement('script'); sc.src = 'counties.js'; sc.onload = ok; sc.onerror = function () { countiesP = null; ok(); }; document.head.appendChild(sc); });
     return countiesP;
   }
-  function hzEntry(a, i) { var d = Math.round(hzDepart(i) / 6e4), e = hzCache.get(a); if (!e || e.d !== d) { e = { d: d, st: null }; hzCache.set(a, e); } return e; }
+  // Live "Now" must not invalidate completed work every minute. Reuse for ten minutes;
+  // explicitly selected departure/earlier-leg timing changes still invalidate immediately.
+  function hzEntry(a, i) { var d = Math.round(hzDepart(i) / 6e4), e = hzCache.get(a), live = !!S.trip.departNow;
+    var timing=[];for(var j=0;j<i;j++)timing.push(hzSel(j)+':'+String((hzAlts(j)[hzSel(j)]||{}).duration));
+    var key=timing.join('|')+'|'+(S.trip.returnTrip&&!backAuto()?S.trip.backAt||'':'');
+    if (!e || e.live !== live || e.timeKey!==key || (live ? Math.abs(e.d-d)>=10 : e.d!==d)) { e = { d: d, live:live, timeKey:key, st: null }; hzCache.set(a, e); } return e; }
+  function hzWarm() { if (aiCan() && Severity.state()==='idle') Severity.compare('warm up', {a:['warm up']}); }
+  async function hzPreload() { hzWarm();var owner=route; for(var i=0;i<hzLegs()&&route===owner;i++) await hzLoadLeg(i); }
   async function hzLoad(a, i) {
     var e = hzEntry(a, i); if (e.st) return e;
     e.st = 'loading'; var t0 = Date.now();
@@ -2897,7 +2908,7 @@
       var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties, onProg: function (f) { e.prog = f; hzBars(); },
         countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.state && Severity.state() === 'ready' ? Severity.compare : null,   // never waits for the model to load
         digestMs: e.aiTry ? 60000 : null });    // the re-read once the model is ready: it may be queued behind recalls, so it gets a minute
-      e.st = 'done'; e.hz = r.hazards; e.stats = r.stats;
+      e.st = 'done'; e.hz = r.hazards; e.stats = r.stats; e.reading = r;
       // no model coming, or it already had its one re-read: the wording is the answer (never read again and again)
       if (!aiCan() || e.aiTry) { if (e.stats.aiPending) LG.info('wx', 'Warnings kept as read from their wording', { pending: e.stats.aiPending }); e.stats.aiPending = 0; e.hz.forEach(function (x) { x.aiPending = false; }); }
       if (e.stats.aiPending) hzAiWatch(a, i);
@@ -2910,7 +2921,7 @@
   /** Routes whose warnings were read by their wording while the model was busy: read again once it's ready. */
   var hzAiWait = [], hzAiT = 0, hzAiKick = false;
   function hzAiWatch(a, i) {
-    hzAiWait.push({ a: a, i: i });
+    var entry=hzCache.get(a);if(!hzAiWait.some(function(w){return w.e===entry;}))hzAiWait.push({ a: a, i: i, e:entry });
     if (hzAiT) return;
     hzAiT = setInterval(async function () {
       if (!aiCan()) { clearInterval(hzAiT); hzAiT = 0; hzAiWait.forEach(function (w) { var e = hzCache.get(w.a); if (e && e.stats) { e.stats.aiPending = 0; (e.hz || []).forEach(function (x) { x.aiPending = false; }); } }); hzAiWait = []; if (step === ST_HAZ) renderHz(); return; }
@@ -2919,8 +2930,13 @@
       var todo = hzAiWait; hzAiWait = [];
       LG.info('wx', 'The model is ready: reading ' + todo.length + ' route(s) warnings again');
       for (var k = 0; k < todo.length; k++) {
-        var e = hzCache.get(todo[k].a); if (!e || e.st !== 'done' || !e.stats.aiPending) continue;
-        e.st = null; e.aiTry = 1; await hzLoad(todo[k].a, todo[k].i);   // its forecasts and warnings are cached: only the reading is redone, once
+        var e = todo[k].e; if (hzCache.get(todo[k].a)!==e || e.st !== 'done' || !e.stats.aiPending || e.aiTry) continue;
+        e.aiTry=1; e.aiRating=true;
+        if(step===ST_HAZ&&hzLeg===todo[k].i)renderHz();
+        try { var rated=await RouteWx.rerate(e.reading,Severity.compare,window.US_COUNTIES&&function(f){return US_COUNTIES[f];},60000); e.hz=rated.hazards;e.stats=rated.stats; }
+        catch(err){LG.warn('wx','AI warning rating failed; keeping wording',String(err&&err.message||err));}
+        if(e.stats.aiPending)LG.info('wx','AI did not finish; keeping warnings as read from their wording',{pending:e.stats.aiPending});
+        e.aiRating=false;e.stats.aiPending=0;(e.hz||[]).forEach(function(x){x.aiPending=false;});
         if (step === ST_HAZ && hzLeg === todo[k].i) { renderHz(); drawHaz(); }
       }
     }, 2000);
@@ -2995,7 +3011,7 @@
       var e = hzCache.get(a), mi = Math.round((a.distanceMeters || 0) / 1609.344), sec = parseFloat(String(a.duration || '0')), chips;
       if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">Checking the weather along it…</span><span class="hz-bar"><i style="width:' + Math.round(Math.max(0.04, e && e.prog || 0) * 100) + '%"></i></span>';
       else if (e.st === 'error') chips = '<span class="hz-ld">couldn\'t check</span>';
-      else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; }
+      else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; if(e.aiRating)chips+='<span class="hz-ld">AI rating warnings…</span>'; }
       // which one Google Maps had (your link), as before
       var note = list.length === 1 ? 'Google\'s only route' : legsMode() ? '' : k === altSel && pickedRoute(route) ? (altSure ? '✓ same as in Google Maps' : 'closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? 'matches your link' : '');
       return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +

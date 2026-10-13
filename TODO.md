@@ -13,9 +13,11 @@ Things the owner wants, saved for later. Add to it as ideas come up; take an ite
 - **Flex-fuel cars as their own fuel type.** The VIN decode already knows a car is flex-fuel (NHTSA's FuelTypeSecondary "Ethanol (E85)"; used since 0.0.129 only to tell the EPA's "FFV" versions apart). Still to do: E85 as a grade (prices: Maps lists it at some stations, AFDC lists E85 stations), the EPA's E85 mileage (`cityA08` / `highwayA08` / `combA08`, its alternate-fuel numbers), and plans that weigh E85's lower price against its ~25% lower mileage.
 
 ## Garage
+- **Marketing trim from VIN when NHTSA omits it.** Manufacturer-backed lookup or a verified generic mapping, not an AI guess or conversion of internal grade codes. Secondary trim text is supported; internal grade codes remain unresolved.
 - **Car pictures:** NHTSA, Wikimedia Commons, the doodle, and Fuel API (owner's key, watermark as delivered) for factory colors, as of 0.0.86. A paid Fuel API plan would drop the FUEL watermark (COMPLIANCE.md #9). Doodles could get more detail (wheels, roof racks, two-tone).
 
 ## Cowork session (needs a web browser)
 Work for a session that can open the sites themselves.
+- **Automatic VIN recall lookup reliability.** NHTSA can decline background reads; 0.0.130 clearly preserves that as unresolved and offers the visible page. Investigate legitimate manufacturer/NHTSA-supported options without bypassing website checks.
 - **Tire Rack drops tires from a size's list.** 195/65R15 read 77 tires but kept 70: 7 were rejected with "No product card with a size was found" (Continental ProContact TX ×2, Kumho Solus TA31, Bridgestone Ecopia EP422 Plus, Nexen N Priz AH8, Yokohama AVID S33D and S33B). Look at those products' cards on TireSearchResults.jsp and fix `tirerack_worker.js`'s card reading.
 - **Tire Rack versions lookup fails right after a list read.** For the next car looked up, step `clars` failed after 97 ms with "Failed to fetch" while the reader was still on the 195/65R15 results page (`https://www.tirerack.com/tires/TireSearchResults.jsp?...`). The ValidationServlet request probably needs the reader back on a page where it's allowed (or a fresh load) between steps.

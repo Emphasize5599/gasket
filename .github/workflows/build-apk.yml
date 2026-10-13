@@ -35,6 +35,11 @@ on:
       - tests/discovery-log.test.js
       - tests/routewx.test.js
       - tests/speed-nokey.test.js
+      - tests/tile-hazards.test.js
+      - tests/vin-trim.test.js
+      - tests/recall-check.test.js
+      - tests/nhtsa-reader.test.js
+      - tests/background-search.test.js
 
 permissions:
   contents: write

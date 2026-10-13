@@ -72,10 +72,10 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   await p.evaluate(()=>__trip.step(6));
   await p.evaluate(()=>{__app.KV.clear('gasweb');__app.N.siteRead=(id,key,args)=>{};__app.N.cancelSiteRead=key=>{window.__cancelKey=key;};});
   await p.click('#taResults [data-trip-refresh="web"]');
-  await p.waitForSelector('#taResults [data-cancel-prices]');
+  await p.waitForSelector('#taResults [data-cancel-search]');
   await p.waitForFunction(()=>document.querySelector('#taResults').textContent.includes('Estimating time'));
   assert.match(await p.innerText('#taResults'),/Estimating time/);
-  await p.click('#taResults [data-cancel-prices]');
+  await p.click('#taResults [data-cancel-search]');
   await p.waitForFunction(()=>!__trip.state().busy);
   assert.equal(await p.evaluate(()=>__app.KV.get('trips','trip|saved-test').v.stations.priceRefresh.cancelled),true);
   assert.equal(await p.evaluate(()=>PriceHistory.history({brand:'exxon',id:__originalStations[0].id},{grade:'regular'}).some(r=>r.price===3.12)),true);

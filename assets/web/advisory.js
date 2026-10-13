@@ -38,6 +38,7 @@
         return { id: x.NHTSACampaignNumber, date: x.ReportReceivedDate, comp: x.Component, sum: x.Summary, cons: x.Consequence, fix: x.Remedy, park: !!x.parkIt, out: !!x.parkOutSide, ota: !!x.overTheAirUpdate };
       }) };
       LG.info('car', 'Recalls on record for ' + G().shortName(c) + ': ' + list.length);
+      preRate(c);
       save();
     } catch (e) { LG.warn('car', 'Recall list', String(e.message || e)); c.recalls = c.recalls && c.recalls.key === key ? c.recalls : { t: Date.now(), key: key, list: null, error: true }; }
     busy[c.id] = false;
@@ -49,40 +50,44 @@
 
   // ---------- reading NHTSA's VIN page: in the background like the price sites (siteRead), or shown to you (siteShow).
   // The page does its own checks as in any browser; nothing is ever solved or got around. ----------
-  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, READER = 2, autoBusy = {}, autoRetried = {};
+  var AUTO_DAYS = 7, AUTO_RETRY_H = 0.5, READER = 3, autoBusy = {}, autoRetried = {};
   /** Check the VIN by itself when there's no check from the last week (and no failed try in the last few hours). */
   function autoCheck(c) {
     if (!c || !c.vin || !call || !N.siteRead || autoBusy[c.id]) return;
     var chk = vinCheck(c); if (chk && days(chk.t) < AUTO_DAYS) return;
     // only a failed try waits (half an hour) before the next. A try that never finished (the app was closed while it ran)
     // doesn't count, and neither does one from before the reader knew NHTSA's "N Unrepaired Recalls Found".
-    var tried = c.recallAuto; if (tried && tried.vin === c.vin && tried.failed && tried.r === READER && Date.now() - tried.t < AUTO_RETRY_H * 3600e3) return;
+    var tried = c.recallAuto; if (tried && tried.vin === c.vin && tried.failed && tried.r === READER && (tried.needsUser || Date.now() - tried.t < AUTO_RETRY_H * 3600e3)) return;
     var vin = c.vin, done = false, t0 = Date.now();
     autoBusy[c.id] = true; LG.info('car', 'Checking the VIN with NHTSA in the background');
     var finish = function (r) {
-      if (done) return; done = true; autoBusy[c.id] = false;
+      if (done) return; done = true; clearTimeout(timeout); autoBusy[c.id] = false;
+      if(c.vin!==vin){autoCheck(c);return;}
       LG.info('car', 'Background VIN check took ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
-      if (!r || r.error || r.blocked || r.closed || c.vin !== vin) {
-        c.recallAuto = { vin: vin, t: Date.now(), failed: true, r: READER }; save();
+      if (!validCheck(r)) {
+        c.recallAuto = { vin: vin, t: Date.now(), failed: true, r: READER, needsUser:!!(r&&(r.refused||r.blocked)) }; save();
         // NHTSA's page sometimes just errors ("an unknown error occurred"): one more try a little later, by itself
         // (never after a check on the page: that waits for you)
         if (!(r && (r.blocked || r.refused)) && !autoRetried[c.id + vin]) {
           autoRetried[c.id + vin] = true; LG.info('car', 'Trying the VIN check again in 20 s');
           setTimeout(function () { if (c.vin === vin) { c.recallAuto = null; autoCheck(c); } }, 20000);
         }
-        LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA\'s lookup turned the hidden window down (its invisible reCAPTCHA): ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no reply in a minute');
+        LG.warn('car', 'Automatic VIN recall check got no answer', r && (r.refused ? 'NHTSA declined the lookup; open its page to check: ' + r.error : r.error || (r.blocked ? 'blocked by a check on NHTSA\'s page' : r.closed ? 'closed' : '')) || 'no valid reply in a minute');
       } else record(c, vin, r, true);
       if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }
     };
-    setTimeout(function () { finish(null); }, 60000);   // it normally answers in 5-10 s
+    var timeout=setTimeout(function () { finish(null); }, 60000);
     call('siteRead', 'nhtsa', JSON.stringify({ url: VIN_PAGE + encodeURIComponent(vin), bg: true })).then(finish);
     setTimeout(function () { if (!done && host && host.isConnected && car() === c) draw(); }, 0);   // (may be asked from inside a draw)
   }
+  function validCheck(r){return !!(r&&!r.error&&!r.blocked&&!r.closed&&!r.refused&&/^(?:0|[1-9]\d?)$/.test(String(r.open))&&Number.isInteger(Number(r.open)));}
   function record(c, vin, r, quiet) {
+    if(!validCheck(r))return;
     c.recallCheck = { t: Date.now(), vin: vin, open: +r.open || 0, campaigns: (r.campaigns || []).slice(0, 30), items: (r.items || []).slice(0, 30) };
     c.recallAuto = { vin: vin, t: Date.now() };
     LG.info('car', 'VIN recall check' + (quiet ? ' (automatic)' : '') + ': ' + c.recallCheck.open + ' open');
     save(); changed();
+    preRate(c);
   }
   // ---------- shown to you (the button) ----------
   var pendingCheck = null;
@@ -97,7 +102,7 @@
     if (!p || !r || r.closed) return;              // closed before NHTSA answered: nothing to record
     var c = (S.cars || []).filter(function (x) { return x.id === p.carId; })[0];
     if (!c || c.vin !== p.vin) return;
-    if (r.error) { A.toast && A.toast(r.error); LG.warn('car', 'VIN recall check', r.error); return; }
+    if (!validCheck(r)) { A.toast && A.toast(r.error || 'NHTSA did not return a recall count.'); LG.warn('car', 'VIN recall check', r.error || 'No valid recall count'); return; }
     record(c, p.vin, r, false);
     // no popup: Advisory shows the answer
     if (car() === c) draw();
@@ -153,8 +158,7 @@
   /** The dot on the Advisory step tab: something worth a look. */
   function syncDot() { var b = document.querySelector('#tpSteps [data-step="2"]'); if (b) b.classList.toggle('attn', attention() > 0); }
   var listOpen = false;
-  // drawn only while it's on screen (switching cars elsewhere mustn't start rating recalls behind your back); shown again
-  // later, it catches up (wake)
+  // Draw only on screen; background lookups and ratings continue and wake catches up.
   var stale = false;
   function draw() {
     if (!host) return;
@@ -175,7 +179,7 @@
     if (!R || R.key !== key || days(R.t) > 7 || (R.error && Date.now() - R.t > 3600e3)) fetchRecalls(c);
     var list = onRecord(c), chk = vinCheck(c), nm = name(c);
     // the recalls still open on your car (once the VIN is checked at NHTSA) are shown first, outside the list, and rated
-    // right away; the rest wait in the folded list, rated only once you open it
+    // right away; background prefetch also rates the rest before the folded list is opened
     var openL = chk && chk.open > 0 ? (list || []).filter(function (x) { return (chk.campaigns || []).indexOf(x.id) >= 0; }) : [];
     var rest = (list || []).filter(function (x) { return openL.indexOf(x) < 0; });
     restList = rest;
@@ -200,7 +204,7 @@
       // only when the background check couldn't get an answer (or can't run here): NHTSA's page, shown to you
       var failed = c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed;
       h += '<div class="adv-state"><b>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) : 'See if your car has open recalls') + '</b>' +
-        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? 'NHTSA didn\'t answer the automatic check. Gasket tries again in half an hour, or open its page now.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
+        '<small>' + (n ? 'Yours may already be fixed. ' : '') + (failed ? c.recallAuto.needsUser ? 'NHTSA declined the background lookup. Open its page to complete any check and read the result; this is not a zero-recall result.' : 'NHTSA didn\'t answer the automatic check. Gasket tries again in half an hour, or open its page now.' : 'NHTSA can tell from your VIN which recalls are still open on your car.') + '</small></div>' +
         '<div class="btns wrap"><button class="btn primary sm" id="advCheck">Check my car at NHTSA</button></div>';
     } else if (!list && busy[c.id]) {
       h += A.ldBar('Getting the recalls on record from NHTSA');   // the card is there right away; it fills in when they arrive
@@ -210,7 +214,7 @@
     }
     if (rest.length) {
       var lab = !chk ? 'See the recalls' : openL.length ? rest.length + ' more on record (fixed on yours, or for other ' + nm + 's)' : 'All ' + n + ' recalls on record for this model';
-      h += '<details class="rc-list" id="advList"' + (listOpen ? ' open' : '') + '><summary>' + esc(lab) + '</summary>' + (listOpen ? bySeverity(rest) : rest).map(recallItem).join('') + '</details>';
+      h += '<details class="rc-list" id="advList"' + (listOpen ? ' open' : '') + '><summary>' + esc(lab) + '</summary>' + bySeverity(rest).map(recallItem).join('') + '</details>';
     }
     if (park && !(chk && !chk.open)) h += '<div class="lead small keep"><b>One of these says not to drive the car, or to park it outside, until it\'s fixed.</b></div>';
     return h + '</div>';
@@ -220,6 +224,7 @@
   /** Rate what isn't rated yet (the model loads the first time), then draw again. */
   function onRated() { if (host && host.isConnected) draw(); }       // one callback (the rater calls it after each batch)
   function rateAll(list) { if (window.Severity && list && list.length) Severity.rate(list, onRated); }
+  function preRate(c){var list=onRecord(c)||[],chk=vinCheck(c),open=chk&&chk.campaigns||[];rateAll(list.filter(function(x){return open.indexOf(x.id)>=0;}).concat(list.filter(function(x){return open.indexOf(x.id)<0;})));}
   // the rater works harder while Advisory is what you're looking at
   if (window.Severity && Severity.focus) Severity.focus(function () { return !!(host && host.isConnected && !host.closest('.hidden') && !document.hidden); });
   var SEV_NAME = { 3: 'Serious', 2: 'Moderate', 1: 'Minor' };
@@ -306,7 +311,7 @@
    * them before Advisory is opened. */
   function prefetch() { var c = car(); if (!c || !call) return; var R = c.recalls, key = recallKey(c);
     if (key && (!R || R.key !== key || days(R.t) > 7)) fetchRecalls(c); else syncDot();
-    autoCheck(c); }
+    autoCheck(c); preRate(c); }
   function init(nativeCall) { call = nativeCall || call; prefetch(); }
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
   function wake() { if (stale) draw(); }

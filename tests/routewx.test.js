@@ -81,6 +81,10 @@ assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geoco
   assert.deepEqual([sws.kind, sws.label, sws.by], ['storm', 'Strong storms', 'ai']);
   const sws2 = W.alertOf({ properties: { event: 'Special Weather Statement', description: 'Patchy dense fog this morning.' } });
   await W.digest(sws2, null); assert.deepEqual([sws2.kind, sws2.by], ['fog', 'words']);
+  const retained={alerts:[sws2],dense:pts,forecast:[{kind:'rain',level:1,fromMi:10,toMi:20}],stats:{weather:16,aiPending:1}};
+  const rated=await W.rerate(retained,async()=>({storm:.7,fog:.1}),null,100);
+  assert.equal(rated.stats.weather,16);assert.equal(rated.hazards[0].kind,'rain');assert.equal(retained.alerts[0].by,'words','AI rerating does not mutate the original reading');
+  assert.equal(rated.stats.aiPending,0);
   assert.equal(sws2.aiPending, true, 'no model: marked as still to be summarized'); assert.equal(sws.aiPending, false);
   // a model that's busy (never answers): its words after a few seconds, never a hang
   const sws3 = W.alertOf({ properties: { event: 'Special Weather Statement', description: 'Patchy dense fog this morning.' } }), t3 = Date.now();

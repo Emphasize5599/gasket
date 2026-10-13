@@ -1081,8 +1081,9 @@
     pg.innerHTML = '<div class="sub-bar"><button type="button" class="sub-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button><h2>' + esc(title) + '</h2></div><div class="sub-body"></div>';
     pg.querySelector('.sub-body').innerHTML = html;
     document.body.appendChild(pg);
+    var header=pg.querySelector('.sub-bar'),resize=new ResizeObserver(function(){pg.style.setProperty('--sub-head-h',header.getBoundingClientRect().height+'px');});resize.observe(header);
     var stop = null;
-    var close = function () { if (stop) try { stop(); } catch (e) { } if (pg._hint) pg._hint.remove(); pg.remove(); window.__subClose = null; };
+    var close = function () { resize.disconnect(); if (stop) try { stop(); } catch (e) { } if (pg._hint) pg._hint.remove(); pg.remove(); window.__subClose = null; };
     window.__subClose = close;
     pg.querySelector('.sub-back').onclick = close;
     qify(pg); scrollHint(pg);

@@ -939,11 +939,13 @@
     if (/\bport\b|multipoint|MPFI|sequential/i.test(oth)) feats.push('Port injection');
     if (/VVT|variable valve/i.test(oth)) feats.push('Variable valve timing');
     if (power !== 'gas') feats.push('Regenerative braking');
-    var trim = g('Trim'); if (/\//.test(trim)) trim = '';     // "Two Eco/Three/Four": the VIN doesn't say which
+    // Secondary trim may name the marketing trim, but internal "E grade" codes
+    // and chassis/body series are not a trustworthy marketing-trim decode.
+    var trimHint=g('Trim')||g('Trim2'),trim=trimHint;if (/\/|\bgrade\b/i.test(trim)) trim = '';
     // dual rear wheels: the VIN's wheel count, or "DRW" in its names; a weight class of 1–2 or a passenger body rules it out
     var wheels = parseInt(g('Wheels'), 10) || 0, cls = /Class\s*(\d)/i.exec(g('GVWR')), names = [g('Series'), g('Series2'), g('Trim'), g('Trim2'), g('Model')].join(' ');
     var drw = wheels >= 6 || /\bDRW\b|dual rear/i.test(names) ? 'yes' : (cls && +cls[1] <= 2) || /sedan|coupe|hatchback|wagon|convertible|sport utility|minivan|crossover/i.test(g('BodyClass')) ? 'no' : '';
-    return { year: parseInt(g('ModelYear'), 10) || 0, make: titleCase(g('Make')), model: g('Model'), trim: trim, trimHint: g('Trim'), series: g('Series'), body: g('BodyClass'),
+    return { year: parseInt(g('ModelYear'), 10) || 0, make: titleCase(g('Make')), model: g('Model'), trim: trim, trimHint: trimHint, series: g('Series'), body: g('BodyClass'),
       power: power, diesel: /diesel/i.test(fuel), flex: /E85|ethanol|flex/i.test(fuel), twoWheel: twoWheel, battery: parseFloat(g('BatteryKWh')) || 0,
       info: { engine: engine, asp: asp, trans: trans, transN: parseInt(g('TransmissionSpeeds'), 10) || '', drive: drive, features: feats, drw: drw },
       warn: g('ErrorCode') && !/^0/.test(g('ErrorCode')) ? g('ErrorText') : '' };
@@ -975,7 +977,7 @@
   async function lookupVin(c, raw) {
     var vin = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { vMsg('A VIN is 17 letters and numbers (never I, O or Q).', true); return; }
-    if (vin === c.vin && hasEpa(c) && c.epaId) { vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
+    if (vin === c.vin && c.vinDecodeRev===130 && hasEpa(c) && c.epaId) { vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
     vMsg('Decoding…');
     try {
       var r = await call('fetchJson', VPIC + 'DecodeVinValuesExtended/' + vin + '?format=json');
@@ -983,7 +985,7 @@
       var R = (JSON.parse(r.body).Results || [])[0] || {};
       var d = fromVpic(R);
       if (!d.year || !d.make || !d.model) { vMsg('NHTSA couldn\'t decode that VIN' + (R.ErrorText ? ': ' + esc(R.ErrorText) : '.'), true); return; }
-      c.vin = vin; c.year = d.year; c.make = d.make; c.model = d.model; c.vpicModel = d.model;
+      c.vin = vin; c.vinDecodeRev=130;c.year = d.year; c.make = d.make; c.model = d.model; c.vpicModel = d.model;
       if (d.body) { c.info = c.info || {}; c.info.body = d.body; }   // the doodle's body style
       if (d.trim) c.trim = d.trim;
       c.power = d.power; if (d.diesel) c.grade = 'diesel';
@@ -1006,7 +1008,7 @@
       LG.info('car', 'VIN decoded', { year: c.year, make: c.make, model: c.model, power: c.power });
       changed();
       var note = d.warn && /check digit/i.test(d.warn) ? ' <b>Note:</b> the VIN\'s check digit doesn\'t add up — double-check you typed it right.' : '';
-      var hint = !d.trim && d.trimHint ? ' The VIN can\'t tell which trim (' + esc(d.trimHint) + ') — add yours below if you like.' : '';
+      var hint = !d.trim ? ' NHTSA does not identify the marketing trim'+(d.trimHint?' (it returned '+d.trimHint+')':'')+'. Enter the trim below; verify it with your manufacturer if unsure.' : '';
       // now the EPA's mileage for it: same year, make and model, then the engine / transmission
       editing = true; epaOpen = true; draw(); epaOpen = false;
       eMsg('');

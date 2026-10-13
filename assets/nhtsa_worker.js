@@ -14,6 +14,10 @@ async function (reqId, args) {
   const t0 = Date.now();
   while (Date.now() - t0 < 45000) {
     const txt = (document.body && document.body.innerText) || '';
+    if (/verify (?:that )?you(?: are|'re) human|access denied|unusual traffic/i.test(txt)) {send({blocked:true,error:'NHTSA requires a visible site check. Open its page to continue.'});return;}
+    const wanted=/[?&]vymm=([^&#]+)/i.exec(args&&args.url||'');
+    const vinBox=Array.from(document.querySelectorAll('input')).find(e=>/vin/i.test([e.id,e.name,e.placeholder].join(' '))&&e.value);
+    if(wanted&&vinBox&&vinBox.value.toUpperCase().replace(/\s/g,'')!==decodeURIComponent(wanted[1]).toUpperCase()){await sleep(300);continue;}
     let m, found = null;
     RESULT.lastIndex = 0;
     while ((m = RESULT.exec(txt))) {

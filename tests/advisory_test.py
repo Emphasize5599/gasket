@@ -57,7 +57,8 @@ with sync_playwright() as p:
         # ---- no VIN: the recalls on record for the model, and how to check yours ----
         rc = ft(pg, '#advRecall'); print('  recalls, no VIN:', rc.replace('\n', ' | ')[:200])
         assert '2 recalls on record' in rc and 'Add your VIN' in rc and 'Corolla' in rc
-        assert pg.evaluate("Object.keys(((window.__app.S.recallSev || {}).r) || {}).length") == 0, 'no VIN check: nothing rated until you open the list'
+        pg.wait_for_function("Object.keys(((window.__app.S.recallSev || {}).r) || {}).length === 2")
+        assert pg.evaluate("Object.keys(((window.__app.S.recallSev || {}).r) || {}).length") == 2, 'recalls rated in the background before the list opens'
         pg.click('#advList summary'); pg.wait_for_timeout(150)
         assert pg.evaluate("Object.keys(((window.__app.S.recallSev || {}).r) || {}).length") == 2, 'opened: rated'
         # a tile each, most serious first: how serious (and why), the part, one line; tap for the sections
@@ -135,9 +136,9 @@ with sync_playwright() as p:
         # no answer (a blocked page): said in one line, and the button opens the page
         pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = () => ({ blocked: true }); window.Garage.car().vin = 'JTDEBRBE0LJ000004'; window.dispatchEvent(new Event('garagechange')); }''')
         pg.wait_for_function("window.Garage.car().recallAuto && window.Garage.car().recallAuto.failed", timeout=5000); pg.wait_for_timeout(200)
-        assert "didn't answer the automatic check" in ft(pg, '#advRecall') and 'Check my car at NHTSA' in ft(pg, '#advCheck')
+        assert 'declined the background lookup' in ft(pg, '#advRecall') and 'Check my car at NHTSA' in ft(pg, '#advCheck')
         pg.evaluate("() => window.dispatchEvent(new Event('garagechange'))"); pg.wait_for_timeout(300)
-        assert len(pg.evaluate('window.__siteRead')) == 1, 'a failed try waits half an hour'
+        assert len(pg.evaluate('window.__siteRead')) == 1, 'a refused lookup waits for the visible check'
         # ---- engine-friendly advice on a car with both features ----
         pg.evaluate('''() => { const S = window.__app.S, c = S.cars.find(x => x.id === 'venza12'); S.carId = c.id;
           c.info = Object.assign({}, c.info, { features: (c.info.features || []).concat(['Cylinder deactivation', 'Start-stop']) }); window.dispatchEvent(new Event('garagechange')); }''')

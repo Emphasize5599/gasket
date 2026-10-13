@@ -398,7 +398,14 @@
     var hz = wx.concat(al).sort(function (a, b) { return a.fromMi - b.fromMi || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind); });
     res.stats.hazards = hz.length;
     res.stats.aiPending = al.filter(function (x) { return x.aiPending; }).length;   // warnings on this road the model hasn't read yet
-    return { hazards: hz, stats: res.stats, alerts: res.alerts || [] };
+    return { hazards: hz, stats: res.stats, alerts: res.alerts || [], dense:dense, forecast:wx };
+  }
+  /** Rate only retained warning text, with no forecast, air or alert requests. */
+  async function rerate(reading,compare,countyOf,ms){
+    var alerts=(reading.alerts||[]).map(function(a){return Object.assign({},a);});
+    await pool(alerts.filter(function(a){return a.aiPending;}),2,function(a){return digest(a,compare,ms);});
+    var al=alertStretches(reading.dense||[],alerts,countyOf),hz=(reading.forecast||[]).concat(al).sort(function(a,b){return a.fromMi-b.fromMi||ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind);});
+    return {hazards:hz,stats:Object.assign({},reading.stats,{hazards:hz.length,aiPending:al.filter(function(a){return a.aiPending;}).length})};
   }
   /** A hazard's short name for the map and the list: "Heavy rain", "Tornado", "Unhealthy air (AQI 162)". */
   function title(x) {
@@ -413,7 +420,7 @@
     return KINDS[x.kind][0];
   }
   var api = { timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
-    forRoute: forRoute, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
+    forRoute: forRoute, rerate:rerate, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;
 })(typeof window !== 'undefined' ? window : globalThis);
