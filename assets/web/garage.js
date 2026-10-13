@@ -931,6 +931,8 @@
     var asp = power === 'ev' || power === 'h2' ? '' : /yes/i.test(g('Turbo')) ? (/twin/i.test(oth) ? 'twinturbo' : 'turbo') : /supercharg/i.test(oth) ? 'super' : engine ? 'na' : '';
     var ts = g('TransmissionStyle'), trans = /CVT|continuously/i.test(ts) ? (power === 'hybrid' ? 'ecvt' : 'cvt') : /dual-clutch|DCT/i.test(ts) ? 'dct' : /automated manual/i.test(ts) ? 'amt' : /manual/i.test(ts) ? 'manual' : /auto/i.test(ts) ? 'auto' : power === 'ev' || power === 'h2' ? 'single' : '';
     var dt = g('DriveType'), drive = /4WD|4-wheel|4x4/i.test(dt) ? '4wd' : /AWD|all-wheel/i.test(dt) ? 'awd' : /FWD|front/i.test(dt) ? 'fwd' : /RWD|rear/i.test(dt) ? 'rwd' : '';
+    // "4x2" / "2WD": two-wheel drive, though not which pair (the EPA's record says); enough to tell "Sienna 2WD" from "Sienna AWD"
+    var twoWheel = drive === 'fwd' || drive === 'rwd' || /4x2|2WD|two[- ]wheel/i.test(dt);
     var feats = [];
     if (/DOHC|dual overhead/i.test(oth)) feats.push('DOHC'); else if (/SOHC|single overhead/i.test(oth)) feats.push('SOHC');
     if (/direct/i.test(oth)) feats.push('Direct injection');
@@ -942,9 +944,33 @@
     var wheels = parseInt(g('Wheels'), 10) || 0, cls = /Class\s*(\d)/i.exec(g('GVWR')), names = [g('Series'), g('Series2'), g('Trim'), g('Trim2'), g('Model')].join(' ');
     var drw = wheels >= 6 || /\bDRW\b|dual rear/i.test(names) ? 'yes' : (cls && +cls[1] <= 2) || /sedan|coupe|hatchback|wagon|convertible|sport utility|minivan|crossover/i.test(g('BodyClass')) ? 'no' : '';
     return { year: parseInt(g('ModelYear'), 10) || 0, make: titleCase(g('Make')), model: g('Model'), trim: trim, trimHint: g('Trim'), series: g('Series'), body: g('BodyClass'),
-      power: power, diesel: /diesel/i.test(fuel), battery: parseFloat(g('BatteryKWh')) || 0,
+      power: power, diesel: /diesel/i.test(fuel), flex: /E85|ethanol|flex/i.test(fuel), twoWheel: twoWheel, battery: parseFloat(g('BatteryKWh')) || 0,
       info: { engine: engine, asp: asp, trans: trans, transN: parseInt(g('TransmissionSpeeds'), 10) || '', drive: drive, features: feats, drw: drw },
       warn: g('ErrorCode') && !/^0/.test(g('ErrorCode')) ? g('ErrorText') : '' };
+  }
+  /** How well an EPA model name fits what the VIN says (higher is better; -99: another model). Pure, tested in Node. */
+  function modelScore(text, base, want) {
+    var t = String(text), rest = t.replace(DRV_SUFFIX, '').trim().toLowerCase(), sfx = DRV_SUFFIX.exec(t), sc;
+    if (rest === base) sc = 3; else if (rest.indexOf(base) === 0) sc = 1; else return -99;   // "Corolla Cross" isn't the "Corolla"
+    var s4 = !!(sfx && /awd|4wd|4x4/i.test(sfx[1])), s2 = !!(sfx && /2wd|fwd|rwd/i.test(sfx[1]));
+    if (want.all) sc += s4 ? 2 : s2 ? -3 : 0; else if (want.two) sc += s2 ? 2 : s4 ? -3 : 0;
+    var hy = /hybrid/i.test(rest), ph = /plug-in|phev/i.test(rest), ffv = /\bffv\b/i.test(rest), dsl = /diesel/i.test(rest);
+    sc += want.phev ? (ph ? 2 : -2) : ph ? -3 : 0;
+    sc += want.hybrid ? (hy ? 2 : -2) : (hy && !want.phev) ? -3 : 0;
+    sc += want.flex ? (ffv ? 1 : 0) : ffv ? -1 : 0;
+    sc += want.diesel ? (dsl ? 2 : 0) : dsl ? -2 : 0;
+    return sc;
+  }
+  /** Versions still tied: the on-phone AI compares the VIN's description with each name, and picks only when one is
+   *  clearly closest (never waiting for the model to load). -> the option, or null. */
+  async function aiPickModel(c, opts) {
+    if (!window.Severity || !Severity.compare || !Severity.state || Severity.state() !== 'ready') return null;
+    var I = c.info || {}, desc = [c.year, c.make, c.vpicModel || c.model, c.trim, I.body, I.drive && I.drive.toUpperCase(), I.engine, c.power !== 'gas' ? c.power : ''].filter(Boolean).join(' ');
+    var groups = {}; opts.forEach(function (o, i) { groups['o' + i] = [c.make + ' ' + o.text]; });
+    var sc = await Promise.race([Severity.compare(desc, groups), new Promise(function (r) { setTimeout(function () { r(null); }, 4000); })]);
+    if (!sc) return null;
+    var ks = Object.keys(sc).sort(function (a, b) { return sc[b] - sc[a]; });
+    return sc[ks[0]] - sc[ks[1]] >= 0.03 ? opts[+ks[0].slice(1)] : null;
   }
   async function lookupVin(c, raw) {
     var vin = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -961,6 +987,7 @@
       if (d.body) { c.info = c.info || {}; c.info.body = d.body; }   // the doodle's body style
       if (d.trim) c.trim = d.trim;
       c.power = d.power; if (d.diesel) c.grade = 'diesel';
+      c.vinHints = { two: !!d.twoWheel, flex: !!d.flex, diesel: !!d.diesel };   // for matching the EPA's versions (not shown)
       if (c.power === 'hybrid') c.type = 'hybrid';
       var i = c.info = c.info || {}, src = i.src = Object.assign({}, i.src), fsrc = i.featSrc = Object.assign({}, i.featSrc);
       Object.keys(d.info).forEach(function (k) {      // what the VIN says is what the car is
@@ -1008,13 +1035,17 @@
       var md = $('eModel'), base = String(c.vpicModel || c.model).toLowerCase(), I = c.info || {};
       // the EPA splits a model by drive ("Charger" is two-wheel drive, "Charger AWD" all-wheel): use what the VIN says
       var starts = pick(md, function (t) { return t.indexOf(base) === 0; });
-      var same = starts.filter(function (o) { return o.text.replace(DRV_SUFFIX, '').trim().toLowerCase() === base; });   // not "Corolla Cross" for "Corolla"
-      var cands = same.length ? same : starts, wantAll = I.drive === 'awd' || I.drive === '4wd';
-      if (I.drive && cands.length > 1) {
-        var byDrive = cands.filter(function (o) { var sfx = DRV_SUFFIX.exec(o.text); return sfx ? /awd|4wd|4x4/i.test(sfx[1]) === wantAll : !wantAll; });
-        if (byDrive.length) cands = byDrive;
+      // every version scored against what the VIN says (drive, hybrid, plug-in, flex fuel, diesel); the best one if it's
+      // clearly ahead, else the on-phone AI between the ones tied (only when it's clearly ahead too), else you pick
+      var H = c.vinHints || {}, want = { all: I.drive === 'awd' || I.drive === '4wd', two: !!H.two || I.drive === 'fwd' || I.drive === 'rwd', hybrid: c.power === 'hybrid', phev: c.power === 'phev', flex: !!H.flex, diesel: !!H.diesel };
+      var ranked = starts.map(function (o) { return { o: o, sc: modelScore(o.text, base, want) }; }).filter(function (x) { return x.sc > -50; }).sort(function (a, b) { return b.sc - a.sc; });
+      var m = ranked.length && (ranked.length === 1 || ranked[0].sc - ranked[1].sc >= 1) ? ranked[0].o : null, byAi = false;
+      if (!m && ranked.length > 1) {
+        var tied = ranked.filter(function (x) { return x.sc === ranked[0].sc; }).map(function (x) { return x.o; });
+        m = await aiPickModel(c, tied); byAi = !!m;
       }
-      var m = cands.length === 1 ? cands[0] : null;
+      if (m) LG.info('car', 'EPA version matched' + (byAi ? ' by the on-phone AI' : ''), { pick: m.text, from: ranked.map(function (x) { return x.o.text + ' ' + x.sc; }) });
+      if (byAi) lead += ' The on-phone AI picked the closest version: check it.';
       if (!m) { say(esc(lead) + ' Pick the model below' + (starts.length ? ' (' + starts.length + ' versions of the ' + esc(c.model) + ')' : '') + ' for its mileage.'); return; }
       md.value = m.value; await md.onchange.call(md);
       if (hasEpa(c) && c.epaId && $('eOpt') && $('eOpt').value) return;
@@ -1431,6 +1462,6 @@
     return out;
   }
 
-  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, applyEpa: applyEpa, POWER: POWER,
+  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
     need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

@@ -36,5 +36,25 @@ with sync_playwright() as p:
     print('mutations', pg.evaluate('window.__mut'), 'errors', errs)
     assert not errs, errs
     print('car', pg.evaluate("JSON.stringify((({year,make,model,epaId,trim})=>({year,make,model,epaId,trim}))(window.Garage.car()))"))
+    # a two-wheel-drive minivan NHTSA calls "4x2" (made-up VIN): the EPA's "2WD" version and the engine by size and cylinders
+    pg.evaluate('''() => { const M = window.__mocks, vp = M.vpic, ep = M.epa;
+      M.vpic = (u) => /5TDKK3DC0BS000001/.test(u) ? { Results: [{ ModelYear: '2011', Make: 'TOYOTA', Model: 'Sienna', DisplacementL: '3.5', EngineCylinders: '6', EngineConfiguration: 'V-Shaped', EngineModel: '2GR-FE',
+        DriveType: '4x2', BodyClass: 'Minivan', FuelTypePrimary: 'Gasoline', Trim2: 'E grade', ErrorCode: '0', ErrorText: '0 - VIN decoded clean.' }] } : vp(u);
+      M.epa = (u) => /menu\/year/.test(u) ? { menuItem: [{ text: '2011', value: '2011' }, { text: '2008', value: '2008' }] }
+        : /menu\/make\?year=2011/.test(u) ? { menuItem: [{ text: 'Toyota', value: 'Toyota' }] }
+        : /menu\/model\?year=2011&make=Toyota/.test(u) ? { menuItem: ['Highlander 2WD', 'Sienna 2WD', 'Sienna AWD', 'Venza'].map((m) => ({ text: m, value: m })) }
+        : /menu\/options.*Sienna%202WD/.test(u) ? { menuItem: [{ text: 'Auto (S6), 6 cyl, 3.5 L', value: '30175' }, { text: 'Auto (S6), 4 cyl, 2.7 L', value: '30176' }] }
+        : /vehicle\/30175$/.test(u) ? { id: '30175', year: '2011', make: 'Toyota', model: 'Sienna 2WD', baseModel: 'Sienna', trany: 'Automatic (S6)', drive: 'Front-Wheel Drive', displ: '3.5', cylinders: '6', city08: '18', highway08: '24', comb08: '20', fuelType1: 'Regular Gasoline', VClass: 'Minivan - 2WD', atvType: '' }
+        : ep(u); }''')
+    pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
+    pg.fill('#gVin', '5tdkk3dc0bs000001'); pg.click('#gVinGo')
+    pg.wait_for_function("window.Garage.car().epaId === '30175'", timeout=15000)
+    sienna = pg.evaluate("[window.Garage.car().model, document.getElementById('eModel').value, document.getElementById('eOpt').value]")
+    print('  4x2 minivan:', sienna); assert sienna == ['Sienna 2WD', 'Sienna 2WD', '30175'], sienna
+    # the scoring: what the VIN says against each version's name
+    sc = pg.evaluate('''() => { const s = (t, w) => window.Garage.modelScore(t, 'sienna', w);
+      return [s('Sienna 2WD', { two: true }), s('Sienna AWD', { two: true }), s('Sienna AWD', { all: true }), s('Highlander 2WD', { two: true }),
+        window.Garage.modelScore('Highlander Hybrid 4WD', 'highlander', { all: true, hybrid: true }), window.Garage.modelScore('Highlander 4WD', 'highlander', { all: true, hybrid: true })]; }''')
+    print('  scores:', sc); assert sc[0] > sc[1] and sc[2] > sc[0] - 1 and sc[3] == -99 and sc[4] > sc[5], sc
     b.close()
-print('VIN lookup on a slow connection: filled once, stays filled; same VIN again does nothing')
+print('VIN lookup on a slow connection: filled once, stays filled; same VIN again does nothing; a 4x2 minivan finds its 2WD version and engine')

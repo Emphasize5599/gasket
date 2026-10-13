@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.129 - 2026-10-13 (keyless test branch only)
+- **VINs find their EPA version more often.** Each version the EPA lists (like "Sienna 2WD" and "Sienna AWD") is scored against what the VIN says: two- or all-wheel drive (including NHTSA's "4x2"), hybrid, plug-in, flex fuel, diesel. When versions still tie, the on-phone AI picks the closest one, only when it's clearly closer, and says so. Then the engine / transmission follows from the engine size and cylinders.
+
 ## 0.0.128 - 2026-10-13 (keyless test branch only)
 - **Typed addresses can have stops in between:** "+ Add a stop" between From and To (each stop its own leg, like a Maps link's).
 - **VIN lookups fill the car in once:** the year / make / model / engine boxes no longer empty and refill themselves; looking up the same VIN again leaves them alone. The NHTSA VIN check tries again by itself if NHTSA's page errors.
