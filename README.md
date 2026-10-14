@@ -109,6 +109,7 @@ Gasket was called **Fuel+ Map** until version 0.0.47. It still restores Fuel+ ba
 | File | What's in it |
 |---|---|
 | [`TODO.md`](TODO.md) | The single categorized backlog: features, fixes, tests, performance and release decisions |
+| [`RETIRED_WORK.md`](RETIRED_WORK.md) | Retired, irrelevant and conditional/out-of-scope ideas; not active work |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in every version |
 | [`VERSIONING.md`](VERSIONING.md) | Version numbers and how releases are made |
 | [`SIGNING.md`](SIGNING.md) | How the release key is made, stored and used |

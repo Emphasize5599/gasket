@@ -1,16 +1,12 @@
 # Open work
 
-The single backlog for Gasket: features, defects, validation and release decisions. Reconciled against the keyless test branch through **0.0.153**, 2026-10-14. Add new work here; close an item when it ships, is retired or its acceptance check passes. Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
+The single backlog for Gasket: features, defects, validation and release decisions. Reconciled against the keyless test branch through **0.0.153**, 2026-10-14. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep item numbers when discussing or changing status. Checked entries are done or explicitly retired; new work takes the next unused number. Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 35 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 ## Pending work
 
 1. [ ] **perf: Increase website-reader limit to 20 and use more generous defaults.** Raise the configurable maximum from 16 to 20, increase the RAM-based default worker counts moderately, and keep explicit user settings and low-memory safeguards. Check speed and stability on the phone before settling the revised defaults. This is the first queued implementation task; it has not been implemented yet.
-
-## fix — reported defects and investigations
-
-2. [x] **Automatic VIN-specific open-recall lookup reliability — done.** Closed per the owner's 2026-10-14 update.
 
 ## feat — product features
 
@@ -24,12 +20,10 @@ Keep item numbers when discussing or changing status. Checked entries are done o
 
 ### Tires and trailers
 
-8. [x] **Trailer tire mismatch/age guidance — not planned.** Retired as not relevant per the owner's 2026-10-14 update. General tire aging belongs to item 9.
 9. [ ] **Tire dry-rot and aging information screen.** Cover sidewall cracking/dry rot, age-related rubber hardening and reduced grip even when tread remains, date-code reading, inspection and tire-maker age/replacement guidance. Keep age/condition separate from the generalized tread estimate; research the guidance before writing the screen.
 
 ### Vehicle images
 
-10. [x] **Keyless vehicle imagery — done for now.** Current NHTSA/Commons matching and photo selection are accepted. Reopen only if actual use shows Commons coverage is too sparse; optional Fuel API support remains.
 11. [ ] **Scenic backgrounds.** Let users place their recreated car image into licensed environments inspired by the idea of Gran Turismo Scapes, without using its assets. Design background selection, placement/compositing and required attribution.
 12. [ ] **Richer optional doodles.** Consider more wheel detail, roof racks and two-tone paint. This is an existing enhancement idea, not a replacement for vehicle photos.
 
@@ -65,15 +59,3 @@ Keep item numbers when discussing or changing status. Checked entries are done o
 21. [ ] **Data-service capacity and distribution model.** Decide whether personal-use service limits fit the intended audience. Recheck Open-Meteo's plan if use becomes commercial and choose hosted/regional OSM data if public Overpass cannot support the audience. No service purchase is authorized merely by this task.
 22. [ ] **Keyless experiment promotion.** After device acceptance and the relevant service decisions, decide when to merge into `main`. Preserve the regular app's package/resource identity rather than copying the separate test-app identity blindly. Public beta readiness is a separate decision from merging personal test improvements.
 23. [ ] **Beta release setup — later milestone.** Set up the proposed beta/RC version naming and distribution process when a beta candidate is ready; keep Android version codes increasing.
-
-Vela reuse is conditional, not current unfinished implementation: no Vela source/templates are bundled. If direct GPL code reuse is proposed, revisit license compatibility, notices and corresponding-source obligations before integrating it. See [KEYLESS_EXPERIMENT.md](KEYLESS_EXPERIMENT.md#license-decision).
-
-## Reconciled items (not open)
-
-24. Tire Rack catalog omissions and the lookup-after-catalog failure: marked resolved per the owner's 2026-10-14 update; no new independent verification was performed during this backlog edit.
-25. Station-discovery coverage, including the earlier Searcy concern: marked resolved per the owner's 2026-10-14 update. Price accuracy and performance checks remain separate tasks.
-26. Hourly route weather and smoke/smog/air-quality hazards: shipped; only pollen sourcing remains above.
-27. Keyless nearby/route discovery, all-grade saved-price refresh, progress/cancel and persistent station history: implemented; cash-price/offline/performance validation remains above. No specific history-chart UI has been committed to the backlog.
-28. Basic EV/hydrogen discovery and route-stop support: implemented; the older “everything else” entry overstated what was missing.
-29. Tire submenu/dually reorganization, hooked-up overview cleanup and photo picker: shipped in 0.0.146–147; superseded local work is not a pending patch.
-30. Car tread-difference warnings and per-vehicle/trailer tire fuel ratings: shipped in 0.0.148; trailer mismatch guidance remains above.
