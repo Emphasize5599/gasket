@@ -48,40 +48,57 @@
     return colors.filter(function (c) { return paint.code && c.code === paint.code; })[0] || null;
   }
   /** NHTSA's vehicles for a year / make / model -> { url, body } of the first with a picture, or null. */
-  function nhtsaPic(res) { var r = (res && res.results) || []; for (var i = 0; i < r.length; i++) if (r[i].vehiclePicture) return { url: r[i].vehiclePicture, body: [r[i].trim, r[i].vehicleModel].filter(Boolean).join(' ') }; return null; }
+  function nhtsaPic(res,car) {
+    var trim=norm(car&&car.trim),dual=car&&((car.info||{}).drw==='yes'||car.tires&&car.tires.corners&&car.tires.corners.dually),best=null;
+    ((res&&res.results)||[]).forEach(function(v){if(!v.vehiclePicture)return;var text=norm([v.trim,v.vehicleModel].join(' '));if(dual&&!/\bdrw\b|dually|dual rear/.test(text))return;var score=trim&&(' '+text+' ').includes(' '+trim+' ')?5:0;if(!best||score>best.score)best={score:score,v:v};});
+    return best?{url:best.v.vehiclePicture,body:[best.v.trim,best.v.vehicleModel].filter(Boolean).join(' ')}:null;
+  }
   var SKIP = /\b(interior|inside|dash(board)?|cockpit|engine|rear|back|tail(gate|lights?)?|badge|emblem|logo|wheels?|rims?|seats?|trunk|boot|steering|gauges?|instruments?|keys?|drawing|diagram|blueprint|toy|toys|scale|lego|crash|wreck|wrecked|damaged|burnt|burned|police|taxi|ambulance|race|racing|rally|modified|tuned|lifted|concept|prototype|museum|interieur|innenraum|heck)\b|\.svg$/i;
   /**
    * The Commons photo for a car: the file name has to name the make and every word of the model; the year (or one close
    * to it) and "front" count in its favor; interiors, rear views, parts, toys, wrecks and the like are skipped, and so
    * are photos labeled with another era. -> { title, url, page, artist, license } or null.
    */
-  function wikiPick(pages, car) {
-    var make = norm(car.make), words = norm(photoModel(car)).split(' ').filter(Boolean), y = +car.year, best = null;
+  function wikiRank(pages, car, allowUncertain) {
+    var make = norm(car.make), words = norm(photoModel(car)).split(' ').filter(Boolean), y = +car.year, ranked=[],dual=(car.info||{}).drw==='yes'||car.tires&&car.tires.corners&&car.tires.corners.dually;
     (pages || []).forEach(function (p) {
       var ii = p.imageinfo && p.imageinfo[0]; if (!ii) return;
       var t = norm(String(p.title || '').replace(/^File:/i, '').replace(/\.(jpe?g|png|webp|tiff?)$/i, ''));
-      if (!/\.(jpe?g|png|webp)$/i.test(p.title || '') || SKIP.test(p.title || '')) return;
-      if (car.info && car.info.drw === 'yes' && /\bsrw\b|single rear wheel/.test(t)) return;
+      var md=ii.extmetadata||{},caption=norm(t+' '+String(md.ImageDescription&&md.ImageDescription.value||'').replace(/<[^>]+>/g,' ')+' '+String(md.Categories&&md.Categories.value||''));
+      var viewTitle=String(p.title||'').replace(/dual rear wheels?/ig,'dually').replace(/single rear wheels?/ig,'srw');
+      if (!/\.(jpe?g|png|webp)$/i.test(p.title || '') || SKIP.test(viewTitle)) return;
+      if (dual && /\bsrw\b|single rear wheel/.test(caption)) return;
+      if (dual && !allowUncertain && !/\bdrw\b|dually|dual rear/.test(caption)) return;
       if (t.indexOf(make) < 0 || words.some(function (w) { return (' ' + t + ' ').indexOf(' ' + w + ' ') < 0; })) return;
-      var years = (t.match(/\b(19[5-9]\d|20[0-4]\d)\b/g) || []).map(Number), score = 0;
+      var model=norm(photoModel(car));
+      // These are separate models, not trim words. A Prius c or Corolla Cross must not stand in for its namesake.
+      if(model==='prius'&&/\bprius (?:c|v|plus|prime|phv|plug in)\b/.test(t))return;
+      if(model==='corolla'&&/\bcorolla cross\b/.test(t))return;
+      if(model==='mustang'&&/\bmustang mach e\b/.test(t))return;
+      var years = (t.match(/\b(19[5-9]\d|20[0-4]\d)\b/g) || []).map(Number), score = 0,range=String(p.title||'').match(/\b((?:19|20)\d{2})\s*[–—-]\s*((?:19|20)\d{2})\b/),inRange=range&&y>=+range[1]&&y<=+range[2];
       if (years.length) {
         // A later date in a caption is the photo date, not a newer model year.
         var near = Math.abs(years[0] - y);
-        if (near > 3) return;                                   // another generation, most likely
-        score += near === 0 ? 6 : 4 - near;
-      }
+        if (!inRange && near > (allowUncertain?3:1)) return;
+        score += inRange?6:near === 0 ? 8 : 4 - near;
+      } else if(!allowUncertain)return;
+      if(p.curated)score+=3;
+      var trim=norm(car.trim);if(trim&&(' '+t+' ').includes(' '+trim+' '))score+=3;
+      if(/crew cab/.test(norm(car.info&&car.info.body))&&/regular cab|single cab/.test(t))return;
       if (/front|3 4|three quarter|exterior/.test(t)) score += 2;
       if (ii.width && ii.height && ii.width > ii.height) score += 1;
       score -= (p.index || 0) * 0.1;                            // the search's own order breaks ties
-      if (!best || score > best.score) best = { score: score, p: p, ii: ii };
+      if(ii.width&&ii.width<640)return;
+      ranked.push({score:score,p:p,ii:ii});
     });
-    if (!best) return null;
-    var m = best.ii.extmetadata || {}, txt = function (k) { return String(m[k] && m[k].value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); };
-    return { title: String(best.p.title).replace(/^File:/i, ''), url: best.ii.thumburl || best.ii.url, page: best.ii.descriptionurl || '', artist: txt('Artist').slice(0, 60) || 'unknown', license: txt('LicenseShortName') || 'see the file page' };
+    return ranked.sort(function(a,b){return b.score-a.score;}).map(function(best){var m=best.ii.extmetadata||{},txt=function(k){return String(m[k]&&m[k].value||'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();};return {title:String(best.p.title).replace(/^File:/i,''),url:best.ii.thumburl||best.ii.url,page:best.ii.descriptionurl||'',artist:txt('Artist').slice(0,60)||'unknown',license:txt('LicenseShortName')||'see the file page'};});
   }
+  function wikiPick(pages,car){return wikiRank(pages,car,false)[0]||null;}
   /** What a lookup depends on: one photo per model (year / make / model). */
   function sig(c, fuel) { return (fuel ? ['f2'] : []).concat([c.year, norm(c.make), norm(baseModel(c.model))]).concat(fuel ? [norm(c.trim)] : []).join('|'); }   // f2: 0.0.93 also takes side views, so older failures are asked again
-  function nhtsaSig(c) { return (photoModel(c) !== baseModel(c.model) ? 'n3|' : '') + sig(c); }
+  function photoConfig(c){return [norm(c.trim),norm(c.info&&c.info.body),((c.info||{}).drw==='yes'||c.tires&&c.tires.corners&&c.tires.corners.dually)?'drw':''].join('|');}
+  function nhtsaSig(c) { return 'n4|'+sig(c)+'|'+photoConfig(c); }
+  function wikiSig(c){return 'w4|'+sig(c)+'|'+photoConfig(c);}
   /**
    * Which picture to show: 'fuel' when you've picked one of the trim's factory colors (and there's a key), else 'nhtsa',
    * else 'wiki', else 'fuel' in its first color (a key, no other photo), else null (the doodle). Doodle mode always draws.
@@ -89,6 +106,7 @@
   function which(c, hasKey) {
     if (!c || c.picMode === 'doodle') return null;
     var p = c.pic || {}, f = hasKey && p.fuel && !p.fuel.fail && p.fuel.colors && p.fuel.colors.length ? p.fuel : null;
+    if(usable(p.chosen)&&p.chosen.sig===sig(c))return 'chosen';
     if (f && pickColor(f.colors, c.paint)) return 'fuel';
     return usable(p.nhtsa) ? 'nhtsa' : usable(p.wiki) ? 'wiki' : f && p.nhtsa && (p.nhtsa.fail || p.nhtsa.imageFail) && p.wiki && (p.wiki.fail || p.wiki.imageFail) ? 'fuel' : null;
   }
@@ -105,7 +123,7 @@
     if (/sedan|saloon|cars\b|\b4 dr\b/.test(s)) return 'sedan';
     var t = c && c.type; return t === 'truck' ? 'pickup' : t === 'suv' ? 'suv' : 'sedan';
   }
-  var CarPicMath = { bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, sig: sig, which: which, bodyOf: bodyOf };
+  var CarPicMath = { bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
   root.CarPicMath = CarPicMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = CarPicMath;
   if (!root.document) return;
@@ -148,25 +166,34 @@
     if (!due(P(c).nhtsa, sg) || busy[b]) return Promise.resolve();
     busy[b] = 1;
     return json('https://api.nhtsa.gov/vehicles/byYmmt?modelYear=' + encodeURIComponent(c.year) + '&make=' + encodeURIComponent(c.make) + '&model=' + encodeURIComponent(photoModel(c)) + '&data=none&productDetail=all')
-      .then(function (res) { var x = nhtsaPic(res); if (!x) throw new Error('no photo'); P(c).nhtsa = { sig: sg, url: x.url, body: x.body, t: Date.now() }; LG.info('car', 'Picture from NHTSA'); })
+      .then(function (res) { var x = nhtsaPic(res,c); if (!x) throw new Error('no photo'); P(c).nhtsa = { sig: sg, url: x.url, body: x.body, t: Date.now() }; LG.info('car', 'Picture from NHTSA'); })
       .catch(function (e) { P(c).nhtsa = { sig: sg, fail: Date.now(), err: String(e && e.message || e) }; LG.info('car', 'No NHTSA photo', P(c).nhtsa.err); })
       .then(function () { delete busy[b]; A.save(); told(c); });
   }
+  function photoPages(c) {
+    var sg=wikiSig(c);if(mem['photos|'+sg])return Promise.resolve(mem['photos|'+sg]);
+    var q=[c.year,c.make,photoModel(c)].join(' ');if(photoConfig(c).endsWith('drw'))q+=' dually';
+    var base='https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&iiextmetadatafilter=Artist|LicenseShortName|ImageDescription|Categories&iiurlwidth=960';
+    var pages=function(res){return Object.keys(res.query&&res.query.pages||{}).map(function(k){return res.query.pages[k];});};
+    return Promise.all([
+      json(base+'&generator=search&gsrnamespace=6&gsrlimit=30&gsrsearch='+encodeURIComponent(q)).then(pages).catch(function(){return [];}),
+      // Article lead pictures are selected by editors to represent the model. They still pass our year/configuration checks.
+      json('https://en.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=0&gsrlimit=5&gsrsearch='+encodeURIComponent(q)+'&prop=pageimages&piprop=name&pilicense=free').then(function(res){
+        var names=pages(res).filter(function(p){var title=norm(String(p.title||'').replace(/\s*\([^)]*\)/g,''));return title===norm(c.make+' '+photoModel(c))&&p.pageimage;}).map(function(p){return 'File:'+p.pageimage;});
+        if(!names.length)return [];
+        return json(base+'&titles='+encodeURIComponent(names.join('|'))).then(function(res){return pages(res).map(function(p){p.curated=true;return p;});});
+      }).catch(function(){return [];})
+    ]).then(function(groups){var seen={},out=[];groups[1].concat(groups[0]).forEach(function(p){if(seen[p.title])return;seen[p.title]=1;out.push(p);});if(out.length)mem['photos|'+sg]=out;return out;});
+  }
   function lookWiki(c) {
-    var sg = 'w3|' + sig(c), b = 'w|' + c.id; // Retry old failed searches and obsolete thumbnail URLs once.
-    if (!due(P(c).wiki, sg) || busy[b]) return Promise.resolve();
-    busy[b] = 1;
-    var q = [c.year, c.make, photoModel(c)].join(' ');
-    if(c.info && c.info.drw === 'yes') q += ' dually';
-    return json('https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=20&gsrsearch=' + encodeURIComponent(q) +
-        '&prop=imageinfo&iiprop=url|size|extmetadata&iiextmetadatafilter=Artist|LicenseShortName&iiurlwidth=960')
-      .then(function (res) {
-        var pages = Object.keys((res.query && res.query.pages) || {}).map(function (k) { return res.query.pages[k]; });
-        var x = wikiPick(pages, c); if (!x) throw new Error('no match');
-        P(c).wiki = Object.assign({ sig: sg, t: Date.now() }, x); LG.info('car', 'Picture from Wikimedia Commons: ' + x.title);
-      })
-      .catch(function (e) { P(c).wiki = { sig: sg, fail: Date.now(), err: String(e && e.message || e) }; LG.info('car', 'No Commons photo', P(c).wiki.err); })
-      .then(function () { delete busy[b]; A.save(); told(c); });
+    var sg=wikiSig(c),b='w|'+c.id;
+    if(!due(P(c).wiki,sg)||busy[b])return Promise.resolve();
+    busy[b]=1;
+    return photoPages(c).then(function(pages){
+      var x=wikiPick(pages,c);if(!x)throw new Error('no sufficiently close year/configuration match');
+      P(c).wiki=Object.assign({sig:sg,t:Date.now()},x);LG.info('car','Picture from Wikimedia Commons: '+x.title);
+    }).catch(function(e){P(c).wiki={sig:sg,fail:Date.now(),err:String(e&&e.message||e)};LG.info('car','No matching Commons photo',P(c).wiki.err);})
+      .then(function(){delete busy[b];A.save();told(c);});
   }
   function imgKey(c) {
     var w = which(c, hasKey()); if (!w) return null;
@@ -223,13 +250,25 @@
   function clearGenerated(c) {
     if (!c) return;
     keep(generatedKey(c), '');
+    if(c.pic)delete c.pic.chosen;A.save();
     told(c);
+  }
+  function hasOverride(c){return hasGenerated(c)||!!(c&&c.pic&&c.pic.chosen&&c.pic.chosen.sig===sig(c));}
+  function choose(c){
+    var close,pg,alive=true;
+    close=A.subPage('Choose vehicle image','<button type="button" class="btn tonal" id="cpUpload">Choose from this device…</button><p class="lead small keep">'+A.esc([c.year,c.make,photoModel(c),c.trim].filter(Boolean).join(' '))+'</p><div id="cpResults" aria-live="polite">'+A.ldBar('Finding matching vehicle photos')+'</div>',function(b){pg=b.closest('.sub-page');b.querySelector('#cpUpload').onclick=function(){close();importGenerated(c);};return function(){alive=false;};});
+    photoPages(c).then(function(pages){
+      if(!alive)return;var options=wikiRank(pages,c,true).slice(0,12),n=c.pic&&c.pic.nhtsa;if(usable(n))options.unshift({url:n.url,title:[c.year,c.make,photoModel(c),n.body].filter(Boolean).join(' '),artist:'NHTSA (EVOX Images)',license:'',source:'nhtsa'});
+      var out=pg.querySelector('#cpResults');out.innerHTML=options.length?'<div class="car-photo-grid">'+options.map(function(x,i){return '<button type="button" class="car-photo-option" data-photo="'+i+'"><img loading="lazy" src="'+A.esc(x.url)+'" alt="'+A.esc(x.title)+'"><span>'+A.esc(x.title)+'</span><small>'+A.esc(x.artist+(x.license?' · '+x.license:''))+'</small></button>';}).join('')+'</div><p class="lead small keep">Check the pictured body style and wheels. Similar model years can have different trim details.</p>':'<p class="lead small keep">No matching photos found. You can choose your own image above.</p>';
+      out.querySelectorAll('[data-photo]').forEach(function(button){button.onclick=async function(){var x=options[+button.dataset.photo];out.querySelectorAll('button').forEach(function(b){b.disabled=true;});var note=document.createElement('p');note.className='lead small keep';note.textContent='Saving photo…';out.prepend(note);try{var r=await call('fetchImage',x.url);if(!r||r.error||!r.body)throw new Error(r&&r.error||'Could not download the photo');if(!alive)return;P(c).chosen=Object.assign({sig:sig(c),t:Date.now()},x);keep('chosen|'+x.url,r.body);keep(generatedKey(c),'');c.picMode='photo';A.save();told(c);close();}catch(e){if(!alive)return;note.textContent='Could not save this photo. Try another one or choose an image from this device.';out.querySelectorAll('button').forEach(function(b){b.disabled=false;});}};});
+    }).catch(function(){if(alive)pg.querySelector('#cpResults').innerHTML='<p class="lead small keep">Photo search is unavailable. You can choose an image from this device above.</p>';});
   }
   function pending(c) {
     if (!c || !c.year || !c.make || !c.model || c.picMode === 'doodle') return false;
+    if(c.pic&&usable(c.pic.chosen)&&c.pic.chosen.sig===sig(c))return false;
     if (busy['n|' + c.id] || busy['w|' + c.id] || busy['f|' + c.id]) return true;
     if (busy['ensure|' + c.id]) return true;
-    var p = c.pic || {}; if (!p.nhtsa || p.nhtsa.sig !== nhtsaSig(c) || (!usable(p.nhtsa) && (!p.wiki || p.wiki.sig !== 'w3|' + sig(c)))) return true;
+    var p = c.pic || {}; if (!p.nhtsa || p.nhtsa.sig !== nhtsaSig(c) || (!usable(p.nhtsa) && (!p.wiki || p.wiki.sig !== wikiSig(c)))) return true;
     var k = imgKey(c); return !!(k && !stored(k) && busy['img|' + k]);
   }
   // ---------- the doodle: side views, front to the right ----------
@@ -258,6 +297,8 @@
   /** Where the picture came from, for the line under it (the Commons one links to the photo's page and license). */
   function credit(c) {
     var w = which(c, hasKey()), p = c && c.pic;
+    if(hasGenerated(c))return {text:'Your selected image'};
+    if(w==='chosen')return {text:'Photo: '+p.chosen.artist+(p.chosen.license?' · '+p.chosen.license:''),url:p.chosen.page};
     if (w === 'fuel') return { text: 'Photo: EVOX Images via Fuel API' + (p.fuel.exact === false ? ' · closest trim: ' + (p.fuel.trim || 'base') : '') };
     if (w === 'nhtsa') return { text: 'Photo: NHTSA (EVOX Images)' };
     if (w === 'wiki') return { text: 'Photo: ' + p.wiki.artist + ' · ' + p.wiki.license + ' · Wikimedia Commons', url: p.wiki.page };
@@ -334,5 +375,5 @@
   }
   root.CarPics = { trims: trims, loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
     colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf,
-    hasGenerated: hasGenerated, importGenerated: importGenerated, clearGenerated: clearGenerated, recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
+    hasGenerated: hasGenerated, hasOverride:hasOverride, choose:choose, importGenerated: importGenerated, clearGenerated: clearGenerated, recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
 })(typeof window !== 'undefined' ? window : globalThis);

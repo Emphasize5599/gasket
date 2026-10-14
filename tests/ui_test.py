@@ -50,6 +50,8 @@ with sync_playwright() as p:
         pg.evaluate(open(os.path.join(os.path.dirname(__file__), 'station-fixtures.js')).read())
         pg.evaluate("() => { __app.setDemo(true); const c=__app.map.getCenter(); __app.fetchAround(c.lat,c.lng); }")
         pg.wait_for_timeout(800)
+        # the list and bubbles show the stations in view: frame them all
+        pg.evaluate("() => { const p = __app.stations().map(s => [s.lat, s.lng]); if (p.length) __app.map.fitBounds(p, { animate: false, padding: [8, 8] }); }"); pg.wait_for_timeout(400)
         pg.screenshot(path=f'{OUT}/{name}-1-map.png')
         n_pins = pg.locator('.leaflet-tooltip.mbub').count()
         vis = pg.evaluate("[...document.querySelectorAll('.leaflet-tooltip.mbub')].filter(e => e.style.visibility !== 'hidden').length")
@@ -75,6 +77,7 @@ with sync_playwright() as p:
         print('  navigate ->', pg.evaluate('window.__lastNav'))
         pg.click('#dClose')
         # brand logos: fetched once (here a stand-in icon), then on the bubbles, the list and the details
+        pg.evaluate("() => { const p = __app.stations().map(s => [s.lat, s.lng]); __app.map.fitBounds(p, { animate: false, padding: [8, 8] }); }"); pg.wait_for_timeout(300)
         pg.evaluate('''window.__mocks = window.__mocks || {}; window.__iconUrls = []; window.__mocks.icon = (u) => { window.__iconUrls.push(u);
           const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#e33'; x.beginPath(); x.arc(32, 32, 28, 0, 7); x.fill();
           return { body: c.toDataURL(), w: 64, h: 64 }; }; window.__app.reloadLogos(); 0''')

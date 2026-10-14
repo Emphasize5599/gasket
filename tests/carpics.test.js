@@ -6,6 +6,8 @@ assert.equal(C.photoModel({model:'Model 3 Long Range AWD'}),'Model 3');
 assert.equal(C.baseModel('Venza AWD'), 'Venza'); assert.equal(C.baseModel('Corolla Hybrid'), 'Corolla Hybrid');
 assert.deepEqual(C.nhtsaPic({ results: [{ vehiclePicture: null }, { vehiclePicture: 'https://static.nhtsa.gov/images/vehicles/1_st0640_046.png', trim: '5 HB', vehicleModel: 'PRIUS' }] }), { url: 'https://static.nhtsa.gov/images/vehicles/1_st0640_046.png', body: '5 HB PRIUS' });
 assert.equal(C.nhtsaPic({ results: [] }), null);
+assert.equal(C.nhtsaPic({results:[{vehiclePicture:'wrong',trim:'LE'},{vehiclePicture:'right',trim:'XLE'}]},{trim:'XLE'}).url,'right','prefer the matching NHTSA trim');
+assert.equal(C.nhtsaPic({results:[{vehiclePicture:'srw',trim:'CREW CAB'}]},{info:{drw:'yes'}}),null,'do not represent a known dually with an unverified standard pickup');
 // Commons: the make and model in the file name, the year (or near it) and "front" count; interiors, rear views, other cars are out
 const pg = (title, index, w, h) => ({ title: 'File:' + title, index, imageinfo: [{ width: w || 1600, height: h || 1000, thumburl: 'https://upload.wikimedia.org/thumb/' + index + '.jpg', descriptionurl: 'https://commons.wikimedia.org/wiki/File:' + index,
   extmetadata: { Artist: { value: '<a href="x">Test Photographer</a>' }, LicenseShortName: { value: 'CC BY-SA 4.0' } } }] });
@@ -15,6 +17,10 @@ const r = C.wikiPick(prius, { year: 2005, make: 'Toyota', model: 'Prius' });
 assert.ok(C.wikiPick([pg('Toyota-mirai-2021-009.jpg',1)],{year:2021,make:'Toyota',model:'Mirai XLE'}),'EPA trim suffix must not reject a matching model photo');
 assert.equal(C.wikiPick([pg('1996 Ram 3500 front 2024-10-15.jpg',1)],{year:2024,make:'RAM',model:'3500'}),null,'photo date cannot disguise a different generation');
 assert.equal(C.wikiPick([pg('2024 Ram 3500 SRW front.jpg',1)],{year:2024,make:'RAM',model:'3500',info:{drw:'yes'}}),null,'known dually must not select an explicitly SRW photo');
+assert.equal(C.wikiPick([pg('Toyota Prius front.jpg',1)],{year:2016,make:'Toyota',model:'Prius'}),null,'an undated photo is not automatic proof of the model year');
+assert.equal(C.wikiPick([pg('2016 Toyota Prius C front.jpg',1)],{year:2016,make:'Toyota',model:'Prius'}),null,'a sibling model must not represent the car');
+assert.ok(C.wikiPick([pg('2024 Ram 3500 dual rear wheels front.jpg',1)],{year:2024,make:'Ram',model:'3500',info:{drw:'yes'}}),'dual rear wheels is configuration, not a rear-view photo');
+assert.equal(C.wikiPick([pg('2016 Toyota Prius front.jpg',1)],{year:2019,make:'Toyota',model:'Prius'}),null,'do not silently cross a multi-year facelift gap');
 assert.deepEqual(r, { title: '2005 Toyota Prius T Spirit 1.5 Front.jpg', url: 'https://upload.wikimedia.org/thumb/4.jpg', page: 'https://commons.wikimedia.org/wiki/File:4', artist: 'Test Photographer', license: 'CC BY-SA 4.0' });
 const civic = [pg('1992 Honda CR-X Del-Sol VXi.jpg', 1), pg('Honda CR-X del Sol 002.JPG', 2), pg('1998 Honda Civic EX coupe, front left, 06-21-2022.jpg', 3)];
 assert.equal(C.wikiPick(civic, { year: 1998, make: 'Honda', model: 'Civic' }).title, '1998 Honda Civic EX coupe, front left, 06-21-2022.jpg', 'another model is skipped');

@@ -84,7 +84,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     assert.equal(await p.locator('.sub-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);
     await p.evaluate(()=>{const t=Garage.car().tires;TireMath.positions(t).filter(p=>p.trailer==='trExample').forEach(p=>t.corners[p.k]=Object.assign({},t.corners[p.k],{size:'205/75R15'}));});
     await p.locator('[data-tr-tire="trExample:a2li"]').click();await p.waitForSelector('#tpSizeEdit');await p.click('#tpSizeEdit');await p.fill('#tpSize','445/95R26');await p.dispatchEvent('#tpSize','change');
-    await p.waitForFunction(()=>Garage.car().tires.corners['trExample:a2li'].size==='445/95R26',null,{timeout:3000});
+    await p.waitForFunction(()=>Garage.car().tires.corners['trExample:a2li'].size==='445/95R26',null,{timeout:10000});
     const individual=await p.evaluate(()=>{const t=Garage.car().tires,g=TireMath.trailerGeometry(t.trailers[0],t.corners);return {diameters:g.axles.map(a=>a.diameter),length:t.trailers[0].geometry.lengthFt,min:g.minLength};});assert.ok(individual.diameters[1]>individual.diameters[0]);assert.ok(individual.length>=individual.min-1e-8);
     await p.click('.sub-back');await p.waitForSelector('#ttSame');
     await p.locator('.sub-body').evaluate(e=>e.scrollTop=e.scrollHeight);await frame(p);

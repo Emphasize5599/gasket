@@ -35,6 +35,14 @@ TR = r'''() => {
   };
 }'''
 errors = []
+def car_sub(pg):
+    """The car's tire details submenu (tread, each tire, the dually and "not all the same" switches live there)."""
+    if pg.locator('.sub-page #tzSplit').count() == 0:
+        if pg.locator('.sub-page').count(): pg.click('.sub-back'); pg.wait_for_timeout(200)
+        pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSplit')
+def main(pg):
+    """Back to the Tires tile (its tread summary and the overview picture)."""
+    while pg.locator('.sub-page').count(): pg.click('.sub-back'); pg.wait_for_timeout(200)
 def ft(pg, sel): return pg.evaluate("(s) => { const e = document.querySelector(s); if (!e) throw new Error('no ' + s); return e.innerText; }", sel)
 def T(pg): return pg.evaluate('window.Garage.car().tires')
 def opts(pg, sel): return pg.evaluate("(s) => [...document.querySelectorAll(s + ' option')].map(o => o.textContent)", sel)
@@ -109,30 +117,30 @@ with sync_playwright() as p:
         assert T(pg)['spare']['kind'] == 'compact' and pg.locator('.tz-guess').count() == 0 and pg.input_value('#tzSpare') == 'compact'
         assert "hasn't been checked" in ft(pg, '.tz-air'), 'picked: now its air is asked for'
         # ---- tread: estimated from miles and rotation, or measured ----
-        pg.fill('#tzMiles', '30000'); pg.dispatch_event('#tzMiles', 'change'); pg.wait_for_timeout(150)
-        pg.select_option('#tzRot', 'yes'); pg.wait_for_timeout(200)
+        car_sub(pg); pg.fill('#tzMiles', '30000'); pg.dispatch_event('#tzMiles', 'change'); pg.wait_for_timeout(150)
+        pg.select_option('#tzRot', 'yes'); pg.wait_for_timeout(200); main(pg)
         out = ft(pg, '.tz-out'); print('  estimate:', out.replace('\n', ' | '))
         assert 'About 6.5/32 in left' in out and 'Plenty left' in out and '65,000-mile warranty' in out, out
-        pg.select_option('#tzRot', 'no'); pg.wait_for_timeout(200)
+        car_sub(pg); pg.select_option('#tzRot', 'no'); pg.wait_for_timeout(200); main(pg)
         assert 'About 5/32 in left' in ft(pg, '.tz-out') and 'Plan new tires' in ft(pg, '.tz-out') and 'skipped rotations' in ft(pg, '.tz-out')   # 10 - 8 x 30k / (65k x 0.75)
         pg.screenshot(path=f'{OUT}/{name}-t1-tires.png', full_page=True)
-        pg.click('#tzMode [data-mode="measure"]'); pg.wait_for_timeout(200)
-        pg.select_option('#tzDepth', '3'); pg.wait_for_timeout(200)
+        car_sub(pg); pg.click('#tzMode [data-mode="measure"]'); pg.wait_for_timeout(200)
+        pg.select_option('#tzDepth', '3'); pg.wait_for_timeout(200); main(pg)
         assert '3/32 in left' in ft(pg, '.tz-out') and 'Replace them soon' in ft(pg, '.tz-out') and 'About' not in ft(pg, '.tz-out').split('\n')[0]
         # the (?) explains the coin test
-        pg.evaluate("document.querySelector('#tzDepth').closest('label').querySelector('.qi').scrollIntoView({ block: 'center' })"); pg.wait_for_timeout(300)
+        car_sub(pg); pg.evaluate("document.querySelector('#tzDepth').closest('label').querySelector('.qi').scrollIntoView({ block: 'center' })"); pg.wait_for_timeout(300)
         pg.click('#tzDepth >> xpath=ancestor::label//button[contains(@class,"qi")]'); pg.wait_for_timeout(200)
         assert 'Lincoln' in ft(pg, '.qpop') and 'Washington' in ft(pg, '.qpop'); pg.evaluate('window.__closeQ && window.__closeQ()')
         # ---- Advisory: replace soon (red dot); a B traction grade is mentioned ----
-        pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzTrac')
-        pg.select_option('#tzTrac', 'B'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
+        car_sub(pg); pg.wait_for_selector('.sub-page #tzTrac')
+        pg.select_option('#tzTrac', 'B'); pg.wait_for_timeout(200); main(pg)
         pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(400)
         at = ft(pg, '#advTires'); print('  advisory:', at.replace('\n', ' | '))
         assert 'Tires: replace soon' in at and '3/32 in' in at and 'traction grade is B' in at and pg.locator('#advTires.warn').count() == 1
         assert pg.locator('#tpSteps [data-step="2"].attn').count() == 1
         pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
-        pg.select_option('#tzDepth', '8'); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzTrac')
-        pg.select_option('#tzTrac', 'A'); pg.wait_for_timeout(200); pg.click('.sub-back'); pg.wait_for_timeout(200)
+        car_sub(pg); pg.select_option('#tzDepth', '8'); pg.wait_for_timeout(150)
+        pg.select_option('#tzTrac', 'A'); pg.wait_for_timeout(200); main(pg)
         # ---- Advisory: the tires' cold pressure, ticked once a month; Next waits for it ----
         pg.evaluate("window.__mocks.tireAir = false"); pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(300)
         assert 'Tire pressure' in ft(pg, '#advTires') and 'driver\'s door jamb' in ft(pg, '#advTires') and pg.locator('[data-tchk="tires"]:checked').count() == 0
@@ -163,40 +171,58 @@ with sync_playwright() as p:
         assert 'T125/70D17' in ft(pg, '.tz-tip') and pg.locator('.tz-air.ok').count() == 0, ft(pg, '#gTiresIn')
         pg.evaluate("() => { Object.assign(window.Garage.car().tires.spare, JSON.parse(window.__sp0)); window.dispatchEvent(new Event('garagechange')); }")
         pg.evaluate('window.__trip.step(2)'); pg.wait_for_timeout(200); pg.evaluate('window.__trip.step(1)'); pg.wait_for_timeout(300); show(pg, 'corolla20')
-        # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive) ----
+        # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive); in the car's tire details ----
+        car_sub(pg)
+        assert pg.locator('.sub-page .tz-car-visual .tz-w').count() == 4, 'the car on its own, in its own page'
         pg.check('#tzSplit'); pg.wait_for_timeout(200)
         pg.click('#tzBy [data-by="depth"]'); pg.wait_for_timeout(200)
         for k, d in (('lf', '8'), ('rf', '8'), ('lr', '6'), ('rr', '6')): pg.select_option('[data-corner="%s"]' % k, d); pg.wait_for_timeout(120)
         rot = ft(pg, '.tz-rot'); print('  rotation:', rot.replace('\n', ' | '))
         assert 'Move these tires' in rot and 'Driver front → Driver rear' in rot and 'two best tires on the rear' in rot
+        main(pg)
         assert '6/32 in left' in ft(pg, '.tz-out') and 'Driver rear' in ft(pg, '.tz-out'), 'the shallowest tire counts'
+        assert pg.locator('#gTiresIn #tzSplit, #gTiresIn [data-corner]').count() == 0, "the car's tire controls are only in its submenu"
+        car_sub(pg)
         pg.select_option('[data-corner="lf"]', '4'); pg.select_option('[data-corner="rf"]', '3'); pg.select_option('[data-corner="lr"]', '7'); pg.select_option('[data-corner="rr"]', '7'); pg.wait_for_timeout(200)
         rot = ft(pg, '.tz-rot'); assert 'Replace before rotating' in rot and 'instead of rotating them to the back' in rot, rot
         # an EPA-rated hybrid can't be a dually: no switch
-        assert pg.locator('#tzDually').count() == 0 and pg.locator('.tz-pic .tz-w').count() == 4
-        # ---- tow mode: "Car tire details", and a tile for each trailer; the hooked-up ones' tires count ----
+        assert pg.locator('#tzDually').count() == 0 and pg.locator('.sub-page .tz-pic .tz-w').count() == 4
+        main(pg)
+        # ---- tow mode: "Car tire details", and a row for each trailer (its tires live in its own page) ----
         pg.check('#tzTow'); assert pg.locator('.sub-page').count() == 0; pg.click('#tzAddTr'); pg.wait_for_selector('.sub-page [data-axles]')
         assert ft(pg, '.sub-page h2') == 'Trailer tire details · Trailer' and pg.locator('.sub-page [id$="_Hooked"]').count() == 0, 'a new trailer is hooked up: it opens to fill in, no switch'
         assert [ft(pg, '.tz-trbtns .btn:nth-child(%d)' % i) for i in (1, 2, 3)] == ['Delete', 'Unhook', 'Discard changes']
         tid = pg.evaluate("window.Garage.car().tires.trailers[0].id")
         pg.click('[data-tr="%s"][data-axles="2"]' % tid); pg.wait_for_timeout(150); pg.click('[data-tr="%s"][data-per="4"]' % tid); pg.wait_for_timeout(150)
+        pg.click('[data-tr-split="true"]'); pg.wait_for_timeout(200)
+        assert pg.locator('.sub-page [data-tr-tire]').count() == 8 and pg.locator('.sub-page [aria-label="Specify Trailer, axle 2, passenger side outer"]').count() == 1
+        assert pg.locator('.sub-page .tz-tr-side.dual').count() == 4, 'dual: an inner and an outer per side'
         pg.screenshot(path=f'{OUT}/{name}-t2a-trailer-page.png')
         pg.click('.sub-back'); pg.wait_for_timeout(200)
         assert 'Car tire details' in ft(pg, '#tzDet') and pg.locator('#tzTr_%s' % tid).count() == 1 and '2 axles × 4 tires' in ft(pg, '#tzTr_%s' % tid), 'Back keeps the changes'
         assert pg.locator('#tzSaved').count() == 0, 'nothing unhooked: no Saved trailers'
-        assert pg.locator('.tz-pic .tz-w').count() == 12 and pg.locator('[data-corner]').count() == 12, 'two axles of four'
-        assert pg.locator('[aria-label="Trailer, axle 2, passenger side outer"]').count() == 1
-        # its tires aren't filled in: the Garage won't go on (fill them in, or discard the tire changes); Advice warns
-        assert 'missing a tread depth' in ft(pg, '#tzMiss') and 'Discard tire changes' in ft(pg, '#tzMiss')
+        assert pg.locator('.tz-overview .tz-w').count() == 12 and pg.locator('#gTiresIn [data-corner], #gTiresIn [data-tr-tire]').count() == 0, 'the hooked-up picture on the tile; tires in the submenus'
+        assert pg.locator('.tz-overview .tz-trn').count() == 0 and 'Trailer' not in pg.evaluate("document.querySelector('.tz-overview').textContent"), 'no trailer label on the picture'
+        # its tires aren't filled in: the row says so, the Garage won't go on; Advice warns
+        assert '8 tires need details' in ft(pg, '#tzTr_%s' % tid) and pg.locator('#tzTr_%s.empty' % tid).count() == 1, ft(pg, '#tzTr_%s' % tid)
         assert 'Your tires could be unsafe' in pg.evaluate("Tires.advice(window.Garage.car()).map(x => x.title).join('|')")
         pg.click('#tNext'); pg.wait_for_timeout(300); assert pg.evaluate('window.__trip.state().step') == 1, 'Garage waits for the tires'
         assert pg.locator('#tpSteps [data-step="2"].dim').count() == 1
-        for k in ['%s:a1lo', '%s:a1li', '%s:a1ri', '%s:a1ro', '%s:a2lo', '%s:a2li', '%s:a2ri']: pg.select_option('[data-corner="%s"]' % (k % tid), '8'); pg.wait_for_timeout(60)
-        pg.select_option('[data-corner="%s:a2ro"]' % tid, '2'); pg.wait_for_timeout(200)
-        assert pg.locator('#tzMiss').count() == 0 and 'At the legal limit' in ft(pg, '.tz-out') and 'Trailer, axle 2, passenger side outer' in ft(pg, '.tz-out')
-        fill = pg.evaluate("[...document.querySelectorAll('.tz-pic .tz-w rect')].map(r => r.style.fill)[11]"); assert 'rgb' in fill or 'hsl' in fill, fill
+        # one through its page, the rest at once
+        pg.click('#tzTr_%s' % tid); pg.wait_for_selector('.sub-page [data-tr-tire]')
+        pg.click('[data-tr-tire="%s:a2ro"]' % tid); pg.wait_for_selector('.sub-page #tpMiles')
+        pg.fill('#tpMiles', '39000'); pg.dispatch_event('#tpMiles', 'change'); pg.wait_for_timeout(100)
+        pg.fill('#tpWarranty', '40000'); pg.dispatch_event('#tpWarranty', 'change'); pg.wait_for_timeout(100)
+        pg.select_option('#tpRot', 'no'); pg.wait_for_timeout(150)
+        pg.click('.sub-back'); pg.wait_for_selector('.sub-page [data-tr-tire]'); pg.click('.sub-back'); pg.wait_for_timeout(200)
+        assert pg.locator('.sub-page').count() == 0
+        assert '7 tires need details' in ft(pg, '#tzTr_%s' % tid), ft(pg, '#tzTr_%s' % tid)
+        pg.evaluate("""(tid) => { const t = window.Garage.car().tires; for (const k of ['a1lo', 'a1li', 'a1ri', 'a1ro', 'a2lo', 'a2li', 'a2ri']) t.corners[tid + ':' + k] = { miles: 1000, warrantyMi: 40000, rotated: 'yes' }; window.Garage.redraw(); window.dispatchEvent(new Event('garagechange')); }""", tid); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        assert 'need details' not in ft(pg, '#tzTr_%s' % tid) and 'Trailer, axle 2, passenger side outer' in ft(pg, '.tz-out'), ft(pg, '.tz-out')
+        fill = pg.evaluate("[...document.querySelectorAll('.tz-overview .tz-w rect')].map(r => r.style.fill)[11]"); assert 'rgb' in fill or 'hsl' in fill, fill
         assert pg.locator('#tpSteps [data-step="2"].dim').count() == 0, 'all filled in: on you go'
-        # a second trailer, hooked up too: chained behind; its tires missing: discard brings back the last complete set
+        # a second trailer, unhooked: Saved trailers
         pg.click('#tzAddTr'); pg.wait_for_selector('.sub-page #ttUnhook')
         t2 = pg.evaluate("window.Garage.car().tires.trailers[1].id")
         pg.click('#ttUnhook'); pg.wait_for_timeout(200)
@@ -206,59 +232,66 @@ with sync_playwright() as p:
         pg.click('#tzSaved'); pg.wait_for_selector('.sub-page [data-hook]')
         pg.click('[data-hook="%s"]' % t2); pg.wait_for_timeout(200)
         assert pg.locator('.sub-page').count() == 0, 'the last one hooked up: the list closes'
-        assert pg.locator('.tz-pic .tz-w').count() == 14 and pg.locator('#tzMiss').count() == 1
+        assert pg.locator('.tz-overview .tz-w').count() == 14
         pg.screenshot(path=f'{OUT}/{name}-t2b-trailer.png')
-        pg.click('#tzDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
-        assert pg.locator('#tzMiss').count() == 0 and pg.locator('.tz-pic .tz-w').count() == 12 and pg.locator('#tzSaved').count() == 1, 'back to the last complete set (the second trailer, unhooked)'
-        assert pg.evaluate("window.Garage.car().tires.trailers[1].hooked") is False
+        pg.click('[data-tr-unhook="%s"]' % t2); pg.wait_for_timeout(200)
+        assert pg.locator('.tz-overview .tz-w').count() == 12 and pg.locator('#tzSaved').count() == 1 and pg.evaluate("window.Garage.car().tires.trailers[1].hooked") is False
         # Discard changes: back to how it was when the page opened
         pg.click('#tzTr_%s' % tid); pg.wait_for_selector('.sub-page [data-axles]')
         pg.click('[data-tr="%s"][data-axles="1"]' % tid); pg.wait_for_timeout(150)
-        assert pg.locator('.tz-pic .tz-w').count() == 8
+        assert pg.locator('.sub-page [data-tr-tire]').count() == 4
         o = pg.evaluate(OVER); pg.evaluate(BIG.replace('#gTires *', '.sub-page *')); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'trailer page sideways: ' + str(o)
         pg.click('#ttDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
-        assert pg.evaluate("window.Garage.car().tires.trailers[0].axles") == 2 and pg.locator('.tz-pic .tz-w').count() == 12 and pg.evaluate("window.Garage.car().tires.corners['%s:a2ro'].depth" % tid) == 2
+        assert pg.evaluate("window.Garage.car().tires.trailers[0].axles") == 2 and pg.locator('.tz-overview .tz-w').count() == 12 and pg.evaluate("window.Garage.car().tires.corners['%s:a2ro'].miles" % tid) == 39000
         # Delete: from Saved trailers → Edit
         pg.click('#tzSaved'); pg.wait_for_selector('.sub-page [data-edit]'); pg.click('[data-edit="%s"]' % t2); pg.wait_for_selector('.sub-page #ttDel')
         pg.click('#ttDel'); pg.wait_for_timeout(200)
         if pg.locator('.cfm-go').count(): pg.click('.cfm-go'); pg.wait_for_timeout(250)
-        assert pg.evaluate("window.Garage.car().tires.trailers.length") == 1 and pg.locator('#tzSaved').count() == 0 and pg.locator('.sub-page').count() == 0
-        pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
+        main(pg)
+        assert pg.evaluate("window.Garage.car().tires.trailers.length") == 1 and pg.locator('#tzSaved').count() == 0
         pg.uncheck('#tzTow'); pg.wait_for_timeout(200)
-        assert pg.locator('.tz-pic .tz-w').count() == 4 and 'Car tire details' not in ft(pg, '#tzDet')
+        assert pg.locator('.tz-overview .tz-w').count() == 4 and 'Car tire details' not in ft(pg, '#tzDet')
         # ---- by mileage: each tire opens its own page; miles, warranty (from the car's tire details) and rotation ----
+        car_sub(pg)
         pg.click('[data-by="miles"]'); pg.wait_for_timeout(200)
         assert pg.locator('[data-tire]').count() == 4 and pg.locator('.tz-c:has([data-tire]) .req').count() == 4 and 'missing details' in ft(pg, '#tzMiss')
         pg.click('[data-tire="lf"]'); pg.wait_for_selector('.sub-page #tpMiles')
-        assert pg.input_value('#tpWarranty') == '65000', 'the warranty from the car\'s tire details'
+        assert pg.input_value('#tpWarranty') == '65000', "the warranty from the car's tire details"
         pg.fill('#tpMiles', '30000'); pg.dispatch_event('#tpMiles', 'change'); pg.wait_for_timeout(100)
         pg.select_option('#tpRot', 'yes'); pg.wait_for_timeout(150)
         assert 'About 6.5/32 in left' in ft(pg, '.sub-page .tz-out'), ft(pg, '.sub-page')
         pg.screenshot(path=f'{OUT}/{name}-t2d-tire.png')
-        pg.click('.sub-back'); pg.wait_for_timeout(200)
-        assert '30,000 mi · 65k warranty' in ft(pg, '[data-tire="lf"]') and pg.locator('.tz-c:has([data-tire]) .req').count() == 3
+        pg.click('.sub-back'); pg.wait_for_selector('.sub-page #tzSplit')
+        assert '30,000 mi · 65k warranty' in ft(pg, '[data-tire="lf"]') and pg.locator('.tz-c:has([data-tire]) .req').count() == 3, "Back goes to the car's tire details"
         pg.click('#tzDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
+        car_sub(pg)
         assert pg.locator('[data-tire]').count() == 0 and pg.locator('[data-corner]').count() == 4, 'discarded: back to the measured set'
+        main(pg)
         # ---- dual rear wheels: a heavy pickup nothing settles shows the switch; a VIN that says DRW turns it on ----
         pg.evaluate("() => { const c = window.Garage.car(); window.__keep = { type: c.type, epaId: c.epaId, epa: c.epa }; c.type = 'truck'; delete c.epaId; c.epa = null; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        car_sub(pg)
         assert pg.locator('#tzDually').count() == 1
         pg.check('#tzDually'); pg.wait_for_timeout(200)
-        assert pg.locator('[data-corner="lri"]').count() == 1 and pg.locator('[data-corner="rri"]').count() == 1 and pg.locator('.tz-pic .tz-w').count() == 6
+        assert pg.locator('[data-corner="lri"]').count() == 1 and pg.locator('[data-corner="rri"]').count() == 1 and pg.locator('.sub-page .tz-pic .tz-w').count() == 6
+        assert pg.locator('.sub-page .tz-car-tires .tz-tr-side.dual').count() == 2 and ft(pg, '.tz-car-tires .tz-tr-side.dual .tz-tr-side-label') == 'Rear, driver side', 'like a dual trailer axle: inner and outer per side'
         pg.select_option('[data-corner="rri"]', '7'); pg.select_option('[data-corner="lri"]', '3'); pg.wait_for_timeout(200)
         assert 'rear duals differ by 4/32' in ft(pg, '.tz-rot'), ft(pg, '.tz-rot')
-        pg.evaluate("document.querySelector('.tz-pic').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2c-dually.png')
         pg.uncheck('#tzDually'); pg.wait_for_timeout(200)
+        main(pg)
         pg.evaluate("() => { const c = window.Garage.car(); Object.assign(c, window.__keep); c.info = Object.assign({}, c.info, { drw: 'yes' }); window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
-        assert pg.locator('#tzDually').count() == 1 and pg.evaluate('Tires.duallyState(Garage.car())') == 'yes' and 'VIN%20says' not in pg.inner_html('#gTiresIn'), 'explicit DRW stays available with an EPA record; without a VIN do not claim VIN evidence'
+        car_sub(pg)
+        assert pg.locator('#tzDually').count() == 1 and pg.evaluate('Tires.duallyState(Garage.car())') == 'yes' and 'VIN says' not in ft(pg, '.sub-page'), 'explicit DRW stays available with an EPA record; without a VIN do not claim VIN evidence'
+        main(pg)
         pg.evaluate("() => { const c = window.Garage.car(); c.info.drw = 'no'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        car_sub(pg)
         assert pg.locator('#tzDually').count() == 0, 'the VIN rules it out: hidden'
-        pg.evaluate("document.getElementById('tzSplit').scrollIntoView({block:'start'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2-corners.png')
+        main(pg)
         # ---- the "why" pictures: submenus that play an animation ----
         pg.click('[data-why="tread"]'); pg.wait_for_selector('.sub-page #anStop svg')
         pg.wait_for_timeout(1200); pg.screenshot(path=f'{OUT}/{name}-t3a-why-moving.png')
@@ -279,7 +312,7 @@ with sync_playwright() as p:
         pg.evaluate("document.getElementById('anStop').__anim.at(4.95)")
         op = pg.evaluate("[...document.querySelectorAll('#anStop .an-car')].map(g => +g.getAttribute('opacity'))"); assert all(0 < o < 1 for o in op), ('fading out', op)
         pg.click('.sub-back'); pg.wait_for_timeout(150); assert pg.locator('.sub-page').count() == 0, 'Back closes it'
-        pg.click('[data-why="back"]'); pg.wait_for_selector('.sub-page #anSteer svg')
+        car_sub(pg); pg.click('[data-why="back"]'); pg.wait_for_selector('.sub-page #anSteer svg')
         pg.wait_for_timeout(2600); pg.screenshot(path=f'{OUT}/{name}-t4a-steer-moving.png')
         pg.evaluate("document.getElementById('anSteer').__anim.at(5.9)")
         under = pg.evaluate("[...document.querySelectorAll('#anSteer .an-under')].map(u => u.style.display !== 'none')"); print('  upside down:', under)
@@ -295,8 +328,12 @@ with sync_playwright() as p:
           return Math.round(best); })''')
         print('  understeer cars from the road center:', off); assert off[0] <= 6 and off[1] >= 18, off
         pg.screenshot(path=f'{OUT}/{name}-t4-steer.png')
-        assert pg.evaluate('window.onBack()') and pg.locator('.sub-page').count() == 0, "the phone's Back button closes it too"
+        assert pg.evaluate('window.onBack()'), "the phone's Back button closes it too"
+        pg.wait_for_selector('.sub-page #tzSplit'); assert pg.locator('.sub-page #anSteer').count() == 0, "back to the car's tire details it was opened from"
         pg.uncheck('#tzSplit'); pg.wait_for_timeout(200)
+        o = pg.evaluate(OVER); pg.evaluate(BIG.replace('#gTires *', '.sub-page *')); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
+        assert not o, 'tire details page sideways: ' + str(o)
+        main(pg)
         assert '8/32 in left' in ft(pg, '.tz-out'), 'all the same again: the single answer'
         # no sideways scrolling, also at 130% text
         o = pg.evaluate(OVER); pg.evaluate(BIG); pg.wait_for_timeout(100); o += pg.evaluate(OVER)

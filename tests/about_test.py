@@ -63,6 +63,8 @@ with sync_playwright() as p:
         pg.click('#sDemo'); pg.wait_for_timeout(900)
         pg.evaluate("() => { __app.setDemo(true); const c=__app.map.getCenter(); __app.fetchAround(c.lat,c.lng); }")
         pg.wait_for_timeout(300)
+        # the list and bubbles show the stations in view: frame them all
+        pg.evaluate("() => { const p = __app.stations().map(s => [s.lat, s.lng]); if (p.length) __app.map.fitBounds(p, { animate: false, padding: [8, 8] }); }"); pg.wait_for_timeout(400)
         assert pg.locator('#rows .row').count() > 3 and pg.locator('#rows .gattr').count() == 0, 'no Google credit on demo stations'
         assert 'Google Maps' not in pg.inner_text('.leaflet-control-attribution'), 'no map credit with demo stations'
         pg.close()

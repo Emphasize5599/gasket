@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.146 - 2026-10-14 (keyless test branch only)
+- Organize car and trailer tire details into their own menus, with mirrored dually selectors.
+- Keep a clean hooked-up overview; remove its trailer label.
+- Improve keyless photo matching and add a photo picker alongside device images.
+- Tire buttons show each tire's miles, warranty and tread; the Tire details and trailer rows say when tires still need details.
+- Bug fixes.
+
 ## 0.0.145 - 2026-10-14 (keyless test branch only)
 - Show previously known stations as you pan the main map, without new API calls.
 - Use the correct hourly forecast at each route ETA.

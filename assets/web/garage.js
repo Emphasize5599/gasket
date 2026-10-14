@@ -341,7 +341,7 @@
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
     if(editing)h += '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
       '<button type="button" class="gc-recreate" id="gcUseGenerated">Choose...</button>' +
-      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasGenerated(c) ? '' : ' disabled') + '>Revert to original</button></div>';
+      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasOverride(c) ? '' : ' disabled') + '>Revert to original</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
       '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
     slideIn = 0;
@@ -366,7 +366,7 @@
     var recreate = $('gcRecreate');
     if (recreate) recreate.onclick = function () { if (window.CarPics && CarPics.recreate) CarPics.recreate(c); };
     var useGenerated = $('gcUseGenerated');
-    if (useGenerated) useGenerated.onclick = function () { if (window.CarPics && CarPics.importGenerated) CarPics.importGenerated(c); };
+    if (useGenerated) useGenerated.onclick = function () { if (window.CarPics && CarPics.choose) CarPics.choose(c); };
     var original = $('gcOriginal');
     if (original) original.onclick = function () {
       if (window.CarPics && CarPics.clearGenerated) CarPics.clearGenerated(c);
@@ -379,7 +379,7 @@
     var c = car(); if (!c || e.detail !== c.id || !host) return;
     var p = document.getElementById('gcPic'); if (p) p.innerHTML = picHtml(c);
     var originalButton = document.getElementById('gcOriginal');
-    if (originalButton && window.CarPics) originalButton.disabled = !CarPics.hasGenerated(c);
+    if (originalButton && window.CarPics) originalButton.disabled = !CarPics.hasOverride(c);
     var s = document.getElementById('gcSub'); if (s) { s.innerHTML = subHtml(c); bindSub(); }
     var pp = document.getElementById('gPaints'); if (pp && editing) { pp.outerHTML = paintHtml(c); bindPaints(c); }
   });
