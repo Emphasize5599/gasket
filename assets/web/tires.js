@@ -1327,7 +1327,7 @@
     if (!p) return;
     var C = t.corners, x = C[k] = C[k] || {}, u = p.unit || {};
     var body = function () {
-      var L = t.list&&t.list.size===(x.size||u.size)&&t.list.items?t.list.items:sizeList(x.size || u.size, function () { if (pg && pg.isConnected) fill(); });
+      var L = t.list&&t.list.size===(x.size||u.size)&&t.list.items?t.list.items:sizeList(x.size || u.size, later);
       if (fromList(L, x, true)) save();
       var w = warrantyOf(x, u);
       var lookup='<details class="tz-det" id="tpLook"'+(lookupOpen?' open':'')+'><summary><span>Look this tire up (recommended)<small>Pick its brand and model to fill in the warranty.</small></span></summary>'+
@@ -1340,13 +1340,16 @@
         (needs(t, p).length ? '' : '<div class="tz-out ' + status(depthAt(t, p)) + '"><b>About ' + depthAt(t, p) + '/32 in left</b><small>On this tire, by its miles.</small></div>');
     };
     var lookupOpen=true,editSize=false;
+    // a catalog reply redraws the page: never while you're typing in it (it would take your text), but once you leave the box
+    var later = function () { if (!pg || !pg.isConnected) return; var b = pg.querySelector('.sub-body'), a = document.activeElement;
+      if (b && b.contains(a) && a.matches('input,textarea')) { if (!a._tpLater) { a._tpLater = true; a.addEventListener('blur', function () { setTimeout(later, 0); }, { once: true }); } return; } fill(); };
     var pg = null, fill = function () {
       var b = pg.querySelector('.sub-body'),old=b.querySelector('#tpLook');if(old)lookupOpen=old.open;b.innerHTML = body();
       var set = function (fn) { return function () { fn.call(this);if(p.trailer){var tr=(t.trailers||[]).filter(function(tr){return tr.id===p.trailer;})[0];if(tr)normalizeTrailer(tr,t.corners);} save(); fill(); }; };
       b.querySelector('#tpMiles').onchange = set(function () { x.miles = this.value === '' ? '' : Math.max(0, parseInt(this.value, 10) || 0); });
       b.querySelector('#tpWarranty').onchange = set(function () { x.warrantyMi = Math.max(0, parseInt(this.value, 10) || 0); });
       b.querySelector('#tpRot').onchange = set(function () { x.rotated = this.value; });
-      b.querySelector('#tpSize').onchange = set(function () { var v = normSize(this.value); x.size = v || '';if(v&&p.trailer){var tr=(t.trailers||[]).filter(function(tr){return tr.id===p.trailer;})[0];if(tr)fillTrailerSizes(t,tr,k,v);} if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
+      b.querySelector('#tpSize').onchange = set(function () { var v = normSize(this.value); x.size = v || '';if(v&&p.trailer){var tr=(t.trailers||[]).filter(function(tr){return tr.id===p.trailer;})[0];if(tr)fillTrailerSizes(t,tr,k,v);} if (v) sizeList(v, later); });
       b.querySelector('#tpSizeEdit').onclick=function(){editSize=!editSize;fill();if(editSize){b.querySelector('#tpSize').focus();b.querySelector('#tpSize').select();}};
       bindPick(b, 'tp', x, function () { return t.list&&t.list.size===(x.size||u.size)&&t.list.items?t.list.items:sizeList(x.size || u.size); }, set);
       if (A.qify) A.qify(b);

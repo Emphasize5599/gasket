@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.149 - 2026-10-14 (keyless test branch only)
+- Recalls on record load for every car again: NHTSA's "no recalls under that name" answer counts as none, and shorter model names are tried (an EPA name like "Model 3 Long Range AWD" finds "Model 3").
+- Bug fixes.
+
 ## 0.0.148 - 2026-10-14 (keyless test branch only)
 - Tires: a Fuel rating section with a tile for the car and each hooked-up trailer, summing up every tire (mixed tire types count for their share); the overall rating shows under Tires.
 - Tread-difference warnings by drivetrain (AWD, on-demand AWD, full- and part-time 4WD, front- and rear-wheel drive), suggesting the axle that just rolls along where there is one.

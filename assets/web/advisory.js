@@ -19,11 +19,15 @@
   // ---------- recalls on record (NHTSA, by year / make / model) ----------
   var busy = {};
   function recallKey(c) { return c.year && c.make && c.model ? c.year + '|' + String(c.make).toLowerCase() + '|' + String(c.vpicModel || c.model).toLowerCase() : ''; }
+  /** The names to ask NHTSA by: the model, then shorter and shorter ("Model 3 Long Range" -> "Model 3 Long" -> "Model 3"
+   * -> "Model"; EPA names carry trims and ranges NHTSA's don't). */
   function nhtsaModels(c) {
-    var m = String(c.vpicModel || c.model || '').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '').trim(), out = [m];
-    var first = m.split(/\s+/)[0]; if (first && first !== m) out.push(first);
+    var w = String(c.vpicModel || c.model || '').replace(/\s+(2WD|4WD|FWD|AWD|RWD|4x4|4x2)$/i, '').trim().split(/\s+/).filter(Boolean), out = [];
+    for (var n = w.length; n >= 1; n--) out.push(w.slice(0, n).join(' '));
     return out;
   }
+  /** Not looked up again until this time has passed: a week after an answer, an hour after a failure. */
+  function recallsStale(c, R, key) { return !R || R.key !== key || (R.errT ? Date.now() - R.errT > 3600e3 : days(R.t) > 7); }
   async function fetchRecalls(c) {
     var key = recallKey(c); if (!key || busy[c.id] || !call) return;
     busy[c.id] = true;
@@ -31,6 +35,8 @@
       var list = [], tried = nhtsaModels(c);
       for (var i = 0; i < tried.length && !list.length; i++) {
         var r = await call('fetchJson', RECALLS + '?make=' + encodeURIComponent(c.make) + '&model=' + encodeURIComponent(tried[i]) + '&modelYear=' + c.year);
+        // NHTSA answers 400 ("Count": 0, "Results returned successfully") when it has no recalls under that name
+        if (r.error && /\b400\b/.test(r.error)) { list = []; continue; }
         if (r.error) throw new Error(r.error);
         list = JSON.parse(r.body).results || [];
       }
@@ -40,7 +46,12 @@
       LG.info('car', 'Recalls on record for ' + G().shortName(c) + ': ' + list.length);
       preRate(c);
       save();
-    } catch (e) { LG.warn('car', 'Recall list', String(e.message || e)); c.recalls = c.recalls && c.recalls.key === key ? c.recalls : { t: Date.now(), key: key, list: null, error: true }; }
+    } catch (e) {
+      LG.warn('car', 'Recall list', String(e.message || e));
+      // keep an earlier list for this car, and wait an hour before asking again (not on every redraw)
+      c.recalls = c.recalls && c.recalls.key === key ? Object.assign({}, c.recalls, { errT: Date.now() }) : { t: Date.now(), errT: Date.now(), key: key, list: null, error: true };
+      save();
+    }
     busy[c.id] = false;
     if (car() === c) { if (host && host.isConnected) draw(); else syncDot(); }
   }
@@ -176,7 +187,7 @@
     var key = recallKey(c);
     if (!key) return '<div class="card adv-card"><h3>Safety recalls</h3><div class="lead small keep">Pick your car in the Garage to see its recalls.</div></div>';
     var R = c.recalls;
-    if (!R || R.key !== key || days(R.t) > 7 || (R.error && Date.now() - R.t > 3600e3)) fetchRecalls(c);
+    if (recallsStale(c, R, key)) fetchRecalls(c);
     var list = onRecord(c), chk = vinCheck(c), nm = name(c);
     // the recalls still open on your car (once the VIN is checked at NHTSA) are shown first, outside the list, and rated
     // right away; background prefetch also rates the rest before the folded list is opened
@@ -310,7 +321,7 @@
   /** Load the recalls on record for the car (NHTSA's free API, never Google) so the step dot and Departure know about
    * them before Advisory is opened. */
   function prefetch() { var c = car(); if (!c || !call) return; var R = c.recalls, key = recallKey(c);
-    if (key && (!R || R.key !== key || days(R.t) > 7)) fetchRecalls(c); else syncDot();
+    if (key && recallsStale(c, R, key)) fetchRecalls(c); else syncDot();
     autoCheck(c); preRate(c); }
   function init(nativeCall) { call = nativeCall || call; prefetch(); }
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
