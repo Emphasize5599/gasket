@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.152 - 2026-10-14 (keyless test branch only)
+- The spare-tire question fits Brave Search's 50-word limit again (it was turned away as too long).
+
 ## 0.0.151 - 2026-10-14 (keyless test branch only)
 - Pages opened for you (Brave Search, NHTSA, a site's check) leave room above and below, so their buttons aren't under Gasket's.
 - Tire Rack lookups try again twice after a hiccup; without a size, picking your version comes before the size box.

@@ -684,8 +684,16 @@
   function spareKey(c) { return G() && G().carKey ? G().carKey(c) : [c.year, c.make, base(c), c.trim || ''].join(' ').trim(); }
   // Brave's answer is written by its AI from this question, so the question says how to answer: a fixed first phrase
   // (read for sure below), and the tip in its own short words. Answers that don't follow it are still read as before.
-  var SPARE_ASK = ' have a factory spare tire? Start: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. If a spare exists, state Location: inside vehicle or under vehicle, or unknown. Otherwise briefly say if one can be added and its size. Say if a spare was optional or varies by trim.';
-  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent('Does the ' + spareKey(c) + SPARE_ASK) + '&summary=1'; }
+  // Brave turns away a query over 50 words or 400 characters ("Your query is too long"): this one is 36 words before the car
+  var SPARE_ASK = ' have a factory spare tire? Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if one was optional by trim or can be added (size).';
+  /** Brave's limits on a query: the car's name gives way (its trim, then words from the end) before the question does. */
+  var BRAVE_WORDS = 50, BRAVE_CHARS = 400;
+  function braveFit(car, ask) {
+    var w = String(car).split(/\s+/).filter(Boolean), q = function () { return 'Does the ' + w.join(' ') + ask; };
+    while (w.length > 3 && (q().split(/\s+/).length > BRAVE_WORDS || q().length > BRAVE_CHARS)) w.pop();
+    return q();
+  }
+  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(braveFit(spareKey(c), SPARE_ASK)) + '&summary=1'; }
   /** An answer read by the old keyword rules (before 0.0.114): read it again with the model. If that differs and you had
    *  confirmed the old guess, you're asked again. Once per answer. */
   var rechecking = {};
