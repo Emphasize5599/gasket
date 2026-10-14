@@ -78,7 +78,7 @@ None of this data is bundled in the repository. The app fetches it while it runs
 - **OpenStreetMap:** map tiles and place names (Nominatim). © OpenStreetMap contributors. The data is available under the Open Database License: https://www.openstreetmap.org/copyright
 - **Google Maps:** station names, places and prices (Places API), and driving routes (Routes API). Google Maps Platform Terms of Service: https://cloud.google.com/maps-platform/terms. The app shows a "Google Maps" credit wherever this content appears.
 - **U.S. Environmental Protection Agency:** fuel economy data from fueleconomy.gov.
-- **National Highway Traffic Safety Administration:** VIN decoding (vPIC) and safety recalls.
+- **National Highway Traffic Safety Administration:** vehicle make/model catalog and VIN decoding (vPIC), and safety recalls. Catalog identity is not a fuel-economy rating or tire-fitment certification.
 - **Federal Highway Administration:** posted speed limits (Highway Performance Monitoring System, via geo.dot.gov).
 - **U.S. Department of Energy:** electric-charging and hydrogen station locations from the Alternative Fuels Data Center, via the National Renewable Energy Laboratory's developer network.
 - **Brave Search:** a car's fuel tank size and which kind of spare tire it has, read from Brave Search's AI answer when the Garage has none (marked as such; check your owner's manual).

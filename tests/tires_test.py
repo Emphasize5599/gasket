@@ -253,7 +253,7 @@ with sync_playwright() as p:
         pg.uncheck('#tzDually'); pg.wait_for_timeout(200)
         pg.evaluate("() => { const c = window.Garage.car(); Object.assign(c, window.__keep); c.info = Object.assign({}, c.info, { drw: 'yes' }); window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
-        assert pg.locator('#tzDually').count() == 1 and 'VIN%20says' in pg.inner_html('#gTiresIn'), 'the VIN says DRW: shown even with an EPA record'
+        assert pg.locator('#tzDually').count() == 1 and pg.evaluate('Tires.duallyState(Garage.car())') == 'yes' and 'VIN%20says' not in pg.inner_html('#gTiresIn'), 'explicit DRW stays available with an EPA record; without a VIN do not claim VIN evidence'
         pg.evaluate("() => { const c = window.Garage.car(); c.info.drw = 'no'; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
         assert pg.locator('#tzDually').count() == 0, 'the VIN rules it out: hidden'
@@ -333,7 +333,7 @@ with sync_playwright() as p:
         assert opts_[0] == ':Choose…' and opts_[1] == 'As Tire Rack names them:Fit Sport w/Honda Sensing' and len(opts_) == 4, 'yours first: it has your trim word'
         assert [r['models'] for r in pg.evaluate('window.__tr') if r['step'] == 'clars'][-1] == ['Fit'], 'Civic Sedan is another car'
         pg.select_option('#tzVerSel', 'v:Fit\u001fSport w/Honda Sensing'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
-        assert T(pg)['trVer'] == {'key': 'v3|2019|Honda|Fit', 'model': 'Fit', 'clar': 'Sport w/Honda Sensing', 'auto': False} and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
+        assert T(pg)['trVer'] == {'key': 'v4|2019|Honda|Fit', 'model': 'Fit', 'clar': 'Sport w/Honda Sensing', 'auto': False} and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
         assert 'Factory size for the 2019 Honda Fit Sport w/Honda Sensing, from Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzVerSel') == 'v:Fit\u001fSport w/Honda Sensing', 'picked: its factory size; the menu stays to change it'
         # another version: its own size (Tire Rack has none for the EX here)
         pg.select_option('#tzVerSel', 'v:Fit\u001fEX'); pg.wait_for_timeout(400)

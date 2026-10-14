@@ -45,7 +45,7 @@ async function (reqId, args) {
   const text = () => (document.body && document.body.innerText) || '';
   const refused = (t) => /currently unavailable|access denied|are you a robot|verify (?:that )?you are (?:a )?human|unusual traffic|request (?:was )?(?:blocked|rejected)|automated (?:requests|access)|security (?:check|verification)|pardon our interruption|enable javascript and cookies to continue|too many requests/i.test(t);
   const pageBlocked = () => refused(text()) || /access denied|captcha|robot|just a moment|security check/i.test(document.title || '') || /\/(blocked|sorry)\//i.test(location.href);
-  const SIZE = /\b(\d{3})\/(\d{2})(?:-|\s*Z?R)(\d{2})\b/g;
+  const SIZE = /\b(?:LT|P)?(\d{3})\/(\d{2})(?:-|\s*Z?R)(\d{2})\b/gi;
   const norm = (m) => m[1] + '/' + m[2] + 'R' + m[3];
   const settle = async (ok, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const t = text(); if (pageBlocked() || ok(t)) return t; await sleep(400); } return text(); };
 

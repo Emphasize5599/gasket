@@ -127,6 +127,14 @@
         tank: 17.7, tankSrc: TANKS[1].src, obs: {}, entries: [], info: seedInfo('venza12') }
     ];
   }
+  function addDuallyDemo(){
+    if(S.cars.some(function(c){return c.id==='demo-ram3500';}))return;
+    S.cars.push({id:'demo-ram3500',name:'2024 RAM 3500 Tradesman (demo)',year:2024,make:'RAM',model:'3500',trim:'Tradesman',type:'truck',power:'gas',grade:'regular',epa:null,demoMileage:true,
+      catalog:{source:'nhtsa',makeId:'496',modelId:'13622'},tank:32,tankSrc:'illustrative demo capacity',obs:{city:12,hwy:17},entries:[],
+      info:{body:'Pickup',drive:'4wd',drw:'yes',engine:'6.4L V8',asp:'na',trans:'auto'},
+      tires:{size:'235/80R17',sizeSrc:'user',corners:{dually:true},tread:{mode:'miles',miles:3000,rotated:'yes'}}});
+    changed();draw();
+  }
   function seedInfo(id) {
     if (id === 'corolla20') return { engine: '1.8L Inline 4 Cyl (2ZR-FXE)', asp: 'na', trans: 'ecvt', drive: 'fwd', features: ['Atkinson cycle', 'Port injection', 'Variable valve timing', 'DOHC', 'Regenerative braking'] };
     if (id === 'venza12') return { engine: '3.5L V6 (2GR-FE)', asp: 'na', trans: 'auto', transN: 6, drive: 'fwd', features: ['Port injection', 'Variable valve timing', 'DOHC'] };
@@ -224,7 +232,8 @@
       h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city) + tile(c.epa.hwy, 'Highway', EPA_Q.hwy) +
         tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb) + rangeTile(c) + '</div>';
       if (k === 'ev' && c.epa.kwh) h += '<div class="lead small keep">EPA: ' + c.epa.kwh.city + ' / ' + c.epa.kwh.hwy + ' / ' + c.epa.kwh.comb + ' kWh per 100 mi' + (c.epa.range ? ' · ' + c.epa.range + ' mi range' : '') + '</div>';
-    } else h += '<div class="msg">No EPA numbers yet — tap Edit and look your car up' + (k === 'gas' ? '' : ', or enter your own under Observed') + '.</div>';
+    } else h += '<div class="msg">No EPA rating selected. Look up a rated version under Edit, or enter your city/highway mileage under Observed mileage. Some heavy-duty vehicles have no EPA rating.</div>';
+    if(c.demoMileage)h += '<div class="lead small keep" style="color:var(--warn)">Demo configuration, mileage and tank capacity are illustrative, not EPA ratings or measurements. Verify the actual vehicle and replace the sample values before planning a real trip.</div>';
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
     h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
@@ -305,7 +314,7 @@
   }
   /** "2020 Corolla Hybrid LE": year, model and (when you gave one) trim. */
   function shortName(x) {
-    if (x.year && x.model) return x.year + ' ' + String(x.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '') + (x.trim ? ' ' + x.trim : '');
+    if (x.year && x.model) return x.year + ' ' + String(x.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '') + (x.trim ? ' ' + x.trim : '')+(x.demoMileage?' (demo)':'');
     return x.name || 'New car';
   }
   function opts(map, cur, blank) {
@@ -426,7 +435,8 @@
     h += '<details class="epa" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>Year / make / model<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model].join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
       '<div class="epa-grid"><select id="eYear"><option value="">Year</option></select><select id="eMake" disabled><option>Make</option></select>' +
       '<select id="eModel" disabled><option>Model</option></select><select id="eOpt" disabled><option>Engine / transmission</option></select></div>' +
-      '<div class="epa-msg" id="eMsg"></div><p class="lead small keep">All vehicles listed by the EPA, from 1984 onward. Some heavy-duty trucks and other vehicles have no EPA rating; enter a custom vehicle below and supply its mileage.</p></details>';
+      '<div class="epa-msg" id="eMsg"></div><p class="lead small keep">All vehicles listed by the EPA, from 1984 onward. Some heavy-duty trucks and other vehicles have no EPA rating; browse NHTSA or enter a custom vehicle and supply its mileage.</p></details>';
+    if(!c.epaId&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
     if (!c.epaId && !c.vin) h += '<details class="epa" id="gCustom"'+(c.year||c.make||c.model?' open':'')+'><summary>Custom vehicle<small>Not in the EPA catalog? Enter its details here.</small></summary>' +
       '<div class="grid2"><label class="nf"><span>Year</span><input id="gCustomYear" type="number" inputmode="numeric" step="1" min="1886" max="9999" value="'+esc(c.year||'')+'"></label>' +
       '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
@@ -713,6 +723,7 @@
         $('gVin').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); lookupVin(c, this.value); } };
       }
       if ($('gName')) $('gName').onchange = function () { c.name = this.value.trim(); draw(); save(); };
+      if($('gCatalog'))$('gCatalog').onclick=function(){openCatalog(c);};
       if($('gName'))$('gName').oninput=function(){$('gEdit').disabled=!this.value.trim()&&!(c.year&&c.make&&c.model);};
       ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
@@ -818,6 +829,25 @@
   function changedSoon() { clearTimeout(soonT); soonT = setTimeout(changed, 300); }
 
   // ---------- EPA lookup ----------
+  function openCatalog(c){
+    var C=window.VehicleCatalog,api=C.create(call,A.KV),alive=true,revision=0;
+    var close=A.subPage('More vehicles (NHTSA)','<p class="lead small keep">Cars, trucks, SUVs and minivans from 1996 onward. NHTSA supplies identity, not MPG, trim or tire fitment. EPA-rated vehicles remain available in the main picker.</p>'+
+      '<div class="grid2"><label class="nf"><span>Vehicle type</span><select id="vcType">'+C.TYPES.map(function(t){return '<option value="'+t.id+'">'+esc(t.label)+'</option>';}).join('')+'</select></label>'+
+      '<label class="nf"><span>Year</span><select id="vcYear"></select></label></div><label class="nf wide"><span>Make</span><select id="vcMake" disabled></select></label><label class="nf wide"><span>Model</span><select id="vcModel" disabled></select></label>'+
+      '<div id="vcMsg" class="epa-msg" role="status"></div><button class="btn tonal sm" id="vcRetry" hidden>Retry NHTSA</button><button class="btn primary" id="vcUse" disabled>Use this vehicle</button>',function(b){
+      var el=function(id){return b.querySelector('#'+id);},busy=false;
+      fill(el('vcYear'),C.years(new Date().getFullYear()),'Year');el('vcYear').value=String(c.year>=1996?c.year:new Date().getFullYear());el('vcType').value=c.type==='truck'?'3':c.type==='suv'?'7':'2';
+      function msg(text,error){el('vcMsg').textContent=text;el('vcMsg').classList.toggle('err',!!error);el('vcRetry').hidden=!error;}
+      async function load(models){var rev=++revision,y=el('vcYear').value,type=el('vcType').value,mk=el('vcMake').value;el('vcUse').disabled=true;fill(el('vcModel'),[],'Model');if(!models)fill(el('vcMake'),[],'Make');if(models&&(!mk||!y))return;msg('Loading NHTSA…');try{var list=models?await api.models(mk,+y,type):await api.makes(type);if(!alive||rev!==revision)return;fill(el(models?'vcModel':'vcMake'),list,models?'Model':'Make');msg(list.length?'Choose '+(models?'a model.':'a make.'):'No '+(models?'models for that year.':'makes returned.')+' You can enter a custom vehicle instead.');}catch(e){if(alive&&rev===revision)msg('Could not load NHTSA: '+e.message+'. Custom entry remains available.',true);}}
+      el('vcType').onchange=function(){load(false);};el('vcYear').onchange=function(){load(!!el('vcMake').value);};el('vcMake').onchange=function(){load(true);};el('vcModel').onchange=function(){el('vcUse').disabled=!this.value;};el('vcRetry').onclick=function(){load(!!el('vcMake').value);};
+      el('vcUse').onclick=async function(){if(busy)return;var year=+el('vcYear').value,make=el('vcMake').selectedOptions[0],model=el('vcModel').selectedOptions[0],type=C.TYPES.filter(function(t){return String(t.id)===el('vcType').value;})[0];if(!year||!make||!model||!model.value)return;busy=true;el('vcUse').disabled=true;
+        var same=c.year===year&&String(c.make).toLowerCase()===make.text.toLowerCase()&&c.model===model.text;
+        if(!same&&(c.year||c.make||c.model)&&!(await A.confirmDel({always:true,title:'Change this vehicle?',body:'Existing vehicle details, mileage and tires will be cleared; any custom picture is kept. Discard changes in the car editor can restore the previous details.',action:'Change vehicle',goClass:'tonal caution'}))){busy=false;el('vcUse').disabled=false;return;}
+        if(!alive||S.carId!==c.id)return;if(!same){['epaId','epaBase','epa','trim','tank','tankSrc','tankLookup','tires','pic','picMode','paint','vinHints','demoMileage'].forEach(function(k){delete c[k];});c.info={};c.obs={};c.entries=[];c.power='gas';c.grade='';}
+        c.year=year;c.make=make.text;c.model=model.text;c.vpicModel=model.text;c.name=[year,make.text,model.text].join(' ');c.type=type.type;c.catalog={source:'nhtsa',makeId:make.value,modelId:model.value};close();changed();draw();await epaMatch(c,'Selected from NHTSA: '+c.name+'.');
+      };load(false);return function(){alive=false;revision++;};
+    });
+  }
   function items(body) { try { var j = JSON.parse(body); var m = j && j.menuItem; return !m ? [] : Array.isArray(m) ? m : [m]; } catch (e) { return []; } }
   async function epaGet(path) { var r = await call('fetchJson', EPA + path); if (r.error) throw new Error(r.error); return r.body; }
   function fill(sel, list, ph) {
@@ -1046,7 +1076,7 @@
       var y = $('eYear'); if (!pick(y, function (t) { return t === String(c.year); }).length) { say(esc(lead) + ' The EPA has no ' + c.year + ' cars listed — enter your own mileage under Observed.'); return; }
       y.value = String(c.year); await y.onchange.call(y);
       var mk = $('eMake'), mm = pick(mk, function (t) { return t === String(c.make).toLowerCase(); });
-      if (!mm.length) { say(esc(lead) + ' Pick the make and model below for its mileage.'); return; }
+      if (!mm.length) { say(esc(lead) + ' No EPA make was found for this year. Keep this vehicle and enter your own city/highway mileage under Observed mileage.'); return; }
       mk.value = mm[0].value; await mk.onchange.call(mk);
       var md = $('eModel'), base = String(c.vpicModel || c.model).toLowerCase(), I = c.info || {};
       // the EPA splits a model by drive ("Charger" is two-wheel drive, "Charger AWD" all-wheel): use what the VIN says
@@ -1062,7 +1092,7 @@
       }
       if (m) LG.info('car', 'EPA version matched' + (byAi ? ' by the on-phone AI' : ''), { pick: m.text, from: ranked.map(function (x) { return x.o.text + ' ' + x.sc; }) });
       if (byAi) lead += ' The on-phone AI picked the closest version: check it.';
-      if (!m) { say(esc(lead) + ' Pick the model below' + (starts.length ? ' (' + starts.length + ' versions of the ' + esc(c.model) + ')' : '') + ' for its mileage.'); return; }
+      if (!m) { say(esc(lead) + (starts.length?' Pick the model below (' + starts.length + ' versions of the ' + esc(c.model) + ') for its mileage.':' No matching EPA model was returned. Keep this vehicle and enter your own city/highway mileage under Observed mileage.')); return; }
       md.value = m.value; await md.onchange.call(md);
       if (hasEpa(c) && c.epaId && $('eOpt') && $('eOpt').value) return;
       // more than one engine / transmission: the one with the VIN's engine size, cylinders (and gears, when it says)
@@ -1478,6 +1508,6 @@
     return out;
   }
 
-  window.Garage = { kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
+  window.Garage = { addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
     need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

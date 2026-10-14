@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.140 - 2026-10-13 (keyless test branch only)
+- NHTSA selection for vehicles beyond EPA coverage, plus a labeled Ram dually demo.
+- Improved truck tire-size reading and manual Tire Rack model matching.
+- Bug fixes.
+
 ## 0.0.139 - 2026-10-13 (keyless test branch only)
 - Clearer custom vehicle entry alongside the full EPA catalog.
 - Matching rounded image buttons with readable wrapping labels.

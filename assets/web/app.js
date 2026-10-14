@@ -1233,6 +1233,7 @@
     });
     $('sDemo').onclick = function () {
       demo = !demo; closeSettings(false);
+      if(demo&&window.Garage)Garage.addDuallyDemo();
       var c = me || map.getCenter(); stations = []; gStations = []; official = {}; lastFetch = null;
       if (demo) fetchAround(c.lat, c.lng); else { loadCache(); render(); }
     };

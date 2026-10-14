@@ -83,6 +83,8 @@ async function run() {
 
     await start(pg, '<h1>2011 Toyota Sienna FWD LE V6</h1><h2>Factory Tire Size</h2><p>235/60-17</p><h2>Optional Tire Sizes</h2><p>235/55-18</p>', { step: 'size' });
     assert.deepEqual((await result(pg)).factory, ['235/60R17']);
+    await start(pg,'<h2>Factory Tire Size</h2><p>LT235/80R17</p><p>P275/70R18</p><h2>Optional Tire Sizes</h2><p>LT285/60R20</p>',{step:'size'});
+    assert.deepEqual(await result(pg),{id:123,factory:['235/80R17','275/70R18'],optional:['285/60R20']});
     await start(pg, '<h2>Factory Tire Size</h2>', { step: 'size' });
     await pg.clock.fastForward(20500);
     assert.equal(await pg.evaluate(() => answers[0] && answers[0].code), 'unreadable');

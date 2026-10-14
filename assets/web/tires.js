@@ -279,7 +279,7 @@
     var cyl = (m = /(\d{1,2})\s*-?\s*cyl/.exec(all)) ? +m[1] : (m = /\bv-?(6|8|10|12)\b/.exec(all)) ? +m[1] : (m = /\b(?:inline|i|straight)\s*-?\s*(3|4|5|6)\b/.exec(all)) ? +m[1] : 0;
     var body = ''; words([info.body, c.trim, c.name].join(' ')).some(function (w) { if (/^(coupe|convertible|sedan|hatchback|liftback|wagon|van|roadster)$/.test(w)) { body = w; return true; } return false; });
     if (!body && /pickup|truck/i.test(info.body || '')) body = 'cab';
-    return { drive: d, cyl: cyl, body: body, trim: words(c.trim).filter(function (w) { return !NOISE.test(w); }) };
+    return { drive: d, cyl: cyl, body: body, drw: info.drw==='yes'||c.tires&&c.tires.corners&&c.tires.corners.dually?'yes':info.drw==='no'?'no':'', trim: words(c.trim).filter(function (w) { return !NOISE.test(w); }) };
   }
   /** How well a list of Tire Rack's words fits the car -> {score, bad}. bad: it says something the car isn't. */
   function fit(f, ws, modelOnly) {   // modelOnly: the trim may still be in the clarifier, so a missing trim word isn't counted
@@ -287,6 +287,7 @@
     ws.forEach(function (w) {
       var m;
       if (/^\d{3}\/\d{2}/.test(w) || NOISE.test(w)) return;
+      if(/^(drw|dually|srw)$/.test(w)){if(f.drw){if((w==='srw')===(f.drw==='no'))score+=3;else bad=true;}return;}
       if ((m = /^(fwd|rwd|awd|4wd|2wd|4x4|4x2)$/.exec(w))) {
         if (!f.drive) return;
         var ok = w === f.drive || ((w === '2wd' || w === '4x2') && (f.drive === 'fwd' || f.drive === 'rwd' || f.drive === '2wd')) || (w === '4x4' && f.drive === '4wd') || (f.drive === '2wd' && (w === 'fwd' || w === 'rwd'));
@@ -329,7 +330,7 @@
       return { model: v.model, clar: v.clar || '', score: r.score, bad: r.bad };
     }).sort(function (a, b) { return (a.bad - b.bad) || (b.score - a.score) || (a.model + a.clar).length - (b.model + b.clar).length; });
     var a = ranked[0], b = ranked[1];
-    var sure = ranked.length === 1 || !!(a && !a.bad && f.trim.length && a.score >= 2 && (!b || b.bad || a.score - b.score >= 0.5));
+    var sure = !!(a&&!a.bad&&(ranked.length === 1 || f.trim.length && a.score >= 2 && (!b || b.bad || a.score - b.score >= 0.5)));
     return { ranked: ranked, best: a || null, sure: sure };
   }
   /** Brave's answer about the spare -> 'full' | 'compact' | 'kit' | 'runflat' | 'none' | null (can't tell). */
@@ -471,10 +472,10 @@
   function tires(c) { c.tires = c.tires || {}; if (!c.tires.tread) c.tires.tread = { mode: 'miles', miles: '', rotated: '' }; return c.tires; }
   function base(c) { return baseModel(c); }
   /** Tire Rack's lists for this car (its model names, and the versions of the ones asked about) are kept per year / make / model. */
-  function verKey(c) { return ['v3', c.year, c.make, base(c)].join('|'); }
+  function verKey(c) { return ['v4', c.year, c.make, base(c)].join('|'); }
   function trOf(c) { var t = tires(c); return t.tr && t.tr.key === verKey(c) ? t.tr : null; }
   /** The version picked (by you, or matched from your trim): Tire Rack's model and clarifier names. */
-  function basis(c) { var f = trFacts(c); return [f.drive, f.cyl, f.body, f.trim.join(' ')].join('|'); }
+  function basis(c) { var f = trFacts(c); return [f.drive, f.cyl, f.body, f.trim.join(' '),f.drw].join('|'); }
   function ver(c) { var t = tires(c), v = t.trVer; return v && v.key === verKey(c) && !(v.auto && v.basis !== basis(c)) ? v : null; }   // a match from details you've since changed is redone
   function verName(v) { return v ? v.model + (v.clar ? ' ' + v.clar : '') : ''; }
   function carQ(c, v) { return 'autoMake=' + encodeURIComponent((trOf(c) && trOf(c).make) || c.make) + '&autoYear=' + encodeURIComponent(c.year) + '&autoModel=' + encodeURIComponent(v.model) + (v.clar ? '&autoModClar=' + encodeURIComponent(v.clar) : ''); }
@@ -536,13 +537,15 @@
           busy[c.id] = false; r = r || {};
           if (vk !== verKey(c)) { lookup(c); return; }
           var mine = r.models ? rankModels(c, r.models) : [];
-          t.tr = { key: vk, t: Date.now(), make: r.make || c.make, models: mine.map(function (x) { return x.model; }), clars: {}, failed: r.blocked || !r.models ? failure(r) : !mine.length ? 'none' : '', error: r.error };
+          t.tr = { key: vk, t: Date.now(), make: r.make || c.make, models: mine.length?mine.map(function (x) { return x.model; }):r.models||[], unmatched:!mine.length, clars: {}, failed: r.blocked || !r.models ? failure(r) : !r.models.length ? 'none' : '', error: r.error };
           LG.info('car', 'Tire Rack models: ' + (t.tr.models.join(', ') || t.tr.failed));
           save(); redraw(c); if (!t.tr.failed) lookup(c);
         });
         redraw(c); return;
       }
       if (tr.failed) return;
+      // A naming mismatch is not proof of absent fitment. Offer the make's models, but never guess a substitute.
+      if(tr.unmatched&&!t.trWant&&!ver(c))return;
       // 2. the versions of the likely models (or of the one you picked), two at a time, until your version is certain
       var v = ver(c), pick = pickVersion(c, versionsOf(tr, t.trWant || null));
       if (!v && t.trWant && tr.clars[t.trWant] && pick.ranked.length === 1) { v = t.trVer = { key: vk, model: pick.best.model, clar: pick.best.clar, auto: false }; }
@@ -779,7 +782,7 @@
       // the layout (a car or a dually, and the trailers hooked up) as a picture, its wheels numbered and colored by
       // tread; how each tire's tread is known (measured, or by its miles); then each tire, by number
       var P = positions(t), dual = duallyState(c), miss = missing(t), byMiles = modeOf(t) === 'miles';
-      if (dual !== 'no' || C.dually) h += '<div class="field tz-sw"><div class="lbl">Dual rear wheels (dually)<small>' + (dual === 'yes' ? 'Your VIN says your truck has them.' : 'Four tires on the rear axle, two on each side.') + '</small></div>' +
+      if (dual !== 'no' || C.dually) h += '<div class="field tz-sw"><div class="lbl">Dual rear wheels (dually)<small>' + (dual === 'yes' ? (c.vin?'Your VIN says your truck has them.':'Specified for this vehicle.') : 'Four tires on the rear axle, two on each side.') + '</small></div>' +
         '<label class="switch"><input type="checkbox" id="tzDually"' + (C.dually ? ' checked' : '') + '><span></span></label></div>';
       h += '<div class="tz-pic" aria-hidden="true">' + wheelSvg(c, t) + '</div>';
       h += '<div class="seg2" id="tzBy"><button data-by="depth" class="' + (byMiles ? '' : 'on') + '">By tread depth</button><button data-by="miles" class="' + (byMiles ? 'on' : '') + '">By mileage</button></div>';
@@ -883,6 +886,7 @@
     if (t.size && t.sizeSrc === 'tirerack') h += '<div class="lead small keep tz-src">Factory size for the ' + esc(yr + vn) + ', from Tire Rack.</div>';
     // your version, as Tire Rack names it: matched from your trim when that's certain, else you pick it
     var vers = tr ? pickVersion(c, versionsOf(tr)).ranked : [], others = tr ? (tr.models || []).filter(function (m) { return !tr.clars[m]; }) : [];
+    if(tr&&tr.unmatched&&!v)h += '<div class="lead small keep">No exact vehicle-name match at Tire Rack. Choose only an entry that matches your actual configuration; a regular pickup may not match a cab/chassis or dually. Otherwise enter the size from the vehicle placard.</div>';
     if (tr && !tr.failed && t.sizeSrc !== 'user' && (vers.length || others.length) && !(v && vers.length === 1 && !others.length)) {
       var val = function (x) { return 'v:' + x.model + '\u001f' + x.clar; }, cur = v ? val(v) : '';
       h += '<label class="nf wide"><span>' + (v ? 'Your version at Tire Rack' : 'Pick your version') + '<small>' + (v && v.auto ? 'matched from your trim' + (c.info && c.info.drive ? ' and drive' : '') + ' · change it if it\'s not yours' : 'Tire Rack lists the ' + esc(yr + base(c)) + ' as these — pick yours to look up its factory size') + '</small></span><select id="tzVerSel">' +
@@ -1555,13 +1559,13 @@
   }
   /**
    * Dual rear wheels: 'yes' (the VIN says so: 6+ wheels, or "DRW"), 'no' (the VIN rules it out, or it isn't a pickup or
-   * van, or the EPA rates it: the EPA covers vehicles up to 8,500 lb and duallys are heavier), or 'maybe' (a heavy pickup
+   * van), or 'maybe' (a pickup
    * or van nothing settles: you say). The switch only shows unless it's 'no'.
    */
   function duallyState(c) {
     var i = c.info || {}, ty = c.type || '';
     if (i.drw === 'yes') return 'yes';
-    if (i.drw === 'no' || c.epaId || (c.epa && +c.epa.comb > 0)) return 'no';
+    if (i.drw === 'no') return 'no';
     return !ty || ty === 'truck' || ty === 'v8deact' ? 'maybe' : 'no';
   }
   /**
