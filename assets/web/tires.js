@@ -67,21 +67,57 @@
   function hooked(t) { return t && t.towMode ? (t.trailers || []).filter(function (x) { return x.hooked; }) : []; }
   /** Editing a saved trailer must not hook it up or add its tires to the trip. */
   function trailerPositions(t,tr) { return positions({towMode:true,corners:t.corners,trailers:[Object.assign({},tr,{hooked:true})]}).filter(function(p){return p.trailer===tr.id;}); }
-  /** Front-to-back normalized axle positions. Identity stays at the same index, never sorted/relabelled. */
-  function axlePositions(tr) {
-    var n = Math.max(1, Math.min(3, +tr.axles || 1)), old = tr.axlePositions || [], out = [];
-    for (var i = 0; i < n; i++) {
-      var v = Number.isFinite(old[i]) ? old[i] : .6 + i * .15;
-      out.push(Math.max(i ? out[i - 1] + .15 : 0, Math.min(1 - (n - i - 1) * .15, v)));
-    }
-    return out;
+  /** Nominal top-down tire footprint in feet, not measured tread or a clearance/safety specification. */
+  function tireFootprint(size) {
+    var m=/^(\d{3})\/(\d{2})R(\d{2})$/.exec(normSize(size)), known=!!m&&+m[1]>0&&+m[2]>0&&+m[3]>0;
+    if(!known)m=['','205','75','15'];
+    return {width:+m[1]/304.8,diameter:(+m[3]*25.4+2*(+m[1])*(+m[2])/100)/304.8,known:known};
   }
-  function moveAxle(tr, index, value) {
-    var p = axlePositions(tr);
-    if (index < 0 || index >= p.length || !Number.isFinite(value)) return p;
-    p[index] = Math.max(index ? p[index - 1] + .15 : 0, Math.min(index + 1 < p.length ? p[index + 1] - .15 : 1, value));
-    tr.axlePositions = p;
-    return p;
+  /** Physical layout; no sorting or renaming axle/tire identities. Grow a too-short body rather than overlap wheels. */
+  function trailerGeometry(tr,corners) {
+    corners=corners||{};
+    var raw=tr.geometry||{}, positive=function(v,d){return Number.isFinite(+v)&&+v>0?Math.min(200,+v):d;};
+    var n=Math.max(1,Math.min(3,+tr.axles||1)), symmetric=raw.symmetric!==false;
+    var left=positive(raw.leftFt,3),right=symmetric?left:positive(raw.rightFt,3),requested=positive(raw.lengthFt,12), axles=[], maxD=0,leftReach=0,rightReach=0,known=true;
+    for(var i=0;i<n;i++) {
+      var axle={diameter:0,wheels:[]};
+      ['left','right'].forEach(function(side){
+        var keys=tr.per===4?(side==='left'?['li','lo']:['ri','ro']):(side==='left'?['l']:['r']),reach=0;
+        keys.forEach(function(s){var key=tr.id+':a'+(i+1)+s, f=tireFootprint(tr.split&&corners[key]&&corners[key].size||tr.size);
+          var pad=f.width*.08;reach+=pad+f.width/2;
+          axle.wheels.push({key:key,side:side,offset:reach,width:f.width,diameter:f.diameter});reach+=f.width/2;
+          axle.diameter=Math.max(axle.diameter,f.diameter);known=known&&f.known;
+        });
+        if(side==='left')leftReach=Math.max(leftReach,reach);else rightReach=Math.max(rightReach,reach);
+      });
+      maxD=Math.max(maxD,axle.diameter);axles.push(axle);
+    }
+    var pad=maxD*.06,gaps=[0],minLength=axles[0].diameter/2+axles[n-1].diameter/2+2*pad;
+    for(i=1;i<n;i++){gaps[i]=(axles[i-1].diameter+axles[i].diameter)/2+pad;minLength+=gaps[i];}
+    var length=Math.max(requested,minLength),front=axles[0].diameter/2+pad,back=length-axles[n-1].diameter/2-pad,travel=back-front;
+    var old=tr.axlePositions||[], positions=[], centers=[];
+    for(i=0;i<n;i++) {
+      var future=0;for(var j=i+1;j<n;j++)future+=gaps[j];
+      var wanted=Number.isFinite(old[i])?old[i]:.6+i*.15;
+      var center=Math.max(i?centers[i-1]+gaps[i]:front,Math.min(back-future,front+Math.max(0,Math.min(1,wanted))*travel));
+      centers.push(center);positions.push(travel>1e-8?Math.round(Math.max(0,Math.min(1,(center-front)/travel))*1e12)/1e12:0);
+    }
+    return {geometry:{lengthFt:length,leftFt:left,rightFt:right,symmetric:symmetric},requestedLength:requested,expanded:length>requested+.0001,minLength:minLength,
+      axles:axles,gaps:gaps,positions:positions,centers:centers,front:front,travel:travel,padding:pad,leftReach:leftReach,rightReach:rightReach,known:known};
+  }
+  function axlePositions(tr,corners) { return trailerGeometry(tr,corners).positions; }
+  function normalizeTrailer(tr,corners) {
+    var g=trailerGeometry(tr,corners),before=JSON.stringify([tr.geometry,tr.axlePositions]);
+    tr.geometry=g.geometry;tr.axlePositions=g.positions;
+    if(g.expanded)tr.geometryNote='Body length increased to '+g.geometry.lengthFt.toFixed(2)+' ft so these tire sizes fit without overlap. Check it against your trailer.';
+    return before!==JSON.stringify([tr.geometry,tr.axlePositions]);
+  }
+  function moveAxle(tr,index,value,corners) {
+    var g=trailerGeometry(tr,corners),p=g.positions;
+    if(index<0||index>=p.length||!Number.isFinite(value))return p;
+    var low=index?p[index-1]+g.gaps[index]/g.travel:0,high=index+1<p.length?p[index+1]-g.gaps[index+1]/g.travel:1;
+    p[index]=g.travel>1e-8?Math.round(Math.max(0,Math.min(1,Math.max(low,Math.min(high,value))))*1e12)/1e12:0;
+    tr.geometry=g.geometry;tr.axlePositions=p;return p;
   }
   /**
    * Older saves: 0.0.69–0.0.74 kept dual and trailer tires as a free list (they become the dually's inner tires and a
@@ -411,7 +447,7 @@
   });return inside!==under?(inside?'inside':'under'):'';}
   function locationName(v){return v==='inside'?'Dedicated storage inside the vehicle':v==='under'?'Under the vehicle':'';}
   TireMath.generalized=generalized;TireMath.spareLocation=spareLocation;
-  TireMath.axlePositions=axlePositions;TireMath.moveAxle=moveAxle;
+  TireMath.axlePositions=axlePositions;TireMath.moveAxle=moveAxle;TireMath.trailerGeometry=trailerGeometry;TireMath.normalizeTrailer=normalizeTrailer;TireMath.tireFootprint=tireFootprint;
   root.TireMath = TireMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = TireMath;
   if (!root.document) return;                                   // Node: the math only
@@ -714,7 +750,7 @@
       '<label class="switch"><input type="checkbox" id="tzTow"' + (t.towMode ? ' checked' : '') + '><span></span></label></div>';
     h += subRow('tzDet', 'car', t.towMode ? 'Car tire details' : 'Tire details', [t.size, t.brand ? t.brand + (t.model ? ' ' + t.model : '') : ''].filter(Boolean).join(' · ') || 'Size, type, brand, wear rating, warranty', !hasDetails(t));
     if (t.towMode) {
-      hooked(t).forEach(function (tr) { h += subRow('tzTr_' + tr.id, 'tr:' + tr.id, 'Trailer tire details · ' + (tr.name || 'Trailer'), trSummary(tr), !tr.size && !tr.brand); });
+      hooked(t).forEach(function (tr) { h += '<div class="tz-tr-entry">'+subRow('tzTr_' + tr.id, 'tr:' + tr.id, 'Trailer tire details · ' + (tr.name || 'Trailer'), trSummary(tr), !tr.size && !tr.brand)+'<button type="button" class="btn tonal sm" data-tr-unhook="'+esc(tr.id)+'" aria-label="Unhook '+esc(tr.name||'Trailer')+'">Unhook</button></div>'; });
       var saved = (t.trailers || []).filter(function (x) { return !x.hooked; });
       h += '<div class="tz-trbar"><button type="button" class="btn tonal sm" id="tzAddTr">+ Add a trailer</button>' +
         (saved.length ? '<button type="button" class="sub-ent tz-saved" id="tzSaved"><span><b>Saved trailers</b><small>' + saved.length + ' not hooked up</small></span>' + GO + '</button>' : '') + '</div>';
@@ -873,36 +909,67 @@
   function trSummary(tr) { return [tr.axles + ' axle' + (tr.axles > 1 ? 's' : '') + ' × ' + tr.per + ' tires', tr.size, tr.brand ? tr.brand + (tr.model ? ' ' + tr.model : '') : ''].filter(Boolean).join(' · '); }
   /** A trailer's details: its name, axles and tires per axle, and its tires (size -> Tire Rack, wear rating, warranty). */
   function trailerVisual(tr) {
-    var t=tires(G().car()), P=trailerPositions(t,tr), h='';
-    axlePositions(tr).forEach(function(v,i){
-      h+='<button type="button" data-tr-axle="'+i+'" style="transform:translateY('+(42+v*300)+'px)" role="slider" aria-label="Axle '+(i+1)+' position, front to rear" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(v*100)+'"><svg viewBox="0 -22 200 44" aria-hidden="true">'+
-        '<line x1="20" y1="0" x2="180" y2="0" class="tz-axle"/>';
-      P.filter(function(p){return p.k.indexOf(tr.id+':a'+(i+1))===0;}).forEach(function(p,j){
-        var x=(tr.per===4?[20,32,168,180]:[32,168])[j], d=depthAt(t,p);
-        h+='<g class="tz-w"><rect x="'+(x-5)+'" y="-8" width="10" height="16" rx="2.5" style="fill:'+(d!=null?hue(depthGood(d)):'var(--line)')+'"/></g>';
-      });
-      h+='<path d="M77 -8 L81 -12 L85 -8 M77 8 L81 12 L85 8 M115 -8 L119 -12 L123 -8 M115 8 L119 12 L123 8" class="tz-drag-arrows"/><text x="100" y="4" text-anchor="middle" class="tz-trn">'+(i+1)+'</text></svg></button>';
-    });
-    return '<div class="tz-tr-visual"><div class="tz-tr-diagram"><svg viewBox="0 0 200 388" role="img" aria-label="Trailer viewed from above, front at top">'+
-      '<path d="M100 4 L100 24 M100 24 L66 42 M100 24 L134 42" class="tz-hitch"/><rect x="58" y="40" width="84" height="338" rx="6" class="il-body"/></svg>'+h+'</div><p class="lead small keep">Drag an axle forward or back. Axles cannot pass each other.</p></div>';
+    var h='<div class="tz-tr-visual"><div class="tz-tr-diagram"><svg role="img" aria-label="Trailer viewed from above, dimension rulers in feet"></svg>';
+    axlePositions(tr,tires(G().car()).corners).forEach(function(v,i){h+='<button type="button" data-tr-axle="'+i+'" role="slider" aria-label="Axle '+(i+1)+' position, front to rear" aria-valuemin="0" aria-valuemax="100"><svg aria-hidden="true"></svg></button>';});
+    ['left','right','length'].forEach(function(kind){h+='<button type="button" class="tz-tr-resize" data-tr-resize="'+kind+'" role="slider" aria-label="Resize trailer '+(kind==='length'?'body length':kind==='left'?'driver-side width':'passenger-side width')+'" aria-valuemin="0.25" aria-valuemax="200"><svg viewBox="0 0 44 44" aria-hidden="true"><path d="'+(kind==='length'?'M22 10 V34 M17 15 L22 10 L27 15 M17 29 L22 34 L27 29':'M10 22 H34 M15 17 L10 22 L15 27 M29 17 L34 22 L29 27')+'" class="tz-drag-arrows"/></svg></button>';});
+    return h+'</div><p class="lead small keep">Drag axles or the body edges. Measurements exclude the hitch and tires. Wheels use nominal tire sizes'+(trailerGeometry(tr,tires(G().car()).corners).known?'.':'; enter Size for accurate scaling.')+'</p></div>';
   }
-  /** Touch targets are HTML buttons, not SVG groups. Paint at most once per frame; save only on release. */
-  function bindTrailerVisual(b,tr,done) {
-    var diagram=b.querySelector('.tz-tr-diagram'), dispose=[];
-    b.querySelectorAll('[data-tr-axle]').forEach(function(g){
-      var i=+g.dataset.trAxle, drag=null, frame=0;
-      var paint=function(v){g.style.transform='translateY('+(42+v*300)+'px)';g.setAttribute('aria-valuenow',Math.round(v*100));};
-      var flush=function(){frame=0;if(drag)paint(moveAxle(drag.draft,i,drag.start+(drag.y-drag.y0)/drag.scale/300)[i]);};
-      g.onpointerdown=function(e){if(e.button!==0||drag||diagram.querySelector('[data-dragging]'))return;e.preventDefault();g.dataset.dragging='true';g.focus({preventScroll:true});var p=axlePositions(tr);drag={id:e.pointerId,y0:e.clientY,y:e.clientY,start:p[i],scale:diagram.getBoundingClientRect().height/388,draft:{axles:tr.axles,axlePositions:p}};g.setPointerCapture(e.pointerId);};
-      g.onpointermove=function(e){if(!drag||drag.id!==e.pointerId)return;e.preventDefault();drag.y=e.clientY;if(!frame)frame=requestAnimationFrame(flush);};
-      var end=function(e){if(!drag||drag.id!==e.pointerId)return;if(frame)cancelAnimationFrame(frame);frame=0;
-        var commit=e.type==='pointerup';if(commit){drag.y=e.clientY;flush();tr.axlePositions=drag.draft.axlePositions.slice();}else paint(axlePositions(tr)[i]);
-        drag=null;delete g.dataset.dragging;if(g.hasPointerCapture(e.pointerId))g.releasePointerCapture(e.pointerId);if(commit)save();done();};
-      g.onpointerup=end;g.onpointercancel=end;g.onlostpointercapture=end;
-      g.onkeydown=function(e){var step={ArrowUp:-.025,ArrowLeft:-.025,ArrowDown:.025,ArrowRight:.025}[e.key];if(step==null||drag)return;e.preventDefault();paint(moveAxle(tr,i,axlePositions(tr)[i]+step)[i]);save();done();};
-      dispose.push(function(){if(frame)cancelAnimationFrame(frame);drag=null;});
+  function trailerView(g,width) {
+    var z=g.geometry,scale=.8*Math.min((width-52)/(z.leftFt+z.rightFt+g.leftReach+g.rightReach),340/z.lengthFt);
+    return {width:width,scale:scale,x:(width-(z.leftFt+z.rightFt+g.leftReach+g.rightReach)*scale)/2+(z.leftFt+g.leftReach)*scale,y:48};
+  }
+  function paintTrailer(b,tr,frozen) {
+    var t=tires(G().car()),g=trailerGeometry(tr,t.corners),z=g.geometry,diagram=b.querySelector('.tz-tr-diagram'),v=frozen||trailerView(g,diagram.clientWidth),s=v.scale;
+    var left=v.x-z.leftFt*s,right=v.x+z.rightFt*s,bottom=v.y+z.lengthFt*s,svg=diagram.querySelector(':scope > svg');
+    svg.setAttribute('viewBox','0 0 '+v.width+' 420');
+    var h='<path d="M'+v.x+' 32 V36 L'+left+' '+v.y+' M'+v.x+' 36 L'+right+' '+v.y+'" class="tz-hitch"/><rect x="'+left+'" y="'+v.y+'" width="'+((z.leftFt+z.rightFt)*s)+'" height="'+(z.lengthFt*s)+'" rx="4" class="il-body"/>';
+    var width=z.leftFt+z.rightFt,step=Math.max(1,Math.ceil(width/10));
+    h+='<g class="tz-ruler"><path d="M'+left+' 24 H'+right+' M'+(v.width-10)+' '+v.y+' V'+bottom+'"/>';
+    for(var a=0;a<=width;a+=step)h+='<path d="M'+(left+a*s)+' 21 V27"/>';
+    step=Math.max(1,Math.ceil(z.lengthFt/12));for(a=0;a<=z.lengthFt;a+=step)h+='<path d="M'+(v.width-13)+' '+(v.y+a*s)+' H'+(v.width-7)+'"/>';
+    h+='<text x="'+((left+right)/2)+'" y="17" text-anchor="middle">'+width.toFixed(1)+' ft</text><text transform="translate('+(v.width-17)+' '+((v.y+bottom)/2)+') rotate(-90)" text-anchor="middle">'+z.lengthFt.toFixed(1)+' ft</text></g>';
+    svg.innerHTML=h;
+    var P=trailerPositions(t,tr);
+    diagram.querySelectorAll('[data-tr-axle]').forEach(function(button){
+      var i=+button.dataset.trAxle,ax=g.axles[i],height=Math.max(44,(ax.diameter+g.padding)*s),y=v.y+g.centers[i]*s;
+      button.style.height=height+'px';button.style.transform='translateY('+(y-height/2)+'px)';button.setAttribute('aria-valuenow',Math.round(g.positions[i]*100));
+      var wheelSvg=button.querySelector('svg');wheelSvg.setAttribute('viewBox','0 '+(-height/2)+' '+v.width+' '+height);wheelSvg.style.height=height+'px';
+      var wheels='<line x1="'+(left-g.leftReach*s)+'" y1="0" x2="'+(right+g.rightReach*s)+'" y2="0" class="tz-axle"/>';
+      ax.wheels.forEach(function(w){var x=w.side==='left'?left-w.offset*s:right+w.offset*s,p=P.filter(function(p){return p.k===w.key;})[0],d=depthAt(t,p);
+        wheels+='<g class="tz-w"><rect data-wheel="'+esc(w.key)+'" x="'+(x-w.width*s/2)+'" y="'+(-w.diameter*s/2)+'" width="'+(w.width*s)+'" height="'+(w.diameter*s)+'" rx="3" style="fill:'+(d!=null?hue(depthGood(d)):'var(--line)')+'"/></g>';
+      });
+      wheels+='<path d="M'+(v.x-22)+' -8 l4 -4 l4 4 M'+(v.x-22)+' 8 l4 4 l4 -4 M'+(v.x+14)+' -8 l4 -4 l4 4 M'+(v.x+14)+' 8 l4 4 l4 -4" class="tz-drag-arrows"/><text x="'+v.x+'" y="4" text-anchor="middle" class="tz-trn">'+(i+1)+'</text>';
+      wheelSvg.innerHTML=wheels;
     });
-    return function(){dispose.forEach(function(stop){stop();});};
+    diagram.querySelectorAll('[data-tr-resize]').forEach(function(button){var kind=button.dataset.trResize;button.style.left=((kind==='left'?left:kind==='right'?right:v.x)-22)+'px';button.style.top=((kind==='length'?bottom:v.y+z.lengthFt*s*.18)-22)+'px';button.setAttribute('aria-valuenow',(kind==='length'?z.lengthFt:kind==='left'?z.leftFt:z.rightFt).toFixed(2));});
+    var fields={ttLength:z.lengthFt,ttWidth:z.leftFt+z.rightFt,ttLeft:z.leftFt,ttRight:z.rightFt};Object.keys(fields).forEach(function(id){var input=b.querySelector('#'+id);if(input&&document.activeElement!==input)input.value=+fields[id].toFixed(2);});
+    var note=b.querySelector('#ttGeometryNote');if(note){note.textContent=tr.geometryNote||'';note.classList.toggle('hidden',!tr.geometryNote);}
+    return v;
+  }
+  /** Physical draft geometry; stable HTML capture targets and one paint per frame, one save on release. */
+  function bindTrailerVisual(b,tr,done) {
+    var diagram=b.querySelector('.tz-tr-diagram'),dispose=[],view=paintTrailer(b,tr),corners=tires(G().car()).corners;
+    diagram.querySelectorAll('[data-tr-axle],[data-tr-resize]').forEach(function(button){
+      var index=button.dataset.trAxle==null?null:+button.dataset.trAxle,kind=button.dataset.trResize,drag=null,frame=0;
+      var flush=function(){frame=0;if(!drag)return;var dx=(drag.x-drag.x0)/drag.view.scale,dy=(drag.y-drag.y0)/drag.view.scale;
+        if(index!=null)moveAxle(drag.draft,index,drag.start+dy/drag.travel,corners);
+        else {delete drag.draft.geometryNote;var z=drag.draft.geometry,original=drag.original;
+          if(kind==='length')z.lengthFt=Math.max(.25,Math.min((420-32-drag.view.y)/drag.view.scale,original.lengthFt+dy));
+          else {var value=(kind==='left'?original.leftFt-dx:original.rightFt+dx),limit=kind==='left'?(drag.view.x-26)/drag.view.scale-trailerGeometry(drag.draft,corners).leftReach:(drag.view.width-26-drag.view.x)/drag.view.scale-trailerGeometry(drag.draft,corners).rightReach;
+            if(z.symmetric)limit=Math.min((drag.view.x-26)/drag.view.scale-trailerGeometry(drag.draft,corners).leftReach,(drag.view.width-26-drag.view.x)/drag.view.scale-trailerGeometry(drag.draft,corners).rightReach);
+            z[kind==='left'?'leftFt':'rightFt']=Math.max(.25,Math.min(limit,value));if(z.symmetric)z.leftFt=z.rightFt=z[kind==='left'?'leftFt':'rightFt'];
+          }normalizeTrailer(drag.draft,corners);
+        }paintTrailer(b,drag.draft,drag.view);
+      };
+      button.onpointerdown=function(e){if(e.button!==0||drag||diagram.querySelector('[data-dragging]'))return;e.preventDefault();button.dataset.dragging='true';button.focus({preventScroll:true});var g=trailerGeometry(tr,corners);view=paintTrailer(b,tr);drag={id:e.pointerId,x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,view:view,start:g.positions[index],travel:g.travel,original:Object.assign({},g.geometry),draft:Object.assign({},tr,{geometry:Object.assign({},g.geometry),axlePositions:g.positions.slice()})};button.setPointerCapture(e.pointerId);};
+      button.onpointermove=function(e){if(!drag||drag.id!==e.pointerId)return;e.preventDefault();drag.x=e.clientX;drag.y=e.clientY;if(!frame)frame=requestAnimationFrame(flush);};
+      var end=function(e){if(!drag||drag.id!==e.pointerId)return;if(frame)cancelAnimationFrame(frame);frame=0;var commit=e.type==='pointerup';
+        if(commit){drag.x=e.clientX;drag.y=e.clientY;flush();tr.geometry=drag.draft.geometry;tr.axlePositions=drag.draft.axlePositions;if(drag.draft.geometryNote)tr.geometryNote=drag.draft.geometryNote;else delete tr.geometryNote;save();}
+        drag=null;delete button.dataset.dragging;if(button.hasPointerCapture(e.pointerId))button.releasePointerCapture(e.pointerId);view=paintTrailer(b,tr);done();};
+      button.onpointerup=end;button.onpointercancel=end;button.onlostpointercapture=end;
+      button.onkeydown=function(e){var step={ArrowUp:-1,ArrowLeft:-1,ArrowDown:1,ArrowRight:1}[e.key];if(step==null||drag)return;e.preventDefault();if(index!=null)moveAxle(tr,index,axlePositions(tr,corners)[index]+step*.025,corners);else {var z=tr.geometry;delete tr.geometryNote;if(kind==='length')z.lengthFt=Math.max(.25,z.lengthFt+step*.25);else {var key=kind==='left'?'leftFt':'rightFt';z[key]=Math.max(.25,z[key]+step*.25);if(z.symmetric)z.leftFt=z.rightFt=z[key];}normalizeTrailer(tr,corners);}view=paintTrailer(b,tr);save();done();};
+      dispose.push(function(){if(frame)cancelAnimationFrame(frame);drag=null;});
+    });return function(){dispose.forEach(function(stop){stop();});};
   }
   function trailerTireRows(tr) {
     var t=tires(G().car()), P=trailerPositions(t,tr), h='<div class="tz-tr-tires">';
@@ -916,6 +983,7 @@
     return h+'</div>';
   }
   function trailerForm(tr) {
+    if(normalizeTrailer(tr,tires(G().car()).corners))save();
     var L = sizeList(tr.size), p = 'tt' + tr.id + '_';
     if (fromList(L, tr, true)) save();
     var h = '<div class="trailer-form"><label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>';
@@ -923,6 +991,12 @@
       '<span>Tires per axle</span><div class="chips mini">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-per="' + o[0] + '" class="' + (tr.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
     h += '<label class="nf wide"><span>Size' + A.qBtn('Printed on the tire\'s side: for example <b>ST205/75R15</b> (ST = special trailer).') + '</span><input type="text" maxlength="20" autocapitalize="characters" id="' + p + 'Size" placeholder="e.g. 205/75R15" value="' + esc(tr.size || '') + '"></label>';
     h += '<div class="seg2" id="ttSame" aria-label="Trailer tires">'+[[false,'All the same'],[true,'Different tires']].map(function(o){return '<button type="button" data-tr-split="'+o[0]+'" aria-pressed="'+(!!tr.split===o[0])+'" class="'+(!!tr.split===o[0]?'on':'')+'">'+o[1]+'</button>';}).join('')+'</div>';
+    var z=tr.geometry;
+    h+='<div class="field"><div class="lbl">Symmetrical trailer<small>Adjust both sides together</small></div><label class="switch"><input type="checkbox" id="ttSymmetrical"'+(z.symmetric?' checked':'')+'><span></span></label></div>';
+    h+='<div class="tz-tr-dimensions'+(z.symmetric?'':' asym')+'"><label class="nf"><span>Body length (ft)</span><input id="ttLength" type="number" min="0.25" max="200" step="0.1" inputmode="decimal" value="'+(+z.lengthFt.toFixed(2))+'"></label>';
+    (z.symmetric?[['ttWidth','Body width (ft)',z.leftFt+z.rightFt]]:[['ttLeft','Driver half-width (ft)',z.leftFt],['ttRight','Passenger half-width (ft)',z.rightFt]]).forEach(function(f){h+='<label class="nf"><span>'+f[1]+'</span><input id="'+f[0]+'" type="number" min="0.25" max="200" step="0.1" inputmode="decimal" value="'+(+f[2].toFixed(2))+'"></label>';});
+    h+='</div><p class="lead small keep">Set these body measurements to match your trailer; the initial 12 × 6 ft is a drawing default, not a lookup. This drawing is not a clearance or fitment check.</p>';
+    h+='<p id="ttGeometryNote" class="lead small keep tz-geometry-note'+(tr.geometryNote?'':' hidden')+'">'+esc(tr.geometryNote||'')+'</p>';
     h += trailerVisual(tr);
     if (!tr.split) {
     h += '<div class="trailer-common">';
@@ -997,9 +1071,11 @@
       $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
       bindPick(b, p, tr, function () { return sizeList(tr.size); }, set);
       b.querySelectorAll('[data-tr-split]').forEach(function(button){button.onclick=set(function(){tr.split=button.dataset.trSplit==='true';t.corners=t.corners||{};if(!t.corners.mode)t.corners.mode='miles';});});
+      b.querySelector('#ttSymmetrical').onchange=set(function(){var z=tr.geometry;z.symmetric=this.checked;if(z.symmetric)z.leftFt=z.rightFt=(z.leftFt+z.rightFt)/2;});
+      b.querySelectorAll('.tz-tr-dimensions input').forEach(function(input){input.onchange=set(function(){var value=+this.value;if(!Number.isFinite(value)||value<.25||value>200){A.toast('Enter a body measurement between 0.25 and 200 feet.');return;}delete tr.geometryNote;var z=tr.geometry;if(this.id==='ttLength')z.lengthFt=value;else if(this.id==='ttWidth')z.leftFt=z.rightFt=value/2;else z[this.id==='ttLeft'?'leftFt':'rightFt']=value;normalizeTrailer(tr,t.corners);});});
       stopDrag=bindTrailerVisual(b,tr,function(){if(pendingFill)fill();onChange();});
       b.querySelectorAll('[data-tr-tire]').forEach(function(button){button.onclick=function(){openTire(c,button.dataset.trTire,function(){openTrailer(c,tr.id,false);});};});
-      b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; tr.axlePositions=axlePositions(tr); }); });
+      b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; normalizeTrailer(tr,t.corners); }); });
       b.querySelectorAll('[data-per]').forEach(function (x) { x.onclick = set(function () { tr.per = +x.dataset.per; }); });
       b.querySelector('#ttUnhook').onclick = function () { tr.hooked = false; LG.info('car', 'Trailer unhooked and saved: ' + tr.name); save(); close(); };
       b.querySelector('#ttDiscard').onclick = async function () {
@@ -1121,7 +1197,7 @@
     var lookupOpen=true,editSize=false;
     var pg = null, fill = function () {
       var b = pg.querySelector('.sub-body'),old=b.querySelector('#tpLook');if(old)lookupOpen=old.open;b.innerHTML = body();
-      var set = function (fn) { return function () { fn.call(this); save(); fill(); }; };
+      var set = function (fn) { return function () { fn.call(this);if(p.trailer){var tr=(t.trailers||[]).filter(function(tr){return tr.id===p.trailer;})[0];if(tr)normalizeTrailer(tr,t.corners);} save(); fill(); }; };
       b.querySelector('#tpMiles').onchange = set(function () { x.miles = this.value === '' ? '' : Math.max(0, parseInt(this.value, 10) || 0); });
       b.querySelector('#tpWarranty').onchange = set(function () { x.warrantyMi = Math.max(0, parseInt(this.value, 10) || 0); });
       b.querySelector('#tpRot').onchange = set(function () { x.rotated = this.value; });
@@ -1135,6 +1211,7 @@
   function bind(c) {
     var t = tires(c);
     var set = function (fn) { return function () { fn.call(this); save(); draw(); onChange(); }; };
+    host.querySelectorAll('[data-tr-unhook]').forEach(function(button){button.onclick=set(function(){var tr=(t.trailers||[]).filter(function(x){return x.id===button.dataset.trUnhook;})[0];if(tr)tr.hooked=false;});});
     host.querySelectorAll('[data-why]').forEach(function (b) { b.onclick = function () { openWhy(b.dataset.why); }; });
     host.querySelectorAll('[data-sub]').forEach(function (b) { b.onclick = function () { var k = b.dataset.sub; if (k === 'car') openCarDetails(c); else openTrailer(c, k.slice(3), false); }; });
     host.querySelectorAll('#tzMode [data-mode]').forEach(function (b) { b.onclick = set(function () { t.tread = Object.assign({}, t.tread, { mode: b.dataset.mode }); }); });
@@ -1466,24 +1543,21 @@
     var W = 140, du = !!C.dually, body = du ? 'M52 10 Q70 2 88 10 L90 60 L100 64 L100 104 Q70 112 40 104 L40 64 L50 60 Z' : 'M50 10 Q70 2 90 10 L92 102 Q70 110 48 102 Z';
     var h = '<path d="' + body + '" class="il-body"/><rect x="56" y="22" width="28" height="16" rx="4" class="il-glass"/><rect x="56" y="' + (du ? 46 : 74) + '" width="28" height="' + (du ? 10 : 12) + '" rx="3" class="il-glass"/>' +
       (du ? '<rect x="50" y="62" width="40" height="38" rx="3" class="tz-bed"/>' : '') + '<path d="M70 0 L75 7 L65 7 Z" class="il-front"/>';
-    var wheel = function (k, x, y) {
+    var wheel = function (k, x, y, width, diameter) {
+      width=width||10;diameter=diameter||16;
       var d = depthAt(t, P.filter(function (p) { return p.k === k; })[0] || { k: k, unit: t }), f = d != null ? depthGood(d) : null;
-      return '<g class="tz-w"><rect x="' + (x - 5) + '" y="' + (y - 8) + '" width="10" height="16" rx="2.5" style="fill:' + (f != null ? hue(f) : 'var(--line)') + '"/><text x="' + x + '" y="' + (y + 3) + '" text-anchor="middle">' + num[k] + '</text></g>';
+      return '<g class="tz-w"><rect x="' + (x - width/2) + '" y="' + (y - diameter/2) + '" width="'+width+'" height="'+diameter+'" rx="2.5" style="fill:' + (f != null ? hue(f) : 'var(--line)') + '"/><text x="' + x + '" y="' + (y + 3) + '" text-anchor="middle">' + num[k] + '</text></g>';
     };
     h += wheel('lf', 44, 26) + wheel('rf', 96, 26);
     if (du) h += wheel('lr', 30, 86) + wheel('lri', 42, 86) + wheel('rri', 98, 86) + wheel('rr', 110, 86);
     else h += wheel('lr', 44, 84) + wheel('rr', 96, 84);
-    var H = 116, top = 108;
+    var H = 116, top = 108,topX=70;
     hooked(t).forEach(function (tr) {        // each trailer hooked up, one behind the other
-      var len = tr.axlePositions ? 200 : 32 + (tr.axles || 1) * 24, y0 = top + 16;
-      h += '<line x1="70" y1="' + top + '" x2="70" y2="' + (y0 + 2) + '" class="tz-hitch"/><rect x="38" y="' + y0 + '" width="64" height="' + len + '" rx="4" class="il-body"/>' +
-        '<text x="70" y="' + (y0 + 13) + '" text-anchor="middle" class="tz-trn">' + esc(String(tr.name || 'Trailer').slice(0, 14)) + '</text>';
-      for (var a = 1; a <= (tr.axles || 1); a++) {
-        var y = tr.axlePositions ? y0 + 24 + axlePositions(tr)[a-1] * (len-38) : y0 + len - 14 - ((tr.axles || 1) - a) * 24, b = tr.id + ':a' + a;
-        h += '<line x1="' + (tr.per === 4 ? 20 : 32) + '" y1="' + y + '" x2="' + (tr.per === 4 ? 120 : 108) + '" y2="' + y + '" class="tz-axle"/>';
-        h += tr.per === 4 ? wheel(b + 'lo', 20, y) + wheel(b + 'li', 32, y) + wheel(b + 'ri', 108, y) + wheel(b + 'ro', 120, y) : wheel(b + 'l', 32, y) + wheel(b + 'r', 108, y);
-      }
-      top = y0 + len; H = top + 6;
+      var g=trailerGeometry(tr,C),z=g.geometry,span=z.leftFt+z.rightFt+g.leftReach+g.rightReach,s=Math.min(100/span,160/z.lengthFt),len=z.lengthFt*s,y0=top+16;
+      var x=(W-span*s)/2+(z.leftFt+g.leftReach)*s,left=x-z.leftFt*s,right=x+z.rightFt*s;
+      h+='<line x1="'+topX+'" y1="'+top+'" x2="'+x+'" y2="'+y0+'" class="tz-hitch"/><rect x="'+left+'" y="'+y0+'" width="'+((z.leftFt+z.rightFt)*s)+'" height="'+len+'" rx="4" class="il-body"/><text x="'+x+'" y="'+(y0+10)+'" text-anchor="middle" class="tz-trn">'+esc(String(tr.name||'Trailer').slice(0,14))+'</text>';
+      g.axles.forEach(function(ax,i){var y=y0+g.centers[i]*s;h+='<line x1="'+(left-g.leftReach*s)+'" y1="'+y+'" x2="'+(right+g.rightReach*s)+'" y2="'+y+'" class="tz-axle"/>';ax.wheels.forEach(function(w){h+=wheel(w.key,w.side==='left'?left-w.offset*s:right+w.offset*s,y,w.width*s,w.diameter*s);});});
+      top=y0+len;topX=x;H=top+6;
     });
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="max-height:' + Math.round(H * 1.25) + 'px">' + h + '</svg>';
   }

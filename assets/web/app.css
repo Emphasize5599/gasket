@@ -1411,7 +1411,15 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .page.sub-page.trailer-page { padding-left:16px; padding-right:16px; }
 .trailer-page > .sub-bar { margin:0; }
 .trailer-page > .sub-body { padding:12px 0 calc(var(--sb) + 60px); }
-.trailer-form, .trailer-common, .tz-tr-tires { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+.trailer-form, .trailer-common { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+.tz-tr-tires { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.tz-tr-side .tz-gl { grid-template-columns:minmax(0,1fr); }
+.tz-tr-dimensions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.tz-tr-dimensions.asym > label:first-child { grid-column:1 / -1; }
+.tz-geometry-note { color:var(--warn) !important; }
+.tz-tr-entry { display:flex; gap:8px; align-items:stretch; margin:8px 0; }
+.tz-tr-entry > .tz-row { flex:1; width:auto; min-width:0; margin:0; }
+.tz-tr-entry > .btn { flex:none; width:auto; margin:0; padding:8px; }
 .trailer-form > *, .trailer-common > * { margin:0; }
 .trailer-form .nf.wide { padding-top:0; }
 .trailer-common > .tz-pick { gap:12px; }
@@ -1426,10 +1434,16 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .tz-tr-side-label { font-size:13px; color:var(--ink-2); margin-bottom:6px; }
 .tz-tr-side:not(.dual) .tz-gl { grid-template-columns:minmax(0,1fr); }
 .tz-tr-visual { margin:0; }
-.tz-tr-diagram { position:relative; width:200px; height:388px; max-width:100%; margin:0 auto; }
+.tz-tr-diagram { position:relative; width:100%; height:420px; max-width:400px; margin:0 auto; }
 .tz-tr-diagram > svg { display:block; width:100%; height:100%; pointer-events:none; }
 .tz-tr-visual [data-tr-axle] { position:absolute; top:0; left:0; width:100%; height:44px; padding:0; margin:0; border:0; border-radius:8px; background:transparent; touch-action:none; cursor:ns-resize; user-select:none; -webkit-user-select:none; transition:none; }
 .tz-tr-visual [data-tr-axle] > svg { display:block; width:100%; height:44px; pointer-events:none; }
+.tz-tr-visual .tz-tr-resize { position:absolute; width:44px; height:44px; margin:0; padding:0; border:0; border-radius:8px; background:transparent; touch-action:none; user-select:none; z-index:3; }
+.tz-tr-resize > svg { width:44px; height:44px; display:block; pointer-events:none; }
+.tz-tr-resize:focus-visible { outline:1px solid var(--accent); }
+.tz-ruler { opacity:.55; }
+.tz-ruler path { fill:none; stroke:var(--ink-2); stroke-width:1; }
+.tz-ruler text { fill:var(--ink-2); font-size:11px; }
 .tz-tr-visual [data-tr-axle]:focus-visible, .tz-tr-visual [data-dragging] { background:color-mix(in srgb,var(--accent) 10%,transparent); outline:1px solid var(--accent); }
 .tz-drag-arrows { fill:none; stroke:var(--ink-2); stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
 .tz-tr-visual > p { margin:8px 0 0; }

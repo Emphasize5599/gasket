@@ -173,9 +173,26 @@ console.log('tire version matching ok');
 {
   const tr={id:'example',hooked:true,axles:3,per:2}, t={towMode:true,trailers:[tr]};
   const keys=T.positions(t).map(p=>p.k);
-  assert.deepEqual(T.axlePositions(tr),[.6,.75,.9]);
-  for(let i=0;i<3;i++)for(const v of [-100,100,NaN]){const p=T.moveAxle(tr,i,v);assert.ok(p[0]>=0&&p[2]<=1);assert.ok(p[1]-p[0]>=.149&&p[2]-p[1]>=.149);assert.deepEqual(T.positions(t).map(p=>p.k),keys);}
+  assert.equal(T.axlePositions(tr).length,3);
+  for(let i=0;i<3;i++)for(const v of [-100,100,NaN]){const p=T.moveAxle(tr,i,v),g=T.trailerGeometry(tr);assert.ok(p[0]>=0&&p[2]<=1);assert.ok(g.centers[1]-g.centers[0]>=g.gaps[1]-1e-8&&g.centers[2]-g.centers[1]>=g.gaps[2]-1e-8);assert.deepEqual(T.positions(t).map(p=>p.k),keys);}
   tr.axlePositions=[1,-1,1];assert.ok(T.axlePositions(tr)[1]>T.axlePositions(tr)[0]);
   tr.axles=1;assert.equal(T.axlePositions(tr).length,1);tr.axles=3;assert.equal(T.axlePositions(tr).length,3);
   console.log('Trailer axle bounds, spacing and stable tire identities passed');
+}
+
+{
+  const valid=(tr,C={})=>{const g=T.trailerGeometry(tr,C);assert.ok(g.geometry.lengthFt>=g.minLength-1e-8);g.axles.forEach((a,i)=>{assert.ok(g.centers[i]-a.diameter/2>=g.padding-1e-8);assert.ok(g.centers[i]+a.diameter/2<=g.geometry.lengthFt-g.padding+1e-8);if(i)assert.ok(g.centers[i]-g.centers[i-1]>=g.gaps[i]-1e-8);});return g;};
+  const tr={id:'layout',hooked:true,axles:3,per:4,size:'205/75R15',split:true,geometry:{lengthFt:12,leftFt:3,rightFt:3,symmetric:true},axlePositions:[0,0,0]};
+  T.normalizeTrailer(tr,{});T.moveAxle(tr,1,0);T.moveAxle(tr,2,0);const old=valid(tr),keys=T.positions({towMode:true,trailers:[tr]}).map(p=>p.k);
+  tr.size='395/95R24';T.normalizeTrailer(tr,{});const grown=valid(tr);assert.ok(grown.gaps[1]>old.gaps[1]);assert.ok(grown.geometry.lengthFt>12);assert.match(tr.geometryNote,/increased/);
+  assert.deepEqual(T.positions({towMode:true,trailers:[tr]}).map(p=>p.k),keys);
+  const C={'layout:a2li':{size:'445/95R26'}};T.normalizeTrailer(tr,C);const single=valid(tr,C);assert.ok(single.axles[1].diameter>single.axles[0].diameter);
+  for(let n=1;n<=3;n++)for(const length of [.25,3,10,30,200])for(const size of ['','155/50R12','205/75R15','395/95R24']){
+    const q={id:'bounds',axles:n,per:4,size,geometry:{lengthFt:length,leftFt:1,rightFt:7,symmetric:false},axlePositions:[1,-1,NaN]};T.normalizeTrailer(q);valid(q);
+    for(let i=0;i<n;i++)for(const v of [-99,0,.5,1,99]){T.moveAxle(q,i,v);valid(q);}
+  }
+  const asym={id:'width',axles:1,geometry:{lengthFt:12,leftFt:2,rightFt:4,symmetric:false}};
+  assert.equal(T.trailerGeometry(asym).geometry.rightFt,4);asym.geometry.symmetric=true;assert.equal(T.trailerGeometry(asym).geometry.rightFt,2);
+  assert.equal(T.tireFootprint('').known,false);assert.equal(T.tireFootprint('000/00R00').known,false);assert.ok(T.tireFootprint('315/85R22').diameter>T.tireFootprint('205/75R15').diameter);
+  console.log('Wheel-scaled clearance, crowded growth, individual sizes, minimum body length and asymmetric geometry passed');
 }
