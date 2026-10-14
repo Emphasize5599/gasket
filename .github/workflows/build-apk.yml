@@ -31,6 +31,8 @@ on:
       - tests/citgo-trip.test.js
       - tests/citgo-trip-ui.test.js
       - tests/scan-audit.test.js
+      - tests/vin-feedback.test.js
+      - tests/roadside-cash.test.js
       - tests/speed-settings.test.js
       - tests/speed.test.js
       - tests/trip.test.js

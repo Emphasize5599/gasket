@@ -10,6 +10,11 @@ These items are not part of the active backlog. Keep their original identifiers 
 
 10. **Alternative keyless photo sourcing.** Not active. Reconsider only if actual use shows Commons coverage is too sparse, as requested by the owner. Optional Fuel API support remains.
 
+## Impractical
+
+13. **Pollen along routes.** Marked impractical at the owner's request, 2026-10-14. No suitable free/keyless U.S. forecast source was established; keyed commercial alternatives add cost and licensing/display constraints. Historical research remains in [DATA_OPTIONS.md](docs/DATA_OPTIONS.md). No pollen provider was enabled.
+15. **Offline use.** Marked impractical at the owner's request, 2026-10-14. This retires the proposed offline-use work, not existing saved trips or station storage; no offline capability or safety guarantee is implied.
+
 ## Out of current scope
 
 Direct Vela code/template reuse is not planned; none is currently bundled. Revisit license compatibility, notices and corresponding-source obligations only if direct reuse is proposed. See [KEYLESS_EXPERIMENT.md](KEYLESS_EXPERIMENT.md#license-decision).

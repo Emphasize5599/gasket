@@ -1501,6 +1501,11 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .tz-tr-visual > p { margin:8px 0 0; }
 .tz-tr-visual .tz-trn { font-size:12px; fill:var(--ink); font-weight:700; paint-order:stroke; stroke:var(--surface); stroke-width:3px; }
 .need, input.need, select.need { outline:none !important; }
+/* Actual failed/ambiguous VIN selections, not the general required-field decoration. */
+input.vin-unresolved, select.vin-unresolved { outline:2px solid #d93025 !important; outline-offset:1px; }
+.vin-lookup-pulse { animation:needPulse .6s ease-in-out 1; }
+@media (prefers-reduced-motion:reduce) { .vin-lookup-pulse { animation:none; } }
+#vinLookupLoading:empty, .epa-msg:empty { display:none; }
 .req { color:#d93025; padding-left:3px; font-weight:800; }
 .app-picker { position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; padding:calc(var(--st) + 16px) 16px calc(var(--sb) + 16px); }
 .app-picker-card { width:100%; max-width:440px; max-height:100%; display:flex; flex-direction:column; background:var(--surface); color:var(--ink); border-radius:22px; box-shadow:var(--shadow); overflow:hidden; }

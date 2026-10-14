@@ -1,6 +1,6 @@
 # Pollen and cash-price options
 
-Research notes, 2026-10-14. Decisions and unfinished implementation remain in `TODO.md` (13 and 14); this is not another backlog. No new data provider, paid requests or subscription has been enabled.
+Research notes, 2026-10-14. Pollen (13) was subsequently marked impractical at the owner's request in `RETIRED_WORK.md`; cash-price work (14) remains in `TODO.md`. This is not another backlog. No new data provider, paid requests or subscription has been enabled.
 
 ## 13 — U.S. pollen
 

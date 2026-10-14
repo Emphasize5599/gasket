@@ -178,7 +178,7 @@
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
     var h = '<p class="lead small keep adv-lead">Things worth knowing about your ' + esc(G().shortName(c)) + ' before you drive.</p>';
-    h += recallCard(c) + tireCard(c) + climateCard(c) + adviceCards(c);
+    h += recallCard(c) + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);
     syncDot();
@@ -274,6 +274,11 @@
     return list.slice().sort(function (a, b) { return lv(b) - lv(a) || ((dmy(b.date) || 0) - (dmy(a.date) || 0)); });
   }
   function tireAdvice(c) { return window.Tires ? Tires.advice(c) : []; }
+  function roadsideCard(){return '<div class="card adv-card" id="advRoadside"><h3>Emergency cash <button type="button" class="qi" data-sub-help id="advTowHelp" aria-label="Emergency towing cash guidance">?</button></h3><div class="adv-item due"><p>Consider keeping $250 available for a local tow to a repair or tire shop. Some operators require cash; confirm the total and payment method before dispatch.</p></div></div>';}
+  function roadsideHelp(){
+    if(window.__closeQ)window.__closeQ();
+    A.subPage('Emergency cash for towing','<div class="card"><h3>A planning allowance, not a quote</h3><p>$250 is a suggested cash reserve, not a national median or a guarantee that a tow will cost that much. AAA describes typical out-of-pocket towing costs of $150–$250, depending on area and distance. We found no reliable national median specifically for a tow to the nearest repair or tire shop.</p><p>Some roadside operators publish cash-only payment policies. Others accept cards, and local rules may require card acceptance. A cash-only demand is not automatically lawful.</p><p>Ask for the full price, destination and accepted payment methods before dispatch; get a receipt. Check roadside-assistance or insurance coverage first. A trailer, heavy vehicle, rural location, after-hours call, recovery work or a long tow may need a larger reserve. Repairs and replacement tires are extra. Keep emergency cash secure, not visibly in the vehicle.</p></div><div class="card"><h3>Sources · checked October 14, 2026</h3><div class="btns wrap"><button class="btn tonal sm" data-tow-source="https://mwg.aaa.com/news/press-release/april-22-2025">AAA towing costs</button><button class="btn tonal sm" data-tow-source="https://cameronstreettowing.com/roadside-assistance-and-lock-out/">Operator payment example</button><button class="btn tonal sm" data-tow-source="https://www.nyc.gov/site/dca/consumers/shopping-services-towing.page">NYC payment rights</button></div></div>',function(body){body.querySelectorAll('[data-tow-source]').forEach(function(b){b.onclick=function(){N.openUrl(b.dataset.towSource);};});});
+  }
   function tireCard(c) {
     var l = tireAdvice(c); if (!l.length) return '';
     return '<div class="card adv-card adv-tires' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advTires"><h3>Tires</h3>' +
@@ -304,6 +309,7 @@
       }).join('') + '</div>';
   }
   function bind(c) {
+    if($('advTowHelp'))$('advTowHelp').onclick=roadsideHelp;
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
     host.querySelectorAll('[data-cchk="recirc"]').forEach(function (b) { b.onchange = function () { if (window.Climate) Climate.setAck(b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     host.querySelectorAll('[data-tchk="tires"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setTiresAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });

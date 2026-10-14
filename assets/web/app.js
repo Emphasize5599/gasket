@@ -1533,6 +1533,7 @@
   }
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('.qi');
+    if(b&&b.hasAttribute('data-sub-help'))return; // styled (?) with its own full explanation page
     if (!b) { if (qpop && !qpop.contains(e.target)) closeQ(); return; }
     e.preventDefault(); e.stopPropagation();
     if (qFrom === b) { closeQ(); return; }
