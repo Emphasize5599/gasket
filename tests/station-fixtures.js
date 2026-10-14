@@ -1,5 +1,4 @@
-/* Demo data in the exact Google Places (New) response shape, so the whole pipeline can be tried
- * before an API key is set up. Prices are invented and clearly labelled DEMO in the UI. */
+/* Test-only station fixtures. Not bundled with Gasket's vehicle-only demo. */
 (function (root) {
   function rng(seed) { return function () { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
   var names = ['Walmart Fuel Station', 'Murphy USA', 'Murphy Express', "Sam's Club Gas Station", 'Exxon', 'Mobil', 'CITGO', 'Exxon', 'CITGO', 'Murphy USA', 'Mobil', 'Walmart Fuel Station', 'CITGO', 'Exxon'];

@@ -19,6 +19,9 @@ with sync_playwright() as p:
         pg.on('console', lambda m: m.type == 'error' and 'tile' not in m.text and 'ERR_' not in m.text and errors.append(m.text))
         pg.goto(URL); pg.evaluate('setInsets(44, 24, 0, 0)'); pg.wait_for_timeout(500)
         pg.click('#sDemo'); pg.wait_for_timeout(900)
+        pg.evaluate(open(os.path.join(os.path.dirname(__file__), 'station-fixtures.js')).read())
+        pg.evaluate("() => { __app.setDemo(true); const c=__app.map.getCenter(); __app.fetchAround(c.lat,c.lng); }")
+        pg.wait_for_timeout(300)
         cid = pg.evaluate("(() => { const S = window.__app; return null; })()")
         # a CITGO with a regular price
         cit = pg.evaluate("(() => { const st = [...document.querySelectorAll('.pin-in')]; return null; })()")

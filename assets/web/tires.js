@@ -598,7 +598,7 @@
       busy[c.id] = 'list'; t.list = { size: sz, t: Date.now(), items: L && L.size === sz ? L.items : [] };
       tireRead({ url: url, step: 'list' }).then(function (r) {
         busy[c.id] = false; r = r || {};
-        if (t.size !== sz) { lookup(c); return; }
+        if (t!==tires(c)||t.size !== sz) { lookup(c); return; }
         if (r.tires && r.tires.length) { t.list = { size: sz, t: Date.now(), catalogVersion: CATALOG_VERSION, items: catalogItems(r.tires) }; LG.info('car', 'Tire Rack: ' + r.tires.length + ' tires in ' + sz); }
         else { t.list = { size: sz, t: Date.now(), catalogVersion: CATALOG_VERSION, items: (t.list && t.list.size === sz && t.list.items) || [], failed: r.empty ? 'none' : failure(r), error: r.error }; LG.info('car', 'Tire Rack tire list not read', t.list.failed); }
         if (r.partial) { t.list.failed = failure(r); t.list.error = r.error; t.list.partial = true; }

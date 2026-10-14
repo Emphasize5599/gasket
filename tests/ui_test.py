@@ -47,6 +47,8 @@ with sync_playwright() as p:
         pg.evaluate("window.__wmMock=null")
         pg.click('#btnSettings'); pg.wait_for_timeout(200)
         pg.click('#sDemo')
+        pg.evaluate(open(os.path.join(os.path.dirname(__file__), 'station-fixtures.js')).read())
+        pg.evaluate("() => { __app.setDemo(true); const c=__app.map.getCenter(); __app.fetchAround(c.lat,c.lng); }")
         pg.wait_for_timeout(800)
         pg.screenshot(path=f'{OUT}/{name}-1-map.png')
         n_pins = pg.locator('.leaflet-tooltip.mbub').count()

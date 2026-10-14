@@ -1099,8 +1099,9 @@
     var calls = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
     var mk = P.monthKey();
     var used = function (k) { return (S.citgoUsed || {})[k] === mk; };
-    var h = '<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>';
+    var heading='<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>',h='';
     if (onboarding) h += '<p class="lead">Start without an API key. Website searches are slower and coverage varies.</p>';
+    h+='<button class="btn tonal" id="sDemo">Let me test Gasket out with demo data</button><p class="lead small keep">Adds four example vehicles only—no stations, prices or trips. Your existing vehicles are kept.</p>';
     h += '<div class="card"><h3>Station discovery</h3><div class="field"><div class="lbl">Prefer website discovery<small>Works without an API key for nearby and route searches. Scans overlapping areas and scrolls each result list. Slower and less consistent: websites can omit stations or prices, stall, or restrict access. No automatic paid fallback. Without a key this method is selected automatically; with a key you can choose either method.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
     var workerAuto=KeylessGas.readerCount({S:{},N:N}),workerCount=KeylessGas.readerCount({S:S,N:N}),workerManual=Number(S.keylessWorkers)>=1;
     h+='<div class="card"><h3>Website readers</h3><div class="field"><div class="lbl">Parallel workers<small>Default uses phone RAM: 4 on smaller/unknown devices, 6 around 8 GB, 8 around 12 GB, 12 around 16 GB. Low-memory devices default to 4. More readers can finish discovery sooner, but use more RAM and may trigger website restrictions. Up to 16 is available; it is not a guaranteed speedup. Active scans keep their starting count.</small></div><b id="workerValue">'+(workerManual?'':'Auto · ')+workerCount+'</b></div><input type="range" id="keylessWorkers" min="1" max="16" step="1" value="'+workerCount+'" data-manual="'+(workerManual?'yes':'no')+'" aria-label="Parallel website workers"><div class="lead small keep">1–16 readers · RAM-based default: '+workerAuto+'</div><button class="btn tonal sm" id="workerAuto">Use RAM default</button></div>';
@@ -1176,9 +1177,8 @@
     h += '<div class="card"><h3>About</h3><div class="field"><div class="lbl">Gasket ' + esc(N.appVersion ? N.appVersion() : '') + '<small>The code this app includes and the data it uses, with their licenses.</small></div>' +
       '<button class="btn tonal sm" id="licOpen">Licenses & credits</button></div></div>';
     h += '<button class="btn primary" id="sDone">' + (onboarding ? 'Save & find gas' : 'Done') + '</button>';
-    h += '<button class="btn tonal" id="sDemo">' + (demo ? 'Turn off demo data' : 'Try with demo data') + '</button>';
     h += '<p class="lead" style="margin-top:16px;font-size:12.5px">Prices: Google Maps (crowd/partner-sourced, not guaranteed). Discount rules as published by Walmart and CITGO, Oct 2026 — the Walmart app\'s Gas Savings page is the final word on which locations participate.</p>';
-    var pg = $('settings'); pg.innerHTML = h; pg.classList.remove('hidden'); pg.scrollTop = 0; scrollHint(pg);
+    var pg = $('settings'),oldBody=pg.querySelector('.settings-body');if(oldBody&&oldBody._hint)oldBody._hint._dispose();pg.classList.add('settings-layout');pg.innerHTML='<header class="settings-bar">'+heading+'</header><div class="settings-body">'+h+'</div>'; pg.classList.remove('hidden');pg.querySelector('.settings-body').scrollTop=0;scrollHint(pg.querySelector('.settings-body'));
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
     $('sDone').onclick = function () { closeSettings(true); };
     $('keylessWorkers').oninput=function(){this.dataset.manual='yes';$('workerValue').textContent=this.value;};
@@ -1232,10 +1232,7 @@
       bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };
     });
     $('sDemo').onclick = function () {
-      demo = !demo; closeSettings(false);
-      if(demo&&window.Garage)Garage.addDuallyDemo();
-      var c = me || map.getCenter(); stations = []; gStations = []; official = {}; lastFetch = null;
-      if (demo) fetchAround(c.lat, c.lng); else { loadCache(); render(); }
+      if(window.Garage)Garage.installDemo();closeSettings(false);
     };
   }
   function logHeader() {

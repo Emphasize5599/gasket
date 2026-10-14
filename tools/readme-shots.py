@@ -20,6 +20,8 @@ with sync_playwright() as p:
     pg.wait_for_timeout(900)
     pg.click('#btnSettings'); pg.wait_for_timeout(200)
     pg.click('#sDemo')
+    pg.evaluate(open(os.path.join(ROOT, 'tests', 'station-fixtures.js')).read())
+    pg.evaluate("() => { __app.setDemo(true); const c=__app.map.getCenter(); __app.fetchAround(c.lat,c.lng); }")
     pg.wait_for_selector('.leaflet-tooltip.mbub')
     pg.wait_for_timeout(1500)
     pg.screenshot(path=f'{OUT}/map.png')

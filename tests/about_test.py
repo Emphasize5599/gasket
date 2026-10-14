@@ -29,6 +29,7 @@ with sync_playwright() as p:
         pg.goto(URL); pg.evaluate('setInsets(44, 24, 0, 0)'); pg.wait_for_timeout(400)
         # ---- Google stations: the credit in the list, a station's details and the map ----
         pg.evaluate(GOOGLE)
+        pg.evaluate(open(os.path.join(os.path.dirname(__file__), 'station-fixtures.js')).read())
         if pg.locator('#settings:not(.hidden)').count() == 0: pg.click('#btnSettings'); pg.wait_for_timeout(300)
         pg.fill('#apiKey', KEY); pg.click('#sDone')
         pg.wait_for_timeout(600)
@@ -60,6 +61,8 @@ with sync_playwright() as p:
         assert pg.locator('#licPage.hidden').count() == 1 and pg.locator('#settings:not(.hidden)').count() == 1, 'back to Settings'
         # ---- demo data is made up: no Google credit ----
         pg.click('#sDemo'); pg.wait_for_timeout(900)
+        pg.evaluate("() => { __app.setDemo(true); const c=__app.map.getCenter(); __app.fetchAround(c.lat,c.lng); }")
+        pg.wait_for_timeout(300)
         assert pg.locator('#rows .row').count() > 3 and pg.locator('#rows .gattr').count() == 0, 'no Google credit on demo stations'
         assert 'Google Maps' not in pg.inner_text('.leaflet-control-attribution'), 'no map credit with demo stations'
         pg.close()

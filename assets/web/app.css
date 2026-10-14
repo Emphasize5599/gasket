@@ -167,6 +167,13 @@ body.trip-on .top .fuel-controls { display: none !important; }
 /* ---------- settings page ---------- */
 .page { position: fixed; inset: 0; z-index: 1000; background: var(--bg); overflow: auto; padding: calc(var(--st) + 8px) 16px calc(var(--sb) + 24px); }
 .page h1 { font-size: 26px; margin: 8px 0 4px; }
+#settings.settings-layout { display:flex; flex-direction:column; overflow:hidden; padding:0 16px; }
+.settings-bar { flex:none; padding:calc(var(--st) + 8px) 0 8px; background:var(--bg); z-index:3; }
+.settings-bar h1 { color:var(--accent); }
+.settings-body { flex:1; min-height:0; overflow:auto; padding-bottom:calc(var(--sb) + 68px); --tile-top:0px; }
+.settings-body > #sDemo { height:auto; min-height:54px; padding:10px; white-space:normal; text-align:center; }
+.epa-tip { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; margin:8px 0; font-size:13px; color:var(--ink-2); }
+.epa-tip .btn { height:auto; min-height:44px; max-width:105px; padding:8px; white-space:normal; }
 .page .lead { color: var(--ink-2); margin: 0 0 14px; }
 .card { background: var(--surface); border-radius: 22px; padding: 6px 16px; margin: 12px 0; }
 .card h3 { margin: 12px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--accent); }

@@ -45,6 +45,7 @@ on:
       - tests/trailer-editor.test.js
       - tests/vehicle-catalog.test.js
       - tests/nhtsa-catalog.test.js
+      - tests/setup-demo.test.js
       - tests/background-search.test.js
 
 permissions:
