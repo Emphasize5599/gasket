@@ -15,6 +15,7 @@
     cars.forEach(function(c,i){c.name=[c.year,c.make,c.model,c.trim].join(' ').trim();c.demoMileage=true;c.demoSet=1;c.picMode='doodle';c.paint={hex:['#457ea2','#aa3939','#d8dce3','#417c62'][i]};c.tankSrc='illustrative demo capacity';c.obs=c.obs||{};c.entries=i===0?[{id:'demo-log',date:'2026-10-01',loggedAt:Date.UTC(2026,9,1,18,30),mpg:50.8,kind:'hwy',speed:60}]:[];c.tires.sizeSrc='user';
       var caps=i===1?{auto:false,fanMax:5,rear:true,seatHeat:true,noFilter:true}:{auto:true,dual:true,rearDefrost:true,seatHeat:true,wheelHeat:i===0,seatCool:i===3,sunroof:i===2};
       c.climate={caps:caps,presets:[]};if(root.ClimateMath){['winter','spring','summer','fall'].forEach(function(s){c.climate.presets.push(root.ClimateMath.starter('season',s,caps));root.ClimateMath.situations(s).forEach(function(w){var p=root.ClimateMath.starter('weather',w[0],caps);p.season=s;c.climate.presets.push(p);});});var p=root.ClimateMath.starter('custom','',caps);p.name='Demo road-trip comfort';c.climate.presets.push(p);}
+      c.climate.presets.forEach(function(p,j){p.id=c.id+'-preset-'+j;});c.paint.rgb=c.paint.hex;delete c.paint.hex;
     });
     var t=cars[1].tires;['lf','rf','lr','lri','rri','rr'].forEach(function(k,i){t.corners[k]={size:t.size,miles:18000+i*2000,warrantyMi:60000,rotated:i<2?'yes':'sometimes'};});for(var a=1;a<=3;a++)['lo','li','ri','ro'].forEach(function(side){t.corners['demo-cargo:a'+a+side]={size:'235/80R16',miles:8000+a*1000,warrantyMi:40000,rotated:'yes'};});return cars;
   }
