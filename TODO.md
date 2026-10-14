@@ -1,29 +1,64 @@
-# Later
+# Open work
 
-Things the owner wants, saved for later. Add to it as ideas come up; take an item off when it ships.
+The single backlog for Gasket: features, defects, validation and release decisions. Reconciled against the keyless test branch through **0.0.153**, 2026-10-14. Add new work here; remove an item when it ships or its acceptance check passes. Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-## Trips
-- **Pollen along the route.** Weather and air along the way shipped in 0.0.114 (the Hazards step since 0.0.116) (Open-Meteo, National Weather Service), but there's no free U.S. pollen forecast (Open-Meteo's covers Europe only; Google's Pollen API is paid). Add it if a free source turns up.
+## fix — reported defects and investigations
 
-## Hydrogen and electric cars
-- **In the main UI** since 0.0.100: the fuel-mode pill (⛽ / ⚡ / H₂) switches the top bar's selector, pins and list. Still to do there: picking plugs (CCS, NACS, CHAdeMO, J1772) from the pill's options, chargers and hydrogen stations in the same detail sheet as gas stations (price per kWh / kg, speed, open now), and Stops following the mode.
-- Everything else for hydrogen and EVs: stations / chargers along the route, prices, plug and connector types, charging speeds and times, range in cold and heat, and plans that work for them like the gas planner does.
+- [ ] **Tire Rack catalog omissions.** Reproduce the 195/65R15 scan that read 77 options but kept 70, then fix product-card/size association. Reported rejects: Continental ProContact TX ×2, Kumho Solus TA31, Bridgestone Ecopia EP422 Plus, Nexen N Priz AH8, Yokohama AVID S33D and S33B. Verify these actual products appear, including distinct variants. This needs a live-site/browser check, not only parser fixtures.
+- [ ] **Tire Rack vehicle lookup after a catalog read.** Investigate the next car's `clars` request failing with “Failed to fetch” while the reader remains on `TireSearchResults.jsp`. Check page/navigation state and legitimate retry behavior. Version 0.0.151 added transient retries; it does not establish that this reported transition failure is resolved.
+- [ ] **Automatic VIN-specific open-recall lookup reliability.** Investigate NHTSA background reads being declined and supported manufacturer/NHTSA alternatives. Preserve an unresolved result and the visible lookup when checks prevent access. The model/year recall-list fixes in 0.0.149 are already shipped; this item concerns the VIN-specific open/remedied result.
 
-## Plug-in hybrids
-- **Better plug-in hybrid (PHEV) support.** Today a PHEV is planned like a gas car (the EPA's gas-only mileage, the gas tank). Still to do: its electric range and kWh per 100 mi (the EPA lists both), how much of a trip runs on the battery (starting charge, charging at the destination or along the way), blended mileage once the battery is used up, charging stops as an option alongside fuel stops, and the battery's share of the fuel cost.
+## feat — product features
 
-## Flex fuel (E85)
-- **Flex-fuel cars as their own fuel type.** The VIN decode already knows a car is flex-fuel (NHTSA's FuelTypeSecondary "Ethanol (E85)"; used since 0.0.129 only to tell the EPA's "FFV" versions apart). Still to do: E85 as a grade (prices: Maps lists it at some stations, AFDC lists E85 stations), the EPA's E85 mileage (`cityA08` / `highwayA08` / `combA08`, its alternate-fuel numbers), and plans that weigh E85's lower price against its ~25% lower mileage.
+### Vehicles and fuels
 
-## Garage
-- **Trailer tire tread differences.** Cars get tread-difference warnings by drivetrain since 0.0.148 (`TireMath.treadDiff`). Trailers have no drivetrain, but mismatched tires still matter (tandem axles share the load, duals must match in diameter, ST tires age out by date): research the best practices (tire makers, RV / trailer industry guidance) and add warnings and suggestions for trailers.
-- **Tire dry-rot information screen.** Explain dry rot/sidewall cracking, what to inspect and when to seek a qualified tire inspection; keep it distinct from the generalized tread estimate. Content and design are still to be developed.
-- **Scenic backgrounds for car images.** Offer cool default environments the user can apply to their recreated car image, inspired by Gran Turismo Scapes (not using its assets). Support placing the car naturally in different scenes; choose a suitable licensed background source and retain any required attribution. Background sourcing and compositing are still to be designed.
-- **Marketing trim from VIN when NHTSA omits it.** Manufacturer-backed lookup or a verified generic mapping, not an AI guess or conversion of internal grade codes. Secondary trim text is supported; internal grade codes remain unresolved.
-- **Car pictures:** NHTSA, Wikimedia Commons, the doodle, and Fuel API (owner's key, watermark as delivered) for factory colors, as of 0.0.86. A paid Fuel API plan would drop the FUEL watermark (COMPLIANCE.md #9). Doodles could get more detail (wheels, roof racks, two-tone).
+- [ ] **Full plug-in hybrid planning.** Import EPA electric range and electricity consumption, accept starting charge, account for battery depletion and gasoline use, offer optional charging stops/destination charging, and split trip cost between electricity and fuel. Current PHEV planning uses gasoline mileage and tank capacity.
+- [ ] **E85 / flex-fuel planning.** Add E85 prices/station discovery and EPA alternate-fuel mileage (`cityA08`, `highwayA08`, `combA08`), then compare fuel choices by trip cost. VIN recognition of flex-fuel versions already exists; E85 as a usable grade does not.
+- [ ] **EV/hydrogen map controls and detail sheets.** Add direct connector choices to the fuel-mode options and bring alternative-fuel stations into the common station-detail experience, with usable per-kWh/per-kg prices and availability where the source supports them. Existing connector filtering from the selected car, station popups, speed/pressure selectors and basic route stops must be retained.
+- [ ] **More realistic EV/hydrogen trip estimates.** Improve price reliability, charging curves/times and temperature-dependent range beyond the current basic estimates. AFDC station discovery along routes, plug compatibility, charging-stop planning and approximate charging durations already exist; this is an improvement task, not a new planner from scratch.
+- [ ] **Verified marketing trim beyond NHTSA's decode.** Find a manufacturer-backed source or verified generic mapping when the marketing trim is missing. Secondary trim text is supported; internal grade codes are not evidence of a marketing trim.
 
-## Cowork session (needs a web browser)
-Work for a session that can open the sites themselves.
-- **Automatic VIN recall lookup reliability.** NHTSA can decline background reads; 0.0.130 clearly preserves that as unresolved and offers the visible page. Investigate legitimate manufacturer/NHTSA-supported options without bypassing website checks.
-- **Tire Rack drops tires from a size's list.** 195/65R15 read 77 tires but kept 70: 7 were rejected with "No product card with a size was found" (Continental ProContact TX ×2, Kumho Solus TA31, Bridgestone Ecopia EP422 Plus, Nexen N Priz AH8, Yokohama AVID S33D and S33B). Look at those products' cards on TireSearchResults.jsp and fix `tirerack_worker.js`'s card reading.
-- **Tire Rack versions lookup fails right after a list read.** For the next car looked up, step `clars` failed after 97 ms with "Failed to fetch" while the reader was still on the 195/65R15 results page (`https://www.tirerack.com/tires/TireSearchResults.jsp?...`). The ValidationServlet request probably needs the reader back on a page where it's allowed (or a fresh load) between steps.
+### Tires and trailers
+
+- [ ] **Trailer tire mismatch/age guidance.** Research tire-maker and trailer-industry guidance for tandem-axle load sharing, dual-tire diameter differences and age/date limits, then add applicable warnings and suggestions. Car drivetrain-based tread-difference warnings shipped in 0.0.148.
+- [ ] **Tire dry-rot information screen.** Explain sidewall cracking/dry rot, what to inspect and when to seek a qualified tire inspection. Keep it distinct from the generalized tread estimate.
+
+### Vehicle images
+
+- [ ] **Better keyless catalog imagery.** Evaluate sources that can reliably represent the model year, body and trim without requiring the user to obtain another key. NHTSA/Commons matching and the photo picker improved in 0.0.146–147; consistent catalog-quality coverage remains an open sourcing problem. Keep optional Fuel API support.
+- [ ] **Scenic backgrounds.** Let users place their recreated car image into licensed environments inspired by the idea of Gran Turismo Scapes, without using its assets. Design background selection, placement/compositing and required attribution.
+- [ ] **Richer optional doodles.** Consider more wheel detail, roof racks and two-tone paint. This is an existing enhancement idea, not a replacement for vehicle photos.
+
+### Route conditions
+
+- [ ] **Pollen along routes — source-dependent.** Find a usable U.S. forecast source and integrate it with arrival times and recirculation advice. Previous research found no suitable free U.S. source; recheck availability before choosing an implementation. Hourly weather, smoke/smog and air-quality hazards already ship.
+
+## test — outstanding device and acceptance checks
+
+- [ ] **Keyless discovery coverage matrix.** On the actual phone, compare API and website discovery in urban, suburban and rural areas, including Searcy, AR. Count missing/duplicate stations and priced stations by brand; reaching a website list's end is not proof of complete geographic coverage.
+- [ ] **Grade and price accuracy checks.** Compare a sample against the displayed Maps and official-chain prices for regular, midgrade, premium and diesel, including Walmart. Check cash/member variants and unknown update times; never infer conditions absent from the source.
+- [ ] **Recovery and request-budget checks.** Exercise blocked pages, visible site checks, airplane mode, cancellation, cooldowns, cache reuse and restart. Confirm progress always exits and keyless operations do not consume paid API calls.
+
+## perf — measurements and efficiency
+
+- [ ] **Long-trip Android stability and duration.** Measure large discovery/refresh runs with at least four readers, RAM-based defaults and user-selected worker counts. Record peak memory, reader recycling, partial-result persistence and elapsed time. A five-minute refresh target and the suspected version-107 OOM have not been established by phone measurements.
+- [ ] **Actual web traffic and cache efficiency.** Measure requests, transferred bytes and time, including resources loaded by Maps itself and Android WebView cache misses. Route-wide discovery/refresh already exists; optimize from measurements rather than adding a second implementation or a reader per station.
+
+## chore — release, services and rights decisions
+
+- [ ] **Google data handling before broader distribution.** Recheck current terms and decide how saved Places/Routes answers, persistent station-price history, Google-derived data on the OSM map, and automated directions/station-page reads will be supported. Preserve the implementation inventory in [COMPLIANCE.md](COMPLIANCE.md), entries 1–3. This backlog does not resolve those questions.
+- [ ] **Direct website provider arrangements.** Review supported feeds/permission or an alternative workflow for Walmart, Murphy USA, ExxonMobil, Tire Rack and Brave Search, covering both tank and spare-tire answers. See compliance entries 4–8. Keep restrictions visible and do not bypass site checks.
+- [ ] **Vehicle-image rights for broader distribution.** Resolve NHTSA/EVOX image reuse, Fuel API licensing and any proposed keyless stock-photo source; retain per-photo Commons attribution and applicable image restrictions. See compliance entries 9–11.
+- [ ] **Data-service capacity and distribution model.** Decide whether personal-use service limits fit the intended audience. Recheck Open-Meteo's plan if use becomes commercial and choose hosted/regional OSM data if public Overpass cannot support the audience. No service purchase is authorized merely by this task.
+- [ ] **Keyless experiment promotion.** After device acceptance and the relevant service decisions, decide when to merge into `main`. Preserve the regular app's package/resource identity rather than copying the separate test-app identity blindly. Public beta readiness is a separate decision from merging personal test improvements.
+- [ ] **Beta release setup — later milestone.** Set up the proposed beta/RC version naming and distribution process when a beta candidate is ready; keep Android version codes increasing.
+
+Vela reuse is conditional, not current unfinished implementation: no Vela source/templates are bundled. If direct GPL code reuse is proposed, revisit license compatibility, notices and corresponding-source obligations before integrating it. See [KEYLESS_EXPERIMENT.md](KEYLESS_EXPERIMENT.md#license-decision).
+
+## Reconciled items (not open)
+
+- Hourly route weather and smoke/smog/air-quality hazards: shipped; only pollen sourcing remains above.
+- Keyless nearby/route discovery, all-grade saved-price refresh, progress/cancel and persistent station history: implemented; device coverage/performance validation remains above. No specific history-chart UI has been committed to the backlog.
+- Basic EV/hydrogen discovery and route-stop support: implemented; the older “everything else” entry overstated what was missing.
+- Tire submenu/dually reorganization, hooked-up overview cleanup and photo picker: shipped in 0.0.146–147; superseded local work is not a pending patch.
+- Car tread-difference warnings and per-vehicle/trailer tire fuel ratings: shipped in 0.0.148; trailer mismatch guidance remains above.

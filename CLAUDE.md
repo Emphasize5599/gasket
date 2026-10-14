@@ -2,6 +2,8 @@
 
 ## This branch: keyless experiment
 
+Backlog maintenance (2026-10-14, through 0.0.153): `TODO.md` is the only current open-work list, grouped by fix/feat/test/perf/chore. Keyless promotion/device checks and service-review actions were consolidated there; `COMPLIANCE.md` and `KEYLESS_EXPERIMENT.md` retain reference/history, not parallel action lists. Basic EV/hydrogen route stops already exist; their backlog is improvements, not a missing implementation. NHTSA model/year recall fixes do not prove automatic VIN-specific open-recall lookup is reliable. No APK/version bump is needed for documentation-only backlog edits.
+
 0.0.153: `TireMath.instead(text)` = 'kit' / 'runflat' / null for what a no-spare car has, said anywhere in the answer (not negated); `readSpare` uses it after a "No spare" lead (before, `parseSpare` saw an addable compact spare first and the kit was missed). Saved `none` guesses are re-read once (`lookup.insteadV`; a confirmed `none` is asked again).
 
 0.0.152: Brave Search turns away queries over 50 words or 400 characters ("Your query is too long"; 0.0.151's 58-word spare question was). `SPARE_ASK` is 36 words before the car; `braveFit(car, ask)` drops words from the end of the car's name until the query fits `BRAVE_WORDS` / `BRAVE_CHARS`. Keep any new Brave question under these.

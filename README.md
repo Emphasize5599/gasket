@@ -100,7 +100,7 @@ The UI tests check every step at 320–448 px wide and at 130% text size for sid
 
 ## Status
 
-Gasket is in **alpha** and built for its author's own use. Releases on GitHub contain **source code only**; there are no APK downloads. It will be published once there's a beta release candidate, after the open terms-of-service questions in [`COMPLIANCE.md`](COMPLIANCE.md) are settled.
+Gasket is in **alpha** and built for its author's own use. Signed APKs are available on GitHub Releases. App-store/public-beta distribution remains a later milestone; open features, fixes, device checks and service decisions are tracked together in [`TODO.md`](TODO.md).
 
 Gasket was called **Fuel+ Map** until version 0.0.47. It still restores Fuel+ backups and imports Fuel+ exports and shared trips.
 
@@ -108,10 +108,11 @@ Gasket was called **Fuel+ Map** until version 0.0.47. It still restores Fuel+ ba
 
 | File | What's in it |
 |---|---|
+| [`TODO.md`](TODO.md) | The single categorized backlog: features, fixes, tests, performance and release decisions |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in every version |
 | [`VERSIONING.md`](VERSIONING.md) | Version numbers and how releases are made |
 | [`SIGNING.md`](SIGNING.md) | How the release key is made, stored and used |
-| [`COMPLIANCE.md`](COMPLIANCE.md) | Terms-of-service questions to settle before a public beta |
+| [`COMPLIANCE.md`](COMPLIANCE.md) | Service/image-rights inventory and prior review notes; open actions live in TODO.md |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | Bundled libraries and data sources, with their licenses |
 
 ## License

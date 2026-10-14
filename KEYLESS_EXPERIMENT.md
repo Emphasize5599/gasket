@@ -63,19 +63,12 @@ Vela is GPL-3.0: https://github.com/PimpinPumpkin/Vela/blob/main/LICENSE. Its ar
 
 OSM data is separately licensed under ODbL and requires attribution; the UI and third-party notices link to the contributors and license. Data licensing obligations are separate from software licensing. Google's public web content still comes with Google's terms: lack of an API key does not waive them. Existing Google/OSM display and collection questions remain in COMPLIANCE.md. Do not represent this experiment as resolving those questions.
 
-## Verification and promotion gates
+## Verification history
 
 Automated tests cover nodes/ways, bounds, supported brands, duplicate forecourts, provenance, conservative price matching, raw and framed JSON replies, exact regular-grade labels, escaped JSON strings, malformed responses, restrictions and zero paid nearby calls. Captured public test responses were also replayed locally: initial search had 20 price labels; a scroll frame had 16. Live Overpass returned 74 fuel objects in a small public Little Rock sample area. These are coverage samples, not guarantees or independent pump-price verification.
 
 Final live run of the actual worker in an isolated desktop browser: 28 Google station rows, 26 with matched regular prices, about 9.2 seconds. This verifies the browser path, not Android WebView behavior or the owner's local coverage. Full existing Node tests passed; normal map/settings and trip UI are tested with the experimental switch off.
 
-Before promotion to main:
-
-1. Compare API vs keyless results on the owner's actual phone in urban, suburban and rural areas; count missing stations and priced stations by brand.
-2. Check a sample against displayed Google prices and chain prices, including cash/member variants. Never infer cash/credit or membership conditions from an unlabeled price.
-3. Confirm retries, visible consent/security checks, airplane mode, cooldowns, cached results and restarts do not strand the spinner or spend paid lookups.
-4. Measure total requests/bytes/time (including Maps' own resources), not just nominal API calls. Verify Android WebView response-cache behavior.
-5. Add efficient route-wide coverage separately. Do not fan out a public Overpass query or a Google browser per station or route point. Keep existing route behavior until coverage is measured.
-6. Decide data-service capacity and review Google's terms and OSM obligations before broader distribution.
+Current acceptance checks, performance measurements and promotion decisions are maintained only in [TODO.md](TODO.md), under `test`, `perf` and `chore`. The older requirement to add route-wide coverage is superseded by the implemented route discovery/refresh paths; their phone coverage and efficiency still need validation.
 
 Public source references: https://github.com/PimpinPumpkin/Vela ; https://wiki.openstreetmap.org/wiki/Overpass_API ; https://www.openstreetmap.org/copyright
