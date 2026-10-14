@@ -1363,6 +1363,8 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .tz-same > button[data-same] { min-width: 0; min-height: 44px; padding: 8px 6px; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); line-height: 1.25; overflow-wrap: anywhere; }
 .tz-same > button[data-same].on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .tz-same > .qi { margin: 0 2px; }
+.tz-locked { border: 0; margin: 0; padding: 0; min-width: 0; opacity: .45; }
+.tz-lock-note { color: var(--warn); font-weight: 600; }
 .tz-car { display: grid; grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr); grid-template-rows: auto auto; gap: 8px 8px; align-items: end; margin: 4px 0 8px; }
 .tz-car .tz-body { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 .tz-car .tz-body svg { width: 40px; height: 80px; display: block; margin: 0 auto; }

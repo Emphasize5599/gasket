@@ -221,7 +221,8 @@ async function run() {
     await ui.evaluate(() => { window.__mode='hang'; });
     await ui.click('#tzRetry');
     await ui.waitForFunction(() => __active===1);
-    await ui.clock.fastForward(80001);
+    // a timeout is tried again twice (2 s, then 6 s later): all three run out before the lookup stops
+    for (const ms of [80001, 2001, 80001, 6001, 80001]) { await ui.clock.fastForward(ms); await new Promise(r => setTimeout(r, 150)); }
     await ui.waitForSelector('#tzLookupError');
     assert.match(await ui.innerText('#tzLookupError'), /too long.*stopped/);
     assert.equal(await ui.locator('#tzRetry').count(), 1);

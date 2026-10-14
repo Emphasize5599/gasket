@@ -165,6 +165,4 @@
   };
   // the tires' monthly cold-pressure tick counts as done (tests that check that gate turn this off)
   window.__mocks.tireAir = true;
-  // the car's tire size counts as filled in (tests that check that requirement turn this off)
-  window.__mocks.tireSizeOk = true;
 })();

@@ -234,3 +234,11 @@ console.log('tire version matching ok');
   assert.equal(T.fuelOf([{}, {}]), null);
   console.log('Tread differences by drivetrain and a mixed-tire fuel rating');
 }
+{
+  // "No spare" first, then "a spare was optional on this trim": that sentence is the tip
+  const t = 'No spare. The 2008 Dodge Charger SXT came with a tire inflator kit as standard. A compact spare tire was optional on the SXT trim [1]. Check under the trunk floor.';
+  assert.equal(T.spareLead(t), 'none');
+  assert.equal(T.optTip(t), 'A compact spare tire was optional on the SXT trim.');
+  assert.equal(T.optTip('No spare. Tesla does not include one.'), '');
+  console.log('An optional spare in Brave\'s answer becomes the tip');
+}

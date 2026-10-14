@@ -9,6 +9,9 @@ Things the owner wants, saved for later. Add to it as ideas come up; take an ite
 - **In the main UI** since 0.0.100: the fuel-mode pill (⛽ / ⚡ / H₂) switches the top bar's selector, pins and list. Still to do there: picking plugs (CCS, NACS, CHAdeMO, J1772) from the pill's options, chargers and hydrogen stations in the same detail sheet as gas stations (price per kWh / kg, speed, open now), and Stops following the mode.
 - Everything else for hydrogen and EVs: stations / chargers along the route, prices, plug and connector types, charging speeds and times, range in cold and heat, and plans that work for them like the gas planner does.
 
+## Plug-in hybrids
+- **Better plug-in hybrid (PHEV) support.** Today a PHEV is planned like a gas car (the EPA's gas-only mileage, the gas tank). Still to do: its electric range and kWh per 100 mi (the EPA lists both), how much of a trip runs on the battery (starting charge, charging at the destination or along the way), blended mileage once the battery is used up, charging stops as an option alongside fuel stops, and the battery's share of the fuel cost.
+
 ## Flex fuel (E85)
 - **Flex-fuel cars as their own fuel type.** The VIN decode already knows a car is flex-fuel (NHTSA's FuelTypeSecondary "Ethanol (E85)"; used since 0.0.129 only to tell the EPA's "FFV" versions apart). Still to do: E85 as a grade (prices: Maps lists it at some stations, AFDC lists E85 stations), the EPA's E85 mileage (`cityA08` / `highwayA08` / `combA08`, its alternate-fuel numbers), and plans that weigh E85's lower price against its ~25% lower mileage.
 

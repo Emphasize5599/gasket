@@ -498,8 +498,14 @@
       /\b(?:dedicated|built-in|spare (?:tire )?well|trunk well|storage well|recessed well|hold[- ]down)\b/i.test(x) && x.length <= 180; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
+  /** The answer's own sentence saying a spare was optional (on some trims, as an option or a package), for the tip. */
+  function optTip(text) {
+    var ss = String(text || '').replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); }).filter(function (x) { return /[.!?]$/.test(x); });
+    var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:optional|option|available on|some trims|certain trims|depend\w*|varies|package)\b/i.test(x) && !/^(?:no spare|full[- ]size spare|compact spare|repair kit|run[- ]flat tires)\.?$/i.test(x) && x.length <= 220; })[0];
+    return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
+  }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
   function spareLocation(text){var inside=false,under=false;String(text||'').replace(/\s+/g,' ').trim().split(/[.!?;]+/).forEach(function(s){
@@ -547,17 +553,25 @@
   }
   var VER_DAYS = 60;
   var trQueue = Promise.resolve();
+  var TR_RETRY = ['timeout', 'network', 'http', 'empty', 'unreadable', 'error'], TR_TRIES = [2000, 6000];
   function tireRead(args) {
     // All cars and trailer sizes share one native Tire Rack WebView; never navigate it over an unfinished request.
     var job = trQueue.then(function () {
       var started = Date.now();
       LG.info('car', 'Tire Rack lookup started: ' + args.step, args);
-      return call('siteRead', 'tirerack', JSON.stringify(args)).then(function (r) {
-        r = r || { error: 'Tire Rack returned no answer', code: 'empty' };
-        LG[r.blocked || r.error ? 'warn' : 'info']('car', 'Tire Rack lookup finished: ' + args.step,
-          { elapsedMs: Date.now() - started, code: r.blocked ? 'blocked' : r.code || (r.unknown ? 'unknown' : 'ok'), error: r.error, detail: r.detail });
-        return r;
-      });
+      // a hiccup (timeout, connection, site error, an unreadable page) is tried again twice, a little later each time;
+      // a check or "currently unavailable" (blocked) never is, and neither is a real answer ("unknown" / no results)
+      var attempt = function (n) {
+        return call('siteRead', 'tirerack', JSON.stringify(args)).then(function (r) {
+          r = r || { error: 'Tire Rack returned no answer', code: 'empty' };
+          var again = !r.blocked && r.error && TR_RETRY.indexOf(r.code || 'error') >= 0 && !/Native bridge/i.test(r.error) && n < TR_TRIES.length;
+          LG[r.blocked || r.error ? 'warn' : 'info']('car', 'Tire Rack lookup finished: ' + args.step,
+            { elapsedMs: Date.now() - started, code: r.blocked ? 'blocked' : r.code || (r.unknown ? 'unknown' : 'ok'), error: r.error, detail: r.detail, attempt: n + 1, retry: again });
+          if (!again) return r;
+          return new Promise(function (ok) { setTimeout(ok, TR_TRIES[n]); }).then(function () { return attempt(n + 1); });
+        });
+      };
+      return attempt(0);
     });
     trQueue = job.catch(function () {});
     return job.catch(function (e) { return { error: String(e && e.message || e), code: 'bridge' }; });
@@ -670,7 +684,7 @@
   function spareKey(c) { return G() && G().carKey ? G().carKey(c) : [c.year, c.make, base(c), c.trim || ''].join(' ').trim(); }
   // Brave's answer is written by its AI from this question, so the question says how to answer: a fixed first phrase
   // (read for sure below), and the tip in its own short words. Answers that don't follow it are still read as before.
-  var SPARE_ASK = ' have a factory spare tire? Start: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. If a spare exists, state Location: inside vehicle or under vehicle, or unknown. Otherwise briefly say if one can be added and its size.';
+  var SPARE_ASK = ' have a factory spare tire? Start: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. If a spare exists, state Location: inside vehicle or under vehicle, or unknown. Otherwise briefly say if one can be added and its size. Say if a spare was optional or varies by trim.';
   function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent('Does the ' + spareKey(c) + SPARE_ASK) + '&summary=1'; }
   /** An answer read by the old keyword rules (before 0.0.114): read it again with the model. If that differs and you had
    *  confirmed the old guess, you're asked again. Once per answer. */
@@ -708,7 +722,7 @@
       return readSpare(r && r.text).then(function (pick) {
         var g = pick.kind;
         var text=String(r&&r.text||'').replace(/\s+/g,' ').trim();
-        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 3,location:spareLocation(text),locationV:1 };
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 4,location:spareLocation(text),locationV:1 };
         LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
         save(); redraw(c); onChange();
       });
@@ -721,7 +735,8 @@
     var lead = spareLead(text);
     if (lead === 'none') { var w0 = parseSpare(text); if (w0 === 'kit' || w0 === 'runflat') lead = w0; }   // "No spare. … a repair kit instead"
     if (lead) {
-      var lt = lead === 'full' || lead === 'compact' ? '' : leadTip(text);
+      // a spare that was optional (on some trims, or as an option): its own words say so, so "no spare" isn't the whole story
+      var lt = lead === 'full' || lead === 'compact' ? '' : leadTip(text) || optTip(text);
       return Promise.resolve({ kind: lead, by: 'answer', score: null, tip: lt || spareTip(spareClauses(text)) });
     }
     var sc = spareClauses(text);
@@ -733,10 +748,10 @@
         // the AI's own reading of which clauses are about a spare the car could have (bought separately, an option)
         scores.forEach(function (o, i) { if (o && o.optional >= 0.55 && o.optional >= Math.max(o.full, o.compact, o.kit, o.runflat) && sc.opt.indexOf(sc.pos[i]) < 0) sc.opt.push(sc.pos[i]); });
         var pick = Object.assign(pickSpare(ok ? scores : null, sc), { model: ok });
-        if (!ok || !sc.opt.length) return Object.assign(pick, { tip: spareTip(sc) });
+        if (!ok || !sc.opt.length) return Object.assign(pick, { tip: spareTip(sc) || optTip(text) });
         // which facts the "you could have a spare" clauses state, read by the model
         return sc.opt.reduce(function (p, c) { return p.then(function (acc) { return Severity.compare(c, TIP_EX).then(function (o) { acc.push(o); return acc; }); }); }, Promise.resolve([]))
-          .then(function (ts) { return Object.assign(pick, { tip: spareTip(sc, ts.some(Boolean) ? ts : null) }); }, function () { return Object.assign(pick, { tip: spareTip(sc) }); });
+          .then(function (ts) { return Object.assign(pick, { tip: spareTip(sc, ts.some(Boolean) ? ts : null) || optTip(text) }); }, function () { return Object.assign(pick, { tip: spareTip(sc) }); });
       }, function () { return Object.assign(pickSpare(null, sc), { tip: spareTip(sc) }); });
   }
   /** What the car has: what you said, else Brave's guess (marked), else ''. */
@@ -770,8 +785,8 @@
   function isRear(k) { return /^(lr|rr|lri|rri)$/.test(k); }
   /** A tire's size: its trailer's, or the car's (the rear axle's own when the car has more than one size). */
   function sizeAt(t, p) { return p.trailer ? normSize((p.unit || {}).size) : isRear(p.k) && t.multiSize ? normSize(t.sizeRear) : normSize(t.size); }
-  /** The car's tire size isn't filled in (both when it has more than one); tests turn the requirement off in trip_mocks. */
-  function sizeMissing(c) { if (root.__mocks && root.__mocks.tireSizeOk) return false; var t = c && c.tires || {}; return !normSize(t.size) || (!!t.multiSize && !normSize(t.sizeRear)); }
+  /** The car's tire size isn't filled in (both when it has more than one): the rest of its tire details waits for it. */
+  function sizeMissing(c) { var t = c && c.tires || {}; return !normSize(t.size) || (!!t.multiSize && !normSize(t.sizeRear)); }
   /** What one tire is (its own lookup from its page, else its car's or trailer's details), for its fuel rating. */
   function specAt(t, p) {
     var C = t.corners || {}, x = C[p.k] || {}, u = p.unit || {}, own = !!(x.type || x.model);
@@ -916,7 +931,9 @@
     var k1 = kind || guess;
     if(k1==='full'||k1==='compact')h+='<label class="nf wide"><span>Where the spare is stored<small>Confirm in the owner\'s manual or on the vehicle; a search answer is not confirmation.</small></span><select id="tzSpareLocation"><option value="">Not confirmed</option>'+['inside','under'].map(function(v){return '<option value="'+v+'"'+(sp.location===v?' selected':'')+'>'+locationName(v)+'</option>';}).join('')+'</select></label>'+(sp.lookup&&sp.lookup.location&&!sp.location?'<p class="lead small keep">Brave suggests: '+esc(locationName(sp.lookup.location))+'.</p>':'');
     // a tip from before tips were short: said again the short way, from the answer it kept
-    if (sp.lookup && sp.lookup.tip && sp.lookup.tipV !== 3 && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
+    if (sp.lookup && sp.lookup.tip && !(sp.lookup.tipV >= 3) && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
+    // 0.0.151: an answer that says a spare was optional gets that sentence as its tip
+    if (sp.lookup && sp.lookup.text && sp.lookup.tipV !== 4) { sp.lookup.tip = sp.lookup.tip || optTip(sp.lookup.text); sp.lookup.tipV = 4; }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
     var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
@@ -970,34 +987,39 @@
     var SL = t.sizeLookup || {}, fac = SL.found ? SL.factory || [] : [];
     var multi = !!t.multiSize, REQ = '<span class="req" aria-label="required">*</span>';
     h += '<div class="field tz-sw tz-multi"><div class="lbl">My car has more than 1 tire size<small>' + Q.multi + '</small></div><label class="switch"><input type="checkbox" id="tzMulti"' + (multi ? ' checked' : '') + '><span></span></label></div>';
-    h += '<div class="nf wide"><span>' + (multi ? 'Front tire size' : 'Size') + REQ + q(Q.size) + '</span>';
+    var hs = '', hv = '';
+    hs += '<div class="nf wide"><span>' + (multi ? 'Front tire size' : 'Size') + REQ + q(Q.size) + '</span>';
     var v = ver(c), tr = trOf(c), vn = verName(v), yr = c.year + ' ' + ((tr && tr.make) || c.make) + ' ';
-    if (fac.length > 1 && !t.size) h += '<div class="chips mini wrap" id="tzPick">' + fac.map(function (z) { return '<button data-size="' + esc(z) + '">' + esc(z) + '</button>'; }).join('') + '</div>' +
+    if (fac.length > 1 && !t.size) hs += '<div class="chips mini wrap" id="tzPick">' + fac.map(function (z) { return '<button data-size="' + esc(z) + '">' + esc(z) + '</button>'; }).join('') + '</div>' +
       '<div class="lead small keep">Your ' + esc(yr + vn) + ' came with ' + fac.length + ' sizes. Pick yours, or type it below.</div>';
-    h += '<input type="text" id="tzSize" maxlength="20" autocapitalize="characters" placeholder="e.g. 195/65R15" value="' + esc(t.size || '') + '"></div>';
-    if (multi) h += '<label class="nf wide"><span>Rear tire size' + REQ + '</span><input type="text" id="tzSizeRear" maxlength="20" autocapitalize="characters" placeholder="e.g. 225/40R18" value="' + esc(t.sizeRear || '') + '"></label>';
-    if (t.size && t.sizeSrc === 'tirerack') h += '<div class="lead small keep tz-src">Factory size for the ' + esc(yr + vn) + ', from Tire Rack.</div>';
+    hs += '<input type="text" id="tzSize" maxlength="20" autocapitalize="characters" placeholder="e.g. 195/65R15" value="' + esc(t.size || '') + '"></div>';
+    if (multi) hs += '<label class="nf wide"><span>Rear tire size' + REQ + '</span><input type="text" id="tzSizeRear" maxlength="20" autocapitalize="characters" placeholder="e.g. 225/40R18" value="' + esc(t.sizeRear || '') + '"></label>';
+    if (t.size && t.sizeSrc === 'tirerack') hs += '<div class="lead small keep tz-src">Factory size for the ' + esc(yr + vn) + ', from Tire Rack.</div>';
     // your version, as Tire Rack names it: matched from your trim when that's certain, else you pick it
     var vers = tr ? pickVersion(c, versionsOf(tr)).ranked : [], others = tr ? (tr.models || []).filter(function (m) { return !tr.clars[m]; }) : [];
-    if(tr&&tr.unmatched&&!v)h += '<div class="lead small keep">No exact vehicle-name match at Tire Rack. Choose only an entry that matches your actual configuration; a regular pickup may not match a cab/chassis or dually. Otherwise enter the size from the vehicle placard.</div>';
+    if(tr&&tr.unmatched&&!v)hv += '<div class="lead small keep">No exact vehicle-name match at Tire Rack. Choose only an entry that matches your actual configuration; a regular pickup may not match a cab/chassis or dually. Otherwise enter the size from the vehicle placard.</div>';
     if (tr && !tr.failed && t.sizeSrc !== 'user' && (vers.length || others.length) && !(v && vers.length === 1 && !others.length)) {
       var val = function (x) { return 'v:' + x.model + '\u001f' + x.clar; }, cur = v ? val(v) : '';
-      h += '<label class="nf wide"><span>' + (v ? 'Your version at Tire Rack' : 'Pick your version') + '<small>' + (v && v.auto ? 'matched from your trim' + (c.info && c.info.drive ? ' and drive' : '') + ' · change it if it\'s not yours' : 'Tire Rack lists the ' + esc(yr + base(c)) + ' as these — pick yours to look up its factory size') + '</small></span><select id="tzVerSel">' +
+      hv += '<label class="nf wide"><span>' + (v ? 'Your version at Tire Rack' : 'Pick your version') + '<small>' + (v && v.auto ? 'matched from your trim' + (c.info && c.info.drive ? ' and drive' : '') + ' · change it if it\'s not yours' : 'Tire Rack lists the ' + esc(yr + base(c)) + ' as these — pick yours to look up its factory size') + '</small></span><select id="tzVerSel">' +
         (v ? '' : '<option value="">Choose…</option>') +
         (vers.length ? '<optgroup label="' + (others.length ? 'Versions' : 'As Tire Rack names them') + '">' + vers.map(function (x) { return '<option value="' + esc(val(x)) + '"' + (val(x) === cur ? ' selected' : '') + '>' + esc(verName(x)) + '</option>'; }).join('') + '</optgroup>' : '') +
         (others.length ? '<optgroup label="' + (vers.length ? 'Other models' : 'Models') + '">' + others.map(function (m) { return '<option value="' + esc('m:' + m) + '">' + esc(m) + (t.trWant === m && busy[c.id] === 'versions' ? ' (loading…)' : '') + '</option>'; }).join('') + '</optgroup>' : '') +
         '</select></label>';
     }
-    if (!t.size && busy[c.id] === 'versions') h += window.__app.ldBar('Asking Tire Rack for the versions of the ' + yr + base(c));
-    else if (busy[c.id] === 'size') h += window.__app.ldBar('Looking up the factory size at Tire Rack');
+    if (!t.size && busy[c.id] === 'versions') hv += window.__app.ldBar('Asking Tire Rack for the versions of the ' + yr + base(c));
+    else if (busy[c.id] === 'size') hv += window.__app.ldBar('Looking up the factory size at Tire Rack');
     var failed = !t.size ? (tr && tr.failed ? tr : SL.failed && v && SL.key === verKey(c) + '|' + vn ? SL : tr && tr.clarFail && !v ? tr.clarError || { failed: 'error' } : null) : t.list && t.list.failed ? t.list : null;
     if (!busy[c.id] && failed) {
-      h += '<div class="lead small keep" role="status" id="tzLookupError">' + (failed.failed === 'unknown' ? 'Tire Rack has no sizes for the ' + esc(yr + vn) + '. Pick another version, or type the size from the sticker inside the driver\'s door.' : esc(failureText(failed))) + '</div>';
-      h += '<button type="button" class="btn tonal sm" id="tzRetry">Retry Tire Rack lookup</button>';
-      if (N.openUrl) h += '<button type="button" class="btn tonal sm" id="tzOpenSite">Open Tire Rack in browser</button>';
-      if (!t.size) h += '<div class="lead small keep">You can enter the tire size from the sticker inside the driver\'s door.</div>';
+      hv += '<div class="lead small keep" role="status" id="tzLookupError">' + (failed.failed === 'unknown' ? 'Tire Rack has no sizes for the ' + esc(yr + vn) + '. Pick another version, or type the size from the sticker inside the driver\'s door.' : esc(failureText(failed))) + '</div>';
+      hv += '<button type="button" class="btn tonal sm" id="tzRetry">Retry Tire Rack lookup</button>';
+      if (N.openUrl) hv += '<button type="button" class="btn tonal sm" id="tzOpenSite">Open Tire Rack in browser</button>';
+      if (!t.size) hv += '<div class="lead small keep">You can enter the tire size from the sticker inside the driver\'s door.</div>';
     }
-    var C = t.corners || {};
+    // no size yet: what Tire Rack still needs from you (your version, a failed lookup) comes first, then the size box
+    h += t.size ? hs + hv : hv + hs;
+    var C = t.corners || {}, locked = sizeMissing(c);
+    // everything else about the tires starts from their size: locked (grayed) until it's filled in
+    if (locked) h += '<p class="lead small keep tz-lock-note" id="tzLockNote">Enter your tire size' + (multi ? 's' : '') + ' first: the rest of your tire details starts from ' + (multi ? 'them' : 'it') + '.</p><fieldset class="tz-locked" disabled>';
     if (!multi) h += sameHtml(C.split);
     if (!C.split && !multi) {
       h += carWear(c, t);
@@ -1008,6 +1030,7 @@
       h += '<div class="nf wide"><span>Wear rating' + q(Q.utqg) + '</span>' + utqgHtml(t.utqg, 'tz') + (t.utqgSrc === 'tirerack' ? '<div class="lead small keep">Wear rating and warranty from Tire Rack.</div>' : '') + '</div>';
       h += '<label class="nf wide"><span>Maker\'s mileage warranty' + q(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="tzWarranty" placeholder="e.g. 65000" value="' + esc(+t.warrantyMi > 0 ? t.warrantyMi : '') + '"></label>';
     } else h += carEach(c, t);
+    if (locked) h += '</fieldset>';
     return h;
   }
   /** A row that opens a submenu: title, one line under it, and an arrow (empty: outlined, nothing filled in yet). */

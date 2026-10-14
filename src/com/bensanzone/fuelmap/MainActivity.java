@@ -22,6 +22,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -542,8 +543,23 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * A site's page shown to the user sits between the status bar and the Done button (with a gap above it), so the
+     * page's own buttons (Brave's check, say) never end up under ours.
+     */
+    private void showMargins(SiteWorker w, boolean on) {
+        ViewGroup.LayoutParams p = w.view.getLayoutParams();
+        if (!(p instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) p;
+        float dens = getResources().getDisplayMetrics().density;
+        lp.topMargin = on ? (int) (40 * dens) : 0;
+        lp.bottomMargin = on ? (int) ((48 + 64 + 24) * dens) : 0;
+        w.view.setLayoutParams(lp);
+    }
+
     private void startVerify(SiteWorker w) {
         verifying = w;
+        showMargins(w, true);
         w.view.loadUrl(w.home);
         web.setVisibility(View.INVISIBLE);
         wmDone.setVisibility(View.VISIBLE);
@@ -557,6 +573,7 @@ public class MainActivity extends Activity {
         w.showReq = reqId;
         w.queue.clear();
         w.queue.add(call);
+        showMargins(w, true);
         w.view.loadUrl(url);
         wmDone.setText("Done \u2014 back to Gasket");
         web.setVisibility(View.INVISIBLE);
@@ -574,6 +591,7 @@ public class MainActivity extends Activity {
             wmDone.setText("Done \u2014 back to the map");
         }
         String key = verifying != null ? verifying.key : "";
+        if (verifying != null) showMargins(verifying, false);
         verifying = null;
         wmDone.setVisibility(View.GONE);
         web.setVisibility(View.VISIBLE);

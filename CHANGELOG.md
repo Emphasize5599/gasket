@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.151 - 2026-10-14 (keyless test branch only)
+- Pages opened for you (Brave Search, NHTSA, a site's check) leave room above and below, so their buttons aren't under Gasket's.
+- Tire Rack lookups try again twice after a hiccup; without a size, picking your version comes before the size box.
+- Tire details unlock once the tire size is in; tires are no longer needed to go on to the next step (Advice still warns).
+- Spare tire: an answer saying a spare was optional shows that as a tip; hybrids are asked about by their full name (Corolla Hybrid, not Corolla), for the tank size too.
+- Bug fixes.
+
 ## 0.0.150 - 2026-10-14 (keyless test branch only)
 - Tire details: the tire size is required; "My car has more than 1 tire size" adds a rear size (each tire then gets its own answer), and a tire's lookup uses its axle's size instead of its own size box.
 - "My tires are different", with a tip under the choice about tires put on 5,000+ miles apart; By mileage comes first.

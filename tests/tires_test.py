@@ -217,12 +217,17 @@ with sync_playwright() as p:
         pg.click('#tzMulti'); pg.wait_for_timeout(200); pg.click('#tzBy [data-by="depth"]'); pg.wait_for_timeout(200)
         assert pg.locator('.sub-page #tzSame').count() == 1 and pg.locator('#tzSizeRear').count() == 0 and pg.evaluate('Garage.car().tires.corners.split') is True
         main(pg)
-        # ---- the tire size is required: no size, the Garage waits and the Tire details row says so ----
-        pg.evaluate("() => { window.__mocks.tireSizeOk = false; const t = window.Garage.car().tires; window.__sz = t.size; t.size = ''; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        # ---- the tire size comes first: without it the rest of the tire details is locked; the trip can still go on ----
+        pg.evaluate("() => { const t = window.Garage.car().tires; window.__sz = t.size; t.size = ''; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
         assert 'tire size needed' in ft(pg, '#tzDet') and pg.locator('#tzDet.empty').count() == 1
-        pg.click('#tNext'); pg.wait_for_timeout(300); assert pg.evaluate('window.__trip.state().step') == 1, 'Garage waits for the tire size'
-        pg.evaluate("() => { window.__mocks.tireSizeOk = true; window.Garage.car().tires.size = window.__sz; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        assert pg.locator('#tpSteps [data-step="2"].dim').count() == 0, 'tire details are not needed to go on'
+        car_sub(pg)
+        assert pg.locator('#tzLockNote').count() == 1 and pg.locator('fieldset.tz-locked[disabled] #tzSame [data-same="0"]').count() == 1 and pg.is_disabled('[data-same="0"]'), 'locked until the size is in'
+        assert not pg.is_disabled('#tzSize'), 'the size box itself stays open'
+        pg.fill('#tzSize', window_sz := '195/65R15'); pg.dispatch_event('#tzSize', 'change'); pg.wait_for_timeout(300)
+        assert pg.locator('#tzLockNote, fieldset.tz-locked').count() == 0, 'the size in: unlocked'
+        main(pg)
         if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
         # ---- tow mode: "Car tire details", and a row for each trailer (its tires live in its own page) ----
         pg.check('#tzTow'); assert pg.locator('.sub-page').count() == 0; pg.click('#tzAddTr'); pg.wait_for_selector('.sub-page [data-axles]')
@@ -243,8 +248,7 @@ with sync_playwright() as p:
         # its tires aren't filled in: the row says so, the Garage won't go on; Advice warns
         assert '8 tires need details' in ft(pg, '#tzTr_%s' % tid) and pg.locator('#tzTr_%s.empty' % tid).count() == 1, ft(pg, '#tzTr_%s' % tid)
         assert 'Your tires could be unsafe' in pg.evaluate("Tires.advice(window.Garage.car()).map(x => x.title).join('|')")
-        pg.click('#tNext'); pg.wait_for_timeout(300); assert pg.evaluate('window.__trip.state().step') == 1, 'Garage waits for the tires'
-        assert pg.locator('#tpSteps [data-step="2"].dim').count() == 1
+        assert pg.locator('#tpSteps [data-step="2"].dim').count() == 0, 'missing tire details warn (Advice) but never hold the trip'
         # one through its page, the rest at once
         pg.click('#tzTr_%s' % tid); pg.wait_for_selector('.sub-page [data-tr-tire]')
         pg.click('[data-tr-tire="%s:a2ro"]' % tid); pg.wait_for_selector('.sub-page #tpMiles')

@@ -263,7 +263,15 @@
   // the hidden Brave Search page reads one question at a time (the tank size here, the spare in Tires)
   var braveChain = Promise.resolve();
   function braveSerial(fn) { var p = braveChain.then(fn, fn); braveChain = p.catch(function () { }); return p; }
-  function tankKey(c) { return c && c.year && c.make && c.model ? [c.year, c.make, baseOf(c), c.trim || ''].join(' ').replace(/\s+/g, ' ').trim() : ''; }
+  /** The car as a search names it: the model's own name (the EPA's "base model" drops words that matter, like Hybrid in
+   *  "Corolla Hybrid" -> "Corolla"), with Hybrid / Plug-in added when the name doesn't say so. */
+  function tankKey(c) {
+    if (!(c && c.year && c.make && c.model)) return '';
+    var m = String(c.model).replace(DRV_SUFFIX, '').trim();
+    if ((c.power === 'hybrid' || c.type === 'hybrid') && !/hybrid/i.test(m)) m += ' Hybrid';
+    else if (c.power === 'phev' && !/hybrid|plug-?in|prime|phev|energi/i.test(m)) m += ' Plug-in Hybrid';
+    return [c.year, c.make, m, c.trim || ''].join(' ').replace(/\s+/g, ' ').trim();
+  }
   function tankUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&summary=1'; }
   function tankAuto(c) {
     if (!c || +c.tank > 0 || kind(c) !== 'gas' || !call || !N.siteRead || tankBusy[c.id] || matching) return;
@@ -294,18 +302,13 @@
    * then the tank / battery size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
    */
   /** Is the car ready for a trip (mileage and tank size), without pointing at anything? */
-  function tiresMissing(c) { return window.Tires && Tires.missing ? Tires.missing(c).length : 0; }
-  function sizeMissing(c) { return !!(window.Tires && Tires.sizeMissing && Tires.sizeMissing(c)); }
-  function ok() { var c = car(); return !!S.cars.length && !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0 && !tiresMissing(c) && !sizeMissing(c); }
+  function ok() { var c = car(); return !!S.cars.length && !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0; }
   function need() {
     if(!S.cars.length)return {el:host&&host.querySelector('[data-car="+"]'),kind:'pick',msg:'Add your vehicle before planning a trip.'};
     var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0, k = kind(c);
     if (mpgOk && tankOk) {
       // tires that aren't all the same, not all filled in: fill them in, or discard the tire changes
-      if (sizeMissing(c)) { var gs = document.getElementById('gTires'); if (gs && !gs.open) { gs.open = true; tiresOpen = true; } return { el: document.getElementById('tzDet') || gs, kind: 'pick', msg: 'Enter your tire size under Tires → Tire details.' }; }
-      var nm = tiresMissing(c); if (!nm) return null;
-      var gt = document.getElementById('gTires'); if (gt && !gt.open) { gt.open = true; tiresOpen = true; }
-      return { el: document.getElementById('tzMiss') || gt, kind: 'pick', msg: nm + ' tire(s) missing details: fill them in or discard the tire changes.' };
+      return null;      // tires aren't needed to go on (Advice warns about missing details)
     }
     if (!mpgOk && !editing && host) { editing = true; epaOpen = true; draw(); epaOpen = false; }
     if (!mpgOk) {
