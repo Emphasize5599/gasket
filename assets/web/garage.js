@@ -328,11 +328,11 @@
       '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
       '<div class="gc-slide carchip on' + (slideIn ? (slideIn > 0 ? ' in-r' : ' in-l') : '') + '"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
       '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
-      (editing ? '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
-        '<button type="button" class="gc-recreate" id="gcUseGenerated">Choose...</button>' +
-        '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasGenerated(c) ? '' : ' disabled') + '>Revert to original</button></div>' : '') +
       '</div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
+    if(editing)h += '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
+      '<button type="button" class="gc-recreate" id="gcUseGenerated">Choose...</button>' +
+      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasGenerated(c) ? '' : ' disabled') + '>Revert to original</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
       '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
     slideIn = 0;
@@ -426,7 +426,12 @@
     h += '<details class="epa" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>Year / make / model<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model].join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
       '<div class="epa-grid"><select id="eYear"><option value="">Year</option></select><select id="eMake" disabled><option>Make</option></select>' +
       '<select id="eModel" disabled><option>Model</option></select><select id="eOpt" disabled><option>Engine / transmission</option></select></div>' +
-      '<div class="epa-msg" id="eMsg"></div></details>';
+      '<div class="epa-msg" id="eMsg"></div><p class="lead small keep">All vehicles listed by the EPA, from 1984 onward. Some heavy-duty trucks and other vehicles have no EPA rating; enter a custom vehicle below and supply its mileage.</p></details>';
+    if (!c.epaId && !c.vin) h += '<details class="epa" id="gCustom"'+(c.year||c.make||c.model?' open':'')+'><summary>Custom vehicle<small>Not in the EPA catalog? Enter its details here.</small></summary>' +
+      '<div class="grid2"><label class="nf"><span>Year</span><input id="gCustomYear" type="number" inputmode="numeric" step="1" min="1886" max="9999" value="'+esc(c.year||'')+'"></label>' +
+      '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
+      '<label class="nf wide"><span>Model</span><input id="gCustomModel" type="text" value="'+esc(c.model||'')+'"></label>' +
+      '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
     if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
     h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     h += paintHtml(c);
@@ -709,6 +714,7 @@
       }
       if ($('gName')) $('gName').onchange = function () { c.name = this.value.trim(); draw(); save(); };
       if($('gName'))$('gName').oninput=function(){$('gEdit').disabled=!this.value.trim()&&!(c.year&&c.make&&c.model);};
+      ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };

@@ -1402,9 +1402,10 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .sub-body details > summary { position:sticky; top:0; z-index:2; background:var(--surface); color:var(--accent); }
 .sub-body details > summary small { white-space:normal; overflow:visible; }
 .sub-body .rec-tag { align-self:flex-start; width:fit-content; }
-.gc-image-actions { display:flex; align-items:stretch; justify-content:center; gap:6px; width:100%; }
-.gc-image-actions > span { display:flex; align-items:center; flex:1; min-width:0; }
-.gc-image-actions .gc-recreate { flex:1; min-width:0; width:auto; margin:0; padding:7px 4px; font-size:11px; white-space:normal; }
+.gc-image-actions { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(0,1.05fr) minmax(0,1.25fr); align-items:stretch; gap:4px; width:100%; margin-top:8px; }
+.gc-image-actions > span { display:flex; align-items:stretch; flex:1; min-width:0; gap:2px; }
+.gc-image-actions > span .qi { flex:none; align-self:center; margin-left:0; }
+.gc-image-actions .gc-recreate { flex:1; min-width:0; width:auto; margin:0; padding:8px 3px; min-height:44px; border-radius:14px; font-size:14px; line-height:1.3; white-space:normal; overflow-wrap:anywhere; }
 .tz-c > span { min-width:0; white-space:normal; overflow:visible; flex-wrap:wrap; }
 .size-edit { display:flex; align-items:center; gap:4px; }.size-edit input { flex:1; min-width:0; }.size-edit button { flex:none; width:40px; height:40px; border-radius:12px; background:var(--surface-2); }
 .tz-cfg { justify-items:stretch; align-items:center; text-align:left; }.tz-cfg .chips { justify-content:flex-start; min-width:0; }

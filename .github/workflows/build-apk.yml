@@ -43,6 +43,7 @@ on:
       - tests/hazard-prefetch.test.js
       - tests/styled-tire-flow.test.js
       - tests/trailer-editor.test.js
+      - tests/vehicle-catalog.test.js
       - tests/background-search.test.js
 
 permissions:
