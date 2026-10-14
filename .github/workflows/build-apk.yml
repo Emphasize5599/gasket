@@ -108,9 +108,12 @@ jobs:
 
       - name: Install Android SDK tools and Java
         if: steps.signing.outputs.ready == 'true'
+        # a stuck package mirror fails here (and retries) instead of hanging the build for hours
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y android-sdk android-sdk-build-tools android-sdk-platform-23 openjdk-17-jdk-headless
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT update
+          sudo apt-get $APT install -y android-sdk android-sdk-build-tools android-sdk-platform-23 openjdk-17-jdk-headless
           if [ ! -s "$RUNNER_TEMP/platform-31.zip" ]; then
             curl --fail --location --retry 2 https://dl.google.com/android/repository/platform-31_r01.zip -o "$RUNNER_TEMP/platform-31.zip"
           fi
