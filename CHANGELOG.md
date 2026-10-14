@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.144 - 2026-10-14 (keyless test branch only)
+- Round vehicle photos to match the garage tiles.
+
 ## 0.0.143 - 2026-10-14 (keyless test branch only)
 - Demo vehicles default to photos; fixed Wikimedia thumbnails and Mirai photo lookup.
 - Demo warnings identify only non-EPA sample values.
