@@ -105,7 +105,12 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     assert.match(await p.locator('.tz-ruler').textContent(),/ft/);
     await p.click('#ttLengthLock');await p.fill('#ttLength','3');await p.dispatchEvent('#ttLength','change');assert.match(await p.innerText('#ttGeometryNote'),/increased/);await p.click('#ttLengthLock');
     await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0];tr.axlePositions=[0,0,0];});
-    await p.click('[data-tr-split="false"]');await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
+    await p.click('[data-tr-split="false"]');
+    await p.evaluate(()=>{window.__originalTrailerRead=__app.N.siteRead;window.__heldTrailerRead=null;__app.N.siteRead=(id,key,json)=>{const a=JSON.parse(json);if(key==='tirerack'&&a.step==='list'&&/width=395(?:%2f|\/)/i.test(a.url)){__heldTrailerRead=id;return;}__originalTrailerRead(id,key,json);};});
+    await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');await p.waitForFunction(()=>__heldTrailerRead!=null);
+    await p.fill('input[id$="_Size"]','405/95R24');await p.evaluate(()=>{window.__editingTrailerSize=document.activeElement;onNativeResult(__heldTrailerRead,{tires:[],empty:true});});await frame(p);
+    assert.equal(await p.inputValue('input[id$="_Size"]'),'405/95R24','background tire catalog completion must preserve an uncommitted edit');assert.ok(await p.evaluate(()=>document.activeElement===__editingTrailerSize&&__editingTrailerSize.isConnected),'background reply must not blur/replace the edited field');
+    await p.evaluate(()=>{__app.N.siteRead=__originalTrailerRead;});await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
     assert.ok(await p.evaluate(()=>document.querySelector('#ttSame').getBoundingClientRect().bottom<document.querySelector('.trailer-common .tz-pick').getBoundingClientRect().top),'size and same/different selector are above Brand');
     const grown=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners);return {length:tr.geometry.lengthFt,min:g.minLength,gaps:g.gaps,centers:g.centers,positions:tr.axlePositions};});
     assert.ok(grown.length>=grown.min-1e-8&&grown.length>12);for(let i=1;i<3;i++)assert.ok(grown.centers[i]-grown.centers[i-1]>=grown.gaps[i]-1e-8);

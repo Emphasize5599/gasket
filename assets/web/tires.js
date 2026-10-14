@@ -1089,9 +1089,12 @@
     var mine = function () { var o = {}; Object.keys(t.corners || {}).forEach(function (k) { if (k.indexOf(id + ':') === 0) o[k] = t.corners[k]; }); return o; };
     var snap = JSON.stringify({ tr: tr, corners: mine() }), pg = null, close = null, stopDrag=null, pendingFill=false, filling=false,layoutEdit={draft:null};
     var drop = function () { t.trailers = t.trailers.filter(function (x) { return x !== tr; }); Object.keys(mine()).forEach(function (k) { delete t.corners[k]; }); };
-    var fill = function () {
+    var fill = function (background) {
       var b = pg.querySelector('.sub-body'); if(filling)return;if(b.querySelector('[data-dragging]')){pendingFill=true;return;}pendingFill=false;filling=true;
       try {
+      // A catalog completion must not replace a field while the user is typing into it.
+      var active=document.activeElement;
+      if(background&&b.contains(active)&&active.matches('input,textarea')){if(!active._trPendingFill){active._trPendingFill=true;active.addEventListener('blur',function(){setTimeout(function(){if(pg&&pg.isConnected)fill(true);},0);},{once:true});}return;}
       // Removing a focused edited input can fire change synchronously inside innerHTML. Commit it before replacement.
       if(b.contains(document.activeElement))document.activeElement.blur();
       if(stopDrag)stopDrag();b.innerHTML = trailerForm(tr,layoutEdit);
@@ -1099,7 +1102,7 @@
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
       var updateLayout=function(fn){var current=layoutPreview(tr,layoutEdit);fn(current);normalizeTrailer(current,t.corners);if(layoutEdit.draft)layoutEdit.draft=layoutData(current);};
       $$('Name').onchange = set(function () { tr.name = this.value.trim() || tr.name; pg.querySelector('.sub-bar h2').textContent = 'Trailer tire details · ' + tr.name; });
-      $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
+      $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(true); }); });
       bindPick(b, p, tr, function () { return sizeList(tr.size); }, set);
       b.querySelectorAll('[data-tr-split]').forEach(function(button){button.onclick=set(function(){tr.split=button.dataset.trSplit==='true';t.corners=t.corners||{};if(!t.corners.mode)t.corners.mode='miles';});});
       b.querySelector('#ttSymmetrical').onchange=set(function(){if(!layoutEdit.draft)return;var checked=this.checked;updateLayout(function(current){var z=current.geometry;z.symmetric=checked;if(z.symmetric)z.leftFt=z.rightFt=(z.leftFt+z.rightFt)/2;});});
@@ -1124,7 +1127,7 @@
       if (A.qify) A.qify(b);
       } finally { filling=false; }
     };
-    close = A.subPage('Trailer tire details · ' + (tr.name || 'Trailer'), '', function (b) { pg = b.closest('.sub-page'); pg.classList.add('trailer-page');subFill = fill; fill(); return function () { if(stopDrag)stopDrag();subFill = null; draw(); onChange(); }; });
+    close = A.subPage('Trailer tire details · ' + (tr.name || 'Trailer'), '', function (b) { pg = b.closest('.sub-page'); pg.classList.add('trailer-page');subFill = function(){fill(true);}; fill(); return function () { if(stopDrag)stopDrag();subFill = null; draw(); onChange(); }; });
   }
   /** The trailers not hooked up: hook one up, or open it. */
   function openSaved(c) {

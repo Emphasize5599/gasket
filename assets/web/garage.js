@@ -994,8 +994,9 @@
   }
   /** How well an EPA model name fits what the VIN says (higher is better; -99: another model). Pure, tested in Node. */
   function modelScore(text, base, want) {
-    var t = String(text), rest = t.replace(DRV_SUFFIX, '').trim().toLowerCase(), sfx = DRV_SUFFIX.exec(t), sc;
-    if (rest === base) sc = 3; else if (rest.indexOf(base) === 0) sc = 1; else return -99;   // "Corolla Cross" isn't the "Corolla"
+    var norm=function(x){return String(x).toLowerCase().replace(/\b([a-z]+)-(?=\d)/g,'$1');};
+    var t = String(text), rest = norm(t.replace(DRV_SUFFIX, '').trim()), sfx = DRV_SUFFIX.exec(t), sc;base=norm(base);
+    if (rest === base) sc = 3; else if (rest.indexOf(base+' ') === 0) sc = 1; else return -99;
     var s4 = !!(sfx && /awd|4wd|4x4/i.test(sfx[1])), s2 = !!(sfx && /2wd|fwd|rwd/i.test(sfx[1]));
     if (want.all) sc += s4 ? 2 : s2 ? -3 : 0; else if (want.two) sc += s2 ? 2 : s4 ? -3 : 0;
     var hy = /hybrid/i.test(rest), ph = /plug-in|phev/i.test(rest), ffv = /\bffv\b/i.test(rest), dsl = /diesel/i.test(rest);
@@ -1080,7 +1081,7 @@
       mk.value = mm[0].value; await mk.onchange.call(mk);
       var md = $('eModel'), base = String(c.vpicModel || c.model).toLowerCase(), I = c.info || {};
       // the EPA splits a model by drive ("Charger" is two-wheel drive, "Charger AWD" all-wheel): use what the VIN says
-      var starts = pick(md, function (t) { return t.indexOf(base) === 0; });
+      var starts = pick(md, function (t) { return modelScore(t,base,{})>-50; });
       // every version scored against what the VIN says (drive, hybrid, plug-in, flex fuel, diesel); the best one if it's
       // clearly ahead, else the on-phone AI between the ones tied (only when it's clearly ahead too), else you pick
       var H = c.vinHints || {}, want = { all: I.drive === 'awd' || I.drive === '4wd', two: !!H.two || I.drive === 'fwd' || I.drive === 'rwd', hybrid: c.power === 'hybrid', phev: c.power === 'phev', flex: !!H.flex, diesel: !!H.diesel };
