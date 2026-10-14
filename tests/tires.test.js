@@ -242,3 +242,12 @@ console.log('tire version matching ok');
   assert.equal(T.optTip('No spare. Tesla does not include one.'), '');
   console.log('An optional spare in Brave\'s answer becomes the tip');
 }
+{
+  // "No spare", a repair kit, and a spare that can be added: the kit is what it has
+  const t = 'No spare. The 2020 Toyota Corolla Hybrid LE comes with a tire repair kit instead of a spare tire. The trunk has a spare tire well, so you can add a compact spare (T125/70D17).';
+  assert.equal(T.spareLead(t), 'none'); assert.equal(T.parseSpare(t), 'compact', 'the general reader sees the addable compact first');
+  assert.equal(T.instead(t), 'kit');
+  assert.equal(T.instead('No spare. It has no repair kit either.'), null);
+  assert.equal(T.instead('No spare. It comes with run-flat tires.'), 'runflat');
+  console.log('"No spare" with a repair kit reads as the kit');
+}

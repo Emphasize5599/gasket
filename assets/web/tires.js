@@ -498,6 +498,14 @@
       /\b(?:dedicated|built-in|spare (?:tire )?well|trunk well|storage well|recessed well|hold[- ]down)\b/i.test(x) && x.length <= 180; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
+  /** What a car with no spare has instead, said anywhere in the answer -> 'kit' | 'runflat' | null ("no repair kit" isn't one). */
+  function instead(text) {
+    var t = String(text || '').toLowerCase().replace(/\s+/g, ' ');
+    var neg = /\b(?:no|not|without|doesn'?t (?:come with|have|include)|does not (?:come with|have|include))\s+(?:a\s+)?(?:tire\s+)?(?:repair|inflator|sealant|mobility)/;
+    if (/(?:repair|inflator|sealant|mobility|fix-a-flat|tire service) kit|tire (?:sealant|inflator)|sealant and (?:an )?(?:air )?(?:compressor|inflator)/.test(t) && !neg.test(t)) return 'kit';
+    if (/run[- ]flat tires?/.test(t) && !/\b(?:no|not|without)\s+run[- ]flat/.test(t)) return 'runflat';
+    return null;
+  }
   /** The answer's own sentence saying a spare was optional (on some trims, as an option or a package), for the tip. */
   function optTip(text) {
     var ss = String(text || '').replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); }).filter(function (x) { return /[.!?]$/.test(x); });
@@ -505,7 +513,7 @@
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, instead: instead, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
   function spareLocation(text){var inside=false,under=false;String(text||'').replace(/\s+/g,' ').trim().split(/[.!?;]+/).forEach(function(s){
@@ -741,7 +749,7 @@
   function readSpare(text) {
     // the format the question asks for: its first phrase says the kind, its next sentence is the tip
     var lead = spareLead(text);
-    if (lead === 'none') { var w0 = parseSpare(text); if (w0 === 'kit' || w0 === 'runflat') lead = w0; }   // "No spare. … a repair kit instead"
+    if (lead === 'none') lead = instead(text) || lead;   // "No spare. … a repair kit instead" (even when it also says a spare can be added)
     if (lead) {
       // a spare that was optional (on some trims, or as an option): its own words say so, so "no spare" isn't the whole story
       var lt = lead === 'full' || lead === 'compact' ? '' : leadTip(text) || optTip(text);
@@ -942,6 +950,8 @@
     if (sp.lookup && sp.lookup.tip && !(sp.lookup.tipV >= 3) && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
     // 0.0.151: an answer that says a spare was optional gets that sentence as its tip
     if (sp.lookup && sp.lookup.text && sp.lookup.tipV !== 4) { sp.lookup.tip = sp.lookup.tip || optTip(sp.lookup.text); sp.lookup.tipV = 4; }
+    // 0.0.153: a saved "No spare" whose answer names a repair kit (or run-flats) is read again; a confirmed misread is asked again
+    if (sp.lookup && sp.lookup.text && sp.lookup.guess === 'none' && !sp.lookup.insteadV) { var i2 = instead(sp.lookup.text); sp.lookup.insteadV = 1; if (i2) { if (sp.kind === 'none') sp.kind = ''; sp.lookup.guess = i2; LG.info('car', 'Spare tire read again: none → ' + i2); } save(); }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
     var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
