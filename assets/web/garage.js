@@ -191,6 +191,12 @@
     if (matching) { drawLater = true; return; }   // a VIN match is filling the pickers: redraw once it's done
     if (!host || drawing) return;
     drawing = true;
+    // A photo or lookup can finish between a details click and its queued toggle event.
+    // Preserve the live element's state before replacing the Garage markup.
+    if($('gObs'))obsOpen=$('gObs').open;
+    if($('gInfo'))infoOpen=$('gInfo').open;
+    if($('gTires'))tiresOpen=$('gTires').open;
+    if($('gClimate'))climOpen=$('gClimate').open;
     // the year / make / model / engine pickers you (or a VIN) already filled: kept as they are, not emptied and filled
     // again one by one (each step waits on the EPA, so the boxes flickered and could end up half-filled)
     var grid = $('eYear') && $('eYear').value && $('eYear').closest('.epa-grid'), keepFor = S.carId;
@@ -232,11 +238,11 @@
     host.innerHTML = h;
     restoreEMsg();
     speedHost = $('tSpeed');
-    $('gObs').addEventListener('toggle', function () { obsOpen = this.open; });
-    if ($('tEpa')) $('tEpa').addEventListener('toggle', function () { epaStay = this.open ? c.id : null; });
-    $('gInfo').addEventListener('toggle', function () { infoOpen = this.open; });
-    $('gTires').addEventListener('toggle', function () { tiresOpen = this.open; });
-    $('gClimate').addEventListener('toggle', function () { climOpen = this.open; });
+    $('gObs').addEventListener('toggle', function () { if(this.isConnected)obsOpen = this.open; });
+    if ($('tEpa')) $('tEpa').addEventListener('toggle', function () { if(this.isConnected)epaStay = this.open ? c.id : null; });
+    $('gInfo').addEventListener('toggle', function () { if(this.isConnected)infoOpen = this.open; });
+    $('gTires').addEventListener('toggle', function () { if(this.isConnected)tiresOpen = this.open; });
+    $('gClimate').addEventListener('toggle', function () { if(this.isConnected)climOpen = this.open; });
     if (window.Climate) Climate.render($('gClimIn'), function () { try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.innerHTML = Tires.summaryHtml(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
