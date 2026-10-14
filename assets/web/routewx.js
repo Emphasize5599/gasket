@@ -255,7 +255,8 @@
   }
   function hourIdx(times, t) {
     if (!times || !times.length) return -1;
-    var t0 = Date.parse(times[0] + 'Z'), i = Math.round((t - t0) / HOUR);
+    // Each hourly value covers the hour beginning at its timestamp; rounding used tomorrow's hour after :30.
+    var t0 = Date.parse(times[0] + 'Z'), i = Math.floor((t - t0) / HOUR);
     return i >= 0 && i < times.length ? i : -1;
   }
   function list(body) { var j = typeof body === 'string' ? JSON.parse(body) : body; return Array.isArray(j) ? j : [j]; }

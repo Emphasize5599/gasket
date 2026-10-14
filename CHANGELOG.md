@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.145 - 2026-10-14 (keyless test branch only)
+- Show previously known stations as you pan the main map, without new API calls.
+- Use the correct hourly forecast at each route ETA.
+- Refine demo vehicle and spare-tire details; add diesel powertrain and correct passenger dual-tire order.
+
 ## 0.0.144 - 2026-10-14 (keyless test branch only)
 - Round vehicle photos to match the garage tiles.
 

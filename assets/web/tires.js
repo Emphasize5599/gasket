@@ -404,11 +404,13 @@
   /** The tip, in a sentence or two: "The trunk has a built-in spot for a spare, just no tire. You can add a temporary spare (T125/70D17)." */
   function spareTip(sc, scores) {
     var f = tipFacts(sc, scores), out = [];
-    if (!f.well && !f.buy && !f.donor) return '';
+    // Buying a spare alone is not useful advice unless the vehicle has a place made for one.
+    if (!f.well) return '';
     if (f.well) out.push('The trunk has a built-in spot for a spare, just no tire in it.');
     var opt = /optional|accessory|dealer/i.test((sc.opt || []).join(' '));
     if (f.buy || f.size) out.push('You can add ' + (f.size ? 'a temporary spare (' + f.size + ')' : 'a spare') + (opt && !f.size ? ' as an optional accessory' : '') + (f.donor ? ', or a matching one from another model' : '') + '.');
     else if (f.donor) out.push('A matching spare from another model can fit.');
+    else out.push('You can add a compatible spare after checking fitment.');
     return out.join(' ');
   }
   /**
@@ -442,7 +444,8 @@
     // its sentences, not its headings ("Adding a Spare Tire" sits on a line of its own)
     var ss = String(text || '').replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); })
       .filter(function (x) { return /[.!?]$/.test(x); }).slice(1, 5);
-    var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:add|added|buy|bought|purchas\w*|install\w*|available|optional|accessory|fit|fits|size)\b/i.test(x) && x.length <= 180; })[0];
+    var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:add|added|buy|bought|purchas\w*|install\w*|available|optional|accessory|fit|fits|size)\b/i.test(x) &&
+      /\b(?:dedicated|built-in|spare (?:tire )?well|trunk well|storage well|recessed well|hold[- ]down)\b/i.test(x) && x.length <= 180; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
@@ -655,7 +658,7 @@
       return readSpare(r && r.text).then(function (pick) {
         var g = pick.kind;
         var text=String(r&&r.text||'').replace(/\s+/g,' ').trim();
-        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 2,location:spareLocation(text),locationV:1 };
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 3,location:spareLocation(text),locationV:1 };
         LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
         save(); redraw(c); onChange();
       });
@@ -826,7 +829,7 @@
     var k1 = kind || guess;
     if(k1==='full'||k1==='compact')h+='<label class="nf wide"><span>Where the spare is stored<small>Confirm in the owner\'s manual or on the vehicle; a search answer is not confirmation.</small></span><select id="tzSpareLocation"><option value="">Not confirmed</option>'+['inside','under'].map(function(v){return '<option value="'+v+'"'+(sp.location===v?' selected':'')+'>'+locationName(v)+'</option>';}).join('')+'</select></label>'+(sp.lookup&&sp.lookup.location&&!sp.location?'<p class="lead small keep">Brave suggests: '+esc(locationName(sp.lookup.location))+'.</p>':'');
     // a tip from before tips were short: said again the short way, from the answer it kept
-    if (sp.lookup && sp.lookup.tip && sp.lookup.tipV !== 2 && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 2; }
+    if (sp.lookup && sp.lookup.tip && sp.lookup.tipV !== 3 && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
     var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
@@ -991,10 +994,10 @@
   function trailerTireRows(tr) {
     var t=tires(G().car()), P=trailerPositions(t,tr), h='<div class="tz-tr-tires">';
     for(var a=1;a<=(tr.axles||1);a++)['driver','passenger'].forEach(function(side){
-      var dual=tr.per===4, prefix=tr.id+':a'+a, keys=dual?(side==='driver'?['lo','li']:['ro','ri']):(side==='driver'?['l']:['r']);
+      var dual=tr.per===4, prefix=tr.id+':a'+a, keys=dual?(side==='driver'?['lo','li']:['ri','ro']):(side==='driver'?['l']:['r']);
       h+='<section class="tz-tr-side'+(dual?' dual':'')+'"><div class="tz-tr-side-label">'+esc((tr.name||'Trailer')+', axle '+a+', '+side+' side')+(!dual&&needs(t,P.filter(function(pos){return pos.k===prefix+keys[0];})[0]).length?'<span class="req">*</span>':'')+'</div><div class="tz-gl">';
       keys.forEach(function(s,j){var p=P.filter(function(pos){return pos.k===prefix+s;})[0];
-        h+='<div class="nf tz-c">'+(dual?'<span>'+(j===0?'Outer':'Inner')+(needs(t,p).length?'<span class="req">*</span>':'')+'</span>':'')+'<button type="button" class="tz-tire" data-tr-tire="'+esc(p.k)+'" aria-label="Specify '+esc(p.name)+'"><span>Specify</span>'+GO+'</button></div>';
+        h+='<div class="nf tz-c">'+(dual?'<span>'+((s==='li'||s==='ri')?'Inner':'Outer')+(needs(t,p).length?'<span class="req">*</span>':'')+'</span>':'')+'<button type="button" class="tz-tire" data-tr-tire="'+esc(p.k)+'" aria-label="Specify '+esc(p.name)+'"><span>Specify</span>'+GO+'</button></div>';
       });h+='</div></section>';
     });
     return h+'</div>';

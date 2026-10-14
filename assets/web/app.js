@@ -176,13 +176,14 @@
   map.on('movestart', function (e) { if (e && e.originalEvent) movedByUser = true; });
   map.on('dragstart zoomstart', function () { movedByUser = true; });
   map.on('moveend', function () {
-    if (!lastFetch || !movedByUser) return;
+    if (!movedByUser) return;
     var c = map.getCenter();
-    var far = P.haversineMi(c.lat, c.lng, lastFetch.lat, lastFetch.lng) > Math.max(2, S.radiusMi * 0.45);
+    var ref=lastFetch||me;
+    var far = !ref || P.haversineMi(c.lat, c.lng, ref.lat, ref.lng) > Math.max(2, S.radiusMi * 0.45);
     $('btnArea').classList.toggle('hidden', !far);
   });
   map.on('click', function () { closeDetail(); setListOpen(false); });
-  map.on('zoomend moveend resize', function () { placeBubsSoon(); });
+  map.on('zoomend moveend resize', function () { render(); });
 
   // ---------- grade selector ----------
   // ---------- fuel mode: gas & diesel, electric or hydrogen (the pill left of the top bar's selector) ----------
@@ -270,8 +271,8 @@
   function refreshStatus() {
     if (pending) return;
     if (!lastFetch) { status(me ? 'Ready' : 'Finding you…'); return; }
-    var priced = stations.filter(function (s) { return s.prices[S.grade]; }).length;
-    var msg = (demo ? 'DEMO data · ' : '') + stations.length + ' stations · ' + priced + ' priced · ' + ago(lastFetch.ts);
+    var visible = visibleStations(), priced = visible.filter(function (s) { return s.prices[S.grade]; }).length;
+    var msg = (demo ? 'DEMO data · ' : '') + visible.length + ' stations · ' + priced + ' priced · ' + ago(lastFetch.ts);
     status(msg);
   }
   setInterval(refreshStatus, 30000);
@@ -449,9 +450,18 @@
   }
 
   // ---------- computing & rendering ----------
+  function visibleStations() {
+    var b=map.getBounds();if(!b.isValid())return stations;
+    var sw=b.getSouthWest(),ne=b.getNorthEast(),box=[sw.lat,sw.lng,ne.lat,ne.lng],out=[],seen={};
+    function add(s){if(!s||!S.brands[s.brand]||!Number.isFinite(s.lat)||!Number.isFinite(s.lng)||s.lat<box[0]||s.lat>box[2]||s.lng<box[1]||s.lng>box[3])return;var k=s.brand+'|'+s.id;if(seen[k])return;seen[k]=true;out.push(s);}
+    stations.forEach(add);
+    // This is local app storage, not a network lookup. It covers stations from earlier map searches and saved trips.
+    if(!demo&&window.__app&&window.PriceHistory&&PriceHistory.near)PriceHistory.near(box).forEach(add);
+    return out;
+  }
   function enriched() {
     var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null);
-    return stations.map(function (s) {
+    return visibleStations().map(function (s) {
       var c = P.compute(s, S.grade, S, new Date());
       return { s: s, c: c, dist: ref ? P.haversineMi(ref.lat, ref.lng, s.lat, s.lng) : null };
     });
@@ -482,7 +492,7 @@
       $('bestLine').innerHTML = 'Best ' + gl + ' <span class="big">' + priceHtml(b.c.final) + '</span><br><b>' + esc(P.displayName(b.s)) + '</b>' +
         (b.dist != null ? ' · ' + b.dist.toFixed(1) + ' mi' : '');
     } else {
-      $('bestLine').innerHTML = stations.length ? 'No ' + gl + ' prices here yet' : 'No matching stations yet';
+      $('bestLine').innerHTML = list.length ? 'No ' + gl + ' prices here yet' : 'No matching stations yet';
     }
     var rows = list.slice().sort(function (a, b) {
       if (sortBy === 'dist') return (a.dist || 0) - (b.dist || 0);
@@ -553,7 +563,7 @@
     var sb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sb')) || 0;
     document.documentElement.style.setProperty('--sheet-h', Math.max(0, h - sb) + 'px');
   }
-  function byId(id) { for (var i = 0; i < stations.length; i++) if (stations[i].id === id) return stations[i]; return null; }
+  function byId(id) { var all=visibleStations();for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i]; return null; }
 
   // ---------- the main map: dots and price bubbles ----------
   function mainOn() { return !document.body.classList.contains('trip-on'); }
@@ -1325,7 +1335,7 @@
       var c=me||(lastFetch?lastFetch:map.getCenter());
       var previous=S.keylessRegular;S.keylessRegular=false;
       try{if(movedByUser&&!$('btnArea').classList.contains('hidden'))return $('btnArea').onclick();fetchAround(c.lat,c.lng);}finally{S.keylessRegular=previous;}
-    },refreshKnownMap,stations.length>0,function(){var c=me||lastFetch||map.getCenter();fetchAround(c.lat,c.lng,null,'discover');});
+    },refreshKnownMap,visibleStations().length>0,function(){var c=me||lastFetch||map.getCenter();fetchAround(c.lat,c.lng,null,'discover');});
   };
   // ---------- one station search or price update at a time, which can run in the background ----------
   // A job: {kind: 'trip' | 'map', label, cancel(), inline() (true while its own screen shows its progress)}. While one
@@ -1396,14 +1406,15 @@
   async function refreshKnownMap(){
     if(pending||job)return;
     jobStart({kind:'map',label:'Refreshing prices · No API',cancel:function(){KeylessGas.cancel();}});
-    var original=stations;
+    var original=stations,known=visibleStations();
     try{
-      var r=await KeylessGas.refreshKnown(original,function(f,label){jobProg(f,label);},[],S.grade);
+      var r=await KeylessGas.refreshKnown(known,function(f,label){jobProg(f,label);},[],S.grade);
       if(stations!==original){status('Map changed; completed observations kept in price history.',true);return;}
-      stations=r.stations;
-      var by=new Map(stations.map(function(s){return [s.brand+'|'+s.id,s];}));
+      if(window.PriceHistory)PriceHistory.observe(r.stations);
+      var by=new Map(r.stations.map(function(s){return [s.brand+'|'+s.id,s];}));
       gStations=gStations.map(function(s){return by.get(s.brand+'|'+s.id)||s;});
       Object.keys(official).forEach(function(k){official[k]=official[k].map(function(s){return by.get(s.brand+'|'+s.id)||s;});});
+      stations=stations.map(function(s){return by.get(s.brand+'|'+s.id)||s;});
       N.saveCache(JSON.stringify({lastFetch:lastFetch,g:gStations,o:official}));render();
       status((r.cancelled?'Cancelled · ':'')+r.updated+'/'+r.total+' prices refreshed; '+r.retained+' unchanged. No API calls.',!!r.errors.length);
       if(r.blocked)showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');

@@ -6,4 +6,6 @@ assert.equal(decode({Trim:'',Trim2:'Sport'}).trim,'Sport');
 assert.equal(decode({Trim:'',Trim2:'E grade',Series:'XYZ/ABC'}).trim,'');
 assert.equal(decode({Trim:'Two/Three',Trim2:'Sport'}).trim,'','ambiguous primary trim is not overridden');
 assert.equal(decode({Trim:'',Series:'LE'}).trim,'','series is not blindly treated as marketing trim');
+assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).power,'diesel','diesel VIN uses diesel powertrain');
+assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).info.features.includes('Regenerative braking'),false,'plain diesel does not get EV features');
 console.log('Primary/secondary trim handling rejects ambiguous and internal grade codes');

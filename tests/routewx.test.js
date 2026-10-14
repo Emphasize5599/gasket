@@ -8,6 +8,8 @@ const L = require('../assets/web/limits.js'), T = require('../assets/web/trip.js
 const line = []; for (let i = 0; i <= 300; i++) line.push({ lat: 34.75 - 0.3 * i / 300, lng: -92.29 - 4.5 * i / 300 });
 const m = T.buildRoute({ distanceMeters: 300 * 1609.344, duration: '18000s', polyline: { encodedPolyline: T.encodePolyline(line) }, legs: [] }, { city: 30, hwy: 38, comb: 33 });
 const t0 = Date.parse('2026-10-14T12:00:00Z');
+assert.equal(W.hourIdx(['2026-10-14T12:00','2026-10-14T13:00','2026-10-14T14:00'],t0+59*60e3),0,'a :59 ETA uses the current forecast hour');
+assert.equal(W.hourIdx(['2026-10-14T12:00','2026-10-14T13:00','2026-10-14T14:00'],t0+60*60e3),1,'the next hour starts at :00');
 const pts = W.samples(m, { depart: t0, stops: [{ mi: 150, min: 15 }] });
 assert.equal(pts.length, 16, 'every 20 miles: ' + pts.length);
 assert.equal(pts[0].eta, t0); assert.equal(pts[pts.length - 1].eta, t0 + 5 * 3600e3 + 15 * 60e3, 'driving time plus the stop');

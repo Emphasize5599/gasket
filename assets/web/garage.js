@@ -30,7 +30,7 @@
   var DOT_TIME = 28.2;
 
   // ---------- what a car is ----------
-  var POWER = { gas: 'Traditional', hybrid: 'Hybrid', phev: 'Plug-in hybrid', ev: 'Electric (EV)', h2: 'Hydrogen fuel cell' };
+  var POWER = { gas: 'Gas engine', diesel: 'Diesel engine', hybrid: 'Hybrid', phev: 'Plug-in hybrid', ev: 'Electric (EV)', h2: 'Hydrogen fuel cell' };
   var ASP = { na: 'Naturally aspirated', turbo: 'Turbocharged', twinturbo: 'Twin-turbo', super: 'Supercharged', both: 'Turbo + supercharged' };
   var TRANS = { auto: 'Automatic', manual: 'Manual', cvt: 'CVT', ecvt: 'eCVT (hybrid)', dct: 'Dual-clutch (DCT)', amt: 'Automated manual', single: 'Single-speed (electric)' };
   var DRIVE = { fwd: 'Front-wheel drive', rwd: 'Rear-wheel drive', awd: 'All-wheel drive', aawd: 'Adaptive AWD (on demand)', '4wd': '4WD (part-time)', '4wdf': '4WD (full-time)' };
@@ -66,11 +66,11 @@
   ];
   var FEATS = FEATURES.map(function (f) { return f.key; });
   function featApplies(f, c) {
-    var p = c.power || 'gas', burns = p !== 'ev', electric = p !== 'gas';
+    var p = c.power || 'gas', burns = p !== 'ev', electric = p !== 'gas' && p !== 'diesel';
     return f.for === 'any' || (f.for === 'engine' && burns && p !== 'h2') || (f.for === 'electric' && electric);
   }
   // plain words for the tiles (the stored values stay the same codes)
-  var POWER_PLAIN = { gas: 'Gas engine', hybrid: 'Hybrid (gas + electric)', phev: 'Plug-in hybrid', ev: 'Fully electric', h2: 'Hydrogen fuel cell' };
+  var POWER_PLAIN = { gas: 'Gas engine', diesel: 'Diesel engine', hybrid: 'Hybrid (gas + electric)', phev: 'Plug-in hybrid', ev: 'Fully electric', h2: 'Hydrogen fuel cell' };
   var ASP_PLAIN = { na: 'No turbocharger (naturally aspirated)', turbo: 'Turbocharger', twinturbo: 'Two turbochargers (twin-turbo)', super: 'Supercharger', both: 'Turbocharger and supercharger' };
   var DRIVE_PLAIN = { fwd: 'Front-wheel drive (FWD)', rwd: 'Rear-wheel drive (RWD)', awd: 'All-wheel drive (AWD)', aawd: 'All-wheel drive when needed (AWD)', '4wd': 'Part-time four-wheel drive (4WD)', '4wdf': 'Full-time four-wheel drive (4WD)' };
   function transPlain(i) {
@@ -94,8 +94,9 @@
     ev: { unit: 'kWh', per: 'mi/kWh', cap: 'Usable battery (kWh)', econ: 'Efficiency (mi/kWh)', fuelWord: 'Charge', price: '$/kWh' },
     h2: { unit: 'kg', per: 'mi/kg', cap: 'Hydrogen tank (kg)', econ: 'Fuel economy (mi/kg)', fuelWord: 'Hydrogen', price: '$/kg' }
   };
+  var DIESEL_UNITS = Object.assign({}, UNITS.gas, { fuelWord: 'Diesel' });
   function kind(c) { c = c || car(); return c && c.power === 'ev' ? 'ev' : c && c.power === 'h2' ? 'h2' : 'gas'; }
-  function units(c) { return UNITS[kind(c)]; }
+  function units(c) { c=c||car();return c.power==='diesel'?DIESEL_UNITS:UNITS[kind(c)]; }
   function unit() { return units().unit; }
   /** The plugs (station-finder names) this EV can use, counting an adapter it carries. */
   function plugs(c) {
@@ -140,6 +141,7 @@
     if(c.demoSet===1){c.demoSet=2;if(c.picMode==='doodle')c.picMode='';}
     c.obs = c.obs || {}; c.entries = c.entries || [];
     if (!c.power) c.power = /electric/i.test(c.epa && c.epa.fuel || '') ? 'ev' : /hydrogen/i.test(c.epa && c.epa.fuel || '') ? 'h2' : c.type === 'hybrid' ? 'hybrid' : 'gas';
+    if(c.power==='gas'&&(c.grade==='diesel'||/diesel/i.test(c.epa&&c.epa.fuel||'')))c.power='diesel';
     if (c.trim == null) c.trim = '';
     if (!c.info) c.info = seedInfo(c.id);
     // 0.0.51: where each detail came from (vin / epa: confirmed; user: you set it)
@@ -530,7 +532,7 @@
   // ---------- about this car ----------
   var verOpen = false, featOpen = false;
   var TILE_Q = {
-    power: 'What makes the car go: a <b>gas engine</b>; a <b>hybrid</b>, with a gas engine and an electric motor that share the work and charge themselves; a <b>plug-in hybrid</b>, which also charges from the wall; <b>fully electric</b>; or a <b>hydrogen fuel cell</b>, which makes electricity from hydrogen.',
+    power: 'What makes the car go: a <b>gas engine</b>; a <b>diesel engine</b>; a <b>hybrid</b>, with a gas engine and an electric motor that share the work and charge themselves; a <b>plug-in hybrid</b>, which also charges from the wall; <b>fully electric</b>; or a <b>hydrogen fuel cell</b>, which makes electricity from hydrogen.',
     engine: 'The engine\'s size is the total space inside its cylinders, in liters. Bigger engines and more cylinders usually mean more power and more fuel used.',
     asp: 'How air gets into the engine. With <b>no turbocharger</b>, the engine breathes on its own. A <b>turbocharger</b> uses exhaust to push in extra air, so a small engine makes big-engine power; a <b>supercharger</b> does the same, driven by the engine.',
     trans: 'How the engine\'s power reaches the wheels. An <b>automatic</b> shifts gears for you. One with <b>no fixed gears</b> changes smoothly instead (a continuously variable transmission). A <b>hybrid automatic</b> blends the engine and motor (power-split). <b>Dual-clutch</b> automatics shift very quickly.',
@@ -586,7 +588,7 @@
   function infoPanel(c) {
     var i = c.info || {}, k = kind(c);
     var fuel = k === 'ev' ? '' : k === 'h2' ? '' :
-      '<label class="nf"><span>Gas you buy<small>' + esc(c.epa && c.epa.fuel ? 'EPA: ' + c.epa.fuel : '&nbsp;') + '</small></span><select id="gGrade">' + Object.keys(P.GRADES).map(function (g) { return '<option value="' + g + '"' + ((c.grade || 'regular') === g ? ' selected' : '') + '>' + P.GRADES[g].label + (g === 'diesel' ? '' : ' gasoline') + '</option>'; }).join('') + '</select></label>';
+      '<label class="nf"><span>Fuel you buy<small>' + esc(c.epa && c.epa.fuel ? 'EPA: ' + c.epa.fuel : '&nbsp;') + '</small></span><select id="gGrade">' + (c.power==='diesel'?['diesel']:Object.keys(P.GRADES).filter(function(g){return g!=='diesel';})).map(function (g) { return '<option value="' + g + '"' + ((c.grade || 'regular') === g ? ' selected' : '') + '>' + P.GRADES[g].label + (g === 'diesel' ? '' : ' gasoline') + '</option>'; }).join('') + '</select></label>';
     var h = '';
     h += isCustom(c) ? customPanel(c) : tilesPanel(c);
     if (fuel) h += '<div class="grid2">' + fuel + '</div>';
@@ -748,7 +750,9 @@
     setI('gEngine', 'engine'); setI('gAsp', 'asp'); setI('gTrans', 'trans'); setI('gTransN', 'transN', true); setI('gDrive', 'drive'); 
     if ($('gGrade')) $('gGrade').onchange = function () { c.grade = this.value; changed(); };
     if ($('gPower')) $('gPower').onchange = function () {
-      var was = kind(c); c.power = this.value;
+      var was = kind(c),oldPower=c.power;c.power = this.value;
+      if(c.power==='diesel')c.grade='diesel';else if(c.grade==='diesel')c.grade='regular';
+      if(oldPower!==c.power&&c.epa&&/diesel/i.test(c.epa.fuel||'')!==(c.power==='diesel')){c.epa=null;delete c.epaId;delete c.epaBase;}
       if (kind(c) !== was) {    // different units: the old tank size and mileage don't mean anything now
         LG.info('car', 'Powertrain ' + POWER[c.power]);
         c.tank = ''; c.tankSrc = ''; c.obs = {};
@@ -841,7 +845,7 @@
       var field=function(id){return b.querySelector('#'+id);};function read(){draft.name=field('cbName').value.trim();draft.year=+field('cbYear').value||'';draft.make=field('cbMake').value.trim();draft.model=field('cbModel').value.trim();draft.power=field('cbPower').value;draft.type=field('cbType').value;field('cbSave').disabled=!editorOk(draft)||draft.year&&!Number.isInteger(draft.year)||draft.year&&(draft.year<1886||draft.year>9999);}
       b.querySelectorAll('input,select').forEach(function(el){el.addEventListener('input',read);el.addEventListener('change',read);});read();
       field('cbSave').onclick=async function(){read();if(field('cbSave').disabled)return;if((c.epaId||c.vin)&&!await A.confirmDel({always:true,title:'Use completely custom data?',body:'The saved EPA rating and VIN association will be removed. Discard changes in the vehicle editor can restore them.',action:'Use custom data',goClass:'tonal caution'}))return;
-        ['epaId','epaBase','epa','vin','vpicModel','catalog','recallCheck','vinHints'].forEach(function(k){delete c[k];});if(c.power!==draft.power){c.obs={};c.tank='';c.tankSrc='';c.grade='';}Object.assign(c,{name:draft.name||[draft.year,draft.make,draft.model].join(' '),year:draft.year,make:draft.make,model:draft.model,power:draft.power,type:draft.type,entryMode:'custom'});close();draw();changed();};
+        ['epaId','epaBase','epa','vin','vpicModel','catalog','recallCheck','vinHints'].forEach(function(k){delete c[k];});if(c.power!==draft.power){c.obs={};c.tank='';c.tankSrc='';c.grade='';}Object.assign(c,{name:draft.name||[draft.year,draft.make,draft.model].join(' '),year:draft.year,make:draft.make,model:draft.model,power:draft.power,type:draft.type,entryMode:'custom'});if(c.power==='diesel')c.grade='diesel';close();draw();changed();};
       field('cbDiscard').onclick=async function(){if(await A.confirmDiscard())close();};
     });
   }
@@ -928,7 +932,7 @@
     var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;
     if (!(city > 0 && hwy > 0)) return { error: 'The EPA has no mileage numbers for that one.' };
     var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
-    c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : 'gas';
+    c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : /diesel/i.test(fuel) ? 'diesel' : 'gas';
     c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);
     c.name = [v.year, v.make, v.model].join(' ') + (opt ? ' · ' + opt : '');
     if (ev) {
@@ -980,7 +984,7 @@
   function fromVpic(R) {
     var g = function (k) { var v = R[k]; return v == null || v === 'Not Applicable' ? '' : String(v).trim(); };
     var el = g('ElectrificationLevel'), fuel = g('FuelTypePrimary') + ' ' + g('FuelTypeSecondary');
-    var power = /FCEV|fuel cell/i.test(el) || /hydrogen/i.test(g('FuelTypePrimary')) ? 'h2' : /BEV/i.test(el) || /^electric/i.test(g('FuelTypePrimary')) ? 'ev' : /PHEV|plug-in/i.test(el) ? 'phev' : /HEV|hybrid/i.test(el) ? 'hybrid' : 'gas';
+    var power = /FCEV|fuel cell/i.test(el) || /hydrogen/i.test(g('FuelTypePrimary')) ? 'h2' : /BEV/i.test(el) || /^electric/i.test(g('FuelTypePrimary')) ? 'ev' : /PHEV|plug-in/i.test(el) ? 'phev' : /HEV|hybrid/i.test(el) ? 'hybrid' : /diesel/i.test(g('FuelTypePrimary')) ? 'diesel' : 'gas';
     var d = parseFloat(g('DisplacementL')), cyl = g('EngineCylinders'), cfg = g('EngineConfiguration');
     var lay = /in-line/i.test(cfg) ? 'Inline ' + cyl + ' Cyl' : /v-shaped/i.test(cfg) ? 'V' + cyl : /opposed/i.test(cfg) ? 'Flat ' + cyl : cyl ? cyl + ' Cyl' : '';
     var engine = power === 'ev' ? [g('EVDriveUnit'), g('EngineKW') ? g('EngineKW') + ' kW' : ''].filter(Boolean).join(', ') || 'Electric motor'
@@ -996,7 +1000,7 @@
     if (/direct/i.test(oth)) feats.push('Direct injection');
     if (/\bport\b|multipoint|MPFI|sequential/i.test(oth)) feats.push('Port injection');
     if (/VVT|variable valve/i.test(oth)) feats.push('Variable valve timing');
-    if (power !== 'gas') feats.push('Regenerative braking');
+    if (power !== 'gas' && power !== 'diesel') feats.push('Regenerative braking');
     // Secondary trim may name the marketing trim, but internal "E grade" codes
     // and chassis/body series are not a trustworthy marketing-trim decode.
     var trimHint=g('Trim')||g('Trim2'),trim=trimHint;if (/\/|\bgrade\b/i.test(trim)) trim = '';

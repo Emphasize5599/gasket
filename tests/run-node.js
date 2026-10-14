@@ -1,6 +1,6 @@
 // Bounded parallel tests. Failed output is retained and any failure fails the runner.
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
-const release=['tirerack','keylessgas','keyless-discovery-ui','saved-prices','map-refresh','picture-storage','tires','keyless-parallel','pricehistory','fuel-grades','keyless-discovery','walmart-keyless','climate','pricing','routes-limit','worker-pool','speed-settings','speed','trip','limits','discovery-log','routewx','speed-nokey','tile-hazards','vin-trim','recall-check','background-search'];
+const release=['tirerack','keylessgas','keyless-discovery-ui','saved-prices','map-refresh','map-known-pan','picture-storage','tires','keyless-parallel','pricehistory','fuel-grades','keyless-discovery','walmart-keyless','climate','pricing','routes-limit','worker-pool','speed-settings','speed','trip','limits','discovery-log','routewx','speed-nokey','tile-hazards','vin-trim','recall-check','background-search'];
 release.push('nhtsa-reader','editor-tires','hazard-prefetch','styled-tire-flow','trailer-editor','vehicle-catalog','nhtsa-catalog','setup-demo');
 release.push('carpics','carpics-download');
 const args=process.argv.slice(2),all=args.includes('--all'),names=all?fs.readdirSync(__dirname).filter(f=>f.endsWith('.test.js')).map(f=>f.slice(0,-8)):args.includes('--release')?release:args;

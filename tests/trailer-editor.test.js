@@ -59,17 +59,18 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.evaluate(()=>document.addEventListener('pointerdown',e=>{window.__edgeTouch={x:e.clientX,y:e.clientY,target:e.target.outerHTML.slice(0,180),rect:(()=>{const r=e.target.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()};},{once:true,capture:true}));
     await touch('touchStart',lane.x+lane.width+8,lane.y+lane.height/2);assert.equal(await p.locator('[data-dragging]').count(),0,JSON.stringify({lane,event:await p.evaluate(()=>__edgeTouch)}));
     for(const dy of [-30,-60,-100]){await touch('touchMove',lane.x+lane.width+8,lane.y+lane.height/2+dy);await frame(p);}await touch('touchEnd');await p.waitForFunction(top=>document.querySelector('.sub-body').scrollTop>top+20,scrollBefore,{timeout:3000});assert.deepEqual(await p.evaluate(()=>Garage.car().tires.trailers[0].axlePositions),pos);
-    // Parent side heading + Outer/Inner children; passenger Outer maps to ro, not ri.
+    // Parent side heading + dual-tire children; passenger Inner sits left of Outer.
     const sides=p.locator('.tz-tr-side');assert.equal(await sides.count(),6);
     assert.equal(await sides.first().locator('.tz-tr-side-label').innerText(),'Trailer, axle 1, driver side');
     assert.deepEqual((await sides.first().locator('.nf > span').allTextContents()).map(s=>s.replace('*','')),['Outer','Inner']);
     assert.deepEqual((await sides.first().locator('button').allTextContents()).map(s=>s.trim()),['Specify','Specify']);
-    assert.deepEqual(await sides.nth(1).locator('button').evaluateAll(es=>es.map(e=>e.dataset.trTire)),['trExample:a1ro','trExample:a1ri']);
+    assert.deepEqual((await sides.nth(1).locator('.nf > span').allTextContents()).map(s=>s.replace('*','')),['Inner','Outer']);
+    assert.deepEqual(await sides.nth(1).locator('button').evaluateAll(es=>es.map(e=>e.dataset.trTire)),['trExample:a1ri','trExample:a1ro']);
     const halves=await sides.evaluateAll(es=>es.map(e=>({x:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right,top:e.getBoundingClientRect().top})));
     for(let i=0;i<halves.length;i+=2){assert.ok(halves[i].right<halves[i+1].x);assert.ok(Math.abs(halves[i].top-halves[i+1].top)<1);}
     const pairs=await sides.evaluateAll(es=>es.map(e=>Array.from(e.querySelectorAll('button')).map(b=>{const r=b.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})));
     assert.ok(pairs.every(pair=>Math.abs(pair[0].y-pair[1].y)<1&&pair[0].x+pair[0].width<pair[1].x&&pair.every(r=>r.width>=44&&r.height>=44)));
-    await sides.nth(1).locator('button').first().click();await p.waitForSelector('#tpMiles');assert.match(await p.innerText('.sub-bar h2'),/passenger side outer/);
+    await sides.nth(1).locator('button').first().click();await p.waitForSelector('#tpMiles');assert.match(await p.innerText('.sub-bar h2'),/passenger side inner/);
     await p.click('.sub-back');await p.waitForSelector('#ttSame');assert.deepEqual(await p.evaluate(()=>Garage.car().tires.trailers[0].axlePositions),pos);
     // One consistent content gutter, no sideways overflow, and the last actions/hint clear a simulated 48px nav bar.
     await p.evaluate(()=>{const es=Array.from(document.querySelectorAll('.tz-tr-tires,.tz-tr-tires *')),sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>e.style.fontSize=sizes[i]*1.3+'px');});

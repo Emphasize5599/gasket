@@ -4,6 +4,7 @@
   var NS='pricehistory',PAGE=128;
   function stamp(s,at){Object.keys(s.prices||{}).forEach(function(g){s.prices[g]=Object.assign({},s.prices[g],{observedAt:at});});return s;}
   function create(KV){
+    var stationCache=null;
     function get(k,fallback){var o=KV.get(NS,k);return o&&o.v!=null?o.v:fallback;}
     function put(k,v){if(KV.put(NS,k,v)===false)throw new Error('Price history could not be saved; check available app storage.');}
     function key(s){return (s.brand||'')+'|'+String(s.id||[s.lat,s.lng,s.address].join('|'));}
@@ -16,6 +17,12 @@
         if(!indexed.has(id)){index.push(id);indexed.add(id);added=true;}
         var before=JSON.stringify(meta),pendingSeen=[];
         ['name','address','lat','lng','featureId','mapsUri'].forEach(function(k){if(s[k]!=null)meta[k]=s[k];});
+        // Keep enough of each discovered station to put it back on the map after the map's last-area cache changes.
+        // The observation log remains the authority for the newest price of every grade.
+        if(Number.isFinite(s.lat)&&Number.isFinite(s.lng)){
+          var snapshot=Object.assign({},s);delete snapshot.prices;
+          meta.snapshot=snapshot;
+        }
         var changed=false;
         Object.keys(s.prices||{}).forEach(function(grade){
           var p=s.prices[grade];if(!p||p.est||!Number.isFinite(p.price)||p.price<0.5||p.price>20)return;
@@ -36,11 +43,18 @@
           if(at||updated){seen.push(token);pendingSeen.push({key:event,value:seen});}
         });
         if(changed||!meta.lastSeenAt||before!==JSON.stringify(meta)){meta.lastSeenAt=observedAt||now;put('station|'+id,meta);}
+        if(stationCache)stationCache.set(id,meta);
         pendingSeen.forEach(function(x){put(x.key,x.value);});
       });
       if(added)put('index',index);
     }
-    function stations(){return get('index',[]).map(function(id){return get('station|'+id,null);}).filter(Boolean);}
+    function stations(){if(!stationCache){stationCache=new Map();get('index',[]).forEach(function(id){var m=get('station|'+id,null);if(m)stationCache.set(id,m);});}return Array.from(stationCache.values());}
+    function near(bounds){return stations().filter(function(m){return Number.isFinite(m.lat)&&Number.isFinite(m.lng)&&m.lat>=bounds[0]&&m.lng>=bounds[1]&&m.lat<=bounds[2]&&m.lng<=bounds[3];}).map(function(m){
+      var s=Object.assign({},m.snapshot||{id:m.id,brand:m.brand,name:m.name,address:m.address,lat:m.lat,lng:m.lng,featureId:m.featureId,mapsUri:m.mapsUri});
+      s.prices=Object.assign({},s.prices);
+      Object.keys(m.latest||{}).forEach(function(g){var r=m.latest[g],old=s.prices[g],oldAt=old&&(old.observedAt||Date.parse(old.updated)||0)||0;if(!old||!r.observedAt||r.observedAt>=oldAt)s.prices[g]={price:r.price,source:r.source,updated:r.sourceUpdatedAt,observedAt:r.observedAt};});
+      return s;
+    });}
     function history(id,options){
       options=options||{};if(typeof id==='object')id=key(id);
       var meta=get('station|'+id,null),rows=[];if(!meta)return rows;
@@ -58,14 +72,14 @@
       });
       return changed?Object.assign({},s,{prices:prices}):s;
     });}
-    return {schema:1,key:key,observe:observe,stations:stations,history:history,stamp:stamp,latest:latest,recover:recover};
+    return {schema:1,key:key,observe:observe,stations:stations,near:near,history:history,stamp:stamp,latest:latest,recover:recover};
   }
   if(typeof module!=='undefined'&&module.exports)module.exports={create:create};
   if(!root.document)return;
   var db=null;
   function current(){return db||(db=create(root.__app.KV));}
   root.PriceHistoryRecovery=function(stations){return current().recover(stations);};
-  root.PriceHistory={stamp:stamp,observe:function(s,t){if(root.__app)try{current().observe(s,t);}catch(e){if(root.FLog)root.FLog.error('history',e.message);root.__app.status(e.message,true);}},stations:function(){return current().stations();},history:function(s,o){return current().history(s,o);},reset:function(){db=null;},seed:async function(){
+  root.PriceHistory={stamp:stamp,observe:function(s,t){if(root.__app)try{current().observe(s,t);}catch(e){if(root.FLog)root.FLog.error('history',e.message);root.__app.status(e.message,true);}},stations:function(){return current().stations();},near:function(b){return current().near(b);},history:function(s,o){return current().history(s,o);},reset:function(){db=null;},seed:async function(){
     var A=root.__app;if(!A)return;current().observe(A.stations(),null);
     var idx=(A.KV.get('trips','index')||{}).v||[];
     for(var i=0;i<idx.length;i++){

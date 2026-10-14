@@ -153,9 +153,9 @@ console.log('tire version matching ok');
   // the tip: short, in the app's own words, from the facts the answer states (a built-in spot, not "space in the trunk")
   assert.equal(T.spareTip(sc), 'The trunk has a built-in spot for a spare, just no tire in it. You can add a temporary spare (T125/70D17), or a matching one from another model.');
   // the model's reading decides which facts (here it reads the accessory clause as "buy", not as a built-in spot)
-  assert.equal(T.spareTip({ opt: ['A spare tire is available as an optional accessory'] }, [{ well: 0.726, buy: 0.933, donor: 0.583 }]), 'You can add a spare as an optional accessory.');
+  assert.equal(T.spareTip({ opt: ['A spare tire is available as an optional accessory'] }, [{ well: 0.726, buy: 0.933, donor: 0.583 }]), '', 'an optional spare alone gives no useful storage advice');
   const mustang = 'The 2005 Ford Mustang does not come standard with a spare tire; instead, it is typically equipped with a tire repair and inflator kit. A spare tire is available as an optional accessory, but it is excluded if the vehicle is equipped with the Performance Package.';
-  sc = T.spareClauses(mustang); assert.equal(T.pickSpare(null, sc).kind, 'kit', 'it used to read the optional spare as compact'); assert.equal(T.spareTip(sc), 'You can add a spare as an optional accessory.');
+  sc = T.spareClauses(mustang); assert.equal(T.pickSpare(null, sc).kind, 'kit', 'it used to read the optional spare as compact'); assert.equal(T.spareTip(sc), '');
   assert.equal(T.pickSpare(null, T.spareClauses('The 2020 BMW 330i comes with run-flat tires and no spare tire. A spare tire kit is available as a dealer accessory.')).kind, 'runflat');
   sc = T.spareClauses(compactAnswer); assert.equal(sc.noSpare, false, '"not a full-size spare" is not "no spare"'); assert.equal(T.spareTip(sc), '');
   // the question asks Brave's AI for a fixed first phrase and a short sentence about adding one: read those first
@@ -164,6 +164,7 @@ console.log('tire version matching ok');
   assert.equal(T.spareLead('The 2012 Venza comes with a compact spare.'), null, 'not in the format: read the old way');
   assert.equal(T.leadTip('No spare. It comes with a tire repair kit instead. A temporary spare (T125/70D17) can be added, since the trunk has a dedicated spare tire well.'), 'A temporary spare (T125/70D17) can be added, since the trunk has a dedicated spare tire well.');
   assert.equal(T.leadTip('Compact spare. It sits under the floor.'), '');
+  assert.equal(T.leadTip('No spare. A dealer sells an optional spare tire separately.'), '', 'no tip without a dedicated location');
   // a real answer to the question (Brave Search, 2020 Corolla Hybrid LE): headings on their own lines are skipped
   const live = 'Repair kit. The 2020 Toyota Corolla Hybrid LE does not come with a spare tire from the factory; it is equipped with a tire repair kit (often referred to as "fix-a-flat") and an air compressor. \n\nAdding a Spare Tire\n\nOwners can add a spare tire to the 2020 Hybrid LE, as the trunk well has sufficient space.\n\nFull-size option: A full-size spare (matching the stock tire size, typically 195/65R15 for the LE trim) fits in the compartment, though it reduces cargo space.';
   assert.equal(T.spareLead(live), 'kit'); assert.equal(T.leadTip(live), 'Owners can add a spare tire to the 2020 Hybrid LE, as the trunk well has sufficient space.');
