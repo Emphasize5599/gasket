@@ -918,32 +918,34 @@
   /** A trailer's details: its name, axles and tires per axle, and its tires (size -> Tire Rack, wear rating, warranty). */
   function trailerVisual(tr,locked) {
     var icon=locked?'M7 11V7a5 5 0 0110 0v4':'M7 11V7a5 5 0 019-3';
-    var h='<div class="tz-tr-visual"><div class="tz-tr-diagram"><button type="button" class="tz-length-lock" id="ttLengthLock" aria-label="'+(locked?'Unlock trailer length':'Lock and save trailer length')+'" aria-pressed="'+(!locked)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+icon+' M5 11h14v10H5z M12 15v3"/></svg></button><svg role="img" aria-label="Trailer viewed from above, dimension rulers in feet"></svg>';
+    var h='<div class="tz-tr-visual"><div class="tz-tr-diagram"><button type="button" class="tz-length-lock" id="ttLengthLock" aria-label="'+(locked?'Unlock trailer dimensions':'Lock and save trailer dimensions')+'" aria-pressed="'+(!locked)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+icon+' M5 11h14v10H5z M12 15v3"/></svg></button><svg role="img" aria-label="Trailer viewed from above, dimension rulers in feet"></svg>';
     axlePositions(tr,tires(G().car()).corners).forEach(function(v,i){h+='<button type="button" data-tr-axle="'+i+'" role="slider" aria-label="Axle '+(i+1)+' position, front to rear" aria-valuemin="0" aria-valuemax="100"><svg aria-hidden="true"></svg></button>';});
-    ['left','right','length'].forEach(function(kind){h+='<button type="button" class="tz-tr-resize" data-tr-resize="'+kind+'"'+(kind==='length'&&locked?' disabled':'')+' role="slider" aria-label="Resize trailer '+(kind==='length'?'body length':kind==='left'?'driver-side width':'passenger-side width')+'" aria-valuemin="0.25" aria-valuemax="200"><svg viewBox="0 0 44 44" aria-hidden="true"><path d="'+(kind==='length'?'M22 10 V34 M17 15 L22 10 L27 15 M17 29 L22 34 L27 29':'M10 22 H34 M15 17 L10 22 L15 27 M29 17 L34 22 L29 27')+'" class="tz-drag-arrows"/></svg></button>';});
-    return h+'</div><p class="lead small keep">'+(locked?'Unlock to edit length.':'Lock to save length and layout changes; leaving discards this preview.')+' Drag axles or body edges. Measurements exclude hitch and tires. Wheels use nominal tire sizes'+(trailerGeometry(tr,tires(G().car()).corners).known?'.':'; enter Size for accurate scaling.')+'</p></div>';
+    ['left','right','length'].forEach(function(kind){h+='<button type="button" class="tz-tr-resize" data-tr-resize="'+kind+'"'+(locked?' disabled':'')+' role="slider" aria-label="Resize trailer '+(kind==='length'?'body length':kind==='left'?'driver-side width':'passenger-side width')+'" aria-valuemin="0.25" aria-valuemax="200"><svg viewBox="0 0 44 44" aria-hidden="true"><path d="'+(kind==='length'?'M22 10 V34 M17 15 L22 10 L27 15 M17 29 L22 34 L27 29':'M10 22 H34 M15 17 L10 22 L15 27 M29 17 L34 22 L29 27')+'" class="tz-drag-arrows"/></svg></button>';});
+    return h+'</div><p class="lead small keep">'+(locked?'Unlock to edit length or width.':'Lock to save dimensions and layout changes; leaving discards this preview.')+' Drag axles or unlocked body edges. Measurements exclude hitch and tires. Wheels use nominal tire sizes'+(trailerGeometry(tr,tires(G().car()).corners).known?'.':'; enter Size for accurate scaling.')+'</p></div>';
   }
   function trailerView(g,width) {
-    var z=g.geometry,scale=.8*Math.min((width-52)/(z.leftFt+z.rightFt+g.leftReach+g.rightReach),340/z.lengthFt);
-    return {width:width,scale:scale,x:(width-(z.leftFt+z.rightFt+g.leftReach+g.rightReach)*scale)/2+(z.leftFt+g.leftReach)*scale,y:48};
+    var z=g.geometry,scale=.8*Math.min((width-52)/(z.leftFt+z.rightFt+g.leftReach+g.rightReach),300/z.lengthFt);
+    return {width:width,scale:scale,x:(width-(z.leftFt+z.rightFt+g.leftReach+g.rightReach)*scale)/2+(z.leftFt+g.leftReach)*scale,y:72};
   }
   function paintTrailer(b,tr,frozen) {
     var t=tires(G().car()),g=trailerGeometry(tr,t.corners),z=g.geometry,diagram=b.querySelector('.tz-tr-diagram'),v=frozen||trailerView(g,diagram.clientWidth),s=v.scale;
     var left=v.x-z.leftFt*s,right=v.x+z.rightFt*s,bottom=v.y+z.lengthFt*s,svg=diagram.querySelector(':scope > svg');
     svg.setAttribute('viewBox','0 0 '+v.width+' 420');
-    var h='<path d="M'+v.x+' 32 V36 L'+left+' '+v.y+' M'+v.x+' 36 L'+right+' '+v.y+'" class="tz-hitch"/><rect x="'+left+'" y="'+v.y+'" width="'+((z.leftFt+z.rightFt)*s)+'" height="'+(z.lengthFt*s)+'" rx="4" class="il-body"/>';
+    var h='<path d="M'+v.x+' '+(v.y-16)+' V'+(v.y-12)+' L'+left+' '+v.y+' M'+v.x+' '+(v.y-12)+' L'+right+' '+v.y+'" class="tz-hitch"/><rect data-tr-body x="'+left+'" y="'+v.y+'" width="'+((z.leftFt+z.rightFt)*s)+'" height="'+(z.lengthFt*s)+'" rx="4" class="il-body"/>';
     var width=z.leftFt+z.rightFt,step=Math.max(1,Math.ceil(width/10));
-    h+='<g class="tz-ruler"><path d="M'+left+' 24 H'+right+' M'+(v.width-10)+' '+v.y+' V'+bottom+'"/>';
-    for(var a=0;a<=width;a+=step)h+='<path d="M'+(left+a*s)+' 21 V27"/>';
+    h+='<g class="tz-ruler"><g data-width-ruler><path d="M'+left+' '+(bottom+36)+' H'+right+'"/>';
+    for(var a=0;a<=width;a+=step)h+='<path d="M'+(left+a*s)+' '+(bottom+33)+' V'+(bottom+39)+'"/>';
+    h+='<text x="'+((left+right)/2)+'" y="'+(bottom+52)+'" text-anchor="middle">'+width.toFixed(1)+' ft</text></g><path d="M'+(v.width-10)+' '+v.y+' V'+bottom+'"/>';
     step=Math.max(1,Math.ceil(z.lengthFt/12));for(a=0;a<=z.lengthFt;a+=step)h+='<path d="M'+(v.width-13)+' '+(v.y+a*s)+' H'+(v.width-7)+'"/>';
-    h+='<text x="'+((left+right)/2)+'" y="17" text-anchor="middle">'+width.toFixed(1)+' ft</text><text transform="translate('+(v.width-17)+' '+((v.y+bottom)/2)+') rotate(-90)" text-anchor="middle">'+z.lengthFt.toFixed(1)+' ft</text></g>';
+    h+='<text transform="translate('+(v.width-17)+' '+((v.y+bottom)/2)+') rotate(-90)" text-anchor="middle">'+z.lengthFt.toFixed(1)+' ft</text></g>';
     svg.innerHTML=h;
     var P=trailerPositions(t,tr);
     diagram.querySelectorAll('[data-tr-axle]').forEach(function(button){
-      var i=+button.dataset.trAxle,ax=g.axles[i],height=Math.max(44,(ax.diameter+g.padding)*s),y=v.y+g.centers[i]*s;
-      button.style.height=height+'px';button.style.transform='translateY('+(y-height/2)+'px)';button.setAttribute('aria-valuenow',Math.round(g.positions[i]*100));
-      var wheelSvg=button.querySelector('svg');wheelSvg.setAttribute('viewBox','0 '+(-height/2)+' '+v.width+' '+height);wheelSvg.style.height=height+'px';
-      var wheels='<line x1="'+(left-g.leftReach*s)+'" y1="0" x2="'+(right+g.rightReach*s)+'" y2="0" class="tz-axle"/>';
+      var i=+button.dataset.trAxle,ax=g.axles[i],height=Math.max(44,(ax.diameter+g.padding)*s),y=v.y+g.centers[i]*s,minX=Infinity,maxX=-Infinity;
+      ax.wheels.forEach(function(w){var x=w.side==='left'?left-w.offset*s:right+w.offset*s;minX=Math.min(minX,x-w.width*s/2);maxX=Math.max(maxX,x+w.width*s/2);});
+      button.style.left=minX+'px';button.style.width=(maxX-minX)+'px';button.style.height=height+'px';button.style.transform='translateY('+(y-height/2)+'px)';button.setAttribute('aria-valuenow',Math.round(g.positions[i]*100));
+      var wheelSvg=button.querySelector('svg');wheelSvg.setAttribute('viewBox',minX+' '+(-height/2)+' '+(maxX-minX)+' '+height);wheelSvg.style.height=height+'px';
+      var wheels='<line x1="'+minX+'" y1="0" x2="'+maxX+'" y2="0" class="tz-axle"/>';
       ax.wheels.forEach(function(w){var x=w.side==='left'?left-w.offset*s:right+w.offset*s,p=P.filter(function(p){return p.k===w.key;})[0],d=depthAt(t,p);
         wheels+='<g class="tz-w"><rect data-wheel="'+esc(w.key)+'" x="'+(x-w.width*s/2)+'" y="'+(-w.diameter*s/2)+'" width="'+(w.width*s)+'" height="'+(w.diameter*s)+'" rx="3" style="fill:'+(d!=null?hue(depthGood(d)):'var(--line)')+'"/></g>';
       });
@@ -960,24 +962,26 @@
     var diagram=b.querySelector('.tz-tr-diagram'),dispose=[],view=paintTrailer(b,tr),corners=tires(G().car()).corners;
     diagram.querySelectorAll('[data-tr-axle],[data-tr-resize]').forEach(function(button){
       var index=button.dataset.trAxle==null?null:+button.dataset.trAxle,kind=button.dataset.trResize,drag=null,frame=0;
+      // Chrome may retarget a finger just outside a button. Let that swipe pan natively; only accepted axle grabs cancel it.
+      var touchStart=function(e){if(drag)e.preventDefault();};if(index!=null)button.addEventListener('touchstart',touchStart,{passive:false});
       var flush=function(){frame=0;if(!drag)return;var dx=(drag.x-drag.x0)/drag.view.scale,dy=(drag.y-drag.y0)/drag.view.scale;
         if(index!=null)moveAxle(drag.draft,index,drag.start+dy/drag.travel,corners);
         else {delete drag.draft.geometryNote;var z=drag.draft.geometry,original=drag.original;
-          if(kind==='length')z.lengthFt=Math.max(.25,Math.min((420-32-drag.view.y)/drag.view.scale,original.lengthFt+dy));
+          if(kind==='length')z.lengthFt=Math.max(.25,Math.min((420-60-drag.view.y)/drag.view.scale,original.lengthFt+dy));
           else {var value=(kind==='left'?original.leftFt-dx:original.rightFt+dx),limit=kind==='left'?(drag.view.x-26)/drag.view.scale-trailerGeometry(drag.draft,corners).leftReach:(drag.view.width-26-drag.view.x)/drag.view.scale-trailerGeometry(drag.draft,corners).rightReach;
             if(z.symmetric)limit=Math.min((drag.view.x-26)/drag.view.scale-trailerGeometry(drag.draft,corners).leftReach,(drag.view.width-26-drag.view.x)/drag.view.scale-trailerGeometry(drag.draft,corners).rightReach);
             z[kind==='left'?'leftFt':'rightFt']=Math.max(.25,Math.min(limit,value));if(z.symmetric)z.leftFt=z.rightFt=z[kind==='left'?'leftFt':'rightFt'];
           }normalizeTrailer(drag.draft,corners);
         }paintTrailer(b,drag.draft,drag.view);
       };
-      button.onpointerdown=function(e){if(e.button!==0||drag||button.disabled||diagram.querySelector('[data-dragging]'))return;e.preventDefault();button.dataset.dragging='true';button.focus({preventScroll:true});var g=trailerGeometry(tr,corners);view=paintTrailer(b,tr);drag={id:e.pointerId,x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,view:view,start:g.positions[index],travel:g.travel,original:Object.assign({},g.geometry),draft:Object.assign({},tr,{geometry:Object.assign({},g.geometry),axlePositions:g.positions.slice()})};button.setPointerCapture(e.pointerId);};
+      button.onpointerdown=function(e){if(e.button!==0||drag||button.disabled||diagram.querySelector('[data-dragging]'))return;var rect=button.getBoundingClientRect();if(index!=null&&(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom))return;e.preventDefault();button.dataset.dragging='true';button.focus({preventScroll:true});var g=trailerGeometry(tr,corners);view=paintTrailer(b,tr);drag={id:e.pointerId,x0:e.clientX,y0:e.clientY,x:e.clientX,y:e.clientY,view:view,start:g.positions[index],travel:g.travel,original:Object.assign({},g.geometry),draft:Object.assign({},tr,{geometry:Object.assign({},g.geometry),axlePositions:g.positions.slice()})};button.setPointerCapture(e.pointerId);};
       button.onpointermove=function(e){if(!drag||drag.id!==e.pointerId)return;e.preventDefault();drag.x=e.clientX;drag.y=e.clientY;if(!frame)frame=requestAnimationFrame(flush);};
       var end=function(e){if(!drag||drag.id!==e.pointerId)return;if(frame)cancelAnimationFrame(frame);frame=0;var commit=e.type==='pointerup';
         if(commit){drag.x=e.clientX;drag.y=e.clientY;flush();tr.geometry=drag.draft.geometry;tr.axlePositions=drag.draft.axlePositions;if(drag.draft.geometryNote)tr.geometryNote=drag.draft.geometryNote;else delete tr.geometryNote;if(locked)save();}
         drag=null;delete button.dataset.dragging;if(button.hasPointerCapture(e.pointerId))button.releasePointerCapture(e.pointerId);view=paintTrailer(b,tr);done();};
       button.onpointerup=end;button.onpointercancel=end;button.onlostpointercapture=end;
       button.onkeydown=function(e){var step={ArrowUp:-1,ArrowLeft:-1,ArrowDown:1,ArrowRight:1}[e.key];if(step==null||drag||button.disabled)return;e.preventDefault();if(index!=null)moveAxle(tr,index,axlePositions(tr,corners)[index]+step*.025,corners);else {var z=tr.geometry;delete tr.geometryNote;if(kind==='length')z.lengthFt=Math.max(.25,z.lengthFt+step*.25);else {var key=kind==='left'?'leftFt':'rightFt';z[key]=Math.max(.25,z[key]+step*.25);if(z.symmetric)z.leftFt=z.rightFt=z[key];}normalizeTrailer(tr,corners);}view=paintTrailer(b,tr);if(locked)save();done();};
-      dispose.push(function(){if(frame)cancelAnimationFrame(frame);drag=null;});
+      dispose.push(function(){if(frame)cancelAnimationFrame(frame);button.removeEventListener('touchstart',touchStart);drag=null;});
     });return function(){dispose.forEach(function(stop){stop();});};
   }
   function trailerTireRows(tr) {
@@ -986,13 +990,24 @@
       var dual=tr.per===4, prefix=tr.id+':a'+a, keys=dual?(side==='driver'?['lo','li']:['ro','ri']):(side==='driver'?['l']:['r']);
       h+='<section class="tz-tr-side'+(dual?' dual':'')+'"><div class="tz-tr-side-label">'+esc((tr.name||'Trailer')+', axle '+a+', '+side+' side')+(!dual&&needs(t,P.filter(function(pos){return pos.k===prefix+keys[0];})[0]).length?'<span class="req">*</span>':'')+'</div><div class="tz-gl">';
       keys.forEach(function(s,j){var p=P.filter(function(pos){return pos.k===prefix+s;})[0];
-        h+='<div class="nf tz-c">'+(dual?'<span>'+(j===0?'Outer':'Inner')+(needs(t,p).length?'<span class="req">*</span>':'')+'</span>':'')+'<button type="button" class="tz-tire" data-tr-tire="'+esc(p.k)+'" aria-label="Specify '+esc(p.name)+'">Specify '+GO+'</button></div>';
+        h+='<div class="nf tz-c">'+(dual?'<span>'+(j===0?'Outer':'Inner')+(needs(t,p).length?'<span class="req">*</span>':'')+'</span>':'')+'<button type="button" class="tz-tire" data-tr-tire="'+esc(p.k)+'" aria-label="Specify '+esc(p.name)+'"><span>Specify</span>'+GO+'</button></div>';
       });h+='</div></section>';
     });
     return h+'</div>';
   }
   function layoutPreview(tr,edit) { return edit.draft?Object.assign({},tr,{geometry:Object.assign({},edit.draft.geometry),axlePositions:edit.draft.axlePositions.slice(),geometryNote:edit.draft.geometryNote}):tr; }
   function layoutData(tr) { return {geometry:Object.assign({},tr.geometry),axlePositions:(tr.axlePositions||[]).slice(),geometryNote:tr.geometryNote}; }
+  /** Keep text at the left and its chevron at the right; omit only when the actual text no longer fits. */
+  function tireArrowFit(b) {
+    var buttons=Array.from(b.querySelectorAll('.tz-tr-side.dual .tz-tire')),frame=0;
+    var fit=function(){frame=0;buttons.forEach(function(button){var span=button.querySelector('span'),svg=button.querySelector('svg'),css=getComputedStyle(button),range=document.createRange();range.selectNodeContents(span);
+      var needed=range.getBoundingClientRect().width+(parseFloat(getComputedStyle(svg).width)||12)+(parseFloat(css.columnGap)||0)+(parseFloat(css.paddingLeft)||0)+(parseFloat(css.paddingRight)||0);
+      button.classList.toggle('no-arrow',needed>button.clientWidth+.5);
+    });};
+    var soon=function(){if(!frame)frame=requestAnimationFrame(fit);},observer=new ResizeObserver(soon);
+    buttons.forEach(function(button){observer.observe(button);observer.observe(button.querySelector('span'));});window.addEventListener('resize',soon);fit();
+    return function(){observer.disconnect();window.removeEventListener('resize',soon);if(frame)cancelAnimationFrame(frame);};
+  }
   function trailerForm(tr,edit) {
     var preview=layoutPreview(tr,edit);if(normalizeTrailer(preview,tires(G().car()).corners)){if(edit.draft)edit.draft=layoutData(preview);else save();}
     var L = sizeList(tr.size), p = 'tt' + tr.id + '_';
@@ -1000,15 +1015,15 @@
     var h = '<div class="trailer-form"><label class="nf wide"><span>Name</span><input type="text" maxlength="24" id="' + p + 'Name" value="' + esc(tr.name || '') + '" placeholder="e.g. Boat"></label>';
     h += '<div class="tz-cfg"><span>Axles</span><div class="chips mini">' + [1, 2, 3].map(function (n) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-axles="' + n + '" class="' + (tr.axles === n ? 'on' : '') + '">' + n + '</button>'; }).join('') + '</div>' +
       '<span>Tires per axle</span><div class="chips mini">' + [[2, '2'], [4, '4 (dual)']].map(function (o) { return '<button type="button" data-tr="' + esc(tr.id) + '" data-per="' + o[0] + '" class="' + (tr.per === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
-    h += '<label class="nf wide"><span>Size' + A.qBtn('Printed on the tire\'s side: for example <b>ST205/75R15</b> (ST = special trailer).') + '</span><input type="text" maxlength="20" autocapitalize="characters" id="' + p + 'Size" placeholder="e.g. 205/75R15" value="' + esc(tr.size || '') + '"></label>';
-    h += '<div class="seg2" id="ttSame" aria-label="Trailer tires">'+[[false,'All the same'],[true,'Different tires']].map(function(o){return '<button type="button" data-tr-split="'+o[0]+'" aria-pressed="'+(!!tr.split===o[0])+'" class="'+(!!tr.split===o[0]?'on':'')+'">'+o[1]+'</button>';}).join('')+'</div>';
     var z=preview.geometry;
-    h+='<div class="field"><div class="lbl">Symmetrical trailer<small>Adjust both sides together</small></div><label class="switch"><input type="checkbox" id="ttSymmetrical"'+(z.symmetric?' checked':'')+'><span></span></label></div>';
+    h+='<div class="field"><div class="lbl">Symmetrical trailer<small>Adjust both sides together</small></div><label class="switch"><input type="checkbox" id="ttSymmetrical"'+(!edit.draft?' disabled':'')+(z.symmetric?' checked':'')+'><span></span></label></div>';
     h+='<div class="tz-tr-dimensions'+(z.symmetric?'':' asym')+'"><label class="nf"><span>Body length (ft)</span><input id="ttLength" type="number" min="0.25" max="200" step="0.1" inputmode="decimal"'+(!edit.draft?' disabled':'')+' value="'+(+z.lengthFt.toFixed(2))+'"></label>';
-    (z.symmetric?[['ttWidth','Body width (ft)',z.leftFt+z.rightFt]]:[['ttLeft','Driver half-width (ft)',z.leftFt],['ttRight','Passenger half-width (ft)',z.rightFt]]).forEach(function(f){h+='<label class="nf"><span>'+f[1]+'</span><input id="'+f[0]+'" type="number" min="0.25" max="200" step="0.1" inputmode="decimal" value="'+(+f[2].toFixed(2))+'"></label>';});
+    (z.symmetric?[['ttWidth','Body width (ft)',z.leftFt+z.rightFt]]:[['ttLeft','Driver half-width (ft)',z.leftFt],['ttRight','Passenger half-width (ft)',z.rightFt]]).forEach(function(f){h+='<label class="nf"><span>'+f[1]+'</span><input id="'+f[0]+'" type="number" min="0.25" max="200" step="0.1" inputmode="decimal"'+(!edit.draft?' disabled':'')+' value="'+(+f[2].toFixed(2))+'"></label>';});
     h+='</div><p class="lead small keep">Set these body measurements to match your trailer; the initial 12 × 6 ft is a drawing default, not a lookup. This drawing is not a clearance or fitment check.</p>';
     h+='<p id="ttGeometryNote" class="lead small keep tz-geometry-note'+(preview.geometryNote?'':' hidden')+'">'+esc(preview.geometryNote||'')+'</p>';
     h += trailerVisual(preview,!edit.draft);
+    h += '<label class="nf wide"><span>Size' + A.qBtn('Printed on the tire\'s side: for example <b>ST205/75R15</b> (ST = special trailer).') + '</span><input type="text" maxlength="20" autocapitalize="characters" id="' + p + 'Size" placeholder="e.g. 205/75R15" value="' + esc(tr.size || '') + '"></label>';
+    h += '<div class="seg2" id="ttSame" aria-label="Trailer tires">'+[[false,'All the same'],[true,'Different tires']].map(function(o){return '<button type="button" data-tr-split="'+o[0]+'" aria-pressed="'+(!!tr.split===o[0])+'" class="'+(!!tr.split===o[0]?'on':'')+'">'+o[1]+'</button>';}).join('')+'</div>';
     if (!tr.split) {
     h += '<div class="trailer-common">';
     if (tr.size && sizeBusy[tr.size]) h += window.__app.ldBar('Finding the tires made in ' + tr.size);
@@ -1083,11 +1098,12 @@
       $$('Size').onchange = set(function () { var v = normSize(this.value); if (this.value.trim() && !v) { A.toast && A.toast('A tire size looks like 205/75R15.'); return; } tr.size = v; if (v) sizeList(v, function () { if (pg && pg.isConnected) fill(); }); });
       bindPick(b, p, tr, function () { return sizeList(tr.size); }, set);
       b.querySelectorAll('[data-tr-split]').forEach(function(button){button.onclick=set(function(){tr.split=button.dataset.trSplit==='true';t.corners=t.corners||{};if(!t.corners.mode)t.corners.mode='miles';});});
-      b.querySelector('#ttSymmetrical').onchange=set(function(){var checked=this.checked;updateLayout(function(current){var z=current.geometry;z.symmetric=checked;if(z.symmetric)z.leftFt=z.rightFt=(z.leftFt+z.rightFt)/2;});});
-      b.querySelectorAll('.tz-tr-dimensions input').forEach(function(input){input.onchange=set(function(){if(this.id==='ttLength'&&!layoutEdit.draft)return;var value=+this.value,id=this.id;if(!Number.isFinite(value)||value<.25||value>200){A.toast('Enter a body measurement between 0.25 and 200 feet.');return;}updateLayout(function(current){delete current.geometryNote;var z=current.geometry;if(id==='ttLength')z.lengthFt=value;else if(id==='ttWidth')z.leftFt=z.rightFt=value/2;else z[id==='ttLeft'?'leftFt':'rightFt']=value;});});});
+      b.querySelector('#ttSymmetrical').onchange=set(function(){if(!layoutEdit.draft)return;var checked=this.checked;updateLayout(function(current){var z=current.geometry;z.symmetric=checked;if(z.symmetric)z.leftFt=z.rightFt=(z.leftFt+z.rightFt)/2;});});
+      b.querySelectorAll('.tz-tr-dimensions input').forEach(function(input){input.onchange=set(function(){if(!layoutEdit.draft)return;var value=+this.value,id=this.id;if(!Number.isFinite(value)||value<.25||value>200){A.toast('Enter a body measurement between 0.25 and 200 feet.');return;}updateLayout(function(current){delete current.geometryNote;var z=current.geometry;if(id==='ttLength')z.lengthFt=value;else if(id==='ttWidth')z.leftFt=z.rightFt=value/2;else z[id==='ttLeft'?'leftFt':'rightFt']=value;});});});
       b.querySelector('#ttLengthLock').onclick=function(){if(b.contains(document.activeElement))document.activeElement.blur();if(layoutEdit.draft){Object.assign(tr,layoutData(layoutPreview(tr,layoutEdit)));layoutEdit.draft=null;save();}else layoutEdit.draft=layoutData(tr);fill();onChange();};
       var visualTr=layoutPreview(tr,layoutEdit);
-      stopDrag=bindTrailerVisual(b,visualTr,function(){if(layoutEdit.draft)layoutEdit.draft=layoutData(visualTr);if(pendingFill)fill();onChange();},!layoutEdit.draft);
+      var stopVisual=bindTrailerVisual(b,visualTr,function(){if(layoutEdit.draft)layoutEdit.draft=layoutData(visualTr);if(pendingFill)fill();onChange();},!layoutEdit.draft),stopArrows=tireArrowFit(b);
+      stopDrag=function(){stopVisual();stopArrows();};
       b.querySelectorAll('[data-tr-tire]').forEach(function(button){button.onclick=function(){openTire(c,button.dataset.trTire,function(){openTrailer(c,tr.id,false);});};});
       b.querySelectorAll('[data-axles]').forEach(function (x) { x.onclick = set(function () { tr.axles = +x.dataset.axles; updateLayout(function(){}); }); });
       b.querySelectorAll('[data-per]').forEach(function (x) { x.onclick = set(function () { tr.per = +x.dataset.per; }); });

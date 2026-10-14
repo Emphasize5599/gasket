@@ -21,7 +21,8 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.evaluate(()=>document.querySelectorAll('.sub-page *').forEach(e=>{const n=parseFloat(getComputedStyle(e).fontSize);if(n)e.style.fontSize=n*1.3+'px';}));
     const first=p.locator('[data-tr-axle="0"]');await first.evaluate(e=>e.scrollIntoView({block:'center'}));await frame(p);
     assert.equal(await first.evaluate(e=>e.tagName),'BUTTON');assert.ok((await first.boundingBox()).height>=44);
-    assert.equal(await first.evaluate(e=>getComputedStyle(e).touchAction),'none');
+    assert.equal(await first.evaluate(e=>getComputedStyle(e).touchAction),'pan-y');
+    const edges=await first.evaluate(e=>{const r=e.getBoundingClientRect(),w=Array.from(e.querySelectorAll('[data-wheel]')).map(w=>w.getBoundingClientRect());return {left:r.left,right:r.right,wheelLeft:Math.min(...w.map(r=>r.left)),wheelRight:Math.max(...w.map(r=>r.right))};});assert.ok(Math.abs(edges.left-edges.wheelLeft)<1&&Math.abs(edges.right-edges.wheelRight)<1,'axle capture ends at the tires, not the screen edges');
     assert.equal(await p.locator('[data-tr-axle] .tz-drag-arrows').count(),3);
     const keys=await p.locator('[data-tr-tire]').evaluateAll(es=>es.map(e=>e.dataset.trTire));
     const cdp=await p.context().newCDPSession(p);
@@ -37,7 +38,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
       assert.equal(await p.locator('.sub-body').evaluate(e=>e.scrollTop),top,'drag does not scroll the submenu');
     }
     await touch('touchEnd');await frame(p);
-    const move=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners),width=document.querySelector('.tz-tr-diagram').clientWidth,z=g.geometry;return {p:tr.axlePositions[0],travel:g.travel,scale:.8*Math.min((width-52)/(z.leftFt+z.rightFt+g.leftReach+g.rightReach),340/z.lengthFt)};});
+    const move=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners),width=document.querySelector('.tz-tr-diagram').clientWidth,z=g.geometry;return {p:tr.axlePositions[0],travel:g.travel,scale:.8*Math.min((width-52)/(z.leftFt+z.rightFt+g.leftReach+g.rightReach),300/z.lengthFt)};});
     assert.ok(Math.abs(move.p-(.4-24/move.travel/move.scale))<.001);
     // Clamp to the neighbour, keep identities. A second touch cancelling must restore the preview without committing it.
     let b=await first.boundingBox();await touch('touchStart',b.x+100,b.y+22);await touch('touchMove',b.x+100,b.y+222);await frame(p);await touch('touchEnd');
@@ -53,6 +54,11 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await touch('touchMove',b.x+100,b.y+2);await frame(p);await touch('touchCancel');await frame(p);
     assert.deepEqual(await p.evaluate(()=>Garage.car().tires.trailers[0].axlePositions),pos);
     await p.fill('input[id$="_Name"]','Trailer');await p.dispatchEvent('input[id$="_Name"]','change');
+    // A swipe beside an axle, still inside the diagram, scrolls without grabbing that axle.
+    const second=p.locator('[data-tr-axle="1"]');await second.evaluate(e=>e.scrollIntoView({block:'center'}));await frame(p);const lane=await second.boundingBox(),scrollBefore=await p.locator('.sub-body').evaluate(e=>e.scrollTop);
+    await p.evaluate(()=>document.addEventListener('pointerdown',e=>{window.__edgeTouch={x:e.clientX,y:e.clientY,target:e.target.outerHTML.slice(0,180),rect:(()=>{const r=e.target.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()};},{once:true,capture:true}));
+    await touch('touchStart',lane.x+lane.width+8,lane.y+lane.height/2);assert.equal(await p.locator('[data-dragging]').count(),0,JSON.stringify({lane,event:await p.evaluate(()=>__edgeTouch)}));
+    for(const dy of [-30,-60,-100]){await touch('touchMove',lane.x+lane.width+8,lane.y+lane.height/2+dy);await frame(p);}await touch('touchEnd');await p.waitForFunction(top=>document.querySelector('.sub-body').scrollTop>top+20,scrollBefore,{timeout:3000});assert.deepEqual(await p.evaluate(()=>Garage.car().tires.trailers[0].axlePositions),pos);
     // Parent side heading + Outer/Inner children; passenger Outer maps to ro, not ri.
     const sides=p.locator('.tz-tr-side');assert.equal(await sides.count(),6);
     assert.equal(await sides.first().locator('.tz-tr-side-label').innerText(),'Trailer, axle 1, driver side');
@@ -68,6 +74,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     // One consistent content gutter, no sideways overflow, and the last actions/hint clear a simulated 48px nav bar.
     await p.evaluate(()=>{const es=Array.from(document.querySelectorAll('.tz-tr-tires,.tz-tr-tires *')),sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>e.style.fontSize=sizes[i]*1.3+'px');});
     const enlargedPairs=await p.locator('.tz-tr-side').evaluateAll(es=>es.map(e=>Array.from(e.querySelectorAll('button')).map(b=>({y:b.getBoundingClientRect().y,overflow:b.scrollWidth>b.clientWidth}))));assert.ok(enlargedPairs.every(pair=>Math.abs(pair[0].y-pair[1].y)<1&&!pair.some(b=>b.overflow)),'horizontal buttons fit at enlarged text');
+    await frame(p);const arrows=await p.locator('.tz-tr-side.dual .tz-tire').evaluateAll(es=>es.map(e=>{const s=e.querySelector('span').getBoundingClientRect(),a=e.querySelector('svg'),r=a.getBoundingClientRect();return {left:getComputedStyle(e).textAlign,shown:getComputedStyle(a).display!=='none',textRight:s.right,arrowLeft:r.left};}));assert.ok(arrows.every(a=>a.left==='left'&&(!a.shown||a.arrowLeft>=a.textRight-1)));if(width===448)assert.ok(arrows.every(a=>a.shown),'arrows remain on the right when there is space');
     const gutters=await p.evaluate(()=>Array.from(document.querySelectorAll('.trailer-form > *')).filter(e=>e.getBoundingClientRect().width>0).map(e=>({left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right})));
     assert.ok(gutters.every(r=>Math.abs(r.left-16)<1&&Math.abs(r.right-(width-16))<1),JSON.stringify(gutters));
     await p.locator('.sub-body').evaluate(e=>e.scrollTop=e.scrollHeight);await frame(p);
@@ -82,20 +89,24 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     if(process.env.TRAILER_SHOT&&width===320)await p.screenshot({path:process.env.TRAILER_SHOT});
     await p.locator('.sub-body').evaluate(e=>e.scrollTop=0);await frame(p);
     if(process.env.TRAILER_TOP_SHOT&&width===320)await p.screenshot({path:process.env.TRAILER_TOP_SHOT});
-    // Body resize defaults to symmetric; asymmetric mode keeps the other side unchanged.
+    // All dimensions are locked initially; unlocking makes a private preview, locking commits both widths and length.
     assert.equal(await p.isChecked('#ttSymmetrical'),true);assert.equal(await p.inputValue('#ttWidth'),'6');
+    assert.equal(await p.isDisabled('#ttWidth'),true);assert.equal(await p.isDisabled('#ttSymmetrical'),true);assert.equal(await p.locator('#ttLengthLock').getAttribute('aria-label'),'Unlock trailer dimensions');
+    assert.ok((await p.locator('[data-tr-resize]').evaluateAll(es=>es.every(e=>e.disabled))));
+    const rulers=await p.evaluate(()=>{const diagram=document.querySelector('.tz-tr-diagram').getBoundingClientRect(),body=document.querySelector('[data-tr-body]').getBoundingClientRect(),ruler=document.querySelector('[data-width-ruler]').getBoundingClientRect(),size=document.querySelector('input[id$="_Size"]').closest('label').getBoundingClientRect(),graphic=document.querySelector('.tz-tr-visual').getBoundingClientRect();return {below:ruler.top>body.bottom+20,moved:body.top-diagram.top>=70,tireBelow:size.top>=graphic.bottom};});assert.ok(rulers.below&&rulers.moved&&rulers.tireBelow,JSON.stringify(rulers));
+    await p.click('#ttLengthLock');assert.equal(await p.isDisabled('#ttWidth'),false);
     const resize=async(kind,dx,dy)=>{const handle=p.locator('[data-tr-resize="'+kind+'"]');await handle.evaluate(e=>e.scrollIntoView({block:'center'}));const r=await handle.boundingBox();await touch('touchStart',r.x+22,r.y+22);await touch('touchMove',r.x+22+dx,r.y+22+dy);await frame(p);await touch('touchEnd');await frame(p);};
-    await resize('left',-12,0);let z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.ok(z.leftFt>3);assert.equal(z.leftFt,z.rightFt);
-    await p.uncheck('#ttSymmetrical');const left=z.leftFt;await resize('right',12,0);z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.equal(z.leftFt,left);assert.ok(z.rightFt>left);
-    const length=z.lengthFt;assert.equal(await p.isDisabled('#ttLength'),true);assert.equal(await p.isDisabled('[data-tr-resize="length"]'),true);assert.equal(await p.locator('#ttLengthLock').getAttribute('aria-label'),'Unlock trailer length');
-    await p.click('#ttLengthLock');assert.equal(await p.isDisabled('#ttLength'),false);await resize('length',0,15);assert.ok(+(await p.inputValue('#ttLength'))>length);assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.lengthFt),length,'unlocked length is not saved on release');
-    await p.click('#ttLengthLock');z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.ok(z.lengthFt>length);assert.equal(await p.isDisabled('#ttLength'),true);
+    await resize('left',-12,0);const previewWidth=+(await p.inputValue('#ttWidth'));assert.ok(previewWidth>6);assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.leftFt),3,'width preview is not saved while unlocked');
+    await p.uncheck('#ttSymmetrical');const left=+(await p.inputValue('#ttLeft'));await resize('right',12,0);assert.equal(+(await p.inputValue('#ttLeft')),left);assert.ok(+(await p.inputValue('#ttRight'))>left);
+    const length=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.lengthFt);assert.equal(await p.isDisabled('#ttLength'),false);await resize('length',0,15);assert.ok(+(await p.inputValue('#ttLength'))>length);assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.lengthFt),length,'unlocked length is not saved on release');
+    await p.click('#ttLengthLock');let z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.ok(z.lengthFt>length&&z.leftFt>3&&z.rightFt>z.leftFt);assert.equal(await p.isDisabled('#ttLength'),true);assert.equal(await p.isDisabled('#ttLeft'),true);assert.equal(await p.isDisabled('#ttRight'),true);
     const savedLength=z.lengthFt;await p.click('#ttLengthLock');await p.fill('#ttLength',String(savedLength+2));await p.dispatchEvent('#ttLength','change');assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.lengthFt),savedLength);
     await p.click('.sub-back');await p.click('[data-sub="tr:trExample"]');assert.equal(await p.isDisabled('#ttLength'),true);assert.ok(Math.abs(+(await p.inputValue('#ttLength'))-savedLength)<.01,'leaving discards unlocked length preview');
     assert.match(await p.locator('.tz-ruler').textContent(),/ft/);
     await p.click('#ttLengthLock');await p.fill('#ttLength','3');await p.dispatchEvent('#ttLength','change');assert.match(await p.innerText('#ttGeometryNote'),/increased/);await p.click('#ttLengthLock');
     await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0];tr.axlePositions=[0,0,0];});
     await p.click('[data-tr-split="false"]');await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
+    assert.ok(await p.evaluate(()=>document.querySelector('#ttSame').getBoundingClientRect().bottom<document.querySelector('.trailer-common .tz-pick').getBoundingClientRect().top),'size and same/different selector are above Brand');
     const grown=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners);return {length:tr.geometry.lengthFt,min:g.minLength,gaps:g.gaps,centers:g.centers,positions:tr.axlePositions};});
     assert.ok(grown.length>=grown.min-1e-8&&grown.length>12);for(let i=1;i<3;i++)assert.ok(grown.centers[i]-grown.centers[i-1]>=grown.gaps[i]-1e-8);
     await frame(p);

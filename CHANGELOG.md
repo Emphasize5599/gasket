@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.138 - 2026-10-13 (keyless test branch only)
+- Lock both trailer dimensions and improve axle dragging versus scrolling.
+- Revised ruler/control placement and right-aligned Specify arrows.
+- Bug fixes.
+
 ## 0.0.137 - 2026-10-13 (keyless test branch only)
 - Horizontal dual-tire controls, trailer-scoped size autofill and confirmed Delete shortcut.
 - Unlock/edit/lock-to-save trailer length.
