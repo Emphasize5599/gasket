@@ -2,10 +2,12 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Reconciled against the keyless test branch through **0.0.153**, 2026-10-14. Add new work here; remove an item when it ships or its acceptance check passes. Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
+## Pending work
+
+- [ ] **perf: Increase website-reader limit to 20 and use more generous defaults.** Raise the configurable maximum from 16 to 20, increase the RAM-based default worker counts moderately, and keep explicit user settings and low-memory safeguards. Check speed and stability on the phone before settling the revised defaults. This is the first queued implementation task; it has not been implemented yet.
+
 ## fix — reported defects and investigations
 
-- [ ] **Tire Rack catalog omissions.** Reproduce the 195/65R15 scan that read 77 options but kept 70, then fix product-card/size association. Reported rejects: Continental ProContact TX ×2, Kumho Solus TA31, Bridgestone Ecopia EP422 Plus, Nexen N Priz AH8, Yokohama AVID S33D and S33B. Verify these actual products appear, including distinct variants. This needs a live-site/browser check, not only parser fixtures.
-- [ ] **Tire Rack vehicle lookup after a catalog read.** Investigate the next car's `clars` request failing with “Failed to fetch” while the reader remains on `TireSearchResults.jsp`. Check page/navigation state and legitimate retry behavior. Version 0.0.151 added transient retries; it does not establish that this reported transition failure is resolved.
 - [ ] **Automatic VIN-specific open-recall lookup reliability.** Investigate NHTSA background reads being declined and supported manufacturer/NHTSA alternatives. Preserve an unresolved result and the visible lookup when checks prevent access. The model/year recall-list fixes in 0.0.149 are already shipped; this item concerns the VIN-specific open/remedied result.
 
 ## feat — product features
@@ -35,7 +37,6 @@ The single backlog for Gasket: features, defects, validation and release decisio
 
 ## test — outstanding device and acceptance checks
 
-- [ ] **Keyless discovery coverage matrix.** On the actual phone, compare API and website discovery in urban, suburban and rural areas, including Searcy, AR. Count missing/duplicate stations and priced stations by brand; reaching a website list's end is not proof of complete geographic coverage.
 - [ ] **Grade and price accuracy checks.** Compare a sample against the displayed Maps and official-chain prices for regular, midgrade, premium and diesel, including Walmart. Check cash/member variants and unknown update times; never infer conditions absent from the source.
 - [ ] **Recovery and request-budget checks.** Exercise blocked pages, visible site checks, airplane mode, cancellation, cooldowns, cache reuse and restart. Confirm progress always exits and keyless operations do not consume paid API calls.
 
@@ -57,8 +58,10 @@ Vela reuse is conditional, not current unfinished implementation: no Vela source
 
 ## Reconciled items (not open)
 
+- Tire Rack catalog omissions and the lookup-after-catalog failure: marked resolved per the owner's 2026-10-14 update; no new independent verification was performed during this backlog edit.
+- Station-discovery coverage, including the earlier Searcy concern: marked resolved per the owner's 2026-10-14 update. Price accuracy and performance checks remain separate tasks.
 - Hourly route weather and smoke/smog/air-quality hazards: shipped; only pollen sourcing remains above.
-- Keyless nearby/route discovery, all-grade saved-price refresh, progress/cancel and persistent station history: implemented; device coverage/performance validation remains above. No specific history-chart UI has been committed to the backlog.
+- Keyless nearby/route discovery, all-grade saved-price refresh, progress/cancel and persistent station history: implemented; price/recovery/performance validation remains above. No specific history-chart UI has been committed to the backlog.
 - Basic EV/hydrogen discovery and route-stop support: implemented; the older “everything else” entry overstated what was missing.
 - Tire submenu/dually reorganization, hooked-up overview cleanup and photo picker: shipped in 0.0.146–147; superseded local work is not a pending patch.
 - Car tread-difference warnings and per-vehicle/trailer tire fuel ratings: shipped in 0.0.148; trailer mismatch guidance remains above.
