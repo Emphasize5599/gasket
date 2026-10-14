@@ -61,9 +61,13 @@ EXTRA = r'''
 '''
 errors = []
 def ft(pg, sel): return pg.evaluate("(s) => { const e = document.querySelector(s); if (!e) throw new Error('no ' + s); return e.innerText; }", sel)
+def saved(pg):
+    """Save and close the car's editor (a submenu over the Garage) when it's open."""
+    if pg.locator('.sub-page.car-edit #gSave').count(): pg.click('#gSave'); pg.wait_for_timeout(200)
+def add(pg): saved(pg); pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
 def idle(pg, t=900):
     pg.wait_for_timeout(t); pg.wait_for_function("!window.__trip.state().busy", timeout=20000); pg.wait_for_timeout(250)
-def nxt(pg, t=700): pg.click('#tNext'); idle(pg, t)
+def nxt(pg, t=700): saved(pg); pg.click('#tNext'); idle(pg, t)
 def step(pg): return pg.evaluate('window.__trip.state().step')
 OVER = '''() => { const W = innerWidth, out = []; document.querySelectorAll('body *').forEach(e => { if (e.closest('.leaflet-container')) return;
   const r = e.getBoundingClientRect(); if (r.width && (e.offsetParent || getComputedStyle(e).position === 'fixed') && (r.right > W + 0.5 || r.left < -0.5)) out.push((e.id || e.className) + ' ' + Math.round(r.left) + '..' + Math.round(r.right)); });
@@ -75,7 +79,7 @@ def wide(pg, label):
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=os.environ.get('CHROME', '/opt/google/chrome/chrome'), args=['--no-sandbox'])
     for name, w, h, scheme in fastwait.viewports([('pixel10pro', 412, 915, 'dark'), ('narrow', 320, 800, 'light')]):
-        pg = b.new_page(viewport={'width': w, 'height': h}, device_scale_factor=2.6, color_scheme=scheme, is_mobile=True, has_touch=True)
+        pg = b.new_page(viewport={'width': w, 'height': h}, device_scale_factor=2.6, color_scheme=scheme, is_mobile=True, has_touch=True); fastwait.editor_guard(pg)
         pg.on('pageerror', lambda e: errors.append(str(e)))
         pg.goto(URL); pg.evaluate('setInsets(44, 24, 0, 0)'); pg.wait_for_timeout(400)
         pg.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop'); pg.click('#sDone'); pg.wait_for_timeout(500)
@@ -89,7 +93,11 @@ with sync_playwright() as p:
         rgb = [int(x) for x in col[col.index('(') + 1:col.index(')')].split(',')[:3]]
         assert rgb[0] > 180 and rgb[1] < 140 and rgb[2] < 140, 'red, not yellow'
         pg.screenshot(path=f'{OUT}/{name}-gr0-edit.png'); wide(pg, 'edit')
-        pg.click('#gEdit'); pg.wait_for_timeout(150)
+        assert pg.locator('.sub-page.car-edit #gcPrev, .sub-page.car-edit #gcNext, .sub-page.car-edit [data-car]').count() == 0, 'no cycling through cars while editing one'
+        assert pg.evaluate("document.querySelector('.sub-page.car-edit .sub-body .nf input').id") == 'gName', 'the name comes first'
+        assert ft(pg, '.sub-nav #gDiscard') == 'Discard changes' and ft(pg, '.sub-nav #gSave') == 'Save' and pg.locator('#gDone').count() == 0
+        pg.click('#gSave'); pg.wait_for_timeout(150)
+        assert pg.locator('.sub-page').count() == 0
         pg.click('[data-car="venza12"]'); pg.wait_for_timeout(250); pg.click('#gEdit'); pg.wait_for_timeout(150)
         pg.click('#gRemove'); pg.wait_for_timeout(250)
         assert pg.locator('#cfm').count() == 1 and 'Remove 2012 Venza XLE?' in ft(pg, '#cfm'), ft(pg, '#cfm')
@@ -99,7 +107,10 @@ with sync_playwright() as p:
         pg.click('#gRemove'); pg.wait_for_timeout(250); pg.click('#cfmYes'); pg.wait_for_timeout(300)
         assert pg.evaluate('window.__app.S.cars.length') == 1 and pg.locator('#gRemove').count() == 0 and pg.locator('#gcNext[disabled]').count() == 1, 'one car left: no Remove, no arrows'
         # ---- add a car by VIN: NHTSA decodes it, the EPA mileage is matched, details filled, recalls checked ----
-        pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
+        add(pg)
+        # a new car: no stand-in drawing, a tip that a lookup gets its picture
+        assert pg.locator('.sub-page .gc-tip').count() == 1 and pg.locator('.sub-page .gc-draw').count() == 0 and 'get a picture for you' in ft(pg, '.gc-tip')
+        assert pg.evaluate("(() => { const p = document.getElementById('gPicMode'), g = document.getElementById('gcPic'); return !!(p.compareDocumentPosition(g) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(document.getElementById('gVin').compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING); })()"), 'VIN … picture style, then the picture'
         # one menu: the VIN first, outlined in green and marked Recommended, then year / make / model; no plate lookup
         assert pg.locator('#gHow, [data-how], .plate-msg').count() == 0, 'no switch between ways, no license plate'
         assert pg.locator('.vin-row.rec #gVin').count() == 1 and 'Recommended' in ft(pg, '.vin-row'), 'the VIN box, recommended'
@@ -138,7 +149,7 @@ with sync_playwright() as p:
         accord = pg.evaluate('window.__app.S.carId')
         pg.evaluate('''() => { window.__siteRead = []; window.__mocks.siteRead = (key, args) => key === 'brave' ? (window.__braveMode === 'blocked' ? { blocked: true }
           : { gal: 19, text: 'The 2008 Dodge Charger SXT has a fuel tank capacity of 19 gallons.' }) : { error: 'x' }; }''')
-        pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
+        add(pg)
         pg.fill('#gVin', '2B3LK33G08H000001'); pg.click('#gVinGo'); idle(pg, 1500)
         c = pg.evaluate('window.Garage.car()'); print('  Charger:', c.get('model'), c.get('epaId'), c.get('epa'), '|', ft(pg, '#eMsg'))
         assert c['epaId'] == '24898' and c['model'] == 'Charger AWD' and c['epa']['city'] == 15, 'matched to the EPA by drive and engine'
@@ -161,7 +172,7 @@ with sync_playwright() as p:
         pg.evaluate("(id) => { const S = window.__app.S; S.cars = S.cars.filter(x => x.id !== S.carId); S.carId = id; window.Garage.redraw(); }", accord); pg.wait_for_timeout(300)
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']
-        pg.click('#gInfo summary'); pg.wait_for_timeout(200)
+        saved(pg); pg.click('#gInfo summary'); pg.wait_for_timeout(200)
         tiles = ft(pg, '.ac-tiles'); print('  tiles:', tiles.replace('\n', ' | '))
         assert '1.5-liter 4-cylinder' in tiles and 'Turbocharger' in tiles and 'no fixed gears (CVT)' in tiles and 'Front-wheel drive' in tiles
         assert pg.locator('.ac-tiles .ac-dd, #gEngine, #gDrive').count() == 0, 'a VIN says exactly what the car is: tiles, no menus'
@@ -188,9 +199,9 @@ with sync_playwright() as p:
         if pg.locator('#gTrim').count() == 0: pg.click('#gEdit'); pg.wait_for_timeout(150)
         pg.fill('#gTrim', 'Sport'); pg.dispatch_event('#gTrim', 'change'); pg.wait_for_timeout(200)
         assert '2021 Accord Sport' in ft(pg, '.carchip.on')
-        pg.fill('#gTank', '14.8'); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(150); pg.click('#gEdit'); pg.wait_for_timeout(150)
+        pg.fill('#gTank', '14.8'); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(150); pg.click('#gSave'); pg.wait_for_timeout(150)
         # ---- an EV from the EPA: kWh, mi/kWh, battery estimated, plug ----
-        pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
+        add(pg)
         pg.select_option('#eYear', '2021'); pg.wait_for_timeout(200); pg.select_option('#eMake', 'Tesla'); pg.wait_for_timeout(200)
         pg.select_option('#eModel', 'Model 3 Long Range AWD'); pg.wait_for_timeout(700)
         ev = pg.evaluate('window.Garage.car()'); print('  EV:', ev['power'], ev['epa'], ev['tank'], ev.get('plug'))
@@ -202,12 +213,12 @@ with sync_playwright() as p:
         assert 'Usable battery (kWh)' in ft(pg, '.g-edit') and pg.locator('#gDcKw').count() == 1 and pg.locator('#gType').count() == 0
         pg.fill('#gDcKw', '250'); pg.dispatch_event('#gDcKw', 'change'); pg.wait_for_timeout(100)
         assert 'Not worked out for EVs' in pg.text_content('#tSpeed')
-        pg.click('#gObs summary'); pg.wait_for_timeout(100); assert 'City mi/kWh' in ft(pg, '#gObs')
+        pg.click('#gSave'); pg.wait_for_timeout(150)
+        saved(pg); pg.click('#gObs summary'); pg.wait_for_timeout(100); assert 'City mi/kWh' in ft(pg, '#gObs')
         pg.screenshot(path=f'{OUT}/{name}-gr4-ev.png', full_page=True); wide(pg, 'ev')
         ev_id = ev['id']
         # ---- a hydrogen car: kg, mi/kg, tank from the spec list ----
-        pg.click('#gEdit'); pg.wait_for_timeout(100)
-        pg.click('[data-car="+"]'); pg.wait_for_timeout(300)
+        add(pg)
         pg.select_option('#eYear', '2021'); pg.wait_for_timeout(200); pg.select_option('#eMake', 'Toyota'); pg.wait_for_timeout(200)
         pg.select_option('#eModel', 'Mirai'); pg.wait_for_timeout(700)
         fc = pg.evaluate('window.Garage.car()'); print('  H2:', fc['power'], fc['epa'], fc['tank'], pg.evaluate('window.Garage.rangeMi()'))

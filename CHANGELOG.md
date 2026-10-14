@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.147 - 2026-10-14 (keyless test branch only)
+- Tire details: choose "My tires are all the same" or "My tires aren't all the same" under the size, each with an explanation; the tread question follows it, and different tires go straight to each tire.
+- Edit your car in its own page with Discard changes and Save at the bottom; the name comes first, then the VIN through the picture style, then the picture.
+- A "New photo" button beside Edit picks another public photo; a new car shows a tip instead of a stand-in drawing.
+- Bug fixes.
+
 ## 0.0.146 - 2026-10-14 (keyless test branch only)
 - Organize car and trailer tire details into their own menus, with mirrored dually selectors.
 - Keep a clean hooked-up overview; remove its trailer label.

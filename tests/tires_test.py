@@ -37,9 +37,9 @@ TR = r'''() => {
 errors = []
 def car_sub(pg):
     """The car's tire details submenu (tread, each tire, the dually and "not all the same" switches live there)."""
-    if pg.locator('.sub-page #tzSplit').count() == 0:
+    if pg.locator('.sub-page #tzSame').count() == 0:
         if pg.locator('.sub-page').count(): pg.click('.sub-back'); pg.wait_for_timeout(200)
-        pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSplit')
+        pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSame')
 def main(pg):
     """Back to the Tires tile (its tread summary and the overview picture)."""
     while pg.locator('.sub-page').count(): pg.click('.sub-back'); pg.wait_for_timeout(200)
@@ -174,14 +174,19 @@ with sync_playwright() as p:
         # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive); in the car's tire details ----
         car_sub(pg)
         assert pg.locator('.sub-page .tz-car-visual .tz-w').count() == 4, 'the car on its own, in its own page'
-        pg.check('#tzSplit'); pg.wait_for_timeout(200)
+        order = pg.evaluate("[...document.querySelectorAll('.sub-page #tzSize, .sub-page #tzSame, .sub-page #tzMode, .sub-page #tzBrand, .sub-page #tzBrandT, .sub-page .tz-fuel')].map(e => e.id || e.className)")
+        assert order[:3] == ['tzSize', 'tzSame', 'tzMode'] and order[-1] == 'tz-fuel', ('size, all the same or not, then the tread question; the catalog after', order)
+        assert pg.locator('.sub-page #tzSame .qi').count() == 2 and '5,000 miles apart' in pg.evaluate("decodeURIComponent(document.querySelectorAll('#tzSame .qi')[1].dataset.q)")
+        pg.click('[data-same="0"]'); pg.wait_for_timeout(200)
         pg.click('#tzBy [data-by="depth"]'); pg.wait_for_timeout(200)
         for k, d in (('lf', '8'), ('rf', '8'), ('lr', '6'), ('rr', '6')): pg.select_option('[data-corner="%s"]' % k, d); pg.wait_for_timeout(120)
+        assert pg.locator('.sub-page #tzMode, .sub-page #tzWarranty, .sub-page #tzBrand, .sub-page #tzBrandT, .sub-page #tzTw').count() == 0, 'each tire: no shared tread or catalog boxes'
+        assert pg.locator('.sub-page .tz-fuel').count() == 1 and 'Tire' not in [x.strip() for x in pg.evaluate("[...document.querySelectorAll('.tz-car-tires .tz-c > span')].map(s => s.textContent)")], 'no "Tire" label over each box'
         rot = ft(pg, '.tz-rot'); print('  rotation:', rot.replace('\n', ' | '))
         assert 'Move these tires' in rot and 'Driver front → Driver rear' in rot and 'two best tires on the rear' in rot
         main(pg)
         assert '6/32 in left' in ft(pg, '.tz-out') and 'Driver rear' in ft(pg, '.tz-out'), 'the shallowest tire counts'
-        assert pg.locator('#gTiresIn #tzSplit, #gTiresIn [data-corner]').count() == 0, "the car's tire controls are only in its submenu"
+        assert pg.locator('#gTiresIn #tzSame, #gTiresIn [data-corner]').count() == 0, "the car's tire controls are only in its submenu"
         car_sub(pg)
         pg.select_option('[data-corner="lf"]', '4'); pg.select_option('[data-corner="rf"]', '3'); pg.select_option('[data-corner="lr"]', '7'); pg.select_option('[data-corner="rr"]', '7'); pg.wait_for_timeout(200)
         rot = ft(pg, '.tz-rot'); assert 'Replace before rotating' in rot and 'instead of rotating them to the back' in rot, rot
@@ -255,15 +260,15 @@ with sync_playwright() as p:
         # ---- by mileage: each tire opens its own page; miles, warranty (from the car's tire details) and rotation ----
         car_sub(pg)
         pg.click('[data-by="miles"]'); pg.wait_for_timeout(200)
-        assert pg.locator('[data-tire]').count() == 4 and pg.locator('.tz-c:has([data-tire]) .req').count() == 4 and 'missing details' in ft(pg, '#tzMiss')
+        assert pg.locator('[data-tire]').count() == 4 and pg.locator('.tz-car-tires .tz-tr-side-label .req').count() == 4 and 'missing details' in ft(pg, '#tzMiss')
         pg.click('[data-tire="lf"]'); pg.wait_for_selector('.sub-page #tpMiles')
         assert pg.input_value('#tpWarranty') == '65000', "the warranty from the car's tire details"
         pg.fill('#tpMiles', '30000'); pg.dispatch_event('#tpMiles', 'change'); pg.wait_for_timeout(100)
         pg.select_option('#tpRot', 'yes'); pg.wait_for_timeout(150)
         assert 'About 6.5/32 in left' in ft(pg, '.sub-page .tz-out'), ft(pg, '.sub-page')
         pg.screenshot(path=f'{OUT}/{name}-t2d-tire.png')
-        pg.click('.sub-back'); pg.wait_for_selector('.sub-page #tzSplit')
-        assert '30,000 mi · 65k warranty' in ft(pg, '[data-tire="lf"]') and pg.locator('.tz-c:has([data-tire]) .req').count() == 3, "Back goes to the car's tire details"
+        pg.click('.sub-back'); pg.wait_for_selector('.sub-page #tzSame')
+        assert '30,000 mi · 65k warranty' in ft(pg, '[data-tire="lf"]') and pg.locator('.tz-car-tires .tz-tr-side-label .req').count() == 3, "Back goes to the car's tire details"
         pg.click('#tzDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
         car_sub(pg)
         assert pg.locator('[data-tire]').count() == 0 and pg.locator('[data-corner]').count() == 4, 'discarded: back to the measured set'
@@ -329,8 +334,8 @@ with sync_playwright() as p:
         print('  understeer cars from the road center:', off); assert off[0] <= 6 and off[1] >= 18, off
         pg.screenshot(path=f'{OUT}/{name}-t4-steer.png')
         assert pg.evaluate('window.onBack()'), "the phone's Back button closes it too"
-        pg.wait_for_selector('.sub-page #tzSplit'); assert pg.locator('.sub-page #anSteer').count() == 0, "back to the car's tire details it was opened from"
-        pg.uncheck('#tzSplit'); pg.wait_for_timeout(200)
+        pg.wait_for_selector('.sub-page #tzSame'); assert pg.locator('.sub-page #anSteer').count() == 0, "back to the car's tire details it was opened from"
+        pg.click('[data-same="1"]'); pg.wait_for_timeout(200)
         o = pg.evaluate(OVER); pg.evaluate(BIG.replace('#gTires *', '.sub-page *')); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'tire details page sideways: ' + str(o)
         main(pg)

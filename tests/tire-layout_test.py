@@ -25,7 +25,7 @@ with sync_playwright() as pw:
           Garage.redraw();
         }""")
         page.click('#gTires summary')
-        assert page.locator('#gTires [data-tire],#gTires [data-corner],#gTires [data-tr-tire],#gTires #tzSplit,#gTires #tzDually').count() == 0
+        assert page.locator('#gTires [data-tire],#gTires [data-corner],#gTires [data-tr-tire],#gTires #tzSame,#gTires #tzDually').count() == 0
         assert page.locator('.tz-overview .tz-w').count() == 14
         assert page.locator('.tz-overview .tz-trn').count() == 0
         page.locator('.tz-overview').evaluate('(e)=>e.scrollIntoView({block:"center"})')
@@ -49,7 +49,7 @@ with sync_playwright() as pw:
         page.wait_for_selector('#tpMiles')
         assert 'Passenger rear, inner' in page.locator('.sub-bar h2').inner_text()
         page.click('.sub-back')
-        page.wait_for_selector('#tzSplit')
+        page.wait_for_selector('#tzSame')
         page.uncheck('#tzDually')
         assert page.locator('.sub-page [data-tire]').count() == 4
         page.click('.sub-back')

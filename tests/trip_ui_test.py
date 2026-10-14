@@ -67,7 +67,7 @@ def replan(pg):
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=os.environ.get('CHROME', '/opt/google/chrome/chrome'), args=['--no-sandbox'])
     for name, w, h, scheme in fastwait.viewports(([(n, int(W), 915, 'dark') for n, W in [os.environ['ONLY'].split(':')]] if os.environ.get('ONLY') else [('pixel10pro', 412, 915, 'dark'), ('pixel8pro', 448, 998, 'light')])):
-        pg = b.new_page(viewport={'width': w, 'height': h}, device_scale_factor=2.6, color_scheme=scheme, is_mobile=True, has_touch=True)
+        pg = b.new_page(viewport={'width': w, 'height': h}, device_scale_factor=2.6, color_scheme=scheme, is_mobile=True, has_touch=True); fastwait.editor_guard(pg)
         pg.on('pageerror', lambda e: errors.append(str(e)))
         pg.on('console', lambda m: m.type == 'error' and 'tile' not in m.text and 'ERR_' not in m.text and errors.append(m.text))
         pg.goto(URL); pg.evaluate('setInsets(44, 24, 0, 0)'); pg.wait_for_timeout(400)
@@ -163,8 +163,7 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/{name}-g3-venza.png')
         # add a car from the EPA (the trip tests below use it)
         pg.click('[data-car="+"]'); pg.wait_for_timeout(400)
-        pg.click('#tNext'); pg.wait_for_timeout(250)
-        assert step(pg) == 1 and pg.locator('#eYear.pulse').count() == 1, 'Next points at the car lookup (pulse)'
+        assert step(pg) == 1 and pg.locator('.sub-page.car-edit #gSave[disabled]').count() == 1 and pg.locator('.sub-page.car-edit #eYear').count() == 1, 'a new car opens its editor; Save waits for the car'
         pg.screenshot(path=f'{OUT}/{name}-w2-need-pick.png'); wide(pg, 'new car')
         pg.select_option('#eYear', '2021'); pg.wait_for_timeout(200)
         pg.select_option('#eMake', 'Honda'); pg.wait_for_timeout(200)

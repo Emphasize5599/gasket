@@ -84,3 +84,18 @@ def viewports(all_viewports):
 if os.environ.get('NO_SCREENSHOTS') == '1':
     # quick runs: skip the PNGs (about a tenth of the UI tests' time); everything else is checked as usual
     Page.screenshot = lambda self, *a, **k: b''
+
+
+def editor_guard(pg):
+    """The car's editor is a submenu over the Garage, closed with its Save button. Tests written for the Garage
+    beneath it: a click on anything outside the editor (and outside a dialog) saves and closes it first."""
+    orig = pg.click
+
+    def click(sel, *a, **k):
+        if (pg.locator('.sub-page.car-edit').count() and pg.locator('.sub-page.car-edit, #cfm').locator(sel).count() == 0
+                and pg.locator('#cfm.on, .qpop, #gSave[disabled]').count() == 0 and pg.locator('.sub-page:not(.car-edit)').count() == 0):
+            orig('#gSave'); pg.wait_for_timeout(200)
+            if sel == '#gEdit': return None      # the old Done
+        return orig(sel, *a, **k)
+    pg.click = click
+    return pg

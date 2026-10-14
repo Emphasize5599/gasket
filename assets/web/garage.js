@@ -175,7 +175,7 @@
 
   // ---------- page ----------
   var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false,editSnap=null;
-  function editorOk(c){return !!(c&&(c.year&&c.make&&c.model||String(c.name||'').trim()));}
+  function editorOk(c){return !!(c&&(c.year&&c.make&&c.model||String(c.name||'').trim()||String(c.nick||'').trim()));}
   // the VIN is the car's identity: dots like a password until you tap the eye
   var vinShown = false;
   var EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>';
@@ -202,7 +202,7 @@
     // the year / make / model / engine pickers you (or a VIN) already filled: kept as they are, not emptied and filled
     // again one by one (each step waits on the EPA, so the boxes flickered and could end up half-filled)
     var grid = $('eYear') && $('eYear').value && $('eYear').closest('.epa-grid'), keepFor = S.carId;
-    try { settle(host); draw0(); } finally { drawing = false; }
+    try { settle(host); if (ed && ed.body) settle(ed.body); draw0(); } finally { drawing = false; }
     var fresh = grid && keepFor === S.carId && $('eYear') && !$('eYear').value && $('eYear').closest('.epa-grid');
     if (fresh) fresh.replaceWith(grid);
   }
@@ -219,8 +219,8 @@
     if(!S.cars.length){editing=false;host.innerHTML='<div class="card g-car"><h3>Your vehicles</h3><p class="lead small keep">No vehicles yet. Add your own vehicle to start planning a trip.</p><button type="button" class="btn primary" data-car="+">Add your first vehicle</button></div>';host.querySelector('[data-car="+"]').onclick=addCar;speedHost=null;return;}
     var c = car(), U = units(c), k = kind(c);
     if(editing&&(!editSnap||editSnap.id!==c.id))editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};
-    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><button class="btn tonal sm" id="gEdit"'+(editing&&!editorOk(c)?' disabled':'')+'>' + (editing ? 'Done' : 'Edit') + '</button></div>' + carousel(c);
-    if (editing) h += editPanel(c)+'<button class="btn tonal sm caution" id="gDiscard">Discard changes</button>';
+    // the car's editor is its own submenu: the tile keeps the picture (its ids live in one place at a time)
+    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><span class="g-top-btns">' + (publicPhoto(c) ? '<button class="btn tonal sm g-newpic" id="gNewPic">' + REFRESH + 'New photo</button>' : '') + '<button class="btn tonal sm" id="gEdit">Edit</button></span></div>' + (editing ? '' : carousel(c));
     h += '</div>';
     h += '<div class="card spd" id="tSpeed"></div>';
     h += '<div class="card g-econ"><h3>' + U.econ + '</h3>';
@@ -238,6 +238,7 @@
     h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + (window.Tires ? Tires.summaryHtml(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
     h += '<details class="card g-obs g-clim" id="gClimate"' + (climOpen ? ' open' : '') + '><summary><span>Climate control</span></summary><div id="gClimIn"></div></details>';
     host.innerHTML = h;
+    drawEditor(c);
     restoreEMsg();
     speedHost = $('tSpeed');
     $('gObs').addEventListener('toggle', function () { if(this.isConnected)obsOpen = this.open; });
@@ -314,9 +315,11 @@
   }
   /** "2020 Corolla Hybrid LE": year, model and (when you gave one) trim. */
   function shortName(x) {
-    if (x.year && x.model) return x.year + ' ' + String(x.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '') + (x.trim ? ' ' + x.trim : '')+(x.demoMileage?' (demo)':'');
+    if (x.nick) return x.nick + (x.demoMileage ? ' (demo)' : '');
+    if (x.year && x.model) return autoName(x) + (x.demoMileage ? ' (demo)' : '');
     return x.name || 'New car';
   }
+  function autoName(x) { return x.year + ' ' + String(x.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '') + (x.trim ? ' ' + x.trim : ''); }
   function opts(map, cur, blank) {
     return (blank != null ? '<option value="">' + blank + '</option>' : '') + Object.keys(map).map(function (k) { return '<option value="' + esc(k) + '"' + (cur === k ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join('');
   }
@@ -325,23 +328,36 @@
   var ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg>';
   var PAINTS = [['White', '#f4f4f2'], ['Black', '#1b1c1f'], ['Silver', '#c9ccd0'], ['Gray', '#6d7178'], ['Red', '#a3161c'], ['Blue', '#1d3f8f'], ['Green', '#2f5d3a'],
     ['Brown', '#5a3d2b'], ['Beige', '#cdbb98'], ['Gold', '#b8953f'], ['Orange', '#d4631c'], ['Yellow', '#e3b81f']];
+  var REFRESH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
+  /** A photo from a public source (NHTSA, Wikimedia Commons, or one picked from them): another can be picked. */
+  function publicPhoto(c) {
+    var CP = window.CarPics; if (!CP || !c || !c.id || c.picMode === 'doodle' || CP.hasGenerated(c) || !CP.src(c)) return false;
+    var w = CP.which(c, CP.hasKey()); return w === 'nhtsa' || w === 'wiki' || w === 'chosen';
+  }
+  /** Nothing to look a picture up by yet (a new car): say so, rather than a stand-in drawing it might think it must change. */
+  function noIdentity(c) { return !(c.year && c.make && c.model) && c.picMode !== 'doodle' && !(window.CarPics && CarPics.src(c)); }
+  var PIC_TIP = 'A VIN or year / make / model lookup will get a picture for you. Feel free to change it if you want something different.';
   function picHtml(c) {
     var src = window.CarPics && CarPics.src(c);
     if (src) return '<img src="' + src + '" alt="' + esc(shortName(c)) + '">';
+    if (noIdentity(c)) return '<div class="tipbox gc-tip"><div><b>Tip:</b> ' + PIC_TIP + '</div></div>';
     return (window.CarPics ? CarPics.drawing(c) : '') + (window.CarPics && CarPics.pending(c) ? '<div class="gc-ld">' + A.ldBar('Finding a picture') + '</div>' : '');
   }
-  function carousel(c) {
+  function carousel(c, inEditor) {
     var i = S.cars.indexOf(c), n = S.cars.length, many = n > 1;
     var sub = subHtml(c);
+    if (inEditor && noIdentity(c)) return '<div class="tipbox gc-tip" id="gcPic"><div><b>Tip:</b> ' + PIC_TIP + '</div></div>' + imgActions(c);
+    if (inEditor) return '<div class="gc gc-solo" id="gCars"><div class="gc-stage" id="gcStage"><div class="gc-slide carchip on"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
+      '<b class="gc-name">' + esc(shortName(c)) + '</b><small class="gc-sub" id="gcSub">' + sub + '</small></div></div></div>' + imgActions(c);
+    function imgActions(c) { return '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
+      '<button type="button" class="gc-recreate" id="gcUseGenerated">Choose...</button>' +
+      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasOverride(c) ? '' : ' disabled') + '>Revert to original</button></div>'; }
     var h = '<div class="gc" id="gCars"><button type="button" class="gc-nav prev" id="gcPrev" aria-label="Previous car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button>' +
       '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
       '<div class="gc-slide carchip on' + (slideIn ? (slideIn > 0 ? ' in-r' : ' in-l') : '') + '"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
       '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
       '</div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
-    if(editing)h += '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
-      '<button type="button" class="gc-recreate" id="gcUseGenerated">Choose...</button>' +
-      '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasOverride(c) ? '' : ' disabled') + '>Revert to original</button></div>';
     h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
       '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
     slideIn = 0;
@@ -355,8 +371,10 @@
     setTimeout(function () { S.carId = nx.id; editing = false; slideIn = d; LG.info('car', 'Selected ' + shortName(nx)); draw(); changed(); }, sl ? 140 : 0);
   }
   function bindCarousel(c) {
-    $('gcPrev').onclick = function () { go(-1); }; $('gcNext').onclick = function () { go(1); };
+    if (!$('gcStage')) return;
+    if ($('gcPrev')) { $('gcPrev').onclick = function () { go(-1); }; $('gcNext').onclick = function () { go(1); }; }
     var st = $('gcStage'), x0 = null, y0 = 0, sl = st.querySelector('.gc-slide');
+    if (!$('gcPrev')) st = document.createElement('div');      // the editor's picture: no swiping to another car
     st.onkeydown = function (e) { if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); } };
     st.addEventListener('pointerdown', function (e) { if (S.cars.length < 2) return; x0 = e.clientX; y0 = e.clientY; });
     st.addEventListener('pointermove', function (e) { if (x0 == null) return; var dx = e.clientX - x0; if (Math.abs(dx) > Math.abs(e.clientY - y0)) sl.style.transform = 'translateX(' + Math.max(-60, Math.min(60, dx * 0.5)) + 'px)'; });
@@ -377,11 +395,13 @@
   // a picture came in: put it in place (no redraw)
   window.addEventListener('carpic', function (e) {
     var c = car(); if (!c || e.detail !== c.id || !host) return;
-    var p = document.getElementById('gcPic'); if (p) p.innerHTML = picHtml(c);
+    var p = document.getElementById('gcPic'); if (p && p.classList.contains('gc-tip')) { draw(); return; } if (p) p.innerHTML = picHtml(c);
     var originalButton = document.getElementById('gcOriginal');
     if (originalButton && window.CarPics) originalButton.disabled = !CarPics.hasOverride(c);
     var s = document.getElementById('gcSub'); if (s) { s.innerHTML = subHtml(c); bindSub(); }
     var pp = document.getElementById('gPaints'); if (pp && editing) { pp.outerHTML = paintHtml(c); bindPaints(c); }
+    // a public photo came (or went): the tile's New photo button follows
+    var np = document.getElementById('gNewPic'); if (!editing && !!np !== publicPhoto(c)) draw();
   });
   /** The line under the picture: the doodle's color, or who took the photo (a Commons photo links to its page and license). */
   function subHtml(c) {
@@ -411,13 +431,13 @@
   }
   function bindPaints(c) {
     if (window.CarPics) CarPics.loadColors(c);        // the trim's factory colors: asked for only while you're here (needs a key)
-    host.querySelectorAll('#gPicMode [data-pm]').forEach(function (b) {
+    document.querySelectorAll('#gPicMode [data-pm]').forEach(function (b) {
       b.onclick = function () { c.picMode = b.dataset.pm === 'doodle' ? 'doodle' : ''; LG.info('car', 'Picture: ' + (c.picMode || 'photo')); save(); draw(); if (window.CarPics) CarPics.ensure(c); };
     });
-    host.querySelectorAll('#gPaints [data-paint]').forEach(function (b) {
+    document.querySelectorAll('#gPaints [data-paint]').forEach(function (b) {
       b.onclick = function () { c.paint = { name: b.dataset.paint, code: b.dataset.code || '', rgb: b.dataset.rgb }; LG.info('car', 'Color: ' + c.paint.name); save(); draw(); if (window.CarPics) CarPics.ensure(c); };
     });
-    var o = host.querySelector('#gPaints [data-orig]');
+    var o = document.querySelector('#gPaints [data-orig]');
     if (o) o.onclick = function () { if (c.paint) c.paint.code = ''; LG.info('car', 'Picture: as photographed'); save(); draw(); };
   }
   function editPanel(c) {
@@ -425,6 +445,7 @@
     var auto = c.typeAuto ? ' (from the EPA: ' + SP.TYPES[c.typeAuto].label.toLowerCase() + ')' : '';
     var h = '<div class="g-edit">';
     var custom=c.entryMode==='custom';
+    h += '<label class="nf wide"><span>Name<small>what Gasket calls this car · blank = ' + esc(c.year && c.model ? autoName(c) : 'year, make and model') + '</small></span><input type="text" id="gName" maxlength="40" placeholder="' + esc(c.year && c.model ? autoName(c) : 'e.g. My car') + '" value="' + esc(c.nick || (c.year && c.model ? '' : c.name || '')) + '"></label>';
     // one menu: the VIN first (worth the trouble: exact version, open recalls, factory tires; outlined in green until the
     // car has one), then year / make / model, which a VIN lookup fills in
     var recVin = !c.vin;
@@ -447,9 +468,9 @@
       '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
       '<label class="nf wide"><span>Model</span><input id="gCustomModel" type="text" value="'+esc(c.model||'')+'"></label>' +
       '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
-    if (!(c.year && c.model)) h += '<label class="nf wide"><span>Name</span><input type="text" id="gName" value="' + esc(c.name || '') + '"></label>';
     h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     h += paintHtml(c);
+    h += carousel(c, true);
     var tankFindable = k === 'gas' && !!tankKey(c);
     h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
       '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">' +
@@ -698,9 +719,48 @@
     });
   }
 
+  // ---------- the car's editor: a submenu with Discard changes / Save at the bottom ----------
+  var ed = null;     // {pg, body, close}
+  function drawEditor(c) {
+    if (!editing) { if (ed) { var e0 = ed; ed = null; e0.closing = true; e0.close(); } return; }
+    if (!ed || !ed.pg.isConnected) {
+      ed = null;
+      if (document.querySelector('.sub-page')) return;      // a page opened from it is up: the editor comes back when it closes
+      var e = {}, close = A.subPage('Edit your car', '', function (b) {
+        e.body = b; e.pg = b.closest('.sub-page'); e.pg.classList.add('car-edit');
+        var nav = document.createElement('div'); nav.className = 'tp-nav sub-nav';
+        nav.innerHTML = '<button class="btn tonal discard" id="gDiscard">Discard changes</button><button class="btn primary" id="gSave">Save</button>';
+        e.pg.appendChild(nav);
+        return function () {
+          if (ed === e) ed = null;
+          // another page opened over it (NHTSA's list, a picture): the editor comes back when that one closes
+          if (!e.closing && editing) { var mo = new MutationObserver(function () { if (!document.querySelector('.sub-page')) { mo.disconnect(); if (editing) draw(); } }); mo.observe(document.body, { childList: true }); }
+        };
+      });
+      e.close = close; ed = e;
+      var back = function () { if (editorOk(car())) saveEdit(car()); else discardEdit(car()); };
+      e.pg.querySelector('.sub-back').onclick = back;
+      window.__subClose = function () { if (ed === e && !e.closing) back(); else close(); };
+      // another subPage opening calls __subClose first: that must close this page, not save it
+      var sp = A.subPage; A.subPage = function () { if (ed === e && !e.closing) { A.subPage = sp; close(); } else A.subPage = sp; return sp.apply(this, arguments); };
+    }
+    settle(ed.body);
+    var sc = ed.body.scrollTop;
+    ed.body.innerHTML = editPanel(c);
+    ed.body.scrollTop = sc;
+    $('gSave').disabled = !editorOk(c);
+    if (A.qify) A.qify(ed.body);
+  }
+  function saveEdit(c) {
+    if (!editorOk(c)) { var n = $('gName'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
+    editSnap = null; editing = false; LG.info('car', 'Saved ' + shortName(c)); draw(); changed();
+  }
+  function discardEdit(c) {
+    A.confirmDiscard().then(function(ok){if(!ok||!editSnap||editSnap.id!==c.id)return;var snap=editSnap;if(snap.isNew){S.cars=S.cars.filter(function(x){return x.id!==c.id;});S.carId=S.cars.some(function(x){return x.id===snap.previous;})?snap.previous:S.cars.length?S.cars[0].id:'';}else{Object.keys(c).forEach(function(k){delete c[k];});Object.assign(c,JSON.parse(snap.before));}editSnap=null;editing=false;draw();changed();});
+  }
   function bind(c) {
     bindCarousel(c);
-    if (editing) bindPaints(c);
+    if (editing && ed) bindPaints(c);
     host.querySelectorAll('[data-car]').forEach(function (b) {
       b.onclick = function () {
         if (b.dataset.car === '+') {
@@ -713,9 +773,11 @@
     host.querySelectorAll('[data-rmcar]').forEach(function (b) {
       b.onclick = function (e) { e.stopPropagation(); var x = S.cars.filter(function (y) { return y.id === b.dataset.rmcar; })[0]; if (x) removeCar(x); };
     });
-    $('gEdit').onclick = function () { if(editing&&!editorOk(c))return;if(!editing)editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};else editSnap=null;editing = !editing; draw(); };
-    if($('gDiscard'))$('gDiscard').onclick=function(){A.confirmDiscard().then(function(ok){if(!ok||!editSnap||editSnap.id!==c.id)return;var snap=editSnap;if(snap.isNew){S.cars=S.cars.filter(function(x){return x.id!==c.id;});S.carId=S.cars.some(function(x){return x.id===snap.previous;})?snap.previous:S.cars.length?S.cars[0].id:'';}else{Object.keys(c).forEach(function(k){delete c[k];});Object.assign(c,JSON.parse(snap.before));}editSnap=null;editing=false;draw();changed();});};
-    if (editing) {
+    $('gEdit').onclick = function () { if (!editing) editSnap = { id: c.id, before: JSON.stringify(c), previous: S.carId }; editing = true; draw(); };
+    if ($('gNewPic')) $('gNewPic').onclick = function () { if (window.CarPics && CarPics.choose) CarPics.choose(c); };
+    if($('gDiscard'))$('gDiscard').onclick=function(){discardEdit(c);};
+    if ($('gSave')) $('gSave').onclick = function () { saveEdit(c); };
+    if (editing && ed) {
       if ($('gVinGo')) {
         $('gVinGo').onclick = function () { lookupVin(c, $('gVin').value); };
         $('gVinEye').onclick = function () {
@@ -724,12 +786,12 @@
         };
         $('gVin').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); lookupVin(c, this.value); } };
       }
-      if ($('gName')) $('gName').onchange = function () { c.name = this.value.trim(); draw(); save(); };
+      if ($('gName')) $('gName').onchange = function () { var v = this.value.trim(); c.nick = v; if (!(c.year && c.model)) c.name = v; if (!v) delete c.nick; draw(); changed(); };
       if($('gCatalog'))$('gCatalog').onclick=function(){openCatalog(c);};
       if($('gNhtsaTip'))$('gNhtsaTip').onclick=function(){c.entryMode='custom';draw();save();openCatalog(c);};
       if($('gBuildCustom'))$('gBuildCustom').onclick=function(){openCustom(c);};
-      host.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
-      if($('gName'))$('gName').oninput=function(){$('gEdit').disabled=!this.value.trim()&&!(c.year&&c.make&&c.model);};
+      document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
+      if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!this.value.trim()&&!(c.year&&c.make&&c.model);};
       ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
@@ -1155,7 +1217,7 @@
   var lastTripMi = 0;
   var drawingSpeed = false;
   function drawSpeed() {
-    if (!speedHost || drawingSpeed) return;
+    if (!speedHost || !speedHost.isConnected || drawingSpeed) return;
     drawingSpeed = true;
     try { drawSpeed0(); } finally { drawingSpeed = false; }
   }

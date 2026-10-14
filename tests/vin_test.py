@@ -4,6 +4,7 @@
 import os, sys, re, json, time
 sys.path.insert(0, os.path.dirname(__file__))
 from playwright.sync_api import sync_playwright
+import fastwait
 src = open(os.path.join(os.path.dirname(__file__), 'garage_test.py')).read()
 ns = {'__file__': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'garage_test.py'), '__name__': 'x'}
 exec(src[:src.index("with sync_playwright()")] if "with sync_playwright()" in src else '', ns)
@@ -11,7 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MOCKS = open(os.path.join(ROOT, 'tests', 'trip_mocks.js')).read(); EXTRA = ns['EXTRA']
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=os.environ.get('CHROME'), args=['--no-sandbox'])
-    pg = b.new_page(viewport={'width': 412, 'height': 915})
+    pg = b.new_page(viewport={'width': 412, 'height': 915}); fastwait.editor_guard(pg)
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto('file://' + os.path.join(ROOT, 'assets/web/index.html')); pg.wait_for_timeout(400)
     pg.click('#sDone'); pg.wait_for_timeout(300)

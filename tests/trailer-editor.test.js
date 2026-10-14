@@ -5,7 +5,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
 (async()=>{
   const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});
   try {for(const width of [320,448]) {
-    const p=await browser.newPage({viewport:{width,height:900},isMobile:true,hasTouch:true,deviceScaleFactor:2}),errors=[];
+    const p=require('./editor_guard')(await browser.newPage({viewport:{width,height:900},isMobile:true,hasTouch:true,deviceScaleFactor:2})),errors=[];
     p.on('pageerror',e=>errors.push(e.message));
     await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
     await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');
