@@ -41,6 +41,12 @@ Keep item numbers when discussing or changing status. Checked entries are done o
 
 31. [ ] **CITGO monthly special redemption and trip optimization.** Verify and improve the planner's treatment of Triple Tuesday and Five Cent Friday: each special is available once per month on its first eligible fill-up, subject to the user's redemption state. Manual monthly tracking already exists in Settings (`citgoUsed` / `citgoBonus`); station candidates are priced individually from that shared state. Ensure a proposed trip cannot count the same monthly special at multiple stops, and optimize stop choice, order and purchase quantities around the first eligible redemption. Later CITGO stops may still be worthwhile at ordinary rewards/prices, so do not impose a one-CITGO-per-trip limit. Handle arrival dates, month changes and already-redeemed specials. Planning/replanning must not record a real redemption; provide a clear user-confirmed way to record an actual fill-up and persist the appropriate month's state. Verify current program terms when implementing.
 
+### Onboarding and visual explanations
+
+32. [ ] **Onboarding experiences.** Design guided introductions for first-time setup and unfamiliar features, helping users understand what to enter and how to get value from the app.
+33. [ ] **More animated explanation menus.** Use short, focused animations or interactive demonstrations to explain concepts where they communicate more clearly than verbose text. Build on the existing animated tire explanations.
+34. [ ] **Visual help behind question marks.** Let applicable (?) controls open video, image or animation explanations when those are more effective than text. Choose the format for the topic rather than using media everywhere; retain a concise accessible text explanation.
+
 ## test — outstanding device and acceptance checks
 
 14. [ ] **Cash-price accuracy checks.** Verify explicitly labeled cash prices are distinguished from card prices and presented appropriately when comparing stations. Do not infer that an unlabeled price is a cash price.
