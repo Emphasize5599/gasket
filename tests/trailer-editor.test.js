@@ -106,10 +106,11 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.click('#ttLengthLock');await p.fill('#ttLength','3');await p.dispatchEvent('#ttLength','change');assert.match(await p.innerText('#ttGeometryNote'),/increased/);await p.click('#ttLengthLock');
     await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0];tr.axlePositions=[0,0,0];});
     await p.click('[data-tr-split="false"]');
-    await p.evaluate(()=>{window.__originalTrailerRead=__app.N.siteRead;window.__heldTrailerRead=null;__app.N.siteRead=(id,key,json)=>{const a=JSON.parse(json);if(key==='tirerack'&&a.step==='list'&&/width=395(?:%2f|\/)/i.test(a.url)){__heldTrailerRead=id;return;}__originalTrailerRead(id,key,json);};});
+    await p.evaluate(()=>{window.__originalTrailerRead=__app.N.siteRead;window.__heldTrailerRead=null;window.__heldTrailerCount=0;__app.N.siteRead=(id,key,json)=>{const a=JSON.parse(json);if(key==='tirerack'&&a.step==='list'&&/width=395(?:%2f|\/)/i.test(a.url)){__heldTrailerCount++;__heldTrailerRead=id;return;}__originalTrailerRead(id,key,json);};});
     await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');await p.waitForFunction(()=>__heldTrailerRead!=null);
     await p.fill('input[id$="_Size"]','405/95R24');await p.evaluate(()=>{window.__editingTrailerSize=document.activeElement;onNativeResult(__heldTrailerRead,{tires:[],empty:true});});await frame(p);
     assert.equal(await p.inputValue('input[id$="_Size"]'),'405/95R24','background tire catalog completion must preserve an uncommitted edit');assert.ok(await p.evaluate(()=>document.activeElement===__editingTrailerSize&&__editingTrailerSize.isConnected),'background reply must not blur/replace the edited field');
+    await p.dispatchEvent('input[id$="_Size"]','change');await frame(p);assert.equal(await p.evaluate(()=>__heldTrailerCount),1,'empty responses must not start an automatic redraw/refetch loop');
     await p.evaluate(()=>{__app.N.siteRead=__originalTrailerRead;});await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
     assert.ok(await p.evaluate(()=>document.querySelector('#ttSame').getBoundingClientRect().bottom<document.querySelector('.trailer-common .tz-pick').getBoundingClientRect().top),'size and same/different selector are above Brand');
     const grown=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners);return {length:tr.geometry.lengthFt,min:g.minLength,gaps:g.gaps,centers:g.centers,positions:tr.axlePositions};});
@@ -121,7 +122,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.click('[data-tr-split="true"]');assert.deepEqual(await p.locator('[data-tr-tire]').evaluateAll(es=>es.map(e=>e.dataset.trTire)),keys);
     assert.equal(await p.locator('.sub-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);
     // Background text swipes still scroll: only the drag handles lock touch action.
-    await p.locator('.sub-body').evaluate(e=>e.scrollTop=0);const bg=await p.locator('.trailer-form > p:not(#ttGeometryNote)').first().boundingBox();
+    await p.locator('.sub-body').evaluate(e=>e.scrollTop=0);await frame(p);const background=p.locator('.trailer-form > p:not(#ttGeometryNote):visible').first();await background.scrollIntoViewIfNeeded();const bg=await background.boundingBox();assert.ok(bg,'text swipe needs a visible background target');
     await touch('touchStart',bg.x+20,bg.y+bg.height/2);for(const dy of [-30,-60,-100]){await touch('touchMove',bg.x+20,bg.y+bg.height/2+dy);await frame(p);}await touch('touchEnd');
     await p.waitForFunction(()=>document.querySelector('.sub-body').scrollTop>30,undefined,{timeout:3000});
     const preserved=await p.evaluate(()=>JSON.stringify([Garage.car().tires.trailers[0].geometry,Garage.car().tires.corners]));await p.click('.sub-back');await p.click('[data-tr-unhook="trExample"]');assert.equal(await p.locator('.sub-page').count(),0);assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].hooked),false);assert.equal(await p.locator('#tzSaved').count(),1);assert.equal(await p.evaluate(()=>JSON.stringify([Garage.car().tires.trailers[0].geometry,Garage.car().tires.corners])),preserved);

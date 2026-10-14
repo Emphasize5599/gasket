@@ -1144,10 +1144,11 @@
     close = A.subPage('Saved trailers', '', function (b) { pg = b.closest('.sub-page'); fill(); return function () { draw(); onChange(); }; });
   }
   /** Tire Rack's tires in a size (for a trailer or one tire): kept for a month; -> items, or [] while it's looked up. */
-  var sizeBusy = {}, sizeMem = {};
+  var sizeBusy = {}, sizeMem = {}, sizeMiss = {};
   function sizeList(size, then) {
     size = normSize(size); if (!size) return [];
     if (sizeMem[size]) return sizeMem[size];
+    if(sizeMiss[size]&&Date.now()-sizeMiss[size]<RETRY_H*36e5)return [];
     var kv = A.KV, cacheKey = 'v' + CATALOG_VERSION + '|' + size, o = kv && kv.get('trlist', cacheKey, LIST_DAYS * 864e5);
     if (o && o.v && o.v.length) return (sizeMem[size] = o.v);
     if (!sizeBusy[size] && call && N.siteRead) {
@@ -1155,7 +1156,8 @@
       tireRead({ url: listUrl({}, size), step: 'list' }).then(function (r) {
         sizeBusy[size] = false; r = r || {};
         var items = catalogItems(r.tires || []);
-        if (items.length) { sizeMem[size] = items; if (kv && !r.partial) kv.put('trlist', cacheKey, items); }
+        if (items.length) { delete sizeMiss[size];sizeMem[size] = items; if (kv && !r.partial) kv.put('trlist', cacheKey, items); }
+        else sizeMiss[size]=Date.now();
         LG.info('car', 'Tire Rack: ' + items.length + ' tires in ' + size);
         if (then) then(); else if (host && host.isConnected) { draw(); if (subFill) subFill(); }
       });
