@@ -220,7 +220,7 @@
     var c = car(), U = units(c), k = kind(c);
     if(editing&&(!editSnap||editSnap.id!==c.id))editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};
     // the car's editor is its own submenu: the tile keeps the picture (its ids live in one place at a time)
-    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><span class="g-top-btns">' + (publicPhoto(c) ? '<button class="btn tonal sm g-newpic" id="gNewPic">' + REFRESH + 'New photo</button>' : '') + '<button class="btn tonal sm" id="gEdit">Edit</button></span></div>' + (editing ? '' : carousel(c));
+    var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><span class="g-top-btns">' + (publicPhoto(c) ? '<button class="btn tonal sm g-newpic" id="gNewPic">' + REFRESH + 'New photo</button>' : '') + '<button class="btn tonal sm" id="gEdit">Edit</button><button type="button" class="btn primary sm g-add" data-car="+">+ Add car</button></span></div>' + (editing ? '' : carousel(c));
     h += '</div>';
     h += '<div class="card spd" id="tSpeed"></div>';
     h += '<div class="card g-econ"><h3>' + U.econ + '</h3>';
@@ -358,8 +358,7 @@
       '<b class="gc-name">' + esc(shortName(c)) + '</b>' + '<small class="gc-sub" id="gcSub">' + sub + '</small>' +
       '</div></div>' +
       '<button type="button" class="gc-nav next" id="gcNext" aria-label="Next car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button></div>';
-    h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') +
-      '<button type="button" class="gc-add" data-car="+">+ Add car</button></div>';
+    if (many) h += '<div class="gc-dots">' + S.cars.map(function (x, j) { return '<button type="button" class="gc-dot' + (j === i ? ' on' : '') + '" data-car="' + esc(x.id) + '" aria-label="' + esc(shortName(x)) + '"></button>'; }).join('') + '</div>';
     slideIn = 0;
     return h;
   }

@@ -72,7 +72,7 @@ r = T.rotation({ lf: 7, rf: 7, lr: 7, rr: 6 }, 'rwd'); assert.equal(r.kind, 'eve
 r = T.rotation({ lf: 4, rf: 3, lr: 7, rr: 7 }, 'fwd');
 assert.equal(r.kind, 'replace'); assert.deepEqual(r.replace.sort(), ['lf', 'rf']); assert.ok(/instead of rotating them to the back/.test(r.notes[0]), 'FWD worn fronts: replace, not rotate');
 r = T.rotation({ lf: 7, rf: 7, lr: 3, rr: 6 }, 'rwd'); assert.deepEqual(r.replace.sort(), ['lr', 'rr'], 'replaced as an axle pair'); assert.ok(/New tires always go on the rear/.test(r.notes[0]));
-r = T.rotation({ lf: 9, rf: 6, lr: 8, rr: 8 }, 'awd'); assert.ok(r.notes.some(n => /alignment/.test(n)) && r.notes.some(n => /within about 2\/32/.test(n)));
+r = T.rotation({ lf: 9, rf: 6, lr: 8, rr: 8 }, 'awd'); assert.ok(r.notes.some(n => /alignment/.test(n)) && T.treadDiff({ lf: 9, rf: 6, lr: 8, rr: 8 }, 'awd').some(x => /within about 2\/32/.test(x.text)), 'the AWD limit moved to treadDiff');
 assert.equal(T.rotation({ lf: 8, rf: null, lr: 6, rr: 6 }, 'fwd'), null, 'all four needed');
 // fuel economy out of 10
 assert.equal(T.fuelScore({ type: 'Mud-Terrain' }).score, 1);
@@ -211,4 +211,26 @@ console.log('tire version matching ok');
   assert.equal(T.fillTrailerSizes(t,first,'first:a1lo',''),false);
   first.hooked=false;delete t.corners['first:a2lo'];T.fillTrailerSizes(t,first,'first:a1lo','205/75R15');assert.deepEqual(t.corners['first:a2lo'],{size:'205/75R15'});
   console.log('Size-only autofill remains scoped to one trailer and preserves existing answers');
+}
+{
+  // tread differences the drivetrain can't take; the fix points at the axle that just rolls along
+  const D = (lf, rf, lr, rr) => ({ lf, rf, lr, rr });
+  assert.deepEqual(T.treadDiff(D(8, 8, 7, 7), 'awd'), [], 'AWD within 2/32: fine');
+  let w = T.treadDiff(D(11, 8, 6, 6), 'awd'); assert.equal(w.length, 1); assert.equal(w[0].level, 'warn'); assert.match(w[0].text, /5\/32 in/); assert.match(w[0].fix, /replace all four|shaved/);
+  assert.equal(T.treadDiff(D(9, 8, 6, 6), 'awd')[0].level, 'info', '3/32 over the 2/32 limit: a note; well past it: a warning');
+  assert.deepEqual(T.treadDiff(D(9, 8, 6, 6), 'aawd'), [], 'on-demand AWD takes about 3/32');
+  w = T.treadDiff(D(9, 4, 7, 7), 'fwd'); assert.equal(w.length, 1); assert.match(w[0].text, /front tires, the ones that drive/); assert.match(w[0].fix, /on the rear, which just rolls along/);
+  assert.deepEqual(T.treadDiff(D(8, 8, 9, 3), 'fwd'), [], 'FWD: the rear just rolls along');
+  w = T.treadDiff(D(8, 8, 9, 3), 'rwd'); assert.match(w[0].fix, /on the front, which just rolls along/);
+  w = T.treadDiff(D(10, 10, 4, 4), '4wd'); assert.match(w[0].text, /transfer case/); assert.match(w[0].fix, /front axle just rolls along/);
+  assert.match(T.treadDiff(D(10, 10, 4, 4), '')[0].text, /Add your drive/);
+  assert.deepEqual(T.treadDiff(null, 'awd'), []);
+  // a fuel rating from every tire: mixed types count each for its share
+  const touring = { type: 'Standard Touring All-Season', brand: 'X', model: 'Y' }, hwy = { type: 'Highway All-Season', brand: 'X', model: 'Z' };
+  const a = T.fuelScore(touring).score, b = T.fuelScore(hwy).score;
+  let f = T.fuelOf([touring, touring, hwy, hwy]); assert.equal(f.score, Math.round((a + b) / 2)); assert.equal(f.mixed, true); assert.deepEqual(f.kinds, { 'Standard Touring All-Season': 2, 'Highway All-Season': 2 });
+  f = T.fuelOf([touring, touring, touring, touring]); assert.equal(f.score, a); assert.equal(f.mixed, false);
+  f = T.fuelOf([touring, {}, {}, {}]); assert.equal(f.n, 1); assert.equal(f.of, 4);
+  assert.equal(T.fuelOf([{}, {}]), null);
+  console.log('Tread differences by drivetrain and a mixed-tire fuel rating');
 }

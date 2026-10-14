@@ -101,7 +101,7 @@ with sync_playwright() as p:
         assert pg.input_value('#tzTw') == '680' and 'Wear rating and warranty from Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzWarranty') == '65000'
         line = ft(pg, '#gTiresLine'); print('  summary line:', line)
         assert line.startswith('Standard Touring All-Season · Fuel 10/10 · UTQG 680 A B'), 'the line under Tires: type, fuel /10, wear rating'
-        assert 'Fuel economy' in ft(pg, '.sub-page') and 'a fuel-saving line' in ft(pg, '.tz-fuel')
+        assert 'Fuel economy' not in ft(pg, '.sub-page') and pg.locator('.sub-page .tz-fuel, .sub-page .tz-ft').count() == 0, 'the fuel rating lives on the Tires tile now'
         pg.screenshot(path=f'{OUT}/{name}-t0-details.png')
         o = pg.evaluate(OVER); pg.evaluate(BIG.replace('#gTires *', '.sub-page *')); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'details page sideways: ' + str(o)
@@ -174,18 +174,27 @@ with sync_playwright() as p:
         # ---- tires that aren't all the same: each corner, where they should go (front-wheel drive); in the car's tire details ----
         car_sub(pg)
         assert pg.locator('.sub-page .tz-car-visual .tz-w').count() == 4, 'the car on its own, in its own page'
-        order = pg.evaluate("[...document.querySelectorAll('.sub-page #tzSize, .sub-page #tzSame, .sub-page #tzMode, .sub-page #tzBrand, .sub-page #tzBrandT, .sub-page .tz-fuel')].map(e => e.id || e.className)")
-        assert order[:3] == ['tzSize', 'tzSame', 'tzMode'] and order[-1] == 'tz-fuel', ('size, all the same or not, then the tread question; the catalog after', order)
+        order = pg.evaluate("[...document.querySelectorAll('.sub-page #tzSize, .sub-page #tzSame, .sub-page #tzMode, .sub-page #tzBrand, .sub-page #tzBrandT')].map(e => e.id || e.className)")
+        assert order[:3] == ['tzSize', 'tzSame', 'tzMode'] and order[-1] in ('tzBrand', 'tzBrandT'), ('size, all the same or not, then the tread question; the catalog after', order)
         assert pg.locator('.sub-page #tzSame .qi').count() == 2 and '5,000 miles apart' in pg.evaluate("decodeURIComponent(document.querySelectorAll('#tzSame .qi')[1].dataset.q)")
         pg.click('[data-same="0"]'); pg.wait_for_timeout(200)
         pg.click('#tzBy [data-by="depth"]'); pg.wait_for_timeout(200)
         for k, d in (('lf', '8'), ('rf', '8'), ('lr', '6'), ('rr', '6')): pg.select_option('[data-corner="%s"]' % k, d); pg.wait_for_timeout(120)
         assert pg.locator('.sub-page #tzMode, .sub-page #tzWarranty, .sub-page #tzBrand, .sub-page #tzBrandT, .sub-page #tzTw').count() == 0, 'each tire: no shared tread or catalog boxes'
-        assert pg.locator('.sub-page .tz-fuel').count() == 1 and 'Tire' not in [x.strip() for x in pg.evaluate("[...document.querySelectorAll('.tz-car-tires .tz-c > span')].map(s => s.textContent)")], 'no "Tire" label over each box'
+        assert pg.locator('.sub-page .tz-fuel').count() == 0 and 'Tire' not in [x.strip() for x in pg.evaluate("[...document.querySelectorAll('.tz-car-tires .tz-c > span')].map(s => s.textContent)")], 'no "Tire" label over each box'
         rot = ft(pg, '.tz-rot'); print('  rotation:', rot.replace('\n', ' | '))
         assert 'Move these tires' in rot and 'Driver front → Driver rear' in rot and 'two best tires on the rear' in rot
         main(pg)
         assert '6/32 in left' in ft(pg, '.tz-out') and 'Driver rear' in ft(pg, '.tz-out'), 'the shallowest tire counts'
+        assert pg.evaluate("(() => { const o = document.querySelector('#gTiresIn .tz-out'), w = document.querySelector('#gTiresIn [data-why=\"tread\"]'), f = document.querySelector('#gTiresIn .tz-fuel-tiles'); return !!(o.compareDocumentPosition(w) & 4) && !!(w.compareDocumentPosition(f) & 4); })()"), 'tread left, then Why tread matters, then Fuel rating'
+        assert pg.locator('#gTiresIn .tz-ft').count() == 1 and '10/10' in ft(pg, '#gTiresIn .tz-ft[data-fuel="car"]')
+        # one tire of another kind (from its own page): the car's rating counts it for its share
+        pg.evaluate("() => { const t = window.Garage.car().tires; t.corners.lr = Object.assign({}, t.corners.lr, { type: 'Mud-Terrain', brand: 'Ex', model: 'Mud' }); window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        fr = ft(pg, '#gTiresIn .tz-ft[data-fuel="car"]'); print('  mixed fuel:', fr.replace('\n', ' | '))
+        assert '8/10' in fr and 'Mixed: 3 Standard Touring All-Season, 1 Mud-Terrain' in fr and 'Fuel ' in ft(pg, '#gTiresLine') and '8/10' in ft(pg, '#gTiresLine')
+        pg.evaluate("() => { const t = window.Garage.car().tires; ['type', 'brand', 'model'].forEach(k => delete t.corners.lr[k]); window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
         assert pg.locator('#gTiresIn #tzSame, #gTiresIn [data-corner]').count() == 0, "the car's tire controls are only in its submenu"
         car_sub(pg)
         pg.select_option('[data-corner="lf"]', '4'); pg.select_option('[data-corner="rf"]', '3'); pg.select_option('[data-corner="lr"]', '7'); pg.select_option('[data-corner="rr"]', '7'); pg.wait_for_timeout(200)
@@ -206,6 +215,7 @@ with sync_playwright() as p:
         pg.click('.sub-back'); pg.wait_for_timeout(200)
         assert 'Car tire details' in ft(pg, '#tzDet') and pg.locator('#tzTr_%s' % tid).count() == 1 and '2 axles × 4 tires' in ft(pg, '#tzTr_%s' % tid), 'Back keeps the changes'
         assert pg.locator('#tzSaved').count() == 0, 'nothing unhooked: no Saved trailers'
+        assert pg.locator('#gTiresIn .tz-ft').count() == 2 and ft(pg, '#gTiresIn .tz-ft[data-fuel="car"]').startswith('Car') and 'Trailer' in ft(pg, '#gTiresIn .tz-ft[data-fuel="%s"]' % tid), 'a fuel tile for each hooked-up trailer'
         assert pg.locator('.tz-overview .tz-w').count() == 12 and pg.locator('#gTiresIn [data-corner], #gTiresIn [data-tr-tire]').count() == 0, 'the hooked-up picture on the tile; tires in the submenus'
         assert pg.locator('.tz-overview .tz-trn').count() == 0 and 'Trailer' not in pg.evaluate("document.querySelector('.tz-overview').textContent"), 'no trailer label on the picture'
         # its tires aren't filled in: the row says so, the Garage won't go on; Advice warns

@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.148 - 2026-10-14 (keyless test branch only)
+- Tires: a Fuel rating section with a tile for the car and each hooked-up trailer, summing up every tire (mixed tire types count for their share); the overall rating shows under Tires.
+- Tread-difference warnings by drivetrain (AWD, on-demand AWD, full- and part-time 4WD, front- and rear-wheel drive), suggesting the axle that just rolls along where there is one.
+- "Why tread matters" sits under the tread answer; the car tire details page ends with the tires themselves.
+- "+ Add car" is a blue button beside Edit; car photos keep their own shape instead of being cut off.
+- Bug fixes.
+
 ## 0.0.147 - 2026-10-14 (keyless test branch only)
 - Tire details: choose "My tires are all the same" or "My tires aren't all the same" under the size, each with an explanation; the tread question follows it, and different tires go straight to each tire.
 - Edit your car in its own page with Discard changes and Save at the bottom; the name comes first, then the VIN through the picture style, then the picture.

@@ -207,7 +207,6 @@
     // uneven wear across an axle points at the alignment, but only between tires that went on together
     if (Math.abs(d.lf - d.rf) >= 2) notes.push('The front tires differ by ' + Math.abs(d.lf - d.rf) + '/32 in side to side. If both went on around the same time, have the alignment checked.');
     if (Math.abs(d.lr - d.rr) >= 2) notes.push('The rear tires differ by ' + Math.abs(d.lr - d.rr) + '/32 in side to side. If both went on around the same time, have the alignment checked.');
-    if ((drive === 'awd' || drive === '4wd') && max - min > 2) notes.push('All- and four-wheel drive need all four tires within about 2/32 in of each other, or the drivetrain strains. When you replace, replace all four (or have a new tire shaved to match).');
     var worn = keys.filter(function (k) { return d[k] <= 4; }).sort(function (a, b) { return d[a] - d[b]; });
     if (worn.length) {
       // the worn ones are replaced (as a pair on the same axle); the new ones go on the rear
@@ -262,6 +261,56 @@
     if (w && +w[1] >= 255) { s -= 0.5; why.push('a wide size'); } else if (w && +w[1] <= 205) { s += 0.5; why.push('a narrow size'); }
     if (nudge) s += Math.max(-1, Math.min(1, nudge));
     return { score: Math.max(1, Math.min(10, Math.round(s))), base: b, why: why };
+  }
+  /**
+   * Tread differences the drivetrain can't take (depths in 32nds by corner; drive as in About this car). A deeper tire is
+   * a bigger one: it turns slower, so a differential or coupling between two tires of different depths slips all the
+   * time, and heats and wears. How much each layout takes (tire makers' and repair guides' rule of thumb; the owner's
+   * manual has the real number): all-wheel and full-time four-wheel drive about 2/32 in across all four (on-demand AWD about
+   * 3/32 in), part-time 4WD about 4/32 in front to rear when it's engaged, and a two-wheel-drive car about 4/32 in side
+   * to side on the axle that drives it (the other axle just rolls along, and takes differences).
+   * -> [{ level: 'warn' | 'info', title, text, fix }]
+   */
+  var TD_LIMIT = { awd: 2, '4wdf': 2, aawd: 3, '4wd': 4, fwd: 4, rwd: 4 };
+  function treadDiff(d, drive) {
+    if (!d || CORNERS.some(function (x) { return !(d[x.k] > 0); })) return [];
+    drive = String(drive || '').toLowerCase();
+    var keys = CORNERS.map(function (x) { return x.k; }), all = keys.map(function (k) { return d[k]; }), out = [];
+    var spread = Math.max.apply(null, all) - Math.min.apply(null, all), lim = TD_LIMIT[drive];
+    var side = function (a, b) { return Math.abs(d[a] - d[b]); }, axleAvg = function (a, b) { return (d[a] + d[b]) / 2; };
+    var f32 = function (n) { return (Math.round(n * 10) / 10) + '/32 in'; };
+    if (drive === 'awd' || drive === '4wdf' || drive === 'aawd') {
+      if (spread > lim) out.push({ level: spread > lim + 2 ? 'warn' : 'info', title: 'Tires: too different for ' + (drive === '4wdf' ? 'four' : 'all') + '-wheel drive',
+        text: 'Your tires differ by up to ' + f32(spread) + ' of tread. ' + (drive === 'aawd' ? 'All-wheel drive that kicks in when needed' : drive === '4wdf' ? 'Full-time four-wheel drive' : 'All-wheel drive') +
+          ' drives every wheel, so a center ' + (drive === 'aawd' ? 'coupling' : 'differential') + ' has to make up the difference all the time: it heats up and wears, and repairs are expensive. Most makers want all four within about ' + lim + '/32 in (check your owner\'s manual).',
+        fix: 'No axle here just rolls along, so moving them around doesn\'t help: replace all four together, or have a new tire shaved to match the others.' });
+    } else if (drive === '4wd') {
+      var fr = Math.abs(axleAvg('lf', 'rf') - axleAvg('lr', 'rr'));
+      if (fr > lim || side('lr', 'rr') > lim) out.push({ level: 'info', title: 'Tires: mismatched for four-wheel drive',
+        text: (fr > lim ? 'Your front and rear tires differ by about ' + f32(fr) + ' of tread. ' : 'Your rear tires differ by ' + f32(side('lr', 'rr')) + ' side to side. ') +
+          'In four-wheel drive the transfer case locks the axles together, so mismatched tires bind it and can damage it; keep them within about ' + lim + '/32 in (check your owner\'s manual), and never use 4WD on dry pavement.',
+        fix: 'In two-wheel drive the front axle just rolls along: put the tires that don\'t match on the front, and keep the rear pair matched.' });
+    } else if (drive === 'fwd' || drive === 'rwd') {
+      var dr = drive === 'fwd' ? ['lf', 'rf'] : ['lr', 'rr'], other = drive === 'fwd' ? 'rear' : 'front', diff = side(dr[0], dr[1]);
+      if (diff > lim) out.push({ level: 'info', title: 'Tires: drive tires don\'t match',
+        text: 'The ' + (drive === 'fwd' ? 'front' : 'rear') + ' tires, the ones that drive the car, differ by ' + f32(diff) + ' side to side. Their differential then works all the time, which wears it (a limited-slip one even faster). Keep them within about ' + lim + '/32 in.',
+        fix: 'Put the tires that don\'t match on the ' + other + ', which just rolls along, and a matched pair on the ' + (drive === 'fwd' ? 'front' : 'rear') + (drive === 'fwd' ? ' (the deeper pair still belongs on the rear)' : '') + '.' });
+    } else if (spread > 4) out.push({ level: 'info', title: 'Tires: very different tread',
+      text: 'Your tires differ by up to ' + f32(spread) + '. Some drivetrains (all-wheel drive especially) are damaged by that. Add your drive under About this car to see what yours takes.', fix: '' });
+    return out;
+  }
+  /**
+   * One fuel rating for a car or a trailer from each of its tires (a tire's own type / brand / model / size from its page,
+   * else the car's or trailer's): mixed tires count each for its share. specs: [{type, brand, model, size, utqg}] (nudge:
+   * the rating model's point for that tire) -> { score, n, kinds: {type: count}, mixed, why } or null.
+   */
+  function fuelOf(specs) {
+    var got = specs.map(function (x) { return fuelScore(x, x && x.nudge); }).filter(Boolean);
+    if (!got.length) return null;
+    var avg = got.reduce(function (a, f) { return a + f.score; }, 0) / got.length, kinds = {};
+    specs.forEach(function (x) { if (x && (x.type || x.model)) { var k = x.type || 'Other'; kinds[k] = (kinds[k] || 0) + 1; } });
+    var mixed = Object.keys(kinds).length > 1 || got.some(function (f) { return f.score !== got[0].score; });
+    return { score: Math.max(1, Math.min(10, Math.round(avg))), avg: avg, n: got.length, of: specs.length, kinds: kinds, mixed: mixed, why: mixed ? [] : got[0].why };
   }
   // ---------- Tire Rack's names for a car ----------
   // Tire Rack files a car under its own model name (often with the drive or body in it: "Sienna FWD", "Mustang GT
@@ -449,7 +498,7 @@
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
   var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
-    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
+    CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
   function spareLocation(text){var inside=false,under=false;String(text||'').replace(/\s+/g,' ').trim().split(/[.!?;]+/).forEach(function(s){
@@ -717,6 +766,24 @@
     });
   }
 
+  /** What one tire is (its own lookup from its page, else its car's or trailer's details), for its fuel rating. */
+  function specAt(t, p) {
+    var C = t.corners || {}, x = C[p.k] || {}, u = p.unit || {}, own = !!(x.type || x.model);
+    var sp = own ? { type: x.type || u.type, brand: x.brand, model: x.model, size: x.size || u.size, utqg: x.utqg || u.utqg } : { type: u.type, brand: u.brand, model: u.model, size: x.size || u.size, utqg: u.utqg };
+    if (u.fuelNudge && u.fuelNudge.key === fuelKey(sp)) sp.nudge = u.fuelNudge.v;
+    return sp;
+  }
+  /** The fuel rating of the car's tires (id 'car'), a trailer's (its id), or the whole setup (null: car + hooked trailers). */
+  function fuelFor(t, id) {
+    return fuelOf(positions(t).filter(function (p) { return id == null ? true : id === 'car' ? !p.trailer : p.trailer === id; }).map(function (p) { return specAt(t, p); }));
+  }
+  function fuelTiles(c, t) {
+    return [{ id: 'car', name: hooked(t).length ? 'Car' : 'Your tires', f: fuelFor(t, 'car') }].concat(hooked(t).map(function (tr) { return { id: tr.id, name: tr.name || 'Trailer', f: fuelFor(t, tr.id) }; }));
+  }
+  function fuelWhy(f) {
+    if (!f.mixed) return f.why.join(', ');
+    return 'Mixed: ' + Object.keys(f.kinds).map(function (k) { return f.kinds[k] + ' ' + k; }).join(', ') + (f.n < f.of ? ' (' + (f.of - f.n) + ' not rated)' : '');
+  }
   // ---------- page ----------
   function render(el, nativeCall, changed) { host = el; call = nativeCall || call; onChange = changed || onChange; var c = G().car(); lookup(c); spareLookup(c); draw(); }
   function summary(c) { var d = document.createElement('div'); d.innerHTML = summaryHtml(c); return d.textContent; }
@@ -724,7 +791,7 @@
   function summaryHtml(c) {
     var t = tires(c), bits = [], g = function (txt, f) { return f == null ? esc(txt) : '<b class="gr" style="color:' + hue(f) + '">' + esc(txt) + '</b>'; };
     if (t.type) bits.push(esc(t.type));
-    var f = fuel(t); if (f) bits.push('Fuel ' + g(f.score + '/10', (f.score - 1) / 9));
+    var f = fuelFor(t, null); if (f) bits.push('Fuel ' + g(f.score + '/10', (f.score - 1) / 9));
     var u = t.utqg || {};
     if (u.tw || u.trac || u.temp) bits.push('UTQG ' + [u.tw ? g(String(u.tw), twGood(u.tw)) : '', u.trac ? g(u.trac, tracGood(u.trac)) : '', u.temp ? g(u.temp, tempGood(u.temp)) : ''].filter(Boolean).join(' '));
     var e = estimate(t); if (e) bits.push(g((e.measured ? '' : '~') + e.depth + '/32 in left', depthGood(e.depth)));if(e&&!e.measured&&generalized(t))bits.push('<span class="tread-general">Generalized estimate</span>');
@@ -791,6 +858,7 @@
         (rot.moves.length ? '<ul>' + rot.moves.map(function (m) { return '<li>' + esc(cname(m.from)) + ' → ' + esc(cname(m.to)) + ' <small>(' + cd[m.from] + '/32 in)</small></li>'; }).join('') + '</ul>' : '') +
         rot.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + (!(c.info && c.info.drive) ? '<p class="tz-xnote">Add your drive (front-, rear- or all-wheel) under About this car for advice that fits it.</p>' : '') + '</div>';
     } else if (!miss.length) h += '<div class="lead small keep">Fill in all four corners and Gasket says which tires should go where.</div>';
+    treadDiff(corners(t), c.info && c.info.drive).forEach(function (x) { h += '<div class="tz-diff ' + x.level + '"><b>' + esc(x.title) + '</b><p>' + esc(x.text) + '</p>' + (x.fix ? '<p class="tz-fix">' + esc(x.fix) + '</p>' : '') + '</div>'; });
     h += whyRow('back', 'Why the better tires go on the back', 'Understeer vs oversteer on a wet curve');
     return h;
   }
@@ -815,12 +883,19 @@
     var r=t.tread,C=t.corners||{},e=estimate(t),st=e?status(e.depth):null;
     h += '<div class="sub-h tz-h">Tread left</div>';
     if(e&&!e.measured&&generalized(t))h+='<p class="tread-general">⚠ This tread estimate is extremely generalized. Select the tire type, brand and model, or enter its mileage warranty. Measure the tread to know what is actually left.</p>';
-    h += whyRow('tread', 'Why tread matters', 'How far new and worn tires take to stop in the rain');
     if (e && !(C.split && missing(t).length)) {
       var word = { good: 'Plenty left.', ok: 'Plan new tires: wet and snow grip start to fade at 4/32 in.', low: 'Replace them soon.', worn: 'At the legal limit: replace them now.' }[st];
       h += '<div class="tz-out ' + st + '"><b>' + (e.measured ? '' : 'About ') + e.depth + '/32 in left' + (e.corner ? ' <small class="tz-on">· ' + esc(cname(e.corner)) + '</small>' : '') + '</b><small>' + word +
         (e.measured ? '' : e.corner ? ' Estimated from each tire\'s miles, warranty and rotation. A coin test tells you for sure.' : ' Estimated from ' + Number(r.miles).toLocaleString() + ' miles and ' + (+t.warrantyMi > 0 ? 'the ' + (t.warrantyMi / 1000) + ',000-mile warranty' : t.utqg && t.utqg.tw ? 'the treadwear rating' : 'a typical tire life') + (r.rotated && r.rotated !== 'yes' ? ', with uneven wear from skipped rotations' : '') + '. A coin test tells you for sure.') + '</small></div>';
     }
+    var td = treadDiff(corners(t), c.info && c.info.drive);
+    td.forEach(function (x) { h += '<div class="tz-diff ' + x.level + '"><b>' + esc(x.title) + '</b><p>' + esc(x.text) + '</p>' + (x.fix ? '<p class="tz-fix">' + esc(x.fix) + '</p>' : '') + '</div>'; });
+    h += whyRow('tread', 'Why tread matters', 'How far new and worn tires take to stop in the rain');
+    // fuel rating: the car's tires, and each hooked-up trailer's, each summed up from every tire on it
+    var fr = fuelTiles(c, t);
+    if (fr.length) h += '<div class="sub-h tz-h">Fuel rating' + q(Q.fuel) + '</div><div class="tz-fuel-tiles">' + fr.map(function (x) {
+      return '<div class="tz-ft" data-fuel="' + esc(x.id) + '"><span>' + esc(x.name) + '</span>' + (x.f ? '<b class="gr" style="color:' + hue((x.f.score - 1) / 9) + '">' + x.f.score + '/10</b><small>' + esc(fuelWhy(x.f)) + '</small>' : '<b class="tz-ft-none">—</b><small>Pick its tire type, brand and model to rate it.</small>') + '</div>';
+    }).join('') + '</div>';
     // the spare
     var sp = spare(t), kind = sp.kind, guess = sp.lookup && sp.lookup.guess;
     h += '<div class="sub-h tz-h">Spare tire</div>';
@@ -921,8 +996,6 @@
       h += '<div class="nf wide"><span>Wear rating' + q(Q.utqg) + '</span>' + utqgHtml(t.utqg, 'tz') + (t.utqgSrc === 'tirerack' ? '<div class="lead small keep">Wear rating and warranty from Tire Rack.</div>' : '') + '</div>';
       h += '<label class="nf wide"><span>Maker\'s mileage warranty' + q(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="tzWarranty" placeholder="e.g. 65000" value="' + esc(+t.warrantyMi > 0 ? t.warrantyMi : '') + '"></label>';
     } else h += carEach(c, t);
-    var fs = fuel(t);
-    if (fs) h += '<div class="tz-fuel"><span>Fuel economy' + q(Q.fuel) + '</span><b class="gr" style="color:' + hue((fs.score - 1) / 9) + '">' + fs.score + '/10</b><small>' + esc(fs.why.join(', ')) + '</small></div>';
     return h;
   }
   /** A row that opens a submenu: title, one line under it, and an arrow (empty: outlined, nothing filled in yet). */
@@ -1661,6 +1734,7 @@
     if (miss.length) out.push({ level: 'warn', title: 'Your tires could be unsafe', text: miss.length + ' of your tires ' + (miss.length === 1 ? 'is' : 'are') + ' missing details in Garage → Tires, so Gasket can\'t tell whether one of them is worn out. Fill them in, or switch back to "all the same".' });
     var rot = rotation(corners(t), c && c.info && c.info.drive);
     if (rot && rot.kind !== 'even') out.push({ level: rot.kind === 'replace' ? 'warn' : 'info', title: rot.kind === 'replace' ? 'Tires: replace before rotating' : 'Tires: better ones on the rear', text: rot.notes[0] + (rot.moves.length ? ' ' + rot.moves.map(function (m) { return cname(m.from) + ' → ' + cname(m.to).toLowerCase(); }).join('; ') + '.' : '') });
+    treadDiff(corners(t), c && c.info && c.info.drive).forEach(function (x) { out.push({ level: x.level, title: x.title, text: x.text + (x.fix ? ' ' + x.fix : '') }); });
     if (t.tread && t.tread.mode !== 'measure' && !(t.corners && t.corners.split) && (t.tread.rotated === 'no' || t.tread.rotated === 'sometimes'))
       out.push({ level: 'info', title: 'Rotate your tires', text: 'Moving them to different corners every 5,000 to 7,500 miles makes them wear evenly and last longer.' });
     if (t.utqg && (t.utqg.trac === 'B' || t.utqg.trac === 'C')) out.push({ level: 'info', title: 'Wet roads', text: 'Your tires\' traction grade is ' + t.utqg.trac + ', below the A most tires have. Leave extra room to stop in the rain.' });

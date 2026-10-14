@@ -1378,6 +1378,17 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .tz-rot { border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--surface-2); border-left: 4px solid var(--save); }
 .tz-rot.move { border-left-color: var(--accent); } .tz-rot.replace { border-left-color: var(--danger); background: var(--danger-bg); }
 .tz-rot b { display: block; font-size: 15px; }
+.tz-diff { border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--surface-2); border-left: 4px solid var(--warn); }
+.tz-diff.warn { border-left-color: var(--danger); background: var(--danger-bg); }
+.tz-diff b { display: block; font-size: 15px; }
+.tz-diff p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.4; }
+.tz-diff .tz-fix { font-weight: 600; }
+/* fuel rating: a tile for the car's tires and one for each hooked-up trailer's */
+.tz-fuel-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.tz-ft { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.tz-ft > span { font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.tz-ft > b { font-size: 22px; line-height: 1.2; }
+.tz-ft > small { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; overflow-wrap: anywhere; }
 .tz-rot ul { margin: 6px 0 2px; padding-left: 18px; font-size: 14px; }
 .tz-rot ul small { color: var(--ink-2); }
 .tz-rot p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.4; }
@@ -1611,6 +1622,9 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 @keyframes gcInR { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes gcInL { from { transform: translateX(-40px); opacity: 0; } to { transform: none; opacity: 1; } }
 .gc-pic { position: relative; width: 100%; min-width: 0; aspect-ratio: 4 / 3; max-height: 220px; display: grid; place-items: center; border-radius: 22px; overflow: hidden; }
+/* a photo: the frame takes the photo's own shape (a tall one isn't cut off at the bottom) */
+.gc-pic:has(> img) { aspect-ratio: auto; max-height: none; }
+.gc-pic > img { max-height: 320px; width: auto; max-width: 100%; }
 .gc-pic img { width: 100%; height: auto; max-height: 100%; object-fit: contain; border-radius: 22px; -webkit-user-drag: none; user-select: none; pointer-events: none; }
 .gc-pic .gc-draw { width: 82%; height: auto; }
 .gc-ld { position: absolute; left: 8%; right: 8%; bottom: 6px; }
