@@ -98,7 +98,10 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.click('[data-tr-split="false"]');await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
     const grown=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners);return {length:tr.geometry.lengthFt,min:g.minLength,gaps:g.gaps,centers:g.centers,positions:tr.axlePositions};});
     assert.ok(grown.length>=grown.min-1e-8&&grown.length>12);for(let i=1;i<3;i++)assert.ok(grown.centers[i]-grown.centers[i-1]>=grown.gaps[i]-1e-8);
-    const ratio=await p.locator('[data-wheel]').first().evaluate(e=>+e.getAttribute('width')/+e.getAttribute('height'));assert.ok(Math.abs(ratio-(395/(24*25.4+2*395*.95)))<1e-8);
+    await frame(p);
+    const wheel=await p.locator('[data-wheel]').first().evaluate(e=>({width:+e.getAttribute('width'),height:+e.getAttribute('height')})),ratio=wheel.width/wheel.height;
+    const drawn=await p.evaluate(()=>({size:Garage.car().tires.trailers[0].size,split:Garage.car().tires.trailers[0].split}));
+    assert.ok(Math.abs(ratio-(395/(24*25.4+2*395*.95)))<1e-6,JSON.stringify({wheel,ratio,drawn}));
     await p.click('[data-tr-split="true"]');assert.deepEqual(await p.locator('[data-tr-tire]').evaluateAll(es=>es.map(e=>e.dataset.trTire)),keys);
     assert.equal(await p.locator('.sub-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);
     // Background text swipes still scroll: only the drag handles lock touch action.
