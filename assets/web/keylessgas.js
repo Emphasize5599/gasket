@@ -10,6 +10,22 @@
     return {lat:lat,lng:lng,radius:radius,bounds:[lat-dy,lng-dx,lat+dy,lng+dx]};
   }
   function osmUrl(a){return 'https://overpass-api.de/api/interpreter?data='+encodeURIComponent('[out:json][timeout:20];nwr["amenity"="fuel"]('+a.bounds.map(function(n){return n.toFixed(5);}).join(',')+');out center tags;');}
+  function mapAreas(b,P){
+    if(!b||b.length!==4||!b.every(Number.isFinite)||b[0]>b[2]||b[1]>b[3]||b[0]<-85||b[2]>85||b[1]<-180||b[3]>180)throw new Error('Zoom in to a map area within supported coordinates (no date-line crossing). No search was started.');
+    var rows=Math.max(1,Math.ceil((b[2]-b[0])*69/6)),out=[],lat=(b[0]+b[2])/2,lng=(b[1]+b[3])/2;
+    // Midpoints of six-mile cells cover the entire rectangle, including corners
+    // and wide landscape views. Eight-mile readers overlap; no centre-only cap.
+    for(var y=0;y<rows;y++){
+      var south=b[0]+(b[2]-b[0])*y/rows,north=b[0]+(b[2]-b[0])*(y+1)/rows;
+      var nearest=south<=0&&north>=0?0:Math.min(Math.abs(south),Math.abs(north));
+      var cols=Math.max(1,Math.ceil((b[3]-b[1])*69.17*Math.cos(nearest*Math.PI/180)/6));
+      // Refuse an unsafe continent-scale plan explicitly, never scan a subset.
+      if(out.length+cols>10000||rows>10000)throw new Error('This view needs over 10,000 search areas. Zoom in to scan the entire visible map safely. No search was started.');
+      for(var x=0;x<cols;x++)out.push(area((south+north)/2,b[1]+(b[3]-b[1])*(x+0.5)/cols,8));
+    }
+    out.sort(function(a,c){return P.haversineMi(lat,lng,a.lat,a.lng)-P.haversineMi(lat,lng,c.lat,c.lng);});
+    return out;
+  }
   function webUrl(a){return 'https://www.google.com/maps/search/gas+stations/@'+a.lat.toFixed(5)+','+a.lng.toFixed(5)+',13z?hl=en';}
   function contains(s,a,P){return P.haversineMi(a.lat,a.lng,s.lat,s.lng)<=a.radius;}
   function normalizeOsm(data,a,P){
@@ -94,16 +110,19 @@
     return groups;
   }
   function dedupeDiscovery(stations,P){
+    stations=P.reconcileStations(stations);
     var out=[],ids=new Map(),bins=new Map();
     stations.forEach(function(s){
       if(!s||!Number.isFinite(s.lat)||!Number.isFinite(s.lng)||Math.abs(s.lat)>85||Math.abs(s.lng)>180)return;
       s=Object.assign({},s,{brand:P.detectBrand(s.name,s.website)||s.brand||'other',prices:Object.assign({},s.prices)});
       var id=s.placeId||s.featureId||s.id,x=Math.floor(s.lat*100),y=Math.floor(s.lng*100),same=id&&ids.get(id);
+      function conflict(t){return ['wmStoreId','murphyStore'].some(function(k){return t[k]!=null&&s[k]!=null&&String(t[k])!==String(s[k]);});}
+      if(same&&conflict(same))same=null;
       if(!same)for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++)(bins.get((x+dx)+'|'+(y+dy))||[]).forEach(function(t){
-        if(t.brand!==s.brand||(s.brand==='other'&&String(t.name).toLowerCase()!==String(s.name).toLowerCase()))return;
+        if(t.brand!==s.brand||conflict(t)||(s.brand==='other'&&String(t.name).toLowerCase()!==String(s.name).toLowerCase()))return;
         if(P.haversineMi(t.lat,t.lng,s.lat,s.lng)<0.025&&(addressKey(t.address)&&addressKey(t.address)===addressKey(s.address)||P.haversineMi(t.lat,t.lng,s.lat,s.lng)<0.006))same=t;
       });
-      if(same){Object.keys(s.prices).forEach(function(g){var old=same.prices[g],fresh=s.prices[g];if(!old||(fresh.observedAt||0)>(old.observedAt||0))same.prices[g]=fresh;});if(id)ids.set(id,same);return;}
+      if(same){Object.keys(s.prices).forEach(function(g){var old=same.prices[g],fresh=s.prices[g];if(!old||(fresh.observedAt||0)>(old.observedAt||0))same.prices[g]=fresh;});['wmStoreId','murphyStore'].forEach(function(k){if(same[k]==null&&s[k]!=null)same[k]=s[k];});same.stationAliases=Array.from(new Set((same.stationAliases||[]).concat(s.stationAliases||[])));if(id)ids.set(id,same);return;}
       out.push(s);if(id)ids.set(id,s);var key=x+'|'+y;if(!bins.has(key))bins.set(key,[]);bins.get(key).push(s);
     });return out;
   }
@@ -150,7 +169,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;

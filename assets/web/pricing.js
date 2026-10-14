@@ -162,25 +162,67 @@
 
   var MATCH_MI = { walmart: 0.6, murphy: 0.35, citgo: 0.2 };
 
+  // Keep provider aliases and their observation pages after interrupted scans.
+  function stationKey(s) { return (s.brand || '') + '|' + String(s.id || [s.lat,s.lng,s.address].join('|')); }
+  function reconcileStations(rows) {
+    var out=[], identities=new Map();
+    function tokens(s) {
+      var a=[stationKey(s)].concat(s.stationAliases||[]);
+      ['placeId','featureId','wmStoreId','murphyStore'].forEach(function(k){if(s[k]!=null)a.push(s.brand+'|'+k+'|'+String(s[k]));});
+      if(s.brand==='walmart'&&/^wm-/.test(s.id||''))a.push('walmart|wmStoreId|'+s.id.slice(3));
+      return a;
+    }
+    function conflict(a,b){return ['wmStoreId','murphyStore'].some(function(k){return a[k]!=null&&b[k]!=null&&String(a[k])!==String(b[k]);});}
+    rows.forEach(function(row){
+      if(!row)return;
+      var s=Object.assign({},row,{prices:Object.assign({},row.prices)}), ts=tokens(s), hits=new Set();
+      Object.keys(s.prices).forEach(function(g){s.prices[g]=Object.assign({source:s.source},s.prices[g]);});
+      ts.forEach(function(t){(identities.get(t)||[]).forEach(function(o){
+        var exact=stationKey(o)===stationKey(s),d=haversineMi(o.lat,o.lng,s.lat,s.lng);
+        if(o.brand===s.brand&&!conflict(o,s)&&(exact||Number.isFinite(d)&&d<=(MATCH_MI[s.brand]||0.1)))hits.add(o);
+      });});
+      // Ambiguous provider links must not collapse different stores.
+      if(Array.from(hits).some(function(a){return Array.from(hits).some(function(b){return conflict(a,b);});}))hits.clear();
+      var target=hits.values().next().value;
+      if(!target){target=s;target.stationAliases=Array.from(new Set([stationKey(s)].concat(s.stationAliases||[])));out.push(target);}
+      else {
+        hits.delete(target);
+        Array.from(hits).concat([s]).forEach(function(other){
+          Object.keys(other.prices||{}).forEach(function(g){var old=target.prices[g],fresh=other.prices[g],at=function(p){return p&&(p.observedAt||Date.parse(p.updated)||0)||0;};if(!old||at(fresh)>at(old))target.prices[g]=fresh;});
+          var isMaps=function(t){return !!(t.featureId||t.placeId||t.google||t.source==='Google Maps web');};
+          if(isMaps(other)&&!isMaps(target))['id','name','address','lat','lng','source','google'].forEach(function(k){if(other[k]!=null)target[k]=other[k];});
+          ['wmStoreId','murphyStore','featureId','placeId','mapsUri','storeName'].forEach(function(k){if(target[k]==null&&other[k]!=null)target[k]=other[k];});
+          target.stationAliases=Array.from(new Set((target.stationAliases||[]).concat(stationKey(other),other.stationAliases||[])));
+          if(other!==s)out.splice(out.indexOf(other),1);
+        });
+      }
+      if(hits.size)identities.forEach(function(list,k){identities.set(k,list.map(function(o){return hits.has(o)?target:o;}));});
+      tokens(target).concat(ts).forEach(function(t){var list=identities.get(t)||[];if(!list.includes(target))list.push(target);identities.set(t,list);});
+    });
+    return out;
+  }
+
   /** Put each chain's official prices onto the matching Google station (same brand, very close by),
    *  or add the official station if Google didn't return it. Never mutates its inputs. */
   function mergeOfficial(googleStations, official) {
-    var out = googleStations.map(function (s) { return Object.assign({}, s); });
+    var out = reconcileStations(googleStations);
     official.forEach(function (w) {
       if (!w || !Object.keys(w.prices).length) return;
       var best = null, bestD = MATCH_MI[w.brand] || 0.3;
       out.forEach(function (s) {
-        if (s.brand !== w.brand || s._official) return;
+        if (s.brand !== w.brand || s._official || ['wmStoreId','murphyStore'].some(function(k){return s[k]!=null&&w[k]!=null&&String(s[k])!==String(w[k]);})) return;
         var d = haversineMi(s.lat, s.lng, w.lat, w.lng);
         if (d < bestD) { bestD = d; best = s; }
       });
       if (best) {
-        best.prices = w.prices; best.source = w.source; best._official = true;
+        var prices=Object.assign({},best.prices);
+        Object.keys(w.prices).forEach(function(g){var old=prices[g],fresh=w.prices[g];if(!old||!old.observedAt||!fresh.observedAt||fresh.observedAt>=old.observedAt)prices[g]=fresh;});
+        best.prices = prices; best.source = w.source; best._official = true;
         ['wmStoreId', 'storeName', 'murphyStore', 'extra'].forEach(function (k) { if (w[k] != null) best[k] = w[k]; });
         if (w.brand === 'murphy') best.name = w.name;
       } else out.push(Object.assign({ _official: true }, w));
     });
-    return out;
+    return reconcileStations(out);
   }
   function mergeWalmart(g, w) { return mergeOfficial(g, w); }
 
@@ -341,7 +383,7 @@
   /** A gas brand, a charger / hydrogen station, or a plain gray stand-in — never undefined. */
   function brand(b) { return BRANDS[b] || ALT[b] || { name: '', short: '?', color: '#777' }; }
 
-  var api = { BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
+  var api = { stationKey: stationKey, reconcileStations: reconcileStations, BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
     compute: compute, tripPrice: tripPrice, citgoRedeemed: citgoRedeemed, setCitgoRedeemed: setCitgoRedeemed, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

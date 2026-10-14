@@ -343,6 +343,8 @@
     var useGoogle = !!S.apiKey && !keyless;
     if (!useGoogle && !keyless && !sites.length) { openSettings(true); return; }
     var b = bounds || bbox(lat, lng, S.radiusMi);
+    var areas;
+    if(keyless)try{areas=KeylessGas.mapAreas(b,P);areas.maxLanes=4;}catch(e){status(e.message,true);$('btnArea').classList.remove('hidden');return;}
     var id = ++reqId; pending = id; errs = [];
     pendingSources = 0; sitePending = {}; siteOk = {};
     pendingCenter = { lat: lat, lng: lng };
@@ -354,21 +356,14 @@
     } else gStations = [];
     if (keyless) {
       pendingSources++;
-      var keylessRadius = Math.min(Math.max(P.haversineMi(lat,lng,b[2],lng),2),30),areas=[];
-      var dy=6/69,dx=6/(69.17*Math.cos(lat*Math.PI/180));
-      for(var y=-Math.ceil(keylessRadius/6);y<=Math.ceil(keylessRadius/6);y++)for(var x=-Math.ceil(keylessRadius/6);x<=Math.ceil(keylessRadius/6);x++){var a=KeylessGas.area(lat+y*dy,lng+x*dx,8);if(P.haversineMi(lat,lng,a.lat,a.lng)<=keylessRadius+3)areas.push(a);}
-      // the map is in use meanwhile: a few readers, and the areas nearest the middle (a zoomed-out view would be a hundred pages)
-      areas.sort(function(a1,a2){return P.haversineMi(lat,lng,a1.lat,a1.lng)-P.haversineMi(lat,lng,a2.lat,a2.lng);});
-      var areaCut=areas.length>MAP_AREAS;if(areaCut)areas=areas.slice(0,MAP_AREAS);areas.maxLanes=4;
       jobStart({kind:'map',label:'Discovering stations · No API',cancel:function(){KeylessGas.cancel();}});
       KeylessGas.discover(areas,function(f,text){jobProg(f,text);},S.grade,false).then(function(r){
         if(id!==reqId)return;
-        gStations=r.stations.filter(function(s){return S.brands[s.brand]&&P.haversineMi(lat,lng,s.lat,s.lng)<=keylessRadius;});
+        gStations=r.stations.filter(function(s){return S.brands[s.brand]&&s.lat>=b[0]&&s.lat<=b[2]&&s.lng>=b[1]&&s.lng<=b[3];});
         errs=errs.concat(r.errors||[]);
         if(r.blocked)showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
         if(r.cancelled)errs.push('Discovery cancelled; completed stations kept.');
-        if(areaCut)errs.push('Searched the middle of the map; zoom in, or move the map, for more.');
-        else if((r.details||[]).some(function(d){return !d.exhausted;}))errs.push('Website discovery is partial; some lists did not finish.');
+        if((r.details||[]).some(function(d){return !d.exhausted;}))errs.push('Website discovery is partial; some lists did not finish.');
         sourceDone();
       }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();}).finally(function(){jobEnd();});
     }
@@ -452,12 +447,12 @@
   // ---------- computing & rendering ----------
   function visibleStations() {
     var b=map.getBounds();if(!b.isValid())return stations;
-    var sw=b.getSouthWest(),ne=b.getNorthEast(),box=[sw.lat,sw.lng,ne.lat,ne.lng],out=[],seen={};
-    function add(s){if(!s||!S.brands[s.brand]||!Number.isFinite(s.lat)||!Number.isFinite(s.lng)||s.lat<box[0]||s.lat>box[2]||s.lng<box[1]||s.lng>box[3])return;var k=s.brand+'|'+s.id;if(seen[k])return;seen[k]=true;out.push(s);}
+    var sw=b.getSouthWest(),ne=b.getNorthEast(),box=[sw.lat,sw.lng,ne.lat,ne.lng],out=[];
+    function add(s){if(!s||!S.brands[s.brand]||!Number.isFinite(s.lat)||!Number.isFinite(s.lng)||s.lat<box[0]||s.lat>box[2]||s.lng<box[1]||s.lng>box[3])return;out.push(s);}
     stations.forEach(add);
     // This is local app storage, not a network lookup. It covers stations from earlier map searches and saved trips.
     if(!demo&&window.__app&&window.PriceHistory&&PriceHistory.near)PriceHistory.near(box).forEach(add);
-    return out;
+    return P.reconcileStations(out);
   }
   function enriched() {
     var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null);
@@ -1345,7 +1340,7 @@
   // runs, body.job-on grays out what would change its data or start another search (grades, fuel mode, refresh, search
   // this area, settings, other trips); the status bar (#jobBar) shows its progress with a ✕ to cancel. Progress is
   // drawn at most once a frame, so the work never makes the screen or touch lag.
-  var job = null, jobRaf = 0, jobDoneT = 0, MAP_AREAS = 24;
+  var job = null, jobRaf = 0, jobDoneT = 0;
   var JOB_LOCKS = ['btnMode', 'btnRefresh', 'btnArea', 'btnSettings'];
   function jobStart(o) {
     clearTimeout(jobDoneT);
@@ -1426,9 +1421,7 @@
   $('btnArea').onclick = function () {
     if (altMode() && window.AltFuel) { $('btnArea').classList.add('hidden'); return AltFuel.refresh(true); }
     var c = map.getCenter(), b = map.getBounds();
-    // cap the box at ~25 mi each way so a zoomed-out map doesn't return a random sample
-    var cap = bbox(c.lat, c.lng, 25);
-    fetchAround(c.lat, c.lng, [Math.max(b.getSouth(), cap[0]), Math.max(b.getWest(), cap[1]), Math.min(b.getNorth(), cap[2]), Math.min(b.getEast(), cap[3])]);
+    fetchAround(c.lat, c.lng, [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()]);
   };
   window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (document.querySelector('.qpop')) { window.__closeQ(); return true; } if (window.__subClose) { window.__subClose(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }

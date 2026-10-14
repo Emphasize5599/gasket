@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.156 - 2026-10-14 (keyless test branch only)
+- Search the full visible map area; reconcile saved station duplicates after cancelled searches.
+- Bug fixes.
+
 ## 0.0.155 - 2026-10-14 (keyless test branch only)
 - Clearer VIN lookup progress and unresolved selections, with less setup clutter.
 - Emergency towing cash guidance in Advisory.
