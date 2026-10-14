@@ -1413,13 +1413,17 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .trailer-page > .sub-body { padding:12px 0 calc(var(--sb) + 60px); }
 .trailer-form, .trailer-common { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
 .tz-tr-tires { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.tz-tr-side .tz-gl { grid-template-columns:minmax(0,1fr); }
+.tz-tr-side .tz-gl { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.tz-tr-side.dual .tz-tire { display:block; text-align:center; padding:8px 2px; font-size:12px; min-height:44px; }
+.tz-tr-side.dual .tz-tire svg { display:none; }
 .tz-tr-dimensions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .tz-tr-dimensions.asym > label:first-child { grid-column:1 / -1; }
 .tz-geometry-note { color:var(--warn) !important; }
 .tz-tr-entry { display:flex; gap:8px; align-items:stretch; margin:8px 0; }
 .tz-tr-entry > .tz-row { flex:1; width:auto; min-width:0; margin:0; }
 .tz-tr-entry > .btn { flex:none; width:auto; margin:0; padding:8px; }
+.tz-tr-shortcuts { display:flex; flex-direction:column; gap:6px; flex:none; justify-content:center; }
+.tz-tr-shortcuts > .btn { width:100%; margin:0; padding:8px; min-height:40px; }
 .trailer-form > *, .trailer-common > * { margin:0; }
 .trailer-form .nf.wide { padding-top:0; }
 .trailer-common > .tz-pick { gap:12px; }
@@ -1441,6 +1445,9 @@ details.card > summary { position:sticky !important; top:var(--tile-top,0px); z-
 .tz-tr-visual .tz-tr-resize { position:absolute; width:44px; height:44px; margin:0; padding:0; border:0; border-radius:8px; background:transparent; touch-action:none; user-select:none; z-index:3; }
 .tz-tr-resize > svg { width:44px; height:44px; display:block; pointer-events:none; }
 .tz-tr-resize:focus-visible { outline:1px solid var(--accent); }
+.tz-length-lock { position:absolute; top:0; right:0; width:44px; height:44px; border-radius:12px; border:1px solid var(--line); background:var(--surface-2); z-index:4; display:grid; place-items:center; }
+.tz-length-lock svg { width:24px; height:24px; stroke:var(--ink-2); stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+.tz-tr-dimensions input:disabled, .tz-tr-resize:disabled { opacity:.5; }
 .tz-ruler { opacity:.55; }
 .tz-ruler path { fill:none; stroke:var(--ink-2); stroke-width:1; }
 .tz-ruler text { fill:var(--ink-2); font-size:11px; }

@@ -61,15 +61,20 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     assert.deepEqual(await sides.nth(1).locator('button').evaluateAll(es=>es.map(e=>e.dataset.trTire)),['trExample:a1ro','trExample:a1ri']);
     const halves=await sides.evaluateAll(es=>es.map(e=>({x:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right,top:e.getBoundingClientRect().top})));
     for(let i=0;i<halves.length;i+=2){assert.ok(halves[i].right<halves[i+1].x);assert.ok(Math.abs(halves[i].top-halves[i+1].top)<1);}
+    const pairs=await sides.evaluateAll(es=>es.map(e=>Array.from(e.querySelectorAll('button')).map(b=>{const r=b.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})));
+    assert.ok(pairs.every(pair=>Math.abs(pair[0].y-pair[1].y)<1&&pair[0].x+pair[0].width<pair[1].x&&pair.every(r=>r.width>=44&&r.height>=44)));
     await sides.nth(1).locator('button').first().click();await p.waitForSelector('#tpMiles');assert.match(await p.innerText('.sub-bar h2'),/passenger side outer/);
     await p.click('.sub-back');await p.waitForSelector('#ttSame');assert.deepEqual(await p.evaluate(()=>Garage.car().tires.trailers[0].axlePositions),pos);
     // One consistent content gutter, no sideways overflow, and the last actions/hint clear a simulated 48px nav bar.
+    await p.evaluate(()=>{const es=Array.from(document.querySelectorAll('.tz-tr-tires,.tz-tr-tires *')),sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>e.style.fontSize=sizes[i]*1.3+'px');});
+    const enlargedPairs=await p.locator('.tz-tr-side').evaluateAll(es=>es.map(e=>Array.from(e.querySelectorAll('button')).map(b=>({y:b.getBoundingClientRect().y,overflow:b.scrollWidth>b.clientWidth}))));assert.ok(enlargedPairs.every(pair=>Math.abs(pair[0].y-pair[1].y)<1&&!pair.some(b=>b.overflow)),'horizontal buttons fit at enlarged text');
     const gutters=await p.evaluate(()=>Array.from(document.querySelectorAll('.trailer-form > *')).filter(e=>e.getBoundingClientRect().width>0).map(e=>({left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right})));
     assert.ok(gutters.every(r=>Math.abs(r.left-16)<1&&Math.abs(r.right-(width-16))<1),JSON.stringify(gutters));
     await p.locator('.sub-body').evaluate(e=>e.scrollTop=e.scrollHeight);await frame(p);
     const last=await p.locator('#ttDiscard').boundingBox();assert.ok(last.y+last.height<=900-48-44,'all footer buttons clear nav and scroll hint');
     const hint=await p.locator('.sub-body').evaluate(e=>{const r=e._hint.getBoundingClientRect();return {top:r.top,bottom:r.bottom,visible:document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===e._hint||e._hint.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))};});assert.ok(hint.bottom<=900-48);assert.ok(last.y+last.height<=hint.top);assert.ok(hint.visible,'scroll hint is above the submenu layer');
     assert.equal(await p.locator('.sub-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);
+    await p.evaluate(()=>{const t=Garage.car().tires;TireMath.positions(t).filter(p=>p.trailer==='trExample').forEach(p=>t.corners[p.k]=Object.assign({},t.corners[p.k],{size:'205/75R15'}));});
     await p.locator('[data-tr-tire="trExample:a2li"]').click();await p.waitForSelector('#tpSizeEdit');await p.click('#tpSizeEdit');await p.fill('#tpSize','445/95R26');await p.dispatchEvent('#tpSize','change');
     const individual=await p.evaluate(()=>{const t=Garage.car().tires,g=TireMath.trailerGeometry(t.trailers[0],t.corners);return {diameters:g.axles.map(a=>a.diameter),length:t.trailers[0].geometry.lengthFt,min:g.minLength};});assert.ok(individual.diameters[1]>individual.diameters[0]);assert.ok(individual.length>=individual.min-1e-8);
     await p.click('.sub-back');await p.waitForSelector('#ttSame');
@@ -82,21 +87,35 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     const resize=async(kind,dx,dy)=>{const handle=p.locator('[data-tr-resize="'+kind+'"]');await handle.evaluate(e=>e.scrollIntoView({block:'center'}));const r=await handle.boundingBox();await touch('touchStart',r.x+22,r.y+22);await touch('touchMove',r.x+22+dx,r.y+22+dy);await frame(p);await touch('touchEnd');await frame(p);};
     await resize('left',-12,0);let z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.ok(z.leftFt>3);assert.equal(z.leftFt,z.rightFt);
     await p.uncheck('#ttSymmetrical');const left=z.leftFt;await resize('right',12,0);z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.equal(z.leftFt,left);assert.ok(z.rightFt>left);
-    const length=z.lengthFt;await resize('length',0,15);z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.ok(z.lengthFt>length);
+    const length=z.lengthFt;assert.equal(await p.isDisabled('#ttLength'),true);assert.equal(await p.isDisabled('[data-tr-resize="length"]'),true);assert.equal(await p.locator('#ttLengthLock').getAttribute('aria-label'),'Unlock trailer length');
+    await p.click('#ttLengthLock');assert.equal(await p.isDisabled('#ttLength'),false);await resize('length',0,15);assert.ok(+(await p.inputValue('#ttLength'))>length);assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.lengthFt),length,'unlocked length is not saved on release');
+    await p.click('#ttLengthLock');z=await p.evaluate(()=>Garage.car().tires.trailers[0].geometry);assert.ok(z.lengthFt>length);assert.equal(await p.isDisabled('#ttLength'),true);
+    const savedLength=z.lengthFt;await p.click('#ttLengthLock');await p.fill('#ttLength',String(savedLength+2));await p.dispatchEvent('#ttLength','change');assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].geometry.lengthFt),savedLength);
+    await p.click('.sub-back');await p.click('[data-sub="tr:trExample"]');assert.equal(await p.isDisabled('#ttLength'),true);assert.ok(Math.abs(+(await p.inputValue('#ttLength'))-savedLength)<.01,'leaving discards unlocked length preview');
     assert.match(await p.locator('.tz-ruler').textContent(),/ft/);
-    await p.fill('#ttLength','3');await p.dispatchEvent('#ttLength','change');assert.match(await p.innerText('#ttGeometryNote'),/increased/);
+    await p.click('#ttLengthLock');await p.fill('#ttLength','3');await p.dispatchEvent('#ttLength','change');assert.match(await p.innerText('#ttGeometryNote'),/increased/);await p.click('#ttLengthLock');
     await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0];tr.axlePositions=[0,0,0];});
-    await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
+    await p.click('[data-tr-split="false"]');await p.fill('input[id$="_Size"]','395/95R24');await p.dispatchEvent('input[id$="_Size"]','change');
     const grown=await p.evaluate(()=>{const tr=Garage.car().tires.trailers[0],g=TireMath.trailerGeometry(tr,Garage.car().tires.corners);return {length:tr.geometry.lengthFt,min:g.minLength,gaps:g.gaps,centers:g.centers,positions:tr.axlePositions};});
     assert.ok(grown.length>=grown.min-1e-8&&grown.length>12);for(let i=1;i<3;i++)assert.ok(grown.centers[i]-grown.centers[i-1]>=grown.gaps[i]-1e-8);
-    assert.deepEqual(await p.locator('[data-tr-tire]').evaluateAll(es=>es.map(e=>e.dataset.trTire)),keys);
     const ratio=await p.locator('[data-wheel]').first().evaluate(e=>+e.getAttribute('width')/+e.getAttribute('height'));assert.ok(Math.abs(ratio-(395/(24*25.4+2*395*.95)))<1e-8);
+    await p.click('[data-tr-split="true"]');assert.deepEqual(await p.locator('[data-tr-tire]').evaluateAll(es=>es.map(e=>e.dataset.trTire)),keys);
     assert.equal(await p.locator('.sub-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);
     // Background text swipes still scroll: only the drag handles lock touch action.
     await p.locator('.sub-body').evaluate(e=>e.scrollTop=0);const bg=await p.locator('.trailer-form > p:not(#ttGeometryNote)').first().boundingBox();
     await touch('touchStart',bg.x+20,bg.y+bg.height/2);for(const dy of [-30,-60,-100]){await touch('touchMove',bg.x+20,bg.y+bg.height/2+dy);await frame(p);}await touch('touchEnd');
     await p.waitForFunction(()=>document.querySelector('.sub-body').scrollTop>30,undefined,{timeout:3000});
     const preserved=await p.evaluate(()=>JSON.stringify([Garage.car().tires.trailers[0].geometry,Garage.car().tires.corners]));await p.click('.sub-back');await p.click('[data-tr-unhook="trExample"]');assert.equal(await p.locator('.sub-page').count(),0);assert.equal(await p.evaluate(()=>Garage.car().tires.trailers[0].hooked),false);assert.equal(await p.locator('#tzSaved').count(),1);assert.equal(await p.evaluate(()=>JSON.stringify([Garage.car().tires.trailers[0].geometry,Garage.car().tires.corners])),preserved);
+    // First size defaults only this new trailer's blank tires, not the already saved trailer or car.
+    await p.click('#tzAddTr');await p.click('[data-per="4"]');await p.click('[data-tr-split="true"]');
+    await p.locator('[data-tr-tire]').first().click();await p.waitForSelector('#tpSize');assert.equal(await p.inputValue('#tpSize'),'');assert.match(await p.innerText('#tpLook summary'),/Look this tire up \(recommended\)/);assert.equal(await p.locator('#tpLook .rec-tag').count(),0);
+    await p.click('#tpSizeEdit');await p.fill('#tpSize','205/75R15');await p.dispatchEvent('#tpSize','change');
+    const defaults=await p.evaluate(()=>{const t=Garage.car().tires,tr=t.trailers[1];return {keys:TireMath.positions(t).filter(p=>p.trailer===tr.id).map(p=>t.corners[p.k]),id:tr.id,others:JSON.stringify({geometry:t.trailers[0].geometry,corners:Object.fromEntries(Object.entries(t.corners).filter(([k])=>k.startsWith('trExample:')))})};});assert.ok(defaults.keys.every(x=>x.size==='205/75R15'));assert.ok(defaults.keys.slice(1).every(x=>Object.keys(x).length===1));assert.equal(defaults.others,JSON.stringify({geometry:JSON.parse(preserved)[0],corners:Object.fromEntries(Object.entries(JSON.parse(preserved)[1]).filter(([k])=>k.startsWith('trExample:')))}));
+    await p.click('.sub-back');await p.waitForSelector('#ttSame');await p.locator('[data-tr-tire]').nth(1).click();await p.waitForSelector('#tpSize');assert.equal(await p.inputValue('#tpSize'),'205/75R15');assert.equal(await p.inputValue('#tpMiles'),'');assert.equal(await p.inputValue('#tpWarranty'),'');await p.click('.sub-back');await p.waitForSelector('#ttSame');await p.click('.sub-back');
+    const shortcuts=p.locator('.tz-tr-shortcuts').last(),positions=await shortcuts.locator('button').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));assert.ok(positions[1]>positions[0]);
+    assert.equal(await p.locator('.tz-tr-entry').last().evaluate(e=>e.scrollWidth>e.clientWidth),false);
+    await p.evaluate(()=>__app.S.confirmDeletes=false);await p.click('[data-tr-delete="'+defaults.id+'"]');await p.waitForSelector('#cfm.on');await p.click('#cfmNo');assert.equal(await p.evaluate(()=>Garage.car().tires.trailers.length),2);
+    await p.click('[data-tr-delete="'+defaults.id+'"]');await p.waitForSelector('#cfm.on');await p.click('#cfmYes');assert.equal(await p.evaluate(()=>Garage.car().tires.trailers.length),1);assert.equal(await p.evaluate(id=>Object.keys(Garage.car().tires.corners).some(k=>k.startsWith(id+':')),defaults.id),false);
     assert.equal(errors.length,0,errors.join('\n'));await cdp.detach();await p.close();
   }} finally {await browser.close();}
   console.log('Trailer touch dragging, smooth tracking, cancel/clamp, dual labels, gutters and three-button nav clearance passed');

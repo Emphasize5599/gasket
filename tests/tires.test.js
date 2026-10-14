@@ -196,3 +196,18 @@ console.log('tire version matching ok');
   assert.equal(T.tireFootprint('').known,false);assert.equal(T.tireFootprint('000/00R00').known,false);assert.ok(T.tireFootprint('315/85R22').diameter>T.tireFootprint('205/75R15').diameter);
   console.log('Wheel-scaled clearance, crowded growth, individual sizes, minimum body length and asymmetric geometry passed');
 }
+
+{
+  const first={id:'first',axles:2,per:4,split:true,hooked:true},other={id:'other',axles:1,per:2,split:true,hooked:true};
+  const source={size:'205/75R15',brand:'Example',model:'Touring',type:'Touring',warrantyMi:40000,miles:1000,rotated:'yes'};
+  const t={towMode:true,trailers:[first,other],corners:{'first:a1lo':source,'first:a1li':{miles:2000},'first:a2ri':{size:'225/75R15',brand:'Existing'},'other:a1l':{size:'195/65R15',model:'Keep'},lf:{size:'195/65R15'}}};
+  const outside=JSON.stringify([other,t.corners['other:a1l'],t.corners.lf]);
+  assert.ok(T.fillTrailerSizes(t,first,'first:a1lo','205/75R15'));
+  assert.deepEqual(t.corners['first:a1li'],{miles:2000,size:'205/75R15'});
+  assert.deepEqual(t.corners['first:a1ro'],{size:'205/75R15'});
+  assert.equal(t.corners['first:a2ri'].size,'225/75R15');assert.equal(first.size,'205/75R15');
+  assert.equal(JSON.stringify([other,t.corners['other:a1l'],t.corners.lf]),outside);assert.equal(t.corners['other:a1r'],undefined);
+  assert.equal(T.fillTrailerSizes(t,first,'first:a1lo',''),false);
+  first.hooked=false;delete t.corners['first:a2lo'];T.fillTrailerSizes(t,first,'first:a1lo','205/75R15');assert.deepEqual(t.corners['first:a2lo'],{size:'205/75R15'});
+  console.log('Size-only autofill remains scoped to one trailer and preserves existing answers');
+}
