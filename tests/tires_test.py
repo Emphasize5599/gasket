@@ -201,7 +201,29 @@ with sync_playwright() as p:
         rot = ft(pg, '.tz-rot'); assert 'Replace before rotating' in rot and 'instead of rotating them to the back' in rot, rot
         # an EPA-rated hybrid can't be a dually: no switch
         assert pg.locator('#tzDually').count() == 0 and pg.locator('.sub-page .tz-pic .tz-w').count() == 4
+        assert 'My tires are different' in ft(pg, '#tzSame') and '5,000 miles apart' in ft(pg, '.tz-same-tip'), 'the tip under the choice'
+        assert pg.evaluate("[...document.querySelectorAll('#tzBy [data-by]')].map(b => b.dataset.by)") == ['miles', 'depth'], 'mileage on the left'
+        # ---- more than one tire size: front and rear, each tire on its own (no "all the same"); a tire's lookup uses its axle's size ----
+        pg.click('#tzMulti'); pg.wait_for_timeout(200)
+        assert pg.locator('.sub-page #tzSame').count() == 0 and pg.locator('#tzSizeRear').count() == 1 and 'Front tire size' in ft(pg, '.sub-page')
+        assert pg.locator('.sub-page .nf:has(#tzSize) .req').count() == 1, 'the size is required'
+        pg.fill('#tzSizeRear', '215/45R17'); pg.dispatch_event('#tzSizeRear', 'change'); pg.wait_for_timeout(200)
+        pg.click('#tzBy [data-by="miles"]'); pg.wait_for_timeout(200)
+        pg.click('[data-tire="rr"]'); pg.wait_for_selector('.sub-page #tpSizeNote')
+        assert '215/45R17, your rear tire size' in ft(pg, '#tpSizeNote') and pg.locator('#tpSize').count() == 0, ft(pg, '#tpSizeNote')
+        pg.click('.sub-back'); pg.wait_for_selector('.sub-page #tzMulti')
+        pg.click('[data-tire="lf"]'); pg.wait_for_selector('.sub-page #tpSizeNote'); assert '195/65R15, your front tire size' in ft(pg, '#tpSizeNote')
+        pg.click('.sub-back'); pg.wait_for_selector('.sub-page #tzMulti')
+        pg.click('#tzMulti'); pg.wait_for_timeout(200); pg.click('#tzBy [data-by="depth"]'); pg.wait_for_timeout(200)
+        assert pg.locator('.sub-page #tzSame').count() == 1 and pg.locator('#tzSizeRear').count() == 0 and pg.evaluate('Garage.car().tires.corners.split') is True
         main(pg)
+        # ---- the tire size is required: no size, the Garage waits and the Tire details row says so ----
+        pg.evaluate("() => { window.__mocks.tireSizeOk = false; const t = window.Garage.car().tires; window.__sz = t.size; t.size = ''; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
+        assert 'tire size needed' in ft(pg, '#tzDet') and pg.locator('#tzDet.empty').count() == 1
+        pg.click('#tNext'); pg.wait_for_timeout(300); assert pg.evaluate('window.__trip.state().step') == 1, 'Garage waits for the tire size'
+        pg.evaluate("() => { window.__mocks.tireSizeOk = true; window.Garage.car().tires.size = window.__sz; window.Garage.redraw(); }"); pg.wait_for_timeout(300)
+        if pg.locator('#gTires[open]').count() == 0: pg.click('#gTires summary'); pg.wait_for_timeout(200)
         # ---- tow mode: "Car tire details", and a row for each trailer (its tires live in its own page) ----
         pg.check('#tzTow'); assert pg.locator('.sub-page').count() == 0; pg.click('#tzAddTr'); pg.wait_for_selector('.sub-page [data-axles]')
         assert ft(pg, '.sub-page h2') == 'Trailer tire details · Trailer' and pg.locator('.sub-page [id$="_Hooked"]').count() == 0, 'a new trailer is hooked up: it opens to fill in, no switch'

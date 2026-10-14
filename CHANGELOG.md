@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.150 - 2026-10-14 (keyless test branch only)
+- Tire details: the tire size is required; "My car has more than 1 tire size" adds a rear size (each tire then gets its own answer), and a tire's lookup uses its axle's size instead of its own size box.
+- "My tires are different", with a tip under the choice about tires put on 5,000+ miles apart; By mileage comes first.
+- The demo cargo trailer's tires have their type, so its fuel rating shows.
+- Bug fixes.
+
 ## 0.0.149 - 2026-10-14 (keyless test branch only)
 - Recalls on record load for every car again: NHTSA's "no recalls under that name" answer counts as none, and shorter model names are tried (an EPA name like "Model 3 Long Range AWD" finds "Model 3").
 - Bug fixes.

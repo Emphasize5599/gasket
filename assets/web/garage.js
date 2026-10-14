@@ -139,6 +139,8 @@
   S.cars.forEach(function (c) {
     // Upgrade only the old demo's forced default, never a later user choice.
     if(c.demoSet===1){c.demoSet=2;if(c.picMode==='doodle')c.picMode='';}
+    // 0.0.150: the demo trailers' tires got their type (for the fuel rating), only where none was picked
+    if(c.id==='demo-ram3500'&&c.tires&&!c.demoTrailerTypes){c.demoTrailerTypes=1;(c.tires.trailers||[]).forEach(function(tr){if(/^demo-/.test(tr.id)&&!tr.type)tr.type='Trailer';});Object.keys(c.tires.corners||{}).forEach(function(k){var x=c.tires.corners[k];if(/^demo-cargo:/.test(k)&&x&&!x.type&&!x.model)x.type='Trailer';});}
     c.obs = c.obs || {}; c.entries = c.entries || [];
     if (!c.power) c.power = /electric/i.test(c.epa && c.epa.fuel || '') ? 'ev' : /hydrogen/i.test(c.epa && c.epa.fuel || '') ? 'h2' : c.type === 'hybrid' ? 'hybrid' : 'gas';
     if(c.power==='gas'&&(c.grade==='diesel'||/diesel/i.test(c.epa&&c.epa.fuel||'')))c.power='diesel';
@@ -293,12 +295,14 @@
    */
   /** Is the car ready for a trip (mileage and tank size), without pointing at anything? */
   function tiresMissing(c) { return window.Tires && Tires.missing ? Tires.missing(c).length : 0; }
-  function ok() { var c = car(); return !!S.cars.length && !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0 && !tiresMissing(c); }
+  function sizeMissing(c) { return !!(window.Tires && Tires.sizeMissing && Tires.sizeMissing(c)); }
+  function ok() { var c = car(); return !!S.cars.length && !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0 && !tiresMissing(c) && !sizeMissing(c); }
   function need() {
     if(!S.cars.length)return {el:host&&host.querySelector('[data-car="+"]'),kind:'pick',msg:'Add your vehicle before planning a trip.'};
     var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0, k = kind(c);
     if (mpgOk && tankOk) {
       // tires that aren't all the same, not all filled in: fill them in, or discard the tire changes
+      if (sizeMissing(c)) { var gs = document.getElementById('gTires'); if (gs && !gs.open) { gs.open = true; tiresOpen = true; } return { el: document.getElementById('tzDet') || gs, kind: 'pick', msg: 'Enter your tire size under Tires → Tire details.' }; }
       var nm = tiresMissing(c); if (!nm) return null;
       var gt = document.getElementById('gTires'); if (gt && !gt.open) { gt.open = true; tiresOpen = true; }
       return { el: document.getElementById('tzMiss') || gt, kind: 'pick', msg: nm + ' tire(s) missing details: fill them in or discard the tire changes.' };
