@@ -252,7 +252,7 @@ public class MainActivity extends Activity {
         if (ua == null) {
             String v = "?";
             try { v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
-            ua = "Gasket/" + v + " (personal Android app; " + getPackageName() + ")";
+            ua = "Gasket/" + v + " (https://github.com/Emphasize5599/gasket; " + getPackageName() + ")";
         }
         return ua;
     }
@@ -845,7 +845,7 @@ public class MainActivity extends Activity {
             "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
-    private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "i.fuelapi.com"};
+    private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "thumb.wikimedia.org", "i.fuelapi.com"};
 
     // brand icons: Google's favicon service, or each brand's own site
     private static final String[] ICON_HOSTS = {"www.google.com", "icons.duckduckgo.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};

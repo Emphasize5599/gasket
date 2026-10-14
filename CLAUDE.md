@@ -2,6 +2,8 @@
 
 ## This branch: keyless experiment
 
+0.0.143: Demo photos default on; old demoSet 1 forced doodle default changes once, subsequent explicit choices stay. Photo-only model normalization removes EPA trim/range descriptors without changing identity. Revised Commons lookup invalidates old failures, requests standard 960px thumbnails; native image allowlist includes thumb.wikimedia.org and identifying User-Agent includes project URL. Failed NHTSA image downloads fall back to Commons, failures back off 24h, images remain persistent and backed up. Entire ensure pipeline coalesces redraws without self-sustaining completion notifications. Photo dates cannot disguise older model years; known dually searches request dually and reject explicit SRW captions. Warning names only non-EPA sample capacity, tire wear/configuration, logs and non-EPA mileage, never official EPA mileage. Mandatory carpics/download tests cover matching, hosts, attribution, fallback, retry bounds and redraw stability. Live NHTSA Mirai photo HTTP200; Commons Ram search includes current-generation dually. No third-party photo assets bundled.
+
 Everything on this branch is meant to be merged into `main` once the owner is satisfied with it; build new work here.
 
 0.0.142: includes 0.0.141 with collision-free, stable per-car IDs for bulk demo climate presets and recognized RGB doodle colors. The earlier 141 workflow published before a follow-up push; the immutable release/tag SHA guard correctly refused replacement. Keep that APK untouched and ship final source under 142. All 35 regressions, native Routes reservation gate, compilation and signature verification passed for the follow-up code; re-run release gates for 142.

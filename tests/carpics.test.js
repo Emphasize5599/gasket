@@ -1,6 +1,8 @@
 // Car pictures: NHTSA's photo, picking a Wikimedia Commons photo by file name, photo vs doodle, the body to draw.
 const assert = require('assert');
 const C = require('../assets/web/carpics.js');
+assert.equal(C.photoModel({model:'Mirai XLE'}),'Mirai');
+assert.equal(C.photoModel({model:'Model 3 Long Range AWD'}),'Model 3');
 assert.equal(C.baseModel('Venza AWD'), 'Venza'); assert.equal(C.baseModel('Corolla Hybrid'), 'Corolla Hybrid');
 assert.deepEqual(C.nhtsaPic({ results: [{ vehiclePicture: null }, { vehiclePicture: 'https://static.nhtsa.gov/images/vehicles/1_st0640_046.png', trim: '5 HB', vehicleModel: 'PRIUS' }] }), { url: 'https://static.nhtsa.gov/images/vehicles/1_st0640_046.png', body: '5 HB PRIUS' });
 assert.equal(C.nhtsaPic({ results: [] }), null);
@@ -10,6 +12,9 @@ const pg = (title, index, w, h) => ({ title: 'File:' + title, index, imageinfo: 
 const prius = [pg('Toyota Prius inside.jpg', 1), pg('Toyota Prius 2005 (Chile).jpg', 2), pg('2005 Toyota Prius T Spirit 1.5 Rear.jpg', 3), pg('2005 Toyota Prius T Spirit 1.5 Front.jpg', 4),
   pg('2016 Toyota Prius Two.jpg', 5), pg('Toyota Prius 2005.jpg', 6), pg('Toyota logo.svg', 7)];
 const r = C.wikiPick(prius, { year: 2005, make: 'Toyota', model: 'Prius' });
+assert.ok(C.wikiPick([pg('Toyota-mirai-2021-009.jpg',1)],{year:2021,make:'Toyota',model:'Mirai XLE'}),'EPA trim suffix must not reject a matching model photo');
+assert.equal(C.wikiPick([pg('1996 Ram 3500 front 2024-10-15.jpg',1)],{year:2024,make:'RAM',model:'3500'}),null,'photo date cannot disguise a different generation');
+assert.equal(C.wikiPick([pg('2024 Ram 3500 SRW front.jpg',1)],{year:2024,make:'RAM',model:'3500',info:{drw:'yes'}}),null,'known dually must not select an explicitly SRW photo');
 assert.deepEqual(r, { title: '2005 Toyota Prius T Spirit 1.5 Front.jpg', url: 'https://upload.wikimedia.org/thumb/4.jpg', page: 'https://commons.wikimedia.org/wiki/File:4', artist: 'Test Photographer', license: 'CC BY-SA 4.0' });
 const civic = [pg('1992 Honda CR-X Del-Sol VXi.jpg', 1), pg('Honda CR-X del Sol 002.JPG', 2), pg('1998 Honda Civic EX coupe, front left, 06-21-2022.jpg', 3)];
 assert.equal(C.wikiPick(civic, { year: 1998, make: 'Honda', model: 'Civic' }).title, '1998 Honda Civic EX coupe, front left, 06-21-2022.jpg', 'another model is skipped');

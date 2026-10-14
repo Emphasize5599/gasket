@@ -136,6 +136,8 @@
   }
   // cars saved before 3.25: powertrain, trim and the details tile
   S.cars.forEach(function (c) {
+    // Upgrade only the old demo's forced default, never a later user choice.
+    if(c.demoSet===1){c.demoSet=2;if(c.picMode==='doodle')c.picMode='';}
     c.obs = c.obs || {}; c.entries = c.entries || [];
     if (!c.power) c.power = /electric/i.test(c.epa && c.epa.fuel || '') ? 'ev' : /hydrogen/i.test(c.epa && c.epa.fuel || '') ? 'h2' : c.type === 'hybrid' ? 'hybrid' : 'gas';
     if (c.trim == null) c.trim = '';
@@ -220,7 +222,7 @@
         tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb) + rangeTile(c) + '</div>';
       if (k === 'ev' && c.epa.kwh) h += '<div class="lead small keep">EPA: ' + c.epa.kwh.city + ' / ' + c.epa.kwh.hwy + ' / ' + c.epa.kwh.comb + ' kWh per 100 mi' + (c.epa.range ? ' · ' + c.epa.range + ' mi range' : '') + '</div>';
     } else h += '<div class="msg">No EPA rating selected. Look up a rated version under Edit, or enter your city/highway mileage under Observed mileage. Some heavy-duty vehicles have no EPA rating.</div>';
-    if(c.demoMileage)h += '<div class="lead small keep" style="color:var(--warn)">Demo settings and logged mileage are illustrative, not EPA ratings or measurements. EPA tiles, if present, use official ratings. Verify real vehicle details before travel.</div>';
+    if(c.demoMileage)h += '<div class="lead small keep demo-data-note" style="color:var(--warn)">'+(hasEpa(c)?'':'Demo mileage is illustrative; this vehicle has no EPA rating. ')+(c.entries&&c.entries.length?'Demo mileage log, ':'')+'capacity, tire wear and configuration presets are illustrative, not EPA data. Verify these sample values before travel.</div>';
     if(c.demoFeatures)h+='<p class="lead small keep">Demo coverage: '+esc(c.demoFeatures)+'</p>';
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
