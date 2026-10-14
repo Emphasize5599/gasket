@@ -66,7 +66,8 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
-    private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|1[0-6])?"); }
+    private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|1[0-9]|20)?"); }
+    private volatile int gasReaderRecycles = 0, gasRendererLosses = 0;
 
     private static final int REQ_LOC = 42;
     private static final String PREFS = "gasket";
@@ -373,6 +374,7 @@ public class MainActivity extends Activity {
                         if (old.readReq >= 0 || verifying == old || workers.get(old.key) != old || old.view == null) return;
                         // Only WebView RAM resource cache; never cookies, lookup answers or app storage.
                         old.view.clearCache(false);
+                        gasReaderRecycles++;
                         root.removeView(old.view); old.view.destroy(); old.view = null;
                         ensureWorker(old.key);
                     }});
@@ -458,6 +460,7 @@ public class MainActivity extends Activity {
                 }
                 @Override
                 public boolean onRenderProcessGone(WebView gone, android.webkit.RenderProcessGoneDetail detail) {
+                    if (isGasWorker(key)) gasRendererLosses++;
                     root.removeView(gone); gone.destroy();
                     if (view == gone) view = null;
                     ready = false; queue.clear();
@@ -1323,6 +1326,11 @@ public class MainActivity extends Activity {
                 manager.getMemoryInfo(memory);
                 result.put("totalMem", memory.totalMem); result.put("availMem", memory.availMem);
                 result.put("lowMemory", memory.lowMemory || manager.isLowRamDevice());
+                Runtime runtime = Runtime.getRuntime();
+                // This is the app's Java heap, NOT WebView renderer memory or whole-process PSS.
+                result.put("appHeapUsed", runtime.totalMemory() - runtime.freeMemory());
+                result.put("appHeapMax", runtime.maxMemory());
+                result.put("readerRecycles", gasReaderRecycles); result.put("rendererLosses", gasRendererLosses);
             } catch (Exception ignored) { }
             return result.toString();
         }

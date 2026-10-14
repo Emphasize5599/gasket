@@ -421,6 +421,7 @@
    * cost overrides for the baseline: priceFn(c), stopCostFn(c)
    */
   function optimize(o, priceFn, stopCostFn) {
+    if(o.cands.some(function(c){return !!c.citgo;}))return optimizeRewards(o,priceFn,stopCostFn);
     // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
     // (EVs: 80% — charging slows to a crawl above it), though you may start the trip above it.
     var STEP = o.step || 0.1, model = o.model;
@@ -514,10 +515,90 @@
     return { ok: true, stops: stops, arriveGal: bestF * STEP, objective: bestV };
   }
 
+  // A purchase's effective average price, including the 30-gallon Club cap. Never mutate a
+  // shared candidate: alternative routes/sweeps must not consume each other's hypothetical reward.
+  function purchaseQuote(c,gal,monthly){
+    if(!c.citgo||!(gal>0))return {c:c,cost:gal*c.price};
+    var r=c.citgo,discount=r.ordinary+(monthly?r.extra:0),factor=Math.min(gal,r.cap)/gal;
+    var price=r.price-discount*factor,yes=monthly?r.bonus:r.normal,no=r.none;
+    var steps=yes.steps.map(function(s){var base=no.steps.find(function(x){return x.label===s.label;});return Object.assign({},s,{amount:(base?base.amount:0)*(1-factor)+s.amount*factor});});
+    var calc=Object.assign({},yes,{final:price,steps:steps,notes:(yes.notes||[]).concat(gal>r.cap?['Club CITGO rewards apply only to the first 30 gallons; shown price is the purchase average.']:[])});
+    return {c:Object.assign({},c,{price:price,calc:calc}),cost:gal*price};
+  }
+  // Four reward states per fuel level (Tuesday/Friday used in this month). Month changes reset
+  // the path's bits; already-redeemed rewards are omitted by Pricing.tripPrice. Positive purchases
+  // consume the first eligible reward automatically, including a small partial fill. Zero buys don't.
+  function optimizeRewards(o,priceFn,stopCostFn){
+    var step=o.step||0.1,m=o.model,lv=Math.max(1,Math.round(o.capGal/step)),fl=o.fillCap?Math.max(1,Math.min(lv,Math.round(o.fillCap/step))):lv,w=lv+1,size=4*w,inf=1e18;
+    var cs=o.cands.slice().sort(function(a,b){return a.d-b.d;}),nodes=[{d:0}].concat(cs.map(function(c){return {d:c.d,c:c};}),[{d:m.totalMi}]),n=nodes.length;
+    var dp=nodes.map(function(){return new Float64Array(size).fill(inf);}),par=nodes.map(function(){return new Int32Array(size).fill(-1);}),from=[];
+    var rg=nodes.map(function(x){return m.galTo(x.d);}),det=function(i){return nodes[i].c?(nodes[i].c.detourMi||0)*m.cityGpm/2:0;};
+    var period=function(i){return nodes[i].c&&(nodes[i].c.rewardMonth||(nodes[i].c.citgo||{}).period);};
+    var start=Math.min(lv,Math.floor(o.startGal/step+1e-9)),buf=Math.ceil(o.bufferGal/step-1e-9),arr=Math.ceil(o.arriveGal/step-1e-9),reach=0;
+    dp[0][start]=0;
+    for(var i=0;i<n-1;i++){
+      var row=dp[i],best=new Float64Array(size).fill(inf),src=new Int32Array(size).fill(-1),c=nodes[i].c;
+      function put(mask,g,val,f){var ix=mask*w+g;if(val<best[ix]){best[ix]=val;src[ix]=f;}}
+      for(var mask=0;mask<4;mask++){
+        var off=mask*w;
+        if(!c){for(var g=0;g<=lv;g++)if(row[off+g]<inf)put(mask,g,row[off+g],off+g);continue;}
+        var r=c.citgo,eligible=!!(r&&r.bit&&!(mask&r.bit)),outMask=eligible?mask|r.bit:mask;
+        var scale=priceFn?priceFn(c)/c.price:1,fullPrice=r?r.price*scale:c.price*scale+(c.timeCost||0),discount=r?(r.ordinary+(eligible?r.extra:0))*scale:0;
+        var cap=r?Math.max(0,Math.floor(r.cap/step+1e-9)):lv,cheap=fullPrice-discount;
+        function cost(q){return q*step*fullPrice-Math.min(q*step,r?r.cap:0)*discount;}
+        if(o.fillUp){
+          for(var f=0;f<=lv;f++)if(row[off+f]<inf){var to=Math.max(f,fl),q=to-f;put(q?outMask:mask,to,row[off+f]+cost(q),off+f);}
+        }else{
+          // Sliding minimum for purchases <=30 gal, running minimum beyond the cap: O(fuel levels),
+          // not a quadratic quantity loop for every station and every buffer/speed sweep.
+          var deque=[],head=0,oldBest=inf,oldF=-1;
+          for(g=0;g<=lv;g++){
+            if(row[off+g]<inf)put(mask,g,row[off+g],off+g);
+            if(g>fl)continue;
+            var add=g-1;
+            if(add>=0&&row[off+add]<inf){var v=row[off+add]-add*step*cheap;while(deque.length>head&&deque[deque.length-1].v>=v)deque.pop();deque.push({f:add,v:v});}
+            while(head<deque.length&&deque[head].f<g-cap)head++;
+            if(head<deque.length)put(outMask,g,deque[head].v+g*step*cheap,off+deque[head].f);
+            var old=g-cap-1;
+            if(old>=0&&row[off+old]<inf&&row[off+old]-old*step*fullPrice<oldBest){oldBest=row[off+old]-old*step*fullPrice;oldF=old;}
+            if(oldF>=0)put(outMask,g,oldBest+g*step*fullPrice-(r?r.cap:0)*discount,off+oldF);
+          }
+        }
+      }
+      from[i]=src;
+      if(best.some(function(x){return x<inf;}))reach=Math.max(reach,nodes[i].d);
+      for(var j=i+1;j<n;j++){
+        var dest=j===n-1;if(o.lastFull&&dest&&n>2&&!c)continue;
+        if(rg[j]-rg[i]>o.capGal)break;
+        var burn=Math.ceil((rg[j]-rg[i]+det(i)+det(j))/step-1e-9),min=dest?arr:i===0?(o.firstDip?0:buf):buf;
+        if(lv-burn<min)continue;
+        var cj=nodes[j].c,pen=cj?(stopCostFn?stopCostFn(cj):(o.stopPenalty||0)+(cj.penalty||0)+((cj.detourMin||0)>1.5?(o.detourPenalty||0):0)+(o.timeValue||0)*((cj.detourMin||0)+(o.stopMinutes||0))/60):0;
+        if(o.lastFull&&dest&&c)pen-=o.stopPenalty||0;
+        var lo=o.lastFull&&dest&&c?fl:burn+min;
+        for(mask=0;mask<4;mask++)for(g=lo;g<=lv;g++){
+          var bi=mask*w+g;if(best[bi]>=inf)continue;
+          var nextMask=period(i)&&period(j)&&period(i)!==period(j)?0:mask,f2=g-burn,ix=nextMask*w+f2,val=best[bi]+pen-(dest?f2*step*(o.refPrice||0):0);
+          if(val<dp[j][ix]){dp[j][ix]=val;par[j][ix]=i*size+bi;}
+        }
+      }
+    }
+    var last=n-1,bestIx=-1,bestVal=inf;
+    for(var x=0;x<size;x++)if(dp[last][x]<bestVal){bestVal=dp[last][x];bestIx=x;}
+    if(bestIx<0)return {ok:false,reachMi:reach,nodes:nodes};
+    var stops=[],cur=last,curIx=bestIx;
+    while(cur>0){var code=par[cur][curIx],pi=Math.floor(code/size),pg=code%size,pf=from[pi][pg],candidate=nodes[pi].c;
+      if(candidate){var buy=(pg%w-pf%w)*step,reward=candidate.citgo,redeem=buy>0&&reward&&reward.bit&&!(Math.floor(pf/w)&reward.bit);
+        stops.unshift({c:candidate,arriveGal:pf%w*step,departGal:pg%w*step,buyGal:buy,citgoRedemption:redeem?{kind:reward.kind,month:reward.period}:null});}
+      cur=pi;curIx=pf;
+    }
+    return {ok:true,stops:stops,arriveGal:bestIx%w*step,objective:bestVal,rewards:true};
+  }
+
   function evaluate(o, res) {
     var buy = 0, cost = 0, det = 0, detMin = 0;
     res.stops.forEach(function (s) {
-      s.cost = s.buyGal * s.c.price; buy += s.buyGal; cost += s.cost; det += s.c.detourMi || 0; detMin += s.c.detourMin || 0;
+      var quote=purchaseQuote(s.c,s.buyGal,!!s.citgoRedemption);s.c=quote.c;
+      s.cost = quote.cost; buy += s.buyGal; cost += s.cost; det += s.c.detourMi || 0; detMin += s.c.detourMin || 0;
     });
     var credit = res.arriveGal * (o.refPrice || 0);
     return { gallons: buy, cost: cost, detourMi: det, detourMin: detMin, leftoverGal: res.arriveGal, leftoverValue: credit,
@@ -528,6 +609,7 @@
 
   /** Full plan: optimized + a "convenient" baseline (fewest stops, least detour, fill up) for comparison. */
   function plan(o) {
+    if(o.rewardPriceAt&&!o.rewardPass&&o.cands.some(function(c){return c.citgo;}))return calendarPlan(o);
     var tooFar = 0, farList = [];
     var cands = o.cands.filter(function (c) {
       if (!(c.price > 0 && c.d >= 0 && c.d <= o.model.totalMi)) return false;
@@ -559,21 +641,36 @@
       s.mile = s.c.d;
       s.etaSec = o.model.timeTo(s.c.d);
       s.arriveMi = s.arriveGal / o.model.combGpm;
-      s.alts = alternatives(oo, s, cands);
+      s.alts = best.rewards?[]:alternatives(oo, s, cands);
     });
-    best.stops.forEach(function (s, k) { s.why = whyNotCheaper(oo, best.stops, k, cands, farList); });
+    best.stops.forEach(function (s, k) { s.why = best.rewards?null:whyNotCheaper(oo, best.stops, k, cands, farList); });
     return { ok: true, tooFar: tooFar, cands: cands, stops: best.stops, arriveGal: best.arriveGal, totals: bestEval, easy: easy.ok ? { stops: easy.stops, totals: easyEval } : null,
       minStops: minStops, refPrice: o.refPrice, noStopGal: noStopGal, firstDip: !!oo.firstDip,
       arriveMi: best.arriveGal / o.model.combGpm, savings: easyEval ? easyEval.net - bestEval.net : null };
   }
 
-  /**
-   * When a stop isn't the cheapest station around, say why in one sentence. Looks at the cheapest station within
-   * 15 route miles of the stop (the same "cluster" — somewhere you'd practically have stopped instead), between the
-   * previous stop and the next one (including ones skipped for being too far out of the way) and finds the reason the
-   * plan passed on it: out of your time limit, can't reach it above your buffer, or the detour/threshold eats the savings.
-   */
+  // Recheck calendar eligibility after stop delays and speed/return-date changes. Usually one pass;
+  // only midnight/month boundaries matter. Oscillating schedules omit monthly specials rather
+  // than promise a reward that this plan cannot reach in time. No real redemption is recorded.
+  function calendarPlan(o){
+    var cs=o.cands.map(function(c){return o.rewardPriceAt(c,o.model,[]);}),p,stable=false;
+    function sig(c){var r=c.citgo;return [c.id,c.price,c.rewardMonth,r&&r.bit,r&&r.extra].join('|');}
+    for(var pass=0;pass<5;pass++){
+      p=plan(Object.assign({},o,{cands:cs,rewardPass:true}));if(!p.ok)return p;if(!o.refPrice)o.refPrice=p.refPrice;
+      var next=o.cands.map(function(c){return o.rewardPriceAt(c,o.model,p.stops);});
+      if(cs.every(function(c,i){return sig(c)===sig(next[i]);})){stable=true;break;}cs=next;
+    }
+    if(!stable){cs=cs.map(function(c){return c.citgo?Object.assign({},c,{citgo:Object.assign({},c.citgo,{bit:0,extra:0,kind:'none'})}):c;});p=plan(Object.assign({},o,{cands:cs,rewardPass:true}));p.rewardTimingUncertain=true;}
+    if(!p.ok)return p;
+    p.stops.forEach(function(s){var dated=o.rewardPriceAt(s.c,o.model,p.stops);s.c.arrivalAt=dated.arrivalAt;if(o.rewardDepartAt)s.etaSec=(dated.arrivalAt-o.rewardDepartAt)/1000;});
+    if(p.easy){var used=new Set(),stops=p.easy.stops;
+      stops.forEach(function(s){var c=o.rewardPriceAt(s.c,o.model,stops),r=c.citgo,key=r&&r.period+'|'+r.kind,monthly=!!(r&&r.bit&&!used.has(key)&&s.buyGal>0);if(monthly)used.add(key);s.c=c;s.citgoRedemption=monthly?{kind:r.kind,month:r.period}:null;});
+      p.easy.totals=evaluate(o,{stops:stops,arriveGal:p.easy.totals.leftoverGal});p.savings=p.easy.totals.net-p.totals.net;
+    }return p;
+  }
+
   var CLUSTER_MI = 15;
+  /** Explain a cheaper nearby station's rejection: reachability, detour or whole-trip cost. */
   function whyNotCheaper(o, stops, k, cands, farList) {
     var m = o.model, s = stops[k], c0 = s.c;
     var prevD = k ? stops[k - 1].c.d : 0, nextD = k < stops.length - 1 ? stops[k + 1].c.d : m.totalMi;
@@ -708,9 +805,11 @@
       var arrive = fromGal - burnIn;
       if (arrive < 0) return;
       var top = o.fillCap || o.capGal, buy = Math.max(0, top - arrive);
+      var reward=c.citgo,monthly=!!(reward&&reward.bit&&!p.stops.some(function(s){return s.buyGal>0&&s.citgoRedemption&&s.citgoRedemption.kind===reward.kind&&s.citgoRedemption.month===reward.period;}));
+      var quote=purchaseQuote(c,buy,monthly);c=quote.c;
       var burnOut = model.galTo(L) - model.galTo(c.d) + (c.detourMi || 0) / 2 * model.cityGpm;
       var extraPerGal = last ? c.price - last.c.price : 0;
-      out.push({ c: c, toDestMi: toDest, arriveGal: arrive, buyGal: buy, cost: buy * c.price, extraPerGal: extraPerGal,
+      out.push({ c: c, toDestMi: toDest, arriveGal: arrive, buyGal: buy, cost: quote.cost, extraPerGal: extraPerGal,citgoRedemption:monthly&&buy>0?{kind:reward.kind,month:reward.period}:null,
         endGal: top - burnOut, endMi: (top - burnOut) / model.combGpm });
     });
     out.sort(function (a, b) { return a.toDestMi - b.toDestMi || a.cost - b.cost; });

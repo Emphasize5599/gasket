@@ -37,7 +37,7 @@ async function cancelled(){
   callbacks.shift()({stores:[{placeId:'saved0',name:'Exxon',lat:34,lng:-92,prices:{regular:{price:3.12}}},{id:'unrelated',name:'Exxon',lat:0,lng:0,prices:{regular:{price:1.99}}}]});
   await new Promise(r=>setImmediate(r));
   assert.equal(finished,false);assert(observations.some(s=>s.prices.regular&&s.prices.regular.price===3.12),'persist completed prices while other areas still run');
-  assert.equal(Array.from(cache.values())[0].v.stores.length,1,'retain only known-station neighbors, not an ever-growing unrelated catalog');
+  assert.equal(Array.from(cache.values()).find(x=>x.v.stores).v.stores.length,1,'retain only known-station neighbors, not an ever-growing unrelated catalog');
   window.KeylessGas.cancel();const result=await task;
   assert.equal(result.cancelled,true);assert.equal(result.updated,1);assert.equal(result.stations[0].prices.regular.price,3.12);
   assert.equal(calls.length,4);assert.deepEqual(cancelled,['gasweb','gasweb2','gasweb3','gasweb4','walmart','murphy']);

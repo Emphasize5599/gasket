@@ -1,0 +1,31 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
+ const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.clock.setFixedTime(new Date(2026,9,6,12));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);
+ assert.equal(await p.getAttribute('#keylessWorkers','max'),'20');await p.fill('#keylessWorkers','20');await p.dispatchEvent('#keylessWorkers','input');await p.click('#sDone');
+ assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),20);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{
+  const A=__app,S=A.S;S.cars[0].tank=2.5;S.trip.fuel={mode:'miles',miles:'60'};S.trip.milesLeft='60';S.trip.bufferMi=5;S.trip.minSave=0;S.trip.fillUp=true;S.brands={citgo:true};S.citgoTier='club';S.citgoUsed={};S.citgoHistory={};
+  const alts=__mocks.route({origin:{placeId:'P-start'},destination:{placeId:'P-end'},computeAlternativeRoutes:true}).routes,m=Trip.buildRoute(alts[0],Garage.carModel());
+  const stations=[25,130,230,300].map((d,i)=>{const pt=m.pointAt(d);return {id:'ChIJTestCitgo'+i,name:'CITGO',brand:'citgo',lat:pt.lat,lng:pt.lng,address:(100+i)+' Main St, Testville, AR',state:'AR',google:true,prices:{regular:{price:3,updated:new Date().toISOString()}}};});
+  const v={route:{stops:[{label:'Test start',address:'100 Main St',...m.pts[0]},{label:'Test end',address:'200 Main St',...m.pts.at(-1)}]},alts,altSel:0,trip:{link:'',fuel:S.trip.fuel,milesLeft:'60',bufferMi:5,minSave:0,fillUp:true,avoid:{}},stations:{official:[],google:[{k:0,list:stations}]},savedT:Date.now()};
+  A.KV.put('trips','trip|citgo-test',v);A.KV.put('trips','index',[{id:'citgo-test',title:'Test start → Test end',t:Date.now(),mi:318,n:2}]);window.__paid=0;
+  A.N.routeSearch=()=>{__paid++;throw Error('unexpected Places');};A.N.computeRoute=()=>{__paid++;throw Error('unexpected Routes');};
+ });
+ await p.click('#btnTrip');await p.click('[data-hist="citgo-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
+ await p.evaluate(()=>{__app.S.trip.departNow=true;__app.S.trip.depart=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);__trip.step(6);});await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
+ await p.evaluate(()=>{__trip.discountsChanged();__trip.state().result.stopsShut=false;__trip.step(7);});
+ assert.equal(await p.evaluate(()=>__trip.state().result.plan.stops.filter(s=>s.citgoRedemption).length),1);
+ assert.deepEqual(await p.evaluate(()=>{const t=__app.S.trip,old={returnTrip:t.returnTrip,backAuto:t.backAuto,backAt:t.backAt};try{t.returnTrip=true;t.backAuto=false;t.backAt=new Date(2026,10,3,12).toISOString();const r=__trip.state().result,q=r.opts.rewardPriceAt(r.cands[0],{legEnds:[60,140],timeTo:d=>d*60},[{c:{d:20,detourMin:2}}]);const later=r.opts.rewardPriceAt({...r.cands[0],d:100},{legEnds:[60,140],timeTo:d=>d*60},[{c:{d:20,detourMin:2}}]);return [q.rewardMonth,later.rewardMonth,later.citgo.kind,new Date(later.arrivalAt).getHours(),new Date(later.arrivalAt).getMinutes()];}finally{Object.assign(t,old);}}),['2026-10','2026-11','tuesday',12,40],'explicit return wait absorbs outbound stop time and uses the return month');
+ await p.waitForFunction(()=>[...document.querySelectorAll('.stopbub .pv')].some(e=>e.textContent.includes('2.81')));
+ await p.click('[data-open="0"]');await p.waitForSelector('[data-citgo-fill="0"]');
+ await p.evaluate(()=>{const es=[...document.querySelectorAll('#stop0 *')],sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>e.style.fontSize=sizes[i]*1.3+'px');});
+ assert.equal(await p.locator('#stop0').evaluate(e=>e.scrollWidth>e.clientWidth),false,'no enlarged-text horizontal overflow');
+ if(process.env.UI_SHOT&&width===320)await p.screenshot({path:process.env.UI_SHOT});
+ await p.click('[data-citgo-fill="0"]');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','cancel does not redeem');
+ await p.click('[data-citgo-fill="0"]');await p.click('#cfmYes');await p.waitForFunction(()=>Pricing.citgoBonus(__app.S,new Date())==='none');
+ assert.equal(await p.evaluate(()=>__trip.state().result.plan.stops.filter(s=>s.citgoRedemption).length),0,'confirm reprices existing choices without network');assert.equal(await p.evaluate(()=>__paid),0);
+ await p.evaluate(()=>window.__priorPlan=__trip.state().result.plan);await p.click('#tClose');await p.click('#btnSettings');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__trip.state().result.plan===__priorPlan),true,'unrelated settings do not discard the chosen plan/top-up');
+ await p.click('#btnSettings');assert.equal(await p.locator('[data-cu="tuesday"]').evaluate(e=>e.classList.contains('on')),true);await p.click('[data-cu="tuesday"]');await p.click('#sDone');assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','settings can undo actual redemption');
+ assert.equal(errors.length,0,errors.join('\n'));await p.close();
+}console.log('320/448px CITGO first-fill UI, 20-reader settings, confirmed redemption/cancel/undo and no-API repricing passed');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

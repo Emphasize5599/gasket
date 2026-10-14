@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.154 - 2026-10-14 (keyless test branch only)
+- Up to 20 website readers, more generous RAM defaults and better scan diagnostics.
+- Plan CITGO monthly specials once per month across the trip, with confirmed actual fill-up tracking.
+- Bug fixes.
+
 ## 0.0.153 - 2026-10-14 (keyless test branch only)
 - Spare tire: "No spare" with a repair kit (or run-flat tires) mentioned anywhere in Brave's answer now reads as the kit, even when the answer also says a spare can be added; saved answers are read again once.
 

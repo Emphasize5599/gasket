@@ -1933,10 +1933,10 @@
         var prs = T.projectLegs(model, { lat: s.lat, lng: s.lng }, maxOff);
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi];
-          var c = P.compute(s, grade, S, nowD, new Date(goD.getTime() + pr.along / (model.totalMi || 1) * model.durationSec * 1000));   // day-based bonuses go by when you'll be there
+          var priced = P.tripPrice(s, grade, S, nowD, rewardArrival(model,pr.along)),c=priced&&priced.calc;
           if (!c) { if (!pi) { unpriced++; unp.push({ s: s, prs: prs }); } break; }
           if(!pi){if(c.ageHours!=null&&c.stale)stale++;if(c.ageUnknown){unknownTimes++;if(c.observedAgeHours>S.staleHours)oldObservations++;}}
-          cands.push(mkCand(s, pr, c.final, c));
+          cands.push(mkCand(s, pr, priced.price, c,priced));
         }
       }
       // no posted price: kept aside at an estimated price (typical on this route + 10¢), and only planned in where no
@@ -2511,6 +2511,22 @@
     if ($('tsDetKeep')) $('tsDetKeep').onclick = function (e) { e.preventDefault(); S.trip.maxDetourMin = detMinOf(r); A.save(); keepScroll(showResult); };
   }
 
+  // Use segment timing rather than a fraction of total distance. Respect a later explicit return
+  // departure. These remain estimates in the phone's timezone, not promises about a pump's clock.
+  function rewardArrival(m,d,stops){
+    var t=departAt().getTime(),seconds=m.timeTo(d),ends=m.legEnds||[],before=function(at){return (stops||[]).filter(function(s){return s.c.d<at;}).reduce(function(sum,s){return sum+(s.c.detourMin||0)+8;},0)*60;};
+    seconds+=before(d);
+    if(S.trip.returnTrip&&!backAuto()&&S.trip.backAt&&ends.length>1){var turn=ends[ends.length-2];if(d>=turn){var wait=new Date(S.trip.backAt).getTime()-(t+(m.timeTo(turn)+before(turn))*1000);seconds+=Math.max(0,wait||0)/1000;}}
+    return new Date(t+seconds*1000);
+  }
+  function repriceRewards(){
+    if(!result)return;
+    var list=[result].concat((result.routes||[]).map(function(x){return x.res;})),seen=new Set();
+    list.forEach(function(r){if(seen.has(r)||!r.opts)return;seen.add(r);var m=r.opts.model;
+      r.cands.forEach(function(c){if(c.est)return;var q=P.tripPrice(c.station,r.grade,S,new Date(),rewardArrival(m,c.d));if(q){delete c.citgo;Object.assign(c,q);}});
+      r.opts=Object.assign({},r.opts,{cands:r.cands});r.plan=T.plan(r.opts);r.sweep=null;r.dsweep=null;r.topSel=-1;
+    });recompute();keepScroll(showResult);
+  }
   function makeOpts(model, cands, startGal) {
     var kd = KIND(), cap = Garage.tank();
     return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * 0.8 : null,
@@ -2520,6 +2536,7 @@
       stopPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
       detourPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
       maxDetourMin: S.trip.maxDetourMin, timeValue: S.trip.timeValue, stopMinutes: kd === 'ev' ? 5 : kd === 'h2' ? 10 : 8,
+      rewardDepartAt:departAt().getTime(),rewardPriceAt:function(c,m,stops){if(c.est||!c.station||c.station.brand!=='citgo')return Object.assign({},c,{rewardMonth:P.monthKey(rewardArrival(m,c.d,stops))});var q=P.tripPrice(c.station,gradeOf(),S,new Date(),rewardArrival(m,c.d,stops));return q?Object.assign({},c,q):c;},
       lastFull: S.trip.arrive === 'full' };
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
@@ -2773,10 +2790,11 @@
     } else {
       var t = p.totals;
       h += warnHtml;
+      if(p.rewardTimingUncertain)h+='<div class="msg">Monthly CITGO specials omitted: stop timing is too close to a date change to count them reliably.</div>';
       h += costEst();
       var whyN = r.cands.length + ' priced station' + (r.cands.length === 1 ? '' : 's') + ' along your route' +
         (p.tooFar ? '; ' + p.tooFar + ' more were over ' + S.trip.maxDetourMin + ' min out of the way' : '') +
-        (r.unpriced ? '; ' + r.unpriced + ' had no ' + gradeLabel(r.grade).toLowerCase() + ' price' : '') + '. Tap a stop for the cheaper stations it was weighed against.';
+        (r.unpriced ? '; ' + r.unpriced + ' had no ' + gradeLabel(r.grade).toLowerCase() + ' price' : '') + (p.cands.some(function(c){return c.citgo;})?'. CITGO monthly rewards and purchase quantities are weighed across the entire trip; a simple station-for-station price comparison would miss later reward changes.':'. Tap a stop for the cheaper stations it was weighed against.');
       if (p.stops.length) {
         var shut = r.stopsShut !== false;
         h += '<div class="sec-row"><button class="sec-h" id="tsStopsH" aria-expanded="' + !shut + '"><span>' + p.stops.length + ' fuel stop' + (p.stops.length === 1 ? '' : 's') +
@@ -3173,6 +3191,14 @@
     el.querySelectorAll('[data-nav]').forEach(function (b) {
       b.onclick = function () { var s = b.dataset.nav === 'top' ? r.top.c : p.stops[+b.dataset.nav].c; N.navigate(s.lat, s.lng, /^(wm|mu|demo)-/.test(s.station.id) ? '' : s.station.id, s.station.name); };
     });
+    el.querySelectorAll('[data-citgo-fill]').forEach(function(b){b.onclick=async function(){
+      // Actual redemption is deliberately separate from planning/navigation. Never silently mark
+      // a future plan's month used; only today's eligible special can be confirmed here.
+      var now=new Date(),kind=P.citgoBonus(S,now);if(kind==='none')return;
+      var name=kind==='tuesday'?'Triple Tuesday':'Five Cent Friday',month=P.monthKey(now);
+      var ok=await A.confirmDel({always:true,title:'Record actual CITGO fill-up?',body:'Confirm you actually filled up using '+name+' today. This marks '+month+' as used and replans saved station choices without any lookups. Planning alone never uses your reward. You can undo this in Settings.',action:'Record fill-up',goClass:'primary'});
+      if(!ok)return;P.setCitgoRedeemed(S,kind,month,true);A.save();repriceRewards();
+    };});
     if (A.bl) (p.stops || []).forEach(function (s, i) { if (r.openStops && r.openStops[i]) A.bl.bind(s.c.station, 'ts' + i); });
     el.querySelectorAll('[data-why]').forEach(function (b) {
       b.onclick = function () { var box = $('why' + b.dataset.why); box.classList.toggle('hidden'); };
@@ -3338,6 +3364,7 @@
         '<button data-top="' + k + '">' + (on ? 'Added ✓' : 'Add') + '</button></div>';
     });
     if (r.top) h += '<div class="s-act"><button data-nav="top">Navigate to the top-up</button></div>';
+    if(r.top&&r.top.c.citgo&&P.citgoBonus(S,new Date())!=='none')h+='<div class="s-act"><button data-citgo-fill="top">Record actual CITGO fill-up…</button></div>';
     return h + '</div>';
   }
   function stopCard(s, i) {
@@ -3351,6 +3378,9 @@
       (c.kw ? ' · <b>~' + Math.max(1, Math.round(s.buyGal / c.kw * 60)) + ' min charging</b> at ~' + Math.round(c.kw) + ' kW average' : '') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
       ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';
+    if(c.citgo){var redemption=s.citgoRedemption;
+      h+='<div class="lead small keep">'+(redemption?(redemption.kind==='tuesday'?'Triple Tuesday':'Five Cent Friday')+' · '+esc(redemption.month):'Everyday Club CITGO reward')+' '+A.qBtn('Monthly specials apply to the first planned eligible purchase, once per month. Later CITGO stops use everyday rewards. Club rewards cover up to 30 gallons; the price shown is the purchase average above that amount. Arrival dates include estimated fuel-stop time and use your phone’s timezone. Verify the reward in Club CITGO. Planning does not record a real fill-up.')+'</div>';
+    }
     if (s.alts.length) {
       h += '<div class="alts">' + s.alts.map(function (a) {
         var ab = P.brand(a.c.station.brand);
@@ -3363,6 +3393,7 @@
       '<div class="ln tot"><span>You pay per ' + { gal: 'gallon', kWh: 'kWh', kg: 'kg' }[UN()] + '</span><span>' + priceText(c.price) + '</span></div>' +
       (st.network || st.dc || st.pricing || st.hours ? '<div class="af-info">' + [st.network, st.dc ? st.dc + ' fast port' + (st.dc === 1 ? '' : 's') + ' · ' + (st.kwEst ? '~' : '') + st.kw + ' kW' + (st.kwEst ? ' (typical for the network)' : '') : '', st.plugs && st.plugs.length && window.AltFuel ? st.plugs.map(AltFuel.plugName).join(', ') : '', st.pricing ? 'Posted price: ' + st.pricing : '', st.hours].filter(Boolean).map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>' : '') + '</div>';
     h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div>';
+    if(c.citgo&&P.citgoBonus(S,new Date())!=='none')h+='<div class="s-act"><button data-citgo-fill="'+i+'">Record actual CITGO fill-up…</button></div>';
     if (A.bl) h += A.bl.buttons(st, 'ts' + i, result.grade);
     h += '</div></div>';
     return h;
@@ -3440,7 +3471,7 @@
       stopTips = [];
       // one bubble per station: a station you stop at twice (going and coming back) shows both numbers, "3, 6"
       var groups = [], byStation = {};
-      result.cands.forEach(function (c) {
+      (result.plan.ok?result.plan.stops.map(function(s){return s.c;}):[]).concat(result.top?[result.top.c]:[]).forEach(function (c) {
         if (!chosen[c.id]) return;
         var key = c.station.id, g = byStation[key];
         if (!g) { g = byStation[key] = { c: c, nums: [], prices: [] }; groups.push(g); }
@@ -3712,7 +3743,7 @@
       drawn = {};
       if (result && onPlan(step)) keepScroll(renderResults);
       if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();
-    }, close: closeTrip, blChanged: blChanged, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
+    }, close: closeTrip, blChanged: blChanged, discountsChanged: repriceRewards, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
     /** For tests: the other stations' dots on the map now (not your stops). */
     otherDots: function () { return dots.filter(function (d) { return layer.hasLayer(d); }).length; },

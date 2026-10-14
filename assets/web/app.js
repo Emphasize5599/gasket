@@ -1105,16 +1105,18 @@
 
   // ---------- settings ----------
   function sw(key, on) { return '<label class="switch"><input type="checkbox" data-k="' + key + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
+  function discountKey(){return JSON.stringify([S.citgoTier,S.citgoUsed,S.citgoHistory,S.walmartPlus,S.samsMode,S.cashbackPct,P.todayKey()]);}
   function openSettings(onboarding) {
+    $('settings').dataset.discountKey=discountKey();
     var calls = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
     var mk = P.monthKey();
-    var used = function (k) { return (S.citgoUsed || {})[k] === mk; };
+    var used = function (k) { return P.citgoRedeemed(S,k,mk); };
     var heading='<h1>' + (onboarding ? 'Set up Gasket' : 'Settings') + '</h1>',h='';
     if (onboarding) h += '<p class="lead">Start without an API key. Website searches are slower and coverage varies.</p>';
     h+='<button class="btn tonal" id="sDemo">Let me test Gasket out with demo data</button><p class="lead small keep">Adds four example vehicles only—no stations, prices or trips. Your existing vehicles are kept.</p>';
     h += '<div class="card"><h3>Station discovery</h3><div class="field"><div class="lbl">Prefer website discovery<small>Works without an API key for nearby and route searches. Scans overlapping areas and scrolls each result list. Slower and less consistent: websites can omit stations or prices, stall, or restrict access. No automatic paid fallback. Without a key this method is selected automatically; with a key you can choose either method.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
     var workerAuto=KeylessGas.readerCount({S:{},N:N}),workerCount=KeylessGas.readerCount({S:S,N:N}),workerManual=Number(S.keylessWorkers)>=1;
-    h+='<div class="card"><h3>Website readers</h3><div class="field"><div class="lbl">Parallel workers<small>Default uses phone RAM: 4 on smaller/unknown devices, 6 around 8 GB, 8 around 12 GB, 12 around 16 GB. Low-memory devices default to 4. More readers can finish discovery sooner, but use more RAM and may trigger website restrictions. Up to 16 is available; it is not a guaranteed speedup. Active scans keep their starting count.</small></div><b id="workerValue">'+(workerManual?'':'Auto · ')+workerCount+'</b></div><input type="range" id="keylessWorkers" min="1" max="16" step="1" value="'+workerCount+'" data-manual="'+(workerManual?'yes':'no')+'" aria-label="Parallel website workers"><div class="lead small keep">1–16 readers · RAM-based default: '+workerAuto+'</div><button class="btn tonal sm" id="workerAuto">Use RAM default</button></div>';
+    h+='<div class="card"><h3>Website readers</h3><div class="field"><div class="lbl">Parallel workers<small>Default uses phone RAM: 4 on smaller/unknown devices, 8 around 8 GB, 12 around 12 GB, 16 around 16 GB. Low-memory devices default to 4. More readers can finish discovery sooner, but use more RAM and may trigger website restrictions. Up to 20 is available; it is not a guaranteed speedup. Active scans keep their starting count; extra readers step back under memory pressure.</small></div><b id="workerValue">'+(workerManual?'':'Auto · ')+workerCount+'</b></div><input type="range" id="keylessWorkers" min="1" max="20" step="1" value="'+workerCount+'" data-manual="'+(workerManual?'yes':'no')+'" aria-label="Parallel website workers"><div class="lead small keep">1–20 readers · RAM-based default: '+workerAuto+'</div><button class="btn tonal sm" id="workerAuto">Use RAM default</button></div>';
     h += '<div class="card"><h3>Google API key · recommended</h3><p class="lead small">Optional. Faster station discovery and more reliable trip planning.</p>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
       '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
@@ -1213,7 +1215,7 @@
     $('citgoTier').onchange = function () { $('citgoBonusRow').classList.toggle('hidden', this.value === 'none'); };
     $('citgoUsed').onclick = function (e) {
       var b = e.target.closest('button'); if (!b) return;
-      b.classList.toggle('on'); S.citgoUsed = Object.assign({}, S.citgoUsed); S.citgoUsed[b.dataset.cu] = b.classList.contains('on') ? P.monthKey() : '';
+      b.classList.toggle('on'); P.setCitgoRedeemed(S,b.dataset.cu,P.monthKey(),b.classList.contains('on'));
       document.querySelector('.citgo-today').textContent = citgoToday();
     };
     $('kvClear').onclick = function () {
@@ -1296,7 +1298,7 @@
     S.apiKey = $('apiKey').value.trim();
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
-    S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(16,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;
+    S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(20,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;
     S.citgoTier = $('citgoTier').value;
     S.samsMode = $('samsMode').value;
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));
@@ -1313,6 +1315,7 @@
     });
     save();
     pg.classList.add('hidden');
+    if(pg.dataset.discountKey!==discountKey()&&window.__trip&&__trip.discountsChanged)__trip.discountsChanged();
     stations = stations.filter(function (s) { return S.brands[s.brand]; });
     render();
     if (selectedId) openDetail(selectedId);
@@ -1459,6 +1462,8 @@
     put: function (ns, key, v) { try { if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { } return false; },
     clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
   };
+  var lastScan=KV.get('gasmeta','last-scan');
+  if(lastScan&&lastScan.v&&lastScan.v.status==='running'&&window.FLog)FLog.info('keyless','Unfinished scan recovered after restart',{kind:lastScan.v.kind,completed:lastScan.v.completed,total:lastScan.v.total,elapsedMs:lastScan.v.elapsedMs,minSystemAvailableMB:lastScan.v.minSystemAvailableMB,peakAppJavaHeapMB:lastScan.v.peakAppJavaHeapMB});
   // ---------- quiet UI: explanations live behind a small (?) instead of filling the screen ----------
   // Hint text under labels and explanatory paragraphs become a circled ? that shows the text when tapped.
   // Warnings (.msg, .note, .warn) and anything marked .keep stay on screen.

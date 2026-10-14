@@ -198,9 +198,18 @@
   function citgoBonus(s, d) {
     d = d || new Date();
     var used = s.citgoUsed || {}, day = d.getDay(), mk = monthKey(d);
-    if (day === 2 && used.tuesday !== mk) return 'tuesday';
-    if (day === 5 && used.friday !== mk) return 'friday';
+    if (day === 2 && !citgoRedeemed(s,'tuesday',mk)) return 'tuesday';
+    if (day === 5 && !citgoRedeemed(s,'friday',mk)) return 'friday';
     return 'none';
+  }
+  function citgoRedeemed(s,kind,month){return !!((s.citgoHistory||{})[month]||{})[kind]||(s.citgoUsed||{})[kind]===month;}
+  function setCitgoRedeemed(s,kind,month,used){
+    if(!/^(tuesday|friday)$/.test(kind)||!/^\d{4}-(?:[1-9]|1[0-2])$/.test(month))return false;
+    s.citgoHistory=Object.assign({},s.citgoHistory);
+    Object.keys(s.citgoUsed||{}).forEach(function(k){var m=s.citgoUsed[k];if(m)s.citgoHistory[m]=Object.assign({},s.citgoHistory[m],{[k]:true});});
+    s.citgoHistory[month]=Object.assign({},s.citgoHistory[month],{[kind]:!!used});
+    s.citgoUsed=Object.assign({},s.citgoUsed);if(used)s.citgoUsed[kind]=month;else if(s.citgoUsed[kind]===month)s.citgoUsed[kind]='';
+    return true;
   }
   function r3(x) { return Math.round(x * 1000) / 1000; }
 
@@ -216,7 +225,8 @@
   }
   /** Returns {base, final, steps:[{label, amount, note}], notes:[], updated} or null if no price for grade. */
   /** at: when you'll be at the pump (for day-based rewards); defaults to now. */
-  function compute(station, grade, s, now, at) {
+  function compute(station, grade, s, now, at, options) {
+    options=options||{};
     var gp = station.prices[grade];
     if (!gp) return null;
     s = s || DEFAULTS;
@@ -253,9 +263,9 @@
       if ((b === 'exxon' || b === 'mobil') && station.wplus !== false) notes.push("Doesn't stack with Exxon Mobil Rewards+ — no points earned on this fill." + (station.wplus === true ? ' Listed as a Walmart+ station by ExxonMobil.' : ''));
     }
 
-    if (b === 'citgo' && s.citgoTier && s.citgoTier !== 'none') {
+    if (!options.noClub && b === 'citgo' && s.citgoTier && s.citgoTier !== 'none') {
       var base = s.citgoTier === 'premier' ? 0.06 : 0.03;
-      var bonus = citgoBonus(s, at || now);
+      var bonus = options.noMonthly?'none':citgoBonus(s, at || now);
       var rate = base, label = 'Club CITGO ' + (s.citgoTier === 'premier' ? 'Premier reward' : 'reward');
       var when = at && at.toDateString() !== (now || new Date()).toDateString() ? ' — ' + at.toLocaleDateString([], { weekday: 'short' }) + ' when you get there' : '';
       if (bonus === 'tuesday') { rate = base * 3; label += ' ×3 (Triple Tuesday' + when + ')'; }
@@ -272,6 +282,17 @@
     var observedAt=Number(gp.observedAt)>0?Number(gp.observedAt):null,observedAge=observedAt?((now||new Date())-observedAt)/3.6e6:null;
     return { base: gp.price, final: r3(running), steps: steps, notes: notes, updated: updated, source:gp.source||station.source,
       ageHours: ageH,ageUnknown:ageH==null,observedAt:observedAt,observedAgeHours:observedAge, stale: ageH==null?(observedAge==null||observedAge>(s.staleHours||24)):ageH>(s.staleHours||24) };
+  }
+
+  // Ordinary candidate prices; hypothetical monthly redemption belongs to each planner path.
+  // Three breakdowns let pure planning cap ALL Club rewards at 30 gallons per purchase.
+  function tripPrice(station,grade,s,now,at){
+    at=at||now||new Date();var normal=compute(station,grade,s,now,at,{noMonthly:true});if(!normal)return null;
+    var out={price:normal.final,calc:normal,rewardMonth:monthKey(at),arrivalAt:at.getTime()};
+    if(station.brand==='citgo'&&s.citgoTier&&s.citgoTier!=='none'){
+      var none=compute(station,grade,s,now,at,{noClub:true}),bonus=compute(station,grade,s,now,at),kind=citgoBonus(s,at);
+      out.citgo={period:monthKey(at),kind:kind,bit:kind==='tuesday'?1:kind==='friday'?2:0,cap:30,price:none.final,ordinary:none.final-normal.final,extra:normal.final-bonus.final,normal:normal,bonus:bonus,none:none};
+    }return out;
   }
 
   /** "$2.89⁹" style: dollars + cents, with the tenth-of-a-cent as superscript (like a pump sign). */
@@ -321,6 +342,6 @@
   function brand(b) { return BRANDS[b] || ALT[b] || { name: '', short: '?', color: '#777' }; }
 
   var api = { BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
-    compute: compute, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
+    compute: compute, tripPrice: tripPrice, citgoRedeemed: citgoRedeemed, setCitgoRedeemed: setCitgoRedeemed, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

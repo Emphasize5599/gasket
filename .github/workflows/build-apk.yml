@@ -28,6 +28,9 @@ on:
       - tests/routes-budget.test.js
       - tests/routes-limit.test.js
       - tests/worker-pool.test.js
+      - tests/citgo-trip.test.js
+      - tests/citgo-trip-ui.test.js
+      - tests/scan-audit.test.js
       - tests/speed-settings.test.js
       - tests/speed.test.js
       - tests/trip.test.js

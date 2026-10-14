@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.fill('#apiKey','TEST');await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{__app.N.memoryInfo=()=>JSON.stringify({totalMem:12*1073741824});__app.S.trip.fuel={mode:'miles',miles:'180'};__app.S.trip.milesLeft='180';__app.S.speed.rule={};});
- await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'8');assert.match(await p.innerText('#workerValue'),/Auto/);
+ await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'12');assert.match(await p.innerText('#workerValue'),/Auto/);
  await p.locator('#keylessWorkers').fill('16');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),16);
  await p.click('#btnSettings');assert.equal(await p.inputValue('#keylessWorkers'),'16');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),null);
  await p.click('#btnTrip');await p.evaluate(()=>__trip.step(5));
