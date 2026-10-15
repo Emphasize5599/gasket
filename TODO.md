@@ -2,7 +2,11 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Reconciled against the keyless test branch through **0.0.155**, 2026-10-14. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 36 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 42 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+
+## fix — defects
+
+36. [ ] **Tire advice condemns serviceable tires.** With better tires on the front and worn ones on the rear (seen on a Mustang in owner testing), the advice says to replace all four although the fronts are serviceable. Advice should name the tires that need replacing and say what to do with the good ones (for example, move the better pair to the rear per `TireMath.rotation`'s rule). Check that AWD's replace-all rule is not applied to two-wheel-drive cars. Add `TireMath` tests for mixed front/rear wear on FWD, RWD and AWD.
 
 ## feat — product features
 
@@ -17,7 +21,21 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 
 ### Tires and trailers
 
+37. [ ] **One tread notice per distinct tire problem.** Advice shows a single tile for one tire ("About 1/32 in left driver rear…") even when several tires are bad. Show a separate notice for each tire whose condition differs significantly, and combine tires in similar condition into one summary notice (for example, "Both rear tires: about 2/32 in left").
+38. [ ] **AI-written whole-setup tire advice.** Fixed rules cannot cover every mix of brands, types, tread depths, positions and tread patterns (for example, matching depths with different tread patterns on an AWD car). Give the notice tiles an overall recommendation for how the tires should be arranged or replaced, written by an on-device AI from the full tire setup and drivetrain, with the existing rules (`TireMath.treadDiff`, `rotation`, `missing`) as checked facts it must not contradict. The current model (all-MiniLM-L6-v2) only compares sentences and cannot write advice, so this needs a small on-device text-generation model: choose one by download size, phone memory and speed, or fall back to rules-built text when it is unavailable. Generated advice must be labeled as AI-written and never override a safety rule.
+
 9. [ ] **Tire dry-rot and aging information screen.** Cover sidewall cracking/dry rot, age-related rubber hardening and reduced grip even when tread remains, date-code reading, inspection and tire-maker age/replacement guidance. Keep age/condition separate from the generalized tread estimate; research the guidance before writing the screen.
+
+### Route hazards and climate
+
+39. [ ] **Confirm wet-weather routes with worn tires.** When tread is low enough to hurt wet-weather grip and the user picks a route option in Hazards that has rain, storm, snow or ice stretches, ask for confirmation before continuing, naming the hazard and the affected tires. Today the selection goes through silently.
+40. [ ] **Rank route options by the vehicle's weak points.** Rank Hazards' options by how vulnerable this vehicle is to each route's hazards, not just by which hazards are present:
+    - wind ranks lower for large or tall vehicles and when towing;
+    - heavy rain and thunderstorms rank lower for worn tires, low-riding cars (sports cars) and a broken or missing air conditioner (demisting);
+    - extreme heat ranks lower when the air conditioner is broken or missing.
+
+    Ground clearance or ride height needs a source: research a general data source first (EPA class, NHTSA/VIN body data, catalog data), with on-device AI classifying low-riding cars only as a fallback. If that needs a larger model, decide it together with item 38. Explain each ranking in the option's row.
+41. [ ] **"My air conditioning is broken" switch.** Put a switch at the top of Garage → Climate control saying whether the car's A/C works. When it is on, presets and Advice should not recommend A/C or its demisting, and Hazards should use it (item 40). Saved per car and included in backup and export.
 
 ### Vehicle images
 
