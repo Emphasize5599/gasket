@@ -3,7 +3,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}
-APK=Gasket.apk
 
 # signing: the keystore and its password never live in the repo (see SIGNING.md). The password comes from KS_PASS.
 # The keystore is KEYSTORE=/path/to.jks, else keystore/release.jks (gitignored), else GASKET_KEYSTORE_B64 (the
@@ -39,7 +38,16 @@ ANDROID_HOME="$SDK" "$GRADLE_CACHE/gradle-8.13/bin/gradle" --console=plain --no-
 SIGNER=${APKSIGNER:-$(find "$SDK/build-tools" -name apksigner -type f | sort -V | tail -1)}
 test -n "$SIGNER"
 
-"$SIGNER" sign --ks "$KS" --ks-pass env:KS_PASS --key-pass env:KS_PASS \
-  --min-sdk-version 31 --out "$APK" build/outputs/apk/release/Gasket-release-unsigned.apk
-"$SIGNER" verify --print-certs "$APK" | grep -E 'SHA-1|SHA-256' | head -2
-ls -la $APK
+# One compilation/dex pass; Gradle packages both supported ABIs plus the universal output.
+# Publish just these two choices. The x86_64-only intermediate need not be signed or uploaded.
+for ABI in arm64-v8a universal; do
+  APK="Gasket-$ABI.apk"
+  UNSIGNED="build/outputs/apk/release/Gasket-$ABI-release-unsigned.apk"
+  test -s "$UNSIGNED"
+  "$SIGNER" sign --ks "$KS" --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+    --min-sdk-version 31 --out "$APK" "$UNSIGNED"
+  "$SIGNER" verify --print-certs "$APK" | grep -E 'SHA-1|SHA-256' | head -2
+  ls -la "$APK"
+done
+# Local backwards-compatible convenience name only; never publish a third duplicate universal asset.
+cp Gasket-universal.apk Gasket.apk

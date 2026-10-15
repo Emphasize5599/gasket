@@ -65,6 +65,25 @@ It handles round trips and multi-stop trips, speed limits along the way (from FH
 - **Bot checks stay with you.** When a site wants an "are you human?" check, Gasket opens it so you can complete it yourself. A background read that hits a check just stops; Gasket never tries to get past one.
 - **Plain words.** Explanations come first; acronyms appear only in parentheses after them.
 
+## APK choices and Obtainium
+
+Releases from 0.0.160 publish two standalone APKs, not base/config split-install files:
+
+1. **`arm64-v8a`**: the smaller download for ARM64 phones, including Pixel 8 and later. Uses the same ARM64 engine as the universal APK, not a separate Tensor-only or Armv9-optimized runtime.
+2. **`universal`**: includes both bundled native ABIs, ARM64 and x86-64. This does not add 32-bit CPU support or lower the minimum Android version.
+
+Both have the same package, version code and signing identity. Switching between them does not require uninstalling or deleting app data. `Gasket.apk` is retained as a local universal-build alias only, not a third duplicate release download.
+
+For Obtainium, enable **Attempt to filter APKs by CPU architecture if possible**. Filenames deliberately contain the canonical `arm64-v8a` token only on that APK; the universal filename does not contain it. [Upstream's filename filter](https://github.com/ImranR98/Obtainium/blob/af286fa8d31d7406d6db167e2314d376d74f7696/lib/services/apk_filter_service.dart) selects the matching ARM64 asset when available. This cannot override a user's own filters or guarantee the behavior of every Obtainium version. Without a matching ABI token, that algorithm can leave multiple choices rather than automatically choosing universal.
+
+To force the smaller keyless-test APK, set **Filter APKs by Regular Expression** to:
+
+```text
+^Gasket-\d+\.\d+\.\d+-keyless-test-arm64-v8a\.apk$
+```
+
+To force universal instead, replace `arm64-v8a` with `universal`. Keep prereleases enabled and the existing keyless-test release filter if tracking the test app. For regular/main releases, remove `-keyless-test` from the APK regex. The regular and test apps remain separate package identities. See [Obtainium's source/filter documentation](https://wiki.obtainium.imranr.dev/sources/).
+
 ## How it's built
 
 ```

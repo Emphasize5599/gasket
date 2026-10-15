@@ -24,7 +24,7 @@ android {
         targetSdk 35
         versionCode appCode
         versionName appVersion
-        // LiteRT-LM ships arm64 and x86_64; other devices keep the non-AI app usable.
+        // Both APK choices retain the same package/version/signing identity for sideloaded updates.
     }
     sourceSets.main {
         manifest.srcFile preparedManifest
@@ -34,6 +34,14 @@ android {
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
     buildTypes.release { minifyEnabled false }
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a', 'x86_64'
+            universalApk true
+        }
+    }
     packaging {
         jniLibs { useLegacyPackaging = false }
         // Full license texts are preserved in runtime-notices.txt instead of conflicting archive paths.
