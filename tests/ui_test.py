@@ -85,7 +85,7 @@ with sync_playwright() as p:
         lg = pg.evaluate("[document.querySelectorAll('.mbub .lg.img img').length, document.querySelectorAll('#rows .badge.logo img').length, window.__iconUrls.length, window.__app.KV.get('logos', 'citgo') ? 1 : 0]")
         print('  logos (bubbles, rows, fetched, saved):', lg); assert lg[0] >= 3 and lg[1] >= 10 and lg[2] == 6 and lg[3] == 1, lg
         # a station with no price: hidden from the map and list when you ask
-        pg.evaluate('''(() => { const st = window.__app.stations(), x = JSON.parse(JSON.stringify(st[0])); x.id = 'demo-noprice'; x.name = 'Kum & Go'; x.prices = {}; st.push(x); window.__app.render(); })(); 0''')
+        pg.evaluate('''(() => { const st = window.__app.stations(), x = JSON.parse(JSON.stringify(st[0])); x.id = 'demo-noprice'; x.name = 'Kum & Go'; x.prices = {}; const mc = window.__app.map.getCenter(); x.lat = mc.lat; x.lng = mc.lng; x.address = '100 Main St, Testville'; ['placeId', 'gid', 'cid', 'wmStoreId', 'aliases'].forEach(k => delete x[k]);   /* its own station: an exact copy is merged with the original (0.0.156) */ st.push(x); window.__app.render(); })(); 0''')
         pg.wait_for_timeout(300)
         n1 = pg.evaluate("[document.querySelectorAll('#rows .row').length, document.querySelectorAll('.mbub').length, [...document.querySelectorAll('#rows .nm')].some(e => e.textContent === 'Kum & Go')]")
         pg.evaluate("window.__app.S.hideUnpriced = true; window.__app.render()"); pg.wait_for_timeout(300)

@@ -169,6 +169,7 @@ with sync_playwright() as p:
         pg.evaluate("() => { window.__mocks.siteShow = (key, args) => key === 'brave' ? { gal: 18.5, text: '18.5 gallons fuel tank' } : { closed: true }; }")
         pg.click('#gTankShow'); pg.wait_for_timeout(500)
         assert pg.evaluate('window.__siteShown')['key'] == 'brave' and pg.evaluate('window.Garage.car().tank') == 18.5, 'the answer found on the page you looked at'
+        saved(pg)      # leave the editor the way a person would before the car under it changes
         pg.evaluate("(id) => { const S = window.__app.S; S.cars = S.cars.filter(x => x.id !== S.carId); S.carId = id; window.Garage.redraw(); }", accord); pg.wait_for_timeout(300)
         c = pg.evaluate('window.Garage.car()'); i = c['info']; print('  info:', i)
         assert i['engine'].startswith('1.5L Inline 4 Cyl') and i['asp'] == 'turbo' and i['trans'] == 'cvt' and i['drive'] == 'fwd' and 'DOHC' in i['features'] and 'Direct injection' in i['features']

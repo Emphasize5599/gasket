@@ -368,15 +368,14 @@ public class MainActivity extends Activity {
             if (isGasWorker(key) && view != null && verifying != this) {
                 view.stopLoading(); view.loadUrl("about:blank"); view.clearHistory(); ready = false;
                 completedReads++;
-                if (completedReads % 8 == 0) {
+                if (completedReads % 4 == 0) {
                     final SiteWorker old = this;
                     main.post(new Runnable() { public void run() {
                         if (old.readReq >= 0 || verifying == old || workers.get(old.key) != old || old.view == null) return;
                         // Only WebView RAM resource cache; never cookies, lookup answers or app storage.
-                        old.view.clearCache(false);
                         gasReaderRecycles++;
                         root.removeView(old.view); old.view.destroy(); old.view = null;
-                        ensureWorker(old.key);
+                        // Recreate lazily for the next read; a paused lane must not retain a replacement WebView.
                     }});
                 }
             }
@@ -391,6 +390,8 @@ public class MainActivity extends Activity {
             WebSettings ws = view.getSettings();
             ws.setJavaScriptEnabled(true);
             ws.setDomStorageEnabled(true);
+            // Station results/prices are text. Do not download map/photo tiles for invisible readers.
+            if (isGasWorker(key)) ws.setBlockNetworkImage(true);
             if (desktop) {
                 // Google Maps' desktop page is the one that spells out every stop's coordinates in its address
                 ws.setUserAgentString("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
@@ -561,6 +562,7 @@ public class MainActivity extends Activity {
     }
 
     private void startVerify(SiteWorker w) {
+        w.view.getSettings().setBlockNetworkImage(false);
         verifying = w;
         showMargins(w, true);
         w.view.loadUrl(w.home);
@@ -572,6 +574,7 @@ public class MainActivity extends Activity {
 
     /** Show a site's page to the user, with the Done button, and run a reader script on it once it has loaded. */
     private void startShow(SiteWorker w, int reqId, String url, String call) {
+        w.view.getSettings().setBlockNetworkImage(false);
         verifying = w;
         w.showReq = reqId;
         w.queue.clear();
@@ -594,7 +597,7 @@ public class MainActivity extends Activity {
             wmDone.setText("Done \u2014 back to the map");
         }
         String key = verifying != null ? verifying.key : "";
-        if (verifying != null) showMargins(verifying, false);
+        if (verifying != null) { showMargins(verifying, false); if(isGasWorker(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
         verifying = null;
         wmDone.setVisibility(View.GONE);
         web.setVisibility(View.VISIBLE);

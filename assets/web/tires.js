@@ -14,21 +14,43 @@
   function lifeMiles(t) {
     if (+t.warrantyMi > 0) return +t.warrantyMi;
     if (t.utqg && +t.utqg.tw > 0) return Math.max(25000, Math.min(90000, +t.utqg.tw * 100));
-    return 50000;
+    var type=String(t.type||'').toLowerCase();
+    // Broad planning assumptions, not tested/model-specific tire lifetimes.
+    return /racetrack|competition|drag racing/.test(type)?10000:/extreme|max performance/.test(type)?25000:/summer|ultra high/.test(type)?30000:/winter|snow|ice/.test(type)?35000:/mud|maximum traction/.test(type)?40000:/touring|highway/.test(type)?60000:50000;
   }
   /** -> { depth (32nds), measured } or null. Wear runs from new down to 2/32 over the expected life; skipped rotations wear
    *  some tires faster (the worst one is what matters). Tires that aren't all the same: the shallowest one measured. */
-  function estimate(t) {
+  function estimate(t,drive) {
     var w = worst(t); if (w) return { depth: w.depth, measured: w.measured, corner: w.k };
     var r = t && t.tread; if (!r) return null;
     if (r.mode === 'measure') return +r.depth > 0 ? { depth: +r.depth, measured: true } : null;
     if (r.miles === '' || r.miles == null || !(+r.miles >= 0)) return null;
     var nd = +t.newDepth || newDepth(t.type), life = lifeMiles(t), f = ROT[r.rotated] || ROT.unsure;
     var d = nd - (nd - 2) * (+r.miles) / (life * f);
+    if(drive&&!(t.corners&&t.corners.split)&&!sameNeeds(t).length)d=Math.min(sameDepth(t,'lf',drive),sameDepth(t,'lr',drive));
     return { depth: Math.max(0, Math.round(d * 2) / 2), measured: false, life: life, factor: f, newDepth: nd };
   }
   /** good (6+/32), ok (4-5.5: plan new ones), low (above 2: replace soon), worn (2/32 or less). */
   function status(depth) { return depth >= 6 ? 'good' : depth >= 4 ? 'ok' : depth > 2 ? 'low' : 'worn'; }
+  function sameNeeds(t){
+    if(!t||t.corners&&t.corners.split)return [];
+    var r=t.tread||{};if(r.mode==='measure')return +r.depth>0?[]:['depth'];
+    var out=[];if(r.miles==null||r.miles===''||!Number.isFinite(+r.miles)||+r.miles<0)out.push('miles');
+    if(!Object.prototype.hasOwnProperty.call(ROT,r.rotated))out.push('rotated');
+    if(!String(t.type||'').trim())out.push('type');return out;
+  }
+  function sameDepth(t,key,drive){
+    if(sameNeeds(t).length)return null;
+    var r=t.tread||{};if(r.mode==='measure')return +r.depth;
+    var nd=+t.newDepth||newDepth(t.type),life=lifeMiles(t),blend={yes:0,sometimes:.45,no:1,unsure:.65}[r.rotated];
+    var front=/^l?f$|^rf$/.test(key),d=String(drive||'').toLowerCase(),rate;
+    if(d==='fwd')rate=front?1.35:.85;
+    else if(d==='rwd')rate=front?1.05:1.25;
+    else if(d==='awd'||d==='4wd')rate=front?1.2:1.1;
+    else rate=1/ROT[r.rotated];
+    var wear=(nd-2)*(+r.miles)/life*(1+(rate-1)*blend);
+    return Math.max(0,Math.round((nd-wear)*2)/2);
+  }
   var MULTI = ['BF GOODRICH', 'MICKEY THOMPSON', 'DICK CEPEK', 'GT RADIAL', 'MASTER CRAFT'];
   var SPELL = { 'BF GOODRICH': 'BFGoodrich', BFGOODRICH: 'BFGoodrich', 'GT RADIAL': 'GT Radial', 'MASTER CRAFT': 'Mastercraft', BRIDGESTONE: 'Bridgestone', 'MICKEY THOMPSON': 'Mickey Thompson', 'DICK CEPEK': 'Dick Cepek' };
   /** "CONTINENTAL SECURECONTACT AW" -> { brand: 'Continental', model: 'SecureContact AW'-ish }. */
@@ -164,7 +186,8 @@
   /** The tires (when they aren't all the same) still missing what's required. */
   function missing(t) { if (!t) return []; return positions(t).filter(function (p) { return ((t.corners&&t.corners.split)||p.trailer&&p.unit.split)&&needs(t,p).length; }); }
   /** One tire's tread in 32nds (measured, or estimated from its miles), or null when it isn't filled in. */
-  function depthAt(t, p) {
+  function depthAt(t, p, drive) {
+    if(!p.trailer&&!(t.corners&&t.corners.split))return sameDepth(t,p.k,drive);
     var e = (t.corners || {})[p.k] || {};
     if (!p.unit.split&&modeOf(t) === 'depth') return +e.depth > 0 ? +e.depth : null;
     if (needs(t, p).length) return null;
@@ -512,7 +535,7 @@
     var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:optional|option|available on|some trims|certain trims|depend\w*|varies|package)\b/i.test(x) && !/^(?:no spare|full[- ]size spare|compact spare|repair kit|run[- ]flat tires)\.?$/i.test(x) && x.length <= 220; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
-  var TireMath = { newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
+  var TireMath = { sameNeeds:sameNeeds,sameDepth:sameDepth,newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
     CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, instead: instead, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
@@ -691,7 +714,7 @@
       redraw(c);
     }
   }
-  function redraw(c) { if (host && host.isConnected && G().car() === c) { draw(); if (subFill) subFill(); } }
+  function redraw(c) { var car=G().car();if (host && host.isConnected && car&&c&&car.id===c.id) { draw();var edit=tireEditors&&tireEditors.get(car);if(edit&&c!==edit.draft&&!busy[c.id])lookup(edit.draft);if (subFill) subFill(); } }
 
   // ---------- the spare: Brave Search's AI answer says which kind, you confirm ----------
   var spareBusy = {};
@@ -839,7 +862,7 @@
     var f = fuelFor(t, null); if (f) bits.push('Fuel ' + g(f.score + '/10', (f.score - 1) / 9));
     var u = t.utqg || {};
     if (u.tw || u.trac || u.temp) bits.push('UTQG ' + [u.tw ? g(String(u.tw), twGood(u.tw)) : '', u.trac ? g(u.trac, tracGood(u.trac)) : '', u.temp ? g(u.temp, tempGood(u.temp)) : ''].filter(Boolean).join(' '));
-    var e = estimate(t); if (e) bits.push(g((e.measured ? '' : '~') + e.depth + '/32 in left', depthGood(e.depth)));if(e&&!e.measured&&generalized(t))bits.push('<span class="tread-general">Generalized estimate</span>');
+    var e = estimate(t,c.info&&c.info.drive); if (e) bits.push(g((e.measured ? '' : '~') + e.depth + '/32 in left', depthGood(e.depth)));if(e&&!e.measured&&generalized(t))bits.push('<span class="tread-general">Generalized estimate</span>');
     return bits.join(' · ') || 'type, fuel economy, wear rating, tread left';
   }
   function opts(list, cur, ph) {
@@ -854,7 +877,7 @@
     fuel: 'How easy the tire rolls, which is how much gas it costs you: 10 saves the most. Gasket estimates it from the tire\'s type (touring and fuel-saving tires roll easiest; all-terrain and mud tires the least), its name, its wear rating and its width, and the small AI model on your phone can move it a point from how the tire is described. It\'s an estimate, not a test result.',
     measure: 'Use a coin. <b>Penny</b>: put it in a groove with Lincoln\'s head down. If you can see all of his head, there\'s 2/32 in or less: replace the tire now. <b>Quarter</b>: if you can see all of Washington\'s head, there\'s 4/32 in or less: plan new tires (wet and snow grip fade from here). If the tread covers part of his head, you have more than 4/32. Check the inside, middle and outside of each tire; the lowest one counts.',
     miles: 'About how many miles you\'ve driven since these tires were put on. A rough number is fine. Your car\'s trip odometer or a service receipt can help.',
-    rotate: '<b>Rotating</b> tires means moving them to different corners of the car (front to back, and sometimes side to side), because front tires wear faster, especially on front-wheel-drive cars. <b>Regularly</b> means every 5,000 to 7,500 miles, or at every oil change on many cars. Skipping it lets some tires wear out sooner than the others.',
+    rotate: '<b>Rotating</b> tires moves them between compatible positions to even out wear. Follow your vehicle and tire manufacturer\'s interval and pattern; some staggered/dually setups restrict rotation. Without individual measurements, wheel colors use broad tire-type, drivetrain and rotation assumptions, not measured axle wear. Regular rotation estimates even wear; skipped rotations estimate more wear on the driven axle. Check actual tread and pressure.',
     byMiles: 'When you can\'t measure each tire, Gasket estimates its tread from its miles against the maker\'s mileage warranty, worn faster when it isn\'t rotated. Each tire\'s warranty starts from its car\'s or trailer\'s tire details.',
     warranty: 'The miles the maker says the tire lasts (the treadwear warranty), from the receipt or the maker\'s site: for example 60,000. Gasket uses it to estimate the tread left.',
     same: 'Pick this when your four tires are a matched set: the same brand and model, put on together (or within a few thousand miles of each other), and rotated so they wear alike. One tread answer then covers them all.',
@@ -881,8 +904,8 @@
     var q=A.qBtn,r=t.tread,h='',deep = /mud|terrain/i.test(t.type || '') ? 15 : 12;
     h += '<div class="seg2" id="tzMode"><button data-mode="miles" class="' + (r.mode !== 'measure' ? 'on' : '') + '">Estimate it</button><button data-mode="measure" class="' + (r.mode === 'measure' ? 'on' : '') + '">I measured it</button></div>';
     if (r.mode === 'measure') h += '<label class="nf wide"><span>Shallowest groove' + q(Q.measure) + '</span><select id="tzDepth">' + depthOpts(r.depth, deep) + '</select></label>';
-    else h += '<div class="grid2"><label class="nf"><span>Miles on these tires' + q(Q.miles) + '</span><input type="number" inputmode="numeric" min="0" step="1000" id="tzMiles" placeholder="e.g. 20000" value="' + esc(r.miles === '' || r.miles == null ? '' : r.miles) + '"></label>' +
-      '<label class="nf"><span>Rotated regularly?' + q(Q.rotate) + '</span><select id="tzRot">' + rotOpts(r.rotated) + '</select></label></div>';
+    else h += '<div class="grid2"><label class="nf"><span>Miles on these tires<span class="req">*</span>' + q(Q.miles) + '</span><input required type="number" inputmode="numeric" min="0" step="1000" id="tzMiles" placeholder="e.g. 20000" value="' + esc(r.miles === '' || r.miles == null ? '' : r.miles) + '"></label>' +
+      '<label class="nf"><span>Rotated regularly?<span class="req">*</span>' + q(Q.rotate) + '</span><select required id="tzRot">' + rotOpts(r.rotated) + '</select></label></div>';
     return h;
   }
   /** Not all the same: each tire on its own (tread depth or its miles), and where they should go. */
@@ -927,7 +950,7 @@
         (saved.length ? '<button type="button" class="sub-ent tz-saved" id="tzSaved"><span><b>Saved trailers</b><small>' + saved.length + ' not hooked up</small></span>' + GO + '</button>' : '') + '</div>';
     }
     h += '<div class="tz-pic tz-overview" aria-hidden="true">' + wheelSvg(c,t) + '</div>';
-    var r=t.tread,C=t.corners||{},e=estimate(t),st=e?status(e.depth):null;
+    var r=t.tread,C=t.corners||{},e=estimate(t,c.info&&c.info.drive),st=e?status(e.depth):null;
     h += '<div class="sub-h tz-h">Tread left</div>';
     if(e&&!e.measured&&generalized(t))h+='<p class="tread-general">⚠ This tread estimate is extremely generalized. Select the tire type, brand and model, or enter its mileage warranty. Measure the tread to know what is actually left.</p>';
     if (e && !(C.split && missing(t).length)) {
@@ -1206,8 +1229,13 @@
   }
   var subFill = null;      // the submenu on screen, redrawn when a lookup it shows comes back
   /** The car's tire details, as its own page. */
+  var tireEditors=new WeakMap();
   function openCarDetails(c) {
-    var t = tires(c), pg = null,stopArrows=null;
+    var edit=tireEditors.get(c);
+    if(!edit){var source=c;edit={source:source,draft:Object.assign({},source,{tires:JSON.parse(JSON.stringify(tires(source)))})};tireEditors.set(source,edit);tireEditors.set(edit.draft,edit);}
+    c=edit.draft;
+    var t = tires(c), pg = null,stopArrows=null,close;
+    function commit(){edit.source.tires=t;save();tireEditors.delete(edit.source);tireEditors.delete(c);}
     var fill = function () {
       t=tires(c);var b = pg.querySelector('.sub-body'),scroll=b.scrollTop;if(stopArrows)stopArrows();b.innerHTML = carDetails(c, t);
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
@@ -1250,10 +1278,17 @@
         if (v !== t.size) { t.size = v; t.sizeSrc = 'user'; } lookup(c);
       });
       bindPick(b, 'tz', t, function () { return t.list && t.list.size === t.size ? t.list.items || [] : []; }, set);
+      var common=!(t.corners&&t.corners.split),need=sameNeeds(t),type=b.querySelector('#tzType');
+      if(common&&t.tread.mode!=='measure'&&type){type.required=true;type.parentElement.querySelector('span').insertAdjacentHTML('beforeend','<span class="req">*</span>');}
+      b.insertAdjacentHTML('beforeend',(common&&need.length?'<p class="lead small keep" id="tzRequired">Complete '+need.map(function(n){return {miles:'miles on these tires',rotated:'rotation frequency',type:'tire type',depth:'measured tread depth'}[n];}).join(', ')+' to save tire details.</p>':'')+'<div class="tz-trbtns"><button type="button" class="btn primary" id="tzDone"'+(common&&need.length?' disabled':'')+'>Done</button><button type="button" class="btn tonal sm caution" id="tzDetailsDiscard">Discard changes</button></div>');
+      b.querySelector('#tzDone').onclick=function(){if(common&&sameNeeds(t).length)return;commit();close(true);};
+      b.querySelector('#tzDetailsDiscard').onclick=async function(){if(!await A.confirmDel({always:true,title:'Discard tire changes?',body:'Return to the tire details from when this menu opened.',action:'Discard changes'}))return;tireEditors.delete(edit.source);tireEditors.delete(c);close(true);};
       if (A.qify) A.qify(b);
       b.scrollTop=scroll;
     };
-    A.subPage(t.towMode ? 'Car tire details' : 'Tire details', '', function (b) { pg = b.closest('.sub-page'); subFill = fill; fill(); nudgeFuel(c); return function () { if(stopArrows)stopArrows();subFill = null; draw(); onChange(); }; });
+    close=A.subPage(t.towMode ? 'Car tire details' : 'Tire details', '', function (b) { pg = b.closest('.sub-page');pg.beforeClose=function(){if(!(t.corners&&t.corners.split)&&sameNeeds(t).length){var note=b.querySelector('#tzRequired');if(note){note.scrollIntoView({block:'nearest'});note.classList.add('pulse');}return false;}commit();return true;}; subFill = fill; fill(); nudgeFuel(c); return function () { if(stopArrows)stopArrows();subFill = null; draw(); onChange(); }; });
+    lookup(c);
+    fill();
   }
   /**
    * A trailer's details, as its own page. Back keeps what you changed; at the bottom: Delete, Unhook (it goes to
@@ -1773,9 +1808,9 @@
       (du ? '<rect x="50" y="62" width="40" height="38" rx="3" class="tz-bed"/>' : '') + '<path d="M70 0 L75 7 L65 7 Z" class="il-front"/>';
     var wheel = function (k, x, y, width, diameter) {
       width=width||10;diameter=diameter||16;
-      var d = depthAt(t, P.filter(function (p) { return p.k === k; })[0] || { k: k, unit: t }), f = d != null ? depthGood(d) : null;
+      var d = depthAt(t, P.filter(function (p) { return p.k === k; })[0] || { k: k, unit: t },c.info&&c.info.drive), f = d != null ? depthGood(d) : null;
       var font=Math.min(7,width*.9/(String(num[k]).length>1?1.5:1));
-      return '<g class="tz-w"><rect x="' + (x - width/2) + '" y="' + (y - diameter/2) + '" width="'+width+'" height="'+diameter+'" rx="2.5" style="fill:' + (f != null ? hue(f) : 'var(--line)') + '"/><text x="' + x + '" y="' + (y + font*.4) + '" style="font-size:'+font+'px" text-anchor="middle">' + num[k] + '</text></g>';
+      return '<g class="tz-w" data-car-wheel="'+k+'" data-depth="'+(d==null?'':d)+'"><title>'+esc(cname(k,C))+': '+(d==null?'details needed':(t.tread&&t.tread.mode==='measure'?'':'estimated ')+d+'/32 in')+'</title><rect x="' + (x - width/2) + '" y="' + (y - diameter/2) + '" width="'+width+'" height="'+diameter+'" rx="2.5" style="fill:' + (f != null ? hue(f) : 'var(--line)') + '"/><text x="' + x + '" y="' + (y + font*.4) + '" style="font-size:'+font+'px" text-anchor="middle">' + num[k] + '</text></g>';
     };
     h += wheel('lf', 44, 26) + wheel('rf', 96, 26);
     if (du) h += wheel('lr', 30, 86) + wheel('lri', 42, 86) + wheel('rri', 98, 86) + wheel('rr', 110, 86);
@@ -1837,5 +1872,5 @@
   function tiresDue(c) { return !tiresAiredOk(c && c.tires || {}); }
   /** Anything on Advice still to tick for the tires (Advisory's Next waits for it). */
   function airDue(c) { return spareDue(c) || tiresDue(c); }
-  root.Tires = { missing: function (c) { return missing(c && c.tires); }, sizeMissing: sizeMissing, duallyState: duallyState, spareDue: spareDue, tiresDue: tiresDue, airDue: airDue, setTiresAired: setTiresAired, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
+  root.Tires = { missing: function (c) { return missing(c && c.tires); }, editing: function (c) { var e = c && tireEditors.get(c); return e ? tires(e.draft) : null; }, sizeMissing: sizeMissing, duallyState: duallyState, spareDue: spareDue, tiresDue: tiresDue, airDue: airDue, setTiresAired: setTiresAired, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
 })(typeof window !== 'undefined' ? window : globalThis);

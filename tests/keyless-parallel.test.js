@@ -46,6 +46,6 @@ async function cancelled(){
 }
 const native=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');
 assert.equal((native.match(/public boolean onRenderProcessGone/g)||[]).length,2,'both UI and hidden views handle renderer exit');
-assert.match(native,/completedReads % 8/);assert.match(native,/old\.view\.clearCache\(false\)/);assert.match(native,/old\.view\.destroy\(\)/);
+assert(/completedReads % 4/.test(native),'recycle hidden views every four reads');assert(!/old\.view\.clearCache\(false\)/.test(native),'keep shared HTTP resources warm when recycling views');assert(/old\.view\.destroy\(\)/.test(native));assert(/if \(isGasWorker\(key\)\) ws\.setBlockNetworkImage\(true\)/.test(native),'invisible gas readers do not download images');
 assert.match(native,/view\.loadUrl\("about:blank"\); view\.clearHistory\(\)/);
 (async()=>{await run(false);await run(true);await cancelled();console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});

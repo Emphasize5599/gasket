@@ -59,6 +59,7 @@
     },
     along: (jobs) => {
       window.__jobs = jobs;
+      const now = new Date().toISOString();   // each answer carries its own time: a newer search's prices win a merge
       const results = [];
       jobs.forEach((j, idx) => {
         const list = (brandAt[j.q] || []).filter(([mi]) => mi >= j.fromMi && mi < j.toMi);

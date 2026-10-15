@@ -344,7 +344,7 @@
     if (!useGoogle && !keyless && !sites.length) { openSettings(true); return; }
     var b = bounds || bbox(lat, lng, S.radiusMi);
     var areas;
-    if(keyless)try{areas=KeylessGas.mapAreas(b,P);areas.maxLanes=4;}catch(e){status(e.message,true);$('btnArea').classList.remove('hidden');return;}
+    if(keyless)try{areas=KeylessGas.mapAreas(b,P);}catch(e){status(e.message,true);$('btnArea').classList.remove('hidden');return;}
     var id = ++reqId; pending = id; errs = [];
     pendingSources = 0; sitePending = {}; siteOk = {};
     pendingCenter = { lat: lat, lng: lng };
@@ -468,6 +468,9 @@
   function shown(x) { return x.c || !S.hideUnpriced || x.s.id === selectedId; }
   function render() {
     syncMain();
+    // Trip pans/zooms have their own route/station layers. Do not rebuild the
+    // hidden main-map list, thousands of markers and price bubbles behind it.
+    if(!mainOn())return;
     if (altMode() && window.AltFuel) {   // chargers / hydrogen stations take the gas stations' place on the map and in the list
       dotLayer.clearLayers(); AltFuel.renderList($('bestLine'), $('rows'));
       syncMapGAttr(); sizeSheet(); return;
@@ -1082,7 +1085,7 @@
   // ---------- a submenu: a page of its own over everything, with a Back bar ----------
   /** Opens title + html as a full page; onOpen(body) runs once it's on screen and may return a cleanup (stop animations). */
   function subPage(title, html, onOpen) {
-    if (window.__subClose) window.__subClose();
+    if (window.__subClose) window.__subClose(true);
     var pg = document.createElement('section');
     pg.className = 'page sub-page';
     pg.innerHTML = '<div class="sub-bar"><button type="button" class="sub-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button><h2>' + esc(title) + '</h2></div><div class="sub-body"></div>';
@@ -1090,9 +1093,9 @@
     document.body.appendChild(pg);
     var header=pg.querySelector('.sub-bar'),resize=new ResizeObserver(function(){pg.style.setProperty('--sub-head-h',header.getBoundingClientRect().height+'px');});resize.observe(header);
     var stop = null;
-    var close = function () { resize.disconnect(); if (stop) try { stop(); } catch (e) { } var hint=pg.querySelector('.sub-body')._hint;if(hint)hint._dispose();pg.remove(); window.__subClose = null; };
+    var close = function (force) { if(force!==true&&pg.beforeClose&&pg.beforeClose()===false)return false;resize.disconnect(); if (stop) try { stop(); } catch (e) { } var hint=pg.querySelector('.sub-body')._hint;if(hint)hint._dispose();pg.remove(); window.__subClose = null;return true; };
     window.__subClose = close;
-    pg.querySelector('.sub-back').onclick = close;
+    pg.querySelector('.sub-back').onclick = function(){close();};
     qify(pg); scrollHint(pg.querySelector('.sub-body'));
     if (onOpen) stop = onOpen(pg.querySelector('.sub-body')) || null;
     return close;

@@ -1,0 +1,25 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright'),M=require('../assets/web/tires');
+const tires={type:'Grand Touring All-Season',corners:{split:false},tread:{mode:'miles',miles:30000,rotated:'no'}};
+assert.deepEqual(M.sameNeeds({...tires,tread:{}}),['miles','rotated']);
+assert.deepEqual(M.sameNeeds({...tires,type:'',tread:{miles:0,rotated:'yes'}}),['type']);
+assert.equal(M.sameNeeds({...tires,tread:{miles:Infinity,rotated:'yes'}})[0],'miles');
+assert(M.sameDepth(tires,'lf','fwd')<M.sameDepth(tires,'lr','fwd'));
+assert(M.sameDepth(tires,'lf','rwd')>M.sameDepth(tires,'lr','rwd'));
+assert(M.sameDepth(tires,'lf','awd')<=M.sameDepth(tires,'lr','awd'));
+assert.equal(M.sameDepth({...tires,tread:{...tires.tread,rotated:'yes'}},'lf','fwd'),M.sameDepth({...tires,tread:{...tires.tread,rotated:'yes'}},'lr','fwd'));
+assert(M.lifeMiles({type:'Grand Touring All-Season'})>M.lifeMiles({type:'Max Performance Summer'}));
+assert.equal(M.lifeMiles({...tires,warrantyMi:65000}),65000);
+(async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
+ const p=await browser.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{__app.S.apiKey='';const c=Garage.car();c.tires={size:'195/65R15',sizeSrc:'user',corners:{split:false},tread:{mode:'miles',miles:'',rotated:''},spare:{kind:'none'},list:{size:'195/65R15',catalogVersion:5,t:Date.now(),items:[]}};});
+ await p.click('#btnTrip');await p.click('#gTires summary');await p.click('#tzDet');assert(await p.isDisabled('#tzDone'));
+ assert.equal(await p.locator('#tzMiles[required],#tzRot[required],#tzType[required]').count(),3);
+ await p.fill('#tzMiles','30000');await p.dispatchEvent('#tzMiles','change');assert(await p.isDisabled('#tzDone'));await p.selectOption('#tzRot','no');assert(await p.isDisabled('#tzDone'));
+ await p.selectOption('#tzType','Grand Touring All-Season');assert(!await p.isDisabled('#tzDone'));
+ assert.equal(await p.evaluate(()=>Garage.car().tires.type||''),'','draft details are not saved before Done');
+ await p.click('#tzDone');assert.equal(await p.evaluate(()=>Garage.car().tires.type),'Grand Touring All-Season');
+ const depths=await p.locator('#gTires [data-car-wheel]').evaluateAll(es=>Object.fromEntries(es.map(e=>[e.dataset.carWheel,+e.dataset.depth])));assert(depths.lf<depths.lr);assert.equal(depths.lf,depths.rf);
+ await p.click('#tzDet');await p.selectOption('#tzRot','yes');await p.click('#tzDetailsDiscard');await p.click('#cfmNo');assert.equal(await p.inputValue('#tzRot'),'yes');await p.click('#tzDetailsDiscard');await p.click('#cfmYes');assert.equal(await p.evaluate(()=>Garage.car().tires.tread.rotated),'no');
+ assert.deepEqual(errors,[]);await p.close();
+}console.log('Tire type/miles/rotation required, transactional Done/discard, and drivetrain-aware same-set wheel colors passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

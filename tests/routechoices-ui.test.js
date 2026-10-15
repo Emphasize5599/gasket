@@ -25,20 +25,27 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('#taResults [data-split]');await p.click('#taResults [data-trip-refresh="discover"]');await p.waitForFunction(()=>__phases.length===4&&!__trip.state().busy,{},{timeout:20000});
  assert.equal(await p.evaluate(()=>__paid),0,'explicit no-API discovery must not become paid discovery when a key exists');
  assert.deepEqual(await p.evaluate(()=>__phases),['start','end','start','end'],'primary search completes before approved alternatives start');
+ await p.evaluate(()=>{window.__projectCount=0;const original=Trip.projectLegs;Trip.projectLegs=function(...args){__projectCount++;return original(...args);};window.__hiddenMapReads=0;const near=PriceHistory.near;PriceHistory.near=function(...args){__hiddenMapReads++;return near(...args);};});
  for(const [i,buffer] of [15,25,35,45].entries()){
   assert.match(await p.innerText('.route-choice-adjust h3'),new RegExp('route '+(i+1)+' of 4','i'));
-  await p.fill('#choiceBuffer',String(buffer));await p.locator('#choiceBuffer').dispatchEvent('change');await p.waitForFunction(()=>!document.querySelector('#tNext').disabled);
+  assert.equal(await p.locator('#choiceBufferSlider,#choiceDetourSlider').count(),2);
+  if(i%2){await p.locator('#choiceBufferSlider').evaluate((el,v)=>{el.value=v;el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));},String(buffer));}else{await p.fill('#choiceBuffer',String(buffer));await p.locator('#choiceBuffer').dispatchEvent('change');}await p.waitForFunction(()=>!document.querySelector('#tNext').disabled);
   if(i<3)await p.click('#tNext');
  }
  assert.deepEqual(await p.evaluate(()=>__trip.state().result.opts.legPolicies.map(x=>Math.round(x.bufferGal/__trip.state().model.combGpm))),[15,25],'alternative changes do not leak to primary or the other leg');
  await p.click('#tNext');await p.waitForSelector('.route-choice-compare');assert.match(await p.innerText('.route-choice-compare h3'),/leg 1 of 2/i);
  assert.equal(await p.locator('[data-choice-route]').count(),2,'rejected route is not compared');
+ assert.equal(await p.evaluate(()=>{let n=0;__app.map.eachLayer(l=>{if(l.options&&l.options.choiceLeg===0)n++;});return n;}),2,'map displays both approved routes for the leg');
+ await p.waitForTimeout(80); // the programmatic fit's 50ms drag guard must finish before simulating a user drag
+ await p.evaluate(()=>{window.__legCenter=__app.map.getCenter();__app.map.fire('dragstart');__app.map.panBy([200,0],{animate:false});});await p.click('#btnFit');await p.waitForFunction(()=>__app.map.getCenter().distanceTo(__legCenter)<20);
  await p.click('[data-choice-route="2"]');await p.waitForFunction(()=>!document.querySelector('#tNext').disabled);await p.click('#tNext');
  assert.match(await p.innerText('.route-choice-compare h3'),/leg 2 of 2/i);
  await p.click('[data-choice-route="1"]');await p.waitForFunction(()=>!document.querySelector('#tNext').disabled);
  assert.deepEqual(await p.evaluate(()=>__trip.state().result.opts.legPolicies.map(x=>Math.round(x.bufferGal/__trip.state().model.combGpm))),[35,45]);
  assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[2,1]);
  assert.equal(await p.evaluate(()=>__paid),0);assert.equal(await p.evaluate(()=>__phases.length),4,'combining leg choices does not discover or route again');
+ assert.equal(await p.evaluate(()=>__projectCount),0,'buffer changes and route combinations reuse per-leg projections instead of rematching every station');
+ assert.equal(await p.evaluate(()=>__hiddenMapReads),0,'trip camera changes do not rebuild hidden main-map stations');
  assert.equal(await p.evaluate(()=>__app.S.trip.bufferMi),40,'global defaults are unchanged');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  if(width===320){await p.screenshot({path:path.resolve('../..','outputs','route-choice-compare.png')});}
@@ -50,5 +57,6 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('#tNext');await p.click('#tNext');await p.waitForSelector('.route-choice-compare');
  assert.equal(await p.locator('[data-choice-route]').count(),1,'all-No keeps a valid primary-only comparison');assert.equal(await p.locator('[data-choice-route]').isDisabled(),false);
  if(width===448){await p.evaluate(()=>{const es=[...document.querySelectorAll('#trip *')],sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>{if(sizes[i])e.style.fontSize=sizes[i]*1.3+'px';});});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+ await p.evaluate(()=>__trip.close());assert.equal(await p.locator('#trip').evaluate(e=>e.classList.contains('hidden')),true);assert.equal(await p.evaluate(()=>{let n=0;__app.map.eachLayer(l=>{if(l.options&&l.options.choiceLeg!=null)n++;});return n;}),0,'closing removes the leg preview and no deferred trip draw restores it');
  assert.equal(await p.evaluate(()=>__paid),0);assert.deepEqual(errors,[]);await p.close();
 }console.log('320/448px explicit Yes/No, primary-first discovery, per-leg route adjustments, leg comparison and keyless local recombination passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

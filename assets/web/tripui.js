@@ -64,8 +64,8 @@
   var rawRoute = null;   // Routes API route
   var result = null;     // plan + candidates
   var alts = [], altSel = 0, altSure = false;   // Google's route options for this trip
-  var routeReview=null,adjustRouteIndex=0,compareLegIndex=-1,choiceComplete=false,choicePool=null,choicePlanning=false;
-  var choiceLayer=L.layerGroup(),choiceFitKey='';
+  var routeReview=null,adjustRouteIndex=0,compareLegIndex=-1,choiceComplete=false,choicePool=null,choicePlanning=false,choiceCandidates=new Map();
+  var choiceLayer=L.layerGroup(),choiceFitKey='',choiceBounds=null;
   function routeFlow(){return !!S.trip.altCompare&&hzLegs()>0;}
   function choiceAnswers(){return S.trip.routeChoices||(S.trip.routeChoices={});}
   function choiceLists(){return Array.from({length:hzLegs()},function(_,i){return hzAlts(i);});}
@@ -77,13 +77,15 @@
   function choiceSettings(item){return RouteChoices.settings(item,choiceAnswers(),S.trip);}
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||result.plan.refPrice,[{stops:p.stops.map(function(s){return {arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price};}),arriveGal:p.arriveGal}]).legs[0].cost;}
   function choiceDraw(){
-    choiceLayer.clearLayers();
-    if(step!==ST_ADJ||!routeFlow())return;
+    if(step!==ST_ADJ||!routeFlow()||$('trip').classList.contains('hidden'))return;
     var item=compareLegIndex>=0?{leg:compareLegIndex,k:hzSel(compareLegIndex),route:hzAlts(compareLegIndex)[hzSel(compareLegIndex)]}:choiceEntries()[adjustRouteIndex];if(!item)return;
-    var m=hzModel(item.route),points=m.pts.map(function(p){return [p.lat,p.lng];});
-    layer.clearLayers();drawn={};L.polyline(points,{color:'#4285f4',weight:6}).addTo(choiceLayer);choiceLayer.addTo(map);
-    var key=RouteChoices.key(item.leg,item.route)+'|'+compareLegIndex;
-    if(choiceFitKey!==key){choiceFitKey=key;map.fitBounds(L.latLngBounds(points),{paddingTopLeft:[24,100],paddingBottomRight:[24,Math.max(160,innerHeight*.4)]});}
+    var items=compareLegIndex>=0?choiceEntries().filter(function(e){return e.leg===item.leg;}):[item],bounds=L.latLngBounds([]);
+    var key=RouteChoices.key(item.leg,item.route)+'|'+compareLegIndex+'|'+items.map(function(e){return RouteChoices.key(e.leg,e.route);}).join(',');
+    if(choiceFitKey===key&&choiceBounds&&map.hasLayer(choiceLayer)){routeBounds=choiceBounds;fitBtn();return;}
+    choiceLayer.clearLayers();
+    layer.clearLayers();drawn={};
+    items.sort(function(a,b){return (a.k===item.k)-(b.k===item.k);}).forEach(function(e){var points=hzModel(e.route).pts.map(function(p){return [p.lat,p.lng];});points.forEach(function(p){bounds.extend(p);});L.polyline(points,{choiceLeg:e.leg,choiceRoute:e.k,color:e.k===item.k?'#4285f4':'#8895a7',weight:e.k===item.k?6:4,opacity:e.k===item.k?1:.7}).addTo(choiceLayer);});choiceLayer.addTo(map);routeBounds=choiceBounds=bounds;
+    if(choiceFitKey!==key){choiceFitKey=key;userMoved=false;fitRoute(false);}fitBtn();
   }
   function choiceHtml(){
     var entries=choiceEntries();adjustRouteIndex=Math.min(adjustRouteIndex,Math.max(0,entries.length-1));
@@ -95,28 +97,42 @@
         var value=row&&choiceCost(row.res),base=choiceCost(result),cost=value==null?'No workable plan':money(value),delta=value!=null&&base!=null?value-base:null;
         h+='<button type="button" class="hz-opt'+(item.k===selected?' on':'')+'" data-choice-route="'+item.k+'"'+(!plan||!plan.ok?' disabled':'')+' aria-pressed="'+(item.k===selected)+'"><span class="hz-o1"><b>'+esc(item.route.description||'Route '+(item.k+1))+'</b><span>'+Math.round((item.route.distanceMeters||0)/1609.344)+' mi · '+fmtDur(parseFloat(item.route.duration))+'</span></span><span>Trip fuel estimate: '+cost+(delta!=null&&Math.abs(delta)>.005?' · '+money(Math.abs(delta))+(delta<0?' less':' more'):'')+'</span></button>';
       });
-      return h+'</div>';
+      return h+(choicePlanning?A.ldBar('Updating route comparison…'):'')+'</div>';
     }
     var item=entries[adjustRouteIndex];if(!item)return '';
     var cfg=choiceSettings(item);
-    return '<div class="card route-choice-adjust"><h3>Adjust route '+(adjustRouteIndex+1)+' of '+entries.length+'</h3><p class="lead small keep">Leg '+(item.leg+1)+' · '+esc(legName(route,item.leg))+' · '+(item.primary?'Primary choice':'Approved alternative')+'</p><p>'+esc(item.route.description||'Route '+(item.k+1))+'</p><div class="grid2">'+num('choiceBuffer','Buffer for this leg (mi)',cfg.bufferMi,5,'Only this route on this leg')+num('choiceDetour','Max detour per stop (min)',cfg.maxDetourMin,1,'Only stations on this route and leg')+'</div><p class="lead small keep">Cruising-speed defaults and purchase preferences remain in Parameters. Fuel carries into the next leg; it is never reset between legs.</p></div>';
+    var slider=function(id,label,value,max,unit,tip){return '<div class="bufbox"><div class="tb-h">'+label+'</div>'+num(id,label+' ('+unit+')',value,1,tip)+'<div class="buf-track"><input type="range" id="'+id+'Slider" min="0" max="'+Math.max(max,value)+'" step="1" value="'+value+'" aria-label="'+label+'"></div><div class="buf-scale"><span>0 '+unit+'</span><span>'+Math.max(max,value)+' '+unit+'</span></div><p class="lead small keep">'+tip+'</p></div>';};
+    return '<div class="card route-choice-adjust"><h3>Adjust route '+(adjustRouteIndex+1)+' of '+entries.length+'</h3><p class="lead small keep">Leg '+(item.leg+1)+' · '+esc(legName(route,item.leg))+' · '+(item.primary?'Primary choice':'Approved alternative')+'</p><p>'+esc(item.route.description||'Route '+(item.k+1))+'</p>'+slider('choiceBuffer','Buffer for this leg',cfg.bufferMi,150,'mi','More reserve gives a safety margin; less reserve can unlock cheaper stops. Applies only to this route and leg.')+slider('choiceDetour','Max detour per stop',cfg.maxDetourMin,30,'min','Allow more time off-route to consider cheaper stations, or less to stay closer to the road.')+(choicePlanning?A.ldBar('Updating route comparison…'):'')+'<p class="lead small keep">Fuel carries into the next leg; it is never reset between legs.</p></div>';
   }
   function bindChoices(){
+    ['choiceBuffer','choiceDetour'].forEach(function(id){var range=$(id+'Slider'),number=$(id);if(!range||!number)return;fillRange(range);range.oninput=function(){number.value=this.value;fillRange(this);};range.onchange=function(){number.dispatchEvent(new Event('change'));};});
     ['choiceBuffer','choiceDetour'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=async function(){var item=choiceEntries()[adjustRouteIndex];if(!item||choicePlanning)return;var cfg=choiceSettings(item),v=Number(this.value);if(!Number.isFinite(v)||v<0){this.value=id==='choiceBuffer'?cfg.bufferMi:cfg.maxDetourMin;return;}choiceAnswers()[item.key]=Object.assign({},choiceAnswers()[item.key],cfg,id==='choiceBuffer'?{bufferMi:Math.min(500,v)}:{maxDetourMin:Math.min(120,v)});choiceComplete=false;A.save();await replanChoices();};});
-    document.querySelectorAll('[data-choice-route]').forEach(function(b){b.onclick=async function(){if(choicePlanning||busy)return;choiceComplete=false;var old=RouteChoices.key(compareLegIndex,hzAlts(compareLegIndex)[hzSel(compareLegIndex)]);choiceAnswers()[old]=Object.assign({},choiceAnswers()[old],{consider:true});var k=+b.dataset.choiceRoute;if(legsMode()){route.legs[compareLegIndex].sel=k;rebuildAlts();}else altSel=k;rawRoute=alts[altSel];model=T.buildRoute(rawRoute,carModel());await replanChoices();rememberSel();};});
+    document.querySelectorAll('[data-choice-route]').forEach(function(b){b.onclick=async function(){if(choicePlanning||busy)return;var k=+b.dataset.choiceRoute;await replanChoices(function(){choiceComplete=false;var old=RouteChoices.key(compareLegIndex,hzAlts(compareLegIndex)[hzSel(compareLegIndex)]);choiceAnswers()[old]=Object.assign({},choiceAnswers()[old],{consider:true});if(legsMode()){route.legs[compareLegIndex].sel=k;rebuildAlts();}else altSel=k;rawRoute=alts[altSel];model=T.buildRoute(rawRoute,carModel());});rememberSel();};});
   }
-  async function replanChoices(){
+  async function replanChoices(change){
     if(!choicePool||choicePlanning||busy)return;
-    choicePlanning=true;
-    if(step===ST_ADJ)navRender();
+    var previous={result:result,model:model,raw:rawRoute,alts:alts,altSel:altSel,selections:choiceSelections()};
+    choicePlanning=true;mapLoading('Updating route comparison');showResult();if(step===ST_ADJ)navRender();await paint();
     try{
+      if(change)change();
       var ks=[altSel].concat(altCompareList()),models=ks.map(function(k){return T.buildRoute(alts[k],carModel());});
-      var all=P.reconcileStations((choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[])).map(function(s){var copy=Object.assign({},s);delete copy.detourExact;delete copy.detourMi;delete copy.detourRange;return copy;});
+      var all=Array.from(new Map((choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]).map(function(s){return [P.stationKey(s),s];})).values()).map(function(s){var copy=Object.assign({},s);delete copy.detourExact;delete copy.detourMi;delete copy.detourRange;return copy;});
       var replayAll={localOnly:true,official:[],google:ks.map(function(k){return {k:k,sig:altSig(alts[k]),list:all};})};
-      var ga=await gatherAll(models,function(){},{},false,replayAll,ks),start=startFuel(models[0]),rows=[],ref=result&&result.plan.refPrice;
-      for(var i=0;i<ks.length;i++){await breathe();var g=ga.per[i],opts=makeOpts(models[i],g.cands,start,alts[ks[i]]);if(ref)opts.refPrice=ref;var plan=T.plan(opts);if(!ref&&plan.refPrice)ref=plan.refPrice;rows.push({k:ks[i],model:models[i],res:{plan:plan,opts:opts,cands:g.cands,notes:g.notes.concat('Recombined legs reuse saved stations; station detours are approximate.'),unpriced:g.unpriced,stale:g.stale,grade:g.grade,startGal:start,topMi:S.trip.topUpMi,topSel:-1,bufMi:S.trip.bufferMi}});}
+      var cached=ks.map(function(k,i){return cachedChoiceCandidates(alts[k],models[i]);}),ga=cached.every(Boolean)?{per:cached,raw:{official:[],google:ks.map(function(){return all;})}}:await gatherAll(models,function(){},{},false,replayAll,ks),start=startFuel(models[0]),rows=[],ref=result&&result.plan.refPrice;
+      for(var i=0;i<ks.length;i++){await breathe();var g=ga.per[i],opts=makeOpts(models[i],g.cands,start,alts[ks[i]]);if(ref)opts.refPrice=ref;var plan=await planAsync(opts);if(!ref&&plan.refPrice)ref=plan.refPrice;rows.push({k:ks[i],model:models[i],res:{plan:plan,opts:opts,cands:g.cands,notes:g.notes.concat('Recombined legs reuse saved stations; station detours are approximate.'),unpriced:g.unpriced,stale:g.stale,grade:g.grade,startGal:start,topMi:S.trip.topUpMi,topSel:-1,bufMi:S.trip.bufferMi}});}
       model=models[0];result=rows[0].res;result.routes=rows;recompute();saveTrip(ga.raw,ks);showResult();navRender();choiceDraw();
-    }finally{choicePlanning=false;if(step===ST_ADJ)navRender();}
+    }catch(e){if(change){if(legsMode())route.legs.forEach(function(l,i){l.sel=previous.selections[i];});alts=previous.alts;altSel=previous.altSel;rawRoute=previous.raw;model=previous.model;result=previous.result;}LG.error('plan','Route comparison failed',e.message);toastMsg('Could not update the route comparison. Try again.');}finally{choicePlanning=false;mapLoaded();if(step===ST_ADJ){showResult();navRender();}}
+  }
+  function cacheChoiceCandidates(raw,m,g){
+    if(!routeFlow())return;choiceLists().forEach(function(list,i){var k=legsMode()?raw._sel[i]:alts.indexOf(raw),a=list[k];if(!a)return;var from=i?(m.legEnds[i-1]||0):0,to=m.legEnds[i]||m.totalMi;
+      var take=function(cs){return (cs||[]).filter(function(c){return (c.leg||0)===i;}).map(function(c){return Object.assign({},c,{d:c.d-from});});};
+      var cands=take(g.cands),unpriced=take(g.unpricedCands);choiceCandidates.set(RouteChoices.key(i,a),{cands:cands,unpricedCands:unpriced,notes:g.notes.slice(),stale:cands.filter(function(c){return c.calc&&c.calc.stale;}).length,unpriced:unpriced.length,grade:g.grade,miles:to-from});
+    });
+  }
+  function cachedChoiceCandidates(raw,m){
+    var result={cands:[],unpricedCands:[],notes:[],stale:0,unpriced:0,grade:gradeOf()},ok=true;
+    choiceLists().forEach(function(list,i){var k=legsMode()?raw._sel[i]:alts.indexOf(raw),g=choiceCandidates.get(RouteChoices.key(i,list[k]));if(!g){ok=false;return;}var from=i?(m.legEnds[i-1]||0):0;['cands','unpricedCands'].forEach(function(field){result[field]=result[field].concat(g[field].map(function(c){var copy=Object.assign({},c,{d:from+c.d,leg:i,id:c.station.id+(i?'@'+i:'')});delete copy.detourExact;return copy;}));});result.notes=result.notes.concat(g.notes);result.stale+=g.stale;result.unpriced+=g.unpriced;});
+    result.notes=Array.from(new Set(result.notes));return ok?result:null;
   }
   var layer = L.layerGroup();
   var busy = false;
@@ -316,11 +332,12 @@
     roadSelSoon();
     requestAnimationFrame(function () { setTimeout(function () {
       if (step !== k0) return;
-      if (model && step >= ST_ADJ) { drawRoute(); if (!userMoved) fitRoute(false); }
+      if($('trip').classList.contains('hidden'))return;
+      if (model && step >= ST_ADJ) { if(step===ST_ADJ&&routeFlow())choiceDraw();else drawRoute(); if (!userMoved) fitRoute(false); }
       hzSync();
       fitBtn(); sheetSize();
       if (step === ST_DEPART) fitDepart();
-      if (model && (step >= ST_ADJ || step === ST_HAZ) && !busy) mapLoaded();
+      if (model && (step >= ST_ADJ || step === ST_HAZ) && !busy&&!choicePlanning) mapLoaded();
     }, 0); });
   }
   /** Departure: the panel only as tall as its content, and the whole route centered above it again. */
@@ -1826,7 +1843,7 @@
     pg(1, 'Choosing stops');
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
   }
-  async function gatherAll(models, pg, dbgS, force, replay, ks) {
+  async function gatherAll(models, pg, dbgS, force, replay, ks,areaPlan) {
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay);
     var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; });
     var webDiscovery=force==='discover'||force==='discover-cache'||force!==true&&(!S.apiKey||S.keylessRegular);
@@ -1894,7 +1911,7 @@
       var tasks = [];
       if(webDiscovery){
         weight.google=1;
-        tasks.push(KeylessGas.discover(KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover').then(function(r){
+        tasks.push(KeylessGas.discover(areaPlan||KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover').then(function(r){
           dbgS.keyless={areas:r.areas,completed:r.completedAreas,stations:r.stations.length,websiteLoads:r.websiteLoads,cancelled:r.cancelled,blocked:r.blocked,apiCalls:0};
           r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=3)perModel[i].push(s);});});
           notes=notes.concat(r.errors||[]);if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
@@ -1997,7 +2014,7 @@
           price: price, calc: calc, station: s, lat: s.lat, lng: s.lng, leg: pr.leg }, extra || {});
       };
       for (var si = 0; si < merged.length; si++) {
-        if (si % 150 === 149) await new Promise(function (r) { setTimeout(r, 0); });   // let the screen breathe on big trips
+        if (si % 25 === 24) await new Promise(function (r) { setTimeout(r, 0); });   // bound UI-thread chunks on big trips
         var s = merged[si];
         // once per leg it's near: on a round trip over the same roads a station is passed going and coming back
         var prs = T.projectLegs(model, { lat: s.lat, lng: s.lng }, maxOff);
@@ -2620,6 +2637,10 @@
       lastFull: S.trip.arrive === 'full' };
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
+  function planAsync(opts){
+    var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
+    return Planner.run(opts,{departAt:opts.rewardDepartAt,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now()});
+  }
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
   function findStops(force) {
     if(force===true&&!S.apiKey)force='discover';
@@ -2653,6 +2674,7 @@
   function jobLocked(k) { return busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
   async function findStops1(force) {
     busy = true; jobCancel = false; searchCancelled = false; bgJob = false;
+    choiceCandidates.clear();      // a new search: per-leg candidates from an earlier one (and their prices) are out of date
     // the map's own search around you gives way: the trip needs the website readers
     if (A.job && A.job() && A.job().kind === 'map') {
       LG.info('stations', 'The map\'s station search stops for the trip\'s'); A.job().cancel();
@@ -2730,14 +2752,16 @@
     var ga;
     if(others.length&&!rpSt){
       var firstDebug={},restDebug={};
-      var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Primary routes · '+l);},firstDebug,force,null,[okKs[0]]);
+      var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
+      var coverage=discovering?KeylessGas.discoveryPhases([okModels[0]],extraModels,T,P):null;
+      if(coverage)LG.info('keyless','Shared primary/alternative coverage',{primaryAreas:coverage.primary.length,alternativeAreas:coverage.alternatives.length,reusedPrimaryAreas:coverage.alternatives.plan.reusedPrimaryAreas});
+      var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Primary routes · '+l);},firstDebug,force,null,[okKs[0]],coverage&&coverage.primary);
       var rest;
       if(jobCancel||firstDebug.keyless&&firstDebug.keyless.blocked){rest={per:okModels.slice(1).map(function(){return {cands:[],notes:['Alternative search not started after cancellation or restriction.'],unpriced:0,stale:0,grade:gradeOf()};}),raw:{official:[],google:okModels.slice(1).map(function(){return [];})}};}
       else {
         // A multi-leg alternative changes one leg, not the whole trip. Discover
         // only that changed leg, then project the saved union onto full routes.
-        var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
-        var searched=await gatherAll(extraModels,function(f,l){prog(.47+f*.43,'Approved alternatives · '+l);},restDebug,discovering?'discover-cache':false,null,okKs.slice(1));
+        var searched=await gatherAll(extraModels,function(f,l){prog(.47+f*.43,'Approved alternatives · '+l);},restDebug,discovering?'discover-cache':false,null,okKs.slice(1),coverage&&coverage.alternatives);
         var baseStations=(first.raw.official||[]).concat.apply(first.raw.official||[],first.raw.google||[]);
         var drop=function(s){var c=Object.assign({},s);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;};
         var projected={localOnly:true,official:searched.raw.official||[],google:okKs.slice(1).map(function(k,i){var a=alts[k],shift=a._leg>0?(okModels[i+1].legEnds||[])[a._leg-1]||0:0;return {k:k,sig:altSig(a),list:baseStations.map(drop).concat((searched.raw.google[i]||[]).map(function(s){var c=Object.assign({},s);if(c.detourRange)c.detourRange=c.detourRange.map(function(d){return d+shift;});return c;}))};})};
@@ -2749,6 +2773,7 @@
       ga={per:first.per.concat(rest.per),cachedAgeMs:Math.max(first.cachedAgeMs||0,rest.cachedAgeMs||0),raw:{official:P.reconcileStations((first.raw.official||[]).concat(rest.raw.official||[])),google:first.raw.google.concat(rest.raw.google),kind:first.raw.kind}};
     }else ga=await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force, rpSt, okKs);
     choicePool=ga.raw;
+    choiceCandidates.clear();ga.per.forEach(function(g,i){cacheChoiceCandidates(alts[okKs[i]],okModels[i],g);});
     // cancelled: website discovery hands back what it finished (planned with, and noted); anything else stops here
     if (jobCancel && !(dbg.search.keyless && dbg.search.keyless.cancelled) && !webRefresh) throw new Error('cancelled while finding stations');
     if (rp) ga.cachedAgeMs = Date.now() - rp.t;
@@ -2770,11 +2795,11 @@
     }
     await paint();
     var t0 = Date.now();
-    var plan = T.plan(opts), estUsed = 0;
+    var plan = await planAsync(opts), estUsed = 0;
     // nothing priced in reach somewhere (very rural): let stations with no posted price fill the gap, at an estimate
     if ((!plan.ok || plan.firstDip) && g.unpricedCands && g.unpricedCands.length) {
       var oEst = Object.assign({}, opts, { cands: cands.concat(g.unpricedCands) });
-      var pEst = T.plan(oEst);
+      var pEst = await planAsync(oEst);
       if (pEst.ok && (!plan.ok || !pEst.firstDip)) {
         plan = pEst; opts = oEst; cands = oEst.cands; estUsed = pEst.stops.filter(function (x) { return x.c.est; }).length;
         LG.info('plan', 'Used ' + estUsed + ' station(s) with no posted price (nothing priced in reach)');
@@ -2809,7 +2834,7 @@
         var g2 = ga.per[gi++];
         var o2 = makeOpts(m2, g2.cands, startGal,alts[k]);
         if (plan.ok) o2.refPrice = plan.refPrice;
-        var p2 = T.plan(o2);
+        var p2 = await planAsync(o2);
         result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
           startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs } });
       }
@@ -2852,8 +2877,8 @@
   function drawSoon() {
     var r0 = result;
     requestAnimationFrame(function () { setTimeout(function () {
-      if (result !== r0 || !onPlan(step)) return;
-      if(step===ST_ADJ&&routeFlow())choiceDraw();else drawRoute(); fitBtn(); if (!busy) mapLoaded();
+      if (result !== r0 || !onPlan(step)||$('trip').classList.contains('hidden')) return;
+      if(step===ST_ADJ&&routeFlow())choiceDraw();else drawRoute(); fitBtn(); if (!busy&&!choicePlanning) mapLoaded();
     }, 0); });
   }
   var BULB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>';
@@ -3357,7 +3382,7 @@
       trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,altCompare:S.trip.altCompare,routeChoices:S.trip.routeChoices,altMinSave:S.trip.altMinSave },
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
-    if(routeFlow())replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
+    if(routeFlow()||(replay&&replay.id===id))replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
     var idx = histIndex().filter(function (x) { return x.id !== id; });
     idx.unshift({ id: id, t: now, title: tripTitle(route), pts: route.stops.map(stopName),
       mi: Math.round(model.totalMi), via: alts[altSel] && alts[altSel].description || '', n: route.stops.length });
@@ -3543,6 +3568,7 @@
   if (window.ResizeObserver) { var roT = 0; new ResizeObserver(function () { clearTimeout(roT); roT = setTimeout(placePinsSoon, 120); }).observe($('trip')); }
   map.on('zoomend moveend', placePinsSoon);
   function drawRoute() {
+    if(map.hasLayer(choiceLayer)){map.removeLayer(choiceLayer);choiceLayer.clearLayers();choiceFitKey='';choiceBounds=null;}
     var r0 = result, key = { model: model, result: r0, plan: r0 && r0.plan, top: r0 && r0.top, cands: r0 && r0.cands, dep: step === ST_DEPART };
     if (map.hasLayer(layer) && Object.keys(key).every(function (x) { return drawn[x] === key[x]; })) return;
     drawn = key;
@@ -3818,10 +3844,12 @@
     var pg = $('trip'); if (pg) pg.classList.remove('submode', 'tall');
   }
   function closeTrip() {
+    closePage();mapLoaded();
     resetAdjust();
     closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ(); mapLoaded();
     layer.clearLayers(); drawn = {}; if (map.hasLayer(layer)) map.removeLayer(layer);
-    document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); hzSync(); A.render();
+    choiceLayer.clearLayers();if(map.hasLayer(choiceLayer))map.removeLayer(choiceLayer);choiceFitKey='';
+    document.body.classList.remove('trip-on', 'trip-full'); routeBounds = null; fitBtn(); hzSync(); requestAnimationFrame(function(){setTimeout(function(){if($('trip').classList.contains('hidden'))A.render();},0);});
     if (A.jobDraw && A.job && A.job()) A.jobDraw();
   }
   function endTrip() { closeTrip(); }

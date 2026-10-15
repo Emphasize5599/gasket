@@ -6,7 +6,7 @@
  *  - CITGO: Walmart+ discount via linked Club CITGO account, and Club CITGO rewards still earn
  *    (Club 3¢, Premier 6¢; one Friday/month +2¢; one "Triple Tuesday"/month = 3x), up to 30 gal.
  */
-(function (root) {
+(function initPricing(root) {
   var BRANDS = {
     walmart: { name: 'Walmart Fuel', short: 'W', color: '#0071DC', query: 'Walmart Fuel Station',
       howTo: 'Walmart app → Gas Savings → scan the QR code on the pump, then pick your grade.' },
@@ -385,5 +385,6 @@
 
   var api = { stationKey: stationKey, reconcileStations: reconcileStations, BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
     compute: compute, tripPrice: tripPrice, citgoRedeemed: citgoRedeemed, setCitgoRedeemed: setCitgoRedeemed, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
+  api.workerSource='('+initPricing.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);

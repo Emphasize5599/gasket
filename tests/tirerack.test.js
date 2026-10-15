@@ -219,6 +219,8 @@ async function run() {
     await ui.fill('#tzSize','225/60R17');
     await ui.dispatchEvent('#tzSize','change');
     await ui.evaluate(() => { __app.N.siteRead=__previousRead; onNativeResult(__held[0],{factory:['235/60R17']}); });
+    await ui.fill('#tzMiles','20000');await ui.dispatchEvent('#tzMiles','change');await ui.selectOption('#tzRot','yes');await ui.selectOption('#tzType','Grand Touring All-Season');
+    await ui.waitForSelector('#tzRetry');await ui.click('#tzDone');await ui.click('#tzDet');
     await ui.waitForFunction(() => Garage.car().tires.list && Garage.car().tires.list.size==='225/60R17');
     assert.equal(await ui.evaluate(() => Garage.car().tires.size), '225/60R17');
     await ui.waitForSelector('#tzRetry');
@@ -261,6 +263,7 @@ async function run() {
     assert.ok(await catalogUI.evaluate(()=>!__catalogReads.find(a=>a.step==='list').url.includes('autoModel')),'replacement catalog must not inherit vehicle/OE filters');
     if(!await catalogUI.locator('#gTires[open]').count()) await catalogUI.click('#gTires summary');
     await catalogUI.click('#tzDet');
+    await catalogUI.fill('#tzMiles','20000');await catalogUI.dispatchEvent('#tzMiles','change');await catalogUI.selectOption('#tzRot','yes');
     assert.equal(await catalogUI.getAttribute('#tzSame [data-same="1"]','aria-checked'),'true','unspecified tires default to all the same');
     for(const type of ['Commercial All-Terrain','Light Truck/SUV Studdable Winter / Snow','Streetable Track & Competition','Future catalog category'])assert((await catalogUI.locator('#tzType option').evaluateAll(es=>es.map(e=>e.value))).includes(type),'all baseline and live future categories stay available');
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
@@ -283,12 +286,14 @@ async function run() {
     await catalogUI.fill('#tzWarranty','70000'); await catalogUI.dispatchEvent('#tzWarranty','change');
     await catalogUI.click('#tzRefresh');
     await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===5);
+    await catalogUI.waitForSelector('#tzRefresh');
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'70000','refresh must preserve a manually entered warranty');
+    await catalogUI.click('#tzDone');
     await catalogUI.evaluate(rows=>{
       const t=Garage.car().tires;t.list.items=rows; t.type='Grand Touring All-Season';t.brand='General';t.model='AltiMAX RT45';t.warrantySrc='tirerack';t.warrantyMi=65000;
       Garage.redraw();
     },rated.tires);
-    await catalogUI.click('.sub-back'); await catalogUI.click('#tzDet');
+    await catalogUI.click('#tzDet');
     await catalogUI.waitForSelector('#tzModel option[value="part:rt45h"]', {state:'attached'});
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'','differing variants require an explicit rating selection');
     await catalogUI.selectOption('#tzModel','part:rt45h');

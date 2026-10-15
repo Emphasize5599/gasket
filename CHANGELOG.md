@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.158 - 2026-10-15 (keyless test branch only)
+- Estimated tire wear graphics and required tire details.
+- Shared route searches, faster background planning and per-leg sliders/maps.
+- Bug fixes.
+
 ## 0.0.157 - 2026-10-15 (keyless test branch only)
 - Per-leg route choices, adjustments and comparisons.
 - Better vehicle validation and website-reader recovery.

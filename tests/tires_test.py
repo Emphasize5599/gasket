@@ -44,7 +44,12 @@ def main(pg):
     """Back to the Tires tile (its tread summary and the overview picture)."""
     while pg.locator('.sub-page').count(): pg.click('.sub-back'); pg.wait_for_timeout(200)
 def ft(pg, sel): return pg.evaluate("(s) => { const e = document.querySelector(s); if (!e) throw new Error('no ' + s); return e.innerText; }", sel)
-def T(pg): return pg.evaluate('window.Garage.car().tires')
+def leave(pg):
+    """Close the tire details; when they can't be saved yet (no miles / rotation / type), discard them."""
+    pg.click('.sub-back'); pg.wait_for_timeout(200)
+    if pg.locator('.sub-page #tzDetailsDiscard').count():
+        pg.click('#tzDetailsDiscard'); pg.click('#cfmYes'); pg.wait_for_timeout(200)
+def T(pg): return pg.evaluate('(Tires.editing && Tires.editing(window.Garage.car())) || window.Garage.car().tires')   # the open Tire details' draft, else the saved tires
 def opts(pg, sel): return pg.evaluate("(s) => [...document.querySelectorAll(s + ' option')].map(o => o.textContent)", sel)
 def show(pg, id_):
     pg.evaluate("(id) => { window.__app.S.carId = id; window.Garage.redraw(); }", id_); pg.wait_for_timeout(300)
@@ -90,7 +95,7 @@ with sync_playwright() as p:
         assert ft(pg, '.sub-page h2') == 'Tire details'
         assert pg.input_value('#tzSize') == '195/65R15' and 'from Tire Rack' in ft(pg, '.sub-page')
         types = opts(pg, '#tzType'); print('  types:', types)
-        assert types == ['Type', 'Grand Touring All-Season', 'Standard Touring All-Season', 'Studless Ice & Snow', 'Other…']
+        assert types[0] == 'Type' and types[-1] == 'Other…' and all(x in types for x in ['Grand Touring All-Season', 'Standard Touring All-Season', 'Studless Ice & Snow', 'All-season', 'Trailer']), 'the catalog\'s types and every general category (0.0.157)'
         pg.select_option('#tzType', 'Standard Touring All-Season'); pg.wait_for_timeout(200)
         assert opts(pg, '#tzBrand') == ['Brand', 'Bridgestone', 'Continental', 'Michelin', 'Other…'], 'all brands remain available regardless of type'
         pg.select_option('#tzBrand', 'Bridgestone'); pg.wait_for_timeout(200)
@@ -99,13 +104,20 @@ with sync_playwright() as p:
         t = T(pg); print('  picked:', t['brand'], t['model'], t['utqg'], t['warrantyMi'])
         assert t['utqg'] == {'tw': 680, 'trac': 'A', 'temp': 'B'} and t['utqgSrc'] == 'tirerack' and t['warrantyMi'] == 65000
         assert pg.input_value('#tzTw') == '680' and 'Wear rating and warranty from Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzWarranty') == '65000'
-        line = ft(pg, '#gTiresLine'); print('  summary line:', line)
-        assert line.startswith('Standard Touring All-Season · Fuel 10/10 · UTQG 680 A B'), 'the line under Tires: type, fuel /10, wear rating'
         assert 'Fuel economy' not in ft(pg, '.sub-page') and pg.locator('.sub-page .tz-fuel, .sub-page .tz-ft').count() == 0, 'the fuel rating lives on the Tires tile now'
         pg.screenshot(path=f'{OUT}/{name}-t0-details.png')
         o = pg.evaluate(OVER); pg.evaluate(BIG.replace('#gTires *', '.sub-page *')); pg.wait_for_timeout(100); o += pg.evaluate(OVER)
         assert not o, 'details page sideways: ' + str(o)
+        # miles, rotation and type are required to save: Back stays until they're in (0.0.158)
         pg.click('.sub-back'); pg.wait_for_timeout(200)
+        assert pg.locator('.sub-page #tzRequired').count() == 1 and pg.is_disabled('#tzDone'), 'not saved without miles and rotation'
+        pg.fill('#tzMiles', '30000'); pg.dispatch_event('#tzMiles', 'change'); pg.wait_for_timeout(150)
+        pg.select_option('#tzRot', 'yes'); pg.wait_for_timeout(200)
+        assert pg.locator('#tzRequired').count() == 0 and not pg.is_disabled('#tzDone')
+        pg.click('.sub-back'); pg.wait_for_timeout(200)
+        assert pg.locator('.sub-page').count() == 0
+        line = ft(pg, '#gTiresLine'); print('  summary line:', line)
+        assert line.startswith('Standard Touring All-Season · Fuel 10/10 · UTQG 680 A B'), 'the line under Tires: type, fuel /10, wear rating'
         assert '195/65R15 · Bridgestone ECOPIA EP422 PLUS' in ft(pg, '#tzDet'), 'size and tire under Tire details'
         col = pg.evaluate("[...document.querySelectorAll('#gTiresLine .gr')].map(e => e.textContent + ' ' + getComputedStyle(e).color)"); print('  graded:', col)
         assert col[0].startswith('10/10 rgb(') and col[3].startswith('B rgb('), col
@@ -244,7 +256,7 @@ with sync_playwright() as p:
         assert pg.locator('#tzSaved').count() == 0, 'nothing unhooked: no Saved trailers'
         assert pg.locator('#gTiresIn .tz-ft').count() == 2 and ft(pg, '#gTiresIn .tz-ft[data-fuel="car"]').startswith('Car') and 'Trailer' in ft(pg, '#gTiresIn .tz-ft[data-fuel="%s"]' % tid), 'a fuel tile for each hooked-up trailer'
         assert pg.locator('.tz-overview .tz-w').count() == 12 and pg.locator('#gTiresIn [data-corner], #gTiresIn [data-tr-tire]').count() == 0, 'the hooked-up picture on the tile; tires in the submenus'
-        assert pg.locator('.tz-overview .tz-trn').count() == 0 and 'Trailer' not in pg.evaluate("document.querySelector('.tz-overview').textContent"), 'no trailer label on the picture'
+        assert pg.locator('.tz-overview .tz-trn').count() == 0 and 'Trailer' not in pg.evaluate("[...document.querySelectorAll('.tz-overview text')].map(t => t.textContent).join(' ')"), 'no trailer label on the picture'
         # its tires aren't filled in: the row says so, the Garage won't go on; Advice warns
         assert '8 tires need details' in ft(pg, '#tzTr_%s' % tid) and pg.locator('#tzTr_%s.empty' % tid).count() == 1, ft(pg, '#tzTr_%s' % tid)
         assert 'Your tires could be unsafe' in pg.evaluate("Tires.advice(window.Garage.car()).map(x => x.title).join('|')")
@@ -390,16 +402,16 @@ with sync_playwright() as p:
         assert 'Your version at Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzVerSel') == 'v:Venza FWD\u001fXLE V6', 'the match shows, to change if it is wrong'
         pg.click('#tzPick [data-size="245/50R20"]'); pg.wait_for_timeout(300)
         assert T(pg)['size'] == '245/50R20' and pg.input_value('#tzSize') == '245/50R20', 'picked: the page shows it'
-        pg.click('.sub-back'); pg.wait_for_timeout(200)
+        leave(pg)
         # ---- a model with no versions at Tire Rack (its size page won't show those): read through its vehicle menu ----
         pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cq', name: '2020 Toyota Sequoia', year: 2020, make: 'Toyota', model: 'Sequoia', trim: '', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 13, hwy: 17, comb: 15 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
         show(pg, 'cq'); pg.wait_for_timeout(300)
         pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
-        pg.wait_for_function("window.Garage.car().tires.size === '275/55R20'", timeout=5000)
+        pg.wait_for_function("((Tires.editing && Tires.editing(window.Garage.car())) || window.Garage.car().tires).size === '275/55R20'", timeout=5000)
         oe = [r for r in pg.evaluate('window.__tr') if r['step'] == 'oesize']
         assert oe and oe[-1]['model'] == 'Sequoia' and oe[-1]['clar'] == '' and oe[-1]['url'].endswith('/tires/brands'), oe
         assert not any(r['step'] == 'size' and 'Sequoia' in r.get('url', '') for r in pg.evaluate('window.__tr')), 'never the size page that only says "currently unavailable"'
-        pg.click('.sub-back'); pg.wait_for_timeout(200)
+        leave(pg)
         # ---- a trim Tire Rack doesn't know; a blocked lookup; typed sizes ----
         pg.evaluate('''() => { const S = window.__app.S; S.cars.push({ id: 'cz', name: '2019 Honda Fit', year: 2019, make: 'Honda', model: 'Fit', trim: 'Sport', epaId: '1', power: 'gas', grade: 'regular', epa: { city: 33, hwy: 40, comb: 36 }, obs: {}, entries: [], info: { src: {}, featSrc: {} } }); }''')
         show(pg, 'cz'); pg.wait_for_timeout(300)
@@ -410,14 +422,14 @@ with sync_playwright() as p:
         print('  Fit versions:', opts_)
         assert opts_[0] == ':Choose…' and opts_[1] == 'As Tire Rack names them:Fit Sport w/Honda Sensing' and len(opts_) == 4, 'yours first: it has your trim word'
         assert [r['models'] for r in pg.evaluate('window.__tr') if r['step'] == 'clars'][-1] == ['Fit'], 'Civic Sedan is another car'
-        pg.select_option('#tzVerSel', 'v:Fit\u001fSport w/Honda Sensing'); pg.wait_for_function("window.Garage.car().tires.size === '185/55R16'", timeout=4000)
+        pg.select_option('#tzVerSel', 'v:Fit\u001fSport w/Honda Sensing'); pg.wait_for_function("((Tires.editing && Tires.editing(window.Garage.car())) || window.Garage.car().tires).size === '185/55R16'", timeout=4000)
         assert T(pg)['trVer'] == {'key': 'v4|2019|Honda|Fit', 'model': 'Fit', 'clar': 'Sport w/Honda Sensing', 'auto': False} and pg.evaluate('window.Garage.car().trim') == 'Sport', 'the car keeps its own trim'
         assert 'Factory size for the 2019 Honda Fit Sport w/Honda Sensing, from Tire Rack' in ft(pg, '.sub-page') and pg.input_value('#tzVerSel') == 'v:Fit\u001fSport w/Honda Sensing', 'picked: its factory size; the menu stays to change it'
         # another version: its own size (Tire Rack has none for the EX here)
         pg.select_option('#tzVerSel', 'v:Fit\u001fEX'); pg.wait_for_timeout(400)
         assert not T(pg).get('size') and 'Tire Rack has no sizes for the 2019 Honda Fit EX' in ft(pg, '.sub-page'), 'a version without sizes says so'
         pg.evaluate("() => { const t = window.Garage.car().tires; t.size = ''; t.sizeSrc = ''; t.trVer = null; }")
-        pg.click('.sub-back'); pg.wait_for_timeout(200); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
+        leave(pg); pg.click('#tzDet'); pg.wait_for_selector('.sub-page #tzSize')
         pg.fill('#tzSize', '185 55 16'); pg.dispatch_event('#tzSize', 'change'); pg.wait_for_timeout(250)
         assert 'looks like 195/65R15' in pg.inner_text('#toast') and not T(pg).get('size')
         pg.evaluate("window.__trMode = 'blocked'")
@@ -460,7 +472,7 @@ with sync_playwright() as p:
     asked = pg.evaluate('window.__asked')
     assert asked[0].startswith('/SetCurrentVehicleServlet?ajax=true&') and 'autoModel=Mustang%20Coupe&autoModClar=&' in asked[0] and asked[1].startswith('/modalPopups/selectOETireSize.jsp?'), asked
     assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Nonsense', 'clar': ''}, 3000).get('unknown'), 'a vehicle Tire Rack sends elsewhere'
-    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Stale', 'clar': ''}, 3000).get('unknown'), 'a panel for another vehicle (the last one set) is never read as this one'
+    assert reader(pg, OEPAGE, {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Stale', 'clar': ''}, 3000).get('code') == 'unreadable', 'a panel for another vehicle (the last one set) is never read as this one: a retryable miss (0.0.157), not a terminal unknown'
     assert reader(pg, "<p>We're sorry. This page is currently unavailable.</p>", {'step': 'oesize', 'make': 'Ford', 'year': 2005, 'model': 'Mustang Coupe', 'clar': ''}).get('blocked')
     LISTPAGE = ('<div><p>GRAND TOURING ALL-SEASON</p><p>Category Ratings Charts</p>'
                 '<p>CONTINENTAL SECURECONTACT AW</p><p>Grand Touring All-Season</p><p>Reviews (28)</p><p>$153.99</p><p>Size: 195/65R15 91H</p><p>Load Range: SL</p><p>UTQG: 700 A A</p><p>More information on UTQG</p><p>60K Mile Manufacturer\'s Warranty</p>'

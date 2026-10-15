@@ -109,6 +109,11 @@
     groups.plan={routeMi:Math.round(miles),sampled:sampled,merged:sampled-groups.length,spacingMi:SPACING,radiusMi:8};   // for the debug log
     return groups;
   }
+  function discoveryPhases(primary,alternatives,T,P){
+    var first=discoveryAreas(primary,T,P),union=discoveryAreas(primary.concat(alternatives),T,P),rest=union.slice(first.length);
+    rest.plan=Object.assign({},union.plan,{primaryAreas:first.length,reusedPrimaryAreas:discoveryAreas(alternatives,T,P).length-rest.length});
+    return {primary:first,alternatives:rest};
+  }
   function dedupeDiscovery(stations,P){
     stations=P.reconcileStations(stations);
     var out=[],ids=new Map(),bins=new Map();
@@ -160,11 +165,11 @@
   function poolTarget(state,m,now,max){
     var floor=Math.min(4,max);
     if(!m){state.target=max;return max;}
-    if(state.target==null){state.target=floor;state.at=now;state.cooldown=now;}
+    if(state.target==null){state.target=Math.min(max,m.low||m.availMB<1200?floor:m.availMB>=2200?8:6);state.at=now;state.cooldown=now;}
     if(now-state.at<2000)return state.target;
     state.at=now;
-    if(m.low||m.availMB<700){state.target=Math.max(floor,state.target-(m.availMB<300?Math.ceil(state.target/2):2));state.cooldown=now+10000;}
-    else if(m.availMB>=1500&&now>=state.cooldown)state.target=Math.min(max,state.target+1);
+    if(m.low||m.availMB<350){state.target=Math.max(floor,state.target-(m.availMB<200?Math.ceil(state.target/2):2));state.cooldown=now+4000;}
+    else if(m.availMB>=850&&now>=state.cooldown)state.target=Math.min(max,state.target+(m.availMB>=1800?2:1));
     return state.target;
   }
   function readerPool(A,lanes,control,audit,more){
@@ -195,7 +200,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -266,7 +271,7 @@
   async function discover(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
-    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||20)),control={cancelled:false,wake:[],lanes:lanes};busy=control;   // (a map search keeps it to a few readers: you're using the map meanwhile)
+    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||20,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
     if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,grade:grade,force:!!force,mem:mem0});

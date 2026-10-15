@@ -22,6 +22,8 @@ on:
       - tests/routechoices-ui.test.js
       - tests/vehicle-required.test.js
       - tests/adaptive-readers.test.js
+      - tests/tire-estimate-ui.test.js
+      - tests/planner-worker.test.js
       - tests/map-refresh.test.js
       - tests/fuel-grades.test.js
       - tests/keyless-discovery.test.js

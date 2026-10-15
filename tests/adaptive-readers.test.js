@@ -7,7 +7,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
  vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date:Clock,setTimeout:later,clearTimeout:id=>timers.delete(id),setInterval:f=>{intervals.add(f);return f;},clearInterval:f=>intervals.delete(f)});
  const task=window.KeylessGas.discover(Array.from({length:100},()=>K.area(34,-92,8)),null,'regular');
  const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
- assert.equal(active.size,4,'memory-capable phones ramp up instead of bursting all 20 WebViews at once');
+ assert.equal(active.size,8,'a phone with 2.5 GB available starts eight readers, respecting its configured ceiling');
  async function round(ms){now+=ms;for(const [id,t] of [...timers])if(t.at<=now){timers.delete(id);t.fn();}const pending=[...active.values()];active.clear();pending.forEach(r=>r({stores:[],detail:{exhausted:true}}));await flush();}
  await round(2000);assert(active.size>=5);await round(2000);assert(active.size>=6);
  available=100;await round(2000);assert.equal(active.size,4,'pressure reduces admission without cancelling completed/in-flight results');

@@ -637,6 +637,10 @@ with sync_playwright() as p:
         goto(pg, 8); dn = ft(pg, '.tp-step:not(.hidden) .warns'); print('  departure notes:', dn.replace('\n', ' | ')); assert 'avoid tolls' in dn and len(dn) < 200; goto(pg, 6)
         pg.evaluate("window.__cheapI30 = false"); goto(pg, 3); setchk(pg, '#tAltCmp', False)
         goto(pg, 4); pg.click('.hz-opt[data-hzk="1"]'); pg.wait_for_timeout(300); stops(pg)
+        # the comparison's I-30 search is reused (cached answers, 0.0.158); the mock's prices changed since, so search again
+        # the mock's prices changed (a real station has one price whichever route asks): drop the comparison's saved answers
+        # and price history, then search again
+        pg.evaluate("['along', 'find', 'pricehistory'].forEach(ns => window.__app.KV.clear(ns))"); adj(pg, 1500); pg.evaluate('window.__trip.find(true)'); idle(pg, 1500)
         # with 140 mi in the tank a smaller buffer reaches cheaper gas: marks show up on the slider
         settings(pg); pg.fill('#tMiles', '140'); adj(pg, 1200)
         pg.wait_for_selector('#tsBuf', state='attached', timeout=5000); pg.wait_for_timeout(300)

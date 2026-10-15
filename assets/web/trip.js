@@ -12,7 +12,7 @@
  *    Detour fuel is burned from the tank, so its cost shows up in what you have to buy.
  *  - You never arrive anywhere (station or destination) with less than your buffer.
  */
-(function (root) {
+(function initTrip(root) {
   'use strict';
   var M_PER_MI = 1609.344;
 
@@ -250,24 +250,21 @@
     var pts = m.pts, cum = m.cum, segs = m.segs, totalMi = m.totalMi;
     var gal = [0];
     segs.forEach(function (s, idx) { gal.push(gal[idx] + (s.to - s.from) * s.gpm); });
+    function segment(d){var lo=0,hi=segs.length-1;while(lo<hi){var mid=(lo+hi)>>>1;if(d<=segs[mid].to)hi=mid;else lo=mid+1;}return lo;}
     return {
       pts: pts, cum: cum, totalMi: totalMi, durationSec: m.durationSec,
       segs: segs, legEnds: m.legEnds, cityGpm: m.cityGpm, hwyGpm: m.hwyGpm, combGpm: m.combGpm,
       /** gallons burned driving the route from mile 0 to mile d */
       galTo: function (d) {
         if (d <= 0) return 0;
-        for (var j = 0; j < segs.length; j++) {
-          var s = segs[j];
-          if (d <= s.to) return gal[j] + (d - s.from) * s.gpm;
-        }
+        if(!segs.length)return 0;
+        var j=segment(d),s=segs[j];if(d<=s.to)return gal[j]+(d-s.from)*s.gpm;
         return gal[gal.length - 1] + (d - totalMi) * segs[segs.length - 1].gpm;
       },
       /** seconds of driving to reach mile d */
       timeTo: function (d) {
-        for (var j = 0; j < segs.length; j++) {
-          var s = segs[j];
-          if (d <= s.to) return s.t0 + (s.to > s.from ? (d - s.from) / (s.to - s.from) : 0) * (s.t1 - s.t0);
-        }
+        if(!segs.length)return 0;
+        var s=segs[segment(d)];if(d<=s.to)return s.t0+(s.to>s.from?(d-s.from)/(s.to-s.from):0)*(s.t1-s.t0);
         return segs.length ? segs[segs.length - 1].t1 : 0;
       },
       pointAt: function (d) {
@@ -431,6 +428,12 @@
     });
     return Math.max(0,need);
   }
+  // Boundary fuel is invariant during a plan. Avoid reintegrating the entire
+  // route (and speed overrides) for every candidate-pair transition.
+  function reserveChecker(o){
+    var boundaries=(o.legPolicies||[]).map(function(p,i,ps){return {d:p.to,gal:o.model.galTo(p.to)+Math.max(p.bufferGal||0,ps[i+1]&&ps[i+1].bufferGal||0)};});
+    return function(from,to,base,detourEnd,galTo){var need=base;for(var i=0;i<boundaries.length;i++){var p=boundaries[i];if(p.d>from+1e-7&&p.d<to-1e-7)need=Math.max(need,p.gal-galTo-(detourEnd||0));}return Math.max(0,need);};
+  }
   function optimize(o, priceFn, stopCostFn) {
     if(o.cands.some(function(c){return !!c.citgo;}))return optimizeRewards(o,priceFn,stopCostFn);
     // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
@@ -456,7 +459,7 @@
         (o.timeValue || 0) * ((c.detourMin || 0) + (o.stopMinutes || 0)) / 60;
     };
     var detGal = function (n) { return n.kind === 'stop' ? (n.c.detourMi || 0) * model.cityGpm : 0; };
-    var routeGal = nodes.map(function (n) { return model.galTo(n.d); });
+    var routeGal = nodes.map(function (n) { return model.galTo(n.d); }),reserveAt=reserveChecker(o);
 
     var dp = [], par = [], bestFrom = [];
     for (var i = 0; i < N; i++) { dp.push(new Float64Array(LV + 1).fill(INF)); par.push(new Int32Array(LV + 1).fill(-1)); }
@@ -493,7 +496,7 @@
         var burn = Math.ceil(burnG / STEP - 1e-9);
         if (routeGal[j] - routeGal[i] > o.capGal) break;              // beyond a full tank: stop looking
         var reserve=nodes[j].kind==='dest'?o.arriveGal:i===0&&o.firstDip?0:legPolicy(o,nodes[j].d).bufferGal;
-        var minA=Math.ceil(reserveBetween(o,nodes[i].d,nodes[j].d,reserve,detGal(nodes[j])/2)/STEP-1e-9);
+        var minA=Math.ceil(reserveAt(nodes[i].d,nodes[j].d,reserve,detGal(nodes[j])/2,routeGal[j])/STEP-1e-9);
         if (LV - burn < minA) continue;
         var add = nodes[j].kind === 'stop' ? stopCost(nodes[j].c) : 0;
         var credit = nodes[j].kind === 'dest' ? (o.refPrice || 0) * STEP : 0;
@@ -544,7 +547,7 @@
     var step=o.step||0.1,m=o.model,lv=Math.max(1,Math.round(o.capGal/step)),fl=o.fillCap?Math.max(1,Math.min(lv,Math.round(o.fillCap/step))):lv,w=lv+1,size=4*w,inf=1e18;
     var cs=o.cands.slice().sort(function(a,b){return a.d-b.d;}),nodes=[{d:0}].concat(cs.map(function(c){return {d:c.d,c:c};}),[{d:m.totalMi}]),n=nodes.length;
     var dp=nodes.map(function(){return new Float64Array(size).fill(inf);}),par=nodes.map(function(){return new Int32Array(size).fill(-1);}),from=[];
-    var rg=nodes.map(function(x){return m.galTo(x.d);}),det=function(i){return nodes[i].c?(nodes[i].c.detourMi||0)*m.cityGpm/2:0;};
+    var rg=nodes.map(function(x){return m.galTo(x.d);}),reserveAt=reserveChecker(o),det=function(i){return nodes[i].c?(nodes[i].c.detourMi||0)*m.cityGpm/2:0;};
     var period=function(i){return nodes[i].c&&(nodes[i].c.rewardMonth||(nodes[i].c.citgo||{}).period);};
     var start=Math.min(lv,Math.floor(o.startGal/step+1e-9)),buf=Math.ceil(o.bufferGal/step-1e-9),arr=Math.ceil(o.arriveGal/step-1e-9),reach=0;
     dp[0][start]=0;
@@ -583,14 +586,15 @@
         var dest=j===n-1;if(o.lastFull&&dest&&n>2&&!c)continue;
         if(rg[j]-rg[i]>o.capGal)break;
         var burn=Math.ceil((rg[j]-rg[i]+det(i)+det(j))/step-1e-9),reserve=dest?o.arriveGal:i===0&&o.firstDip?0:legPolicy(o,nodes[j].d).bufferGal;
-        var min=Math.ceil(reserveBetween(o,nodes[i].d,nodes[j].d,reserve,det(j))/step-1e-9);
+        var min=Math.ceil(reserveAt(nodes[i].d,nodes[j].d,reserve,det(j),rg[j])/step-1e-9);
         if(lv-burn<min)continue;
         var cj=nodes[j].c,pen=cj?(stopCostFn?stopCostFn(cj):(o.stopPenalty||0)+(cj.penalty||0)+((cj.detourMin||0)>1.5?(o.detourPenalty||0):0)+(o.timeValue||0)*((cj.detourMin||0)+(o.stopMinutes||0))/60):0;
         if(o.lastFull&&dest&&c)pen-=o.stopPenalty||0;
         var lo=o.lastFull&&dest&&c?fl:burn+min;
+        var resetPeriod=period(i)&&period(j)&&period(i)!==period(j);
         for(mask=0;mask<4;mask++)for(g=lo;g<=lv;g++){
           var bi=mask*w+g;if(best[bi]>=inf)continue;
-          var nextMask=period(i)&&period(j)&&period(i)!==period(j)?0:mask,f2=g-burn,ix=nextMask*w+f2,val=best[bi]+pen-(dest?f2*step*(o.refPrice||0):0);
+          var nextMask=resetPeriod?0:mask,f2=g-burn,ix=nextMask*w+f2,val=best[bi]+pen-(dest?f2*step*(o.refPrice||0):0);
           if(val<dp[j][ix]){dp[j][ix]=val;par[j][ix]=i*size+bi;}
         }
       }
@@ -999,5 +1003,7 @@
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
+  api.restoreModel=makeModel;
+  api.workerSource='('+initTrip.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
 })(this);

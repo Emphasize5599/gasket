@@ -63,7 +63,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     const sides=p.locator('.tz-tr-side');assert.equal(await sides.count(),6);
     assert.equal(await sides.first().locator('.tz-tr-side-label').innerText(),'Trailer, axle 1, driver side');
     assert.deepEqual((await sides.first().locator('.nf > span').allTextContents()).map(s=>s.replace('*','')),['Outer','Inner']);
-    assert.deepEqual((await sides.first().locator('button').allTextContents()).map(s=>s.trim()),['Specify','Specify']);
+    assert.ok((await sides.first().locator('button').allTextContents()).map(s=>s.trim()).every(t=>/^(Specify|Needs .+)$/.test(t)));   // 'Needs …' once the missing-details redraw lands
     assert.deepEqual((await sides.nth(1).locator('.nf > span').allTextContents()).map(s=>s.replace('*','')),['Inner','Outer']);
     assert.deepEqual(await sides.nth(1).locator('button').evaluateAll(es=>es.map(e=>e.dataset.trTire)),['trExample:a1ri','trExample:a1ro']);
     const halves=await sides.evaluateAll(es=>es.map(e=>({x:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right,top:e.getBoundingClientRect().top})));
