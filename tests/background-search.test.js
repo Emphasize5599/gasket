@@ -37,6 +37,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 
     // 1. a search on its own screen: no status bar (the step shows it); the steps that would change it are closed
     await discover();
+    await p.waitForSelector('#jobBar:not(.hidden)',{timeout:2000}).catch(()=>{});   // the dock paints on the next animation frame   // the dock paints on the next animation frame
     assert.equal(await p.locator('#jobBar:not(.hidden)').count(), 1, 'The global status bar remains visible above Adjustments');
     assert.equal(await p.locator('#taResults .prog-load').count(),0,'no duplicate progress inside the menu');assert.equal(await p.locator('#jobBar [data-cancel="stations"]').count(),1,'cancellation stays available in the dock');assert.equal(await p.isDisabled('#tNext'),true);assert.equal(await p.innerText('#tNext'),'Next');
     assert.equal(await p.locator('#taResults .card.skel .prog-load').count(),0,'buffer/detour skeletons do not repeat station discovery progress');
