@@ -40,8 +40,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  // Persist the browser stand-in's exact native cache and KV across reopening.
  await p.evaluate(()=>{sessionStorage.setItem('standinRestored',JSON.stringify({s:__app.N.loadSettings()||JSON.stringify(__app.S),c:__app.N.loadCache()}));sessionStorage.setItem('test-kv',JSON.stringify(window.__kv));});
  await p.reload();await p.waitForSelector('#btnLocate.live');
- const counts=await p.evaluate(()=>{const rows=PriceHistory.near([33,-95,36,-89]);return {n:rows.filter(s=>s.wmStoreId==='99001').length,grades:Object.keys(rows.find(s=>s.wmStoreId==='99001').prices)};});
- assert.equal(counts.n,1);assert(counts.grades.includes('diesel')&&counts.grades.includes('regular'));
+ const counts=await p.evaluate(()=>{const rows=PriceHistory.near([33,-95,36,-89]),store=rows.find(s=>s.wmStoreId==='99001');return {n:rows.filter(s=>s.wmStoreId==='99001').length,grades:Object.keys(store&&store.prices||{}),records:PriceHistory.stations().map(s=>({id:s.id,store:s.snapshot&&s.snapshot.wmStoreId,lat:s.lat,lng:s.lng})),savedKeys:Object.keys(JSON.parse(sessionStorage.getItem('test-kv')||'{}')).length,restoredKeys:Object.keys(window.__kv||{}).length};});
+ assert.equal(counts.n,1,JSON.stringify(counts));assert(counts.grades.includes('diesel')&&counts.grades.includes('regular'),JSON.stringify(counts));
  await p.evaluate(()=>{
   __app.S.apiKey='TEST';__app.S.keylessRegular=false;__app.N.siteSearch=(key,id)=>setTimeout(()=>onSiteResult(key,id,{stores:[]}),0);
   __app.N.search=(id,key,queries,...box)=>{window.__apiBox=box.slice(0,4);setTimeout(()=>onSearchResult(id,{places:[],errors:[]}),0);};
