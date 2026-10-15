@@ -616,18 +616,26 @@ with sync_playwright() as p:
         if not sweep[-1][1]: assert pg.evaluate('window.__trip.state().result.bufMi') == cur
         # other routes: plan the trip on I-30 too, where (in this test) gas is 35c cheaper
         pg.evaluate("window.__cheapI30 = true; window.__alongRoutes = {}")
-        settings(pg); setchk(pg, '#tAltCmp', True); pg.fill('#tAltSave', '2'); pg.dispatch_event('#tAltSave', 'input'); stops(pg, 1500)
+        goto(pg, 3); setchk(pg, '#tAltCmp', True); pg.fill('#tAltSave', '2'); pg.dispatch_event('#tAltSave', 'change')
+        goto(pg, 4)
+        for _ in range(12):
+            if step(pg) != 4: break
+            pg.click('#tNext'); pg.wait_for_timeout(100)  # primary selection, then explicit Yes for each alternative
+        adj(pg, 1500); pg.evaluate('window.__trip.find(true)'); idle(pg, 1500)
         assert pg.evaluate('window.__alongRoutes') == {'I-30': True, 'US-67': True}, pg.evaluate('window.__alongRoutes')
         print('  compare:', pg.evaluate("JSON.stringify((window.__trip.state().result.routes||[]).map(e=>[e.k, e.res.plan.ok, e.res.plan.totals && e.res.plan.totals.net]))"), pg.evaluate("document.querySelector('.tp-step:not(.hidden)') && document.querySelector('.tp-step:not(.hidden)').innerText.slice(0,300)"))
-        rb = ft(pg, '.routebox'); print('  route box:', rb.replace('\n', ' | '))
-        assert 'cheaper route: via i-30 w' in rb.lower(), rb
-        pg.evaluate("document.querySelector('.routebox').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
+        for _ in range(12):
+            if pg.locator('.route-choice-compare').count(): break
+            pg.click('#tNext'); pg.wait_for_timeout(100)
+        rb = ft(pg, '.route-choice-compare'); print('  route comparison:', rb.replace('\n', ' | '))
+        assert 'i-30 w' in rb.lower(), rb
+        pg.evaluate("document.querySelector('.route-choice-compare').scrollIntoView({block:'center'})"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-t2c-otherroute.png')
-        pg.click('.routebox [data-route="0"]'); pg.wait_for_timeout(400)
+        pg.click('[data-choice-route="0"]'); pg.wait_for_function('!document.getElementById("tNext").disabled'); pg.click('#tNext'); idle(pg, 400)
         after = ft(pg, '.tp-step:not(.hidden)'); print('  switched:', mi(pg), '|', [l for l in after.split('\n') if 'Also checked' in l])
-        assert mi(pg) == 318 and 'via us-67 s and i-30 w' in after.lower() and 'cheaper route' not in after.lower()
+        assert mi(pg) == 318 and pg.evaluate('window.__trip.state().result.routes.find(e=>e.res===window.__trip.state().result).k') == 0
         goto(pg, 8); dn = ft(pg, '.tp-step:not(.hidden) .warns'); print('  departure notes:', dn.replace('\n', ' | ')); assert 'avoid tolls' in dn and len(dn) < 200; goto(pg, 6)
-        pg.evaluate("window.__cheapI30 = false"); settings(pg); setchk(pg, '#tAltCmp', False)
+        pg.evaluate("window.__cheapI30 = false"); goto(pg, 3); setchk(pg, '#tAltCmp', False)
         goto(pg, 4); pg.click('.hz-opt[data-hzk="1"]'); pg.wait_for_timeout(300); stops(pg)
         # with 140 mi in the tank a smaller buffer reaches cheaper gas: marks show up on the slider
         settings(pg); pg.fill('#tMiles', '140'); adj(pg, 1200)

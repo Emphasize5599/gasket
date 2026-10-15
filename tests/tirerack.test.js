@@ -26,6 +26,12 @@ async function result(pg) {
   return pg.evaluate(() => answers[0]);
 }
 async function run() {
+  const tiresSource=fs.readFileSync(path.join(root,'assets/web/tires.js'),'utf8'),readCode=tiresSource.slice(tiresSource.indexOf('function tireRead(args)'),tiresSource.indexOf('function failure(r)'));
+  for(const blocked of [false,true]){
+    let attempts=0;const delays=[];
+    const read=Function('trQueue','call','LG','TR_RETRY','TR_TRIES','setTimeout',readCode+';return tireRead;')(Promise.resolve(),async()=>{attempts++;return attempts===1?blocked?{blocked:true,error:'restriction',code:'blocked'}:{error:'Unverified vehicle panel',code:'unreadable'}:{factory:['205/55R16']};},{info:()=>{},warn:()=>{}},['unreadable'],[2000,6000],(f,ms)=>{delays.push(ms);f();});
+    const r=await read({step:'oesize'});assert.equal(attempts,blocked?1:2);assert.deepEqual(delays,blocked?[]:[2000]);assert.equal(blocked?r.blocked:r.factory[0],blocked?true:'205/55R16');
+  }
   const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, headless: true, args: ['--no-sandbox'] });
   try {
     let pg = await browser.newPage();
@@ -90,10 +96,18 @@ async function run() {
     assert.equal(await pg.evaluate(() => answers[0] && answers[0].code), 'unreadable');
     await pg.close(); pg = await browser.newPage();
     pg.on('pageerror', e => errors.push(e.message));
+    await start(pg,base,{step:'oesize',year:2020,make:'Test',model:'Coupe'},`window.fetch=async(url)=>({ok:true,status:200,text:async()=>String(url).includes('SetCurrentVehicle')?'\u007b"vehicleZipSet":"success"\u007d':'<h2>Different vehicle</h2><h3>Factory tire size</h3><p>205/55R16</p>'});`);
+    assert.equal((await result(pg)).code,'unreadable','a mismatched vehicle panel is retryable, not a terminal unknown vehicle');
+    await start(pg,base,{step:'oesize',year:2020,make:'Test',model:'Coupe'},`window.fetch=async(url)=>({ok:true,status:200,text:async()=>String(url).includes('SetCurrentVehicle')?'\u007b"vehicleZipSet":"success"\u007d':'<h2>2020 Test Coupe</h2><h3>Factory tire size</h3><p>205/55R16</p>'});`);
+    assert.deepEqual((await result(pg)).factory,['205/55R16']);
     await start(pg, '<p>No tires found</p>', { step: 'list' });
     assert.equal((await result(pg)).empty, true);
     const card = (brand, model, type, warranty, utqg = '680 A A', part = '', service = '') => `<article class="tire"><h2><a href="https://www.tirerack.com/tires/tires.jsp?tireMake=${encodeURIComponent(brand)}&tireModel=${encodeURIComponent(model)}${part ? '&partnum='+part : ''}"><span>${brand}</span><br><span>${model}</span></a></h2>${utqg ? `<a href="/tires/types/tiretype.jsp">${type}</a>` : `<span class="category">${type}</span>`}<ul><li>Size: <span>195/65R15</span></li>${service ? `<li>Serv. Desc: ${service}</li><li>Load Range: SL</li>` : ''}${utqg ? `<li>UTQG: <span>${utqg}</span></li>` : ''}</ul><a>${warranty}</a></article>`;
     const continental = card('Continental','SecureContact AW','Grand Touring All-Season','60K Mile Manufacturer\'s Warranty','700 A A');
+    for(const type of ['Classic','Off-Road Maximum Traction','Racetrack & Autocross Only','Drag Racing','Future catalog category']){
+      await start(pg,'<h1>We have 1 tire model in stock</h1>'+card('TestBrand','Test Model',type,'','600 A A'),{step:'list'});
+      assert.equal((await result(pg)).tires[0].type,type,'explicit catalog categories must not be discarded by a short keyword list');
+    }
     const cooper = card('Cooper','Endeavor','Grand Touring All-Season','65,000-mile<br>Manufacturer\'s Warranty');
     const winter = card('Bridgestone','Blizzak WS90','Studless Ice & Snow','',null);
     await start(pg, `<h1>We have 3 tire models in stock</h1><label>Results Per Page: <select id="resultsPerPage"><option value="10">10</option><option value="all">All</option></select></label><div id="cards">${continental}</div>`, { step:'list' }, `document.getElementById('resultsPerPage').onchange=()=>setTimeout(()=>{document.getElementById('cards').insertAdjacentHTML('beforeend',${JSON.stringify(cooper + winter)});},500);`);
@@ -238,8 +252,8 @@ async function run() {
     await catalogUI.evaluate(tires=>{
       __app.S.cars.push({id:'prius-catalog',name:'2016 Prius Two',year:2016,make:'Toyota',model:'Prius',trim:'Two',info:{},obs:{},entries:[],tires:{size:'195/65R15',sizeSrc:'user',type:'grand touring all-season',brand:'Cooper',model:'Endeavor',list:{size:'195/65R15',catalogVersion:2,failed:'incomplete',t:Date.now(),items:[{brand:'Continental',model:'SecureContact AW',type:'Grand Touring All-Season'}]}}});
       window.__catalogReads=[];
-      __app.N.siteRead=(id,key,json)=>{const args=JSON.parse(json); if(key==='tirerack') __catalogReads.push(args);setTimeout(()=>onNativeResult(id,key==='tirerack'?{tires:tires,catalogVersion:4}:{error:'test skip'}),100);};
-    },all.tires);
+      __app.N.siteRead=(id,key,json)=>{const args=JSON.parse(json); if(key==='tirerack') __catalogReads.push(args);setTimeout(()=>onNativeResult(id,key==='tirerack'?{tires:tires,catalogVersion:5}:{error:'test skip'}),100);};
+    },all.tires.concat([{brand:'Test category brand',model:'Future model',type:'Future catalog category'}]));
     await catalogUI.click('#btnTrip'); if(await catalogUI.locator('#tpNew').count()) await catalogUI.click('#tpNew');
     await catalogUI.evaluate(()=>{__app.S.carId='prius-catalog';Garage.redraw();});
     await catalogUI.waitForFunction(()=>Garage.car().tires.warrantyMi===65000);
@@ -247,6 +261,8 @@ async function run() {
     assert.ok(await catalogUI.evaluate(()=>!__catalogReads.find(a=>a.step==='list').url.includes('autoModel')),'replacement catalog must not inherit vehicle/OE filters');
     if(!await catalogUI.locator('#gTires[open]').count()) await catalogUI.click('#gTires summary');
     await catalogUI.click('#tzDet');
+    assert.equal(await catalogUI.getAttribute('#tzSame [data-same="1"]','aria-checked'),'true','unspecified tires default to all the same');
+    for(const type of ['Commercial All-Terrain','Light Truck/SUV Studdable Winter / Snow','Streetable Track & Competition','Future catalog category'])assert((await catalogUI.locator('#tzType option').evaluateAll(es=>es.map(e=>e.value))).includes(type),'all baseline and live future categories stay available');
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
     assert.equal(await catalogUI.inputValue('#tzType'),'Grand Touring All-Season');
     assert.equal(await catalogUI.inputValue('#tzBrand'),'Cooper');
@@ -266,7 +282,7 @@ async function run() {
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
     await catalogUI.fill('#tzWarranty','70000'); await catalogUI.dispatchEvent('#tzWarranty','change');
     await catalogUI.click('#tzRefresh');
-    await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===4);
+    await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===5);
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'70000','refresh must preserve a manually entered warranty');
     await catalogUI.evaluate(rows=>{
       const t=Garage.car().tires;t.list.items=rows; t.type='Grand Touring All-Season';t.brand='General';t.model='AltiMAX RT45';t.warrantySrc='tirerack';t.warrantyMi=65000;

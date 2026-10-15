@@ -155,6 +155,32 @@
   function memNow(A){try{var m=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');return m.totalMem?{availMB:Math.round(m.availMem/1048576),totalMB:Math.round(m.totalMem/1048576),low:!!m.lowMemory,appHeapMB:Math.round((m.appHeapUsed||0)/1048576),appHeapMaxMB:Math.round((m.appHeapMax||0)/1048576),readerRecycles:m.readerRecycles||0,rendererLosses:m.rendererLosses||0}:null;}catch(e){return null;}}
   function autoWorkers(memory){var gb=Number(memory&&memory.totalMem)/1073741824;return memory&&memory.lowMemory?4:gb>=15?16:gb>=11?12:gb>=7?8:4;}
   function readerCount(A){var value=Number(A.S&&A.S.keylessWorkers);if(Number.isFinite(value)&&value>=1)return Math.min(20,Math.max(1,Math.round(value)));var memory={};try{memory=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');}catch(e){}return autoWorkers(memory);}
+  // One shared decision per fresh sample: a cached low-memory reading must not
+  // retire every extra lane. Pause instead; gradually resume when RAM recovers.
+  function poolTarget(state,m,now,max){
+    var floor=Math.min(4,max);
+    if(!m){state.target=max;return max;}
+    if(state.target==null){state.target=floor;state.at=now;state.cooldown=now;}
+    if(now-state.at<2000)return state.target;
+    state.at=now;
+    if(m.low||m.availMB<700){state.target=Math.max(floor,state.target-(m.availMB<300?Math.ceil(state.target/2):2));state.cooldown=now+10000;}
+    else if(m.availMB>=1500&&now>=state.cooldown)state.target=Math.min(max,state.target+1);
+    return state.target;
+  }
+  function readerPool(A,lanes,control,audit,more){
+    var state={},sampleAt=0,sample=null,paused=new Set();
+    function target(){var now=Date.now();if(!sampleAt||now-sampleAt>=2000){sampleAt=now;sample=memNow(A);}return poolTarget(state,sample,now,lanes.length);}
+    control.pool=state;target();
+    return {target:target,permit:async function(key){
+      var index=lanes.indexOf(key);
+      while(more()&&!control.cancelled&&!control.blocked){
+        if(index<target()){if(paused.delete(key)&&root.FLog)root.FLog.info('keyless','Website reader resumes',{lane:index,target:state.target});return true;}
+        if(!paused.has(key)){paused.add(key);audit.retire();if(A.N&&A.N.releaseGasReader)A.N.releaseGasReader(key);if(root.FLog)root.FLog.info('keyless','Website reader pauses for memory headroom',{lane:index,target:state.target});}
+        await new Promise(function(resolve){var timer,wake=function(){clearTimeout(timer);control.wake=control.wake.filter(function(f){return f!==wake;});resolve();};control.wake.push(wake);timer=setTimeout(wake,500);});
+      }
+      return false;
+    }};
+  }
   // Aggregate diagnostics only: no locations, station names, URLs or credentials. A throttled checkpoint
   // survives a process restart; "unfinished" is evidence of interruption, not proof of an OOM.
   function scanAudit(A,kind,lanes,total,control){
@@ -164,12 +190,12 @@
     if(previous&&previous.v&&previous.v.status==='running'&&LG)LG.info('keyless','Previous scan was unfinished',{id:previous.v.id,kind:previous.v.kind,completed:previous.v.completed,total:previous.v.total,elapsedMs:previous.v.elapsedMs});
     function sampleMemory(){sampleAt=Date.now();sample=memNow(A);if(sample){peak=Math.max(peak,sample.appHeapMB);min=min==null?sample.availMB:Math.min(min,sample.availMB);}}
     function snapshot(status){sampleMemory();var oldest=0;active.forEach(function(t){oldest=Math.max(oldest,Date.now()-t);});return {id:id,kind:kind,status:status,elapsedMs:Date.now()-started,completed:done,total:total,readers:lanes.length,manual:!!(A.S&&Number(A.S.keylessWorkers)>=1),active:active.size,maxActive:maxActive,oldestActiveMs:oldest,retired:retired,cached:cached,checkpoints:checkpoints,persistMs:persistMs,minSystemAvailableMB:min,peakAppJavaHeapMB:peak,memory:sample};}
-    function write(status){var s=snapshot(status);try{A.KV.put('gasmeta','last-scan',s);}catch(e){}if(LG)LG.info('keyless',status==='running'?'Scan heartbeat':'Scan diagnostics',s);return s;}
+    function write(status){var s=snapshot(status);s.targetReaders=control.pool&&control.pool.target!=null?control.pool.target:lanes.length;try{A.KV.put('gasmeta','last-scan',s);}catch(e){}if(LG)LG.info('keyless',status==='running'?'Scan heartbeat':'Scan diagnostics',s);return s;}
     write('running');last=Date.now();
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -252,11 +278,10 @@
       timer=setInterval(function(){report();audit.tick();},1000);report();
       var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
       var chainWork=chain([],areas,true,force).finally(function(){sourcesDone=true;officialMs=Date.now()-started;report();});
-      var memAt=0,memLow=false,quit=0;
-      function lowMem(){if(Date.now()-memAt>5000){memAt=Date.now();var m=memNow(A);memLow=!!(m&&(m.low||m.availMB<700));}return memLow;}
+      var pool=readerPool(A,lanes,control,audit,function(){return next<areas.length&&!blocked;});
       async function lane(key){while(next<areas.length&&!blocked&&!control.blocked&&!control.cancelled){
-        // the phone running low on memory: readers past the first four stop taking areas (their pages are freed)
-        if(lanes.indexOf(key)>=4&&lowMem()){quit++;audit.retire();if(LG)LG.info('keyless','Low memory: a website reader steps back',{lane:lanes.indexOf(key),readersLeft:lanes.length-quit,mem:memNow(A)});releaseReaders();break;}
+        if(lanes.indexOf(key)>=pool.target()&&!await pool.permit(key))break;
+        if(next>=areas.length||blocked||control.blocked||control.cancelled)break;
         var idx=next,a=areas[next++],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake,t0=Date.now();
         if(cache)r=cache.v;
         else{
@@ -339,13 +364,13 @@
     // Dedicated readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
     var next=0,done=0,samples=0,totalMs=0,active=new Map();
-    var audit=scanAudit(A,'refresh',lanes,groups.length,control),outcome='failed',memAt=0,memLow=false;
-    function lowMem(){if(Date.now()-memAt>5000){memAt=Date.now();var m=memNow(A);memLow=!!(m&&(m.low||m.availMB<700));}return memLow;}
+    var audit=scanAudit(A,'refresh',lanes,groups.length,control),outcome='failed';
+    var pool=readerPool(A,lanes,control,audit,function(){return next<ordered.length&&!blocked;});
     function report(){
       var average=samples?totalMs/samples:null,remaining=ordered.slice(next).filter(function(x){return !x.cache;}).length;
       var work=average==null?null:remaining*average;
       if(work!=null)active.forEach(function(t){work+=Math.max(1000,average-(Date.now()-t));});
-      var eta=work==null?null:Math.ceil(work/Math.min(lanes.length,remaining+active.size||1)/1000);
+      var eta=work==null?null:Math.ceil(work/Math.min(pool.target(),remaining+active.size||1)/1000);
       var text=control.cancelled?'Cancelling; keeping completed prices':!done?'Preparing… · '+ordered.length+' areas to check':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
       text+=' · '+(eta==null?'Estimating time…':eta>=60?'~'+Math.ceil(eta/60)+' min remaining':'~'+eta+' sec remaining');
       if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
@@ -367,7 +392,8 @@
     }
     try{
       async function lane(key){while(next<ordered.length&&!blocked&&!control.blocked&&!control.cancelled){
-        if(lanes.indexOf(key)>=4&&lowMem()){audit.retire();if(root.FLog)FLog.info('keyless','Low memory: a website reader steps back',{lane:lanes.indexOf(key),mem:memNow(A)});releaseReaders();break;}
+        if(lanes.indexOf(key)>=pool.target()&&!await pool.permit(key))break;
+        if(next>=ordered.length||blocked||control.blocked||control.cancelled)break;
         var x=ordered[next++],r,at;
         if(x.cache){r=x.cache.v;at=x.cache.t;}
         else{

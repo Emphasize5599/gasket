@@ -18,6 +18,10 @@ on:
       - tests/pricehistory.test.js
       - tests/station-reconcile.test.js
       - tests/map-scan-merge.test.js
+      - tests/routechoices.test.js
+      - tests/routechoices-ui.test.js
+      - tests/vehicle-required.test.js
+      - tests/adaptive-readers.test.js
       - tests/map-refresh.test.js
       - tests/fuel-grades.test.js
       - tests/keyless-discovery.test.js

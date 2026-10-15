@@ -531,12 +531,19 @@
   // ---------- the card ----------
   var A = root.__app, S = A.S, N = A.N, $ = A.$, esc = A.esc, LG = root.FLog || { info: function () {}, warn: function () {} };
   var TR = 'https://www.tirerack.com/tires/';
-  var TYPES = ['All-season', 'Touring all-season', 'Grand touring all-season', 'Performance all-season', 'All-weather (snow-rated)', 'Summer', 'Winter', 'All-terrain', 'Mud-terrain', 'Highway (trucks and SUVs)', 'Trailer'];
-  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 4;
+  // Baseline categories from Tire Rack's category/results filters (2026-10-15).
+  // Always union with the live catalog: a future category must not disappear.
+  var TYPES = ['All-season','All-weather (snow-rated)','Summer','Winter','All-terrain','Mud-terrain','Touring all-season',
+    'Passenger All-Season','Standard Touring All-Season','Grand Touring All-Season','Grand Touring Summer','Crossover/SUV Touring All-Season','Highway All-Season','Commercial All-Season',
+    'Extreme Performance Summer','Max Performance Summer','Ultra High Performance Summer','Ultra High Performance All-Season','High Performance Summer','High Performance All-Season','Street/Sport Truck All-Season','Street/Sport Truck Summer',
+    'On-Road All-Terrain','Off-Road All-Terrain','Commercial All-Terrain','Rugged All-Terrain','Off-Road Maximum Traction',
+    'Studless Ice & Snow','Studdable Winter / Snow','Performance Winter / Snow','Light Truck/SUV Studless Ice & Snow','Light Truck/SUV Studdable Winter / Snow','Light Truck/SUV Performance Winter / Snow',
+    'Racetrack & Autocross Only','Wet Racetrack & Autocross Only','Streetable Track & Competition','Drag Racing','Classic','Trailer','Spare'];
+  var RETRY_H = 6, LIST_DAYS = 30, CATALOG_VERSION = 5;
   var host = null, call = null, onChange = function () {}, busy = {}, open = {};
   function G() { return root.Garage; }
   function save() { A.save(); }
-  function tires(c) { c.tires = c.tires || {}; if (!c.tires.tread) c.tires.tread = { mode: 'miles', miles: '', rotated: '' }; return c.tires; }
+  function tires(c) { c.tires = c.tires || {};if(!c.tires.corners)c.tires.corners={split:false};if(c.tires.corners.split==null)c.tires.corners.split=false; if (!c.tires.tread) c.tires.tread = { mode: 'miles', miles: '', rotated: '' }; return c.tires; }
   function base(c) { return baseModel(c); }
   /** Tire Rack's lists for this car (its model names, and the versions of the ones asked about) are kept per year / make / model. */
   function verKey(c) { return ['v4', c.year, c.make, base(c)].join('|'); }
@@ -975,7 +982,7 @@
   }
   /** Type -> brand -> model from Tire Rack's list for a size (selects), or typed when there's no list. */
   function pickHtml(L, x, pre) {
-    var types = L.length ? uniq(L.map(function (y) { return y.type; })).sort() : TYPES;
+    var types = uniq(L.map(function(y){return y.type;}).concat(TYPES,x.type||[])).filter(function(v,i,a){return a.findIndex(function(t){return catalogKey(t)===catalogKey(v);})===i;}).sort();
     var inType = L; // Type describes the selected tire; it must not hide brands/models.
     var brands = uniq(inType.map(function (y) { return y.brand; })).sort();
     var modelRows = inType.filter(function (y) { return catalogKey(y.brand) === catalogKey(x.brand); });

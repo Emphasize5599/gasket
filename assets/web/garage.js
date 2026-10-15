@@ -177,7 +177,16 @@
 
   // ---------- page ----------
   var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false,editSnap=null;
-  function editorOk(c){return !!(c&&(c.year&&c.make&&c.model||String(c.name||'').trim()||String(c.nick||'').trim()));}
+  var epaPending=new WeakSet(),epaEpoch=new WeakMap();
+  function epaInvalidate(c){epaEpoch.set(c,(epaEpoch.get(c)||0)+1);epaPending.delete(c);}
+  function editorOk(c){
+    if(!c)return false;
+    if(c.entryMode==='custom')return !!(c.year&&c.make&&c.model||String(c.name||'').trim()||String(c.nick||'').trim());
+    if(!c.year||!c.make||!c.model||!c.epaId||!hasEpa(c)||epaPending.has(c)||matching)return false;
+    if(editing&&ed&&ed.pg.isConnected){var ids=['eYear','eMake','eModel','eOpt'],want=[c.year,c.make,c.model,c.epaId];return ids.every(function(id,i){var el=$(id);return el&&el.value&&String(el.value).toLowerCase()===String(want[i]).toLowerCase();});}
+    return true;
+  }
+  function editorGate(c){if(car()!==c)return;var b=$('gSave');if(b)b.disabled=!editorOk(c);}
   // the VIN is the car's identity: dots like a password until you tap the eye
   var vinShown = false;
   var EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>';
@@ -208,9 +217,10 @@
     // again one by one (each step waits on the EPA, so the boxes flickered and could end up half-filled)
     var grid = $('eYear') && $('eYear').value && $('eYear').closest('.epa-grid'), keepFor = S.carId;
     try { settle(host); if (ed && ed.body) settle(ed.body); draw0(); } finally { drawing = false; }
-    var fresh = grid && keepFor === S.carId && $('eYear') && !$('eYear').value && $('eYear').closest('.epa-grid');
+    var fresh = grid && keepFor === S.carId && $('eYear') && $('eYear').closest('.epa-grid');
     if (fresh) fresh.replaceWith(grid);
     syncVinUi(car());
+    editorGate(car());
   }
   // Your car (the buttons; details behind Edit), best cruising speed, fuel economy, observed mileage, about this car.
   var obsOpen = false, infoOpen = false, tiresOpen = false, climOpen = false;
@@ -466,8 +476,7 @@
     h += '<div class="seg2" id="gEntryMode" aria-label="Vehicle data source"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">EPA vehicle</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">Non-EPA / custom</button></div>';
     if(!custom)h+='<div class="epa-tip"><span>Can\'t find your car? It might be exempt from the EPA.</span><button type="button" class="btn tonal sm" id="gNhtsaTip">NHTSA lookup</button></div>';
     if(!custom)h += '<details class="epa" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>Year / make / model<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model].join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
-      '<div id="vinLookupLoading" role="status"></div><div class="epa-grid"><select id="eYear" aria-label="Year"><option value="">Year</option></select><select id="eMake" aria-label="Make" disabled><option>Make</option></select>' +
-      '<select id="eModel" aria-label="Model" disabled><option>Model</option></select><select id="eOpt" aria-label="Engine / transmission" disabled><option>Engine / transmission</option></select></div>' +
+      '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
       '<div class="epa-msg" id="eMsg"></div></details>';
     if(custom&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
     if(custom)h+='<button type="button" class="btn tonal sm" id="gBuildCustom">Build completely custom vehicle</button>';
@@ -803,7 +812,7 @@
       if($('gNhtsaTip'))$('gNhtsaTip').onclick=function(){c.entryMode='custom';draw();save();openCatalog(c);};
       if($('gBuildCustom'))$('gBuildCustom').onclick=function(){openCustom(c);};
       document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
-      if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!this.value.trim()&&!(c.year&&c.make&&c.model);};
+      if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!(c.entryMode==='custom'&&this.value.trim()||editorOk(c));};
       ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
@@ -813,9 +822,9 @@
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
-      if($('tEpa'))$('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
+      if($('tEpa'))$('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
       // (a VIN match fills them itself; a redraw that kept the filled pickers has nothing to fill)
-      setTimeout(function () { if ($('tEpa') && $('tEpa').open && !matching && $('eYear') && $('eYear').options.length < 2) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } }, 0);
+      setTimeout(function () { if ($('tEpa') && $('tEpa').open && !matching && $('eYear') && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } }, 0);
       if ($('gRemove')) $('gRemove').onclick = function () { removeCar(c); };
     }
     // about this car
@@ -983,34 +992,43 @@
       if (!had) eMsg('Loading…');
       fill($('eYear'), items(await epaGet('menu/year')), 'Year'); if (!had) eMsg('');
       $('eYear').onchange = async function () {
+        if(!presetting)epaInvalidate(c);
         clearVinField(c,'eYear');
-        var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission'); if (!y) return;
-        fill($('eMake'), items(await epaGet('menu/make?year=' + encodeURIComponent(y))), 'Make');
+        var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!y) return;
+        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
       };
       $('eMake').onchange = async function () {
+        if(!presetting)epaInvalidate(c);
         clearVinField(c,'eMake');
-        var y = $('eYear').value, mk = this.value; fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission'); if (!mk) return;
-        fill($('eModel'), items(await epaGet('menu/model?year=' + encodeURIComponent(y) + '&make=' + encodeURIComponent(mk))), 'Model');
+        var y = $('eYear').value, mk = this.value; fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!mk) return;
+        try{var models=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)));if(car()===c&&$('eMake')&&$('eYear').value===y&&$('eMake').value===mk)fill($('eModel'),models,'Model');}catch(e){if(car()===c&&$('eModel')){eMsg('Could not load models. Choose the make again to retry.',true);needVinFields(c,['eModel'],'EPA model menu failed');}if(matching)throw e;}
       };
       $('eModel').onchange = async function () {
+        if(!presetting)epaInvalidate(c);
         clearVinField(c,'eModel');
-        var y = $('eYear').value, mk = $('eMake').value, md = this.value; fill($('eOpt'), [], 'Engine / transmission'); if (!md) return;
-        var opts = items(await epaGet('menu/options?year=' + encodeURIComponent(y) + '&make=' + encodeURIComponent(mk) + '&model=' + encodeURIComponent(md)));
+        var y = $('eYear').value, mk = $('eMake').value, md = this.value; fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!md) return;
+        var opts;
+        try{opts=items(await epaGet('menu/options?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)+'&model='+encodeURIComponent(md)));}catch(e){if(car()===c&&$('eOpt')){eMsg('Could not load engine / transmission options. Choose the model again to retry.',true);needVinFields(c,['eOpt'],'EPA options menu failed');}if(matching)throw e;return;}
+        if(car()!==c||!$('eModel')||$('eYear').value!==y||$('eMake').value!==mk||$('eModel').value!==md)return;
         fill($('eOpt'), opts, 'Engine / transmission');
         if (opts.length === 1 && !presetting) { $('eOpt').value = opts[0].value; await $('eOpt').onchange(); }
       };
       $('eOpt').onchange = async function () {
-        var id = $('eOpt').value; if (!id) return;
+        var id = $('eOpt').value;editorGate(c); if (!id) return;
+        var epoch=(epaEpoch.get(c)||0)+1;epaEpoch.set(c,epoch);
+        var selection=['eYear','eMake','eModel','eOpt'].map(function(k){return $(k).value;});
+        var opt = $('eOpt').selectedOptions[0] ? $('eOpt').selectedOptions[0].text : '';
+        epaPending.add(c);editorGate(c);
         eMsg('Loading…');
         try{
         var v = JSON.parse(await epaGet(encodeURIComponent(id)));
-        var opt = $('eOpt').selectedOptions[0] ? $('eOpt').selectedOptions[0].text : '';
+        if(epaEpoch.get(c)!==epoch||car()!==c||!editing||selection.some(function(value,i){var el=$(['eYear','eMake','eModel','eOpt'][i]);return !el||el.value!==value;}))return;
         var r = applyEpa(c, v, id, opt);
         if (r.error) { eMsg(r.error, true); return; }
         clearVinField(c,'eOpt');['gEngine','gTrans','gDrive'].forEach(function(key){if(missingVinDetails(c).indexOf(key)<0)clearVinField(c,key);});
-        editing = true; epaOpen = true; draw(); epaOpen = false; changed();
+        epaPending.delete(c);editing = true; epaOpen = true; draw(); epaOpen = false; changed();
         eMsg(r.msg);
-        }catch(e){needVinFields(c,['eOpt'],'EPA record request failed');eMsg('EPA lookup failed. Choose again to retry.',true);LG.warn('car','EPA record request failed',{message:e.message});}
+        }catch(e){if(epaEpoch.get(c)===epoch){needVinFields(c,['eOpt'],'EPA record request failed');eMsg('EPA lookup failed. Choose again to retry.',true);LG.warn('car','EPA record request failed',{message:e.message});}}finally{if(epaEpoch.get(c)===epoch)epaPending.delete(c);editorGate(c);}
       };
     } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true);if(matching)throw e; }
   }
@@ -1019,6 +1037,7 @@
   async function epaPreset(c) {
     if (presetting) { presetAgain = true; return; }   // a redraw replaced the pickers mid-way: fill the new ones after
     presetting = true;
+    if($('eYear'))$('eYear').dataset.savedEpa='0';
     try {
       await epaYears(c);
       var set = async function (id, want) {
@@ -1029,7 +1048,7 @@
         return true;
       };
       if (await set('eYear', c.year) && await set('eMake', c.make) && await set('eModel', c.model)) await set('eOpt', c.epaId);
-    } catch (e) { } finally { presetting = false; if (presetAgain) { presetAgain = false; if ($('tEpa') && $('tEpa').open) epaPreset(c); } }
+    } catch (e) { } finally { presetting = false;editorGate(c); if (presetAgain) { presetAgain = false; if ($('tEpa') && $('tEpa').open) epaPreset(c); } }
   }
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {
@@ -1040,7 +1059,7 @@
     var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
     c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : /diesel/i.test(fuel) ? 'diesel' : 'gas';
     c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);
-    c.name = [v.year, v.make, v.model].join(' ') + (opt ? ' · ' + opt : '');
+    c.name = [v.year, v.make, v.model].join(' ') + (opt ? ' · ' + opt : '');c.epaOption=opt||'';
     if (ev) {
       // MPGe -> miles per kWh (33.705 kWh = 1 gallon-equivalent)
       var mk = function (x) { return r2(x / 33.705); };

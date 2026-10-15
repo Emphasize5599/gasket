@@ -1336,6 +1336,17 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void releaseGasReader(final String key) {
+            if (!isGasWorker(key)) return;
+            main.post(new Runnable() { public void run() {
+                SiteWorker worker = workers.get(key);
+                if (worker == null || worker.readReq >= 0 || verifying == worker || worker.view == null) return;
+                worker.view.stopLoading(); root.removeView(worker.view); worker.view.destroy();
+                worker.view = null; worker.ready = false;
+            }});
+        }
+
+        @JavascriptInterface
         public void releaseGasReaders() {
             main.post(new Runnable() { public void run() {
                 for (SiteWorker worker : workers.values()) {

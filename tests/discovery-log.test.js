@@ -28,7 +28,7 @@ assert.equal(rep.areasAddingNothing,2);
     __trip:{call:async(fn,key,args)=>{const a=JSON.parse(args);const m=/@(-?[\d.]+),(-?[\d.]+)/.exec(a.url)||[];t++;
       return {stores:[{id:'web:'+t,featureId:'0x'+t+':0x1',name:'Exxon',lat:+m[1]||34,lng:+m[2]||-92,prices:{regular:{price:3.1,updated:null}}}],
         detail:{read:20,priced:12,exhausted:true,stopReason:'end',scrolls:3,elapsedMs:4000,firstFeedMs:800,firstReplyMs:900,lastGrowthMs:3500,replies:4}};}}};
-  vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date,setInterval,clearInterval,setTimeout,Promise});
+  vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date,setInterval,clearInterval,setTimeout,clearTimeout,Promise});
   await window.KeylessGas.discover(areas,null,'regular',true);
   const names=logs.map(l=>l[1]);
   assert.equal(names[0],'Discovery started');assert.equal(logs[0][2].plan.routeMi,720);assert.equal(logs[0][2].lanes,4);assert.equal(logs[0][2].mem.availMB,5120);
@@ -41,11 +41,11 @@ assert.equal(rep.areasAddingNothing,2);
   assert.equal(JSON.stringify(tables[0][2].rows[0].slice(7,10)),JSON.stringify(['end',3,20]));
   // low on memory: readers past the first four step back (logged), and every area still gets done by the rest
   const logs2=[],win2={document:{},FLog:{info:(a,m,x)=>logs2.push([m,x]),debug:()=>{}},
-    __app:{P,S:{keylessWorkers:8},siteOn:()=>false,N:{memoryInfo:()=>JSON.stringify({totalMem:8*2**30,availMem:500*2**20}),releaseGasReaders:()=>{win2.released=(win2.released||0)+1;}},KV:{get:()=>null,put:()=>true}},
+    __app:{P,S:{keylessWorkers:8},siteOn:()=>false,N:{memoryInfo:()=>JSON.stringify({totalMem:8*2**30,availMem:500*2**20}),releaseGasReader:()=>{win2.released=(win2.released||0)+1;},releaseGasReaders:()=>{win2.released=(win2.released||0)+1;}},KV:{get:()=>null,put:()=>true}},
     __trip:{call:async()=>({stores:[],detail:{read:0,stopReason:'quiet',elapsedMs:10}})}};
-  vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window:win2,Date,setInterval,clearInterval,setTimeout,Promise});
+  vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window:win2,Date,setInterval,clearInterval,setTimeout,clearTimeout,Promise});
   await win2.KeylessGas.discover(areas.slice(0,40),null,'regular',true);
-  const stepped=logs2.filter(l=>l[0]==='Low memory: a website reader steps back');
+  const stepped=logs2.filter(l=>l[0]==='Website reader pauses for memory headroom');
   assert.equal(stepped.length,4,'readers 5-8 step back');assert.ok(win2.released>=4,'their pages are freed');
   assert.equal(logs2.find(l=>l[0]==='Discovery finished')[1].done,40,'the first four finish every area');
   console.log('Discovery log: report math, start/progress/finish entries and a '+tables.length+'-entry area table that fits passed');

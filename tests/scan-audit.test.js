@@ -10,7 +10,7 @@ async function scan(mode){
    if(mode==='cancel')return new Promise(r=>pending.push(r));
    return {stores:[{placeId:s.id,name:'Exxon',lat:s.lat,lng:s.lng,prices:{regular:{price:3}}}]};
  }}};
- vm.runInNewContext(source,{window,FLog:window.FLog,Date:Clock,setInterval:f=>{timers.add(f);return f;},clearInterval:f=>timers.delete(f),setTimeout});
+ vm.runInNewContext(source,{window,FLog:window.FLog,Date:Clock,setInterval:f=>{timers.add(f);return f;},clearInterval:f=>timers.delete(f),setTimeout,clearTimeout});
  const known=Array.from({length:24},(_,i)=>({id:'s'+i,brand:'exxon',lat:34+i*.1,lng:-100,prices:{regular:{price:4}}}));
  const task=window.KeylessGas.refreshKnown(known,null,[],'regular');if(mode==='cancel')window.KeylessGas.cancel();const result=await task,summary=cache.get('gasmeta|last-scan').v;
  assert.equal(summary.status,mode==='renderer'||mode==='cancel'?'cancelled':'finished');assert.equal(timers.size,0,'interval always cleaned up');

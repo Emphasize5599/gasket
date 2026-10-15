@@ -420,6 +420,17 @@
    *        fillUp:bool, stopPenalty:$, timeValue:$/hr, stopMinutes, refPrice}
    * cost overrides for the baseline: priceFn(c), stopCostFn(c)
    */
+  function legPolicy(o,d){return (o.legPolicies||[]).find(function(p){return d>=p.from-1e-7&&d<=p.to+1e-7;})||o;}
+  // Check reserves at leg boundaries even when there is no fuel stop there.
+  function reserveBetween(o,from,to,base,detourEnd,galTo){
+    var need=base,gal=galTo||function(d){return o.model.galTo(d);};
+    (o.legPolicies||[]).forEach(function(p,i,ps){
+      if(p.to<=from+1e-7||p.to>=to-1e-7)return;
+      var reserve=Math.max(p.bufferGal||0,ps[i+1]&&ps[i+1].bufferGal||0);
+      need=Math.max(need,reserve-(gal(to)-gal(p.to))-(detourEnd||0));
+    });
+    return Math.max(0,need);
+  }
   function optimize(o, priceFn, stopCostFn) {
     if(o.cands.some(function(c){return !!c.citgo;}))return optimizeRewards(o,priceFn,stopCostFn);
     // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
@@ -481,7 +492,8 @@
         var burnG = routeGal[j] - routeGal[i] + detGal(nodes[i]) / 2 + detGal(nodes[j]) / 2;
         var burn = Math.ceil(burnG / STEP - 1e-9);
         if (routeGal[j] - routeGal[i] > o.capGal) break;              // beyond a full tank: stop looking
-        var minA = nodes[j].kind === 'dest' ? arr : (i === 0 ? firstMin : buf);
+        var reserve=nodes[j].kind==='dest'?o.arriveGal:i===0&&o.firstDip?0:legPolicy(o,nodes[j].d).bufferGal;
+        var minA=Math.ceil(reserveBetween(o,nodes[i].d,nodes[j].d,reserve,detGal(nodes[j])/2)/STEP-1e-9);
         if (LV - burn < minA) continue;
         var add = nodes[j].kind === 'stop' ? stopCost(nodes[j].c) : 0;
         var credit = nodes[j].kind === 'dest' ? (o.refPrice || 0) * STEP : 0;
@@ -570,7 +582,8 @@
       for(var j=i+1;j<n;j++){
         var dest=j===n-1;if(o.lastFull&&dest&&n>2&&!c)continue;
         if(rg[j]-rg[i]>o.capGal)break;
-        var burn=Math.ceil((rg[j]-rg[i]+det(i)+det(j))/step-1e-9),min=dest?arr:i===0?(o.firstDip?0:buf):buf;
+        var burn=Math.ceil((rg[j]-rg[i]+det(i)+det(j))/step-1e-9),reserve=dest?o.arriveGal:i===0&&o.firstDip?0:legPolicy(o,nodes[j].d).bufferGal;
+        var min=Math.ceil(reserveBetween(o,nodes[i].d,nodes[j].d,reserve,det(j))/step-1e-9);
         if(lv-burn<min)continue;
         var cj=nodes[j].c,pen=cj?(stopCostFn?stopCostFn(cj):(o.stopPenalty||0)+(cj.penalty||0)+((cj.detourMin||0)>1.5?(o.detourPenalty||0):0)+(o.timeValue||0)*((cj.detourMin||0)+(o.stopMinutes||0))/60):0;
         if(o.lastFull&&dest&&c)pen-=o.stopPenalty||0;
@@ -613,7 +626,8 @@
     var tooFar = 0, farList = [];
     var cands = o.cands.filter(function (c) {
       if (!(c.price > 0 && c.d >= 0 && c.d <= o.model.totalMi)) return false;
-      if (o.maxDetourMin != null && (c.detourMin || 0) > o.maxDetourMin) { tooFar++; farList.push(c); return false; }   // more extra time than you'll spend
+      var policy=legPolicy(o,c.d);
+      if (policy.maxDetourMin != null && (c.detourMin || 0) > policy.maxDetourMin) { tooFar++; farList.push(c); return false; }
       return true;
     });
     if (!o.refPrice) {
@@ -963,18 +977,18 @@
     var G = function (d) { return m.galTo(d) + (rates ? extraBetween(rates, 0, d) : 0); };
     var det = function (c) { return (c.detourMi || 0) * m.cityGpm / 2; };
     var cs = o.cands.filter(function (c) {
-      return c.price > 0 && c.d >= 0 && c.d <= end && !(o.maxDetourMin != null && (c.detourMin || 0) > o.maxDetourMin);
+      var policy=legPolicy(o,c.d);return c.price > 0 && c.d >= 0 && c.d <= end && !(policy.maxDetourMin != null && (c.detourMin || 0) > policy.maxDetourMin);
     }).sort(function (a, b) { return a.d - b.d; });
     var pos = 0, gas = o.startGal, back = 0, first = true;
     for (var hops = 0; hops <= cs.length + 1; hops++) {
       var gp = G(pos);
-      if (gas - back - (G(end) - gp) - 2 * (o.step || 0.1) >= o.arriveGal - 1e-9) return true;
+      if (gas - back - (G(end) - gp) - 2 * (o.step || 0.1) >= reserveBetween(o,pos,end,o.arriveGal,0,G) - 1e-9) return true;
       var best = null;
       for (var k = 0; k < cs.length; k++) {
         var c = cs[k]; if (c.d <= pos) continue;
         var used = back + G(c.d) - gp + det(c);
         if (used > o.capGal + 1e-9) break;
-        if (gas - used - 2 * (o.step || 0.1) >= (first ? 0 : o.bufferGal) - 1e-9) best = c;   // the planner rounds to its grain
+        if (gas - used - 2 * (o.step || 0.1) >= reserveBetween(o,pos,c.d,first?0:legPolicy(o,c.d).bufferGal,det(c),G) - 1e-9) best = c;   // the planner rounds to its grain
       }
       if (!best) return false;
       pos = best.d; gas = o.fillCap || o.capGal; back = det(best); first = false;

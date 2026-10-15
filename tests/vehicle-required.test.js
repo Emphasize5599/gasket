@@ -1,0 +1,25 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
+ const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{
+  const menu=xs=>({menuItem:xs.map(x=>({text:x,value:x}))});__mocks.epa=url=>url.includes('menu/year')?menu(['2005','2006']):url.includes('menu/make')?menu(['Ford']):url.includes('menu/model')?menu(['Test Coupe']):url.includes('menu/options')?{menuItem:[{text:'Auto, 6 cyl, 4.0 L',value:'test-auto'},{text:'Manual, 6 cyl, 4.0 L',value:'test-manual'}]}:{menuItem:[]};
+  const fetch=__app.N.fetchJson;__app.N.fetchJson=(id,url)=>{if(/\/test-(auto|manual)$/.test(url)){window.__recordRequest=id;return;}fetch(id,url);};
+  window.__record={id:'test-auto',year:2005,make:'Ford',model:'Test Coupe',city08:20,highway08:30,comb08:24,displ:4,cylinders:6,trany:'Automatic 5-spd',fuelType1:'Regular Gasoline'};
+ });
+ await p.click('#btnTrip');await p.click('[data-car="+"]');await p.fill('#gName','Test car');assert.equal(await p.isDisabled('#gSave'),true,'a name cannot bypass missing EPA selectors');
+ for(const [id,value] of [['eYear','2005'],['eMake','Ford'],['eModel','Test Coupe']]){await p.waitForFunction(([id,value])=>[...document.getElementById(id).options].some(o=>o.value===value),[id,value]);await p.selectOption('#'+id,value);}
+ await p.waitForFunction(()=>document.querySelector('#eOpt').options.length===3);assert.equal(await p.isDisabled('#gSave'),true);
+ assert.equal(await p.locator('.epa-grid .req').count(),4);assert.equal(await p.locator('.epa-grid select[required]').count(),4);
+ await p.selectOption('#eOpt','test-auto');await p.waitForFunction(()=>!!window.__recordRequest);assert.equal(await p.isDisabled('#gSave'),true,'selected option is not a successfully fetched EPA record');
+ await p.evaluate(()=>onNativeResult(__recordRequest,{error:'Test network failure'}));assert.equal(await p.isDisabled('#gSave'),true);
+ await p.selectOption('#eOpt','test-manual');await p.waitForFunction(()=>!document.querySelector('#gSave').disabled===false); // still pending
+ await p.evaluate(()=>onNativeResult(__recordRequest,{body:JSON.stringify({...__record,id:'test-manual',trany:'Manual 5-spd'})}));
+ await p.waitForFunction(()=>!document.querySelector('#gSave').disabled);assert.equal(await p.evaluate(()=>Garage.car().epaId),'test-manual');
+ await p.selectOption('#eYear','2006');assert.equal(await p.isDisabled('#gSave'),true,'changing an ancestor invalidates the prior engine/transmission selection');
+ await p.click('[data-entry="custom"]');assert.equal(await p.isDisabled('#gSave'),false,'custom vehicles do not need an invented EPA record');
+ await p.click('#gSave');await p.waitForSelector('.car-edit',{state:'detached'});
+ // Returning to a confirmed saved EPA car works without any network menu.
+ await p.evaluate(()=>{__app.S.carId='corolla20';Garage.redraw();__mocks.epa=()=>({__error:'offline'});});await p.click('#gEdit');await p.waitForFunction(()=>!document.querySelector('#gSave').disabled);
+ assert.equal(await p.inputValue('#eOpt'),'41214');await p.click('#gSave');
+ assert.deepEqual(errors,[]);await p.close();
+}console.log('320/448px all four EPA fields required, pending/failed records blocked, named/custom bypass rules and offline confirmed selections passed');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

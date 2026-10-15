@@ -138,15 +138,17 @@ async function (reqId, args) {
       const t = (new DOMParser().parseFromString(html, 'text/html').body.textContent || '').replace(/\s+/g, ' ');
       // the panel names the vehicle it's for; if it isn't this one, the vehicle didn't take
       const key = (x) => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (!/factory tire size/i.test(t) || key(t).indexOf(key(args.year + ' ' + args.make + ' ' + args.model)) < 0) { send({ unknown: true }); return; }
-      send(readSizes(t));
+      if (!/factory tire size/i.test(t) || key(t).indexOf(key(args.year + ' ' + args.make + ' ' + args.model)) < 0) { send({ error: 'Tire Rack returned an unverified vehicle panel', code: 'unreadable', detail: { vehiclePanelMatched: false } }); return; }
+      const sizes=readSizes(t);
+      if(!sizes.factory.length){send({error:'Tire Rack vehicle panel had no readable factory size',code:'unreadable',detail:{vehiclePanelMatched:true}});return;}
+      send(sizes);
     } catch (e) { fail(e); }
     return;
   }
 
   if (args.step === 'list') {
-    const CAT = /(?:all[ -]season|summer|winter|snow|all[ -]weather|all[ -]terrain|mud[ -]terrain|highway|touring|performance|ice|competition|trailer|spare)/i;
-    const stateKey = '__gasketTireCatalogV4';
+    const CAT = /(?:all[ -]season|summer|winter|snow|all[ -]weather|all[ -]terrain|mud[ -]terrain|off[ -]road|highway|touring|performance|\bice\b|competition|trailer|spare|classic|racetrack|autocross|drag[ -]racing)/i;
+    const stateKey = '__gasketTireCatalogV5';
     let state = { id: reqId, started: Date.now(), tires: [], pages: [], expanded: false, rejected: {} };
     try { const old = JSON.parse(sessionStorage.getItem(stateKey) || 'null'); if (old && old.id === reqId) state = old; } catch (_) {}
     const identity = (p) => p.partnum ? 'part:' + p.partnum : p.name.toLowerCase() + '|' + (p.serviceDesc || '') + '|' + (p.loadRange || '');
@@ -159,7 +161,7 @@ async function (reqId, args) {
     const persist = () => { try { sessionStorage.setItem(stateKey, JSON.stringify(state)); } catch (_) {} };
     const finish = (extra) => {
       try { sessionStorage.removeItem(stateKey); } catch (_) {}
-      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 4,
+      send(Object.assign({ tires: out.slice(0, 300), empty: out.length === 0, catalogVersion: 5,
         detail: { expected: count(text()), read: out.length, uniqueModels: new Set(out.map((p) => p.name.toLowerCase())).size, pages: state.pages.length,
           perPage: state.perPage || null, rejected: Object.values(state.rejected || {}).slice(0, 12) } }, extra || {}));
     };
@@ -218,10 +220,11 @@ async function (reqId, args) {
           }
           const meta = metadata(t); if (!meta.size) continue;
           if (requestedSize && meta.size !== requestedSize) { reason = 'Different size: ' + meta.size; break; }
-          const categoryText = (s) => s.length < 70 && CAT.test(s) && s.toLowerCase() !== p.name.toLowerCase() && !/warranty|test|review|rating|chart|compare/i.test(s);
-          let category = Array.from(box.querySelectorAll('a')).filter((e) => !product(e)).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find(categoryText);
-          if (!category) category = Array.from(box.querySelectorAll('[class*="category" i],[class*="tiretype" i],[data-category]')).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find(categoryText);
-          if (!category) category = t.split('\n').map((s) => s.trim().replace(/^Tire Category\s*:\s*/i, '')).find((s) => categoryText(s) && /^(?:(?:grand|standard|crossover|highway|ultra|high|max|extreme|street|track|on[ -]road|off[ -]road|commercial|rugged|light truck|performance|studless|studdable|winter|temporary|special)|all[ -])/i.test(s));
+          const categoryText = (s,explicit) => s.length>0 && s.length < 70 && (explicit||CAT.test(s)) && s.toLowerCase() !== p.name.toLowerCase() && !/warranty|test|review|rating|chart|compare/i.test(s);
+          let category = Array.from(box.querySelectorAll('a')).filter((e) => !product(e)).map((e) => ({text:e.textContent.replace(/\s+/g, ' ').trim(),explicit:/\/tires\/types\/tiretype\.jsp/i.test(e.getAttribute('href')||'')})).find((e)=>categoryText(e.text,e.explicit));
+          category=category&&category.text;
+          if (!category) category = Array.from(box.querySelectorAll('[class*="category" i],[class*="tiretype" i],[data-category]')).map((e) => e.textContent.replace(/\s+/g, ' ').trim()).find((s)=>categoryText(s,true));
+          if (!category) category = t.split('\n').map((s) => s.trim().replace(/^Tire Category\s*:\s*/i, '')).find((s) => categoryText(s,false) && /^(?:(?:grand|standard|crossover|highway|ultra|high|max|extreme|street|track|racetrack|wet|drag|classic|trailer|spare|on[ -]road|off[ -]road|commercial|rugged|light truck|performance|studless|studdable|winter|temporary|special)|all[ -])/i.test(s));
           if (category) { cards++; add(Object.assign({}, p, meta, { type: category })); delete state.rejected[identity(p)]; break; }
           reason = 'Category missing'; excerpt = t.replace(/\s+/g, ' ').slice(0, 240);
         }
