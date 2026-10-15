@@ -68,7 +68,7 @@ It handles round trips and multi-stop trips, speed limits along the way (from FH
 ## How it's built
 
 ```
-Android app (one Java class, no Gradle)
+Android app (Java shell + optional LiteRT-LM runtime)
 ├─ WebView ──── the whole UI: plain HTML / CSS / JS, no framework, no bundler
 │               Leaflet + OpenStreetMap tiles for maps
 ├─ Native ───── a small JavaScript bridge: location, storage, sharing, backups
@@ -76,14 +76,14 @@ Android app (one Java class, no Gradle)
                           NHTSA and Tire Rack pages through injected scripts
 ```
 
-- `src/com/bensanzone/fuelmap/MainActivity.java`: the only Java class. It hosts the WebView and the `Native` bridge.
+- `src/com/bensanzone/fuelmap/MainActivity.java`: hosts the WebView and the `Native` bridge. Separate Java classes own optional local generation and verified model downloads.
 - `assets/web/`: the UI. `trip.js` (route math and stop planning) is pure logic that also runs in Node. `app.js` has a desktop stand-in for `Native`, so the whole UI runs in Chrome.
 - `assets/*_worker.js`: the scripts injected into the hidden site windows.
-- `build.sh`: builds the APK with the Android SDK tools directly (aapt → javac → dx → zipalign → apksigner), with no Gradle.
+- `build.sh`: uses checksum-pinned Gradle 8.13 / AGP 8.13.2 to package native dependencies, then signs `Gasket.apk` with the existing key. The original manifest remains the package/version source.
 
 ## Building and testing
 
-You need the Android SDK as Debian and Ubuntu package it (`android-sdk`, which `build.sh` expects under `/usr/lib/android-sdk`), a JDK, Node.js, and Python with Playwright and Chrome or Chromium.
+You need JDK 21 (required by LiteRT-LM's class files), an Android SDK with platform/build-tools 35 (`ANDROID_HOME`, or `ANDROID_SDK_ROOT`; legacy fallback `/usr/lib/android-sdk`), Node.js, and Playwright with Chrome or Chromium. Python/Playwright is needed for the older Python checks. The signed-APK workflow provisions and caches the SDK and native build dependencies. Optional Gemma weights are downloaded only by explicit user consent in Settings, never during builds/tests; see [the AI integration notes](docs/AI_MODEL_PLAN.md).
 
 ```sh
 # a signed APK (your own keystore; see SIGNING.md)

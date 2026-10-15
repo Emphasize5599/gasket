@@ -1,12 +1,12 @@
 /* One versioned policy: the model receives these same branches and their evaluated facts/actions. */
 (function(root){
   'use strict';
-  var RULES={version:1,units:'tread in 32nds of an inch',thresholds:{replace:2,soon:3,plan:4},
+  var RULES={version:2,units:'tread in 32nds of an inch',classifyTread:null,
     spreadLimits:null, // Filled from TireMath, not an independent copy of its drivetrain assumptions.
     branches:[
       'Unknown or estimated depth is not a measurement; never certify safety from estimated wear.',
-      'Depth at/below replace: replace the named worn tires before driving; never condemn other tires solely for sharing a vehicle.',
-      'Depth above replace through soon: arrange replacement soon. Above soon through plan: plan replacement for reduced wet/snow grip.',
+      'Use classifyTread for thresholds: worn means replace the named worn tires before driving; never condemn other tires solely for sharing a vehicle.',
+      'Classification low: arrange replacement soon. Classification ok: plan replacement for reduced wet/snow grip.',
       'New/better pair belongs on rear of a compatible two-wheel-drive setup. Exact movements require confirmed fitment/pattern restrictions; do not invent them.',
       'AWD/full-time/on-demand four-wheel systems: compare all car tires to the applicable app spread heuristic; manufacturer requirements may differ. Matching depths do not establish matching patterns or circumference.',
       'Part-time 4WD: compare front/rear axle averages and rear side-to-side. Two-wheel drive: compare side-to-side on driven axle only. Unknown drive: request confirmation.',
@@ -38,16 +38,17 @@
       unknowns:['Manufacturer fitment/circumference limits, load/pressure and pattern restrictions are not independently verified.']};
   }
   function evaluate(setup,math){
-    var rules=Object.assign({},RULES,{spreadLimits:Object.assign({},math.TD_LIMIT)}), facts=[],actions=[];
+    var rules=Object.assign({},RULES,{classifyTread:String(math.status),spreadLimits:Object.assign({},math.TD_LIMIT)}), facts=[],actions=[];
     function add(id,level,message,positions,kind){facts.push({id:id,level:level,text:message,positions:positions||[],kind:kind||'inspect'});}
     setup.tires.forEach(function(t){
       var name=t.position;
       if(t.depth==null)add('missing:'+t.id,'warn',name+': tread depth is unknown; enter details or measure it.',[t.id]);
       else {
         var depth=(t.measured?'Measured ':'Estimated ')+t.depth+'/32 in';
-        if(t.depth<=rules.thresholds.replace)add('replace:'+t.id,'warn',name+': '+depth+'. Replace this worn tire before driving; have paired fitment checked.',[t.id],'replace');
-        else if(t.depth<=rules.thresholds.soon)add('soon:'+t.id,'warn',name+': '+depth+'. Arrange replacement soon; wet and snow grip are reduced.',[t.id],'replace_soon');
-        else if(t.depth<=rules.thresholds.plan)add('plan:'+t.id,'info',name+': '+depth+'. Plan replacement; wet and snow grip are reduced.',[t.id],'plan');
+        var condition=math.status(t.depth);
+        if(condition==='worn')add('replace:'+t.id,'warn',name+': '+depth+'. Replace this worn tire before driving; have paired fitment checked.',[t.id],'replace');
+        else if(condition==='low')add('soon:'+t.id,'warn',name+': '+depth+'. Arrange replacement soon; wet and snow grip are reduced.',[t.id],'replace_soon');
+        else if(condition==='ok')add('plan:'+t.id,'info',name+': '+depth+'. Plan replacement; wet and snow grip are reduced.',[t.id],'plan');
       }
     });
     if(setup.tires.some(function(t){return t.depth!=null&&!t.measured;}))add('estimate','warn','Estimated wear is generalized, not an inspection. Measure tread to verify the tire condition.');
@@ -56,7 +57,10 @@
     if(known.length===car.length&&car.length===4){
       var d={};car.forEach(function(t){d[t.id]=t.depth;});
       // Use existing evaluated mismatch facts, but not their unconditional replace-all/movement prose.
-      math.treadDiff(d,setup.drive).forEach(function(x,i){add('spread:'+i,x.level,x.text,car.map(function(t){return t.id;}));});
+      math.treadDiff(d,setup.drive).forEach(function(x,i){
+        var depths=car.map(function(t){return t.depth;});
+        add('spread:'+i,x.level,'Entered/estimated car tread spans '+Math.min.apply(null,depths)+'–'+Math.max.apply(null,depths)+'/32 in. This triggers Gasket’s drivetrain mismatch heuristic; confirm actual manufacturer fitment/circumference limits. Do not assume every AWD vehicle has a mechanical center differential.',car.map(function(t){return t.id;}));
+      });
       if((setup.drive==='fwd'||setup.drive==='rwd')&&Math.min(d.lf,d.rf)>Math.min(d.lr,d.rr))
         add('rear-grip','info','Keep the new or better matched pair on the rear if fitment allows. Do not discard serviceable front tires merely because the rear tires need replacement.',car.map(function(t){return t.id;}),'fitment_review');
     }
