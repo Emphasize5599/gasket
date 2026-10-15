@@ -3,6 +3,12 @@
   'use strict';
   var tasks = new Map(), expanded = false, frame = 0, completion = null, completionTimer = 0;
   var doc = root.document;
+  function layout(){
+    if(!doc)return;var hub=doc.getElementById('taskHub'),meter=doc.getElementById('apiCount'),inset=12;
+    if(hub&&doc.body.classList.contains('trip-full')&&doc.body.classList.contains('trip-on')&&meter){var r=meter.getBoundingClientRect();if(r.width&&r.height)inset=Math.min(Math.ceil(r.right)+8,Math.max(12,root.innerWidth-180));}
+    if(hub)hub.style.left=inset+'px';
+  }
+  if(doc){root.addEventListener('resize',layout);new MutationObserver(function(changes){if(changes.some(function(c){return c.oldValue!==doc.body.className;}))queue();}).observe(doc.body,{attributes:true,attributeFilter:['class'],attributeOldValue:true});}
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function queue() { if (!doc || frame) return; frame = root.requestAnimationFrame(function () { frame = 0; draw(); }); }
   function upsert(id, value) {
@@ -44,21 +50,21 @@
     var hub = doc.getElementById('taskHub');
     if (!hub) {
       hub = doc.createElement('div'); hub.id='taskHub'; hub.className='task-hub hidden';
-      hub.innerHTML='<div class="task-top"><div id="jobBar" class="job-bar" role="status" aria-live="polite"></div><button id="taskMore" class="task-more hidden" aria-label="Show background tasks" aria-controls="taskList" aria-expanded="false">⌄</button></div><div id="taskList" class="task-list hidden" aria-label="Background tasks"></div>';
+      hub.innerHTML='<div class="task-top"><div id="jobBar" class="job-bar" role="status" aria-live="polite"></div><button id="taskMore" class="task-more hidden" aria-label="Show background tasks" aria-controls="taskList" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button></div><div id="taskList" class="task-list hidden" aria-label="Background tasks"></div>';
       doc.body.appendChild(hub);
       doc.getElementById('taskMore').onclick=function(){expanded=!expanded;draw();};
       hub.onclick=function(e){var b=e.target.closest('[data-cancel]');if(b)cancel(b.dataset.cancel);};
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
-    var all=sorted(), visible=all.filter(function(t){return !(t.inline&&t.inline());}), multiple=all.length>1;
-    var primary=visible[0]|| (multiple?all[0]:null), bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
-    // Inline progress remains sufficient for one station task; never hide other work alongside it.
+    var all=sorted(), multiple=all.length>1;
+    var primary=all[0], bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
+    // One dock stays visible on every screen, even when a tile also offers inline progress.
     hub.classList.toggle('hidden',!primary&&!completion);
     doc.body.classList.toggle('tasks-visible',!!(primary||completion));
     more.classList.toggle('hidden',!multiple); hub.classList.toggle('multiple',multiple);
     if(!multiple)expanded=false;
     more.setAttribute('aria-expanded',String(expanded)); more.setAttribute('aria-label',(expanded?'Hide':'Show')+' background tasks ('+all.length+')');
-    more.textContent=expanded?'⌃':'⌄';
+    more.querySelector('.chev').classList.toggle('up',expanded);
     bar.className='job-bar'+(!primary&&completion?' done':'');
     if(primary){paintRow(bar,primary,true);bar.setAttribute('aria-label',primary.text||'Background task');}
     else if(completion){
@@ -77,7 +83,7 @@
         paintRow(el,t,false);if(list.children[index]!==el)list.insertBefore(el,list.children[index]||null);
       });
     }
-    root.dispatchEvent(new Event('tasklayout'));
+    layout();root.dispatchEvent(new Event('tasklayout'));
   }
-  root.Tasks={upsert:upsert,remove:remove,draw:draw,list:sorted,cancel:cancel,back:function(){if(!expanded)return false;expanded=false;draw();return true;}};
+  root.Tasks={upsert:upsert,remove:remove,draw:draw,layout:layout,list:sorted,cancel:cancel,back:function(){if(!expanded)return false;expanded=false;draw();return true;}};
 })(typeof window!=='undefined'?window:globalThis);

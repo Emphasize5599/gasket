@@ -32,13 +32,12 @@
   function store() { var s = S(); if (!s) return {}; if (!s.recallSev || s.recallSev.v !== VERSION) s.recallSev = { v: VERSION, r: {} }; return s.recallSev.r; }
   function dot(a, b) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
   // In the main thread the model would share the thread that draws the screen and takes your taps. So it runs in a
-  // background worker when the phone allows one (the screen stays smooth however long it takes); otherwise here, one
-  // sentence at a time with a pause before each.
+  // background worker. A failed worker uses wording rules; inference never falls back to the UI thread.
   function rest(ms) { return new Promise(function (r) { setTimeout(r, ms == null ? 24 : ms); }); }
   var KV = function () { return root.__app && root.__app.KV; };
   // how far along: the download (first time only, 0–70%), working out the examples (70–95%), then ready
   var prog = { f: 0, label: 'Waiting to rate' }, listeners = [];
-  var comparing = 0;
+  var comparing = 0, failedAt = 0, groupVectors = new Map();
   function taskStatus() {
     if (!root.Tasks) return;
     if (state === 'loading' || running || comparing) root.Tasks.upsert('lightweight-ai', { text: state === 'loading' ? prog.label : running && comparing ? 'AI: rating recalls and route hazards…' : running ? 'AI: rating safety recalls…' : 'AI: reading route hazards…', frac: null });
@@ -69,43 +68,39 @@
   /** The model in a background worker -> embedMany(texts) -> [vector per text]. Rejects if the phone won't run one. */
   function startWorker() {
     return new Promise(function (ok, no) {
-      var w, seq = 0, pend = {}, ready = false, dog = 0;
-      var fail = function (why) { clearTimeout(dog); try { w && w.terminate(); } catch (e) { } Object.keys(pend).forEach(function (k) { pend[k].no(new Error(why)); }); if (!ready) no(new Error(why)); };
+      var w, url, seq = 0, pend = {}, ready = false, dog = 0, dead = false, active = 0, queue = [];
+      var fail = function (why) { if(dead)return;dead=true;clearTimeout(dog);try { w && w.terminate(); URL.revokeObjectURL(url); } catch (e) { }
+        Object.keys(pend).forEach(function (k) { clearTimeout(pend[k].timer);pend[k].no(new Error(why)); });pend={};queue=[];
+        if(ready){state='failed';failedAt=Date.now();loading=null;groupVectors.clear();taskStatus();if(root.FLog)root.FLog.warn('ai','Lightweight model stopped; using wording rules',why);}else no(new Error(why)); };
+      function pump(){if(dead||active||!queue.length)return;active=queue.shift();try{w.postMessage({type:'embed',id:active,texts:pend[active].texts});dog=setTimeout(function(){fail('Rating request timed out');},20000);}catch(e){fail('Rating worker unavailable');}}
       var watch = function () { clearTimeout(dog); if (!ready) dog = setTimeout(function () { fail('the worker went quiet'); }, 30000); };
-      try { w = new Worker(URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' }))); } catch (e) { return no(e); }   // a classic worker (a module one won't start from the app's page); it imports the library itself
+      try { url=URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' })); w = new Worker(url); } catch (e) { if(url)URL.revokeObjectURL(url);return no(e); }   // a classic worker; imports the library itself
       w.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); fail(e && e.message || 'worker error'); };
       w.onmessage = function (e) {
-        var m = e.data || {}; watch();
+        var m = e.data || {}; if(dead)return;if(!ready)watch();
         if (m.type === 'progress') onFile(m);
         else if (m.type === 'ready') { ready = true; clearTimeout(dog); ok(function (texts) {
-          return new Promise(function (r, j) { var id = ++seq; pend[id] = { ok: r, no: j }; w.postMessage({ type: 'embed', id: id, texts: texts }); });
+          return new Promise(function (r, j) { if(dead)return j(new Error('Rating worker stopped'));var id = ++seq; pend[id] = { ok: r, no: j, texts:texts, timer:setTimeout(function(){fail('Rating queue timed out');},60000) }; queue.push(id);pump(); });
         }); }
         else if (m.type === 'emb') {
-          var p = pend[m.id]; delete pend[m.id]; if (!p) return;
-          var dim = m.data.length / m.n, rows = []; for (var i = 0; i < m.n; i++) rows.push(m.data.slice(i * dim, (i + 1) * dim)); p.ok(rows);
-        } else if (m.type === 'error') { if (m.id && pend[m.id]) { pend[m.id].no(new Error(m.msg)); delete pend[m.id]; } else fail(m.msg); }
+          var p = pend[m.id]; if (!p||m.id!==active) return;
+          if(!Array.isArray(m.data)||m.n!==p.texts.length||!m.n||m.data.length%m.n||!m.data.every(Number.isFinite)){fail('Invalid rating result');return;}
+          delete pend[m.id]; clearTimeout(p.timer);clearTimeout(dog);active=0;
+          var dim = m.data.length / m.n, rows = []; for (var i = 0; i < m.n; i++) rows.push(m.data.slice(i * dim, (i + 1) * dim)); p.ok(rows);pump();
+        } else if (m.type === 'error') fail('Rating worker error');
       };
       watch();
       w.postMessage({ type: 'init', lib: LIB, model: MODEL });
     });
   }
-  /** The model here, in the page (the fallback): one sentence at a time, with a pause before each so taps get through. */
-  async function startPage() {
-    var T = await import(LIB);
-    T.env.allowLocalModels = false; T.env.useBrowserCache = false;     // the app keeps the files itself
-    if (T.env.backends && T.env.backends.onnx && T.env.backends.onnx.wasm) { T.env.backends.onnx.wasm.numThreads = 1; T.env.backends.onnx.wasm.proxy = false; }
-    await rest();
-    var pipe = await T.pipeline('feature-extraction', MODEL, { dtype: 'q8', progress_callback: function (p) { if (p && p.status === 'progress') onFile(p); } });
-    return async function (texts) { var out = []; for (var i = 0; i < texts.length; i++) { await rest(60); out.push(Array.from((await pipe(texts[i], { pooling: 'mean', normalize: true })).data)); } return out; };
-  }
   /** Load the library and the model (the first time: the download); resolves to embedMany(texts). */
   function load() {
     if (loading) return loading;
+    if(failedAt&&Date.now()-failedAt<60000)return Promise.reject(new Error('Rating model cooling down'));
     state = 'loading';
     loading = (async function () {
       setProg(0.02, 'Getting the rating model ready');
-      try { embed = await startWorker(); mode = 'worker'; }
-      catch (e) { if (root.FLog) root.FLog.info('car', 'Recall rating runs in the page (no background worker)', String(e && e.message || e)); embed = await startPage(); mode = 'page'; }
+      embed = await startWorker(); mode = 'worker';
       setProg(0.7, 'Setting up the rating model');
       // the examples' vectors are worked out once and kept (they only change with VERSION)
       var kv = KV(), ak = 'anchors|' + VERSION + '|' + MODEL, kept = kv && kv.get('ai', ak);
@@ -122,7 +117,7 @@
       state = 'ready'; setProg(0.95, 'Rating');
       if (root.FLog) root.FLog.info('car', 'Recall rating model ready (' + (mode === 'worker' ? 'background worker' : 'in the page') + ')');
       return embed;
-    })().catch(function (e) { state = 'failed'; loading = null; taskStatus(); throw e; });
+    })().catch(function (e) { state = 'failed'; failedAt=Date.now();loading = null;groupVectors.clear(); taskStatus(); throw e; });
     return loading;
   }
   function score(v) {
@@ -183,9 +178,9 @@
     if (root.__mocks && root.__mocks.severity) return Promise.resolve(null);
     comparing++; taskStatus();
     return load().then(async function () {
-      var names = Object.keys(groups), all = [String(txt).slice(0, 300)];
-      names.forEach(function (g) { all = all.concat(groups[g]); });
-      var vs = await embed(all), v = vs[0], at = 1, out = {};
+      var names = Object.keys(groups), id=JSON.stringify(groups), pending=groupVectors.get(id);
+      if(!pending){var all=[];names.forEach(function(g){all=all.concat(groups[g]);});pending=embed(all);if(groupVectors.size>=8)groupVectors.delete(groupVectors.keys().next().value);groupVectors.set(id,pending);pending.catch(function(){if(groupVectors.get(id)===pending)groupVectors.delete(id);});}
+      var vs = await pending, v = (await embed([String(txt).slice(0, 600)]))[0], at = 0, out = {};
       names.forEach(function (g) {
         var sc = groups[g].map(function () { return dot(v, vs[at++]); }).sort(function (a, b) { return b - a; });
         out[g] = (sc[0] + (sc[1] != null ? sc[1] : sc[0])) / 2;

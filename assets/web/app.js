@@ -282,6 +282,7 @@
     var n = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
     el.textContent = n + ' / ' + (cap || '∞');
     el.classList.toggle('hi', cap > 0 && n >= cap * 0.85);
+    if(window.Tasks)Tasks.layout();
   }
   window.__apiCount = apiCount;
   apiCount(); setInterval(apiCount, 4000);

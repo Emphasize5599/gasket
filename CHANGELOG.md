@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.161 - 2026-10-15 (keyless test branch only)
+- Trip-wide adjustments and optional cheaper-trip maps with hazards, added time and savings.
+- Parameters before Route; removed the dollars-per-hour setting.
+- Top task dock clears menus and the API meter; fixed stalled hazard AI requests.
+
 ## 0.0.160 - 2026-10-15 (keyless test branch only)
 - Separate smaller ARM64 and universal APK downloads with Obtainium-friendly names.
 

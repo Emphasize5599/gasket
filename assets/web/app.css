@@ -1790,10 +1790,11 @@ body.trip-full .job-bar .jb-t { overflow: hidden; text-overflow: ellipsis; white
 .job-bar .jb-x { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); font-size: 16px; }
 .job-bar .jb-go { flex: none; height: 36px; padding: 0 14px; }
 /* Shared task hub: the bar relinquishes width only while the extra-task button is present. */
-.task-hub { position:fixed; z-index:1150; left:12px; right:12px; top:calc(var(--st) + 104px); }
+.task-hub { position:fixed; z-index:10000; left:12px; right:12px; top:calc(var(--st) + 2px); }
 .task-hub.hidden { display:none; }
 .task-top { display:flex; align-items:stretch; gap:8px; }
-body .task-hub .job-bar { position:relative; top:auto; left:auto; right:auto; flex:1 1 0; min-width:0; margin:0; }
+body .task-hub .job-bar { position:relative; top:auto; left:auto; right:auto; flex:1 1 0; min-width:0; margin:0; min-height:0; height:44px; padding:0 8px; }
+body .task-hub .jb-t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .task-more { flex:0 0 42px; width:42px; min-height:44px; border-radius:12px; background:var(--surface); color:var(--accent); border:1px solid var(--line); font-size:25px; display:grid; place-items:center; }
 .task-more.hidden { display:none; }
 .task-list { margin-top:6px; border:1px solid var(--line); border-radius:16px; padding:4px 10px; background:var(--surface); box-shadow:0 4px 20px #0002; max-height:35vh; overflow:auto; }
@@ -1812,8 +1813,22 @@ body.trip-full .task-hub, body:has(#settings:not(.hidden)) .task-hub, body:has(.
 body:has(#settings:not(.hidden)) .task-hub .job-bar, body:has(.sub-page) .task-hub .job-bar { min-height:0; height:44px; padding-top:0; padding-bottom:0; }
 body:has(#settings:not(.hidden)) .task-hub .jb-t, body:has(.sub-page) .task-hub .jb-t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 body:has(#settings:not(.hidden)) .task-list .jb-t, body:has(.sub-page) .task-list .jb-t { white-space:normal; overflow-wrap:anywhere; }
-body.tasks-visible #settings .settings-bar { padding-top:calc(var(--st) + 54px); }
-body.tasks-visible .page.sub-page { padding-top:calc(var(--st) + 54px); }
+body { --task-space:0px; }
+body.tasks-visible { --task-space:54px; }
+.top { top:var(--task-space); }
+body.trip-full .top { top:0; }
+.page { padding-top:calc(var(--st) + 8px + var(--task-space)); --tile-top:calc(var(--st) + var(--task-space)); }
+#settings .settings-bar { padding-top:calc(var(--st) + 8px + var(--task-space)); }
+.page.sub-page { padding-top:calc(var(--st) + 4px + var(--task-space)); }
+.page.tpanel:not(.full) { padding-top:0; }
+.page.tpanel.full { padding-top:calc(var(--st) + 56px); }
+.cfm-bg { padding-top:calc(16px + var(--st) + var(--task-space)); }
+.trip-proposal { overflow:hidden; }
+.proposal-delta { display:flex; justify-content:space-between; gap:12px; padding:12px 0 4px; font-size:20px; font-variant-numeric:tabular-nums; }
+.proposal-map { height:240px; border-radius:16px; overflow:hidden; margin:8px 0; isolation:isolate; }
+.proposal-buttons { display:flex; align-items:center; gap:10px; padding:8px 0; }
+.proposal-buttons .btn { flex:1; min-width:0; height:auto; min-height:44px; white-space:normal; padding:8px; }
+.proposal-decline { background:color-mix(in srgb,var(--danger) 12%,var(--surface)); color:var(--danger); border:1px solid var(--danger); }
 body .task-hub .job-bar .pbar { flex-basis:60px; min-width:24px; }
 body .task-hub .job-bar .pct:empty { display:none; }
 .gemma-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }

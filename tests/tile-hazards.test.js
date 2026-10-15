@@ -20,11 +20,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    RouteWx.forRoute=async()=>{__reads++;return {hazards:[],stats:{aiPending:1},alerts:[],dense:[],forecast:[]};};
    RouteWx.rerate=()=>{__ratings++;return new Promise(r=>{window.__finishRating=()=>r({hazards:[],stats:{aiPending:0}});});};
   });
-  await p.click('#btnTrip');await p.click('[data-hist="hazards"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.departNow=true;__trip.step(4);});await p.waitForFunction(()=>__reads===2);
-  await p.evaluate(()=>{const original=Date.now;Date.now=()=>original()+65000;__trip.step(4);});assert.equal(await p.evaluate(()=>__reads),2,'Now advancing one minute retains completed hazard checks');
+  await p.click('#btnTrip');await p.click('[data-hist="hazards"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.departNow=true;__trip.step(5);});await p.waitForFunction(()=>__reads===2);
+  await p.evaluate(()=>{const original=Date.now;Date.now=()=>original()+65000;__trip.step(5);});assert.equal(await p.evaluate(()=>__reads),2,'Now advancing one minute retains completed hazard checks');
   await p.evaluate(()=>{__ai='ready';});await p.waitForFunction(()=>__ratings===1);assert.match(await p.innerText('#tHz'),/AI still rating warnings/);
   await p.evaluate(()=>__finishRating());await p.waitForFunction(()=>__ratings===2);await p.evaluate(()=>__finishRating());await p.waitForFunction(()=>!document.querySelector('#tHz').textContent.includes('AI still rating warnings'));
-  await p.evaluate(()=>__trip.step(4));assert.equal(await p.evaluate(()=>__reads),2,'AI rating does not repeat network checks');assert.equal(await p.evaluate(()=>__ratings),2,'each completed entry gets one AI pass');
+  await p.evaluate(()=>__trip.step(5));assert.equal(await p.evaluate(()=>__reads),2,'AI rating does not repeat network checks');assert.equal(await p.evaluate(()=>__ratings),2,'each completed entry gets one AI pass');
   assert.equal(errors.length,0,errors.join('\n'));await p.close();
  }
  console.log('320/448px sticky tile boundaries, enlarged-text submenu clearance, stable Now hazards and explicit network-free one-shot AI phase passed');

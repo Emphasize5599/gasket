@@ -12,10 +12,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   A.KV.put('trips','trip|nokey',saved);A.KV.put('trips','index',[{id:'nokey',title:'Start → End',t:saved.savedT,mi:318,via:'Test route',n:5}]);
  });
  await p.click('#btnTrip');await p.click('[data-hist="nokey"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
- await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tDepart');
+ await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tDepart');
  assert.equal(await p.locator('#tRouteInfo .card').count(),0,'no route tile under the Route step');
  await p.evaluate(()=>{window.__disc=0;const o=KeylessGas.discover;KeylessGas.discover=function(){__disc++;return o.apply(this,arguments);};});
- await p.evaluate(()=>__trip.step(4));await p.waitForSelector('[data-hzk="1"]');await p.click('[data-hzk="1"]');await p.waitForFunction(()=>document.querySelector('[data-hzk="1"]').classList.contains('on'));
+ await p.evaluate(()=>__trip.step(5));await p.waitForSelector('[data-hzk="1"]');await p.click('[data-hzk="1"]');await p.waitForFunction(()=>document.querySelector('[data-hzk="1"]').classList.contains('on'));
  await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
  const r=await p.evaluate(()=>({disc:__disc,card:!!document.querySelector('#taResults .price-refresh-card'),msg:(document.querySelector('#taResults .msg.err')||{}).textContent||''}));
  console.log('  Adjust:',JSON.stringify(r));
@@ -23,9 +23,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.ok(r.card&&/No plan keeps you/.test(r.msg),'Adjust shows its card and why, not a blank placeholder');
  // Leaving is required; Now fills in this minute
  const later=await p.evaluate(()=>{const d=new Date(Date.now()+864e5-new Date().getTimezoneOffset()*6e4);return d.toISOString().slice(0,16);});
- await p.evaluate(()=>__trip.step(3));await p.evaluate(()=>{document.querySelector('[data-src="typed"]').click();document.getElementById('tFrom').value='100 Main St';document.getElementById('tTo').value='200 Main St';});await p.fill('#tDepart','');await p.dispatchEvent('#tDepart','change');
- assert.equal(await p.evaluate(()=>document.querySelector('[data-step="4"]').classList.contains('dim')),true,'no Leaving: later steps gray');
- await p.click('#tNext');await p.waitForSelector('#tDepart.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),3,'Next points at Leaving');
+ await p.evaluate(()=>__trip.step(4));await p.evaluate(()=>{document.querySelector('[data-src="typed"]').click();document.getElementById('tFrom').value='100 Main St';document.getElementById('tTo').value='200 Main St';});await p.fill('#tDepart','');await p.dispatchEvent('#tDepart','change');
+ assert.equal(await p.evaluate(()=>document.querySelector('[data-step="5"]').classList.contains('dim')),true,'no Leaving: later steps gray');
+ await p.click('#tNext');await p.waitForSelector('#tDepart.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),4,'Next points at Leaving');
  await p.click('#tNow');
  const now=await p.evaluate(()=>[document.getElementById('tDepart').value,__app.S.trip.depart,Date.now()-new Date().getTimezoneOffset()*6e4]);
  assert.ok(now[0]&&now[0]===now[1]&&Math.abs(Date.parse(now[0]+'Z')-now[2])<120e3,'Now fills in this minute: '+now);
@@ -35,7 +35,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.isChecked('#tBackAuto'),true);assert.equal(await p.isVisible('#tBackAt'),false,'right away: no date box');
  await p.evaluate(()=>{const s=document.getElementById('tBackAuto');s.checked=false;s.dispatchEvent(new Event('change'));});
  assert.equal(await p.isVisible('#tBackAt'),true);
- await p.click('#tNext');await p.waitForSelector('#tBackAt.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),3,'Head back is required when not right away');
+ await p.click('#tNext');await p.waitForSelector('#tBackAt.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),4,'Head back is required when not right away');
  await p.fill('#tBackAt',later);await p.dispatchEvent('#tBackAt','change');assert.equal(await p.evaluate(()=>__app.S.trip.backAt),later);
  await p.evaluate(()=>{const s=document.getElementById('tBackAuto');s.checked=true;s.dispatchEvent(new Event('change'));});
  await p.evaluate(()=>{const s=document.getElementById('tRound');s.checked=false;s.dispatchEvent(new Event('change'));});

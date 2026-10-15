@@ -15,11 +15,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   __app.S.trip.avoid.tolls=true;
   __app.N.siteRead=(id,key,json)=>{if(!/^gasweb(?:[2-4])?$/.test(key))return setTimeout(()=>onNativeResult(id,{error:'mock skip'}),1);__web++;const a=JSON.parse(json);if(a.mode!=='discover')throw Error('Wrong reader mode');setTimeout(()=>onNativeResult(id,{stores:[{id:'web:local',name:'Local Fuel',lat:34.775,lng:-92.29,address:'100 Main St, Testville',prices:{regular:{price:3.12}},source:'Google Maps web'}],detail:{exhausted:true}}),10);};
  });
- await p.click('#btnTrip');await p.evaluate(()=>__trip.step(3));await p.click('#tSrc [data-src="typed"]');
+ await p.click('#btnTrip');await p.evaluate(()=>__trip.step(4));await p.click('#tSrc [data-src="typed"]');
  await p.fill('#tFrom','100 Main St, Testville');await p.fill('#tTo','200 Main St, Testville');
  await p.click('#tGetRoutes'); // restored installs deliberately do not automatically search on open
  await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
- await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tHz .hz-approx');assert.match(await p.innerText('#tHz .hz-notice'),/Website route · approximate/);
+ await p.evaluate(()=>__trip.step(5));await p.waitForSelector('#tHz .hz-approx');assert.match(await p.innerText('#tHz .hz-notice'),/Website route · approximate/);
  assert.equal(await p.evaluate(()=>new URL(__gmapsUrl).searchParams.get('avoid')),'tolls');
  await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
  assert.equal(await p.evaluate(()=>__paid),0);assert((await p.evaluate(()=>__web))>0);

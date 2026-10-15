@@ -64,6 +64,7 @@ on:
       - tests/setup-demo.test.js
       - tests/background-search.test.js
       - tests/tasks.test.js
+      - tests/severity.test.js
       - tests/gemma.test.js
       - tests/gemma-ui.test.js
       - tests/gemma-native.test.js
