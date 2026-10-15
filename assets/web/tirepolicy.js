@@ -16,18 +16,20 @@
       'Never infer replace-all from AWD alone; a tire professional/manufacturer fitment requirements decide how to restore matching rolling circumference.'
     ]};
   function text(v){return v==null||v===''?null:String(v);}
+  function number(v){return v==null||v===''||!Number.isFinite(+v)?null:+v;}
   function snapshot(car,math){
     var t=JSON.parse(JSON.stringify(car.tires||{})), drive=(car.info||{}).drive||'unknown', C=t.corners||{};
     var tires=math.positions(t).map(function(p){
       var unit=p.unit||{}, split=p.trailer?!!unit.split:!!C.split, e=split?C[p.k]||{}:{}, tread=unit.tread||t.tread||{};
+      var own=!!(e.type||e.model);
       var measured=split?!unit.split&&(C.mode==='depth'||!C.mode&&e.depth!=null):tread.mode==='measure';
       var depth=math.depthAt(t,p,drive);
       if(measured){var entered=split?e.depth:tread.depth;if(entered!==''&&entered!=null&&Number.isFinite(+entered)&&+entered>=0)depth=+entered;}
       var size=p.trailer?unit.size:(t.multiSize&&/^(lr|rr|lri|rri)$/.test(p.k)?t.sizeRear:unit.size);
       return {id:p.k,position:text(p.name),unit:p.trailer?'trailer':'car',axle:text(p.group),
-        type:text(e.type||unit.type),brand:text(e.brand||unit.brand),model:text(e.model||unit.model),
+        type:text(e.type||unit.type),brand:text(own?e.brand:unit.brand),model:text(own?e.model:unit.model),
         size:text(e.size||size),depth:Number.isFinite(depth)?depth:null,measured:measured,
-        miles:split?(Number.isFinite(+e.miles)&&e.miles!==''?+e.miles:null):(Number.isFinite(+tread.miles)&&tread.miles!==''?+tread.miles:null),
+        miles:number(split?e.miles:tread.miles),
         rotated:text(split?e.rotated:tread.rotated),warrantyMi:math.warrantyOf(e,unit)||null,
         pattern:text(e.pattern||unit.pattern),directional:typeof e.directional==='boolean'?e.directional:null,
         ageYears:Number.isFinite(e.ageYears)?e.ageYears:null};

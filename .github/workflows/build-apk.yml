@@ -123,7 +123,7 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Cache pinned Gradle and native dependencies
         if: steps.signing.outputs.ready == 'true'
