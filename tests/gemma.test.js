@@ -1,4 +1,7 @@
 const assert=require('node:assert/strict'),M=require('../assets/web/tires'),P=require('../assets/web/tirepolicy');
+const native=require('node:fs').readFileSync('src/com/bensanzone/fuelmap/GemmaService.java','utf8');
+assert(native.includes('prefs.getBoolean("enabled", true)'),'larger AI defaults on but an explicitly stored opt-out is honored');
+assert(native.includes('"cancelAdvice".equals(command)&&!"advice".equals(task)'),'stale advice cancellation cannot stop downloads');
 const car=(drive,depths)=>({info:{drive},tires:{size:'205/55R16',brand:'Example',model:'Tour',type:'Touring',corners:{split:true,mode:'depth',...Object.fromEntries(['lf','rf','lr','rr'].map((k,i)=>[k,{depth:depths[i]}]))}}});
 for(const drive of ['fwd','rwd','awd','4wdf','aawd','4wd','unknown']){
  const pack=P.prepare(car(drive,[8,8,2,2]),M);

@@ -13,14 +13,16 @@
   }
   function changed(){window.dispatchEvent(new Event('gemmachange'));}
   function status(value){
-    var priorPhase=state.phase;
+    var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
-    if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,bytes:state.bytes||0,ready:!!state.ready});
-    var downloading=/^(download|verify)$/.test(state.phase)||state.phase==='cancelling'&&state.task==='download', generating=/^(load|generate|cancelling)$/.test(state.phase)&&!downloading;
+    if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
+    if((state.error&&state.error!==priorIssue)||(state.reason&&state.reason!==priorReason))LG.warn('ai','Local model task update',{phase:state.phase,task:state.task||priorTask||'',bytes:state.bytes||0,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
+    if(state.error&&state.error!==priorIssue&&priorTask==='download')A.toast('Model download stopped · '+(state.bytes?'partial file kept.':'not complete.')+' Resume in Settings.');
+    var downloading=/^(download|verify|retry)$/.test(state.phase)||state.phase==='cancelling'&&state.task==='download', generating=/^(load|generate|cancelling)$/.test(state.phase)&&!downloading;
     if(window.Tasks){
-      if(downloading)Tasks.upsert('gemma-download',{text:state.phase==='cancelling'?'Pausing model download…':state.phase==='verify'?'Verifying Gemma model…':'Downloading Gemma · '+(Number(state.bytes||0)/1e9).toFixed(2)+' / 3.66 GB',frac:/verify|cancelling/.test(state.phase)?null:Number(state.bytes||0)/Number(state.total||3659530240),cancel:function(){command('cancel');}});
-      else Tasks.remove('gemma-download');
-      if(generating)Tasks.upsert('gemma-advice',{text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining your tire setup…',frac:null,cancel:function(){if(running)attempted.add(running.key);desired=null;command('cancel');}});
+      if(downloading)Tasks.upsert('gemma-download',{text:state.phase==='cancelling'?'Pausing model download…':state.phase==='verify'?'Verifying Gemma model…':state.phase==='retry'?'Resuming model download · attempt '+(state.attempt||2)+' / 4':'Downloading Gemma · '+(Number(state.bytes||0)/1e9).toFixed(2)+' / 3.66 GB',frac:/verify|cancelling/.test(state.phase)?null:Number(state.bytes||0)/Number(state.total||3659530240),cancel:function(){command('cancel');}});
+      else Tasks.remove('gemma-download',priorTask==='download'&&!state.ready&&priorPhase!=='idle'?{text:'Model download paused · '+(state.bytes?'partial file kept':'not complete'),action:'Resume',onAction:function(){if(state.enabled&&state.supported)command('download');else A.openSettings(false);}}:null);
+      if(generating)Tasks.upsert('gemma-advice',{text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining your tire setup…',frac:null,cancel:function(){if(running)attempted.add(running.key);desired=null;command('cancelAdvice');}});
       else Tasks.remove('gemma-advice');
     }
     if(!state.enabled){desired=null;cache.clear();attempted.clear();}
@@ -28,6 +30,7 @@
   }
   window.onGemmaStatus=status;
   async function command(action){
+    LG.info('ai','Local model command',{command:action,phase:state.phase,task:state.task||'',bytes:state.bytes||0});
     var r=await call('aiCommand',action);
     if(r.error){lastIssue=r.error;paintSettings();return r;}
     lastIssue='';status(r);return r;
@@ -39,7 +42,7 @@
     if(!next.pack.setup.tires.some(function(t){return t.depth!=null;}))return;
     if(cache.has(next.key)||attempted.has(next.key)){desired=null;return;}
     desired=next;
-    if(running){if(running.key!==next.key&&!running.cancelled){running.cancelled=true;command('cancel');}return;}
+    if(running){if(running.key!==next.key&&!running.cancelled){running.cancelled=true;command('cancelAdvice');}return;}
     if(!state.busy)run();
   }
   async function run(){
@@ -47,7 +50,7 @@
     var item=desired;desired=null;running=item;attempted.add(item.key);lastIssue='';
     var started=Date.now();LG.info('ai','Local tire explanation started',{positions:item.pack.setup.tires.length,facts:item.pack.facts.length,inputBytes:new TextEncoder().encode(item.prompt).length});
     // Start status immediately; native initialization happens off-thread and reports the precise phase.
-    Tasks.upsert('gemma-advice',{text:'Preparing local tire advice…',frac:null,cancel:function(){command('cancel');}});changed();
+    Tasks.upsert('gemma-advice',{text:'Preparing local tire advice…',frac:null,cancel:function(){command('cancelAdvice');}});changed();
     try{
       var result=await call('aiGenerate',item.prompt);
       var now=current(), live=now&&input(now);
@@ -91,7 +94,7 @@
   }
   function retry(){var c=current();if(c)try{attempted.delete(input(c).key);}catch(e){}lastIssue='';schedule();}
   window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry};
-  window.addEventListener('garagechange',function(){if(running){var c=current();try{if(!c||input(c).key!==running.key){running.cancelled=true;command('cancel');}}catch(e){command('cancel');}}schedule();});
+  window.addEventListener('garagechange',function(){if(running){var c=current();try{if(!c||input(c).key!==running.key){running.cancelled=true;command('cancelAdvice');}}catch(e){command('cancelAdvice');}}schedule();});
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){}});
   setTimeout(function(){if(A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){lastIssue='Local model status could not be read.';}},0);
 })();

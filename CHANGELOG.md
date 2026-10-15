@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.162 - 2026-10-15 (keyless test branch only)
+- Require vehicle capacity before saving; Route now precedes Parameters.
+- Keep equal-width red No / green Yes route-review buttons visible during background work.
+- Avoid false extreme-cold statements; improve AI download retries, resume controls and logging.
+- Larger AI defaults enabled; model download still requires confirmation.
+- Consolidated progress in a wrapping top bar, with tap-to-expand full-screen messages.
+
 ## 0.0.161 - 2026-10-15 (keyless test branch only)
 - Trip-wide adjustments and optional cheaper-trip maps with hazards, added time and savings.
 - Parameters before Route; removed the dollars-per-hour setting.

@@ -14,14 +14,17 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   A.N.siteRead=(id,key,json)=>{if(!/^gasweb/.test(key))return setTimeout(()=>onNativeResult(id,{stores:[]}),0);const a=JSON.parse(json),m=/@(-?[\d.]+),(-?[\d.]+)/.exec(a.url),lat=+m[1],lng=+m[2];setTimeout(()=>onNativeResult(id,{stores:[{id:'web:'+lat+':'+lng,name:'Exxon',brand:'exxon',lat,lng,address:'100 Test St',source:'Google Maps web',prices:{regular:{price:3.25}}}],detail:{exhausted:true}}),0);};
  });
  await p.click('#btnTrip');await p.click('[data-hist="choice-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__app.S.trip.departNow=true);
- await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tRule');
+ await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tRule');
  await p.evaluate(()=>{Tasks.upsert('layout-test',{text:'Reading hazards…'});Tasks.upsert('layout-other',{text:'Downloading model…'});});await p.waitForSelector('#taskMore:not(.hidden)');
  assert(await p.evaluate(()=>{const bar=document.querySelector('#jobBar').getBoundingClientRect(),meter=document.querySelector('#apiCount').getBoundingClientRect(),tabs=document.querySelector('.tp-head').getBoundingClientRect();return bar.left>=meter.right+7&&bar.bottom<tabs.top;}),'full-screen status respects API meter and menu selectors');
  await p.evaluate(()=>{Tasks.remove('layout-test');Tasks.remove('layout-other');});
  assert.equal(await p.locator('#tTime').count(),0,'no dollar/hour input');
- await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tAltCmp');assert.equal(await p.locator('#tpS4 #tAltCmp').count(),1);
+ await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tAltCmp');assert.equal(await p.locator('#tpS3 #tAltCmp').count(),1);
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('[data-hzk]');
  await p.click('#tNext');await p.click('#tNext');await p.waitForFunction(()=>document.querySelector('#tBack').textContent==='No');
+ assert.equal(await p.locator('#tpNav.route-review').count(),1);const halves=await p.evaluate(()=>['tBack','tNext'].map(id=>{const e=document.getElementById(id);return {width:e.getBoundingClientRect().width,color:getComputedStyle(e).backgroundColor};}));assert(Math.abs(halves[0].width-halves[1].width)<1);assert.equal(halves[0].color,'rgb(198, 40, 40)');assert.equal(halves[1].color,'rgb(24, 128, 56)');
+ // Simulate late search/plan completion: labels must remain review actions, not Back/Next.
+ await p.evaluate(()=>{__trip.relogo();__trip.discountsChanged();});await p.waitForTimeout(80);assert.equal(await p.innerText('#tBack'),'No');assert.equal(await p.innerText('#tNext'),'Yes');
  await p.click('#tBack');await p.click('#tNext');await p.click('#tNext');await p.click('#tBack');
  await p.waitForFunction(()=>__trip.state().step===6&&!__trip.state().busy);
  await p.waitForSelector('#tsBuf');await p.waitForSelector('#tsDet');

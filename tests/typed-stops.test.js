@@ -14,7 +14,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     });
     await p.evaluate(() => { window.__bodies = []; const f = __app.N.computeRoute; __app.N.computeRoute = function (id, key, body) { __bodies.push(JSON.parse(body)); return f.apply(this, arguments); }; });
     await p.click('#btnTrip'); if (await p.locator('#tpNew').count()) await p.click('#tpNew');
-    await p.evaluate(() => __trip.step(4)); await p.click('#tSrc [data-src="typed"]');
+    await p.evaluate(() => __trip.step(3)); await p.click('#tSrc [data-src="typed"]');
     await p.fill('#tFrom', 'Arkansas State Capitol, Little Rock, AR');
     assert.equal(await p.locator('#tVia .via-in').count(), 0); await p.click('#tViaAdd');
     assert.equal(await p.locator('#tVia .via-in').count(), 1, 'a stop box between From and To');

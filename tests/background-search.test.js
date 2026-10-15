@@ -31,22 +31,23 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     const st = () => p.evaluate(() => { const s = __trip.state(); return { step: s.step, busy: s.busy, job: !!(__app.job() && __app.job().kind), open: !document.getElementById('trip').classList.contains('hidden') }; });
     const discover = async () => { await p.click('#taResults [data-split]'); await p.click('#taResults [data-trip-refresh="discover"]'); await p.waitForFunction(() => __trip.state().busy && __app.job()); };
     await p.click('#btnTrip'); await p.click('[data-hist="bg"]'); await p.waitForFunction(() => __trip.state().model && !__trip.state().busy);
+    await p.waitForFunction(()=>!Tasks.list().some(t=>t.id==='trip-draw'),'saved-trip opening status must settle');
     await p.evaluate(() => { __app.S.trip.departNow = true; });   // (a reopened trip asks when you're leaving: now)
     await p.evaluate(() => __trip.step(6)); await p.waitForFunction(() => __trip.state().result && !__trip.state().busy);
 
     // 1. a search on its own screen: no status bar (the step shows it); the steps that would change it are closed
     await discover();
     assert.equal(await p.locator('#jobBar:not(.hidden)').count(), 1, 'The global status bar remains visible above Adjustments');
-    assert.ok(await p.locator('#taResults .prog-load [data-cancel-search]:visible').count() >= 1, 'with its own ✕');
+    assert.equal(await p.locator('#taResults .prog-load').count(),0,'no duplicate progress inside the menu');assert.equal(await p.locator('#jobBar [data-cancel="stations"]').count(),1,'cancellation stays available in the dock');assert.equal(await p.isDisabled('#tNext'),true);assert.equal(await p.innerText('#tNext'),'Next');
     assert.equal(await p.locator('#taResults .card.skel .prog-load').count(),0,'buffer/detour skeletons do not repeat station discovery progress');
-    assert.equal(await p.locator('#taResults .price-refresh-card .prog-load').count(),1,'scan progress belongs in the refresh tile');
-    assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, false, true, true, true, true],
+    assert.equal(await p.locator('#taResults .price-refresh-card .prog-load').count(),0,'refresh tile only shows CSS placeholders');assert.equal(await p.locator('#taResults .scan-pending').count(),1);
+    assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, true, false, true, true, true],
       'Garage, Route, Hazards (they would change it) and Stops, Departure (it is about to change them) closed while it runs');
     // Advice and Parameters still open, and Advice's tab row goes on to Parameters
     await p.click('#tpSteps [data-step="2"]'); await p.waitForFunction(() => __trip.state().step === 2);
-    await p.click('#tpSteps [data-step="3"]'); await p.waitForFunction(() => __trip.state().step === 3);
+    await p.click('#tpSteps [data-step="4"]'); await p.waitForFunction(() => __trip.state().step === 4);
     assert.ok((await st()).busy, 'still searching'); await p.click('#tpSteps [data-step="6"]'); await p.waitForFunction(() => __trip.state().step === 6);
-    await p.click('#tpSteps [data-step="4"]', { force: true }); assert.equal((await st()).step, 6, 'a closed step cannot be opened');
+    await p.click('#tpSteps [data-step="3"]', { force: true }); assert.equal((await st()).step, 6, 'a closed step cannot be opened');
 
     // 2. ✕ asks; a tap outside the question keeps you here, with the search still running
     await p.click('#tClose'); await p.waitForSelector('#cfm.on');
@@ -68,7 +69,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     assert.deepEqual(locks.disabled, [true, true, true], 'settings, refresh and fuel mode grayed out'); assert.equal(locks.grades, 'none', 'grades grayed out');
     assert.ok(locks.gray < 0.6); assert.equal(locks.trip, false, 'the trip itself can be reopened');
     assert.match(locks.bar, /^Preparing… · \d+ areas to search$/, 'nothing done yet: Preparing…, not a stuck 0');
-    assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#jobBar .jb-t')).whiteSpace), 'nowrap', 'the compact global row stays on one line');
+    assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#jobBar .jb-t')).whiteSpace), 'normal', 'the main-map status wraps');
     if (shots) await p.screenshot({ path: shots + '/bg-map.png' });
     // the map stays usable: pan it
     const c0 = await p.evaluate(() => __app.map.getCenter()); await p.mouse.move(180, 400); await p.mouse.down(); await p.mouse.move(120, 330, { steps: 5 }); await p.mouse.up();
@@ -81,7 +82,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 
     // 4. Back to Parameters (asks, runs on), where the status bar shows; Back from there is closed (Hazards would change it)
     await p.click('#tBack'); await p.waitForSelector('#cfm.on'); await p.click('#cfmYes'); await p.waitForSelector('#cfm', { state: 'detached' });
-    await p.waitForFunction(() => __trip.state().step === 3); await p.waitForSelector('#jobBar:not(.hidden)');
+    await p.waitForFunction(() => __trip.state().step === 4); await p.waitForSelector('#jobBar:not(.hidden)');
     assert.equal(await p.isDisabled('#tBack'), false, 'Parameters can return to Advice while the search runs');
     // in a full-screen menu the bar sits in the empty space above the step tabs
     await p.evaluate(() => { document.getElementById('trip').classList.add('full'); document.body.classList.add('trip-full'); __app.jobDraw(); });
@@ -100,7 +101,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     await p.waitForSelector('#jobBar.done .jb-go'); assert.match(await p.innerText('#jobBar'), /stops are ready/i);
     assert.equal(await p.evaluate(() => document.body.classList.contains('job-on')), false); assert.equal(await p.isDisabled('#btnSettings'), false, 'unlocked');
     await p.click('#jobBar .jb-go'); await p.waitForFunction(() => __trip.state().step === 6 && document.querySelector('#taResults .price-refresh-card'));
-    assert.equal(await p.isDisabled('#tpSteps [data-step="4"]'), false);
+    assert.equal(await p.isDisabled('#tpSteps [data-step="3"]'), false);
 
     // 6. phone Back → Cancel search: it stops (the readers are told), and Back still goes back
     await p.evaluate(() => { __gate = 'hold'; __cancels = 0; __app.KV.clear('gasweb'); }); await discover();   // (the first search's areas are cached for 15 min)
@@ -108,7 +109,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     await p.waitForFunction(() => !__trip.state().busy, null, { timeout: 20000 });
     const c = await p.evaluate(() => ({ step: __trip.state().step, cancels: __cancels, job: !!__app.job(), bar: document.getElementById('jobBar').className }));
     console.log('  cancelled:', JSON.stringify(c));
-    assert.equal(c.step, 3); assert.ok(c.cancels > 0, 'the website readers were cancelled'); assert.equal(c.job, false);
+    assert.equal(c.step, 4); assert.ok(c.cancels > 0, 'the website readers were cancelled'); assert.equal(c.job, false);
 
     // 7. the status bar's ✕ cancels a background search
     await p.evaluate(() => __trip.step(6)); await p.waitForFunction(() => !__trip.state().busy && document.querySelector('#taResults .price-refresh-card'));

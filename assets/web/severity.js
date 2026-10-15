@@ -179,7 +179,7 @@
     comparing++; taskStatus();
     return load().then(async function () {
       var names = Object.keys(groups), id=JSON.stringify(groups), pending=groupVectors.get(id);
-      if(!pending){var all=[];names.forEach(function(g){all=all.concat(groups[g]);});pending=embed(all);if(groupVectors.size>=8)groupVectors.delete(groupVectors.keys().next().value);groupVectors.set(id,pending);pending.catch(function(){if(groupVectors.get(id)===pending)groupVectors.delete(id);});}
+      if(!pending){var all=[];names.forEach(function(g){all=all.concat(groups[g]);});pending=(async function(){var rows=[];for(var i=0;i<all.length;i+=4)rows=rows.concat(await embed(all.slice(i,i+4)));return rows;})();if(groupVectors.size>=8)groupVectors.delete(groupVectors.keys().next().value);groupVectors.set(id,pending);pending.catch(function(){if(groupVectors.get(id)===pending)groupVectors.delete(id);});}
       var vs = await pending, v = (await embed([String(txt).slice(0, 600)]))[0], at = 0, out = {};
       names.forEach(function (g) {
         var sc = groups[g].map(function () { return dot(v, vs[at++]); }).sort(function (a, b) { return b - a; });

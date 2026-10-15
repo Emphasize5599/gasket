@@ -14,7 +14,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>onNativeResult(__recordRequest,{error:'Test network failure'}));assert.equal(await p.isDisabled('#gSave'),true);
  await p.selectOption('#eOpt','test-manual');await p.waitForFunction(()=>!document.querySelector('#gSave').disabled===false); // still pending
  await p.evaluate(()=>onNativeResult(__recordRequest,{body:JSON.stringify({...__record,id:'test-manual',trany:'Manual 5-spd'})}));
- await p.waitForFunction(()=>!document.querySelector('#gSave').disabled);assert.equal(await p.evaluate(()=>Garage.car().epaId),'test-manual');
+ await p.waitForFunction(()=>Garage.car().epaId==='test-manual');assert.equal(await p.isDisabled('#gSave'),true,'valid EPA record cannot bypass missing tank capacity');await p.fill('#gTank','15.5');await p.dispatchEvent('#gTank','change');await p.waitForFunction(()=>!document.querySelector('#gSave').disabled);assert.equal(await p.evaluate(()=>Garage.car().epaId),'test-manual');
+ for(const value of ['','0','-1']){await p.fill('#gTank',value);await p.dispatchEvent('#gTank','change');assert.equal(await p.isDisabled('#gSave'),true,'invalid capacity cannot be saved');}await p.fill('#gTank','15.5');await p.dispatchEvent('#gTank','change');
  await p.selectOption('#eYear','2006');assert.equal(await p.isDisabled('#gSave'),true,'changing an ancestor invalidates the prior engine/transmission selection');
  await p.click('[data-entry="custom"]');assert.equal(await p.isDisabled('#gSave'),false,'custom vehicles do not need an invented EPA record');
  await p.click('#gSave');await p.waitForSelector('.car-edit',{state:'detached'});

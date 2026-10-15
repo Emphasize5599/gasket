@@ -147,7 +147,7 @@
     var from = Date.parse(p.onset || p.effective || p.sent), to = Date.parse(p.ends || p.expires), d = digestKnown(p.event);
     var same = ((p.geocode && p.geocode.SAME) || []).map(function (c) { return String(c).slice(-5); });
     return { id: p.id || f.id, event: p.event, level: /extreme|severe/i.test(p.severity) || /warning/i.test(p.event) ? 2 : 1, from: isNaN(from) ? 0 : from, to: isNaN(to) ? Infinity : to,
-      headline: p.headline || '', text: String(p.description || '').replace(/\s+/g, ' ').slice(0, 600), area: p.areaDesc || '', counties: same, polys: polysOf(f && f.geometry),
+      headline: p.headline || '', text: String(p.description || '').replace(/\s+/g, ' ').slice(0, 12000), area: p.areaDesc || '', counties: same, polys: polysOf(f && f.geometry),
       kind: d ? d.kind : 'alert', label: d ? d.label : p.event, vague: !d };
   }
   /** What an alert is, from its name: {kind, label}, or null when the name doesn't say ("Special Weather Statement"). */
@@ -161,8 +161,8 @@
   function digestKnown(event) { for (var i = 0; i < KNOWN.length; i++) if (KNOWN[i][0].test(event)) return { kind: KNOWN[i][1], label: KNOWN[i][2] }; return null; }
   /** A vague alert's words, when the rating model can't read it: the first hazard its text names. */
   function digestWords(text) {
-    var t = String(text || ''), best = null;
-    KNOWN.forEach(function (k) { var m = k[0].exec(t); if (m && (!best || m.index < best.at)) best = { at: m.index, kind: k[1], label: k[2] }; });
+    var t = String(text || '').replace(/\bcold\s+front\b/gi,'weather front'), best = null;
+    KNOWN.forEach(function (k) { var re=k[1]==='cold'?/extreme cold|dangerously cold|dangerous(?:ly)? (?:low )?wind chill|wind chills? (?:as low as|below|of)\s*-\d|frostbite|hypothermia|temperatures? (?:well )?below zero/i:k[0];var m = re.exec(t); if (m && !/\b(?:no|not|without)\b[^.!?;,]{0,35}$/i.test(t.slice(Math.max(0,m.index-45),m.index)) && (!best || m.index < best.at)) best = { at: m.index, kind: k[1], label: k[2] }; });
     if (!best && /thunder|lightning|hail/i.test(t)) best = { kind: 'storm', label: 'Strong storms' };
     if (!best && /heavy rain|downpour/i.test(t)) best = { kind: 'rain', label: 'Heavy rain' };
     return best ? { kind: best.kind, label: best.label } : null;
@@ -188,17 +188,23 @@
   async function digest(a, compare, ms) {
     if (!a.vague) return a;
     // the model gets a few seconds at most (it may be busy rating recalls); its words read the alert otherwise
-    var txt = (a.headline + '. ' + a.text).slice(0, 300), sc = compare ? await Promise.race([
+    var fullText=a.headline+'. '+a.text, words=digestWords(fullText);
+    var txt = fullText.slice(0, 600), sc = compare ? await Promise.race([
       compare(txt, ALERT_EX).catch(function () { return null; }),
       new Promise(function (r) { setTimeout(function () { r(null); }, ms || DIGEST_MS); })]) : null;
     // no answer from the model (not loaded yet, busy or failed): its words for now, marked so it can be read again
     a.aiPending = !sc;
     if (sc) {
       var best = Object.keys(sc).sort(function (x, y) { return sc[y] - sc[x]; })[0];
-      if (sc[best] >= 0.35) { a.kind = best; a.label = AI_LABEL[best]; a.by = 'ai'; return a; }
+      var runner=Object.keys(sc).filter(function(k){return k!==best;}).reduce(function(n,k){return Math.max(n,sc[k]);},0);
+      // Similarity is not evidence of dangerous cold/heat. A front or seasonal temperatures alone are not an extreme alert.
+      var supported=best!=='cold'||words&&words.kind==='cold';
+      if(best==='heat')supported=/extreme heat|excessive heat|dangerously hot|heat index.{0,25}(?:10[5-9]|1[1-9]\d)/i.test(fullText);
+      if (Number.isFinite(sc[best])&&sc[best] >= 0.35&&sc[best]-runner>=0.06&&supported) { a.kind = best; a.label = AI_LABEL[best]; a.by = 'ai'; return a; }
     }
-    var w = digestWords(a.headline + ' ' + a.text);
+    var w = words;
     if (w) { a.kind = w.kind; a.label = w.label; a.by = 'words'; }
+    else {a.kind='alert';a.label=a.event;a.by='words';}
     return a;
   }
 

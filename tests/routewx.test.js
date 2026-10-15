@@ -73,6 +73,10 @@ assert.equal(W.windMph('10 to 35 mph'), 35); assert.equal(W.windMph(''), null);
 assert.deepEqual(W.digestKnown('Flash Flood Warning'), { kind: 'flood', label: 'Flash flooding' });
 assert.deepEqual(W.digestKnown('Winter Storm Watch'), { kind: 'snow', label: 'Snow and ice' });
 assert.equal(W.digestKnown('Special Weather Statement'), null, 'vague: read its text');
+assert.equal(W.digestWords('A cold front will pass through this afternoon.'),null,'a cold front is not dangerous cold');
+assert.equal(W.digestWords('No dangerously cold temperatures are expected.'),null);
+assert.equal(W.digestWords('A cold front will bring dense fog this evening.').kind,'fog');
+assert.equal(W.digestWords('Dangerously cold wind chills may cause frostbite.').kind,'cold');
 assert.deepEqual(W.digestWords('At 3 PM, dense fog was reducing visibility to a quarter mile.'), { kind: 'fog', label: 'Dense fog' });
 assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geocode: { SAME: ['005119'] } } }).counties[0], '05119', 'SAME code -> county FIPS');
 
@@ -83,6 +87,10 @@ assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geoco
   assert.deepEqual([sws.kind, sws.label, sws.by], ['storm', 'Strong storms', 'ai']);
   const sws2 = W.alertOf({ properties: { event: 'Special Weather Statement', description: 'Patchy dense fog this morning.' } });
   await W.digest(sws2, null); assert.deepEqual([sws2.kind, sws2.by], ['fog', 'words']);
+  const front=W.alertOf({properties:{event:'Special Weather Statement',description:'A cold front will bring dense fog to the area.'}});
+  await W.digest(front,async()=>({cold:.95,fog:.1}));assert.equal(front.kind,'fog','unsupported high-confidence AI cold classification rejected');
+  const unclear=W.alertOf({properties:{event:'Special Weather Statement',description:'A cold front is moving through the area.'}});
+  await W.digest(unclear,async()=>({cold:.8,wind:.79}));assert.equal(unclear.kind,'alert','uncertain alerts keep the original event rather than inventing a hazard');
   const retained={alerts:[sws2],dense:pts,forecast:[{kind:'rain',level:1,fromMi:10,toMi:20}],stats:{weather:16,aiPending:1}};
   const rated=await W.rerate(retained,async()=>({storm:.7,fog:.1}),null,100);
   assert.equal(rated.stats.weather,16);assert.equal(rated.hazards[0].kind,'rain');assert.equal(retained.alerts[0].by,'words','AI rerating does not mutate the original reading');

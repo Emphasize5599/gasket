@@ -25,7 +25,7 @@
       if (fn === 'aiGenerate') timeout = 125000;
       if (fn === 'aiCommand') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
-        if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancel'); } catch (e) { }
+        if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancelAdvice'); } catch (e) { }
         window.onNativeResult(id, { error: (/^ai/.test(fn) ? 'Local AI' : args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
       try { N[fn].apply(N, [id].concat(args)); }
@@ -234,7 +234,7 @@
     var webHelp='Best for price refreshes at stations already saved with this trip. No Places or Routes calls. '+(web?'Estimated '+(estimate.seconds<60?'under a minute':'about '+minutes+' minutes')+' for '+estimate.areas+' areas with '+estimate.readers+' readers'+(estimate.measured?', based on recent scans':'; initial estimate, refined while scanning')+'. Cache reuse and website restrictions affect timing. ':'Find stations first or open a saved trip to estimate the refresh time. ')+'Only explicitly published fuel-grade prices are used; missing prices remain unchanged.';
     var apiHelp='Best for station discovery along a new route. It can also refresh prices very quickly, but uses your Places API budget. Saved route geometry is reused.'+(capped?' Your monthly Places cap is reached.':'')+(!S.apiKey?' Add the recommended API key in Settings to use this option.':'');
     return '<div class="card price-refresh-card"><h3>Refresh station prices</h3>'+
-      (busy?progBar(priceRefreshActive?'Refreshing saved prices':'Discovering stations'):
+      (busy?'<div class="scan-pending" aria-busy="true"><span></span><span></span></div>':
       '<div class="scan-launches"><span class="split-btn"><button class="btn primary" data-trip-refresh="web"'+(!web?' disabled':'')+'>'+RF_ICON+'No API</button>'+
         '<button type="button" class="btn primary split-dd" data-split aria-haspopup="true" aria-expanded="false" aria-label="More No API options">▾</button></span>'+A.qBtn(webHelp)+
         '<button class="btn primary" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>'+RF_ICON+'API</button>'+A.qBtn(apiHelp)+
@@ -245,35 +245,21 @@
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
   var loadingTrip = false;   // a saved trip is being opened (its route is read just after the panel is up)
 
-  /** Progress inside the Next button: frac 0..1 and what it's doing. */
-  var lastProg = { pct: 0, label: '' };
+  /** Shared top-dock progress; navigation never doubles as a loading bar. */
   function prog(frac, label) {
-    var pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
-    lastProg = { pct: pct, label: label };
     if (busy && A.job && A.job() && A.job().kind === 'trip') A.jobProg(frac, label);
-    var b = $(routing ? 'tGetRoutes' : 'tNext'); if (!b) return;
-    b.classList.add('busy');
-    b.innerHTML = '<span class="pfill" style="width:' + pct + '%"></span><span class="plab">' + esc(label) + ' · ' + pct + '%</span>';
-    if (mapLd && mapLd.live) mapLd.set(frac, label);
-    // and the bars inside the placeholder tiles (Adjustments, Stops) say the same
-    document.querySelectorAll('.prog-load').forEach(function (el) {
-      var i = el.querySelector('i'), p = el.querySelector('.pct'), l = el.querySelector('.pl');
-      if (i) i.style.width = pct + '%'; if (p) p.textContent = pct + '%'; if (l) l.textContent = label;
-    });
+    else if(routing&&window.Tasks)Tasks.upsert('route-fetch',{text:label,frac:frac});
+    if(mapLd&&mapLd.live)mapLd.set(frac,label);
+    var b=$('tGetRoutes');if(routing&&b)b.disabled=true;
+    routeGate();
   }
   /**
-   * While stops are worked out, Adjustments and Stops show their usual tiles right away, each with a loading bar
-   * inside saying what it's waiting on, instead of a blank screen that fills in later.
+   * While stops are worked out, keep the normal tile layout as CSS placeholders.
    */
-  function progBar(label) {   // starts where the work already is (prog() keeps it moving)
-    var pct = busy ? lastProg.pct : 0, l = busy && lastProg.label ? lastProg.label : label;
-    return '<div class="parse-load prog-load"><span class="pl">' + esc(l) + '</span><span class="pbar"><i style="width:' + pct + '%"></i></span><span class="pct">' + pct + '%</span>' +
-      (busy && !loadingTrip ? '<button type="button" class="pl-x" data-cancel-search aria-label="Cancel the search">✕</button>' : '') + '</div>';
-  }
   function skelCard(title, body) { return '<div class="card skel"><div class="sk-h">' + esc(title) + '</div>' + (body || '') + '</div>'; }
   function skelRows(n) { var h = ''; for (var i = 0; i < n; i++) h += '<div class="sk-row"><span class="sk-dot"></span><span class="sk-lines"><span></span><span></span></span><span class="sk-price"></span></div>'; return h; }
   function skelStops(label) {
-    return skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', progBar(label) + skelRows(2)) +
+    return skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', skelRows(2)) +
       '<div class="gas-tiles skel-tiles">' + skelCard(KIND() === 'ev' ? 'Charge to leave with' : 'Gas to leave with', '<div class="sk-big"></div>') +
       skelCard(KIND() === 'ev' ? 'Charge when you arrive' : 'Gas when you arrive', '<div class="sk-big"></div>') + '</div>';
   }
@@ -281,18 +267,17 @@
     return refreshCard()+tipBox() + skelCard('Buffer for this trip', '<div class="sk-slider"></div>') +
       skelCard('Max. detour per stop', '<div class="sk-slider"></div>') + skelCard('Cruising speed', '<div class="sk-slider"></div>');
   }
-  function progEnd() { var b = $('tNext'); if (b) { b.classList.remove('busy'); b.textContent = 'Next'; b._sub = null; } routeGate(); if (typeof backMode === 'function') backMode(); }
+  function progEnd() { if(window.Tasks)Tasks.remove('route-fetch');var b=$('tNext');if(b){b.classList.remove('busy');b._sub=null;}navRender(); }
   /** Let the screen draw (a progress bar, a tapped button) before a stretch of heavy work. */
   function paint() { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); }
   // the big map, grayed out with a progress bar while the route and stops are drawn (shows only past 0.75 s)
   var mapLd = null;
   function mapLoading(label, frac) {
-    if ($('trip') && $('trip').classList.contains('hidden')) { mapLoaded(); return; }   // in the background: the map stays free to use
-    if (!mapLd || !mapLd.live) mapLd = A.loader(document.body, label, { fixed: true });
-    mapLd.el.style.top = '0'; mapLd.el.style.bottom = Math.round(sheetCover()) + 'px';
-    mapLd.set(frac == null ? null : frac, label);
+    if(routing||A.job&&A.job()||$('trip')&&$('trip').classList.contains('hidden')){mapLoaded();return;}
+    if(!mapLd||!mapLd.live)mapLd={live:true,set:function(f,t){if(window.Tasks)Tasks.upsert('trip-draw',{text:t||label,frac:f});},done:function(){this.live=false;if(window.Tasks)Tasks.remove('trip-draw');}};
+    mapLd.set(frac==null?null:frac,label);
   }
-  function mapLoaded() { if (mapLd) { mapLd.done(); mapLd = null; } }
+  function mapLoaded(){if(mapLd){mapLd.done();mapLd=null;}if(window.Tasks)Tasks.remove('trip-draw');}
   var routing = false, freshRoutes = false;
   function show(el, on) { el.classList.toggle('hidden', !on); }
   function fmtDur(sec) { var m = Math.round(sec / 60), h = Math.floor(m / 60); return h ? h + ' h ' + (m % 60) + ' min' : m + ' min'; }
@@ -307,8 +292,8 @@
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
-  var STEPS = ['Garage', 'Advisory', 'Parameters', 'Route', 'Hazards', 'Adjustments', 'Stops', 'Departure'], step = 1;
-  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 4, ST_HAZ = 5, ST_PARAMS = 3, ST_ADJ = 6, ST_STOPS = 7, ST_DEPART = 8;
+  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Departure'], step = 1;
+  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_DEPART = 8;
   /** Adjustments and Stops both show the plan (and the map). */
   function onPlan(k) { return k === ST_ADJ || k === ST_STOPS; }
   function tpBody() { return $('tpBody'); }
@@ -418,9 +403,9 @@
     setTimeout(function () { if (step !== ST_DEPART) return; fitRoute(true); fitBtn(); placePinsSoon(); }, 260);
   }
   function navRender() {
-    var nav = $('tpNav');
+    var nav = $('tpNav');nav.classList.toggle('route-review',step===ST_HAZ&&!!routeReview);
     if (loadingTrip) {   // a saved trip opening: say so where Next will be, and nothing else can be pressed yet
-      nav.innerHTML = '<span></span><button class="btn primary opening" disabled>Opening your trip<span class="ob-bar"><i></i></span></button>';
+      nav.innerHTML = '<span></span><button class="btn primary" disabled>Next</button>';if(window.Tasks)Tasks.upsert('trip-draw',{text:'Opening your trip',frac:null});
       gateTabs(); return;
     }
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
@@ -507,7 +492,8 @@
       if ($('tGetRoutes')) $('tGetRoutes').onclick = getRoutes;
       if ($('tRefreshRoutes')) $('tRefreshRoutes').onclick = refreshRoutes;
     }
-    var n = $('tNext'); if (n) n.classList.toggle('dim', step === ST_ROUTE && !model);
+    var n = $('tNext'); if (n){n.classList.toggle('dim', step === ST_ROUTE && !model);n.disabled=loadingTrip||busy&&onPlan(step)||routing&&step===ST_ROUTE;}
+    if($('tOpen'))$('tOpen').disabled=busy||loadingTrip;
     gateTabs();
   }
   /** The last step you can go straight to: every step before it is done (what Next checks, without pointing at
@@ -517,8 +503,8 @@
     if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
     if (window.Tires && Tires.airDue && Tires.airDue(Garage.car())) return ST_ADVISORY;
     if (window.Climate && Climate.ackDue()) return ST_ADVISORY;
-    if (!hasFuel()) return ST_PARAMS;
     if (!model || document.querySelector('#tParsed .pick button') || timesNeed()) return ST_ROUTE;
+    if (!hasFuel()) return ST_PARAMS;
     if(choicePending().length)return ST_HAZ;
 
     return ST_DEPART;
@@ -3750,6 +3736,7 @@
   }
   var dotsHidden = false;
   function backMode() {
+    if(step===ST_HAZ&&routeReview){var b=$('tBack'),n=$('tNext');if(b)b.textContent='No';if(n){n.classList.remove('busy');n.textContent='Yes';}return;}
     var on = speedMode(), pg = $('trip');
     // adjusting speed by road: only the route, its stretches and your stops on the map (the other stations are noise there)
     if (on !== dotsHidden) { dotsHidden = on; dots.forEach(function (d) { if (on) layer.removeLayer(d); else if (!layer.hasLayer(d)) layer.addLayer(d); }); }

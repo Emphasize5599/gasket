@@ -179,7 +179,8 @@
   var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false,editSnap=null;
   var epaPending=new WeakSet(),epaEpoch=new WeakMap();
   function epaInvalidate(c){epaEpoch.set(c,(epaEpoch.get(c)||0)+1);epaPending.delete(c);}
-  function editorOk(c){
+  function editorOk(c){return !!c&&Number.isFinite(Number(c.tank))&&Number(c.tank)>0&&identityOk(c);}
+  function identityOk(c){
     if(!c)return false;
     if(c.entryMode==='custom')return !!(c.year&&c.make&&c.model||String(c.name||'').trim()||String(c.nick||'').trim());
     if(!c.year||!c.make||!c.model||!c.epaId||!hasEpa(c)||epaPending.has(c)||matching)return false;
@@ -491,7 +492,7 @@
     h += carousel(c, true);
     var tankFindable = k === 'gas' && !!tankKey(c);
     h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
-      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" id="gTank" value="' + esc(c.tank || '') + '">' +
+      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" min="0.1" required id="gTank" value="' + esc(c.tank || '') + '">' +
       (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
     // under the row, so the two boxes stay level
     var tkExtra = tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '';
@@ -770,7 +771,7 @@
     if (A.qify) A.qify(ed.body);
   }
   function saveEdit(c) {
-    if (!editorOk(c)) { var n = $('gName'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
+    if (!editorOk(c)) { var n = identityOk(c)?$('gTank'):$('gName'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
     vinStates.delete(c);editSnap = null; editing = false; LG.info('car', 'Saved ' + shortName(c)); draw(); changed();
   }
   function discardEdit(c) {
@@ -812,7 +813,7 @@
       if($('gNhtsaTip'))$('gNhtsaTip').onclick=function(){c.entryMode='custom';draw();save();openCatalog(c);};
       if($('gBuildCustom'))$('gBuildCustom').onclick=function(){openCustom(c);};
       document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
-      if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!(c.entryMode==='custom'&&this.value.trim()||editorOk(c));};
+      if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!editorOk(Object.assign({},c,{nick:this.value.trim(),name:this.value.trim()||c.name}));};
       ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
       $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
@@ -925,7 +926,7 @@
       '<label class="nf wide"><span>Name</span><input id="cbName" value="'+esc(c.name||'')+'"></label><div class="grid2"><label class="nf"><span>Year</span><input id="cbYear" type="number" min="1886" max="9999" step="1" value="'+esc(c.year||'')+'"></label><label class="nf"><span>Make</span><input id="cbMake" value="'+esc(c.make||'')+'"></label></div><label class="nf wide"><span>Model</span><input id="cbModel" value="'+esc(c.model||'')+'"></label>'+
       '<div class="grid2"><label class="nf"><span>Powertrain</span><select id="cbPower">'+opts(POWER,c.power||'gas')+'</select></label><label class="nf"><span>Vehicle type</span><select id="cbType">'+Object.keys(SP.TYPES).map(function(k){return '<option value="'+k+'"'+(k===(c.type||'car')?' selected':'')+'>'+esc(SP.TYPES[k].label)+'</option>';}).join('')+'</select></label></div>'+
       '<p class="lead small keep">After saving, use the normal vehicle menus for tank/battery capacity, observed mileage, engine, climate, tires and trailers.</p><div id="cbMsg" class="epa-msg" role="status"></div><button id="cbSave" class="btn primary" disabled>Save custom vehicle</button><button id="cbDiscard" class="btn tonal caution">Discard changes</button>',function(b){
-      var field=function(id){return b.querySelector('#'+id);};function read(){draft.name=field('cbName').value.trim();draft.year=+field('cbYear').value||'';draft.make=field('cbMake').value.trim();draft.model=field('cbModel').value.trim();draft.power=field('cbPower').value;draft.type=field('cbType').value;field('cbSave').disabled=!editorOk(draft)||draft.year&&!Number.isInteger(draft.year)||draft.year&&(draft.year<1886||draft.year>9999);}
+      var field=function(id){return b.querySelector('#'+id);};function read(){draft.name=field('cbName').value.trim();draft.year=+field('cbYear').value||'';draft.make=field('cbMake').value.trim();draft.model=field('cbModel').value.trim();draft.power=field('cbPower').value;draft.type=field('cbType').value;field('cbSave').disabled=!identityOk(draft)||draft.year&&!Number.isInteger(draft.year)||draft.year&&(draft.year<1886||draft.year>9999);}
       b.querySelectorAll('input,select').forEach(function(el){el.addEventListener('input',read);el.addEventListener('change',read);});read();
       field('cbSave').onclick=async function(){read();if(field('cbSave').disabled)return;if((c.epaId||c.vin)&&!await A.confirmDel({always:true,title:'Use completely custom data?',body:'The saved EPA rating and VIN association will be removed. Discard changes in the vehicle editor can restore them.',action:'Use custom data',goClass:'tonal caution'}))return;
         ['epaId','epaBase','epa','vin','vpicModel','catalog','recallCheck','vinHints'].forEach(function(k){delete c[k];});if(c.power!==draft.power){c.obs={};c.tank='';c.tankSrc='';c.grade='';}Object.assign(c,{name:draft.name||[draft.year,draft.make,draft.model].join(' '),year:draft.year,make:draft.make,model:draft.model,power:draft.power,type:draft.type,entryMode:'custom'});if(c.power==='diesel')c.grade='diesel';close();draw();changed();};

@@ -23,7 +23,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.match(sp.note,/off for this route: without a Google API key/);assert.ok(sp.inputs>0&&sp.enabled===0,'every control there, none usable');assert.ok(sp.tog&&sp.all,'the slider and the by-road entrance stay on screen');assert.equal(sp.pe,'none');
  assert.equal(await p.evaluate(()=>__trip.state().result.planOffs==null||!/[1-9]/.test(__trip.state().result.planOffs)),true,'planned at the limits, not your +5 rule');
  if(shots)await p.screenshot({path:shots+'/nokey-adjust.png',fullPage:false});
- await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tRule');
+ await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tRule');
  const pr=await p.evaluate(()=>{const c=document.getElementById('tRule').closest('.card');return {off:c.classList.contains('spd-off'),note:(c.querySelector('.spd-off-note')||{}).textContent||'',first:c.children[1]&&c.children[1].className,enabled:[...c.querySelectorAll('input,button,select')].filter(x=>!x.disabled).length};});
  console.log('  Parameters:',JSON.stringify(pr));
  assert.ok(pr.off&&/API key/.test(pr.note)&&pr.first==='spd-off-note'&&pr.enabled===0,'the cruising-speed card: under its heading, grayed out');

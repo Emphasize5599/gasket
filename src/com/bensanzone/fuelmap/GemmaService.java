@@ -30,6 +30,8 @@ final class GemmaService {
     private volatile boolean closed;
     private volatile String phase = "idle", error = "", task = "";
     private volatile long downloaded, lastNotify;
+    private volatile String reason = "";
+    private volatile int attempt = 1;
     private volatile boolean ready;
     private long activeTicket;
 
@@ -44,13 +46,14 @@ final class GemmaService {
             && model.lastModified() == prefs.getLong("verifiedMtime", -1);
     }
     private boolean supported() { return Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a") || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64"); }
-    private boolean enabled() { return prefs.getBoolean("enabled", false); }
+    private boolean enabled() { return prefs.getBoolean("enabled", true); }
     JSONObject status() {
         JSONObject value = new JSONObject();
         try {
             value.put("enabled", enabled()); value.put("ready", ready); value.put("supported", supported());
             value.put("phase", phase); value.put("error", error); value.put("bytes", downloaded); value.put("total", BYTES);
             value.put("task", task);
+            value.put("reason", reason); value.put("attempt", attempt);
             value.put("revision", REV); value.put("busy", busy.get());
             if (runtime != null) value.put("backend", runtime.backend);
         } catch (Exception ignored) { }
@@ -64,7 +67,9 @@ final class GemmaService {
     }
     synchronized void command(int id, String command) {
         if (closed) return;
-        if ("cancel".equals(command) || "disable".equals(command)) {
+        if("cancelAdvice".equals(command)&&!"advice".equals(task)){listener.result(id,status());return;}
+        if ("cancel".equals(command) || "cancelAdvice".equals(command) || "disable".equals(command)) {
+            reason="disable".equals(command)?"Larger AI disabled by user":"cancelAdvice".equals(command)?"Advice cancelled after setup change or timeout":"Task paused by user";
             if ("disable".equals(command)) prefs.edit().putBoolean("enabled", false).apply();
             epoch.incrementAndGet();
             GemmaRuntime active = runtime; if (active != null) active.cancel();
@@ -90,13 +95,14 @@ final class GemmaService {
         } else if ("download".equals(command)) {
             if (!enabled() || !supported()) { result(id, null, "Enable the larger model first."); return; }
             if (ready || !busy.compareAndSet(false, true)) { listener.result(id, status()); return; }
-            long ticket = epoch.incrementAndGet(); error = ""; task = "download"; phase = "download"; notifyStatus();
+            long ticket = epoch.incrementAndGet(); error = ""; reason="";attempt=1;task = "download"; phase = "download"; notifyStatus();
             worker.execute(() -> {
                 try {
                     // An unverified leftover is never loaded. Re-download rather than blessing it by size.
                     if (model.exists() && !model.delete()) throw new Exception("Remove the unverified model before downloading again.");
                     ModelDownload.fetch(new URL(URL_MODEL), partial, model, BYTES, SHA, new ModelDownload.Control() {
                         public boolean cancelled() { return closed || ticket != epoch.get() || !enabled(); }
+                        public void retry(int next, String why) { attempt=next;reason=why;phase="retry";notifyStatus(); }
                         public void progress(long count, boolean verifying) {
                             downloaded = count; phase = verifying ? "verify" : "download";
                             long now = System.currentTimeMillis(); if (verifying || now - lastNotify > 500) { lastNotify = now; notifyStatus(); }
@@ -105,9 +111,10 @@ final class GemmaService {
                     prefs.edit().putString("verifiedSha", SHA).putLong("verifiedMtime", model.lastModified()).commit();
                     ready = SHA.equals(prefs.getString("verifiedSha", "")) && model.lastModified() == prefs.getLong("verifiedMtime", -1);
                     if (!ready) throw new Exception("Could not record model verification.");
+                    reason="";
                 } catch (Exception failure) {
-                    if (ticket == epoch.get()) error = failure.getMessage() == null ? "Model download failed." : failure.getMessage();
-                } finally { busy.set(false); phase = "idle"; task = ""; notifyStatus(); }
+                    if (ticket == epoch.get()) {error = failure.getMessage() == null ? "Model download failed." : failure.getMessage();reason=failure.getClass().getSimpleName();}
+                } finally { downloaded=ready?BYTES:partial.length();busy.set(false); phase = "idle"; task = ""; notifyStatus(); }
             });
         } else { result(id, null, "Unknown model command."); return; }
         listener.result(id, status()); notifyStatus();
@@ -117,7 +124,7 @@ final class GemmaService {
         // Conservative UTF-8 bound: leave room for instructions/output in the 32k token context. Never truncate rules.
         if (prompt == null || prompt.getBytes(StandardCharsets.UTF_8).length > 27000) { result(id, null, "Complete tire setup exceeds the model context budget."); return; }
         if (!busy.compareAndSet(false, true)) { result(id, null, "Larger model is already working."); return; }
-        final long ticket = epoch.incrementAndGet(); error = ""; task = "advice"; phase = "load"; notifyStatus();
+        final long ticket = epoch.incrementAndGet(); error = ""; reason="";task = "advice"; phase = "load"; notifyStatus();
         activeTicket = ticket;
         final long started = System.nanoTime();
         ScheduledFuture<?> deadline = timer.scheduleAtFixedRate(() -> {

@@ -7,8 +7,24 @@ import java.util.Locale;
 
 /** Streaming, resumable, checksum-verified download. No model bytes enter the Java heap as a whole. */
 final class ModelDownload {
-    interface Control { boolean cancelled(); void progress(long bytes, boolean verifying); }
+    private static final class NetworkReadException extends IOException { NetworkReadException(IOException cause) { super("Model network read interrupted.",cause); } }
+    interface Control { boolean cancelled(); void progress(long bytes, boolean verifying); default void retry(int attempt, String reason) {} }
     static void fetch(URL url, File partial, File destination, long expected, String sha, Control control) throws Exception {
+        for(int attempt=1;;attempt++) {
+            try { fetchOnce(url,partial,destination,expected,sha,control);return; }
+            catch(IOException failure) {
+                if(control.cancelled())throw new InterruptedIOException("Model download paused.");
+                String message=String.valueOf(failure.getMessage());
+                boolean transientFailure=failure instanceof NetworkReadException||failure instanceof SocketTimeoutException||failure instanceof SocketException||failure instanceof EOFException
+                    ||message.startsWith("Model download was interrupted")||message.matches(".*HTTP (?:408|429|5[0-9][0-9]).*");
+                if(!transientFailure||attempt>=4)throw failure;
+                control.progress(partial.length(),false);control.retry(attempt+1,"Temporary network interruption");
+                long until=System.currentTimeMillis()+(1L<<(attempt-1))*1000;
+                while(System.currentTimeMillis()<until){if(control.cancelled())throw new InterruptedIOException("Model download paused.");Thread.sleep(100);}
+            }
+        }
+    }
+    private static void fetchOnce(URL url, File partial, File destination, long expected, String sha, Control control) throws Exception {
         if (control.cancelled()) throw new InterruptedIOException("Model download paused.");
         if (destination.exists()) throw new IOException("Remove the existing model before replacing it.");
         long start = partial.exists() ? partial.length() : 0;
@@ -30,7 +46,9 @@ final class ModelDownload {
                     throw new IOException("Not enough free storage for the model and working space.");
                 try (InputStream in = connection.getInputStream(); FileOutputStream out = new FileOutputStream(partial, start > 0)) {
                     byte[] buffer = new byte[256 * 1024]; long count = start; int read;
-                    while ((read = in.read(buffer)) != -1) {
+                    while (true) {
+                        try {read=in.read(buffer);} catch(IOException interrupted) {throw new NetworkReadException(interrupted);}
+                        if(read==-1)break;
                         if (control.cancelled()) throw new InterruptedIOException("Model download paused.");
                         if (count + read > expected) throw new IOException("Model is larger than the pinned download.");
                         out.write(buffer, 0, read); count += read; control.progress(count, false);

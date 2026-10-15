@@ -6,7 +6,7 @@ fs.copyFileSync(path.resolve('src/com/bensanzone/fuelmap/ModelDownload.java'),pa
 const java=`package com.bensanzone.fuelmap;
 import java.io.*;import java.net.*;import java.nio.file.*;import java.security.*;import com.sun.net.httpserver.*;
 public class DownloadTest {
- static byte[] data=new byte[1024*1024];static String hash;static File folder;static String base;static int requests;
+ static byte[] data=new byte[1024*1024];static String hash;static File folder;static String base;static int requests,flaky;
  static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
  static class Control implements ModelDownload.Control {long bytes;boolean cancel=false;public boolean cancelled(){return cancel;}public void progress(long b,boolean verify){bytes=b;}}
  static void run(String mode,int pre,boolean fail,boolean cancel) throws Exception {
@@ -20,12 +20,12 @@ public class DownloadTest {
   StringBuilder digest=new StringBuilder();for(byte b:MessageDigest.getInstance("SHA-256").digest(data))digest.append(String.format("%02x",b&255));hash=digest.toString();
   HttpServer server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
   server.createContext("/",e->{try{requests++;String mode=e.getRequestURI().getPath();String range=e.getRequestHeaders().getFirst("Range");int start=range==null||mode.contains("ignored")?0:Integer.parseInt(range.substring(6,range.length()-1));
-   if(mode.contains("error")){e.sendResponseHeaders(503,-1);return;}
+   if(mode.contains("error")||mode.contains("flaky")&&flaky++==0){e.sendResponseHeaders(503,-1);return;}
    if(start>0)e.getResponseHeaders().set("Content-Range","bytes "+(mode.contains("bad-range")?start+1:start)+"-"+(data.length-1)+"/"+data.length);
    byte[] body=java.util.Arrays.copyOfRange(data,start,data.length);if(mode.contains("corrupt"))body[0]++;
    e.sendResponseHeaders(start>0?206:200,body.length);e.getResponseBody().write(body);
   }finally{e.close();}});server.start();base="http://127.0.0.1:"+server.getAddress().getPort()+"/";
-  try{run("fresh",0,false,false);run("resume",12345,false,false);run("ignored",12345,false,false);run("bad-range",12345,true,false);run("corrupt",0,true,false);run("cancelled",0,true,true);run("error",0,true,false);
+  try{run("fresh",0,false,false);run("resume",12345,false,false);run("ignored",12345,false,false);int beforeBad=requests;run("bad-range",12345,true,false);check(requests==beforeBad+1,"Bad range retried");run("corrupt",0,true,false);run("cancelled",0,true,true);int beforeError=requests;run("error",0,true,false);check(requests==beforeError+4,"HTTP retries were not bounded");run("flaky",12345,false,false);check(flaky==2,"Temporary failure did not resume");
    check(!new File(folder,"corrupt.part").exists(),"Corrupt partial retained");check(new File(folder,"cancelled.part").length()>0,"Cancelled partial lost");
    File part=new File(folder,"complete.part"),dest=new File(folder,"complete.model");Files.write(part.toPath(),data);int before=requests;ModelDownload.fetch(new URL(base+"complete"),part,dest,data.length,hash,new Control());check(requests==before,"Complete partial was downloaded again");
    System.out.println("Native model download: fresh, resume, ignored/bad range, checksum, cancellation, HTTP failure and promotion passed");
