@@ -1,0 +1,70 @@
+plugins { id 'com.android.application' version '8.13.2' }
+
+// Keep version/package data in the existing manifest so release tooling has one source of truth.
+def manifestText = file('AndroidManifest.xml').getText('UTF-8')
+def appPackage = (manifestText =~ /package="([^"]+)"/)[0][1]
+def appCode = (manifestText =~ /android:versionCode="([^"]+)"/)[0][1].toInteger()
+def appVersion = (manifestText =~ /android:versionName="([^"]+)"/)[0][1]
+// AGP requires namespace in Gradle, not the source manifest. Do not rewrite the checked-in file.
+def preparedManifest = layout.buildDirectory.file('gasket-manifest/AndroidManifest.xml')
+tasks.register('prepareGasketManifest') {
+    inputs.file('AndroidManifest.xml'); outputs.file(preparedManifest)
+    doLast {
+        def out = preparedManifest.get().asFile
+        out.parentFile.mkdirs()
+        out.setText(manifestText.replaceFirst(/\s+package="[^"]+"/, ''), 'UTF-8')
+    }
+}
+android {
+    namespace appPackage
+    compileSdk 35
+    defaultConfig {
+        applicationId appPackage
+        minSdk 31
+        targetSdk 35
+        versionCode appCode
+        versionName appVersion
+        // LiteRT-LM ships arm64 and x86_64; other devices keep the non-AI app usable.
+    }
+    sourceSets.main {
+        manifest.srcFile preparedManifest
+        java.srcDirs = ['src']
+        res.srcDirs = ['res']
+        assets.srcDirs = ['assets']
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+    buildTypes.release { minifyEnabled false }
+    packaging {
+        jniLibs { useLegacyPackaging = false }
+        // Full license texts are preserved in runtime-notices.txt instead of conflicting archive paths.
+        resources.excludes += ['META-INF/INDEX.LIST', 'META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*']
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'prepareGasketManifest' }
+dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.18.0' }
+
+// Preserve the AAR's full native third-party notices and every resolved Java dependency's license files.
+def noticesDirectory = layout.buildDirectory.dir('runtime-assets')
+tasks.register('prepareRuntimeNotices') {
+    inputs.files(configurations.releaseRuntimeClasspath)
+    outputs.dir(noticesDirectory)
+    doLast {
+        def output = new File(noticesDirectory.get().asFile, 'runtime-notices.txt')
+        output.parentFile.mkdirs()
+        output.withWriter('UTF-8') { writer ->
+            writer.write('Gasket on-device AI runtime notices\n\n')
+            configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.sort { it.moduleVersion.id.toString() }.each { artifact ->
+                writer.write('\n=== ' + artifact.moduleVersion.id + ' ===\n')
+                if (artifact.name == 'litertlm-android') {
+                    def sha = java.security.MessageDigest.getInstance('SHA-256').digest(artifact.file.bytes).encodeHex().toString()
+                    if (sha != '706cbb8a87739b2818111bf3a19a78b8f7781586d10f80adf3415581fab7595f') throw new GradleException('Pinned LiteRT-LM AAR checksum changed')
+                }
+                def notices = zipTree(artifact.file).matching { include '**/*LICENSE*', '**/*NOTICE*', '**/*license*', '**/*notice*' }
+                notices.files.sort().each { entry -> writer.write('\n' + entry.name + '\n' + entry.getText('UTF-8') + '\n') }
+                if (artifact.name == 'litertlm-android' && !notices.files.any { it.name == 'THIRD_PARTY_NOTICE.txt' }) throw new GradleException('Native license notices are missing')
+            }
+        }
+    }
+}
+android.sourceSets.main.assets.srcDir(noticesDirectory)
+tasks.named('preBuild').configure { dependsOn 'prepareRuntimeNotices' }

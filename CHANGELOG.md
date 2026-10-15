@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.159 - 2026-10-15 (keyless test branch only)
+- Optional Gemma 4 E4B tire explanations with a verified, resumable model download.
+- Expandable top progress bar for simultaneous background tasks.
+- Tire advice identifies affected tires; safety notices remain independent of AI.
+
 ## 0.0.158 - 2026-10-15 (keyless test branch only)
 - Estimated tire wear graphics and required tire details.
 - Shared route searches, faster background planning and per-leg sliders/maps.

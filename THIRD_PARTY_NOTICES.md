@@ -71,6 +71,12 @@ Advisory rates how serious a recall is on the phone. The first time it's needed,
 
 The recall text is rated on the phone; it isn't sent anywhere.
 
+## Optional on-device explanations
+
+Gemma 4 E4B instruction-tuned, Google, is downloaded only with consent; it is not bundled in the APK. Apache License 2.0. Model: https://huggingface.co/google/gemma-4-E4B-it . LiteRT conversion: https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm . Downloaded weights stay on the device and are excluded from backups.
+
+LiteRT-LM Android 0.18.0 (Google AI Edge, Apache License 2.0) is bundled for native inference: https://github.com/google-ai-edge/LiteRT-LM . Java dependencies include Gson 2.14.0 (Google), Kotlin 2.4.0 and Kotlin coroutines 1.11.0 (JetBrains), under Apache License 2.0. The build preserves the resolved dependency license files and LiteRT-LM's complete native THIRD_PARTY_NOTICE.txt, including its differently licensed components. These are available using **Full AI runtime license notices** in Licenses & credits. The runtime's Apache license also accompanies these notices.
+
 ## Map data and online services
 
 None of this data is bundled in the repository. The app fetches it while it runs, and each source's own terms apply.

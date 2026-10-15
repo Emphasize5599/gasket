@@ -38,7 +38,13 @@
   var KV = function () { return root.__app && root.__app.KV; };
   // how far along: the download (first time only, 0–70%), working out the examples (70–95%), then ready
   var prog = { f: 0, label: 'Waiting to rate' }, listeners = [];
-  function setProg(f, label) { prog = { f: Math.max(prog.f, Math.min(1, f)), label: label }; listeners.forEach(function (fn) { try { fn(prog); } catch (e) { } }); }
+  var comparing = 0;
+  function taskStatus() {
+    if (!root.Tasks) return;
+    if (state === 'loading' || running || comparing) root.Tasks.upsert('lightweight-ai', { text: state === 'loading' ? prog.label : running && comparing ? 'AI: rating recalls and route hazards…' : running ? 'AI: rating safety recalls…' : 'AI: reading route hazards…', frac: null });
+    else root.Tasks.remove('lightweight-ai');
+  }
+  function setProg(f, label) { prog = { f: Math.max(prog.f, Math.min(1, f)), label: label }; taskStatus(); listeners.forEach(function (fn) { try { fn(prog); } catch (e) { } }); }
   var files = {};
   function onFile(p) {
     if (!p || !p.total) return;
@@ -116,7 +122,7 @@
       state = 'ready'; setProg(0.95, 'Rating');
       if (root.FLog) root.FLog.info('car', 'Recall rating model ready (' + (mode === 'worker' ? 'background worker' : 'in the page') + ')');
       return embed;
-    })().catch(function (e) { state = 'failed'; loading = null; throw e; });
+    })().catch(function (e) { state = 'failed'; loading = null; taskStatus(); throw e; });
     return loading;
   }
   function score(v) {
@@ -149,9 +155,10 @@
     if (done && (todo.length || running) && dones.indexOf(done) < 0) dones.push(done);
     if (running || !queue.length) return;
     running = true;
+    taskStatus();
     var mock = root.__mocks && root.__mocks.severity;        // the desktop tests stand in for the model
     var tell = function () { var d = dones.slice(); d.forEach(function (f) { try { f(); } catch (e) { } }); };
-    var finish = function () { running = false; queue = []; queued = {}; if (root.__app && root.__app.save) root.__app.save(); var d = dones; dones = []; d.forEach(function (f) { try { f(); } catch (e) { } }); };
+    var finish = function () { running = false; taskStatus(); queue = []; queued = {}; if (root.__app && root.__app.save) root.__app.save(); var d = dones; dones = []; d.forEach(function (f) { try { f(); } catch (e) { } }); };
     (async function () {
       if (!mock) await load();
       var st = store();
@@ -174,6 +181,7 @@
    *  if needed), or null when it can't (no model in the tests, or it failed). */
   function compare(txt, groups) {
     if (root.__mocks && root.__mocks.severity) return Promise.resolve(null);
+    comparing++; taskStatus();
     return load().then(async function () {
       var names = Object.keys(groups), all = [String(txt).slice(0, 300)];
       names.forEach(function (g) { all = all.concat(groups[g]); });
@@ -183,7 +191,7 @@
         out[g] = (sc[0] + (sc[1] != null ? sc[1] : sc[0])) / 2;
       });
       return out;
-    }).catch(function () { return null; });
+    }).catch(function () { return null; }).finally(function () { comparing--; taskStatus(); });
   }
   root.Severity = { get: get, rate: rate, busy: busy, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

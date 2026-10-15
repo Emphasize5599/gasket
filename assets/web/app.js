@@ -867,6 +867,10 @@
       '<div class="card lic-doc">' + mdHtml(L.notices) + '</div>' +
       '<div class="card lic-doc">' + mdHtml(L.license) + '</div>';
     var pg = $('licPage'); pg.innerHTML = h; pg.classList.remove('hidden'); pg.scrollTop = 0;
+    if (N.aiNotices) {
+      var runtimeLicenses=document.createElement('button');runtimeLicenses.className='btn tonal';runtimeLicenses.textContent='Full AI runtime license notices';pg.appendChild(runtimeLicenses);
+      runtimeLicenses.onclick=async function(){runtimeLicenses.disabled=true;try{var r=await window.__trip.call('aiNotices');if(r.error){toast(r.error);return;}subPage('AI runtime licenses','<pre class="logtxt" style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(r.body)+'</pre>');}finally{runtimeLicenses.disabled=false;}};
+    }
     $('licBack').onclick = function () { pg.classList.add('hidden'); };
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
   }
@@ -1127,6 +1131,7 @@
 
     h += '<div class="card"><h3>General</h3>' +
       '<div class="field"><div class="lbl">Ask before deleting<small>A confirmation before anything is deleted or removed — cars, mileage entries, saved trips, lists, the cache.</small></div>' + sw('confirmDeletes', S.confirmDeletes !== false) + '</div></div>';
+    if (!onboarding && window.Gemma) h += Gemma.settingsHtml();
     h += '<div class="card"><h3>Discounts</h3>' +
       '<div class="field"><div class="lbl">Walmart+ member<small>10¢/gal off (5¢ in Alabama) at Walmart, Murphy, Exxon, Mobil, CITGO; member pricing at Sam\'s.</small></div>' + sw('walmartPlus', S.walmartPlus) + '</div>' +
       '<div class="field"><div class="lbl">Club CITGO status<small>Stacks with Walmart+ at CITGO. Club 3¢, Premier 6¢ (12 fills of 8+ gal in a quarter).</small></div><select id="citgoTier">' +
@@ -1191,6 +1196,7 @@
     var pg = $('settings'),oldBody=pg.querySelector('.settings-body');if(oldBody&&oldBody._hint)oldBody._hint._dispose();pg.classList.add('settings-layout');pg.innerHTML='<header class="settings-bar">'+heading+'</header><div class="settings-body">'+h+'</div>'; pg.classList.remove('hidden');pg.querySelector('.settings-body').scrollTop=0;scrollHint(pg.querySelector('.settings-body'));
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
     $('sDone').onclick = function () { closeSettings(true); };
+    if (window.Gemma) Gemma.bindSettings();
     $('keylessWorkers').oninput=function(){this.dataset.manual='yes';$('workerValue').textContent=this.value;};
     $('workerAuto').onclick=function(){$('keylessWorkers').value=workerAuto;$('keylessWorkers').dataset.manual='no';$('workerValue').textContent='Auto · '+workerAuto;};
     $('sLogView').onclick = function () { showLog(); };
@@ -1364,6 +1370,7 @@
     var locks = JOB_LOCKS.concat(job && job.locks || []);
     job = null; document.body.classList.remove('job-on', 'job-map');
     locks.forEach(function (id) { var b = $(id); if (b) b.disabled = false; });
+    if (window.Tasks) { Tasks.remove('stations', done); return; }
     var bar = $('jobBar'); if (!bar) return;
     if (done && done.text) {
       bar.className = 'job-bar done'; bar.innerHTML = '<span class="jb-t">' + esc(done.text) + '</span>' + (done.action ? '<button class="btn primary sm jb-go">' + esc(done.action) + '</button>' : '') + '<button class="jb-x" aria-label="Close">✕</button>';
@@ -1378,6 +1385,11 @@
       .replace(/ areas to (?:search|check)/, ' areas').replace(/(\d+\/\d+) areas/, '$1').replace(/ · Estimating time…/, '').replace(/ remaining/, ' left').replace(/^Finding stations$/, 'Stations');
   }
   function jobDraw() {
+    if (window.Tasks) {
+      if (job) Tasks.upsert('stations', { text: job.cancelling ? 'Cancelling…' : job.text, frac: job.frac, priority: 10, inline: job.inline, cancel: function () { if (job && job.cancel) { job.cancelling = true; job.cancel(); } } });
+      else Tasks.draw();
+      return;
+    }
     var bar = $('jobBar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'jobBar'; bar.setAttribute('role', 'status'); document.body.appendChild(bar); }
     if (!job) { bar.classList.add('hidden'); return; }
@@ -1426,7 +1438,7 @@
     var c = map.getCenter(), b = map.getBounds();
     fetchAround(c.lat, c.lng, [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()]);
   };
-  window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (document.querySelector('.qpop')) { window.__closeQ(); return true; } if (window.__subClose) { window.__subClose(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
+  window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (window.Tasks && Tasks.back()) return true; if (document.querySelector('.qpop')) { window.__closeQ(); return true; } if (window.__subClose) { window.__subClose(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }
     if (!$('licPage').classList.contains('hidden')) { $('licPage').classList.add('hidden'); return true; }
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
@@ -1545,7 +1557,7 @@
   window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
-    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
+    logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, jobShort: jobShort, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
   window.__app.confirmDiscard=function(){return confirmDel({always:true,title:'Discard changes?',body:'Your changes in this editor will be undone.',action:'Discard changes',goClass:'tonal caution'});};
   // Keep Android's native select/date dialogs out of app-owned forms. OS file,
   // permission and sharing panels remain system-owned.

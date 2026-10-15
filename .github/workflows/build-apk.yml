@@ -8,6 +8,9 @@ on:
       - .github/workflows/build-apk.yml
       - AndroidManifest.xml
       - build.sh
+      - build.gradle
+      - settings.gradle
+      - gradle.properties
       - src/**
       - res/**
       - assets/**
@@ -60,6 +63,10 @@ on:
       - tests/nhtsa-catalog.test.js
       - tests/setup-demo.test.js
       - tests/background-search.test.js
+      - tests/tasks.test.js
+      - tests/gemma.test.js
+      - tests/gemma-ui.test.js
+      - tests/gemma-native.test.js
 
 permissions:
   contents: write
@@ -112,27 +119,30 @@ jobs:
             echo "::notice::APK signing is not configured. Add repository Actions secrets KS_PASS and GASKET_KEYSTORE_B64 using the existing release key, then run this workflow on main. No replacement key will be generated."
           fi
 
-      - name: Cache checksum-pinned Android compile platform
+      - uses: actions/setup-java@v4
+        if: steps.signing.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache pinned Gradle and native dependencies
         if: steps.signing.outputs.ready == 'true'
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/platform-31.zip
-          key: gasket-android-platform-31-ca5bcaa565cb37e9d287051d6dd0e49a5426ec29
+          path: |
+            ~/.cache/gasket-gradle
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gasket-gradle-8.13-${{ hashFiles('build.gradle', 'settings.gradle', 'gradle.properties') }}
+          restore-keys: ${{ runner.os }}-gasket-gradle-8.13-
 
-      - name: Install Android SDK tools and Java
+      - name: Prepare Android compile platform
         if: steps.signing.outputs.ready == 'true'
-        # a stuck package mirror fails here (and retries) instead of hanging the build for hours
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: |
-          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-          sudo apt-get $APT update
-          sudo apt-get $APT install -y android-sdk android-sdk-build-tools android-sdk-platform-23 openjdk-17-jdk-headless
-          if [ ! -s "$RUNNER_TEMP/platform-31.zip" ]; then
-            curl --fail --location --retry 2 https://dl.google.com/android/repository/platform-31_r01.zip -o "$RUNNER_TEMP/platform-31.zip"
-          fi
-          echo "ca5bcaa565cb37e9d287051d6dd0e49a5426ec29  $RUNNER_TEMP/platform-31.zip" | sha1sum -c -
-          unzip -q "$RUNNER_TEMP/platform-31.zip" -d "$RUNNER_TEMP/gasket-platform"
-          echo "ANDROID_JAR=$(find "$RUNNER_TEMP/gasket-platform" -name android.jar -print -quit)" >> "$GITHUB_ENV"
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_JAR=$ANDROID_HOME/platforms/android-35/android.jar" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
 
       - name: Read app version
         if: steps.signing.outputs.ready == 'true'
@@ -144,7 +154,9 @@ jobs:
 
       - name: Test actual native Routes reservation gate
         if: steps.signing.outputs.ready == 'true'
-        run: GASKET_NATIVE_TESTS=1 node tests/routes-budget.test.js
+        run: |
+          GASKET_NATIVE_TESTS=1 node tests/routes-budget.test.js
+          GASKET_NATIVE_TESTS=1 node tests/gemma-native.test.js
 
       - name: Build with the existing release key and verify APK
         if: steps.signing.outputs.ready == 'true'

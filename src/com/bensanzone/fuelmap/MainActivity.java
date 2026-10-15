@@ -77,6 +77,19 @@ public class MainActivity extends Activity {
             + "places.addressComponents,places.types,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
 
     private WebView web;
+    private GemmaService gemma;
+    private synchronized GemmaService gemma() {
+        if (gemma == null) gemma = new GemmaService(getApplicationContext(), new GemmaService.Listener() {
+            public void status(JSONObject value) { js("window.onGemmaStatus&&window.onGemmaStatus(" + value.toString() + ");"); }
+            public void result(int id, JSONObject value) { reply(id, value); }
+        });
+        return gemma;
+    }
+
+    @Override protected void onDestroy() {
+        synchronized (this) { if (gemma != null) { gemma.close(); gemma = null; } }
+        super.onDestroy();
+    }
     private boolean rendererRecoveryPending = false;
     private void recoverRendererUi() {
         if (rendererRecoveryPending) return;
@@ -1152,6 +1165,17 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
+        @JavascriptInterface public String aiStatus() { return gemma().status().toString(); }
+        @JavascriptInterface public void aiCommand(int reqId, String command) { gemma().command(reqId, command); }
+        @JavascriptInterface public void aiGenerate(int reqId, String prompt) { gemma().generate(reqId, prompt); }
+        @JavascriptInterface public void aiNotices(final int reqId) {
+            new Thread(() -> {
+                JSONObject value = new JSONObject();
+                try (InputStream input = getAssets().open("runtime-notices.txt")) { value.put("body", readAll(input)); }
+                catch (Exception failure) { try { value.put("error", "Runtime notices could not be read."); } catch (Exception ignored) { } }
+                reply(reqId, value);
+            }, "AI-license-notices").start();
+        }
         /** Debug log lives in a private file (only when you turn debug logging on). */
         @JavascriptInterface
         public void saveLog(String text) {

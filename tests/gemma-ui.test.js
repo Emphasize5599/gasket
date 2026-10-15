@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
+assert.equal(await p.locator('#gemmaSettings').count(),0,'onboarding remains future work');await p.click('#sDone');
+await p.evaluate(()=>{
+ window.aiCalls=[];window.aiPending=[];window.aiActive=0;window.aiMax=0;window.modelState={enabled:false,ready:false,supported:true,phase:'idle',busy:false,total:3659530240,revision:'fixture'};
+ __app.N.aiStatus=()=>JSON.stringify(modelState);
+ __app.N.aiCommand=(id,cmd)=>{aiCalls.push(cmd);if(cmd==='enable')modelState.enabled=true;if(cmd==='disable')modelState.enabled=false;if(cmd==='cancel'||cmd==='disable'){modelState.phase='idle';modelState.busy=false;aiPending.splice(0).forEach(x=>{aiActive--;onNativeResult(x.id,{error:'cancelled'});});}if(cmd==='download'){modelState.phase='download';modelState.task='download';modelState.busy=true;}onNativeResult(id,{...modelState});onGemmaStatus({...modelState});};
+ __app.N.aiGenerate=(id,prompt)=>{aiActive++;aiMax=Math.max(aiMax,aiActive);aiPending.push({id,prompt});modelState.phase='generate';modelState.task='advice';modelState.busy=true;onGemmaStatus({...modelState});};
+ window.resolveAI=()=>{const pending=aiPending.shift();if(!pending)return;const pack=JSON.parse(pending.prompt.split('FULL POLICY AND DATA:\n')[1]);aiActive--;onNativeResult(pending.id,{text:JSON.stringify({summary:'The rear tread needs attention first.',actions:pack.actions.map(a=>({id:a.id,why:'Consider the checked condition and fitment together.'})),facts:pack.facts.map(f=>f.id)})});modelState.phase='idle';modelState.busy=false;onGemmaStatus({...modelState});};
+ onGemmaStatus({...modelState});__app.openSettings(false);
+});
+await p.locator('#gemmaSettings').scrollIntoViewIfNeeded();await p.click('#gemmaEnable');assert(!await p.isDisabled('#gemmaDownload'));assert.equal(await p.evaluate(()=>aiCalls.includes('download')),false);
+await p.click('#gemmaDownload');await p.click('#cfmNo');assert.equal(await p.evaluate(()=>aiCalls.includes('download')),false,'explicit consent required');await p.click('#gemmaDownload');await p.click('#cfmYes');await p.waitForSelector('#jobBar');assert.match(await p.locator('#jobBar').innerText(),/Downloading Gemma/);
+await p.evaluate(()=>{__app.jobStart({kind:'map',label:'Discovering stations…',cancel:()=>{}});});await p.waitForSelector('#taskMore:not(.hidden)');await p.click('#taskMore');assert.match(await p.locator('#taskList').innerText(),/Downloading Gemma/);
+await p.evaluate(()=>{__app.jobEnd();modelState.phase='idle';modelState.busy=false;modelState.ready=true;onGemmaStatus({...modelState});const c=Garage.car();c.make='Example';c.info={drive:'rwd'};c.tires={size:'205/55R16',brand:'Example',model:'Tour',type:'Touring',corners:{split:true,mode:'depth',lf:{depth:8},rf:{depth:8},lr:{depth:2},rr:{depth:2}}};dispatchEvent(new Event('garagechange'));});
+await p.waitForFunction(()=>aiPending.length===1);assert.equal(await p.evaluate(()=>aiMax),1);
+await p.evaluate(()=>{Garage.car().tires.corners.lr.depth=3;dispatchEvent(new Event('garagechange'));});await p.waitForFunction(()=>aiPending.length===1&&aiCalls.includes('cancel'));assert.equal(await p.evaluate(()=>aiMax),1,'no overlapping generation');
+await p.evaluate(()=>resolveAI());await p.waitForFunction(()=>!!Gemma.answer(Garage.car()));const answer=await p.evaluate(()=>Gemma.answer(Garage.car()));assert.equal(answer.pack.setup.tires.find(t=>t.id==='lr').depth,3);
+await p.evaluate(()=>{Garage.car().tires.corners.lr.depth=1;dispatchEvent(new Event('garagechange'));});await p.waitForFunction(()=>aiPending.length===1);assert.equal(await p.evaluate(()=>Gemma.answer(Garage.car())),null,'old result cannot apply to edited setup');
+await p.evaluate(()=>__app.N.aiCommand(-1,'disable'));await p.waitForTimeout(300);assert.equal(await p.evaluate(()=>Gemma.answer(Garage.car())),null);assert.equal(await p.evaluate(()=>aiActive),0);
+assert.deepEqual(errors,[]);assert.equal(await p.evaluate(()=>Object.prototype.hasOwnProperty.call(__app.S,'gemmaEnabled')),false,'restoring settings cannot trigger a model download');
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

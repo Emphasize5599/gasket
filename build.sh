@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
-# Gradle-free build: aapt -> javac -> dx -> zipalign -> apksigner
+# Dependency-aware build for LiteRT-LM's native AARs; signing identity is unchanged.
 set -euo pipefail
 cd "$(dirname "$0")"
-SDK=/usr/lib/android-sdk
-BT=$SDK/build-tools/debian
-JAR=${ANDROID_JAR:-$SDK/platforms/android-31/android.jar}
-RESOURCE_JAR=$SDK/platforms/android-23/android.jar
-OUT=build
+SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}
 APK=Gasket.apk
 
 # signing: the keystore and its password never live in the repo (see SIGNING.md). The password comes from KS_PASS.
@@ -30,18 +26,20 @@ if [ ! -f "$KS" ]; then
   exit 1
 fi
 
-rm -rf $OUT && mkdir -p $OUT/gen $OUT/classes
+# A checksum-pinned distribution replaces a binary wrapper checked into source.
+GRADLE_CACHE=${GASKET_GRADLE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/gasket-gradle}
+GRADLE_SHA=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78
+mkdir -p "$GRADLE_CACHE"
+if [ ! -x "$GRADLE_CACHE/gradle-8.13/bin/gradle" ]; then
+  curl --fail --location --retry 2 https://services.gradle.org/distributions/gradle-8.13-bin.zip -o "$GRADLE_CACHE/gradle-8.13-bin.zip"
+  echo "$GRADLE_SHA  $GRADLE_CACHE/gradle-8.13-bin.zip" | sha256sum -c -
+  unzip -q -o "$GRADLE_CACHE/gradle-8.13-bin.zip" -d "$GRADLE_CACHE"
+fi
+ANDROID_HOME="$SDK" "$GRADLE_CACHE/gradle-8.13/bin/gradle" --console=plain --no-daemon assembleRelease
+SIGNER=${APKSIGNER:-$(find "$SDK/build-tools" -name apksigner -type f | sort -V | tail -1)}
+test -n "$SIGNER"
 
-aapt package -f -m -J $OUT/gen -M AndroidManifest.xml -S res -I $RESOURCE_JAR
-javac -nowarn -Xlint:none -source 8 -target 8 -bootclasspath $JAR -encoding UTF-8 \
-  -d $OUT/classes $(find src $OUT/gen -name '*.java') 2>&1 | grep -v 'warning' || true
-test -f $OUT/classes/com/bensanzone/fuelmap/MainActivity.class
-java -jar $BT/lib/dx.jar --dex --min-sdk-version=26 --output=$OUT/classes.dex $OUT/classes
-aapt package -f -M AndroidManifest.xml -S res -A assets -I $RESOURCE_JAR -F $OUT/unsigned.apk
-(cd $OUT && aapt add -f unsigned.apk classes.dex >/dev/null)
-zipalign -f -p 4 $OUT/unsigned.apk $OUT/aligned.apk
-
-apksigner sign --ks "$KS" --ks-pass env:KS_PASS --key-pass env:KS_PASS \
-  --min-sdk-version 31 --out $APK $OUT/aligned.apk
-apksigner verify --print-certs $APK | grep -E 'SHA-1|SHA-256' | head -2
+"$SIGNER" sign --ks "$KS" --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+  --min-sdk-version 31 --out "$APK" build/outputs/apk/release/Gasket-release-unsigned.apk
+"$SIGNER" verify --print-certs "$APK" | grep -E 'SHA-1|SHA-256' | head -2
 ls -la $APK

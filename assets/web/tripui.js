@@ -22,8 +22,11 @@
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|1\d|20)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|1\d|20)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
+      if (fn === 'aiGenerate') timeout = 125000;
+      if (fn === 'aiCommand') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
-        window.onNativeResult(id, { error: (args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
+        if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancel'); } catch (e) { }
+        window.onNativeResult(id, { error: (/^ai/.test(fn) ? 'Local AI' : args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
       try { N[fn].apply(N, [id].concat(args)); }
       catch (e) { window.onNativeResult(id, { error: String(e && e.message || e), code: 'bridge' }); }

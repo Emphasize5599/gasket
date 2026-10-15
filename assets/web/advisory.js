@@ -178,7 +178,7 @@
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
     var h = '<p class="lead small keep adv-lead">Things worth knowing about your ' + esc(G().shortName(c)) + ' before you drive.</p>';
-    h += recallCard(c) + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
+    h += recallCard(c) + (window.Gemma ? Gemma.card(c) : '') + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);
     syncDot();
@@ -309,6 +309,7 @@
       }).join('') + '</div>';
   }
   function bind(c) {
+    if ($('gemmaRetry')) $('gemmaRetry').onclick = function () { Gemma.retry(); };
     if($('advTowHelp'))$('advTowHelp').onclick=roadsideHelp;
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
     host.querySelectorAll('[data-cchk="recirc"]').forEach(function (b) { b.onchange = function () { if (window.Climate) Climate.setAck(b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
@@ -328,9 +329,10 @@
    * them before Advisory is opened. */
   function prefetch() { var c = car(); if (!c || !call) return; var R = c.recalls, key = recallKey(c);
     if (key && recallsStale(c, R, key)) fetchRecalls(c); else syncDot();
-    autoCheck(c); preRate(c); }
+    autoCheck(c); preRate(c); if (window.Gemma) Gemma.prefetch(); }
   function init(nativeCall) { call = nativeCall || call; prefetch(); }
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
+  window.addEventListener('gemmachange', function () { if (host && host.isConnected) draw(); });
   function wake() { if (stale) draw(); }
 
   window.Advisory = { init: init, render: render, wake: wake, attention: attention, departureNote: departureNote, onRecord: onRecord, vinCheck: vinCheck, ADVICE: ADVICE, adviceFor: adviceFor,

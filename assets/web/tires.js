@@ -1829,8 +1829,9 @@
   /** What Advisory says about the tires: [{ level: 'warn'|'info', title, text, check? }]. */
   function advice(c) {
     var t = c && c.tires; if (!t) t = {};
-    var out = [], e = estimate(t);
-    if (e) {
+    var out = [], e = estimate(t), checked = root.TirePolicy ? root.TirePolicy.prepare(c || {}, TireMath) : null;
+    if (checked) checked.facts.forEach(function(f){out.push({level:f.level,title:f.kind==='replace'?'Tires: replace the affected tire':f.kind==='replace_soon'?'Tires: replace soon':f.kind==='plan'?'Tires: plan replacement':'Tire setup',text:f.text});});
+    if (e && !checked) {
       var st = status(e.depth), on = e.corner ? ' (' + cname(e.corner, t.corners).toLowerCase() + ')' : '';
       if (st === 'worn') out.push({ level: 'warn', title: 'Tires: replace now', text: (e.measured ? '' : 'About ') + e.depth + '/32 in of tread left' + on + ', at or below the legal limit. Worn tires take much longer to stop on wet roads.' });
       else if (st === 'low') out.push({ level: 'warn', title: 'Tires: replace soon', text: (e.measured ? '' : 'About ') + e.depth + '/32 in of tread left' + on + '. Grip on wet and snowy roads is fading.' });
@@ -1839,8 +1840,8 @@
     var miss = missing(t);
     if (miss.length) out.push({ level: 'warn', title: 'Your tires could be unsafe', text: miss.length + ' of your tires ' + (miss.length === 1 ? 'is' : 'are') + ' missing details in Garage → Tires, so Gasket can\'t tell whether one of them is worn out. Fill them in, or switch back to "all the same".' });
     var rot = rotation(corners(t), c && c.info && c.info.drive);
-    if (rot && rot.kind !== 'even') out.push({ level: rot.kind === 'replace' ? 'warn' : 'info', title: rot.kind === 'replace' ? 'Tires: replace before rotating' : 'Tires: better ones on the rear', text: rot.notes[0] + (rot.moves.length ? ' ' + rot.moves.map(function (m) { return cname(m.from) + ' → ' + cname(m.to).toLowerCase(); }).join('; ') + '.' : '') });
-    treadDiff(corners(t), c && c.info && c.info.drive).forEach(function (x) { out.push({ level: x.level, title: x.title, text: x.text + (x.fix ? ' ' + x.fix : '') }); });
+    if (!checked && rot && rot.kind !== 'even') out.push({ level: rot.kind === 'replace' ? 'warn' : 'info', title: rot.kind === 'replace' ? 'Tires: replace before rotating' : 'Tires: better ones on the rear', text: rot.notes[0] + (rot.moves.length ? ' ' + rot.moves.map(function (m) { return cname(m.from) + ' → ' + cname(m.to).toLowerCase(); }).join('; ') + '.' : '') });
+    if (!checked) treadDiff(corners(t), c && c.info && c.info.drive).forEach(function (x) { out.push({ level: x.level, title: x.title, text: x.text + (x.fix ? ' ' + x.fix : '') }); });
     if (t.tread && t.tread.mode !== 'measure' && !(t.corners && t.corners.split) && (t.tread.rotated === 'no' || t.tread.rotated === 'sometimes'))
       out.push({ level: 'info', title: 'Rotate your tires', text: 'Moving them to different corners every 5,000 to 7,500 miles makes them wear evenly and last longer.' });
     if (t.utqg && (t.utqg.trac === 'B' || t.utqg.trac === 'C')) out.push({ level: 'info', title: 'Wet roads', text: 'Your tires\' traction grade is ' + t.utqg.trac + ', below the A most tires have. Leave extra room to stop in the rain.' });
