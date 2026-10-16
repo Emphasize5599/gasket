@@ -93,6 +93,7 @@
     document.getElementById('gemmaRemove').onclick=async function(){if(await A.confirmDel({always:true,title:'Remove the local model?',body:'Deletes the model and its partial download, not your cars or tire details. Download it again to use larger AI.',action:'Remove'}))command('remove');};
   }
   function retry(){var c=current();if(c)try{attempted.delete(input(c).key);}catch(e){}lastIssue='';schedule();}
+  var slot=document.getElementById('gemmaSlot');if(slot){slot.outerHTML=settingsHtml();bindSettings();}   // Settings opened before this file loaded (first-time setup)
   window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry};
   window.addEventListener('garagechange',function(){if(running){var c=current();try{if(!c||input(c).key!==running.key){running.cancelled=true;command('cancelAdvice');}}catch(e){command('cancelAdvice');}}schedule();});
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){}});

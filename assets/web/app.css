@@ -775,6 +775,7 @@ body.trip-on .top .bar { justify-content: space-between; }
 .page.tpanel.full { height: 100%; top: 0; border-radius: 0; padding-top: calc(var(--st) + 56px); box-shadow: none; }
 .page.tpanel.full .tp-grab { display: none; }
 body.trip-full .top { z-index: 1000; }
+body.trip-full #btnSettings { display: none !important; }   /* under the lookup counter: only its round background showed */
 .tp-step { min-width: 0; }
 /* "North Little Rock →" / "Dallas": names wrap whole, the arrow stays with the first */
 .arws { min-width: 0; flex: 1; }
@@ -1835,6 +1836,8 @@ body.trip-full .top { top:0; }
 .page.sub-page { padding-top:calc(var(--st) + 4px + var(--task-space)); }
 .page.tpanel:not(.full) { padding-top:0; }
 .page.tpanel.full { padding-top:calc(var(--st) + max(56px,var(--task-space))); }
+/* no lookup counter (no key): full-screen menus only drop down for a status bar that has something to show */
+body:not(.api-meter) .page.tpanel.full { padding-top:calc(var(--st) + 8px + var(--task-space)); }
 .cfm-bg { padding-top:calc(16px + var(--st) + var(--task-space)); }
 .trip-proposal { overflow:hidden; }
 .proposal-delta { display:flex; justify-content:space-between; gap:12px; padding:12px 0 4px; font-size:20px; font-variant-numeric:tabular-nums; }

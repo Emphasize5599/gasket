@@ -282,6 +282,7 @@
     var n = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
     el.textContent = n + ' / ' + (cap || '∞');
     el.classList.toggle('hi', cap > 0 && n >= cap * 0.85);
+    el.classList.toggle('hidden', !S.apiKey); document.body.classList.toggle('api-meter', !!S.apiKey);   // no key, no Google lookups to count (the status bar then starts at the edge)
     if(window.Tasks)Tasks.layout();
   }
   window.__apiCount = apiCount;
@@ -1132,7 +1133,9 @@
 
     h += '<div class="card"><h3>General</h3>' +
       '<div class="field"><div class="lbl">Ask before deleting<small>A confirmation before anything is deleted or removed — cars, mileage entries, saved trips, lists, the cache.</small></div>' + sw('confirmDeletes', S.confirmDeletes !== false) + '</div></div>';
-    if (!onboarding && window.Gemma) h += Gemma.settingsHtml();
+    // first-time setup too (the download still asks first, and keeps going after setup). Setup opens before gemma.js
+    // loads: a slot it fills when it does
+    h += window.Gemma ? Gemma.settingsHtml() : '<div id="gemmaSlot"></div>';
     h += '<div class="card"><h3>Discounts</h3>' +
       '<div class="field"><div class="lbl">Walmart+ member<small>10¢/gal off (5¢ in Alabama) at Walmart, Murphy, Exxon, Mobil, CITGO; member pricing at Sam\'s.</small></div>' + sw('walmartPlus', S.walmartPlus) + '</div>' +
       '<div class="field"><div class="lbl">Club CITGO status<small>Stacks with Walmart+ at CITGO. Club 3¢, Premier 6¢ (12 fills of 8+ gal in a quarter).</small></div><select id="citgoTier">' +
@@ -1300,7 +1303,7 @@
   function closeSettings(apply) {
     var pg = $('settings'); if (pg.classList.contains('hidden')) return false;
     var hadKey = !!S.apiKey;
-    S.apiKey = $('apiKey').value.trim();
+    S.apiKey = $('apiKey').value.trim(); apiCount();
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
     S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(20,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;

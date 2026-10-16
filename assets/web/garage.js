@@ -179,7 +179,10 @@
   var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false,editSnap=null;
   var epaPending=new WeakSet(),epaEpoch=new WeakMap();
   function epaInvalidate(c){epaEpoch.set(c,(epaEpoch.get(c)||0)+1);epaPending.delete(c);}
-  function editorOk(c){return !!c&&Number.isFinite(Number(c.tank))&&Number(c.tank)>0&&identityOk(c);}
+  function editorOk(c){return !!c&&Number.isFinite(Number(c.tank))&&Number(c.tank)>0&&identityOk(c)&&trimOk(c);}
+  /** Trim is required (it can change the tank size), except for a custom car known only by its name. */
+  function trimNeeded(c){return !!c&&!(c.entryMode==='custom'&&!(c.year&&c.make&&c.model));}
+  function trimOk(c){return !trimNeeded(c)||!!String(c.trim||'').trim();}
   function identityOk(c){
     if(!c)return false;
     if(c.entryMode==='custom')return !!(c.year&&c.make&&c.model||String(c.name||'').trim()||String(c.nick||'').trim());
@@ -233,7 +236,7 @@
     h2: ' For fuel-cell cars the EPA\'s MPGe is miles per kg of hydrogen (1 kg holds about the energy of a gallon of gas).'
   };
   function draw0() {
-    if(!S.cars.length){editing=false;host.innerHTML='<div class="card g-car"><h3>Your vehicles</h3><p class="lead small keep">No vehicles yet. Add your own vehicle to start planning a trip.</p><button type="button" class="btn primary" data-car="+">Add your first vehicle</button></div>';host.querySelector('[data-car="+"]').onclick=addCar;speedHost=null;return;}
+    if(!S.cars.length){editing=false;drawEditor(null);host.innerHTML='<div class="card g-car"><h3>Your vehicles</h3><p class="lead small keep">No vehicles yet. Add your own vehicle to start planning a trip.</p><button type="button" class="btn primary" data-car="+">Add your first vehicle</button></div>';host.querySelector('[data-car="+"]').onclick=addCar;speedHost=null;return;}
     var c = car(), U = units(c), k = kind(c);
     if(editing&&(!editSnap||editSnap.id!==c.id))editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};
     // the car's editor is its own submenu: the tile keeps the picture (its ids live in one place at a time)
@@ -290,7 +293,7 @@
   function tankUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&summary=1'; }
   function tankAuto(c) {
     if (!c || +c.tank > 0 || kind(c) !== 'gas' || !call || !N.siteRead || tankBusy[c.id] || matching) return;
-    var key = tankKey(c); if (!key) return;
+    var key = tankKey(c); if (!key || !trimOk(c)) return;   // the trim can change the tank: wait for it
     var L = c.tankLookup; if (L && L.key === key && (!L.failed || Date.now() - L.t < 6 * 3600e3)) return;   // once per car (a failure: again after 6 h)
     tankFind(c, false);
   }
@@ -302,6 +305,7 @@
       new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]); };
     var r = await (shown ? ask() : braveSerial(ask));
     tankBusy[c.id] = false;
+    if (tankKey(c) !== key) { LG.info('car', 'Tank answer was for another trim: asking again'); if (!(+c.tank > 0)) tankFind(c, shown); return; }
     if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it') {
       c.tank = r2(r.gal); c.tankSrc = TANK_SRC; c.tankLookup = { key: key, t: Date.now(), gal: r.gal };
       LG.info('car', 'Tank size from Brave Search' + (r.src === 'results' ? '\'s results (no AI answer)' : r.src === 'ai' ? '\'s AI answer' : '') + ': ' + r.gal + ' gal', r.text || '');
@@ -487,7 +491,7 @@
       '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
       '<label class="nf wide"><span>Model</span><input id="gCustomModel" type="text" value="'+esc(c.model||'')+'"></label>' +
       '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
-    h += '<label class="nf wide"><span>Trim<small>optional · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
+    h += '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>can change the tank size · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     h += paintHtml(c);
     h += carousel(c, true);
     var tankFindable = k === 'gas' && !!tankKey(c);
@@ -771,7 +775,7 @@
     if (A.qify) A.qify(ed.body);
   }
   function saveEdit(c) {
-    if (!editorOk(c)) { var n = identityOk(c)?$('gTank'):$('gName'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
+    if (!editorOk(c)) { var n = !identityOk(c)?$('gName'):!trimOk(c)?$('gTrim'):$('gTank'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
     vinStates.delete(c);editSnap = null; editing = false; LG.info('car', 'Saved ' + shortName(c)); draw(); changed();
   }
   function discardEdit(c) {
@@ -815,7 +819,15 @@
       document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
       if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!editorOk(Object.assign({},c,{nick:this.value.trim(),name:this.value.trim()||c.name}));};
       ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
-      $('gTrim').onchange = function () { c.trim = this.value.trim(); draw(); changed(); };
+      $('gTrim').oninput = function () { if ($('gSave')) $('gSave').disabled = !editorOk(Object.assign({}, c, { trim: this.value.trim() })); };
+      $('gTrim').onchange = function () {
+        var v = this.value.trim(); if (v === String(c.trim || '')) return;
+        c.trim = v; LG.info('car', 'Trim ' + (v ? 'set' : 'cleared'));
+        // a different trim can have a different tank: empty the box and ask Brave again
+        if (kind(c) === 'gas') { c.tank = ''; c.tankSrc = ''; c.tankLookup = null; }
+        draw(); changed();
+        if (kind(c) === 'gas' && v && tankKey(c)) tankFind(c, false);
+      };
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
       if ($('gTankShow')) $('gTankShow').onclick = function (e) { e.preventDefault(); tankFind(c, true); };

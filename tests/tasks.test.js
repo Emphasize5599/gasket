@@ -1,6 +1,13 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
 const p=await b.newPage({viewport:{width,height:900}});p.setDefaultTimeout(6000);await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.waitForFunction(()=>!__app.job());
+// no key: no lookup counter, no gear circle under it, and a full-screen menu without a status starts at the top
+await p.evaluate(()=>{__app.S.apiKey='';__apiCount();});assert.equal(await p.locator('#apiCount').isVisible(),false,'no key, no counter');
+await p.click('#btnTrip');await p.waitForSelector('.tp-head');assert.equal(await p.locator('#btnSettings').isVisible(),false,'no settings circle in full-screen menus');
+assert((await p.locator('.tp-head').boundingBox()).y<20,'nothing to show: no room kept for the status bar');
+await p.evaluate(()=>Tasks.upsert('probe',{text:'Reading hazards…'}));await p.waitForFunction(()=>!document.getElementById('taskHub').classList.contains('hidden'));
+{const jb=await p.locator('#jobBar').boundingBox(),hd=await p.locator('.tp-head').boundingBox();assert(jb.x<=14,'no counter: the status bar is not indented');assert(hd.y>=jb.y+jb.height,'a status: the menu moves down for it');}
+await p.evaluate(()=>{Tasks.remove('probe');__trip.close();});await p.waitForFunction(()=>!document.body.classList.contains('trip-on'));
 await p.evaluate(()=>{window.cancelled=[];__app.jobEnd();__app.jobStart({kind:'map',label:'Discovering stations 10/100 · ~5 min',cancel:()=>cancelled.push('stations')});});
 await p.waitForSelector('#jobBar');assert.equal(await p.locator('#taskMore').isVisible(),false);const single=await p.locator('#jobBar').boundingBox();
 assert(single.y+single.height<=(await p.locator('#btnSettings').boundingBox()).y,'main-map controls move below the task dock');
