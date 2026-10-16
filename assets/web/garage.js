@@ -715,6 +715,7 @@
     h += isCustom(c) ? customPanel(c) : tilesPanel(c);
     if (fuel) h += '<div class="grid2">' + fuel + '</div>';
     h += featPanel(c);
+    h += '<label class="nf wide"><span>Weather-risk vehicle profile'+A.qBtn('Auto uses the EPA vehicle class or NHTSA body class as a high-profile estimate, not a ground-clearance measurement. Choose Low-riding for a sports car or lowered vehicle; override Auto for modified vehicles. No profile makes driving into floodwater safe.')+'</span><select id="gHazardProfile">'+opts({auto:'Auto (vehicle class)',normal:'Standard profile',low:'Low-riding',tall:'Tall / large vehicle'},i.hazardProfile||'auto',null)+'</select></label>';
     return h;
   }
   function obsPanel(c) {
@@ -922,6 +923,7 @@
     var info = c.info = c.info || {};
     var setI = function (id, k2, num) { var el = $(id); if (el) el.onchange = function () { var v = this.value.trim(); info[k2] = num ? (parseInt(v, 10) || '') : v;if(v)clearVinField(c,id); save(); if (id === 'gTrans') draw(); else updInfoLine(c); }; };
     setI('gEngine', 'engine'); setI('gAsp', 'asp'); setI('gTrans', 'trans'); setI('gTransN', 'transN', true); setI('gDrive', 'drive'); 
+    if($('gHazardProfile'))$('gHazardProfile').onchange=function(){info.hazardProfile=this.value;changed();};
     if ($('gGrade')) $('gGrade').onchange = function () { c.grade = this.value; changed(); };
     if ($('gPower')) $('gPower').onchange = function () {
       var was = kind(c),oldPower=c.power;c.power = this.value;

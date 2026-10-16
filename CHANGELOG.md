@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.174 - 2026-10-16 (keyless test branch only)
+- Vehicle-aware hazard ranking, with brief reasons and an optional vehicle-profile override.
+- Per-car broken-A/C switch updates climate recommendations and hazard advice.
+- Remembering cheaper-route answers is off by default, saved-trip/vehicle-specific, and warns before reuse. New trips always ask again.
+
 ## 0.0.173 - 2026-10-16 (keyless test branch only)
 - Added Back navigation while reviewing cheaper-route alternatives.
 - Expanded statuses show other active work, then pending planning stages, without duplicating the primary scan.

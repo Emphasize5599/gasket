@@ -23,6 +23,9 @@ on:
       - tests/map-scan-merge.test.js
       - tests/routechoices.test.js
       - tests/routechoices-ui.test.js
+      - tests/route-memory-ui.test.js
+      - tests/vehicle-weather.test.js
+      - tests/vehicle-weather-ui.test.js
       - tests/vehicle-required.test.js
       - tests/adaptive-readers.test.js
       - tests/tire-estimate-ui.test.js

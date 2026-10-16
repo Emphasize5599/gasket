@@ -10,6 +10,8 @@
     arrive: 'buffer', topUpMi: 1.0, returnTrip: false, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
   ['linkSliders','slowMode','maxUnder','timeValue'].forEach(function(k){delete S.trip[k];});
+  // Consent is session state, never a global default or inferred from a matching route link.
+  S.trip.routeChoices={};
 
   // ---------- native calls as promises ----------
   var nid = 900000, waiting = {};
@@ -70,7 +72,41 @@
   var alts = [], altSel = 0, altSure = false;   // Google's route options for this trip
   var routeReview=null,choiceComplete=false,choicePool=null,choicePlanning=false,choiceCandidates=new Map();
   function routeFlow(){return !!S.trip.altCompare&&hzLegs()>0;}
-  function choiceAnswers(){return S.trip.routeChoices||(S.trip.routeChoices={});}
+  var choiceOwner=S.carId,choiceSavedId=null,choiceChecked=false,choiceReviewedAt=0,choiceEpoch=0;
+  function choiceOwnerSync(){
+    if(choiceSavedId&&route&&route.histId!==choiceSavedId)resetChoices();
+    if(choiceOwner===S.carId)return;
+    choiceOwner=S.carId;S.trip.routeChoices={};choiceChecked=false;choiceReviewedAt=0;choiceEpoch++;
+    routeReview=null;choiceComplete=false;choicePool=null;result=null;stopRecommendations();
+    if($('tRememberRoutes'))$('tRememberRoutes').checked=Garage.car().rememberRouteChoices===true;
+  }
+  function choiceAnswers(){choiceOwnerSync();return S.trip.routeChoices||(S.trip.routeChoices={});}
+  function resetChoices(savedId){S.trip.routeChoices={};choiceOwner=S.carId;choiceSavedId=savedId||null;choiceChecked=false;choiceReviewedAt=0;choiceEpoch++;routeReview=null;choiceComplete=false;choicePool=null;}
+  function rememberedChoices(previous){
+    var records=Object.assign({},previous||{}),c=Garage.car();
+    if(c.rememberRouteChoices===true&&choiceReviewedAt&&Object.keys(choiceAnswers()).length)
+      records[c.id]={answers:JSON.parse(JSON.stringify(choiceAnswers())),reviewedAt:choiceReviewedAt};
+    else delete records[c.id];
+    return records;
+  }
+  function saveChoices(){
+    if(!choiceSavedId)return;
+    var o=A.KV.get('trips','trip|'+choiceSavedId);if(!o||!o.v)return;
+    o.v.routeChoicesByVehicle=rememberedChoices(o.v.routeChoicesByVehicle);
+    if(o.v.trip)delete o.v.trip.routeChoices;
+    A.KV.put('trips','trip|'+choiceSavedId,o.v);
+  }
+  async function restoreChoices(){
+    choiceOwnerSync();if(choiceChecked)return;choiceChecked=true;
+    var c=Garage.car(),o=choiceSavedId&&A.KV.get('trips','trip|'+choiceSavedId),record=o&&o.v&&o.v.routeChoicesByVehicle&&o.v.routeChoicesByVehicle[c.id];
+    if(c.rememberRouteChoices!==true||!record||!record.answers||!Number.isFinite(record.reviewedAt)||record.reviewedAt<=0||!Object.keys(record.answers).length)return;
+    var epoch=choiceEpoch,age=Math.max(0,Date.now()-record.reviewedAt),old=age>=3600000;
+    var ok=await A.confirmDel({always:true,title:'Remembered alternative routes',body:'Your alternative-route selections were remembered for this saved trip and this vehicle only.<br><br>'+(old?'<strong>These selections are over an hour old. Review them: forecasts have likely changed.</strong>':'Review these selections if it has been more than an hour; forecasts have likely changed.')+'<br><br>Fresh hazard checks still run. Remembered choices are not a safety approval.',action:'Use remembered',no:'Review again',goClass:'primary'});
+    if(epoch!==choiceEpoch||c.id!==S.carId)return;
+    if(ok){S.trip.routeChoices=JSON.parse(JSON.stringify(record.answers));choiceReviewedAt=record.reviewedAt;}
+    else {S.trip.routeChoices={};choiceReviewedAt=0;saveChoices();}
+    gateTabs();
+  }
   function choiceLists(){return Array.from({length:hzLegs()},function(_,i){return hzAlts(i);});}
   function choiceSelections(){return choiceLists().map(function(_,i){return hzSel(i);});}
   function choiceEntries(){return RouteChoices.entries(choiceLists(),choiceSelections(),choiceAnswers());}
@@ -79,7 +115,7 @@
   function reviewStart(){return reviewShow(choicePending()[0]);}
   function reviewOrder(){return RouteChoices.pending(choiceLists(),choiceSelections(),{});}
   function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
-  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
+  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
   var recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||p.refPrice,[{stops:p.stops.map(function(s){return {arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price};}),arriveGal:p.arriveGal}]).legs[0].cost;}
@@ -477,6 +513,7 @@
       return true;
     }
     if(k===ST_HAZ){
+      await restoreChoices();
       var owner=route;
       for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)];if(!await hzConfirmRisk(a,i,function(){return route===owner&&step===ST_HAZ&&hzAlts(i)[hzSel(i)]===a;}))return false;}
       if(choicePending().length){reviewStart();return false;}
@@ -519,7 +556,7 @@
 
     return ST_DEPART;
   }
-  window.addEventListener('advisorychange', function () { gateTabs(); }); window.addEventListener('garagechange', function () { gateTabs(); });
+  window.addEventListener('advisorychange', function () { gateTabs(); }); window.addEventListener('garagechange', function () { choiceOwnerSync();gateTabs();if(step===ST_HAZ&&document.body.classList.contains('trip-on'))renderHz(); });
   /** Step tabs past what you can reach are grayed out (pressing one still goes as far as it can and points at what's missing). */
   function gateTabs() {
     var r = reach();
@@ -601,7 +638,7 @@
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
         '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
         '<div id="tRouteGo"></div></div>' +
-        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,1,'for the whole trip')+'<span></span></div></div><div id="tRouteInfo"></div>';
+        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,1,'for the whole trip')+'<span></span></div></div><div id="tRouteInfo"></div>';
     }
     if (k === ST_PARAMS) {
       var kd = KIND();
@@ -661,6 +698,7 @@
   function backAuto() { var t = S.trip; return t.backAuto != null ? !!t.backAuto : !t.backAt; }
   function bindRoute() {
     $('tAltCmp').onchange=function(){$('tAltBox').classList.toggle('hidden',!this.checked);S.trip.altCompare=this.checked;routeReview=null;choiceComplete=false;result=null;A.save();gateTabs();};
+    $('tRememberRoutes').onchange=function(){choiceOwnerSync();Garage.car().rememberRouteChoices=this.checked;saveChoices();A.save();};
     $('tAltSave').onchange=function(){S.trip.altMinSave=Math.max(0,Number(this.value)||0);A.save();};
     var t = S.trip;
     $('tLink').addEventListener('input', debounce(function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); readLink().then(autoRoutes); }, 400));
@@ -1426,7 +1464,7 @@
         if (mt) {
           prog(0.9, 'Reading your saved trip');
           await paint();
-          r.histId = mt.id; r.reused = mt.t;
+          r.reused = mt.t; // Reuse station/route data, never the saved trip's consent identity.
           rawRoute = alts[altSel]; model = T.buildRoute(rawRoute, carModel()); ensureLimits(model);
           replay = { id: mt.id, t: mt.t, stations: v.stations, alts: v.alts, partial: true };
           LG.info('history', 'Same places as a saved trip — using its routes (no lookups)', { id: mt.id, saved: new Date(mt.t).toISOString(), options: alts.map(function (a) { return a.description; }), picked: altSel });
@@ -3260,7 +3298,8 @@
   function hzDot(k) { return '<i class="hz-dot" style="background:' + RouteWx.COLORS[k] + '" title="' + esc(RouteWx.KINDS[k][0]) + '"></i>'; }
   function hzListHtml(xs, st) {
     var c = window.Garage && Garage.car(), tt = c && c.tires || {}, e = window.TireMath ? TireMath.estimate(tt) : null;
-    var ctx = { tread: e ? e.depth : null, tireType: tt.type, towing: !!tt.towMode }, h = '';
+    var profile=RouteWx.vehicleProfile(c),setup=window.TirePolicy&&window.TireMath?TirePolicy.snapshot(c||{},TireMath):null,depths=setup?setup.tires.filter(function(t){return typeof t.depth==='number'&&Number.isFinite(t.depth);}).map(function(t){return t.depth;}):[];
+    var ctx = { tread: depths.length?Math.min.apply(null,depths):e ? e.depth : null, tireType: tt.type, towing: profile.towing,acUnavailable:profile.acUnavailable }, h = '';
     if (!xs.length) h += '<p class="lead small keep">' + (st.weather ? 'Nothing to watch for: no storms, rain, snow, ice, fog, strong wind, extreme heat or cold, warnings or bad air forecast where and when you\'ll be.' : 'No forecast reaches that far ahead yet.') + '</p>';
     h += xs.map(function (x) {
       var sit = RouteWx.KINDS[x.kind][1], pr = sit && window.Climate && Climate.presetFor ? Climate.presetFor(c, sit, new Date(x.from)) : null;
@@ -3282,9 +3321,13 @@
     var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
     var list = hzAlts(hzLeg), sel = routeReview?routeReview.k:hzSel(hzLeg);
     if (!list.length) { el.innerHTML = '<div class="card empty-res">Get your routes first.</div>'; return; }
+    var car=Garage.car()||{},setup=window.TirePolicy&&window.TireMath?TirePolicy.snapshot(car,TireMath):null;
+    var fit=RouteWx.rankOptions(list.map(function(a){var e=hzCache.get(a)||{};return {ready:e.st==='done',hazards:e.hz||[],stats:e.stats,miles:(a.distanceMeters||0)/1609.344};}),car,setup);
+    var order=list.map(function(a,k){return k;});if(fit.complete)order.sort(function(a,b){return fit.rows[a].rank-fit.rows[b].rank||a-b;});
     var h = '<p class="hz-notice">Hazards are projections from forecasts and active warnings. They can change with little warning: check again before you go.' +
       (list[sel] && list[sel].websiteApproximate ? ' <span class="hz-approx">Website route · approximate ' + A.qBtn('Website route points and total time are not full API turn-by-turn geometry or no-traffic timing. Detours and fuel/time estimates are less precise. Verify the route in Google Maps before driving. An API key is recommended for more reliable planning.') + '</span>' : '') +
-      '</p><div class="hz-opts">' + list.map(function (a, k) {
+      '</p><p class="hz-profile">For this vehicle: '+esc(fit.profile.label)+A.qBtn('Relative comparison using the forecast and known vehicle details, not a safety rating. Major hazards remain important for every vehicle; no ranking permits entering floodwater. '+fit.profile.source+'. Ground clearance is not measured. Change the profile in Garage → About this car → Edit. Known low tread, hooked trailers and unavailable A/C affect the reasons shown. Rankings appear only when all options have complete weather/air checks and no pending AI classification; no route is selected automatically.')+'</p><div class="hz-opts">' + order.map(function (k) {
+      var a=list[k];
       if(routeReview&&k!==sel)return '';
       var e = hzCache.get(a), mi = Math.round((a.distanceMeters || 0) / 1609.344), sec = parseFloat(String(a.duration || '0')), chips;
       if (!e || !e.st || e.st === 'loading') chips = '<span class="hz-ld">Checking the weather along it…</span><span class="hz-bar"><i style="width:' + Math.round(Math.max(0.04, e && e.prog || 0) * 100) + '%"></i></span>';
@@ -3293,7 +3336,7 @@
       // which one Google Maps had (your link), as before
       var note = list.length === 1 ? 'Google\'s only route' : legsMode() ? '' : k === altSel && pickedRoute(route) ? (altSure ? '✓ same as in Google Maps' : 'closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? 'matches your link' : '');
       return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +
-        (note ? '<span class="hz-note">' + esc(note) + '</span>' : '') + '<span class="hz-o2">' + chips + '</span></button>';
+        (note ? '<span class="hz-note">' + esc(note) + '</span>' : '') + '<span class="hz-o2">' + chips + '</span><span class="hz-fit"><strong>'+(fit.complete?'Vehicle fit '+fit.rows[k].rank+' of '+list.length:'Not ranked — comparison incomplete')+'</strong>'+(e&&e.st==='done'?'<span>'+esc(fit.rows[k].fit.reasons.join(' · '))+'</span>':'')+'</span></button>';
     }).join('') + '</div>';
     if(routeReview)h='<div class="card"><button type="button" class="btn tonal sm route-review-back" id="tReviewBack"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg>Back</button><h3>Would you consider this route if it were cheaper?</h3><p class="lead small keep">Leg '+(hzLeg+1)+' · '+esc(legName(route,hzLeg))+'. No skips its station search; Yes includes it after your primary routes.</p></div>'+h;
     var e = hzCache.get(list[sel]);
@@ -3494,7 +3537,7 @@
     var key = r.stops.map(function (st) { return st.current ? 'here' : (st.lat != null ? st.lat.toFixed(3) + ',' + st.lng.toFixed(3) : norm(st.address || st.label)); }).join('|') +
       '|' + ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; }).join(',');
     var h = 0; for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-    return 't' + (h >>> 0).toString(36);
+    return r.histId='t'+(h>>>0).toString(36)+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
   }
   /** "North Little Rock → Dallas", or every stop for a trip with a few stops in between ("North Little Rock → Dallas → North Little Rock"). */
   function tripTitle(r) {
@@ -3505,13 +3548,16 @@
   function saveTrip(raw, ks) {
     if (!route || !raw) return;
     var id = histId(route), now = Date.now();
+    choiceOwnerSync();var prior=choiceSavedId===id&&A.KV.get('trips','trip|'+id);
+    var choices=rememberedChoices(prior&&prior.v&&prior.v.routeChoicesByVehicle);choiceSavedId=id;
     var google = (raw.google || []).map(function (list, i) { return { k: ks[i], sig: alts[ks[i]] ? altSig(alts[ks[i]]) : '', list: list }; });
     var keepStop = function (st) { var o = Object.assign({}, st); delete o.choices; return o; };
     A.KV.put('trips', 'trip|' + id, {
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
-      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,altCompare:S.trip.altCompare,routeChoices:S.trip.routeChoices,altMinSave:S.trip.altMinSave },
+      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave },
+      routeChoicesByVehicle:choices,
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
     if(routeFlow()||(replay&&replay.id===id))replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
@@ -3575,6 +3621,7 @@
   function jobBlocks() { if (!busy || loadingTrip) return false; A.toast('Finish or cancel the station search first (the bar at the top).'); return true; }
   function newTrip(link) {
     if (jobBlocks()) return;
+    resetChoices();
     resetAdjust();
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
@@ -3591,11 +3638,11 @@
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
-    S.trip.altCompare=!!v.trip.altCompare;S.trip.routeChoices=v.trip.routeChoices||{};S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
+    resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
     routeReview=null;choiceComplete=false;choicePool=null;
     if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();
-    route = v.route; alts = v.alts;
+    route = Object.assign({},v.route,{histId:id}); alts = v.alts;
     S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
     rawRoute = alts[altSel]; result = null; parsing = null;
     replay = { id: id, t: v.savedT || o.t, stations: v.stations, alts: v.alts };
@@ -3609,6 +3656,7 @@
     loadingTrip = false; busy = false;
     LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
     renderStep();   // Next goes on from the Garage; entering Stops plans it from the saved stations
+    await restoreChoices();
     if (jumpTo) { var j = jumpTo; jumpTo = 0; advance(j); }
   }
   function priceText(v) { return '$' + P.fmt3(v); }

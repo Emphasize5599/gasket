@@ -111,6 +111,67 @@
     var tires = kinds.length ? (setup && setup.tires || []).filter(function(t){return typeof t.depth==='number' && Number.isFinite(t.depth) && t.depth>=0 && t.depth<=limit;}) : [];
     return {kinds:tires.length?kinds:[],tires:tires,limit:limit};
   }
+  /** Classes are profile estimates, never clearance measurements. Only the user confirms low ride height. */
+  function vehicleProfile(car) {
+    car=car||{};var i=car.info||{},cl=car.climate||{},t=car.tires||{},choice=/^(normal|low|tall)$/.test(i.hazardProfile)?i.hazardProfile:'auto';
+    var body=i.body||car.epa&&car.epa.vclass||car.type||'',source=i.body?'NHTSA body class':car.epa&&car.epa.vclass?'EPA vehicle class':'Vehicle type';
+    var high=/\b(suvs?|trucks?|pickups?|vans?|minivans?|bus|buses|motorhomes?)\b|sport utility|multipurpose passenger/i.test(body);
+    if(choice!=='auto')high=choice==='tall';
+    return {high:high,low:choice==='low',source:choice==='auto'?source+' (profile estimate)':'Your profile selection',
+      label:choice==='low'?'Low-riding':high?'Tall / large':'Standard / unspecified',clearanceKnown:false,lowConfirmed:choice==='low',
+      acUnavailable:!!cl.acBroken||!!(cl.caps&&cl.caps.noAc),towing:!!t.towMode&&(t.trailers||[]).some(function(tr){return !!tr.hooked;})};
+  }
+  var FIT_WEIGHT={tornado:10,flood:10,tropical:8,alert:7,storm:5,ice:6,snow:5,rain:3,fog:3,wind:4,heat:3,cold:3,air:3};
+  /** Transparent comparison heuristic, not an accident probability or a safety certification. */
+  function vehicleFit(hazards,profile,setup,totalMi) {
+    profile=profile||{};var byKind={},reasons=[],urgent=0,peak=0,burden=0;
+    function reason(s){if(reasons.indexOf(s)<0)reasons.push(s);}
+    var tires=setup&&setup.tires||[],depths=tires.filter(function(t){return typeof t.depth==='number'&&Number.isFinite(t.depth)&&t.depth>=0;}).map(function(t){return t.depth;});
+    var depth=depths.length?Math.min.apply(null,depths):null,summer=tires.some(function(t){return isSummerTire(t.type);});
+    (hazards||[]).forEach(function(h){if(!KINDS[h.kind])return;var level=h.level>=2?2:1;
+      if(/^(tornado|flood|tropical)$/.test(h.kind)||h.kind==='alert'&&level===2)urgent=1;
+      if(h.kind==='flood')reason('Flooding: never enter water over the road');
+      if(h.kind==='tornado')reason('Tornado: seek sturdy shelter');
+      if(h.kind==='tropical')reason('Tropical storm exposure: consider postponing');
+      if(h.kind==='alert'&&level===2)reason('Severe weather warning: review before travel');
+      peak=Math.max(peak,level);
+      var factor=1,k=h.kind;
+      if(k==='wind'||k==='tropical'||k==='tornado'||k==='storm'){
+        if(profile.towing){factor+=1;reason('Crosswinds while towing');}
+        else if(profile.high){factor+=.6;reason('High-profile vehicle in wind ('+(profile.source==='Your profile selection'?'your selection':'class estimate')+')');}
+      }
+      if(/^(rain|storm|flood|tropical)$/.test(k)){
+        if(depth!=null&&depth<=4){factor+=1;reason('Low tread in wet weather');}
+        if(profile.low&&(level>=2||k!=='rain')){factor+=.7;reason('Low-riding vehicle: water clearance concern');}
+        if(profile.acUnavailable){factor+=.6;reason('No A/C dehumidifying in wet weather');}
+      }
+      if(k==='fog'&&profile.acUnavailable){factor+=.6;reason('No A/C dehumidifying in fog');}
+      if(k==='heat'&&profile.acUnavailable){factor+=1;reason('Heat without working A/C');}
+      if(k==='snow'||k==='ice'){
+        if(depth!=null&&depth<=5){factor+=1;reason('Low tread in snow or ice');}
+        if(summer){factor+=1;reason('Summer tires in snow or ice');}
+      }
+      var from=Number.isFinite(h.fromMi)?Math.max(0,h.fromMi):0,to=Number.isFinite(h.toMi)?Math.max(from,h.toMi):from;
+      if(Number.isFinite(totalMi)){from=Math.min(from,totalMi);to=Math.min(to,totalMi);}
+      (byKind[k]||(byKind[k]=[])).push({from:from,to:Math.max(from+1,to),value:FIT_WEIGHT[k]*level*factor});
+    });
+    Object.keys(byKind).forEach(function(k){
+      var rows=byKind[k],edges=Array.from(new Set(rows.reduce(function(a,r){return a.concat(r.from,r.to);},[]))).sort(function(a,b){return a-b;}),max=0,sum=0;
+      for(var j=1;j<edges.length;j++){var value=0;rows.forEach(function(r){if(r.from<edges[j]&&r.to>edges[j-1])value=Math.max(value,r.value);});max=Math.max(max,value);sum+=value*(edges[j]-edges[j-1])/20;}
+      burden+=max+sum; // overlapping forecasts/alerts of the same kind count only once
+    });
+    if(!reasons.length)reason(Object.keys(byKind).length?'Forecast exposure; no additional known vehicle factors':'No hazards found in the checked forecast');
+    return {key:[urgent,peak,Math.round(burden*1000)],reasons:reasons};
+  }
+  function rankOptions(entries,car,setup) {
+    var profile=vehicleProfile(car),all=true;
+    var rows=entries.map(function(e,i){var s=e.stats||{},complete=!!e.ready&&!s.errors&&!s.beyondWeather&&!s.beyondAir&&!s.aiPending&&(s.points==null||s.weather>=s.points);
+      if(!complete)all=false;return {index:i,complete:complete,fit:vehicleFit(e.hazards,profile,setup,e.miles)};
+    });
+    function cmp(a,b){for(var j=0;j<3;j++){var d=a.fit.key[j]-b.fit.key[j];if(d)return d;}return 0;}
+    if(all){var ordered=rows.slice().sort(function(a,b){return cmp(a,b)||a.index-b.index;});ordered.forEach(function(r,i){r.rank=i&&cmp(r,ordered[i-1])===0?ordered[i-1].rank:i+1;});}
+    return {rows:rows,profile:profile,complete:all};
+  }
   // the climate presets' own names (ClimateMath.WEATHER)
   var SIT_NAME = { storm: 'stormy', ice: 'icy', snow: 'snowy', rain: 'rainy', fog: 'foggy', heat: 'hot & sunny', cold: 'frosty', air: 'smoky or polluted' };
   function isSummerTire(type) { return /summer|performance/i.test(type || '') && !/all[- ]?season|all[- ]?weather/i.test(type || ''); }
@@ -129,7 +190,7 @@
     if (k === 'alert') a.push('The National Weather Service has ' + (x.events.length > 1 ? 'these out' : 'this out') + ' where and when you\'ll be there. Check it before you go; it can change your route or your day.');
     if (k === 'air') {
       a.push('Recirculate through it' + (x.peak.aqi ? ' (AQI up to ' + x.peak.aqi + (x.peak.cause ? ', mostly ' + x.peak.cause : '') + ')' : '') + ', then back to fresh air once you\'re past it.');
-      if (long) a.push('It lasts over an hour: keep the A/C on so the air doesn\'t get stuffy, and if you get drowsy take a break at a stop rather than opening up to outside air.');
+      if (long) a.push(ctx.acUnavailable?'No working A/C: recirculate cannot cool the cabin. Consider delaying travel; plan cooled rest stops away from the pollution.':'It lasts over an hour: keep the A/C on so the air doesn\'t get stuffy, and if you get drowsy take a break at a stop rather than opening up to outside air.');
     }
     if ((k === 'rain' && x.level >= 2) || k === 'storm' || k === 'flood' || k === 'tropical') {
       if (d != null && d <= 4) a.push('Your tires are at ' + (d <= 2 ? 'the legal limit' : 'about ' + d + '/32 in') + ': worn tread hydroplanes easily. Slow down well below the limit and stay out of standing water.');
@@ -144,6 +205,8 @@
     if (k === 'fog') a.push('Low beams (not high beams), slow down, and keep a long gap.');
     if (k === 'wind') a.push(ctx.towing ? 'Strong crosswinds with a trailer: slow down; gusts can push it around.' : 'Strong crosswinds: both hands on the wheel, extra care passing trucks.');
     if (k === 'heat') a.push('Check the coolant and tire pressure before you go, and bring water.');
+    if(ctx.acUnavailable&&/^(rain|storm|fog|snow|ice|flood|tropical)$/.test(k))a.push('No A/C dehumidifying: use fresh air and windshield airflow as needed. If the glass will not stay clear, stop safely.');
+    if(ctx.acUnavailable&&k==='heat')a.push('No working A/C: consider postponing or traveling at a cooler time, and plan cooled rest stops. Ventilation is not a substitute for A/C in extreme heat.');
     if (ctx.preset) a.push('Your “' + ctx.preset.title + '” climate preset: ' + ctx.preset.line + (ctx.preset.notes ? '. ' + ctx.preset.notes : '') + '.');
     else if (SIT_NAME[k]) a.push('Tip: set up what you\'d do “If it\'s ' + SIT_NAME[k] + '” under Climate control in the Garage.');
     return a;
@@ -437,7 +500,7 @@
     if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : pk.wind ? ' (up to ' + Math.round(pk.wind) + ' mph)' : '');
     return KINDS[x.kind][0];
   }
-  var api = { tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
+  var api = { vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
     forRoute: forRoute, rerate:rerate, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;

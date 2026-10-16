@@ -1,6 +1,6 @@
 # Open work
 
-The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.173**, 2026-10-16, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
+The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.174**, 2026-10-16, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
 Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 48 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
@@ -22,14 +22,6 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 ### Route hazards and climate
 
 47. [ ] **Redesign hazard warning menus with animations.** Use concise, focused animations to make each hazard and its vehicle-specific consequences understandable without a text wall. Preserve accessible text, reduced-motion support and explicit acknowledgment where required.
-
-40. [ ] **Rank route options by the vehicle's weak points.** Rank Hazards' options by how vulnerable this vehicle is to each route's hazards, not just by which hazards are present:
-    - wind ranks lower for large or tall vehicles and when towing;
-    - heavy rain and thunderstorms rank lower for worn tires, low-riding cars (sports cars) and a broken or missing air conditioner (demisting);
-    - extreme heat ranks lower when the air conditioner is broken or missing.
-
-    Ground clearance or ride height needs a source: research a general data source first (EPA class, NHTSA/VIN body data, catalog data), with on-device AI classifying low-riding cars only as a fallback. If that needs a larger model, decide it together with item 38. Explain each ranking in the option's row.
-41. [ ] **"My air conditioning is broken" switch.** Put a switch at the top of Garage → Climate control saying whether the car's A/C works. When it is on, presets and Advice should not recommend A/C or its demisting, and Hazards should use it (item 40). Saved per car and included in backup and export.
 
 ### Vehicle images
 
