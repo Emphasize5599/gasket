@@ -118,7 +118,7 @@
   function rangeMi(c) { c = c || car(); var m = obsHwy(c) && obsCity(c) ? harm(obsCity(c), obsHwy(c)) : 0; return m > 0 && +c.tank > 0 ? m * +c.tank : (c.epa && +c.epa.range) || 0; }
 
   // ---------- data ----------
-  function installDemo(onlyDually){var added=0;window.DemoCars.create().forEach(function(c){if(onlyDually&&c.id!=='demo-ram3500'||S.cars.some(function(x){return x.id===c.id;}))return;S.cars.push(c);added++;});if(!S.carId&&S.cars.length)S.carId=S.cars[0].id;if(added){changed();draw();}return added;}
+  function installDemo(onlyDually){var added=0;window.DemoCars.create().forEach(function(c){if(onlyDually&&c.id!=='demo-ram3500'||S.cars.some(function(x){return x.id===c.id;}))return;S.cars.push(c);added++;});if(!S.carId&&S.cars.length)S.carId=S.cars[0].id;if(added){Object.assign(S.trip||(S.trip={}),DemoCars.tripDefaults());changed();draw();}return added;}
   function addDuallyDemo(){return installDemo(true);}
   function seedInfo(id) {
     if (id === 'corolla20') return { engine: '1.8L Inline 4 Cyl (2ZR-FXE)', asp: 'na', trans: 'ecvt', drive: 'fwd', features: ['Atkinson cycle', 'Port injection', 'Variable valve timing', 'DOHC', 'Regenerative braking'] };

@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.175 - 2026-10-16 (keyless test branch only)
+- Route review has a square Back arrow beside No/Yes; remembering off asks again when returning to Hazards and never writes temporary answers into settings.
+- Demo vehicles prefill fuel/charge and trip-planning values.
+- Fixed the empty speed-controls tile in Stops.
+
 ## 0.0.174 - 2026-10-16 (keyless test branch only)
 - Vehicle-aware hazard ranking, with brief reasons and an optional vehicle-profile override.
 - Per-car broken-A/C switch updates climate recommendations and hazard advice.

@@ -847,11 +847,12 @@ details.g-obs[open] { padding-bottom: 12px; }
 .kpi-share svg { width: 22px; height: 22px; fill: currentColor; }
 .tp-nav .btn svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .tp-nav .btn:disabled { opacity: .45; }
-.tp-nav.route-review { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.tp-nav.route-review { grid-template-columns:48px minmax(0,1fr) minmax(0,1fr); }
 .tp-nav.route-review #tBack { background:#c62828; color:#fff; }
 .tp-nav.route-review #tNext { background:#188038; color:#fff; }
-.route-review-back { display:inline-flex; align-items:center; gap:4px; margin:0 0 10px; }
+.route-review-back { display:inline-flex; align-items:center; justify-content:center; padding:0; border-radius:14px; }
 .route-review-back svg { width:20px; height:20px; fill:currentColor; }
+[data-trip-speed]:empty { display:none; }
 .hz-profile { color:var(--ink-2); font-size:12.5px; margin:6px 2px; }
 .hz-fit { display:block; width:100%; font-size:12px; line-height:1.4; color:var(--ink-2); }
 .hz-fit strong, .hz-fit > span { display:block; margin-top:4px; }

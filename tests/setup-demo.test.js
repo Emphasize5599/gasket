@@ -8,7 +8,15 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('#sDemo');assert.equal(await p.evaluate(()=>__demoScanCalls),0,'demo button must not start a station scan');assert.equal(await p.evaluate(()=>__app.stations().length),0);assert.equal(await p.evaluate(()=>__app.S.cars.length),4);assert.equal(await p.evaluate(()=>__app.S.cars.some(c=>c.vin)),false);assert.equal(await p.evaluate(()=>__app.S.cars.find(c=>c.id==='demo-ram3500').epaId||null),null);
  const coverage=await p.evaluate(()=>{const cs=__app.S.cars,ram=cs.find(c=>c.id==='demo-ram3500');return {powers:cs.map(c=>c.power),diesel:ram.grade,intake:cs.find(c=>c.id==='demo-prime').info.asp,tireCount:TireMath.positions(ram.tires).length,missing:TireMath.missing(ram.tires).length,weather:cs.every(c=>c.climate.presets.some(p=>p.kind==='weather'&&p.season)),logged:cs.some(c=>c.entries.some(e=>e.loggedAt&&e.mpg)),measured:cs.some(c=>c.tires.tread.mode==='measure'),general:cs.some(c=>TireMath.generalized(c.tires))};});assert.deepEqual(coverage.powers,['phev','diesel','ev','h2']);assert.equal(coverage.diesel,'diesel');assert.equal(coverage.intake,'na');assert.equal(coverage.tireCount,18);assert.equal(coverage.missing,0);assert.ok(coverage.weather&&coverage.logged&&coverage.measured&&coverage.general);
  assert.ok(await p.evaluate(()=>__app.S.cars.every(c=>new Set(c.climate.presets.map(p=>p.id)).size===c.climate.presets.length)),'bulk demo presets have distinct stable identities');
- await p.click('#btnTrip');await p.evaluate(()=>{__app.S.carId='demo-ram3500';Garage.redraw();});
+ assert.deepEqual(await p.evaluate(()=>{const t=__app.S.trip;return [t.altMinSave,t.bufferMi,t.tankPrice,t.minSave,t.maxDetourMin];}),[.01,50,'4.00',1,7.5],'demo trip settings');
+ assert(await p.evaluate(()=>__app.S.cars.every(c=>c.power==='ev'?c.demoFuel.mode==='pct'&&c.demoFuel.pct==='100':c.demoFuel.mode==='gauge'&&c.demoFuel.n16===1)),'demo fuel defaults match every powertrain');
+ await p.click('#btnTrip');
+ await p.evaluate(()=>{window.__demoAirDue=Tires.airDue;window.__demoAckDue=Climate.ackDue;Tires.airDue=()=>false;Climate.ackDue=()=>false;});
+ for(const id of ['demo-prime','demo-tesla','demo-ram3500','demo-mirai']){
+  await p.evaluate(()=>__trip.step(1));await p.click('[data-car="'+id+'"]');await p.evaluate(()=>__trip.step(4));
+  assert.deepEqual(await p.evaluate(()=>__app.S.trip.fuel),id==='demo-tesla'?{mode:'pct',pct:'100'}:{mode:'gauge',n16:1},'selected demo vehicle receives its own fuel default');assert.equal(await p.inputValue('#tBuffer'),'50');assert.equal(await p.inputValue('#tTankPrice'),'4.00');assert.equal(await p.inputValue('#tMaxMin'),'7.5');
+ }
+ await p.evaluate(()=>{Tires.airDue=__demoAirDue;Climate.ackDue=__demoAckDue;__trip.step(1);__app.S.carId='demo-ram3500';Garage.redraw();});
  assert.equal(await p.evaluate(()=>Garage.units().fuelWord),'Diesel');
  assert.equal(await p.locator('#gInfo #gPower').count(),0,'About this car only shows the details');assert.match(await p.locator('#gInfo').textContent(),/Diesel/);
  await p.click('#gEdit');assert.equal(await p.inputValue('#gPower'),'diesel');assert.deepEqual(await p.locator('#gGrade option').allTextContents(),['Diesel']);

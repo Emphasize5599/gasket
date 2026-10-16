@@ -32,5 +32,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await open('memory-a');await p.waitForSelector('#cfm');await p.click('#cfmYes');await p.waitForSelector('#cfm',{state:'detached'});await p.evaluate(()=>__trip.step(3));await p.uncheck('#tRememberRoutes');
  assert.equal(await p.evaluate(()=>__app.KV.get('trips','trip|memory-a').v.routeChoicesByVehicle[__firstCar]),undefined,'turning off removes this vehicle’s remembered record');assert(await p.evaluate(()=>!!__app.KV.get('trips','trip|memory-a').v.routeChoicesByVehicle[__secondCar]),'other vehicle memory remains separate');
  await open('memory-a');assert.equal(await p.locator('#cfm').count(),0);assert.deepEqual(await p.evaluate(()=>__app.S.trip.routeChoices),{},'reopening with remembering disabled always asks again');
+ await p.evaluate(()=>__trip.step(5));await p.click('#tNext');await p.waitForSelector('#tReviewBack');await p.click('#tBack');await p.waitForFunction(()=>Object.keys(__app.S.trip.routeChoices).length>0);
+ assert.equal(await p.evaluate(()=>{__app.save();return JSON.parse(__app.N.loadSettings()).trip.routeChoices;}),undefined,'temporary consent is never written into general settings');
+ assert.equal(await p.evaluate(()=>JSON.parse(JSON.stringify(__app.S)).trip.routeChoices),undefined,'exports and backup settings cannot include temporary consent');
+ await p.evaluate(()=>__trip.step(5));assert.deepEqual(await p.evaluate(()=>__app.S.trip.routeChoices),{},'returning from Adjustments with remembering off asks again');await p.click('#tNext');await p.waitForSelector('#tReviewBack');assert.equal(await p.innerText('#tNext'),'Yes');
  await p.evaluate(()=>__trip.close());assert.deepEqual(errors,[]);await p.close();
 }console.log('Saved-trip/car-scoped opt-in, default-off, fresh-trip reset and forecast-age acknowledgment passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

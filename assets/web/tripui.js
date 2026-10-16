@@ -11,7 +11,7 @@
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
   ['linkSliders','slowMode','maxUnder','timeValue'].forEach(function(k){delete S.trip[k];});
   // Consent is session state, never a global default or inferred from a matching route link.
-  S.trip.routeChoices={};
+  Object.defineProperty(S.trip,'routeChoices',{value:{},writable:true,configurable:true,enumerable:false});
 
   // ---------- native calls as promises ----------
   var nid = 900000, waiting = {};
@@ -111,7 +111,7 @@
   function choiceSelections(){return choiceLists().map(function(_,i){return hzSel(i);});}
   function choiceEntries(){return RouteChoices.entries(choiceLists(),choiceSelections(),choiceAnswers());}
   function choicePending(){return routeFlow()?RouteChoices.pending(choiceLists(),choiceSelections(),choiceAnswers()):[];}
-  function reviewShow(item){routeReview=item||null;if(item)hzLeg=item.leg;hzFitKey=null;renderHz();drawHaz();navRender();tpBody().scrollTop=0;hzLoadLeg(hzLeg);return !!item;}
+  function reviewShow(item){routeReview=item||null;if(item)hzLeg=item.leg;hzFitKey=null;renderHz();drawHaz();hzPill();navRender();tpBody().scrollTop=0;hzLoadLeg(hzLeg);return !!item;}
   function reviewStart(){return reviewShow(choicePending()[0]);}
   function reviewOrder(){return RouteChoices.pending(choiceLists(),choiceSelections(),{});}
   function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
@@ -376,6 +376,10 @@
   /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
   function adviceDue() { return !!((window.Tires && Tires.airDue && Tires.airDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
+    // Going back is a new review, not implicit consent to reuse this session's answers.
+    if(step===ST_HAZ&&shown>ST_HAZ&&Garage.car().rememberRouteChoices!==true){
+      S.trip.routeChoices={};choiceReviewedAt=0;routeReview=null;choiceComplete=false;result=null;
+    }
     if(!recommendationActive()){stopRecommendations();clearRecommendationMaps();}
     freshModel();
     setTimeout(function () { if (A.jobDraw && A.job && A.job()) A.jobDraw(); }, 0);   // its status bar shows unless this step shows the search itself
@@ -418,6 +422,7 @@
     } else {
       b.scrollTop = scrolls[step] || 0;
       if (step === ST_ADVISORY && window.Advisory && Advisory.wake) Advisory.wake();   // a car switch while it was hidden
+      if(onPlan(step))renderTripSpeed();
     }
     // the big map: drawn after this frame paints, and only when its route or stops changed
     var k0 = step;
@@ -452,7 +457,7 @@
     }
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
-    if(step===ST_HAZ&&routeReview){$('tBack').textContent='No';$('tNext').textContent='Yes';$('tBack').onclick=function(){reviewAnswer(false);};$('tNext').onclick=function(){reviewAnswer(true);};routeGate();return;}
+    if(step===ST_HAZ&&routeReview){nav.insertAdjacentHTML('afterbegin','<button type="button" class="btn tonal route-review-back" id="tReviewBack" aria-label="Back to previous route"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>');$('tReviewBack').onclick=reviewBack;$('tBack').textContent='No';$('tNext').textContent='Yes';$('tBack').onclick=function(){reviewAnswer(false);};$('tNext').onclick=function(){reviewAnswer(true);};routeGate();return;}
     if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } var previous=step-1;while(previous>ST_ADVISORY&&jobLocked(previous))previous--;if (jobLocked(previous)) return; leaveAsk(function () { closeLegs(); collectSafe(); step=previous; renderStep(); }); };
     if ($('tNext')) $('tNext').onclick = async function () { if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { var i=hzLeg,a=hzAlts(i)[hzSel(i)];if(await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i&&hzAlts(i)[hzSel(i)]===a;}))hzGoLeg(i + 1); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
     if ($('tOpen')) $('tOpen').onclick = openMaps;
@@ -638,7 +643,7 @@
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
         '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
         '<div id="tRouteGo"></div></div>' +
-        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,1,'for the whole trip')+'<span></span></div></div><div id="tRouteInfo"></div>';
+        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div><div id="tRouteInfo"></div>';
     }
     if (k === ST_PARAMS) {
       var kd = KIND();
@@ -648,7 +653,7 @@
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
-      '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 1, 'extra driving per stop') + '</div>' +
+      '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 0.5, 'extra driving per stop') + '</div>' +
       '<div class="sub-h">When you get there <button type="button" class="qi" id="tArriveQ" aria-label="More info">?</button></div>' +
       '<div class="seg2" id="tArrive"><button data-a="buffer" class="' + (t.arrive !== 'full' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
 
@@ -775,12 +780,12 @@
   }
   function renderFuel() {
     FuelGauge.render($('tFuel'), { kind: KIND(), tank: Garage.tank(), mpu: Garage.carModel().comb, unit: UN(), fuel: fuel(),
-      onChange: function (f) { S.trip.fuel = f; syncMilesLeft(); A.save(); result = null; emptyHelp(); gateTabs(); } });
+      onChange: function (f) { S.trip.fuel = f;if(Garage.car().demoFuel)Garage.car().demoFuel=Object.assign({},f);syncMilesLeft(); A.save(); result = null; emptyHelp(); gateTabs(); } });
     emptyHelp();
     setTimeout(function () { try { emptyPlan(); } catch (e) { } }, 300);   // ready before the needle gets to E
   }
   /** How much is in the tank: S.trip.fuel ({mode: gauge / pct / miles, …}, see fuelgauge.js), filled in for this car. */
-  function fuel() { return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
+  function fuel() {var c=Garage.car();if(c.demoFuel&&S.trip.demoFuelCar!==c.id){S.trip.fuel=Object.assign({},c.demoFuel);S.trip.milesLeft='';S.trip.demoFuelCar=c.id;}else if(!c.demoFuel)delete S.trip.demoFuelCar;return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
   function fuelMiles() { return FuelGauge.math.miles(fuel(), Garage.tank(), Garage.carModel().comb); }
   function hasFuel() { var m = fuelMiles(); return m != null && m > 0; }   // an empty tank isn't an answer (see emptyHelp)
   /** Roads wind: a straight line times this is a fair guess at the miles to a station off the route. */
@@ -2260,8 +2265,10 @@
     }
     return legs;
   }
+  function speedTile(){var host=$('tpS'+step);return host&&host.querySelector('[data-trip-speed]');}
   function renderTripSpeed() {
-    var el = $('tsSpeed'); if (!el || !result || !result.plan.ok) return;
+    var el = speedTile(); if (!el || !result || !result.plan.ok) return;
+    tpBody().querySelectorAll('[data-trip-speed]').forEach(function(e){e.removeAttribute('id');});el.id='tsSpeed';
     ensureLimits(model);
     var legs = speedLegs(), lim = model._lim, st = result.speedState = result.speedState || {};
     var priceAt = function (d) { var L = legs.filter(function (x) { return d >= x.a && d < x.b; })[0] || legs[legs.length - 1]; return L ? L.price : result.startPrice; };
@@ -3061,10 +3068,10 @@
       } else h += '<div class="msg ok">No stop needed — checked ' + r.cands.length.toLocaleString() + ' stations.</div>';
       if(!routeFlow())h += routeBox();
       h += '<div class="gas-tiles">' + idealBox() + arriveBox() + '</div>';
-      if(routeFlow()&&step===ST_STOPS)h+='<div class="spdbox" id="tsSpeed"></div>';
+      if(routeFlow()&&step===ST_STOPS)h+='<div class="spdbox" data-trip-speed></div>';
       h += A.gAttr();                                   // the route, and most stations, come from Google
       // Adjustments: the buffer, max. detour and speeds (and the optional top-up)
-      ah += bufBox();ah += detBox();ah += '<div class="spdbox" id="tsSpeed"></div>';if (S.trip.arrive === 'full') ah += topUpBox();
+      ah += bufBox();ah += detBox();ah += '<div class="spdbox" data-trip-speed></div>';if (S.trip.arrive === 'full') ah += topUpBox();
     }
     put(h, ah);
     var both = tpBody();
@@ -3338,7 +3345,7 @@
       return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +
         (note ? '<span class="hz-note">' + esc(note) + '</span>' : '') + '<span class="hz-o2">' + chips + '</span><span class="hz-fit"><strong>'+(fit.complete?'Vehicle fit '+fit.rows[k].rank+' of '+list.length:'Not ranked — comparison incomplete')+'</strong>'+(e&&e.st==='done'?'<span>'+esc(fit.rows[k].fit.reasons.join(' · '))+'</span>':'')+'</span></button>';
     }).join('') + '</div>';
-    if(routeReview)h='<div class="card"><button type="button" class="btn tonal sm route-review-back" id="tReviewBack"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg>Back</button><h3>Would you consider this route if it were cheaper?</h3><p class="lead small keep">Leg '+(hzLeg+1)+' · '+esc(legName(route,hzLeg))+'. No skips its station search; Yes includes it after your primary routes.</p></div>'+h;
+    if(routeReview)h='<div class="card"><h3>Would you consider this route if it were cheaper?</h3><p class="lead small keep">Leg '+(hzLeg+1)+' · '+esc(legName(route,hzLeg))+'. No skips its station search; Yes includes it after your primary routes.</p></div>'+h;
     var e = hzCache.get(list[sel]);
     h += '<div class="card wx-card" id="tWx"><h3>On this route</h3>';
     if (!e || !e.st || e.st === 'loading') h += A.ldBar('Checking the forecast where and when you\'ll be');

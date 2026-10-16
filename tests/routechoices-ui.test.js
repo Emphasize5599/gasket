@@ -22,7 +22,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tAltCmp');assert.equal(await p.locator('#tpS3 #tAltCmp').count(),1);
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('[data-hzk]');
  await p.click('#tNext');await p.click('#tNext');await p.waitForFunction(()=>document.querySelector('#tBack').textContent==='No');
- assert.equal(await p.locator('#tpNav.route-review').count(),1);const halves=await p.evaluate(()=>['tBack','tNext'].map(id=>{const e=document.getElementById(id);return {width:e.getBoundingClientRect().width,color:getComputedStyle(e).backgroundColor};}));assert(Math.abs(halves[0].width-halves[1].width)<1);assert.equal(halves[0].color,'rgb(198, 40, 40)');assert.equal(halves[1].color,'rgb(24, 128, 56)');
+ assert.equal(await p.locator('#tpNav.route-review').count(),1);assert.equal(await p.locator('#tpNav > #tReviewBack').count(),1);assert.equal(await p.locator('#tReviewBack').innerText(),'');const back=await p.locator('#tReviewBack').boundingBox();assert(Math.abs(back.width-back.height)<1,'Back is square');const halves=await p.evaluate(()=>['tBack','tNext'].map(id=>{const e=document.getElementById(id);return {width:e.getBoundingClientRect().width,color:getComputedStyle(e).backgroundColor};}));assert(Math.abs(halves[0].width-halves[1].width)<1);assert.equal(halves[0].color,'rgb(198, 40, 40)');assert.equal(halves[1].color,'rgb(24, 128, 56)');
+ if(process.env.UI_SHOTS)await p.screenshot({path:path.join(process.env.UI_SHOTS,'route-review-footer-'+width+'.png')});
  const firstReview=await p.locator('.hz-opt b').textContent();await p.click('#tReviewBack');assert.equal(await p.innerText('#tBack'),'Back','first review backs out to primary selection');
  await p.click('#tNext');await p.waitForSelector('#tReviewBack');assert.equal(await p.locator('.hz-opt b').textContent(),firstReview);
  await p.click('#tBack');const secondReview=await p.locator('.hz-opt b').textContent();assert.notEqual(secondReview,firstReview);
@@ -45,6 +46,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.match(await p.locator('.proposal-delta').first().innerText(),/min/);
  await p.click('[data-decline="0"]');assert.equal(await p.locator('.trip-proposal').count(),2);
  await p.click('#tNext');await p.waitForSelector('#tsIdeal');
+ assert.equal(await p.locator('#tsSpeed').count(),1,'only the visible speed tile owns its ID');assert((await p.locator('#tpS7 #tsSpeed').innerText()).trim().length>0,'Stops has populated speed controls, not an empty tile');
  assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[0,0],'Next skips recommendations without changing the trip');
  if(width===320){
   await p.evaluate(()=>{window.__plannerRun=Planner.run;window.__holdPlan=true;Planner.run=function(o,c){if(!__holdPlan)return __plannerRun(o,c);__holdPlan=false;return new Promise(resolve=>{window.__releasePlan=()=>__plannerRun(o,c).then(resolve);});};__trip.step(6);});
