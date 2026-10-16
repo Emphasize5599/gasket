@@ -473,6 +473,7 @@
       collectSafe();
       for (var s0 = step; s0 < to; s0++) {
         if (s0 === ST_ADVISORY || s0 === ST_PARAMS) { if (!(await ready(s0))) return; }
+        else if(s0===ST_HAZ){if(!(await ready(s0)))return;} // A background scan must not skip route-consideration questions.
         else if (s0 === ST_ROUTE && (!model || timesNeed())) return;
       }
       step = to; renderStep(); return;
