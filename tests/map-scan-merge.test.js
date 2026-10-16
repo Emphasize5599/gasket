@@ -38,7 +38,9 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  await p.evaluate(()=>{__app.map.panBy([20,0],{animate:false});});
  await p.waitForFunction(()=>document.querySelectorAll('#rows .row').length===2);
  // Persist the browser stand-in's exact native cache and KV across reopening.
- await p.evaluate(()=>{sessionStorage.setItem('standinRestored',JSON.stringify({s:__app.N.loadSettings()||JSON.stringify(__app.S),c:__app.N.loadCache()}));sessionStorage.setItem('test-kv',JSON.stringify(window.__kv));});
+ // (handed to the reloaded page by an init script: sessionStorage alone can come back empty after a file:// reload)
+ const snap=await p.evaluate(()=>({s:__app.N.loadSettings()||JSON.stringify(__app.S),c:__app.N.loadCache(),kv:window.__kv}));
+ await p.addInitScript(d=>{try{sessionStorage.setItem('standinRestored',JSON.stringify({s:d.s,c:d.c}));sessionStorage.setItem('test-kv',JSON.stringify(d.kv));}catch(e){}window.__kv=JSON.parse(JSON.stringify(d.kv));},snap);
  await p.reload();await p.waitForSelector('#btnLocate.live');
  const counts=await p.evaluate(()=>{const rows=PriceHistory.near([33,-95,36,-89]),store=rows.find(s=>s.wmStoreId==='99001');return {n:rows.filter(s=>s.wmStoreId==='99001').length,grades:Object.keys(store&&store.prices||{}),records:PriceHistory.stations().map(s=>({id:s.id,store:s.snapshot&&s.snapshot.wmStoreId,lat:s.lat,lng:s.lng})),savedKeys:Object.keys(JSON.parse(sessionStorage.getItem('test-kv')||'{}')).length,restoredKeys:Object.keys(window.__kv||{}).length};});
  assert.equal(counts.n,1,JSON.stringify(counts));assert(counts.grades.includes('diesel')&&counts.grades.includes('regular'),JSON.stringify(counts));
