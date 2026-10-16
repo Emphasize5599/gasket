@@ -567,7 +567,8 @@
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
       return '<option value="' + t + '"' + ((c.type || 'car') === t ? ' selected' : '') + '>' + SP.TYPES[t].label + '</option>'; }).join('') + '</select></label></div>';
     // engine, transmission, drive, fuel and features: changed here (the Garage page's About this car only shows them)
-    h += tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
+    var dOld = $('gDetails'); if (dOld) detOpen = dOld.open;   // its toggle event comes a task later: a redraw before it would close it
+    h +=tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
     return h;
   }
   function infoLine(c) {
