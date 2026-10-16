@@ -80,7 +80,14 @@
   function card(c){
     if(!state.enabled)return '';
     var got=answer(c),esc=A.esc;
-    if(got)return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup · AI-written</h3><div class="gemma-answer"><p>'+esc(got.answer.summary)+'</p>'+got.answer.actions.map(function(a){var action=got.pack.actions.find(function(x){return x.id===a.id;});return '<p><b>'+esc(action.text)+'</b>'+(a.why?' '+esc(a.why):'')+'</p>';}).join('')+'</div><p class="lead small keep">AI explanation, checked against Gasket’s findings—not a tire inspection. Required notices remain below.</p></div>';
+    if(got){
+      // the AI's summary and why its top findings matter; the checked findings themselves, folded, are the record
+      var facts=got.pack.facts,find=function(id){return facts.filter(function(f){return f.id===id;})[0];};
+      var top=got.answer.top.map(function(a){var f=find(a.id);return f?'<li class="'+(f.level==='warn'?'warn':'')+'"><b>'+esc(f.title)+'</b> '+esc(a.why)+'<small>'+esc(f.text)+'</small></li>':'';}).join('');
+      return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup · AI-written</h3><div class="gemma-answer"><p>'+esc(got.answer.summary)+'</p>'+(top?'<ul class="gemma-top">'+top+'</ul>':'')+'</div>'+
+        '<details class="gemma-all"><summary><span>All checked findings ('+facts.length+')</span></summary><ul>'+facts.map(function(f){return '<li class="'+(f.level==='warn'?'warn':'')+'">'+esc(f.text)+'</li>';}).join('')+'</ul></details>'+
+        '<p class="lead small keep">Written by the on-phone AI from Gasket’s checked findings, not a tire inspection.</p></div>';
+    }
     var eligible=false;try{eligible=input(c).pack.setup.tires.some(function(t){return t.depth!=null;});}catch(e){}
     var label=state.ready?(running?'Local AI is preparing an explanation.':eligible?'Checked tire notices are available below.':'Add tire mileage and type, or measured tread, before requesting an explanation.'):'Download Gemma in Settings to enable local explanations.';
     return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup</h3><p class="lead small keep">'+esc(lastIssue||state.error||label)+'</p>'+(state.ready&&eligible&&!running?'<button class="btn tonal sm" id="gemmaRetry">Try AI explanation</button>':'')+'</div>';

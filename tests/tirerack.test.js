@@ -219,7 +219,7 @@ async function run() {
     await ui.fill('#tzSize','225/60R17');
     await ui.dispatchEvent('#tzSize','change');
     await ui.evaluate(() => { __app.N.siteRead=__previousRead; onNativeResult(__held[0],{factory:['235/60R17']}); });
-    await ui.fill('#tzMiles','20000');await ui.dispatchEvent('#tzMiles','change');await ui.selectOption('#tzRot','yes');await ui.selectOption('#tzType','Grand Touring All-Season');
+    await ui.fill('#tzMiles','20000');await ui.dispatchEvent('#tzMiles','change');await ui.selectOption('#tzRot','yes');await ui.selectOption('#tzType','Grand Touring All-Season');await ui.fill('#tzDot','2324');await ui.dispatchEvent('#tzDot','change');
     await ui.waitForSelector('#tzRetry');await ui.click('#tzDone');await ui.click('#tzDet');
     await ui.waitForFunction(() => Garage.car().tires.list && Garage.car().tires.list.size==='225/60R17');
     assert.equal(await ui.evaluate(() => Garage.car().tires.size), '225/60R17');
@@ -288,6 +288,7 @@ async function run() {
     await catalogUI.waitForFunction(()=>__catalogReads.filter(a=>a.step==='list').length===2 && Garage.car().tires.list.catalogVersion===5);
     await catalogUI.waitForSelector('#tzRefresh');
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'70000','refresh must preserve a manually entered warranty');
+    if(await catalogUI.isDisabled('#tzDone')){await catalogUI.fill('#tzDot','2324');await catalogUI.dispatchEvent('#tzDot','change');}
     await catalogUI.click('#tzDone');
     await catalogUI.evaluate(rows=>{
       const t=Garage.car().tires;t.list.items=rows; t.type='Grand Touring All-Season';t.brand='General';t.model='AltiMAX RT45';t.warrantySrc='tirerack';t.warrantyMi=65000;

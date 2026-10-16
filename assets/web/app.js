@@ -1074,7 +1074,8 @@
       // back to the top: near the end (phones stop a little short of it), or heading back up after a screen or more
       up = below <= Math.max(48, sc.clientHeight * 0.12) || (goingUp && sc.scrollTop > sc.clientHeight);
       b.classList.toggle('up', up); b.setAttribute('aria-label', up ? 'Back to the top' : 'More below');
-      var inset=sc.classList.contains('sub-body')?(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sb'))||0):0;
+      // a subpage's body runs behind Android's bar, unless a footer (the car editor's Discard / Save) sits below it
+      var inset=sc.classList.contains('sub-body')&&!sc.nextElementSibling?(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sb'))||0):0;
       b.style.top = Math.round(r.bottom - inset - 34 - 10) + 'px'; b.style.left = Math.round(r.left + r.width / 2 - 17) + 'px';   // subpages also clear Android's gesture/three-button bar
     };
     var soon = function () { if (!raf) raf = requestAnimationFrame(update); };

@@ -16,7 +16,7 @@ assert.equal(M.lifeMiles({...tires,warrantyMi:65000}),65000);
  await p.click('#btnTrip');await p.click('#gTires summary');await p.click('#tzDet');assert(await p.isDisabled('#tzDone'));
  assert.equal(await p.locator('#tzMiles[required],#tzRot[required],#tzType[required]').count(),3);
  await p.fill('#tzMiles','30000');await p.dispatchEvent('#tzMiles','change');assert(await p.isDisabled('#tzDone'));await p.selectOption('#tzRot','no');assert(await p.isDisabled('#tzDone'));
- await p.selectOption('#tzType','Grand Touring All-Season');assert(!await p.isDisabled('#tzDone'));
+ await p.selectOption('#tzType','Grand Touring All-Season');assert(await p.isDisabled('#tzDone'),'the date made is required too');await p.fill('#tzDot','2324');await p.dispatchEvent('#tzDot','change');assert(!await p.isDisabled('#tzDone'));
  assert.equal(await p.evaluate(()=>Garage.car().tires.type||''),'','draft details are not saved before Done');
  await p.click('#tzDone');assert.equal(await p.evaluate(()=>Garage.car().tires.type),'Grand Touring All-Season');
  const depths=await p.locator('#gTires [data-car-wheel]').evaluateAll(es=>Object.fromEntries(es.map(e=>[e.dataset.carWheel,+e.dataset.depth])));assert(depths.lf<depths.lr);assert.equal(depths.lf,depths.rf);

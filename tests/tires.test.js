@@ -52,9 +52,10 @@ assert.equal(T.estimate(v75).depth, 3); assert.equal(v75.trailers.length, 1); as
 // by mileage: each tire needs its miles, a warranty (its own, or its car's / trailer's) and whether it's been rotated
 const mi = four(0, 0, 0, 0); mi.corners.mode = 'miles'; mi.warrantyMi = 60000; mi.type = 'Grand Touring All-Season';
 assert.equal(T.missing(mi).length, 4, 'nothing filled in: all four missing');
-['lf', 'rf', 'lr'].forEach(k => { mi.corners[k] = { miles: 30000, rotated: 'yes' }; });
+['lf', 'rf', 'lr'].forEach(k => { mi.corners[k] = { miles: 30000, rotated: 'yes', dot: '2322' }; });
 assert.deepEqual(T.missing(mi).map(p => p.k), ['rr']); assert.deepEqual(T.needs(mi, T.positions(mi)[3]), ['miles', 'rotated']);
 mi.corners.rr = { miles: 30000, rotated: 'no', warrantyMi: 80000 };
+assert.deepEqual(T.missing(mi).map(p => p.k), ['rr'], 'no date made yet: still missing (its tread is estimated anyway)'); mi.corners.rr.dot = '2322';
 assert.equal(T.missing(mi).length, 0);
 assert.equal(T.depthAt(mi, T.positions(mi)[0]), 6, 'halfway through the car\'s 60k warranty: 6/32');
 assert.equal(T.estimate(mi).measured, false, 'estimated, not measured');
@@ -281,4 +282,18 @@ console.log('tire version matching ok');
   assert.equal(T.variantOf('the standard Blazer (non-EV) retains a compact spare'), 'gas');
   assert.equal(T.sentenceKind('It has a compact spare, not a full-size spare.'), 'compact');
   console.log('a mixed gas / EV answer is read for this car only');
+}
+
+// 0.0.170: tire age from the DOT code's week + year, and the spare assumed as old as its model year allows
+{
+  const T = require('../assets/web/tires.js'), now = Date.UTC(2026, 9, 16);
+  assert.deepEqual([T.dotDate('2319').week, T.dotDate('2319').year], [23, 2019]);
+  assert.equal(T.dotDate('DOT U2LL LMLR 0308').year, 2008, 'the last four digits, after the rest of the code');
+  assert.equal(T.dotDate('5419'), null, 'no 54th week'); assert.equal(T.dotDate('12'), null);
+  assert.equal(T.dotOk('0127', now), false, 'a code from the future is a typo');
+  assert.equal(T.ageYears('4220', now), 6, 'week 42 of 2020 is 6 years old in mid-October 2026');
+  assert.deepEqual(['fine', 'inspect', 'old', 'replace'], [4.9, 5, 6, 10].map(T.ageStatus));
+  assert.equal(T.spareDot(2025), '0124', 'a 2025 car could be built from January 2024 (40 CFR 85.2304)');
+  assert.equal(T.spareDot(''), '');
+  console.log('tire age from the DOT code; spare age assumed from the model year');
 }

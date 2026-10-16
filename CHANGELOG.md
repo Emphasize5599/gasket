@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.170 - 2026-10-16 (keyless test branch only)
+- Local AI tire explanations rebuilt: the checked findings now cover each tire's tread, miles left, warranty, rotation, age and the spare, and the AI summarizes the most urgent first (tuned on the real model; see docs/AI_TIRE_EVAL.md).
+- Tire age: when your tires were made (the DOT date code) is required; the spare, if undated, is assumed as old as the car's model year allows.
+- The tire picture shows the spare lying flat, behind the car or beside it while towing; small trailer wheels get number tags.
+- Demo cars each have a different set of tire problems to try.
+- Bug fixes.
+
 ## 0.0.169 - 2026-10-16 (keyless test branch only)
 - The spare-tire lookup names your car's powertrain and reads only what an answer says about your version (a gas Blazer's answer that also covered the Blazer EV opened with the EV's "No spare").
 - Bug fixes.
