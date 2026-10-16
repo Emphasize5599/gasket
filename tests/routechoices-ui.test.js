@@ -10,7 +10,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   const saved={route:{stops:[{label:'Start',lat:34,lng:-92},{label:'Middle',lat:34.7,lng:-92},{label:'End',lat:35.4,lng:-92}],legs},alts,altSel:0,altSure:true,trip:{from:'100 Main St, Testville',to:'200 Main St, Testville',fuel:A.S.trip.fuel,altCompare:true,altMinSave:.1,routeChoices:{}},stations:{official:[],google:[]},savedT:Date.now()};
   A.KV.put('trips','trip|choice-test',saved);A.KV.put('trips','index',[{id:'choice-test',title:'Synthetic two-leg route',t:saved.savedT,mi:100,n:3}]);
   window.__paid=0;A.N.search=A.N.computeRoute=A.N.routeSearch=()=>__paid++;
-  window.__phases=[];const discover=KeylessGas.discover;KeylessGas.discover=async function(...args){__phases.push('start');const r=await discover(...args);__phases.push('end');return r;};
+  window.__phases=[];window.__scanGate=new Promise(r=>window.__continueScan=r);const discover=KeylessGas.discover;KeylessGas.discover=async function(...args){__phases.push('start');args[1](.1,'Discovering stations…');await __scanGate;const r=await discover(...args);__phases.push('end');return r;};
   A.N.siteRead=(id,key,json)=>{if(!/^gasweb/.test(key))return setTimeout(()=>onNativeResult(id,{stores:[]}),0);const a=JSON.parse(json),m=/@(-?[\d.]+),(-?[\d.]+)/.exec(a.url),lat=+m[1],lng=+m[2];setTimeout(()=>onNativeResult(id,{stores:[{id:'web:'+lat+':'+lng,name:'Exxon',brand:'exxon',lat,lng,address:'100 Test St',source:'Google Maps web',prices:{regular:{price:3.25}}}],detail:{exhausted:true}}),0);};
  });
  await p.click('#btnTrip');await p.click('[data-hist="choice-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__app.S.trip.departNow=true);
@@ -23,6 +23,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('[data-hzk]');
  await p.click('#tNext');await p.click('#tNext');await p.waitForFunction(()=>document.querySelector('#tBack').textContent==='No');
  assert.equal(await p.locator('#tpNav.route-review').count(),1);const halves=await p.evaluate(()=>['tBack','tNext'].map(id=>{const e=document.getElementById(id);return {width:e.getBoundingClientRect().width,color:getComputedStyle(e).backgroundColor};}));assert(Math.abs(halves[0].width-halves[1].width)<1);assert.equal(halves[0].color,'rgb(198, 40, 40)');assert.equal(halves[1].color,'rgb(24, 128, 56)');
+ const firstReview=await p.locator('.hz-opt b').textContent();await p.click('#tReviewBack');assert.equal(await p.innerText('#tBack'),'Back','first review backs out to primary selection');
+ await p.click('#tNext');await p.waitForSelector('#tReviewBack');assert.equal(await p.locator('.hz-opt b').textContent(),firstReview);
+ await p.click('#tBack');const secondReview=await p.locator('.hz-opt b').textContent();assert.notEqual(secondReview,firstReview);
+ await p.click('#tReviewBack');assert.equal(await p.locator('.hz-opt b').textContent(),firstReview,'previous answered route can be revisited');
+ await p.click('#tBack');assert.equal(await p.locator('.hz-opt b').textContent(),secondReview,'forward goes to the next question without skipping answered ones');
+ await p.evaluate(()=>__tripBack());assert.equal(await p.locator('.hz-opt b').textContent(),firstReview,'Android Back matches the visible Back action');
  // Simulate late search/plan completion: labels must remain review actions, not Back/Next.
  await p.evaluate(()=>{__trip.relogo();__trip.discountsChanged();});await p.waitForTimeout(80);assert.equal(await p.innerText('#tBack'),'No');assert.equal(await p.innerText('#tNext'),'Yes');
  await p.click('#tBack');await p.click('#tNext');await p.click('#tNext');await p.click('#tBack');
@@ -80,5 +86,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.locator('#tsBuf').evaluate(el=>{el.value='30';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});await p.waitForFunction(()=>__trip.state().result.bufMi===30);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await p.evaluate(()=>{__app.S.trip.bufferFloor=10;});
+ await p.evaluate(()=>{__trip.state().route.legs.forEach((l,i)=>l.alts.forEach((a,k)=>{if(k!==l.sel)__app.S.trip.routeChoices[RouteChoices.key(i,a)]={consider:true};}));window.__pipelineSearch=__trip.find('discover');});
+ await p.waitForFunction(()=>__trip.state().busy&&Tasks.list().some(t=>t.id==='trip-pending:alternatives'));
+ await p.waitForSelector('#taskMore:not(.hidden)');await p.click('#taskMore');
+ assert.match(await p.innerText('#jobBar'),/Primary routes/);assert.equal(await p.locator('#taskList [data-task-id="trip-draw"]').count(),0,'station progress has only one producer');
+ assert.doesNotMatch(await p.innerText('#taskList'),/Discovering stations/,'primary discovery stays in its bar, never duplicated in the list');
+ assert.match(await p.innerText('#taskList'),/Choosing stops/);assert.match(await p.innerText('#taskList'),/Searching approved alternative routes/);
+ await p.evaluate(()=>__continueScan());await p.waitForFunction(()=>!__trip.state().busy);
+ assert.equal(await p.evaluate(()=>Tasks.list().filter(t=>t.id.startsWith('trip-pending:')||t.id.startsWith('station-source:')).length),0,'completed pipeline leaves no pending or provider tasks');
  await p.evaluate(()=>__trip.close());assert.deepEqual(errors,[]);await p.close();
 }console.log('320/448px global settings, optional whole-trip recommendations, decline, skip and cached replacement passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

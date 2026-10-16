@@ -850,6 +850,8 @@ details.g-obs[open] { padding-bottom: 12px; }
 .tp-nav.route-review { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 .tp-nav.route-review #tBack { background:#c62828; color:#fff; }
 .tp-nav.route-review #tNext { background:#188038; color:#fff; }
+.route-review-back { display:inline-flex; align-items:center; gap:4px; margin:0 0 10px; }
+.route-review-back svg { width:20px; height:20px; fill:currentColor; }
 .legs-pop { position: absolute; left: 12px; right: 12px; z-index: 5; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 20px;
   background: var(--surface); box-shadow: var(--shadow); max-height: 60%; overflow: auto; transform-origin: bottom center;
   opacity: 0; transform: translateY(16px) scale(.98); transition: opacity .18s ease, transform .22s ease; pointer-events: none; }
@@ -1825,6 +1827,8 @@ body .task-hub.compact.full-message .jb-t { white-space:normal; }
 .task-row .pbar { flex:0 1 60px; min-width:24px; height:6px; border-radius:4px; background:var(--line); overflow:hidden; }
 .task-row .pbar i { display:block; height:100%; background:var(--accent); border-radius:4px; }
 .task-row .pct { font-size:12px; color:var(--ink-2); }
+.task-row[data-task-state="pending"] { color:var(--ink-2); }
+.task-state { flex:none; font-size:12px; color:var(--ink-2); }
 .task-row .jb-x { flex:none; width:36px; height:36px; border-radius:12px; color:var(--ink-2); }
 .task-hub .indeterminate i { animation:task-busy 1.4s ease-in-out infinite alternate; }
 @keyframes task-busy { from { transform:translateX(0); } to { transform:translateX(180%); } }

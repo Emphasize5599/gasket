@@ -28,7 +28,15 @@
     if (done && done.text && !tasks.size) { completion = done; clearTimeout(completionTimer); completionTimer = setTimeout(function(){completion=null;queue();}, 10000); }
     queue();
   }
-  function sorted() { return Array.from(tasks.values()).sort(function(a,b){return (b.priority||0)-(a.priority||0)||a.started-b.started;}); }
+  function sorted() { return Array.from(tasks.values()).sort(function(a,b){return (a.state==='pending')-(b.state==='pending')||(b.priority||0)-(a.priority||0)||(a.order||0)-(b.order||0)||a.started-b.started;}); }
+  // Several readers may use one provider concurrently: show one real task until the last read ends.
+  function begin(id,value) {
+    if(value.pendingId)remove(value.pendingId);
+    var t=tasks.get(id),count=(t&&t.readers||0)+1;
+    upsert(id,Object.assign({},value,{state:'running',readers:count}));
+    var ended=false;return function(){if(ended)return;ended=true;var current=tasks.get(id);if(!current)return;if(current.readers>1)upsert(id,{readers:current.readers-1});else remove(id);};
+  }
+  function visible() {return sorted().filter(function(t){var parent=tasks.get(t.parent);return !(t.mirrorOf&&tasks.has(t.mirrorOf))&&!(parent&&t.state!=='pending'&&(t.parentLabels||[t.text]).some(function(label){return label&&String(parent.text||'').indexOf(label)>=0;}));});}
   function cancel(id) {
     var t = tasks.get(id); if (!t || !t.cancel || t.cancelling) return;
     t.cancelling = true; t.text = 'Cancelling…'; queue(); t.cancel();
@@ -41,6 +49,11 @@
       '<span class="pct">'+(progress==null?'':Math.round(progress*100)+'%')+'</span>'+(t.cancel?'<button class="jb-x" data-cancel="'+esc(t.id)+'" aria-label="Cancel '+esc(text)+'"'+(t.cancelling?' disabled':'')+'>✕</button>':'');
   }
   function paintRow(el,t,main) {
+    if(t.state==='pending'){
+      el.dataset.taskId=t.id;el.dataset.taskState='pending';el.dataset.fullText=t.text||'Pending';
+      el.innerHTML=(main?messageButton():'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(t.text)+'</span><span class="task-state">Pending</span>';return;
+    }
+    el.dataset.taskState='running';
     if(el.dataset.taskId!==t.id||!el.querySelector('.pbar')||!!el.querySelector('.jb-x')!==!!t.cancel){el.innerHTML=row(t,main);el.dataset.taskId=t.id;}
     var progress=Number.isFinite(t.frac)?Math.max(0,Math.min(1,t.frac)):null;
     var text=t.cancelling?'Cancelling…':t.text||'Working…';
@@ -67,7 +80,7 @@
       doc.addEventListener('click',function(e){if(messageExpanded&&!e.target.closest('.jb-expand')){messageExpanded=false;layout();}},true);
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
-    var all=sorted(), multiple=all.length>1;
+    var all=visible(), multiple=all.length>1;
     var primary=all[0], bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
     var nextId=primary?primary.id:completion?'completion':'';if(nextId!==primaryId){messageExpanded=false;primaryId=nextId;}
     // One dock stays visible on every screen, even when a tile also offers inline progress.
@@ -97,5 +110,5 @@
     }
     layout();root.dispatchEvent(new Event('tasklayout'));
   }
-  root.Tasks={upsert:upsert,remove:remove,draw:draw,layout:layout,list:sorted,cancel:cancel,back:function(){if(messageExpanded){messageExpanded=false;layout();return true;}if(!expanded)return false;expanded=false;draw();return true;}};
+  root.Tasks={begin:begin,upsert:upsert,remove:remove,draw:draw,layout:layout,list:sorted,cancel:cancel,back:function(){if(messageExpanded){messageExpanded=false;layout();return true;}if(!expanded)return false;expanded=false;draw();return true;}};
 })(typeof window!=='undefined'?window:globalThis);

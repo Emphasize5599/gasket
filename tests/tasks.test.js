@@ -32,5 +32,18 @@ bar=await p.locator('#jobBar').boundingBox();assert(bar.height>44);assert((await
 await p.click('.settings-bar h1');assert.equal(await p.locator('#jobBar .jb-expand').getAttribute('aria-expanded'),'false');assert.equal(await p.locator('#jobBar .jb-t').evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
 await p.click('#taskMore');await p.keyboard.press('Escape');assert.equal(await p.locator('#taskMore').getAttribute('aria-expanded'),'false');
 await p.evaluate(()=>{document.body.style.fontSize='22px';document.querySelectorAll('#taskHub *').forEach(e=>{if(e.classList.contains('jb-t'))e.style.fontSize='22px';});});assert.equal(await p.evaluate(()=>document.getElementById('taskHub').scrollWidth>document.getElementById('taskHub').clientWidth),false);
-await p.evaluate(()=>{Tasks.remove('second');Tasks.remove('generate');});await p.waitForSelector('#taskHub.hidden',{state:'attached'});assert.equal(await p.locator('#taskHub').isVisible(),false);await p.close();
+await p.evaluate(()=>{Tasks.remove('second');Tasks.remove('generate');});await p.waitForSelector('#taskHub.hidden',{state:'attached'});assert.equal(await p.locator('#taskHub').isVisible(),false);
+// Primary remains in place; only other real work appears below it, followed by pending stages.
+await p.evaluate(()=>{__app.jobStart({kind:'trip',label:'Primary routes · Discovering stations…'});Tasks.upsert('mirror',{text:'Primary routes · Discovering stations…',mirrorOf:'stations'});Tasks.upsert('pending-plan',{text:'Choosing stops',state:'pending',order:100,priority:99});Tasks.upsert('pending-walmart',{text:'Checking Walmart prices',state:'pending',order:10,priority:99});Tasks.upsert('active-ai',{text:'Reading hazards',frac:.5});});
+await p.waitForSelector('#taskMore:not(.hidden)');await p.click('#taskMore');
+assert.equal(await p.locator('#jobBar .jb-t').textContent(),'Primary routes · Discovering stations…');
+assert.deepEqual(await p.locator('#taskList .task-row').evaluateAll(es=>es.map(e=>e.dataset.taskId)),['active-ai','pending-walmart','pending-plan']);
+assert.equal(await p.locator('#taskList [data-task-state="pending"] .pbar').count(),0);assert.equal(await p.locator('#taskList .task-state').first().textContent(),'Pending');
+await p.evaluate(()=>{const parentLabels=['Checking Walmart website prices','Reading Walmart prices'];window.__endA=Tasks.begin('source-walmart',{text:'Checking Walmart website prices',parent:'stations',parentLabels,pendingId:'pending-walmart'});window.__endB=Tasks.begin('source-walmart',{text:'Checking Walmart website prices',parent:'stations',parentLabels});});
+await p.waitForSelector('#taskList [data-task-id="source-walmart"]');assert.equal(await p.locator('#taskList [data-task-id="pending-walmart"]').count(),0);
+await p.evaluate(()=>__endA());assert.equal(await p.evaluate(()=>Tasks.list().find(t=>t.id==='source-walmart').readers),1);
+await p.evaluate(()=>__app.jobProg(.8,'Primary routes · Reading Walmart prices'));await p.waitForFunction(()=>document.querySelector('#jobBar .jb-t').textContent.includes('Reading Walmart'));
+assert.equal(await p.locator('#taskList [data-task-id="source-walmart"]').count(),0,'current provider is not duplicated below its primary status');
+await p.evaluate(()=>__app.jobProg(.8,'Primary routes · Discovering stations'));await p.waitForSelector('#taskList [data-task-id="source-walmart"]');
+await p.evaluate(()=>{__endB();Tasks.remove('mirror');Tasks.remove('pending-plan');Tasks.remove('active-ai');__app.jobEnd();});await p.waitForSelector('#taskHub.hidden',{state:'attached'});await p.close();
 }}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

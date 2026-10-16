@@ -231,8 +231,9 @@
     function read(key,args,quietTimeout){
       var promise=(queues[key]||Promise.resolve()).then(async function(){
         if(stopped())return {cancelled:true};if(onLoad)onLoad();if(onLabel)onLabel(key==='walmart'?'Checking Walmart website prices':'Checking Murphy website prices');
+        var endTask=root.Tasks&&A.job&&A.job()?root.Tasks.begin('station-source:'+key,{parent:'stations',text:'Checking '+(key==='walmart'?'Walmart':'Murphy')+' website prices',parentLabels:key==='walmart'?['Checking Walmart website prices','Reading Walmart prices']:['Checking Murphy website prices','Reading Murphy prices'],pendingId:'trip-pending:'+key}):null;
         var wake,stop=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);}),r;
-        try{r=await Promise.race([call('siteRead',key,JSON.stringify(args)),stop]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});}
+        try{r=await Promise.race([call('siteRead',key,JSON.stringify(args)),stop]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});if(endTask)endTask();}
         if(r.blocked){control.blocked=true;control.blockedSite=key;}if(r.error&&onError&&!(quietTimeout&&r.code==='timeout'))onError((key==='walmart'?'Walmart: ':'Murphy USA: ')+r.error);
         return r;
       });queues[key]=promise.catch(function(){});return promise;

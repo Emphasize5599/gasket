@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.173 - 2026-10-16 (keyless test branch only)
+- Added Back navigation while reviewing cheaper-route alternatives.
+- Expanded statuses show other active work, then pending planning stages, without duplicating the primary scan.
+- Automated warning checks now cover every hazard type at two phone widths.
+
 ## 0.0.172 - 2026-10-16 (keyless test branch only)
 - Wet-weather routes now require acknowledgment when car or hooked-up trailer tires have low tread, naming the hazards and affected tires.
 - Applies to default routes, alternate selections and cheaper-route consideration; reuses background weather checks.

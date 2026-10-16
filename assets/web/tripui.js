@@ -52,13 +52,14 @@
     delete siteWait[key + ':' + id]; f(res); return true;
   };
   function site(key, args, timeoutMs, onProg) {
+    var endTask=window.Tasks&&A.job&&A.job()&&/^(walmart|murphy)$/.test(key)?Tasks.begin('station-source:'+key,{parent:'stations',text:'Checking '+(key==='walmart'?'Walmart':'Murphy')+' website prices',parentLabels:key==='walmart'?['Checking Walmart website prices','Reading Walmart prices']:['Checking Murphy website prices','Reading Murphy prices'],pendingId:'trip-pending:'+key}):null;
     return new Promise(function (resolve) {
       var id = ++nid, k = key + ':' + id;
       siteWait[k] = function (r) { delete progH[k]; resolve(r); };
       if (onProg) progH[k] = onProg;
       setTimeout(function () { if (siteWait[k]) { delete siteWait[k]; delete progH[k]; LG.warn('site', key + ' timed out'); resolve({ error: 'timed out' }); } }, timeoutMs || 90000);
       N.siteSearch(key, id, JSON.stringify(args));
-    });
+    }).finally(function(){if(endTask)endTask();});
   }
 
   // ---------- state ----------
@@ -74,8 +75,11 @@
   function choiceSelections(){return choiceLists().map(function(_,i){return hzSel(i);});}
   function choiceEntries(){return RouteChoices.entries(choiceLists(),choiceSelections(),choiceAnswers());}
   function choicePending(){return routeFlow()?RouteChoices.pending(choiceLists(),choiceSelections(),choiceAnswers()):[];}
-  function reviewStart(){var pending=choicePending();routeReview=pending[0]||null;if(!routeReview)return false;hzLeg=routeReview.leg;hzFitKey=null;renderHz();drawHaz();navRender();hzLoadLeg(hzLeg);return true;}
-  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key;choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewStart())advance(ST_ADJ);}
+  function reviewShow(item){routeReview=item||null;if(item)hzLeg=item.leg;hzFitKey=null;renderHz();drawHaz();navRender();tpBody().scrollTop=0;hzLoadLeg(hzLeg);return !!item;}
+  function reviewStart(){return reviewShow(choicePending()[0]);}
+  function reviewOrder(){return RouteChoices.pending(choiceLists(),choiceSelections(),{});}
+  function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
+  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
   var recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||p.refPrice,[{stops:p.stops.map(function(s){return {arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price};}),arriveGal:p.arriveGal}]).legs[0].cost;}
@@ -249,9 +253,9 @@
 
   /** Shared top-dock progress; navigation never doubles as a loading bar. */
   function prog(frac, label) {
-    if (busy && A.job && A.job() && A.job().kind === 'trip') A.jobProg(frac, label);
-    else if(routing&&window.Tasks)Tasks.upsert('route-fetch',{text:label,frac:frac});
-    if(mapLd&&mapLd.live)mapLd.set(frac,label);
+    if (busy && A.job && A.job() && A.job().kind === 'trip') { A.jobProg(frac, label);mapLoaded(); }
+    else if(routing&&window.Tasks){Tasks.upsert('route-fetch',{text:label,frac:frac});mapLoaded();}
+    else if(mapLd&&mapLd.live)mapLd.set(frac,label);
     var b=$('tGetRoutes');if(routing&&b)b.disabled=true;
     routeGate();
   }
@@ -350,7 +354,7 @@
     // anywhere from there) — straight away, not as a slide a busy screen could freeze halfway
     if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzFitKey = null; hzLeg = shown > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
     else if (!full && (!shown || shown < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
-    if(step===ST_HAZ&&routeReview){if(!choicePending().some(function(x){return x.key===routeReview.key;}))routeReview=null;else hzLeg=routeReview.leg;}
+    if(step===ST_HAZ&&routeReview){if(!reviewOrder().some(function(x){return x.key===routeReview.key;}))routeReview=null;else hzLeg=routeReview.leg;}
     if (step !== ST_DEPART && preDepartH != null) { if (!full && shown === ST_DEPART) pg.style.setProperty('--panel-h', preDepartH); preDepartH = null; }   // back from Departure: your height again
     if (!full && (pg.classList.contains('full') || !shown)) {
       pg.classList.add('snap'); requestAnimationFrame(function () { requestAnimationFrame(function () { pg.classList.remove('snap'); }); });
@@ -1892,6 +1896,7 @@
   }
   async function gatherAll(models, pg, dbgS, force, replay, ks,areaPlan) {
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay);
+    if(!(replay&&replay.localOnly)&&S.xomCheck!==false)scanPending('discounts','Checking station discount eligibility',15);
     var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; });
     var webDiscovery=force==='discover'||force==='discover-cache'||force!==true&&(!S.apiKey||S.keylessRegular);
     if (replay) {
@@ -2044,8 +2049,10 @@
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
     if(!replay&&window.PriceHistory){PriceHistory.observe(official);}
 
+    finishScanPending('walmart');
     // Exxon / Mobil stations that aren't in the Walmart+ program lose that discount
-    if(!(replay&&replay.localOnly))try { var allSt = official.slice(); perModel.forEach(function (l) { allSt = allSt.concat(l); }); await xomCheck(allSt); } catch (e) { LG.warn('stations', 'Walmart+ check', String(e)); }
+    finishScanPending('discounts');
+    if(!(replay&&replay.localOnly))try { var allSt = official.slice(); perModel.forEach(function (l) { allSt = allSt.concat(l); });if(S.xomCheck!==false)pg(.94,'Checking station discount eligibility');await xomCheck(allSt); } catch (e) { LG.warn('stations', 'Walmart+ check', String(e)); }
     var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date(), goD = departAt();
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];
@@ -2722,6 +2729,10 @@
   }
   // ---------- a station search as a job: it can run in the background, or be cancelled ----------
   var bgJob = false, jobCancel = false, searchCancelled = false;
+  var scanPendingIds=new Set();
+  function scanPending(id,text,order){if(jobCancel)return;var key='trip-pending:'+id;scanPendingIds.add(key);if(window.Tasks)Tasks.upsert(key,{parent:'stations',state:'pending',text:text,order:order});}
+  function finishScanPending(id){var key='trip-pending:'+id;scanPendingIds.delete(key);if(window.Tasks)Tasks.remove(key);}
+  function clearScanPending(){scanPendingIds.forEach(function(id){if(window.Tasks)Tasks.remove(id);});scanPendingIds.clear();}
   /** Is the trip panel showing this search's own progress (its plan steps, or Departure's price refresh)? */
   function tripShowsJob() {
     var pg = $('trip');
@@ -2730,6 +2741,7 @@
   function cancelSearch() {
     if (!busy) return;
     jobCancel = true; priceCancelRequested = true; if (window.KeylessGas) KeylessGas.cancel();
+    clearScanPending();
     LG.info('stations', 'Search cancelled');
   }
   /** Leaving the step that shows a running search (Back, the ✕): cancel it, or keep it running in the background. */
@@ -2754,6 +2766,7 @@
       for (var w = 0; w < 100 && A.job(); w++) await new Promise(function (r) { setTimeout(r, 100); });
     }
     if (A.jobStart) A.jobStart({ kind: 'trip', label: 'Finding stations', cancel: cancelSearch, inline: tripShowsJob });
+    mapLoaded();
     gateTabs();
     try { await findStops0(force); }
     catch (e) {
@@ -2761,7 +2774,7 @@
       else { LG.error('plan', e.message || String(e)); toastMsg(e.message || String(e)); }
       result = null;
     }
-    busy = false; priceRefreshActive=false;progEnd();
+    clearScanPending();busy = false; priceRefreshActive=false;progEnd();
     var shown = tripShowsJob();
     if (A.jobEnd) A.jobEnd(shown ? null : searchCancelled ? { text: 'Station search cancelled' } :
       result && result.plan ? { text: jobCancel ? 'Search cancelled · planned with the stations found so far' : result.plan.ok ? 'Your stops are ready' : 'Stations found; no plan works yet', action: 'Open', onAction: function () { if (document.body.classList.contains('trip-on')) { step = ST_ADJ; renderStep(); } else openTrip(ST_ADJ); } } : null);
@@ -2771,9 +2784,12 @@
     if (onPlan(step) && !result) renderResults();
   }
   async function findStops0(force, noReplay) {
+    scanPending('plan','Choosing stops',100);scanPending('draw','Preparing the map and trip costs',110);
     var cap=Number(S.monthlyCap)||0,exhausted=cap>0&&N.callsThisMonth()>=cap;
     var webRefresh=force==='web';
     var discovering=force==='discover'||force!==true&&(!S.apiKey||S.keylessRegular)&&(noReplay||!savedPriceReplay());
+    var wmReplay=webRefresh&&(replay||savedPriceReplay()),wmKnown=wmReplay&&wmReplay.stations,wmNeeded=!webRefresh||wmKnown&&((wmKnown.official||[]).some(function(s){return s.brand==='walmart';})||(wmKnown.google||[]).some(function(g){return (g.list||[]).some(function(s){return s.brand==='walmart';});}));
+    if(wmNeeded&&KIND()==='gas'&&A.siteOn('walmart')&&(webRefresh||discovering||force===true||!replay))scanPending('walmart','Checking Walmart website prices',10);
     priceRefreshActive=webRefresh||discovering;priceCancelRequested=false;
     if(step===ST_DEPART&&webRefresh)renderStep();
     if ($('tsResults')) $('tsResults').innerHTML = skelStops('Finding stations');
@@ -2823,6 +2839,7 @@
     }
     if (rp) LG.info('stations', 'Using the stations saved with this trip (' + agoText(Date.now() - rp.t) + ') — no lookups');
     var ga;
+    if(others.length&&!rpSt)scanPending('alternatives','Searching approved alternative routes',20);
     if(others.length&&!rpSt){
       var firstDebug={},restDebug={};
       var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
@@ -2832,6 +2849,7 @@
       var rest;
       if(jobCancel||firstDebug.keyless&&firstDebug.keyless.blocked){rest={per:okModels.slice(1).map(function(){return {cands:[],notes:['Alternative search not started after cancellation or restriction.'],unpriced:0,stale:0,grade:gradeOf()};}),raw:{official:[],google:okModels.slice(1).map(function(){return [];})}};}
       else {
+        finishScanPending('alternatives');
         // A multi-leg alternative changes one leg, not the whole trip. Discover
         // only that changed leg, then project the saved union onto full routes.
         var searched=await gatherAll(extraModels,function(f,l){prog(.47+f*.43,'Approved alternatives · '+l);},restDebug,discovering?'discover-cache':false,null,okKs.slice(1),coverage&&coverage.alternatives);
@@ -2856,7 +2874,7 @@
     if(refreshInfo)g.notes.push((refreshInfo.cancelled?'Cancelled website refresh: ':'Website refresh: ')+refreshInfo.updated+'/'+refreshInfo.total+' saved stations matched'+(refreshInfo.grade?' for '+refreshInfo.grade:'')+'; '+refreshInfo.retained+' left unchanged. No new stations discovered; no Places or Routes API calls for that refresh. Website retrieval is not a pump-price update timestamp.');
     if(refreshInfo)g.notes=g.notes.concat(refreshInfo.errors||[]);
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
-    prog(0.93, 'Choosing stops');
+    finishScanPending('plan');prog(0.93, 'Choosing stops');
     if (step >= ST_ADJ) mapLoading('Choosing stops', 0.93);
     var startGal = startFuel(model);
     var opts = makeOpts(model, cands, startGal), planOffs = null;
@@ -2891,7 +2909,7 @@
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
       topMi: S.trip.topUpMi, topSel: -1, bufMi: tripBuf(), cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp, planOffs: planOffs, estUsed: estUsed };
     if(routeFlow())result.routes=[{k:altSel,model:model,res:result}];
-    prog(0.97, 'Drawing the map');
+    finishScanPending('draw');prog(0.97, 'Drawing the map');
     await paint();
     var t1 = Date.now();
     recompute();
@@ -3277,7 +3295,7 @@
       return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +
         (note ? '<span class="hz-note">' + esc(note) + '</span>' : '') + '<span class="hz-o2">' + chips + '</span></button>';
     }).join('') + '</div>';
-    if(routeReview)h='<div class="card"><h3>Would you consider this route if it were cheaper?</h3><p class="lead small keep">Leg '+(hzLeg+1)+' · '+esc(legName(route,hzLeg))+'. No skips its station search; Yes includes it after your primary routes.</p></div>'+h;
+    if(routeReview)h='<div class="card"><button type="button" class="btn tonal sm route-review-back" id="tReviewBack"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg>Back</button><h3>Would you consider this route if it were cheaper?</h3><p class="lead small keep">Leg '+(hzLeg+1)+' · '+esc(legName(route,hzLeg))+'. No skips its station search; Yes includes it after your primary routes.</p></div>'+h;
     var e = hzCache.get(list[sel]);
     h += '<div class="card wx-card" id="tWx"><h3>On this route</h3>';
     if (!e || !e.st || e.st === 'loading') h += A.ldBar('Checking the forecast where and when you\'ll be');
@@ -3285,6 +3303,7 @@
     else h += hzListHtml(e.hz, e.stats);
     h += '<p class="wx-src">Weather and warnings: National Weather Service · Past its 6½-day forecast: weather data by Open-Meteo.com (CC BY 4.0; NOAA\'s National Blend of Models) · Air: Copernicus Atmosphere Monitoring Service via Open-Meteo</p></div>';
     el.innerHTML = h;
+    if($('tReviewBack'))$('tReviewBack').onclick=reviewBack;
     el.querySelectorAll('[data-hzk]').forEach(function (b) { b.onclick = function () { if(!routeReview)hzChoose(+b.dataset.hzk); }; });
     if ($('tHzRetry')) $('tHzRetry').onclick = function (ev) { ev.preventDefault(); hzCache.delete(list[sel]); renderHz(); hzLoadLeg(hzLeg); };
     fitHz();
@@ -3972,6 +3991,7 @@
     if (closePicker()) return true;
     if (closeLegs()) return true;
     if (!$('trip').classList.contains('hidden')) {
+      if(step===ST_HAZ&&routeReview){reviewBack();return true;}
       if (speedMode()) { leaveSpeedMode(); return true; }
       var previous=step-1;while(previous>ST_ADVISORY&&jobLocked(previous))previous--;
       if (step > 1 && !jobLocked(previous)) leaveAsk(function () { collectSafe(); step=previous; renderStep(); });

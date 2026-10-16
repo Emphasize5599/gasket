@@ -121,10 +121,11 @@ async function worker(pg,body,raw,status=200,args={}){
   // Settings form overwrites S, so enable using the actual checkbox and leave the API key installed.
   await ui.click('#btnSettings');await ui.check('[data-k="keylessRegular"]');await ui.fill('#apiKey','TEST');await ui.click('#sDone');
   await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));
-  await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('Website discovery'));
+  // Capture one settled frame: the clock-driven map redraw can replace this message between separate reads.
+  const discovered=await (await ui.waitForFunction(()=>{const status=document.getElementById('status').textContent,rows=document.getElementById('rows').textContent;return status.includes('Website discovery')&&rows.includes('Exxon')?{status,rows}:false;})).jsonValue();
   assert.equal(await ui.evaluate(()=>__paid),0,'regular nearby mode must never silently consume paid lookups');
-  assert.match(await ui.innerText('#rows'),/Exxon/);
-  assert.match(await ui.innerText('#status'),/partial/);
+  assert.match(discovered.rows,/Exxon/);
+  assert.match(discovered.status,/partial/);
   await ui.evaluate(()=>{KeylessGas.discover=async()=>{throw new Error('Google restricted test request');};});
   await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));await ui.waitForFunction(()=>document.getElementById('status').textContent.includes('restricted test'));
   assert.equal(await ui.evaluate(()=>__paid),0,'keyless failure must not invoke a paid fallback');

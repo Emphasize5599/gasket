@@ -3,11 +3,11 @@ const P=require('../assets/web/pricing.js'),K=require('../assets/web/keylessgas.
 const point={lat:34,lng:-92},node={id:'123',displayName:'Test Supercenter',geoPoint:{latitude:34.004,longitude:-92},address:{addressLineOne:'100 Main St',city:'Testville',state:'AR'}};
 const store={id:'123',name:node.displayName,geo:node.geoPoint,address:node.address,fuel:{metadata:{dateCreated:'2026-10-12T12:00:00Z'},prices:[{name:'UNLEAD',price:2.879},{name:'PREMIUM',price:3.479},{name:'DIESEL',price:3.199}]}};
 const maps={id:'web:wm',featureId:'0x1:0x2',name:'Walmart Fuel Station',brand:'walmart',...point,address:'100 Main Street, Testville, AR',prices:{regular:{price:4},midgrade:{price:4.1}}};
-function setup(block,slow){const data=new Map(),calls=[],history=[],active=new Set();const window={document:{},PriceHistory:{observe:s=>history.push(...s)},__app:{P,siteOn:k=>k==='walmart',N:{cancelSiteRead:()=>{}},KV:{get:(ns,k)=>data.get(ns+'|'+k),put:(ns,k,v)=>data.set(ns+'|'+k,{v,t:Date.now()})}},__trip:{call:async(fn,key,json)=>{
+function setup(block,slow){const data=new Map(),calls=[],history=[],active=new Set(),taskEvents=[];const window={document:{},Tasks:{begin:(id,value)=>{taskEvents.push({id,value,start:true});return()=>taskEvents.push({id,start:false});}},PriceHistory:{observe:s=>history.push(...s)},__app:{P,job:()=>({kind:'trip'}),siteOn:k=>k==='walmart',N:{cancelSiteRead:()=>{}},KV:{get:(ns,k)=>data.get(ns+'|'+k),put:(ns,k,v)=>data.set(ns+'|'+k,{v,t:Date.now()})}},__trip:{call:async(fn,key,json)=>{
  assert.equal(fn,'siteRead','must not invoke paid APIs');assert(!active.has(key),'same source reader requests must serialize');active.add(key);const args=JSON.parse(json);calls.push({key,args});await new Promise(r=>setTimeout(r,2));active.delete(key);
  if(key==='walmart'){if(block)return {blocked:true,error:'Robot or human?'};if(slow&&args.mode==='nodes'&&args.points.length>1)return {error:'Site lookup timed out',code:'timeout'};return args.mode==='nodes'?{nodes:[node]}:{stores:[store]};}
  return {stores:[maps],detail:{exhausted:true}};
- }}};vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date,setTimeout,setInterval,clearInterval});return {window,calls,data,history};}
+ }}};vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date,setTimeout,setInterval,clearInterval});return {window,calls,data,history,taskEvents};}
 (async()=>{
  const refresh=setup();const r=await refresh.window.KeylessGas.refreshKnown([maps],null,[],'regular');
  assert.equal(r.updated,1);assert.equal(r.stations.length,1);assert.equal(r.stations[0].id,maps.id);assert.equal(r.stations[0].lat,maps.lat);
@@ -26,5 +26,9 @@ function setup(block,slow){const data=new Map(),calls=[],history=[],active=new S
  const slow=setup(false,true),sl=await slow.window.KeylessGas.discover([K.area(34,-92,8),K.area(34.1,-92,8),K.area(34.2,-92,8)],null,'regular',true);
  assert.equal(sl.stations.some(s=>s.wmStoreId==='123'),true,'the Walmart still found');assert.equal(sl.errors.filter(e=>/Walmart/.test(e)).length,0,'no timeout error after the halves worked');
  assert.ok(slow.calls.filter(c=>c.key==='walmart'&&c.args.mode==='nodes').length>=4,'split down to single areas');
+ for(const run of [refresh,linked,discovery,blocked,slow]){
+  assert(run.taskEvents.some(e=>e.start&&e.id==='station-source:walmart'&&e.value.pendingId==='trip-pending:walmart'),'actual reader reports provider work');
+  assert.equal(run.taskEvents.filter(e=>e.start).length,run.taskEvents.filter(e=>!e.start).length,'provider status released after success, restriction or retry');
+ }
  console.log('Walmart keyless discovery/regular refresh: finder ID resolution, all-grade official prices, preserved locations, cache, dedupe, no paid calls and restriction stop passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
