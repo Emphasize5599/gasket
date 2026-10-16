@@ -4,6 +4,7 @@ async function (reqId, args) {
   // "unusual traffic"), the hidden read says {blocked: true} and stops; the user can open the page and do it themselves.
   // Reports back through GasketSite.result(reqId, json): {gal, text, src: 'ai' | 'results'} or {blocked} or {error}.
   // args.kind 'spare' asks about the spare tire instead: {text, src} (the AI answer's words; the app reads which kind).
+  // args.kind 'trims' asks for the model's trim levels the same way: {text, src} (the app reads the names: TrimMath.parse).
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const flat = (s) => (s || '').replace(/\s+/g, ' ').trim();
@@ -33,12 +34,12 @@ async function (reqId, args) {
     return out;
   };
   // the AI answer's own text, or '' (not there yet)
-  const spare = !!(args && args.kind === 'spare');
+  const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), words = spare || trims;   // text answers, not a number
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {
       const t = el.innerText || '';
-      if (!AI_END.test(t) || !(spare ? /spare|repair kit|inflator|run-?flat/i : /gal/i).test(t)) return;
+      if (!AI_END.test(t) || !(spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /gal/i).test(t)) return;
       if (!best || t.length < best.length) best = t;
     });
     return best ? flat(best) : '';
@@ -65,11 +66,11 @@ async function (reqId, args) {
       if (bg) { send({ blocked: true }); return; }
     } else {
       const ai = aiText();
-      if (spare) {
+      if (words) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
         if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= 3) { send({ text: ai.slice(0, 1500), src: 'ai' }); return; } }
         else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
-          const at = Math.max(0, t.search(/spare tire/i));
+          const at = Math.max(0, t.search(trims ? /\btrim(s| levels?)\b/i : /spare tire/i));
           if (at > 0) { send({ text: t.slice(at, at + 1500), src: 'results' }); return; }
         }
         await sleep(400); continue;
@@ -86,5 +87,5 @@ async function (reqId, args) {
     }
     await sleep(400);
   }
-  send({ error: 'Brave Search didn\'t give ' + (spare ? 'an answer about the spare.' : 'a tank size.') + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });
+  send({ error: 'Brave Search didn\'t give ' + (spare ? 'an answer about the spare.' : trims ? 'a list of trims.' : 'a tank size.') + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });
 }

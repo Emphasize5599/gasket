@@ -277,6 +277,58 @@
   // "<year make model trim> fuel tank capacity in gallons?". The number fills the box (marked as Brave's answer, to
   // check). If it fails (or Brave shows a check, which is never got around), the box has a ↻ and "Search Brave yourself"
   // opens the page for you; typing it in always works.
+  // ---------- trims: a list to pick from (Brave Search's answer, plus Fuel API's when its key is set) ----------
+  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30;
+  function trimKey(c) { return c && c.year && c.make && c.model ? tankKey(Object.assign({}, c, { trim: '' })) : ''; }
+  function trimUrl(c) {
+    var w = trimKey(c).split(' '), q = function () { return 'What are all the trim levels of the ' + w.join(' ') + '? Answer with "Trims:" then each trim name, separated by commas.'; };
+    while (w.length > 3 && (q().split(/\s+/).length > 50 || q().length > 400)) w.pop();   // Brave's query limits (see tires.js braveFit)
+    return 'https://search.brave.com/search?q=' + encodeURIComponent(q()) + '&summary=1';
+  }
+  /** What's known about this model's trims: {list, busy, failed}, from memory or the KV cache. */
+  function trimState(c) {
+    var k = trimKey(c); if (!k) return null;
+    if (!trimMem[k]) { try { var o = A.KV.get('trims', k); if (o && o.v && Date.now() - o.v.t < (o.v.failed ? 6 * 3600e3 : TRIM_DAYS * 864e5)) trimMem[k] = o.v; } catch (e) { } }
+    return trimMem[k] || null;
+  }
+  function trimList(c) {
+    var st = trimState(c), vin = (c.vinHints || {}).trim || '';
+    return TrimMath.merge(st && st.list, vin ? [vin] : []);
+  }
+  async function trimFind(c) {
+    var k = trimKey(c); if (!k || !call || !N.siteRead || matching) return;
+    var st = trimState(c); if (st) return;
+    trimMem[k] = { busy: true, list: [], t: Date.now() };
+    LG.info('car', 'Asking Brave Search for the trims', k);
+    var ask = function () { return Promise.race([call('siteRead', 'brave', JSON.stringify({ url: trimUrl(c), bg: true, kind: 'trims', year: c.year })), new Promise(function (ok) { setTimeout(function () { ok(null); }, 40000); })]); };
+    var r = await Promise.all([braveSerial(ask), window.CarPics && CarPics.trims ? CarPics.trims(c) : Promise.resolve([])]);
+    var brave = r[0] && r[0].text ? TrimMath.parse(r[0].text, c) : [], list = TrimMath.merge(r[1], brave);
+    var v = { list: list, t: Date.now(), failed: !list.length };
+    trimMem[k] = v; try { A.KV.put('trims', k, v); } catch (e) { }
+    LG.info('car', list.length ? 'Trims: ' + list.length + ' (' + (r[1].length ? 'Fuel API' + (brave.length ? ' + ' : '') : '') + (brave.length ? 'Brave Search' : '') + ')' : 'No trim list', list.length ? list.join(', ') : (r[0] && (r[0].error || (r[0].blocked ? 'a check on Brave Search\'s page' : ''))) || 'no reply in 40 s');
+    if (trimKey(car()) === k) draw();
+  }
+  /** A trim chosen or typed: a different trim can have a different tank, so the box empties and Brave is asked again. */
+  function setTrim(c, v) {
+    v = String(v || '').trim(); if (v === String(c.trim || '')) return;
+    c.trim = v; LG.info('car', 'Trim ' + (v ? 'set' : 'cleared'));
+    if (kind(c) === 'gas') { c.tank = ''; c.tankSrc = ''; c.tankLookup = null; }
+    draw(); changed();
+    if (kind(c) === 'gas' && v && tankKey(c)) tankFind(c, false);
+  }
+  function trimHtml(c) {
+    var st = trimState(c), list = trimList(c), have = TrimMath.find(list, c.trim), other = trimOther[c.id] || (!!c.trim && !have);
+    var hint = st && st.busy ? 'looking up this model\'s trims…' : list.length ? 'pick yours: it can change the tank size' : 'can change the tank size';
+    var h = '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>' + hint + '</small></span>';
+    if (list.length) {
+      h += '<select id="gTrimSel"><option value=""' + (!have && !other ? ' selected' : '') + '>Choose your trim</option>' +
+        list.map(function (t) { return '<option' + (t === have && !other ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') +
+        '<option value="__other"' + (other ? ' selected' : '') + '>Other (type it)</option></select></label>';
+      if (!other) return h;
+      h += '<label class="nf wide"><span>Your trim<small>as on your registration or the badge, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(DRV_SUFFIX, '').trim()) + ' Two”</small></span>';
+    }
+    return h + '<input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
+  }
   var tankBusy = {}, TANK_SRC = 'from Brave Search\'s AI answer · check your owner\'s manual';
   // the hidden Brave Search page reads one question at a time (the tank size here, the spare in Tires)
   var braveChain = Promise.resolve();
@@ -491,7 +543,7 @@
       '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
       '<label class="nf wide"><span>Model</span><input id="gCustomModel" type="text" value="'+esc(c.model||'')+'"></label>' +
       '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
-    h += '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>can change the tank size · shows on the car\'s button, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '')) + ' Two”</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
+    h += trimHtml(c);
     h += paintHtml(c);
     h += carousel(c, true);
     var tankFindable = k === 'gas' && !!tankKey(c);
@@ -819,15 +871,15 @@
       document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
       if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!editorOk(Object.assign({},c,{nick:this.value.trim(),name:this.value.trim()||c.name}));};
       ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
-      $('gTrim').oninput = function () { if ($('gSave')) $('gSave').disabled = !editorOk(Object.assign({}, c, { trim: this.value.trim() })); };
-      $('gTrim').onchange = function () {
-        var v = this.value.trim(); if (v === String(c.trim || '')) return;
-        c.trim = v; LG.info('car', 'Trim ' + (v ? 'set' : 'cleared'));
-        // a different trim can have a different tank: empty the box and ask Brave again
-        if (kind(c) === 'gas') { c.tank = ''; c.tankSrc = ''; c.tankLookup = null; }
-        draw(); changed();
-        if (kind(c) === 'gas' && v && tankKey(c)) tankFind(c, false);
+      if ($('gTrim')) {
+        $('gTrim').oninput = function () { if ($('gSave')) $('gSave').disabled = !editorOk(Object.assign({}, c, { trim: this.value.trim() })); };
+        $('gTrim').onchange = function () { setTrim(c, this.value); };
+      }
+      if ($('gTrimSel')) $('gTrimSel').onchange = function () {
+        if (this.value === '__other') { trimOther[c.id] = true; draw(); if ($('gTrim')) $('gTrim').focus(); return; }
+        delete trimOther[c.id]; setTrim(c, this.value);
       };
+      if (trimKey(c) && !trimState(c)) trimFind(c);
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
       if ($('gTankShow')) $('gTankShow').onclick = function (e) { e.preventDefault(); tankFind(c, true); };

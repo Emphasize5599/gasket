@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.166 - 2026-10-16 (keyless test branch only)
+- Pick your trim from a list (Brave Search's answer, plus Fuel API's trims with its key), or type another.
+
 ## 0.0.165 - 2026-10-16 (keyless test branch only)
 - Trim is required; changing it clears the tank size and asks Brave again.
 - First-time setup offers the optional larger AI download.
