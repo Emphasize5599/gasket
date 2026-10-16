@@ -12,15 +12,27 @@
     return {car:c,pack:pack,prompt:prompt,key:revision+'|'+JSON.stringify(pack)};
   }
   function changed(){window.dispatchEvent(new Event('gemmachange'));}
+  // time left: the speed over the last 30 s of progress (a stall or a resume starts it over)
+  var rateS=[];
+  function leftText(bytes,total){
+    var now=Date.now();if(!rateS.length||bytes<rateS[rateS.length-1].b)rateS=[];
+    if(!rateS.length||bytes!==rateS[rateS.length-1].b)rateS.push({t:now,b:bytes});
+    while(rateS.length>2&&now-rateS[0].t>30000)rateS.shift();
+    var first=rateS[0],span=(now-first.t)/1000,rate=span>=4?(bytes-first.b)/span:0;
+    if(!(rate>0))return ' · estimating time left…';
+    var sec=Math.max(0,(total-bytes)/rate),min=Math.ceil(sec/60);
+    return ' · '+(sec<60?'under a minute':min<60?'~'+min+' min':'~'+Math.floor(min/60)+' h '+(min%60)+' min')+' left';
+  }
   function status(value){
     var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
     if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if((state.error&&state.error!==priorIssue)||(state.reason&&state.reason!==priorReason))LG.warn('ai','Local model task update',{phase:state.phase,task:state.task||priorTask||'',bytes:state.bytes||0,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if(state.error&&state.error!==priorIssue&&priorTask==='download')A.toast('Model download stopped · '+(state.bytes?'partial file kept.':'not complete.')+' Resume in Settings.');
+    if(state.phase!=='download')rateS=[];
     var downloading=/^(download|verify|retry)$/.test(state.phase)||state.phase==='cancelling'&&state.task==='download', generating=/^(load|generate|cancelling)$/.test(state.phase)&&!downloading;
     if(window.Tasks){
-      if(downloading)Tasks.upsert('gemma-download',{text:state.phase==='cancelling'?'Pausing model download…':state.phase==='verify'?'Verifying Gemma model…':state.phase==='retry'?'Resuming model download · attempt '+(state.attempt||2)+' / 4':'Downloading Gemma · '+(Number(state.bytes||0)/1e9).toFixed(2)+' / 3.66 GB',frac:/verify|cancelling/.test(state.phase)?null:Number(state.bytes||0)/Number(state.total||3659530240),cancel:function(){command('cancel');}});
+      if(downloading)Tasks.upsert('gemma-download',{text:state.phase==='cancelling'?'Pausing model download…':state.phase==='verify'?'Verifying Gemma model…':state.phase==='retry'?'Resuming model download · attempt '+(state.attempt||2)+' / 4':'Downloading Gemma · '+(Number(state.bytes||0)/1e9).toFixed(2)+' / 3.66 GB'+leftText(Number(state.bytes||0),Number(state.total||3659530240)),frac:/verify|cancelling/.test(state.phase)?null:Number(state.bytes||0)/Number(state.total||3659530240),cancel:function(){command('cancel');}});
       else Tasks.remove('gemma-download',priorTask==='download'&&!state.ready&&priorPhase!=='idle'?{text:'Model download paused · '+(state.bytes?'partial file kept':'not complete'),action:'Resume',onAction:function(){if(state.enabled&&state.supported)command('download');else A.openSettings(false);}}:null);
       if(generating)Tasks.upsert('gemma-advice',{text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining your tire setup…',frac:null,cancel:function(){if(running)attempted.add(running.key);desired=null;command('cancelAdvice');}});
       else Tasks.remove('gemma-advice');

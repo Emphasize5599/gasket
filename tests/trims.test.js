@@ -13,6 +13,9 @@ assert.deepEqual(T.parse('The 2020 Ford Mustang trim levels are EcoBoost, EcoBoo
 // bullets, parentheses and prices are not names
 assert.deepEqual(T.parse('Trims: • L (base) • LE • XLE • XSE • Limited ($35,000 starting price)', { year: 2019, make: 'Toyota', model: 'Camry' }), ['L', 'LE', 'XLE', 'XSE', 'Limited']);
 assert.deepEqual(T.parse('Trims: LE, XLE, LE, le', accord), ['LE', 'XLE'], 'each name once');
+// Brave's footer runs straight onto the last trim (seen on a 2025 Chevrolet Blazer: "Premier AI-generated answer")
+assert.deepEqual(T.parse('Trims: LT, RS, Premier AI-generated answer. Please verify critical facts.', { year: 2025, make: 'Chevrolet', model: 'Blazer AWD' }), ['LT', 'RS', 'Premier']);
+assert.deepEqual(T.parse('Trims: 2LT, 3LT, RS, Premier Please verify critical facts. Sources', { year: 2025, make: 'Chevrolet', model: 'Blazer' }), ['2LT', '3LT', 'RS', 'Premier']);
 // no list at all
 assert.deepEqual(T.parse('The Accord is a midsize sedan sold since 1976.', accord), []);
 assert.deepEqual(T.parse('', accord), []);

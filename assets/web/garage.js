@@ -278,7 +278,7 @@
   // check). If it fails (or Brave shows a check, which is never got around), the box has a ↻ and "Search Brave yourself"
   // opens the page for you; typing it in always works.
   // ---------- trims: a list to pick from (Brave Search's answer, plus Fuel API's when its key is set) ----------
-  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30;
+  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30, TRIM_V = 'v2|';   // v2: v1 lists could end in Brave's "AI-generated answer"
   function trimKey(c) { return c && c.year && c.make && c.model ? tankKey(Object.assign({}, c, { trim: '' })) : ''; }
   function trimUrl(c) {
     var w = trimKey(c).split(' '), q = function () { return 'What are all the trim levels of the ' + w.join(' ') + '? Answer with "Trims:" then each trim name, separated by commas.'; };
@@ -288,7 +288,7 @@
   /** What's known about this model's trims: {list, busy, failed}, from memory or the KV cache. */
   function trimState(c) {
     var k = trimKey(c); if (!k) return null;
-    if (!trimMem[k]) { try { var o = A.KV.get('trims', k); if (o && o.v && Date.now() - o.v.t < (o.v.failed ? 6 * 3600e3 : TRIM_DAYS * 864e5)) trimMem[k] = o.v; } catch (e) { } }
+    if (!trimMem[k]) { try { var o = A.KV.get('trims', TRIM_V + k); if (o && o.v && Date.now() - o.v.t < (o.v.failed ? 6 * 3600e3 : TRIM_DAYS * 864e5)) trimMem[k] = o.v; } catch (e) { } }
     return trimMem[k] || null;
   }
   function trimList(c) {
@@ -299,12 +299,13 @@
     var k = trimKey(c); if (!k || !call || !N.siteRead || matching) return;
     var st = trimState(c); if (st) return;
     trimMem[k] = { busy: true, list: [], t: Date.now() };
+    setTimeout(function () { if (trimKey(car()) === k) draw(); }, 0);   // the bar in the trim box (this starts during a redraw)
     LG.info('car', 'Asking Brave Search for the trims', k);
     var ask = function () { return Promise.race([call('siteRead', 'brave', JSON.stringify({ url: trimUrl(c), bg: true, kind: 'trims', year: c.year })), new Promise(function (ok) { setTimeout(function () { ok(null); }, 40000); })]); };
     var r = await Promise.all([braveSerial(ask), window.CarPics && CarPics.trims ? CarPics.trims(c) : Promise.resolve([])]);
     var brave = r[0] && r[0].text ? TrimMath.parse(r[0].text, c) : [], list = TrimMath.merge(r[1], brave);
     var v = { list: list, t: Date.now(), failed: !list.length };
-    trimMem[k] = v; try { A.KV.put('trims', k, v); } catch (e) { }
+    trimMem[k] = v; try { A.KV.put('trims', TRIM_V + k, v); } catch (e) { }
     LG.info('car', list.length ? 'Trims: ' + list.length + ' (' + (r[1].length ? 'Fuel API' + (brave.length ? ' + ' : '') : '') + (brave.length ? 'Brave Search' : '') + ')' : 'No trim list', list.length ? list.join(', ') : (r[0] && (r[0].error || (r[0].blocked ? 'a check on Brave Search\'s page' : ''))) || 'no reply in 40 s');
     if (trimKey(car()) === k) draw();
   }
@@ -320,6 +321,8 @@
     var st = trimState(c), list = trimList(c), have = TrimMath.find(list, c.trim), other = trimOther[c.id] || (!!c.trim && !have);
     var hint = st && st.busy ? 'looking up this model\'s trims…' : list.length ? 'pick yours: it can change the tank size' : 'can change the tank size';
     var h = '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>' + hint + '</small></span>';
+    if (st && st.busy && !list.length) return h + '<select id="gTrimSel" disabled><option>Looking up trims…</option></select>' + A.ldBar('Asking Brave Search for this model\'s trims') + '</label>' +
+      '<label class="nf wide"><span>Or type it<small>if you know it</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     if (list.length) {
       h += '<select id="gTrimSel"><option value=""' + (!have && !other ? ' selected' : '') + '>Choose your trim</option>' +
         list.map(function (t) { return '<option' + (t === have && !other ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') +
@@ -350,7 +353,7 @@
     tankFind(c, false);
   }
   async function tankFind(c, shown) {
-    var key = tankKey(c); if (!key || tankBusy[c.id]) return;
+    var key = tankKey(c); if (!key || tankBusy[c.id] || !trimOk(c)) return;
     tankBusy[c.id] = true; draw();
     LG.info('car', 'Asking Brave Search for the tank size' + (shown ? ' (shown to you)' : ''), key);
     var ask = function () { return Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown, year: c.year })),
@@ -546,12 +549,12 @@
     h += trimHtml(c);
     h += paintHtml(c);
     h += carousel(c, true);
-    var tankFindable = k === 'gas' && !!tankKey(c);
-    h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
-      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" min="0.1" required id="gTank" value="' + esc(c.tank || '') + '">' +
-      (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
+    var tankFindable = k === 'gas' && !!tankKey(c), tankLocked = !trimOk(c);   // the trim can change it: pick that first
+    h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(tankLocked ? 'choose your trim first' : c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
+      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" min="0.1" required id="gTank" value="' + esc(c.tank || '') + '"' + (tankLocked ? ' disabled' : '') + '>' +
+      (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
     // under the row, so the two boxes stay level
-    var tkExtra = tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '';
+    var tkExtra = tankLocked ? '' : tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">Couldn\'t find it. <a href="#" id="gTankShow">Search Brave yourself</a>, or type it in.</small>' : '';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
@@ -1729,5 +1732,6 @@
   }
 
   window.Garage = { installDemo:installDemo, addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
+    trimBusy: function () { return Object.keys(trimMem).some(function (k) { return trimMem[k].busy; }); },   // tests wait for the trim lookup's redraws
     need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();
