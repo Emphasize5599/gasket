@@ -21,7 +21,7 @@ assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measure
   window.__weatherReads=0;window.__weatherGates=[];
   RouteWx.forRoute=async()=>{__weatherReads++;await new Promise(r=>__weatherGates.push(r));return {hazards:[{kind:'rain',level:2,fromMi:20,toMi:40,from:Date.now(),to:Date.now()+3600000,peak:{precip:.4}}],stats:{},alerts:[],dense:[],forecast:[]};};
  });
- await p.click('#btnTrip');await p.click('[data-hist="wet-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(5));await p.waitForFunction(()=>__weatherReads===2);
+ await p.click('#btnTrip');await p.click('[data-hist="wet-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.departNow=true;__trip.step(5);});await p.waitForFunction(()=>__weatherReads===2);
  // Next on the default route waits for the already-running forecast, without another request.
  await p.click('#tNext');await p.waitForTimeout(80);assert.equal(await p.locator('#cfm').count(),0);assert.equal(await p.evaluate(()=>__weatherReads),2);
  await p.evaluate(()=>__weatherGates.splice(0).forEach(r=>r()));await p.waitForSelector('.wet-tire-warning');assert.match(await p.innerText('#cfm'),/Rain|rain/);assert.match(await p.innerText('#cfm'),/All 4 car tires — measured 3\/32/);
@@ -32,7 +32,9 @@ assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measure
  // Cancelling an alternate selection keeps the old route; explicit acknowledgment accepts it.
  await p.click('[data-hzk="1"]');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.getAttribute('.hz-opt.on','data-hzk'),'0');
  await p.click('[data-hzk="1"]');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmYes');await p.waitForFunction(()=>document.querySelector('.hz-opt.on').dataset.hzk==='1',null,{timeout:5000}).catch(async e=>{console.error(await p.evaluate(()=>({toasts:__wetToasts,tires:Garage.car().tires,step:__trip.state().step})));throw e;});await p.waitForSelector('#cfm',{state:'detached'});
- await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===6);assert.equal(await p.locator('#cfm').count(),0,'same route/risk does not prompt twice');
+ // Explicit Now retains its checked forecast across minute boundaries, not an unset departure.
+ await p.clock.setFixedTime(new Date(await p.evaluate(()=>Date.now()+61000)));
+ await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===6);assert.equal(await p.locator('#cfm').count(),0,'same route/risk does not prompt twice across a minute boundary');
  await p.waitForFunction(()=>!__trip.state().busy);
  // Tire edits invalidate acknowledgment, and genuinely worn-out tires get stronger wording.
  await p.evaluate(()=>{Garage.car().tires.tread.depth=2;__trip.step(5);});await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');assert.match(await p.innerText('#cfm'),/replace before driving/i);
