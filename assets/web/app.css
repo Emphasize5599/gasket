@@ -355,6 +355,9 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .bufbox, .routebox { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 12px 0; }
 .routebox.good { border-color: var(--save); background: var(--save-bg); }
 .routebox .btn { margin-top: 10px; width: 100%; }
+.buf-floor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0 4px; color: var(--ink-2); font-size: .92rem; }
+.buf-floor label { color: var(--ink); font-weight: 500; }
+.buf-floor input[type=number] { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; width: 72px; min-height: 44px; box-sizing: border-box; text-align: right; }
 .buf-read { display: flex; gap: 10px; align-items: baseline; margin: 6px 0 2px; }
 .buf-read b { font-size: 1.25rem; }
 .buf-read span { color: var(--ink-2); font-size: .92rem; }

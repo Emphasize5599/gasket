@@ -6,7 +6,7 @@
   var esc = A.esc, priceHtml = A.priceHtml;
 
   // ---------- persistent inputs ----------
-  S.trip = Object.assign({ link: '', from: '', to: '', milesLeft: '', bufferMi: 40, fillUp: false, minSave: 1,
+  S.trip = Object.assign({ link: '', from: '', to: '', milesLeft: '', bufferMi: 40, bufferFloor: 10, fillUp: false, minSave: 1,
     arrive: 'buffer', topUpMi: 1.0, returnTrip: false, tankPrice: '', maxDetourMin: 10, altCompare: false, altMinSave: 5,
     avoid: { tolls: false, highways: false, ferries: false } }, S.trip || {});
   ['linkSliders','slowMode','maxUnder','timeValue'].forEach(function(k){delete S.trip[k];});
@@ -151,7 +151,7 @@
     var raw=recommendationRaw(proposal.sel),m=T.buildRoute(raw,carModel()),points=m.pts.map(function(p){return [p.lat,p.lng];});
     var mini=L.map(el,{zoomControl:false,scrollWheelZoom:false,tap:false,attributionControl:true});
     recommendationMaps.push(mini);mini.attributionControl.setPrefix(false);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(mini);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'osm-tiles',attribution:'© OpenStreetMap'}).addTo(mini);
     L.polyline(points,{color:'#4285f4',weight:5,interactive:false}).addTo(mini);mini.fitBounds(L.latLngBounds(points),{padding:[16,16]});
     var label=el.parentElement.querySelector('.proposal-weather');
     try{
@@ -184,7 +184,9 @@
       // Commit only after the replacement has a valid plan; failures never change the current selection.
       if(legsMode()){route.legs.forEach(function(l,i){l.sel=proposal.sel[i];});rebuildAlts();raw=alts[0];}else altSel=proposal.sel[0];
       rawRoute=raw;model=m;result={plan:p,opts:opts,cands:g.cands,notes:g.notes,unpriced:g.unpriced,stale:g.stale,grade:g.grade,startGal:base.startGal,bufMi:base.bufMi,topMi:base.topMi,topSel:-1,planOffs:''};
-      choiceComplete=true;recompute();if(choicePool){var stations=Array.from(new Map((choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]).map(function(s){return [P.stationKey(s),s];})).values()),ks=[altSel].concat(altCompareList());saveTrip({official:stations.map(function(s){var c=Object.assign({},s);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:ks.map(function(){return [];}),kind:choicePool.kind||'gas'},ks);}else rememberSel();startSweep();hzPreload();renderStep();
+      choiceComplete=true;recompute();if(choicePool){var stations=Array.from(new Map((choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]).map(function(s){return [P.stationKey(s),s];})).values()),ks=[altSel].concat(altCompareList());saveTrip({official:stations.map(function(s){var c=Object.assign({},s);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:ks.map(function(){return [];}),kind:choicePool.kind||'gas'},ks);}else rememberSel();startSweep();hzPreload();
+      // back to Adjustments for the new trip; its Next compares the trips once more (another replacement loops again)
+      choiceComplete=false;recommendationState='idle';closeLegs();step=ST_ADJ;renderStep();
     }catch(e){if(route===owner){if(legsMode())route.legs.forEach(function(l,i){l.sel=previous.selections[i];});alts=previous.alts;altSel=previous.sel;rawRoute=previous.raw;model=previous.model;result=base;choiceComplete=false;}toastMsg('Could not replace this trip. Your original trip is unchanged.');LG.warn('routes','Trip replacement failed',String(e&&e.message||e));}
     finally{if(epoch===recommendationEpoch){choicePlanning=false;if(window.Tasks)Tasks.remove('route-comparison');if(recommendationActive())renderResults();navRender();}}
   }
@@ -2286,8 +2288,12 @@
   }
   function canDo(mi, cx, offs) { return T.reachable(baseOpts(mi), ratesOf(cx, offs)); }
   /** Can the buffer slider go to this row? (rows are planned at your speeds; linked: after slowing as far as you allow) */
+  /** The lowest buffer any trip may use (Adjustments' "Never below"): the slider can't go under it. */
+  function bufFloor() { var f = +S.trip.bufferFloor; return f > 0 ? f : 0; }
+  /** The buffer a new plan starts at: your usual one, raised to the floor. */
+  function tripBuf() { return Math.max(+S.trip.bufferMi || 0, bufFloor()); }
   function bufOk(x, cx) {
-    return !!(x&&x.ok);
+    return !!(x&&x.ok&&x.mi>=bufFloor());
   }
   /** Highest offset that still has a plan — at this buffer, or (linked) at the smallest buffer. Binary search. */
   function maxOffset(cx, set) {
@@ -2357,9 +2363,9 @@
     var r = result;
     if (r.sweep || r.sweeping) return;
     r.sweeping = true;
-    var top = Math.min(100, Math.max(60, Math.ceil(S.trip.bufferMi * 1.5 / 5) * 5)), list = [];
+    var top = Math.min(100, Math.max(60, Math.ceil(tripBuf() * 1.5 / 5) * 5)), list = [];
     for (var b = 5; b <= top; b += 5) list.push(b);
-    [S.trip.bufferMi, r.bufMi].forEach(function (v) { if (v >= 0 && list.indexOf(v) < 0) list.push(v); });
+    [S.trip.bufferMi, tripBuf(), bufFloor(), r.bufMi].forEach(function (v) { if (v > 0 && list.indexOf(v) < 0) list.push(v); });
     list.sort(function (a, b2) { return a - b2; });
     var rows = [], i = 0, t0 = Date.now();
     setTimeout(function next() {
@@ -2369,6 +2375,7 @@
       if (i < list.length) return setTimeout(next, 0);
       r.sweep = T.marks(rows); r.sweeping = false;
       LG.debug('plan', 'Buffer sweep in ' + (Date.now() - t0) + ' ms', rows.map(function (x) { return x.mi + ':' + (x.net == null ? '-' : x.net.toFixed(2)) + (x.mark ? '*' : ''); }).join(' '));
+      if (floorUp(r)) return;
       if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); if (r.plan.ok && $('tsSpeed')) renderTripSpeed(); }
     }, 300);
   }
@@ -2430,7 +2437,7 @@
     var out = [], runs = [], prev = null;
     if (!base.ok) return out;
     sw.forEach(function (x) {
-      if (!x.ok) { prev = null; return; }
+      if (!bufOk(x)) { prev = null; return; }
       var d = x.net - base.net, k = Math.abs(d) < 0.05 ? 0 : Math.round(d * 20);    // same cost to within 5¢ = one run
       if (prev && prev.k === k && (prev.mi < base.mi) === (x.mi < base.mi)) prev.rows.push(x);
       else { prev = { k: k, d: d, mi: x.mi, rows: [x] }; runs.push(prev); }
@@ -2473,11 +2480,11 @@
   }
   function bufBox() {
     var r = result, sw = r.sweep;
-    var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>';
+    var h = '<div class="bufbox" id="tsBufBox"><div class="tb-h">Buffer for this trip</div>' + floorRow();
     if (!sw) return h + A.ldBar('Checking other buffers') + '</div>';
     // the buffer's limits depend on your speeds, which depend on the speed limits: wait for them
     if (S.limitLookup !== false && (!model._lim || model._lim === 'loading')) return h + limBar(model, 'Waiting for speed limits') + '</div>';
-    var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
+    var min = sw[0].mi, max = sw[sw.length - 1].mi, cur = swRow(r.bufMi), base = swRow(tripBuf());
     if (!base.ok) base = cur;
     var pos = function (mi) { return ((mi - min) / (max - min) * 100).toFixed(2); };
     var bl = bufLimits(), warns = [];
@@ -2506,12 +2513,36 @@
       return '<span class="bgray" style="left:' + a.toFixed(2) + '%;width:' + (b2 - a).toFixed(2) + '%"></span>';
     }).join('') + '</div><input type="range" id="tsBuf" min="' + min + '" max="' + max + '" step="1" value="' + r.bufMi + '"></div>';
     h += '<div class="buf-scale"><span>' + min + ' mi</span><span>' + max + ' mi</span></div>';
-    if (!cur.ok) {
-      var okRows = sw.filter(function (x) { return x.ok; });
-      h += '<div class="lead small keep">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : 'No buffer works — check the miles left.') + '</div>';
+    if (!bufOk(cur)) {
+      var okRows = sw.filter(function (x) { return bufOk(x); }), lowOk = sw.some(function (x) { return x.ok; });
+      h += '<div class="lead small keep">' + (okRows.length ? 'The highest buffer that works on this trip is ' + okRows[okRows.length - 1].mi + ' mi.' : lowOk && bufFloor() ? 'No buffer of ' + bufFloor() + ' mi or more works on this trip — lower “Never below” or check the miles left.' : 'No buffer works — check the miles left.') + '</div>';
     }
-    if (r.bufMi !== S.trip.bufferMi) h += '<div class="lead small keep usual-l">Your buffer is different than usual. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer.</a></div>';
+    if (r.bufMi !== tripBuf()) h += '<div class="lead small keep usual-l">Your buffer is different than usual. <a href="#" id="tsBufKeep">Make ' + r.bufMi + ' mi my usual buffer.</a></div>';
     return h + '</div>';
+  }
+  /** Top left of the buffer tile: the lowest buffer the slider may reach, for every trip (S.trip.bufferFloor). */
+  function floorRow() {
+    var help = 'The least ' + (KIND() === 'ev' ? 'charge' : 'gas') + ' you ever want left, in miles of range. The slider can\'t go below it, so trying a smaller buffer for a cheaper trip never plans you down to an almost empty tank: you reach every stop and the end with at least this much. It applies to all trips. 0 turns it off.';
+    return '<div class="buf-floor"><label for="tsBufFloor">Never below</label><input type="number" id="tsBufFloor" inputmode="numeric" min="0" max="200" step="1" value="' + bufFloor() + '"><span>mi</span>' + A.qBtn(help) + '</div>';
+  }
+  function bindFloor() {
+    var inp = $('tsBufFloor'); if (!inp) return;
+    inp.onchange = function () {
+      var f = Math.max(0, Math.min(200, Math.round(parseFloat(inp.value) || 0)));
+      if (f === bufFloor()) { inp.value = f; return; }
+      S.trip.bufferFloor = f; A.save(); LG.info('plan', 'Buffer floor: ' + f + ' mi');
+      var r = result; if (!r || !r.sweep) return;
+      if (r.sweep.every(function (x) { return x.mi !== f; })) { r.sweep = null; startSweep(); refreshBufBox(); return; }   // check that buffer too
+      if (!floorUp(r)) refreshBufBox();
+    };
+  }
+  /** The trip's buffer is below the floor: move it up to the lowest buffer at or above the floor that works. */
+  function floorUp(r) {
+    if (r !== result || !r.sweep || r.bufMi >= bufFloor()) return false;
+    var up = r.sweep.filter(function (x) { return x.mi >= bufFloor() && bufOk(x); })[0];
+    if (!up) return false;
+    LG.info('plan', 'Buffer raised to the floor: ' + r.bufMi + ' → ' + up.mi + ' mi');
+    setBuffer(up); return true;
   }
   function bufText(x, base) {
     if (!x.ok) return 'can\'t keep this much — no priced station in reach';
@@ -2522,9 +2553,10 @@
     return (Math.abs(d) < 0.05 ? 'same cost as usual' : d < 0 ? 'saves ' + money(-d) + ' vs. usual' : money(d) + ' more than usual') + ' · ' + n;
   }
   function bindBuf() {
+    bindFloor();
     var inp = $('tsBuf'); if (!inp) return;
     Garage.guardRange(inp); fillRange(inp);
-    var r = result, cur = swRow(r.bufMi), base = swRow(S.trip.bufferMi);
+    var r = result, cur = swRow(r.bufMi), base = swRow(tripBuf());
     if (!base.ok) base = cur;
     var last = r.bufMi;
     // the knob snaps to the marks (and where it is now); a tick each time it lands on another one
@@ -2661,8 +2693,8 @@
   function makeBaseOpts(model, cands, startGal) {
     var kd = KIND(), cap = Garage.tank();
     return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * 0.8 : null,
-      model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: S.trip.bufferMi * model.combGpm,
-      arriveGal: S.trip.bufferMi * model.combGpm, fillUp: S.trip.fillUp,
+      model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
+      arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
       stopPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
       detourPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
@@ -2850,7 +2882,7 @@
       stops: plan.ok ? plan.stops.map(function (s) { return { name: s.c.station.name, mile: Math.round(s.c.d), price: s.c.price, buy: Math.round(s.buyGal * 10) / 10, why: s.why }; }) : null });
     LG.debug('plan', 'Candidates', cands.map(function (c) { return [c.station.name, Math.round(c.d), c.price, Math.round(c.detourMi * 10) / 10]; }));
     result = { plan: plan, opts: opts, cands: cands, notes: notes, unpriced: unpriced, stale: stale, grade: grade, startGal: startGal,
-      topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp, planOffs: planOffs, estUsed: estUsed };
+      topMi: S.trip.topUpMi, topSel: -1, bufMi: tripBuf(), cachedAgeMs: ga.cachedAgeMs, fromHistory: !!rp, planOffs: planOffs, estUsed: estUsed };
     if(routeFlow())result.routes=[{k:altSel,model:model,res:result}];
     prog(0.97, 'Drawing the map');
     await paint();
@@ -2870,7 +2902,7 @@
         if (plan.ok) o2.refPrice = plan.refPrice;
         var p2 = await planAsync(o2);
         result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
-          startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: S.trip.bufferMi, cachedAgeMs: ga.cachedAgeMs } });
+          startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: tripBuf(), cachedAgeMs: ga.cachedAgeMs } });
       }
       LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
     }

@@ -46,10 +46,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await p.evaluate(()=>__releasePlan());await p.waitForFunction(()=>!Tasks.list().some(t=>t.id==='route-comparison'));assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[0,0],'skipping in-flight work cannot change the selection');await p.evaluate(()=>Planner.run=__plannerRun);
  }
  await p.evaluate(()=>__trip.step(6));await p.click('#tNext');await p.waitForFunction(()=>document.querySelectorAll('.trip-proposal').length===3);
+ await p.waitForSelector('.proposal-map .osm-tiles',{state:'attached',timeout:5000});   // the themed layer: dark mode inverts .osm-tiles
  const chosen=await p.evaluate(()=>{const rs=[...document.querySelectorAll('.trip-proposal')];return rs.find(r=>r.textContent.includes('option 2 / Leg 2 option 1')).dataset.proposal;});
  await p.evaluate(()=>{window.__goodRun=Planner.run;Planner.run=function(){Planner.run=__goodRun;return Promise.reject(new Error('Synthetic failure'));};});
  await p.click('[data-replace="'+chosen+'"]');await p.waitForFunction(()=>!document.querySelector('[data-replace]').disabled);assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[0,0],'failed replacement leaves the trip unchanged');
- await p.click('[data-replace="'+chosen+'"]');await p.waitForSelector('#tsIdeal');
+ await p.click('[data-replace="'+chosen+'"]');await p.waitForFunction(()=>__trip.state().step===6&&!Tasks.list().some(t=>t.id==='route-comparison'));
+ // a replacement returns to Adjustments; its Next compares the trips once more before the stops
+ await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===7&&!Tasks.list().some(t=>t.id==='route-comparison')&&!!document.querySelector('.trip-proposal,#tsResults .msg,#tsResults .note'));
+ if(!await p.locator('#tsIdeal:visible').count()){await p.click('#tNext');}await p.waitForSelector('#tsIdeal',{state:'visible'});
  assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[2,1],'replacement commits the complete combination');
  assert.equal(await p.evaluate(()=>__trip.state().result.opts.timeValue),0);
  assert.equal(await p.evaluate(()=>__trip.state().result.bufMi),30);
@@ -58,5 +62,18 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>__projectCount),0,'combination search reuses leg station projections');
  assert.equal(await p.evaluate(()=>__paid),0,'comparison/replacement never calls paid discovery or routing');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ // "Never below": the buffer can't be set (or slid) under the floor; raising it moves the trip's buffer up
+ await p.evaluate(()=>__trip.step(6));await p.waitForSelector('#tsBufFloor');await p.waitForSelector('#tsBuf');
+ assert.equal(await p.inputValue('#tsBufFloor'),'10','default floor');
+ await p.fill('#tsBufFloor','35');await p.dispatchEvent('#tsBufFloor','change');
+ await p.waitForFunction(()=>__trip.state().result.bufMi>=35&&!!document.querySelector('#tsBuf'));
+ assert.equal(await p.evaluate(()=>__app.S.trip.bufferFloor),35);
+ await p.locator('#tsBuf').evaluate(el=>{el.value='31';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});await p.waitForTimeout(100);
+ assert(await p.evaluate(()=>__trip.state().result.bufMi>=35),'the slider cannot go below the floor');
+ assert.equal(await p.evaluate(()=>[...document.querySelectorAll('#tsBufBox .bm[data-snap]')].filter(m=>m.dataset.snap<35).length),0,'no savings marks below the floor');
+ await p.fill('#tsBufFloor','0');await p.dispatchEvent('#tsBufFloor','change');await p.waitForSelector('#tsBuf');
+ await p.locator('#tsBuf').evaluate(el=>{el.value='30';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});await p.waitForFunction(()=>__trip.state().result.bufMi===30);
+ assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await p.evaluate(()=>{__app.S.trip.bufferFloor=10;});
  await p.evaluate(()=>__trip.close());assert.deepEqual(errors,[]);await p.close();
 }console.log('320/448px global settings, optional whole-trip recommendations, decline, skip and cached replacement passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
