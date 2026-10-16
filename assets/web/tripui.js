@@ -2561,8 +2561,10 @@
     var last = r.bufMi;
     // the knob snaps to the marks (and where it is now); a tick each time it lands on another one
     var snaps = snapPoints($('tsBufBox'), r.bufMi).filter(function (v) { return v === r.bufMi || bufOk(swRow(v)); });
+    // no cost marks (every buffer costs the same): slide freely instead of being stuck between "usual" and here
+    var snapOn = !!$('tsBufBox').querySelector('[data-bm]');
     inp.oninput = function () {
-      var x = swRow(+inp.value), v = x.mi;
+      var x = swRow(snapOn ? nearest(snaps, +inp.value) : +inp.value), v = x.mi;
       if (!bufOk(x)) { v = last; x = swRow(last); }        // can't slide into the gray
       inp.value = v; fillRange(inp);
       if (v !== last) { tick(); last = v; }
@@ -2651,8 +2653,9 @@
     var snaps = snapPoints($('tsDetBox') || inp.closest('.bufbox'), null).map(ix).filter(function (k) { return k >= 0 && sw[k].ok; });
     if (snaps.indexOf(last) < 0) snaps.push(last);
     snaps.sort(function (a2, b2) { return a2 - b2; });
+    var snapOn = !!($('tsDetBox') || inp.closest('.bufbox')).querySelector('[data-dm]');   // as the buffer slider: free when nothing changes the cost
     inp.oninput = function () {
-      var k = +inp.value, x = sw[k];
+      var k = snapOn ? nearest(snaps, +inp.value) : +inp.value, x = sw[k];
       if (!x.ok) { k = last; x = sw[last]; }
       inp.value = k; fillRange(inp);
       if (k !== last) { tick(); last = k; }

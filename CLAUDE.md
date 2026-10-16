@@ -2,6 +2,8 @@
 
 ## This branch: keyless experiment
 
+0.0.164: buffer / detour sliders snap to their marks again (`nearest(snaps, …)`, removed in 0.0.161) whenever a cost mark (`[data-bm]` / `[data-dm]`) is drawn; with no marks (every value costs the same) they slide freely, which is why 0.0.161 dropped snapping. Test: routechoices-ui (synthetic sweep costs).
+
 0.0.163: buffer floor `S.trip.bufferFloor` (default 10 mi, 0 = off), the "Never below" number at the top left of the buffer tile (`floorRow` / `bindFloor`). `bufOk` refuses buffers under it (gray band, no snap, no savings marks); `tripBuf()` = usual raised to the floor starts every plan, base marker and "different than usual"; `floorUp` moves a trip's buffer up to the lowest working buffer at or above a new floor (the sweep re-runs when it never checked that value). It cannot fix a start below the floor (`firstDip` still shows). Replace on a cheaper-trip recommendation returns to Adjustments (`choiceComplete=false`), whose Next compares once more. Recommendation maps use the `osm-tiles` class so dark mode inverts them. Python garage / trip_ui / advisory / est / perf / vin were already failing at 0.0.162 (capacity-required Save, new step order); routechoices-ui covers this release.
 
 0.0.162: Route is step 3 again, Parameters 4, Hazards 5 (others unchanged), since cruising-speed parameters need route data. Reach/gating and tests follow this order. Vehicle editor Save now requires a finite positive tank/battery/H2 capacity for EPA and custom vehicles, including pending/failed Brave lookup; identity-only custom builder can return a draft to the editor, not bypass final capacity validation. Required input and direct save guard agree; typing a custom name cannot bypass capacity.

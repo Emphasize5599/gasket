@@ -65,6 +65,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  // "Never below": the buffer can't be set (or slid) under the floor; raising it moves the trip's buffer up
  await p.evaluate(()=>__trip.step(6));await p.waitForSelector('#tsBufFloor');await p.waitForSelector('#tsBuf');
  assert.equal(await p.inputValue('#tsBufFloor'),'10','default floor');
+ // snapping: with cost marks the knob lands on a mark (here buffers up to 20 mi are cheaper: a mark at 20)
+ await p.evaluate(()=>{__trip.state().result.sweep.forEach(x=>{if(x.ok)x.net=x.mi<=20?-1:0;});});await p.fill('#tsBufFloor','5');await p.dispatchEvent('#tsBufFloor','change');await p.waitForSelector('#tsBufBox [data-bm="20"]',{state:'attached'});
+ await p.locator('#tsBuf').evaluate(el=>{el.value='24';el.dispatchEvent(new Event('input'));});
+ assert.equal(await p.inputValue('#tsBuf'),'20','the knob snaps to the nearest mark');
+ await p.dispatchEvent('#tsBuf','change');await p.waitForFunction(()=>__trip.state().result.bufMi===20);
  await p.fill('#tsBufFloor','35');await p.dispatchEvent('#tsBufFloor','change');
  await p.waitForFunction(()=>__trip.state().result.bufMi>=35&&!!document.querySelector('#tsBuf'));
  assert.equal(await p.evaluate(()=>__app.S.trip.bufferFloor),35);
