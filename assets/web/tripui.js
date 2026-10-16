@@ -75,7 +75,7 @@
   function choiceEntries(){return RouteChoices.entries(choiceLists(),choiceSelections(),choiceAnswers());}
   function choicePending(){return routeFlow()?RouteChoices.pending(choiceLists(),choiceSelections(),choiceAnswers()):[];}
   function reviewStart(){var pending=choicePending();routeReview=pending[0]||null;if(!routeReview)return false;hzLeg=routeReview.leg;hzFitKey=null;renderHz();drawHaz();navRender();hzLoadLeg(hzLeg);return true;}
-  function reviewAnswer(yes){if(!routeReview)return;var id=routeReview.key;choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewStart())advance(ST_ADJ);}
+  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key;choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewStart())advance(ST_ADJ);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
   var recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||p.refPrice,[{stops:p.stops.map(function(s){return {arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price};}),arriveGal:p.arriveGal}]).legs[0].cost;}
@@ -414,7 +414,7 @@
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
     if(step===ST_HAZ&&routeReview){$('tBack').textContent='No';$('tNext').textContent='Yes';$('tBack').onclick=function(){reviewAnswer(false);};$('tNext').onclick=function(){reviewAnswer(true);};routeGate();return;}
     if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } var previous=step-1;while(previous>ST_ADVISORY&&jobLocked(previous))previous--;if (jobLocked(previous)) return; leaveAsk(function () { closeLegs(); collectSafe(); step=previous; renderStep(); }); };
-    if ($('tNext')) $('tNext').onclick = function () { if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { hzGoLeg(hzLeg + 1); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
+    if ($('tNext')) $('tNext').onclick = async function () { if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { var i=hzLeg,a=hzAlts(i)[hzSel(i)];if(await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i&&hzAlts(i)[hzSel(i)]===a;}))hzGoLeg(i + 1); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
     if ($('tOpen')) $('tOpen').onclick = openMaps;
     routeGate(); backMode();
   }
@@ -472,7 +472,11 @@
       if (!hasFuel()) { flag($('tMiles') || $('tFuelPct') || $('tGauge'), 'box', KIND() === 'ev' ? 'How charged is your battery?' : 'How much gas do you have?'); return false; }
       return true;
     }
-    if(k===ST_HAZ&&choicePending().length){reviewStart();return false;}
+    if(k===ST_HAZ){
+      var owner=route;
+      for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)];if(!await hzConfirmRisk(a,i,function(){return route===owner&&step===ST_HAZ&&hzAlts(i)[hzSel(i)]===a;}))return false;}
+      if(choicePending().length){reviewStart();return false;}
+    }
     if (onPlan(k)) {
       if (!result) { await findStops(); if (!result) return false; }
       if (!result.plan.ok) { flag($('tsBufBox') || $('tsResults'), 'pick', 'No plan works with this buffer — try a smaller one.'); return false; }
@@ -3116,8 +3120,9 @@
   function hzWarm() { if (aiCan() && Severity.state()==='idle') Severity.compare('warm up', {a:['warm up']}); }
   async function hzPreload() { hzWarm();var owner=route,next=0,count=hzLegs();async function lane(){while(next<count&&route===owner)await hzLoadLeg(next++);}await Promise.all([lane(),lane(),lane()]); }
   async function hzLoad(a, i) {
-    var e = hzEntry(a, i); if (e.st) return e;
+    var e = hzEntry(a, i); if (e.st) return e.promise || e;
     e.st = 'loading'; var t0 = Date.now();
+    e.promise = (async function () {
     try {
       var r = await RouteWx.forRoute(hzModel(a), wxGet, { depart: e.d * 6e4, stateAt: window.Limits && Limits.stateAt, counties: loadCounties, onProg: function (f) { e.prog = f; hzBars(); },
         countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.state && Severity.state() === 'ready' ? Severity.compare : null,   // never waits for the model to load
@@ -3129,6 +3134,8 @@
       LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || ''].filter(function (v) { return v !== ''; }); }) });
     } catch (err) { e.st = 'error'; e.err = String(err && err.message || err); LG.warn('wx', 'Hazards along a route failed', e.err); }
     return e;
+    })();
+    return e.promise;
   }
   /** Can the on-phone model still read warnings (not failed, not missing)? */
   function aiCan() { return !!(window.Severity && Severity.state && Severity.state() !== 'failed' && !(window.__mocks && __mocks.severity)); }
@@ -3179,8 +3186,45 @@
       });
     });
   }
+  var hzRiskAcks = new WeakMap(), hzRiskBusy = false;
+  function hzRiskState(a,i) {
+    var e=hzEntry(a,i),setup=window.TirePolicy&&window.TireMath?TirePolicy.snapshot(Garage.car(),TireMath):null;
+    var risk=RouteWx.tireRisk(setup,e.st==='done'?e.hz:[]);
+    return {e:e,risk:risk,key:JSON.stringify([Garage.car().id,setup,risk.kinds,(e.hz||[]).filter(function(h){return risk.kinds.indexOf(h.kind)>=0;}).map(function(h){return [h.kind,h.level,h.event,h.fromMi,h.toMi,h.from,h.to];}),e.d,e.timeKey])};
+  }
+  function hzRiskHtml(state,a,i) {
+    var risk=state.risk,groups={},setup=TirePolicy.snapshot(Garage.car(),TireMath);
+    var unitKey=function(t){return t.unit==='trailer'?t.id.split(':')[0]:'car';};
+    risk.tires.forEach(function(t){var key=JSON.stringify([unitKey(t),t.depth,t.measured]);(groups[key]||(groups[key]=[])).push(t);});
+    var rows=Object.keys(groups).map(function(k){var ts=groups[k],t=ts[0],all=setup.tires.filter(function(x){return unitKey(x)===unitKey(t);}),name;
+      if(ts.length===all.length)name=t.trailer?t.trailer+': all '+ts.length+' tires':'All '+ts.length+' car tires';
+      else name=ts.map(function(x){return x.position;}).join(', ');
+      return '<li>'+esc(name)+' — '+(t.measured?'measured ':'estimated ')+esc(String(t.depth))+'/32 in</li>';
+    });
+    return '<div class="wet-tire-warning"><p>'+esc((hzLegs()>1?'Leg '+(i+1)+' · ':'')+(a.description||'Selected route'))+'</p><p><b>'+esc(risk.kinds.map(function(k){return RouteWx.KINDS[k][0];}).join(', '))+'</b> along this route. Low tread reduces grip.</p><ul>'+rows.slice(0,3).join('')+'</ul>'+(rows.length>3?'<details><summary>More affected tires</summary><ul>'+rows.slice(3).join('')+'</ul></details>':'')+
+      (risk.tires.some(function(t){return t.depth<=2;})?'<p class="warn"><b>Worn-out tires: replace before driving.</b></p>':'<p>Consider another route or postponing the trip. Check actual tread if these are estimates.</p>')+'<p class="small">Acknowledging this warning does not mean the route is safe.</p></div>';
+  }
+  async function hzConfirmRisk(a,i,valid) {
+    if(!a)return true;
+    // No known low tread: weather continues in the background, never hold navigation for this check.
+    if(!RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),[{kind:'snow'}]).tires.length)return true;
+    if(hzRiskBusy)return false;
+    var owner=route;hzRiskBusy=true;
+    try {
+      var checked=await hzLoad(a,i); // reuse the in-flight background check; never fetch it twice
+      if(route!==owner||!document.body.classList.contains('trip-on')||valid&&!valid())return false;
+      var state=hzRiskState(a,i);
+      if(state.e!==checked){A.toast('Departure changed. Check this route again.');return false;}
+      if(!state.risk.tires.length||hzRiskAcks.get(a)===state.key)return true;
+      var ok=await A.confirmDel({always:true,title:'Low tread on a wet-weather route',body:hzRiskHtml(state,a,i),no:'Choose another',action:'I understand',goClass:'primary'});
+      if(!ok)return false;
+      if(route!==owner||!document.body.classList.contains('trip-on')||valid&&!valid()||hzRiskState(a,i).key!==state.key){A.toast('Tires or weather changed. Review this route again.');return false;}
+      hzRiskAcks.set(a,state.key);LG.info('wx','Wet-weather tire warning acknowledged',{leg:i+1,kinds:state.risk.kinds,tires:state.risk.tires.map(function(t){return t.id;})});return true;
+    }finally{hzRiskBusy=false;}
+  }
   async function hzChoose(k) {
     var i = hzLeg; if (k === hzSel(i)) return;
+    var a=hzAlts(i)[k];if(!await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i;}))return;
     routeReview=null;choiceComplete=false;
     if (legsMode()) await pickLeg(i, k); else await pickAlt(k);
     if (step === ST_HAZ) { renderHz(); drawHaz(); }
@@ -3913,6 +3957,7 @@
     var pg = $('trip'); if (pg) pg.classList.remove('submode', 'tall');
   }
   function closeTrip() {
+    hzRiskAcks=new WeakMap();
     closePage();mapLoaded();
     resetAdjust();
     closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ(); mapLoaded();

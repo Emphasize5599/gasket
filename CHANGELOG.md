@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.172 - 2026-10-16 (keyless test branch only)
+- Wet-weather routes now require acknowledgment when car or hooked-up trailer tires have low tread, naming the hazards and affected tires.
+- Applies to default routes, alternate selections and cheaper-route consideration; reuses background weather checks.
+
 ## 0.0.171 - 2026-10-16 (keyless test branch only)
 - Fixed overlapping tire manufacture-date fields; the spare date now lives in Tire details, not the main Tires tile.
 - Larger trailer number tags, plus a numbered spare tag after the last road tire.

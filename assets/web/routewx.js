@@ -100,6 +100,17 @@
   }
 
   // ---------- what to do about it ----------
+  /** Known wet-weather exposure + current road tires, never the stored spare.
+   * Review thresholds, not promises of grip: wet 4/32, snow/ice 5/32.
+   * Sources: Tire Rack, "When Should Tires Be Replaced?" / "How Much Tread Depth Is Enough?".
+   */
+  function tireRisk(setup, hazards) {
+    var wet = {rain:1,storm:1,flood:1,tropical:1,snow:1,ice:1}, kinds = [];
+    (hazards || []).forEach(function(h){if(wet[h.kind] && kinds.indexOf(h.kind)<0)kinds.push(h.kind);});
+    var winter = kinds.indexOf('snow')>=0 || kinds.indexOf('ice')>=0, limit = winter ? 5 : 4;
+    var tires = kinds.length ? (setup && setup.tires || []).filter(function(t){return typeof t.depth==='number' && Number.isFinite(t.depth) && t.depth>=0 && t.depth<=limit;}) : [];
+    return {kinds:tires.length?kinds:[],tires:tires,limit:limit};
+  }
   // the climate presets' own names (ClimateMath.WEATHER)
   var SIT_NAME = { storm: 'stormy', ice: 'icy', snow: 'snowy', rain: 'rainy', fog: 'foggy', heat: 'hot & sunny', cold: 'frosty', air: 'smoky or polluted' };
   function isSummerTire(type) { return /summer|performance/i.test(type || '') && !/all[- ]?season|all[- ]?weather/i.test(type || ''); }
@@ -426,7 +437,7 @@
     if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : pk.wind ? ' (up to ' + Math.round(pk.wind) + ' mph)' : '');
     return KINDS[x.kind][0];
   }
-  var api = { timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
+  var api = { tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
     forRoute: forRoute, rerate:rerate, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;
