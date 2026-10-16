@@ -295,7 +295,7 @@ async function run() {
     },rated.tires);
     await catalogUI.click('#tzDet');
     await catalogUI.waitForSelector('#tzModel option[value="part:rt45h"]', {state:'attached'});
-    assert.equal(await catalogUI.inputValue('#tzWarranty'),'','differing variants require an explicit rating selection');
+    assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000','differing variants: the lowest listed warranty until you pick the exact rating');
     await catalogUI.selectOption('#tzModel','part:rt45h');
     assert.equal(await catalogUI.inputValue('#tzWarranty'),'65000');
     await catalogUI.selectOption('#tzModel','part:rt45t');

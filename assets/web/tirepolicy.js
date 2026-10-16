@@ -76,19 +76,35 @@
   function prompt(pack){return 'Explain this tire setup using only the checked findings and permitted actions below. '+
     'Return JSON {"summary":"short explanatory prose, no new actions or numbers", "actions":[{"id":"permitted action ID","why":"brief explanation grounded in facts"}],"facts":["every supplied fact ID"]}. '+
     'Reference every supplied action exactly once; prioritize urgent findings. Summary and why fields explain the reasons, not commands; the app displays the actual checked actions separately. Use no numerals in generated prose. Do not propose exact rotations, universal replacement of all tires, driving permission, prices or manufacturer specifications. '+
-    'Do not repeat the full fact list in the summary; the app displays it. FULL POLICY AND DATA:\n'+JSON.stringify(pack);}
-  function validate(raw,pack){
-    var answer;try{answer=JSON.parse(raw);}catch(e){return null;}
-    if(!answer||typeof answer.summary!=='string'||!answer.summary.trim()||answer.summary.length>800||!Array.isArray(answer.actions)||!Array.isArray(answer.facts))return null;
-    var facts=pack.facts.map(function(f){return f.id;}),ids=pack.actions.map(function(a){return a.id;});
-    if(answer.facts.length!==facts.length||new Set(answer.facts).size!==facts.length||answer.facts.some(function(id){return facts.indexOf(id)<0;}))return null;
-    if(answer.actions.length!==ids.length||new Set(answer.actions.map(function(a){return a&&a.id;})).size!==ids.length)return null;
-    if(answer.actions.some(function(a){return !a||ids.indexOf(a.id)<0||typeof a.why!=='string'||a.why.length>400;}))return null;
-    var prose=answer.summary+' '+answer.actions.map(function(a){return a.why;}).join(' ');
-    // The generator explains; numerical findings and exact actions remain app-owned and visible separately.
-    if(prose.length>2400||/[0-9<>]|https?:/i.test(prose)||/\b(?:replace|rotate|swap|move|drive|inflate|deflate|install|remove|ignore|safe|guaranteed)\b/i.test(prose))return null;
-    return {summary:answer.summary.trim(),actions:answer.actions.map(function(a){return {id:a.id,why:a.why.trim()};}),facts:answer.facts};
+    'Do not repeat the full fact list in the summary; the app displays it. Reply with the JSON object only: no code fences, no text before or after it. FULL POLICY AND DATA:\n'+JSON.stringify(pack);}
+  // A generated explanation is checked before it shows; check() says why one was turned away (logged, not shown).
+  var COMMAND=/(?:^|[.!?;:]\s+|\b(?:you|we)\s+(?:should|must|need to|have to|can)\s+)(?:replace|rotate|swap|move|drive|inflate|deflate|install|remove|ignore)\b/i;
+  function jsonOf(raw){
+    var t=String(raw||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'');   // small models fence their JSON
+    try{return JSON.parse(t);}catch(e){}
+    var a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)return null;
+    try{return JSON.parse(t.slice(a,b+1));}catch(e){return null;}
   }
-  root.TirePolicy={version:RULES.version,prepare:prepare,evaluate:evaluate,snapshot:snapshot,prompt:prompt,validate:validate};
+  function check(raw,pack){
+    var answer=jsonOf(raw);if(!answer)return {reason:'not JSON'};
+    if(typeof answer.summary!=='string'||!answer.summary.trim()||!Array.isArray(answer.actions)||!Array.isArray(answer.facts))return {reason:'missing summary/actions/facts'};
+    if(answer.summary.length>800)return {reason:'summary too long'};
+    var facts=pack.facts.map(function(f){return f.id;}),ids=pack.actions.map(function(a){return a.id;});
+    if(answer.facts.length!==facts.length||new Set(answer.facts).size!==facts.length||answer.facts.some(function(id){return facts.indexOf(id)<0;}))return {reason:'fact IDs do not match'};
+    if(answer.actions.length!==ids.length||new Set(answer.actions.map(function(a){return a&&a.id;})).size!==ids.length)return {reason:'action IDs do not match'};
+    if(answer.actions.some(function(a){return !a||ids.indexOf(a.id)<0||typeof a.why!=='string'||a.why.length>400;}))return {reason:'unknown action or bad why'};
+    var prose=answer.summary+' '+answer.actions.map(function(a){return a.why;}).join(' ');
+    if(prose.length>2400)return {reason:'too long'};
+    if(/[<>]|https?:/i.test(prose))return {reason:'markup or link'};
+    // numbers only as the checked findings state them (the app shows those itself)
+    var known={};pack.facts.forEach(function(f){(String(f.text||'').match(/\d+(?:\.\d+)?/g)||[]).forEach(function(n){known[n]=1;});});
+    var odd=(prose.match(/\d+(?:\.\d+)?/g)||[]).filter(function(n){return !known[n];});if(odd.length)return {reason:'numbers not in the findings: '+odd.slice(0,4).join(', ')};
+    // it explains; it doesn't instruct (the checked actions are the app's), and it never promises safety
+    if(COMMAND.test(prose))return {reason:'gives an instruction'};
+    if(/\b(?:safe|safely|guaranteed?)\b/i.test(prose))return {reason:'promises safety'};
+    return {ok:{summary:answer.summary.trim(),actions:answer.actions.map(function(a){return {id:a.id,why:a.why.trim()};}),facts:answer.facts}};
+  }
+  function validate(raw,pack){var r=check(raw,pack);return r.ok||null;}
+  root.TirePolicy={version:RULES.version,prepare:prepare,evaluate:evaluate,snapshot:snapshot,prompt:prompt,validate:validate,check:check};
   if(typeof module!=='undefined'&&module.exports)module.exports=root.TirePolicy;
 })(typeof window!=='undefined'?window:globalThis);

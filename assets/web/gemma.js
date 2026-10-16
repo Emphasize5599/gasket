@@ -68,8 +68,8 @@
       var now=current(), live=now&&input(now);
       if(!state.enabled||item.cancelled||!live||live.key!==item.key)return;
       if(result.error){lastIssue=result.error;LG.warn('ai','Local tire explanation failed',{elapsedMs:Date.now()-started});return;}
-      var accepted=TirePolicy.validate(result.text,item.pack);
-      if(!accepted){lastIssue='AI explanation could not be checked. Use the checked tire notices below.';LG.warn('ai','Local explanation rejected by output guard',{elapsedMs:Date.now()-started,responseChars:String(result.text||'').length});return;}
+      var checked=TirePolicy.check(result.text,item.pack),accepted=checked.ok;
+      if(!accepted){lastIssue='AI explanation could not be checked. Use the checked tire notices below.';LG.warn('ai','Local explanation rejected by output guard',{elapsedMs:Date.now()-started,responseChars:String(result.text||'').length,reason:checked.reason,start:String(result.text||'').slice(0,160)});return;}
       LG.info('ai','Local tire explanation accepted',{elapsedMs:Date.now()-started});
       cache.set(item.key,{answer:accepted,pack:item.pack});
       while(cache.size>12)cache.delete(cache.keys().next().value);

@@ -251,3 +251,15 @@ console.log('tire version matching ok');
   assert.equal(T.instead('No spare. It comes with run-flat tires.'), 'runflat');
   console.log('"No spare" with a repair kit reads as the kit');
 }
+
+// 0.0.168: an opener ("Compact spare.") the answer's own body contradicts: the body wins (2025 Blazer LT, Brave)
+{
+  const T = require('../assets/web/tires.js');
+  const blazer = 'Compact spare. Located inside the rear cargo area. The 2025 Chevrolet Blazer LT does not come with a spare tire as standard equipment; instead, it is equipped with a tire inflator kit (sealant and air compressor). A 16-inch compact spare tire with a mechanical jack and tools is available as a factory-installed standalone option for $195. The RS trim features self-sealing tires rather than a spare or repair kit.';
+  assert.equal(T.leadOverruled(blazer, 'compact'), 'kit', 'not standard + an inflator kit instead = kit');
+  assert.equal(T.leadOverruled('Compact spare. Located under the cargo floor. The 2021 Toyota RAV4 comes with a compact temporary spare and a jack.', 'compact'), null, 'a real compact spare stands');
+  assert.equal(T.leadOverruled('Compact spare. Inside the vehicle. The car does not come with a full-size spare; it has a compact one.', 'compact'), null, '"not a full-size spare" is not "no spare"');
+  assert.equal(T.leadOverruled('Full-size spare. Under the vehicle. Note: the base model does not come with a spare tire as standard.', 'full'), 'none', 'not standard, nothing named instead = none');
+  assert.equal(T.leadOverruled(blazer, 'kit'), null, 'only spare openers are checked');
+  console.log('spare opener overruled by the answer body');
+}

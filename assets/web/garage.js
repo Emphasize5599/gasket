@@ -254,7 +254,7 @@
     if(c.demoFeatures)h+='<p class="lead small keep">Demo coverage: '+esc(c.demoFeatures)+'</p>';
     h += '</div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
-    h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoPanel(c) + '</details>';
+    h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoView(c) + '</details>';
     h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + (window.Tires ? Tires.summaryHtml(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
     h += '<details class="card g-obs g-clim" id="gClimate"' + (climOpen ? ' open' : '') + '><summary><span>Climate control</span></summary><div id="gClimIn"></div></details>';
     host.innerHTML = h;
@@ -299,7 +299,7 @@
     var k = trimKey(c); if (!k || !call || !N.siteRead || matching) return;
     var st = trimState(c); if (st) return;
     trimMem[k] = { busy: true, list: [], t: Date.now() };
-    setTimeout(function () { if (trimKey(car()) === k) draw(); }, 0);   // the bar in the trim box (this starts during a redraw)
+    setTimeout(function () { if (trimKey(car()) === k) drawIdle(); }, 0);   // the bar in the trim box (this starts during a redraw)
     LG.info('car', 'Asking Brave Search for the trims', k);
     var ask = function () { return Promise.race([call('siteRead', 'brave', JSON.stringify({ url: trimUrl(c), bg: true, kind: 'trims', year: c.year })), new Promise(function (ok) { setTimeout(function () { ok(null); }, 40000); })]); };
     var r = await Promise.all([braveSerial(ask), window.CarPics && CarPics.trims ? CarPics.trims(c) : Promise.resolve([])]);
@@ -307,7 +307,13 @@
     var v = { list: list, t: Date.now(), failed: !list.length };
     trimMem[k] = v; try { A.KV.put('trims', TRIM_V + k, v); } catch (e) { }
     LG.info('car', list.length ? 'Trims: ' + list.length + ' (' + (r[1].length ? 'Fuel API' + (brave.length ? ' + ' : '') : '') + (brave.length ? 'Brave Search' : '') + ')' : 'No trim list', list.length ? list.join(', ') : (r[0] && (r[0].error || (r[0].blocked ? 'a check on Brave Search\'s page' : ''))) || 'no reply in 40 s');
-    if (trimKey(car()) === k) draw();
+    if (trimKey(car()) === k) drawIdle();
+  }
+  /** A lookup's redraw: not while you're typing in the editor (it would replace the box); once you leave it. */
+  function drawIdle() {
+    var ae = document.activeElement;
+    if (ae && ed && ed.body && ed.body.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) { ae.addEventListener('blur', function () { setTimeout(draw, 0); }, { once: true }); return; }
+    draw();
   }
   /** A trim chosen or typed: a different trim can have a different tank, so the box empties and Brave is asked again. */
   function setTrim(c, v) {
@@ -431,7 +437,7 @@
     if (inEditor) return '<div class="gc gc-solo" id="gCars"><div class="gc-stage" id="gcStage"><div class="gc-slide carchip on"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
       '<b class="gc-name">' + esc(shortName(c)) + '</b><small class="gc-sub" id="gcSub">' + sub + '</small></div></div></div>' + imgActions(c);
     function imgActions(c) { return '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
-      '<button type="button" class="gc-recreate" id="gcUseGenerated">Choose...</button>' +
+      '<button type="button" class="gc-recreate" id="gcUseGenerated">Pick a photo...</button>' +
       '<button type="button" class="gc-recreate gc-original" id="gcOriginal"' + (window.CarPics && CarPics.hasOverride(c) ? '' : ' disabled') + '>Revert to original</button></div>'; }
     var h = '<div class="gc" id="gCars"><button type="button" class="gc-nav prev" id="gcPrev" aria-label="Previous car"' + (many ? '' : ' disabled') + '>' + ARROW + '</button>' +
       '<div class="gc-stage" id="gcStage" tabindex="0" aria-roledescription="carousel" aria-label="Your cars: swipe or use the arrow keys">' +
@@ -560,7 +566,8 @@
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
       return '<option value="' + t + '"' + ((c.type || 'car') === t ? ' selected' : '') + '>' + SP.TYPES[t].label + '</option>'; }).join('') + '</select></label></div>';
-    h += tkExtra + (S.cars.length > 1 ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
+    // engine, transmission, drive, fuel and features: changed here (the Garage page's About this car only shows them)
+    h += tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
     return h;
   }
   function infoLine(c) {
@@ -629,7 +636,7 @@
   }
 
   // ---------- about this car ----------
-  var verOpen = false, featOpen = false;
+  var verOpen = false, featOpen = false, detOpen = false;
   var TILE_Q = {
     power: 'What makes the car go: a <b>gas engine</b>; a <b>diesel engine</b>; a <b>hybrid</b>, with a gas engine and an electric motor that share the work and charge themselves; a <b>plug-in hybrid</b>, which also charges from the wall; <b>fully electric</b>; or a <b>hydrogen fuel cell</b>, which makes electricity from hydrogen.',
     engine: 'The engine\'s size is the total space inside its cylinders, in liters. Bigger engines and more cylinders usually mean more power and more fuel used.',
@@ -683,6 +690,21 @@
         return '<div class="ac-f"><label><input type="checkbox" data-feat="' + esc(f.key) + '"' + (chk ? ' checked' : '') + '><span>' + esc(f.label) +
           (conf ? '<small>' + (fs[f.key] === 'vin' ? 'from your VIN' : 'from the EPA') + '</small>' : '') + '</span></label>' + A.qBtn(f.q) + '</div>';
       }).join('') + '</div><div class="lead small keep">Checked ones marked "from your VIN" or "from the EPA" are confirmed. Check anything else your car has: Advisory uses this list.</div></details>';
+  }
+  /** The Garage page's About this car: what's known, to read. Changing it is in Edit (the Details section). */
+  function infoView(c) {
+    var i = c.info || {}, k = kind(c), en = enginePlain(c), gasLike = c.power !== 'ev' && c.power !== 'h2';
+    var h = '<div class="ac-tiles">' + tile('power', 'Powertrain', POWER_PLAIN[c.power] || '', TILE_Q.power) +
+      tile('engine', k === 'ev' ? 'Motor' : k === 'h2' ? 'Fuel cell' : 'Engine', en.text, TILE_Q.engine + (en.code ? ' Engine code: <b>' + esc(en.code) + '</b>.' : '')) +
+      (gasLike ? tile('asp', 'Air intake', ASP_PLAIN[i.asp] || '', TILE_Q.asp) : '') +
+      tile('trans', 'Transmission', transPlain(i), TILE_Q.trans) + tile('drive', 'Drivetrain', DRIVE_PLAIN[i.drive] || '', TILE_Q.drive);
+    if (k === 'gas') h += tile('grade', 'Fuel you buy', (P.GRADES[c.grade || 'regular'] || {}).label || c.grade || 'Regular', '');
+    h += '</div>';
+    var fs = i.featSrc || {}, on = (i.features || []).filter(function (x) { return FEATURES.some(function (f) { return f.key === x && featApplies(f, c); }); });
+    h += '<div class="ac-fview"><div class="sub-h">Features</div>' + (on.length ? '<ul>' + on.map(function (x) { var f = FEATURES.filter(function (y) { return y.key === x; })[0]; return '<li>' + esc(f.label) + (fs[x] === 'vin' ? ' <small>from your VIN</small>' : fs[x] === 'epa' ? ' <small>from the EPA</small>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="lead small keep">None listed.</p>') + '</div>';
+    h += '<div class="ac-src-row"><span class="lead small keep ac-src">' + (isCustom(c) ? 'Your own entries.' : c.vin ? 'From your VIN' + (c.epaId ? ' and the EPA\'s record' : '') + '.' : 'From the EPA\'s record for this version.') + ' To change any of this, edit the car.</span>' +
+      '<button type="button" class="btn tonal sm" id="gInfoEdit">Edit</button></div>';
+    return h;
   }
   function infoPanel(c) {
     var i = c.info || {}, k = kind(c);
@@ -791,7 +813,7 @@
     return ask({ title: 'Remove ' + shortName(c) + '?', body: 'Its mileage log and details go with it.', action: 'Remove' }).then(function (ok) {
       if (!ok) return;
       S.cars = S.cars.filter(function (x) { return x !== c; });
-      if (!S.cars.some(function (x) { return x.id === S.carId; })) { S.carId = S.cars[0].id; editing = false; }
+      if (!S.cars.some(function (x) { return x.id === S.carId; })) { S.carId = S.cars.length ? S.cars[0].id : ''; editing = false; editSnap = null; }   // the only car: the garage is empty again
       LG.info('car', 'Removed ' + shortName(c));
       draw(); changed();
     });
@@ -917,15 +939,19 @@
     // a part you set yourself (custom car, or a detail the records don't have)
     var markUser = function (k2) { info.src = Object.assign({}, info.src); info.src[k2] = 'user'; };
     ['gEngine', 'gAsp', 'gTrans', 'gDrive'].forEach(function (id) { var el = $(id); if (el) el.addEventListener('change', function () { markUser({ gEngine: 'engine', gAsp: 'asp', gTrans: 'trans', gDrive: 'drive' }[id]); }); });
-    host.querySelectorAll('[data-set]').forEach(function (sel) {
+    // the editable details live in the editor; the Garage page only reads them
+    var both = function (sel) { var out = Array.prototype.slice.call(host.querySelectorAll(sel)); if (ed && ed.body) out = out.concat(Array.prototype.slice.call(ed.body.querySelectorAll(sel))); return out; };
+    if ($('gInfoEdit')) $('gInfoEdit').onclick = function () { if (!editing) editSnap = { id: c.id, before: JSON.stringify(c), previous: S.carId }; editing = true; detOpen = true; draw(); setTimeout(function () { var d = $('gDetails'); if (d) d.scrollIntoView({ block: 'start' }); }, 50); };
+    if ($('gDetails')) $('gDetails').addEventListener('toggle', function () { detOpen = this.open; });
+    both('[data-set]').forEach(function (sel) {
       sel.onchange = function () { if (!this.value) return; info[this.dataset.set] = this.value; markUser(this.dataset.set); save(); draw(); };
     });
     // versions: the ▾ on a tile opens the list; picking one loads it from the EPA
-    host.querySelectorAll('[data-ver]').forEach(function (b) { b.onclick = function () { verOpen = !verOpen; draw(); if (verOpen && $('gVers')) $('gVers').scrollIntoView({ block: 'nearest' }); }; });
-    host.querySelectorAll('[data-vid]').forEach(function (b) { b.onclick = function () { pickVariant(c, b.dataset.vid); }; });
+    both('[data-ver]').forEach(function (b) { b.onclick = function () { verOpen = !verOpen; draw(); if (verOpen && $('gVers')) $('gVers').scrollIntoView({ block: 'nearest' }); }; });
+    both('[data-vid]').forEach(function (b) { b.onclick = function () { pickVariant(c, b.dataset.vid); }; });
     // features: a checklist; confirmed ones (from the VIN or the EPA) ask before they're unchecked; one camshaft layout only
     if ($('gFeats')) $('gFeats').addEventListener('toggle', function () { featOpen = this.open; });
-    host.querySelectorAll('[data-feat]').forEach(function (cb) {
+    both('[data-feat]').forEach(function (cb) {
       cb.onchange = function () {
         var f = cb.dataset.feat, fs = info.featSrc = Object.assign({}, info.featSrc), l = (info.features || []).slice(), def = FEATURES.filter(function (o) { return o.key === f; })[0] || {};
         var done = function () { info.features = l; save(); draw(); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } };
@@ -1120,6 +1146,8 @@
   }
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {
+    // another EPA version (say the Blazer after the Blazer EV): its details replace the old version's, not just the blanks
+    if (c.epaId && String(c.epaId) !== String(v.id || id)) force = true;
     var atv = String(v.atvType || ''), fuel = String(v.fuelType1 || v.fuelType || '');
     var ev = /^EV$/i.test(atv) || /^electricity$/i.test(fuel), fc = /FCV/i.test(atv) || /hydrogen/i.test(fuel);
     var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;

@@ -529,13 +529,25 @@
     if (/run[- ]flat tires?/.test(t) && !/\b(?:no|not|without)\s+run[- ]flat/.test(t)) return 'runflat';
     return null;
   }
+  /**
+   * The answer opened with "Compact spare" / "Full-size spare", but its own words go on to say the car doesn't come with
+   * a spare as standard (seen on a 2025 Blazer LT: "does not come with a spare tire as standard equipment; instead, it
+   * is equipped with a tire inflator kit … A 16-inch compact spare … is available as a factory-installed option"). The
+   * body wins: what it has instead (kit / run-flat), else none. -> that kind, or null when the opener stands.
+   */
+  function leadOverruled(text, lead) {
+    if (lead !== 'full' && lead !== 'compact') return null;
+    var body = String(text || '').replace(/^\s*answer with ai\s*/i, '').replace(/^[^.!?]*[.!?]\s*(?:(?:located|stored|location)[^.!?]*[.!?]\s*)?/i, '');   // past the opener (and its location line)
+    if (!SPARE_NONE.test(body) && !/\bnot (?:included|standard)\b[^.]{0,40}\bspare\b|\bspare\b[^.]{0,40}\b(?:is|was) (?:not standard|optional|an option)\b/i.test(body)) return null;
+    return instead(body) || 'none';
+  }
   /** The answer's own sentence saying a spare was optional (on some trims, as an option or a package), for the tip. */
   function optTip(text) {
     var ss = String(text || '').replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); }).filter(function (x) { return /[.!?]$/.test(x); });
     var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:optional|option|available on|some trims|certain trims|depend\w*|varies|package)\b/i.test(x) && !/^(?:no spare|full[- ]size spare|compact spare|repair kit|run[- ]flat tires)\.?$/i.test(x) && x.length <= 220; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
-  var TireMath = { sameNeeds:sameNeeds,sameDepth:sameDepth,newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
+  var TireMath = { leadOverruled:leadOverruled,sameNeeds:sameNeeds,sameDepth:sameDepth,newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
     CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, instead: instead, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
@@ -723,7 +735,7 @@
   // Brave's answer is written by its AI from this question, so the question says how to answer: a fixed first phrase
   // (read for sure below), and the tip in its own short words. Answers that don't follow it are still read as before.
   // Brave turns away a query over 50 words or 400 characters ("Your query is too long"): this one is 36 words before the car
-  var SPARE_ASK = ' have a factory spare tire? Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if one was optional by trim or can be added (size).';
+  var SPARE_ASK = ' come with a spare tire as standard? Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if a spare is optional or can be added (size).';
   /** Brave's limits on a query: the car's name gives way (its trim, then words from the end) before the question does. */
   var BRAVE_WORDS = 50, BRAVE_CHARS = 400;
   function braveFit(car, ask) {
@@ -780,6 +792,7 @@
     // the format the question asks for: its first phrase says the kind, its next sentence is the tip
     var lead = spareLead(text);
     if (lead === 'none') lead = instead(text) || lead;   // "No spare. … a repair kit instead" (even when it also says a spare can be added)
+    var over = leadOverruled(text, lead); if (over) lead = over;   // "Compact spare." then "doesn't come with a spare as standard … a kit instead"
     if (lead) {
       // a spare that was optional (on some trims, or as an option): its own words say so, so "no spare" isn't the whole story
       var lt = lead === 'full' || lead === 'compact' ? '' : leadTip(text) || optTip(text);
@@ -981,6 +994,7 @@
     // 0.0.151: an answer that says a spare was optional gets that sentence as its tip
     if (sp.lookup && sp.lookup.text && sp.lookup.tipV !== 4) { sp.lookup.tip = sp.lookup.tip || optTip(sp.lookup.text); sp.lookup.tipV = 4; }
     // 0.0.153: a saved "No spare" whose answer names a repair kit (or run-flats) is read again; a confirmed misread is asked again
+    if (sp.lookup && sp.lookup.text && /^(compact|full)$/.test(sp.lookup.guess) && sp.lookup.by === 'answer' && !sp.lookup.standardV) { var o2 = leadOverruled(sp.lookup.text, sp.lookup.guess); sp.lookup.standardV = 1; if (o2) { if (sp.kind === sp.lookup.guess) sp.kind = ''; LG.info('car', 'Spare tire read again: ' + sp.lookup.guess + ' → ' + o2); sp.lookup.guess = o2; sp.lookup.tip = optTip(sp.lookup.text) || sp.lookup.tip; } save(); }
     if (sp.lookup && sp.lookup.text && sp.lookup.guess === 'none' && !sp.lookup.insteadV) { var i2 = instead(sp.lookup.text); sp.lookup.insteadV = 1; if (i2) { if (sp.kind === 'none') sp.kind = ''; sp.lookup.guess = i2; LG.info('car', 'Spare tire read again: none → ' + i2); } save(); }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
@@ -1006,7 +1020,9 @@
   /** Type -> brand -> model from Tire Rack's list for a size (selects), or typed when there's no list. */
   function pickHtml(L, x, pre) {
     var types = uniq(L.map(function(y){return y.type;}).concat(TYPES,x.type||[])).filter(function(v,i,a){return a.findIndex(function(t){return catalogKey(t)===catalogKey(v);})===i;}).sort();
-    var inType = L; // Type describes the selected tire; it must not hide brands/models.
+    // a tire type picked: only the brands and models of that type (when the catalog says the type)
+    var typed = x.type && x.type !== 'Other' ? L.filter(function (y) { return catalogKey(y.type) === catalogKey(x.type); }) : [];
+    var inType = typed.length ? typed : L;
     var brands = uniq(inType.map(function (y) { return y.brand; })).sort();
     var modelRows = inType.filter(function (y) { return catalogKey(y.brand) === catalogKey(x.brand); });
     var models = uniq(modelRows.map(function (y) { return y.model; })).sort();
@@ -1236,8 +1252,12 @@
     c=edit.draft;
     var t = tires(c), pg = null,stopArrows=null,close;
     function commit(){edit.source.tires=t;save();tireEditors.delete(edit.source);tireEditors.delete(c);}
-    var fill = function () {
-      t=tires(c);var b = pg.querySelector('.sub-body'),scroll=b.scrollTop;if(stopArrows)stopArrows();b.innerHTML = carDetails(c, t);
+    var fill = function (background) {
+      t=tires(c);var b = pg.querySelector('.sub-body'),scroll=b.scrollTop;
+      // a lookup's reply (the tires in this size, a version) must not replace a box you're typing in: once you leave it
+      var active=document.activeElement;
+      if(background&&b.contains(active)&&active.matches('input,textarea')){if(!active._tzPendingFill){active._tzPendingFill=true;active.addEventListener('blur',function(){setTimeout(function(){if(pg&&pg.isConnected)fill(true);},0);},{once:true});}return;}
+      if(stopArrows)stopArrows();b.innerHTML = carDetails(c, t);
       var set = function (fn) { return function () { fn.call(this); save(); fill(); onChange(); }; };
       bindCarWear(b,c,t,set,fill);stopArrows=tireArrowFit(b);
       if (b.querySelector('#tzRetry')) b.querySelector('#tzRetry').onclick = set(function () {
@@ -1280,13 +1300,13 @@
       bindPick(b, 'tz', t, function () { return t.list && t.list.size === t.size ? t.list.items || [] : []; }, set);
       var common=!(t.corners&&t.corners.split),need=sameNeeds(t),type=b.querySelector('#tzType');
       if(common&&t.tread.mode!=='measure'&&type){type.required=true;type.parentElement.querySelector('span').insertAdjacentHTML('beforeend','<span class="req">*</span>');}
-      b.insertAdjacentHTML('beforeend',(common&&need.length?'<p class="lead small keep" id="tzRequired">Complete '+need.map(function(n){return {miles:'miles on these tires',rotated:'rotation frequency',type:'tire type',depth:'measured tread depth'}[n];}).join(', ')+' to save tire details.</p>':'')+'<div class="tz-trbtns"><button type="button" class="btn primary" id="tzDone"'+(common&&need.length?' disabled':'')+'>Done</button><button type="button" class="btn tonal sm caution" id="tzDetailsDiscard">Discard changes</button></div>');
+      b.insertAdjacentHTML('beforeend',(common&&need.length?'<p class="lead small keep" id="tzRequired">Complete '+need.map(function(n){return {miles:'miles on these tires',rotated:'rotation frequency',type:'tire type',depth:'measured tread depth'}[n];}).join(', ')+' to save tire details.</p>':'')+'<div class="tz-trbtns"><button type="button" class="btn primary" id="tzDone"'+(common&&need.length?' disabled':'')+'>Done</button><button type="button" class="btn tonal caution" id="tzDetailsDiscard">Discard changes</button></div>');
       b.querySelector('#tzDone').onclick=function(){if(common&&sameNeeds(t).length)return;commit();close(true);};
       b.querySelector('#tzDetailsDiscard').onclick=async function(){if(!await A.confirmDel({always:true,title:'Discard tire changes?',body:'Return to the tire details from when this menu opened.',action:'Discard changes'}))return;tireEditors.delete(edit.source);tireEditors.delete(c);close(true);};
       if (A.qify) A.qify(b);
       b.scrollTop=scroll;
     };
-    close=A.subPage(t.towMode ? 'Car tire details' : 'Tire details', '', function (b) { pg = b.closest('.sub-page');pg.beforeClose=function(){if(!(t.corners&&t.corners.split)&&sameNeeds(t).length){var note=b.querySelector('#tzRequired');if(note){note.scrollIntoView({block:'nearest'});note.classList.add('pulse');}return false;}commit();return true;}; subFill = fill; fill(); nudgeFuel(c); return function () { if(stopArrows)stopArrows();subFill = null; draw(); onChange(); }; });
+    close=A.subPage(t.towMode ? 'Car tire details' : 'Tire details', '', function (b) { pg = b.closest('.sub-page');pg.beforeClose=function(){if(!(t.corners&&t.corners.split)&&sameNeeds(t).length){var note=b.querySelector('#tzRequired');if(note){note.scrollIntoView({block:'nearest'});note.classList.add('pulse');}return false;}commit();return true;}; subFill = function(){fill(true);}; fill(); nudgeFuel(c); return function () { if(stopArrows)stopArrows();subFill = null; draw(); onChange(); }; });
     lookup(c);
     fill();
   }
@@ -1380,16 +1400,23 @@
     var y = CORNERS.filter(function (z) { return z.k === k; })[0]; return y ? y.name : k;
   }
   /** Picking a model from Tire Rack's list fills in its type, wear rating and warranty. */
+  /** One warranty for several listings of a model (its load / speed ratings): the lowest one listed, so the tread
+   *  estimate errs toward warning sooner; picking the exact rating gives that listing's own. 0 = none listed. */
+  function commonWarranty(rows) {
+    var ws = rows.map(function (z) { return +z.warrantyMi || 0; }).filter(function (w) { return w > 0; });
+    return ws.length ? Math.min.apply(null, ws) : 0;
+  }
   function catalogKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
   function catalogItems(L) { return L.map(function (x) { var s = split(x.name); return { name: x.name, brand: x.brand || s.brand, model: x.model || s.model, partnum: x.partnum || '', serviceDesc: x.serviceDesc || '', loadRange: x.loadRange || '', type: x.type, utqg: x.utqg, warrantyMi: x.warrantyMi || 0 }; }); }
   function fromList(L, x, blanksOnly) {
     var before = JSON.stringify([x.type, x.brand, x.model, x.utqg, x.utqgSrc, x.warrantyMi, x.warrantySrc]);
     var matches = L.filter(function (z) { return catalogKey(z.brand) === catalogKey(x.brand) && catalogKey(z.model) === catalogKey(x.model); });
     var y = x.catalogPart ? matches.find(function (z) { return z.partnum === x.catalogPart; }) : matches[0];
+    if (y && !(+y.warrantyMi > 0) && matches.length > 1) y = Object.assign({}, y, { warrantyMi: commonWarranty(matches) });   // this listing has none: the model's
     if (!x.catalogPart && matches.length > 1) {
       // Keep the type and common facts, but don't choose a variant's differing warranty or rating on the owner's behalf.
       y = Object.assign({}, y);
-      if (matches.some(function (z) { return z.warrantyMi !== y.warrantyMi; })) { y.warrantyMi = 0; if (x.warrantySrc === 'tirerack') { delete x.warrantyMi; delete x.warrantySrc; } }
+      y.warrantyMi = commonWarranty(matches);   // variants without one don't count; disagreeing ones: the lowest
       if (matches.some(function (z) { return JSON.stringify(z.utqg) !== JSON.stringify(y.utqg); })) { y.utqg = null; if (x.utqgSrc === 'tirerack') { delete x.utqg; delete x.utqgSrc; } }
     }
     if (y) {
@@ -1408,7 +1435,16 @@
   /** Type / brand / model / wear rating / warranty boxes (pre = their id prefix) for x (the car's tires, a trailer, or one tire). */
   function bindPick(root, pre, x, L, set) {
     var $$ = function (id) { return root.querySelector('#' + pre + id); };
-    if ($$('Type')) $$('Type').onchange = set(function () { x.type = this.value === '*' ? 'Other' : this.value; });
+    if ($$('Type')) $$('Type').onchange = set(function () {
+      x.type = this.value === '*' ? 'Other' : this.value;
+      // the list now shows only this type: a brand / model of another type goes (typed-in ones stay)
+      var rows = L().filter(function (y) { return catalogKey(y.type) === catalogKey(x.type); });
+      if (!rows.length || x.type === 'Other') return;
+      var inList = function (f, v) { return rows.some(function (y) { return catalogKey(y[f]) === catalogKey(v) && (f === 'brand' || catalogKey(y.brand) === catalogKey(x.brand)); }); };
+      var known = function (f, v) { return L().some(function (y) { return catalogKey(y[f]) === catalogKey(v); }); };
+      if (x.model && !x.modelCustom && known('model', x.model) && !inList('model', x.model)) { x.model = ''; delete x.catalogPart; clearCatalogSpecs(x); }
+      if (x.brand && !x.brandCustom && known('brand', x.brand) && !inList('brand', x.brand)) { x.brand = ''; x.model = ''; delete x.catalogPart; clearCatalogSpecs(x); }
+    });
     if ($$('Brand')) $$('Brand').onchange = set(function () { clearCatalogSpecs(x); delete x.catalogPart; x.brandCustom = this.value === '*'; x.brand = x.brandCustom ? '' : this.value; x.model = ''; delete x.modelCustom; });
     if ($$('BrandT')) $$('BrandT').onchange = set(function () { clearCatalogSpecs(x); delete x.catalogPart; x.brand = this.value.trim(); fromList(L(), x); });
     if ($$('BrandCatalog')) $$('BrandCatalog').onclick = set(function () { x.brand = ''; x.model = ''; delete x.brandCustom; delete x.modelCustom; delete x.catalogPart; clearCatalogSpecs(x); });
@@ -1873,5 +1909,6 @@
   function tiresDue(c) { return !tiresAiredOk(c && c.tires || {}); }
   /** Anything on Advice still to tick for the tires (Advisory's Next waits for it). */
   function airDue(c) { return spareDue(c) || tiresDue(c); }
-  root.Tires = { missing: function (c) { return missing(c && c.tires); }, editing: function (c) { var e = c && tireEditors.get(c); return e ? tires(e.draft) : null; }, sizeMissing: sizeMissing, duallyState: duallyState, spareDue: spareDue, tiresDue: tiresDue, airDue: airDue, setTiresAired: setTiresAired, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
+  root.Tires = { replyRedraw: function () { if (subFill) subFill(); },   // tests: what a lookup's reply does to the open page
+    missing: function (c) { return missing(c && c.tires); }, editing: function (c) { var e = c && tireEditors.get(c); return e ? tires(e.draft) : null; }, sizeMissing: sizeMissing, duallyState: duallyState, spareDue: spareDue, tiresDue: tiresDue, airDue: airDue, setTiresAired: setTiresAired, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
 })(typeof window !== 'undefined' ? window : globalThis);

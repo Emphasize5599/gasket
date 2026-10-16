@@ -4,6 +4,14 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.168 - 2026-10-16 (keyless test branch only)
+- About this car is read-only; change details in Edit → Details. Switching EPA versions replaces the old version's details.
+- Tire type narrows the brand and model lists; picking a model fills its mileage warranty.
+- Better spare-tire reading when a spare is optional rather than standard.
+- The only car can be removed; popups stay clear of the status bar; "Pick a photo...".
+- Local AI explanations are checked more sensibly, and rejections say why in the log.
+- Bug fixes.
+
 ## 0.0.167 - 2026-10-16 (keyless test branch only)
 - The trim box shows while it's asking Brave; the tank size waits for a trim.
 - The AI model download shows the time left.

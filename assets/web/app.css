@@ -1070,7 +1070,7 @@ details.g-obs[open] { padding-bottom: 12px; }
 /* the car's editor: Discard changes / Save at the bottom, like the per-road speed submenu */
 .sub-page > .sub-nav { margin: 0 -10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .sub-page > .sub-nav .btn { font-size: 15px; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
-.sub-page.car-edit > .sub-body { padding-bottom: 16px; }
+.sub-page.car-edit > .sub-body { padding-bottom: 72px; }   /* the last control (Remove) clears the floating scroll button */
 .chips.cars { padding-top: 8px; }
 .carchip { display: inline-flex; align-items: stretch; max-width: 100%; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
 .chips .carchip button { border: 0; border-radius: 0; background: none; min-width: 0; }
@@ -1862,3 +1862,20 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .via-add { margin: 2px 0 12px; }
 .via-row .via-x { color: var(--ink-2); font-size: 15px; }
 .grid3 .nf > span { overflow-wrap: anywhere; hyphens: auto; } .grid3 .nf select, .grid3 .nf input { min-width: 0; max-width: 100%; }
+/* About this car on the Garage page: to read; changing it is in Edit → Details */
+.ac-fview ul { margin: 4px 0 0; padding-left: 20px; }
+.ac-fview li { margin: 2px 0; }
+.ac-fview li small { color: var(--ink-2); }
+.ac-src-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 8px; }
+.ac-src-row .ac-src { flex: 1 1 160px; min-width: 0; margin: 0; }
+.ac-src-row .btn { flex: 0 0 auto; width: auto; padding-left: 18px; padding-right: 18px; }
+.ed-details { margin: 12px 0; }
+/* car tire details: Done and Discard changes side by side, the same size */
+.tz-trbtns #tzDone, .tz-trbtns #tzDetailsDiscard { flex: 1 1 0; min-width: 0; }
+/* everything placed from the top leaves room for the status bar while it shows (--task-space is 0 without one) */
+.app-picker { padding-top: calc(var(--st) + 16px + var(--task-space)); }
+.refresh-menu { top: calc(var(--st) + 64px + var(--task-space)); }
+.chip-btn, .banner { top: calc(var(--st) + 98px + var(--task-space)); }
+.af-legend { top: calc(var(--st) + 168px + var(--task-space)); }
+.hz-leg { top: calc(var(--st) + 17px + var(--task-space)); }
+.ed-details > summary span small { display: block; font-weight: 500; color: var(--ink-2); text-transform: none; letter-spacing: 0; }

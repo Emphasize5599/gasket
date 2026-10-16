@@ -17,6 +17,13 @@ for(const drive of ['fwd','rwd','awd','4wdf','aawd','4wd','unknown']){
  assert.equal(P.validate(JSON.stringify({...raw,actions:[{id:'invented',why:'Trust me.'}]}),pack),null);
  assert.equal(P.validate(JSON.stringify(raw).slice(0,-1),pack),null);
  assert(P.prompt(pack).includes(JSON.stringify(pack)),'complete policy/setup included, never truncated');
+ // what a small model really sends: fenced JSON, explaining words (replacing, rotation), numbers the findings state
+ const nums=(pack.facts.map(f=>f.text).join(' ').match(/\d+/g)||[]);
+ const fine={...raw,summary:'The rear tires are the most worn, which is why replacing them comes first; a rotation plan matters less here.'+(nums.length?' The findings mention '+nums[0]+'.':'')};
+ assert(P.validate('```json\n'+JSON.stringify(fine)+'\n```',pack),'fenced JSON with explanatory wording is accepted');
+ assert(P.validate('Here is the explanation: '+JSON.stringify(fine)+' Hope this helps.',pack),'text around the JSON is ignored');
+ for(const summary of ['You should replace the front tires.','The tires are fine. Rotate them now.','This setup is guaranteed to grip.'])assert.equal(P.validate(JSON.stringify({...raw,summary}),pack),null,summary);
+ assert.equal(P.check('not json at all',pack).reason,'not JSON');assert.match(P.check(JSON.stringify({...raw,summary:'The limit is 9/32.'}),pack).reason,/numbers/);
 }
 let c=car('rwd',[8,8,0,2]), pack=P.prepare(c,M);
 assert.equal(pack.setup.tires[2].depth,0);assert(pack.facts.some(f=>f.id==='replace:lr'));

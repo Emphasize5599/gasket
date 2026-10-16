@@ -1537,9 +1537,11 @@
     var r = b.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight, m = 12;
     var w = Math.min(340, W - 2 * m); qpop.style.width = w + 'px';
     var left = Math.max(m, Math.min(W - m - w, r.left + r.width / 2 - w / 2));
-    var ph = qpop.offsetHeight, below = r.bottom + 10 + ph <= H - m || r.top - 10 - ph < m;
+    // the status bar's dock (when it shows) is off limits at the top
+    var hub = document.getElementById('taskHub'), topMin = hub && !hub.classList.contains('hidden') ? Math.ceil(hub.getBoundingClientRect().bottom) + 8 : m;
+    var ph = qpop.offsetHeight, below = r.bottom + 10 + ph <= H - m || r.top - 10 - ph < topMin;
     var top = below ? r.bottom + 10 : r.top - 10 - ph;
-    qpop.style.left = left + 'px'; qpop.style.top = Math.max(m, top) + 'px';
+    qpop.style.left = left + 'px'; qpop.style.top = Math.max(topMin, top) + 'px';
     qpop.classList.add(below ? 'below' : 'above');
     qpop.querySelector('.qpop-tail').style.left = Math.max(14, Math.min(w - 14, r.left + r.width / 2 - left)) + 'px';
   }
