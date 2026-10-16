@@ -1001,7 +1001,7 @@
   /** "Made" box: the DOT date code (week + year), with what it means once it's filled in. */
   function dotField(id, code, what, blank) {
     var d = dotDate(code), a = ageYears(code), bad = String(code || '').trim() && !dotOk(code);
-    return '<label class="nf wide tz-dot"><span>When ' + what + ' were made' + (blank ? '' : '<span class="req">*</span>') + A.qBtn(Q.dot) + '<small>' + (d && !bad ? 'Week ' + d.week + ' of ' + d.year + ' · ' + agePhrase(a) : bad ? 'That isn\'t a date code: four digits, week then year (2319 = week 23 of 2019).' : blank || 'Last 4 digits of the DOT code on the sidewall') + '</small></span>' +
+    return '<label class="nf wide tz-date-field"><span>When ' + what + ' were made' + (blank ? '' : '<span class="req">*</span>') + A.qBtn(Q.dot) + '<small class="keep">' + (d && !bad ? 'Week ' + d.week + ' of ' + d.year + ' · ' + agePhrase(a) : bad ? 'That isn\'t a date code: four digits, week then year (2319 = week 23 of 2019).' : blank || 'Last 4 digits of the DOT code on the sidewall') + '</small></span>' +
       '<input id="' + id + '"' + (blank ? '' : ' required') + ' inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="e.g. 2319" value="' + esc(code || '') + '"></label>';
   }
   function agePhrase(a) { return a == null ? '' : a < 1 ? 'under a year old' : a.toFixed(a < 10 ? 1 : 0).replace(/\.0$/, '') + ' years old'; }
@@ -1084,8 +1084,6 @@
     if (sp.lookup && sp.lookup.text && sp.lookup.guess === 'none' && !sp.lookup.insteadV) { var i2 = instead(sp.lookup.text); sp.lookup.insteadV = 1; if (i2) { if (sp.kind === 'none') sp.kind = ''; sp.lookup.guess = i2; LG.info('car', 'Spare tire read again: none → ' + i2); } save(); }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
-    if (k1 === 'full' || k1 === 'compact') { var sd = spareDot(c.year), sdd = dotDate(sd);
-      h += dotField('tzSpareDot', sp.dot, 'your spare', sdd ? 'Not entered: Gasket assumes week 1 of ' + sdd.year + ' (' + agePhrase(ageYears(sd)) + '), the earliest a ' + c.year + ' model year could be built. Spares are usually the car\'s originals; its DOT code tells you for sure.' : 'Last 4 digits of the DOT code on its sidewall').replace('were made', 'was made'); }
     var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
     if (k2 === 'full' || k2 === 'compact') h += '<div class="tz-air ' + (airedOk(t) ? 'ok' : 'due') + '">' + (airedOk(t) ? 'Air checked ' + new Date(sp.aired).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. Next check by ' + new Date(sp.aired + AIR_DAYS * 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '.' :
       'Its air hasn\'t been checked this month. Check it' + (k2 === 'compact' ? ' (compact spares usually need 60 psi)' : '') + ', then tick it in Advice.') + '</div>';
@@ -1183,6 +1181,11 @@
       h += '<label class="nf wide"><span>Maker\'s mileage warranty' + q(Q.warranty) + '</span><input type="number" inputmode="numeric" min="0" step="5000" id="tzWarranty" placeholder="e.g. 65000" value="' + esc(+t.warrantyMi > 0 ? t.warrantyMi : '') + '"></label>';
     } else h += carEach(c, t);
     if (locked) h += '</fieldset>';
+    if (/^(full|compact)$/.test(spareKind(t))) {
+      var sp = spare(t), sd = spareDot(c.year), sdd = dotDate(sd);
+      h += '<section class="tz-spare-details" aria-labelledby="tzSpareHeading"><h3 id="tzSpareHeading">Spare tire</h3>' +
+        dotField('tzSpareDot', sp.dot, 'your spare', sdd ? 'Optional. Without its code, age is estimated from week 1 of ' + sdd.year + '. Enter the actual code for a more accurate age.' : 'Optional. Last 4 digits of the DOT code on its sidewall.').replace('were made', 'was made') + '</section>';
+    }
     return h;
   }
   /** A row that opens a submenu: title, one line under it, and an arrow (empty: outlined, nothing filled in yet). */
@@ -1592,6 +1595,7 @@
     if (find('tzMiles')) find('tzMiles').onchange = set(function () { t.tread.miles = this.value === '' ? '' : Math.max(0, parseInt(this.value, 10) || 0); t.tread.t = Date.now(); });
     if (find('tzRot')) find('tzRot').onchange = set(function () { t.tread.rotated = this.value; });
     if (find('tzDot')) find('tzDot').onchange = set(function () { t.tread.dot = this.value.replace(/\D/g, '').slice(0, 4); });
+    if (find('tzSpareDot')) find('tzSpareDot').onchange = set(function () { spare(t).dot = this.value.replace(/\D/g, '').slice(0, 4); });
     b.querySelectorAll('[data-dot]').forEach(function (s) { s.onchange = set(function () { C()[s.dataset.dot] = Object.assign({}, C()[s.dataset.dot], { dot: s.value.replace(/\D/g, '').slice(0, 4) }); }); });
     // each tire
     var C = function () { t.corners = t.corners || { split: false }; return t.corners; };
@@ -1635,7 +1639,6 @@
     if ($('tzAddTr')) $('tzAddTr').onclick = addTrailer;
     if ($('tzSaved')) $('tzSaved').onclick = function () { openSaved(c); };
     // the spare
-    if ($('tzSpareDot')) $('tzSpareDot').onchange = set(function () { spare(t).dot = this.value.replace(/\D/g, '').slice(0, 4); });
     $('tzSpare').onchange = set(function () { spare(t).kind = this.value;if(this.value!=='full'&&this.value!=='compact')delete spare(t).location; LG.info('car', 'Spare tire: ' + (this.value || 'not sure')); });
     if($('tzSpareLocation'))$('tzSpareLocation').onchange=set(function(){spare(t).location=this.value;});
     if ($('tzSpareShow')) $('tzSpareShow').onclick = function () { spareLookup(c, true); };
@@ -1938,7 +1941,7 @@
     var wheel = function (k, x, y, width, diameter) {
       width=width||10;diameter=diameter||16;
       var d = depthAt(t, P.filter(function (p) { return p.k === k; })[0] || { k: k, unit: t },c.info&&c.info.drive), f = d != null ? depthGood(d) : null;
-      var font=Math.min(7,width*.9/(String(num[k]).length>1?1.5:1)), tiny=width*.9/1.5<4.5;   // by size, not digits: every wheel on an axle is drawn the same way
+      var font=Math.min(7,width*.9/(String(num[k]).length>1?1.5:1)), tiny=k.indexOf(':')>=0||width*.9/1.5<4.5;   // trailer numbers always use readable external tags
       // too small to read inside the wheel: its number goes on a tag beside it (wheels on one side of an axle share one)
       if(tiny){var side=x<W/2?'l':'r',key=side+Math.round(y),tg=tags[key]||(tags[key]={side:side,y:y,edge:x,nums:[]});tg.nums.push({n:num[k],x:x});tg.edge=side==='l'?Math.min(tg.edge,x-width/2):Math.max(tg.edge,x+width/2);}
       return '<g class="tz-w" data-car-wheel="'+k+'" data-depth="'+(d==null?'':d)+'"><title>'+esc(cname(k,C))+': '+(d==null?'details needed':(t.tread&&t.tread.mode==='measure'?'':'estimated ')+d+'/32 in')+'</title><rect x="' + (x - width/2) + '" y="' + (y - diameter/2) + '" width="'+width+'" height="'+diameter+'" rx="2.5" style="fill:' + (f != null ? hue(f) : 'var(--line)') + '"/>'+(tiny?'':'<text x="' + x + '" y="' + (y + font*.4) + '" style="font-size:'+font+'px" text-anchor="middle">' + num[k] + '</text>')+'</g>';
@@ -1960,6 +1963,7 @@
         '<circle cx="' + sx + '" cy="' + sy + '" r="' + (r * .52).toFixed(2) + '" class="tz-rim-lip"/>' +
         '<circle cx="' + sx + '" cy="' + sy + '" r="' + (r * .2).toFixed(2) + '" class="tz-hub"/>' +
         [0, 1, 2, 3, 4].map(function (i) { var a = -Math.PI / 2 + i * 2 * Math.PI / 5, rr = r * .34; return '<circle cx="' + (sx + rr * Math.cos(a)).toFixed(2) + '" cy="' + (sy + rr * Math.sin(a)).toFixed(2) + '" r="' + (r * .065).toFixed(2) + '" class="tz-lug"/>'; }).join('') + '</g>';
+      tags.spare = {side:'r', y:sy, edge:sx+r, nums:[{n:P.length+1,x:sx}]};
       if (!towing) { top = sy + r + 2; H = Math.max(H, top + 4); }
     }
     (carOnly?[]:hooked(t)).forEach(function (tr) {        // each trailer hooked up, one behind the other
@@ -1971,10 +1975,10 @@
     });
     // the tags for tiny wheels: a gray pill with the numbers, a short line to the wheels (like the map's tags)
     Object.keys(tags).forEach(function (k) {
-      var g = tags[k], txt = g.nums.sort(function (a, b) { return a.x - b.x; }).map(function (v) { return v.n; }).join(' '), w = txt.length * 3 + 5, gap = 4, x0 = g.side === 'l' ? Math.max(1, g.edge - gap - w) : Math.min(W - 1 - w, g.edge + gap);
-      h += '<g class="tz-tag" aria-hidden="true"><line x1="' + (g.side === 'l' ? x0 + w : x0) + '" y1="' + g.y + '" x2="' + g.edge + '" y2="' + g.y + '"/><rect x="' + x0 + '" y="' + (g.y - 4) + '" width="' + w + '" height="8" rx="4"/><text x="' + (x0 + w / 2) + '" y="' + (g.y + 2) + '" text-anchor="middle">' + txt + '</text></g>';
+      var g = tags[k], txt = g.nums.sort(function (a, b) { return a.x - b.x; }).map(function (v) { return v.n; }).join(' '), w = txt.length * 6 + 10, gap = 4, x0 = g.side === 'l' ? g.edge - gap - w : g.edge + gap;
+      h += '<g class="tz-tag" data-tag="' + k + '" aria-hidden="true"><line x1="' + (g.side === 'l' ? x0 + w : x0) + '" y1="' + g.y + '" x2="' + g.edge + '" y2="' + g.y + '"/><rect x="' + x0 + '" y="' + (g.y - 8) + '" width="' + w + '" height="16" rx="6"/><text x="' + (x0 + w / 2) + '" y="' + (g.y + 3.5) + '" text-anchor="middle">' + txt + '</text></g>';
     });
-    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="max-height:' + Math.round(H * 1.25) + 'px">' + h + '</svg>';
+    return '<svg viewBox="-40 0 220 ' + H + '">' + h + '</svg>';
   }
 
   /** What Advisory says about the tires: [{ level: 'warn'|'info', title, text, check? }]. */

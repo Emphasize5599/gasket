@@ -1568,7 +1568,7 @@ input.vin-unresolved, select.vin-unresolved { outline:2px solid #d93025 !importa
 .tz-cfg { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); margin: 2px 0 8px; }
 .tz-cfg .chips { padding: 0; flex-wrap: wrap; }
 .tz-pic { display: flex; justify-content: center; margin: 4px 0 6px; }
-.tz-pic svg { width: 150px; height: auto; display: block; }
+.tz-pic svg { width: 300px; max-width: 100%; height: auto; display: block; }
 .tz-w text { font-size: 7px; font-weight: 900; fill: #111; }
 .tz-bed { fill: none; stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 2; opacity: .6; }
 .tz-hitch { stroke: var(--ink-2); stroke-width: 3; }
@@ -1857,7 +1857,11 @@ body .task-hub .job-bar .pct:empty { display:none; }
 .tz-spare .tz-lug { fill: var(--ink-2); }
 .tz-tag line { stroke: var(--ink-2); stroke-width: .5; }
 .tz-tag rect { fill: #5b6370; }
-.tz-tag text { fill: #fff; font-size: 5px; font-weight: 600; }
+.tz-tag text { fill: #fff; font-size: 10px; font-weight: 700; }
+.tz-date-field { min-width: 0; height: auto; width: 100%; }
+.tz-date-field small { display: block; margin-top: 4px; }
+.tz-spare-details { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tz-spare-details h3 { margin: 0; color: var(--accent); }
 .gemma-top { list-style:none; margin:8px 0 0; padding:0; display:grid; gap:10px; }
 .gemma-top li { padding-left:12px; border-left:3px solid var(--line); }
 .gemma-top li.warn { border-left-color:var(--warn); }

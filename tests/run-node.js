@@ -11,6 +11,7 @@ release.push('adaptive-readers');
 release.push('tire-estimate-ui','planner-worker');
 release.push('tasks','gemma','gemma-ui');
 release.push('trims');
+release.push('tire-date-layout');
 release.push('severity');
 release.push('apk-build');
 const args=process.argv.slice(2),all=args.includes('--all'),names=all?fs.readdirSync(__dirname).filter(f=>f.endsWith('.test.js')).map(f=>f.slice(0,-8)):args.includes('--release')?release:args;

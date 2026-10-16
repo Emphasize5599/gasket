@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Reconciled against the keyless test branch through **0.0.155**, 2026-10-14. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 46 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 47 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 ## fix — defects
 
@@ -47,6 +47,8 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 14. [ ] **Cash-price offers and comparisons.** The current one-price-per-grade model does not preserve payment eligibility; Google fuel-price responses have no cash/card field. Add separate explicitly labeled offers, cash/card preferences, correct reward/cashback eligibility and history/cache support, then verify real source coverage. Never infer that an unlabeled price is cash. Findings and a proposed design are in [DATA_OPTIONS.md](docs/DATA_OPTIONS.md).
 
 ### Onboarding and visual explanations
+
+46. [ ] **Simpler UI flow for everyday users.** Assume users will read very little: make the next action obvious, group related inputs where users expect them, and use concise labels, progressive disclosure and visual feedback instead of explanation walls. Validate common setup and trip tasks with people unfamiliar with Gasket.
 
 32. [ ] **Onboarding experiences.** Design guided introductions for first-time setup and unfamiliar features, helping users understand what to enter and how to get value from the app. Offer an optional larger-model mode using Gemma 4 E4B, explain its purpose and download/storage cost, and obtain explicit download consent. Detect phone RAM and warn when it is low; this is guidance, not an automatic prohibition. Unknown RAM must be reported as unknown. Let the user skip, enable later, cancel the download and disable the model; basic planning and safety notices must work without it. See [AI_MODEL_PLAN.md](docs/AI_MODEL_PLAN.md).
 42. [ ] **Complex-case responses without the larger AI.** Provide concise, useful rules-built responses when Gemma is disabled, not downloaded, busy past a useful deadline, unsupported, cancelled, failing or rejected by validation. State relevant known facts, the safe next action and any missing information; do not imply the lightweight similarity model can generate explanations. Handle mixed tire/drivetrain/trailer situations without a generic text wall or falsely claiming that an unresolved combination is safe. Preserve all applicable safety notices and never require enabling the larger AI to continue using the app.
