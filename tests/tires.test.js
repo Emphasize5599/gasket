@@ -263,3 +263,22 @@ console.log('tire version matching ok');
   assert.equal(T.leadOverruled(blazer, 'kit'), null, 'only spare openers are checked');
   console.log('spare opener overruled by the answer body');
 }
+
+// 0.0.169: an answer about the model's other versions too (Brave, 2025 Blazer 2LT): "No spare." was the EV's opener
+{
+  const T = require('../assets/web/tires.js');
+  const both = "No spare. The 2025 Chevrolet Blazer 2LT (gasoline model) comes with a compact spare tire as standard equipment, located under the vehicle. This is consistent with GM's policy for 2027 models where the standard Blazer (non-EV) retains a compact spare, unlike the Blazer EV which relies on a repair kit.\n\nFor the 2025 Chevrolet Blazer EV 2LT, the answer is No spare.  It comes with a tire inflator kit (sealant and compressor) stored inside the cargo area under the floor panel. A spare tire is not standard and is not currently available as a factory-installed option for the EV. Owners have noted that adding a spare is difficult due to the floor-mounted battery pack; aftermarket solutions like a hitch-mounted spare or securing a full-size wheel in the cargo area are the only practical methods, though specific compact spare kits for the Blazer EV were not widely available as of late 2024.\n\nKey Distinction:\n\n2025 Gas Blazer 2LT: Standard compact spare under the vehicle.\n2025 Blazer EV 2LT: No spare; standard inflator kit inside. Optional aftermarket full-size or compact spares can be added, but they must be secured manually (e.g., in cargo or on a hitch) as they do not fit under the floor.";
+  for (const text of [both, both.replace(/\s+/g, ' ')]) {   // saved answers lose their line breaks
+    const gas = T.forThisCar(text, 'gas'), ev = T.forThisCar(text, 'ev');
+    assert.equal(gas.mixed, true); assert.equal(gas.kind, 'compact', 'the gas Blazer: compact');
+    assert.ok(!/inflator|battery/.test(gas.text), 'the EV sentences are dropped');
+    assert.equal(T.spareLocation(gas.text), 'under');
+    assert.equal(ev.kind, 'kit', 'the Blazer EV: inflator kit');
+  }
+  // one version only, or an "unlike the hybrid" aside: read as before
+  assert.equal(T.forThisCar('Compact spare. The 2021 Toyota RAV4 has a compact spare, unlike the RAV4 Hybrid which has a kit.', 'gas').mixed, false);
+  assert.equal(T.forThisCar('Repair kit. The 2020 Toyota Corolla Hybrid LE does not come with a spare tire; it has a repair kit.', 'hybrid').mixed, false);
+  assert.equal(T.variantOf('the standard Blazer (non-EV) retains a compact spare'), 'gas');
+  assert.equal(T.sentenceKind('It has a compact spare, not a full-size spare.'), 'compact');
+  console.log('a mixed gas / EV answer is read for this car only');
+}

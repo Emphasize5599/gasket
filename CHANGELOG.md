@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.169 - 2026-10-16 (keyless test branch only)
+- The spare-tire lookup names your car's powertrain and reads only what an answer says about your version (a gas Blazer's answer that also covered the Blazer EV opened with the EV's "No spare").
+- Bug fixes.
+
 ## 0.0.168 - 2026-10-16 (keyless test branch only)
 - About this car is read-only; change details in Edit → Details. Switching EPA versions replaces the old version's details.
 - Tire type narrows the brand and model lists; picking a model fills its mileage warranty.

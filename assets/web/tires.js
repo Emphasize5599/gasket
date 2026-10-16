@@ -541,13 +541,50 @@
     if (!SPARE_NONE.test(body) && !/\bnot (?:included|standard)\b[^.]{0,40}\bspare\b|\bspare\b[^.]{0,40}\b(?:is|was) (?:not standard|optional|an option)\b/i.test(body)) return null;
     return instead(body) || 'none';
   }
+  // The other versions of a model an answer can wander onto ("The 2025 Blazer 2LT (gasoline model) comes with a compact
+  // spare … For the 2025 Blazer EV 2LT, the answer is No spare", opening with the EV's "No spare."): the earliest named wins
+  var VARIANTS = [['gas', /\bgas(?:oline)?(?:[- ]powered)?\b|\bnon[- ]?EV\b|\binternal[- ]combustion\b|\bdiesel\b/i], ['phev', /\bplug-in(?: hybrid)?\b|\bPHEV\b/i],
+    ['hybrid', /\bhybrid\b/i], ['ev', /(?<!non[- ]?)\b(?:EV|BEV)s?\b|\b(?:battery|all)[- ]electric\b|\belectric (?:model|version|vehicle|variant)\b/]];
+  var ASIDE = /,?\s*\b(?:unlike|whereas|compared (?:to|with)|as opposed to|while the)\b.*$/i;
+  function variantOf(s) {
+    var best = null, at = Infinity;
+    VARIANTS.forEach(function (v) { var m = v[1].exec(s); if (m && m.index < at) { at = m.index; best = v[0]; } });
+    return best;
+  }
+  function powerVariant(power) { return power === 'ev' ? 'ev' : power === 'phev' ? 'phev' : power === 'hybrid' ? 'hybrid' : power === 'h2' ? null : 'gas'; }
+  /** One sentence's kind of spare -> 'full' | 'compact' | 'kit' | 'runflat' | 'none' | null. */
+  function sentenceKind(s) {
+    var l = String(s || '').toLowerCase();
+    if (/\bno spare\b|\b(?:not|never) (?:come|equipped|offered) with a (?:\w+ )?spare\b|\b(?:does not|doesn'?t|do not|don'?t) (?:come with|have|include|get) a (?:\w+ )?spare\b|\bwithout a (?:\w+ )?spare\b|\bspare (?:tire )?is not (?:standard|included)\b/.test(l)) return instead(s) || 'none';
+    var f = l.search(/full[- ]size spare/), k = l.search(/(?:compact|temporary|donut|space[- ]saver|mini)(?: temporary)?(?: spare| tire)/);
+    if (f >= 0 || k >= 0) return f >= 0 && (k < 0 || f < k) ? 'full' : 'compact';
+    return instead(s);
+  }
+  /**
+   * An answer about several versions of the model (gas and EV, hybrid and gas …) -> only what it says about this car's:
+   * {mixed, text, kind}. Sentences take the version they name first (an "unlike the EV …" aside doesn't count), or keep
+   * the one before them; a sentence naming none, before any is named, is about the car in general. When it's mixed, the
+   * opener isn't trusted (it may be the other version's): kind = the first of this version's sentences that says one,
+   * else the first general one. Not mixed: {mixed: false, text} unchanged.
+   */
+  function forThisCar(text, power) {
+    var ours = powerVariant(power), t = String(text || '');
+    if (!ours) return { mixed: false, text: t };
+    var ss = t.replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    var cur = null, rows = ss.map(function (s) { var main = s.replace(ASIDE, '').trim() || s, v = variantOf(main); if (v) cur = v; return { s: main, v: cur }; });
+    if (!rows.some(function (r) { return r.v && r.v !== ours; }) || !rows.some(function (r) { return r.v === ours; })) return { mixed: false, text: t };
+    var kept = rows.filter(function (r) { return !r.v || r.v === ours; }), kind = null;
+    kept.filter(function (r) { return r.v === ours; }).concat(kept.filter(function (r) { return !r.v; })).some(function (r) { kind = sentenceKind(r.s); return !!kind; });
+    var out = kept.map(function (r) { return /[.!?:;]$/.test(r.s) ? r.s : r.s + '.'; }).join(' ');
+    return { mixed: true, text: out, kind: kind === 'none' ? instead(out) || 'none' : kind };   // "No spare. … an inflator kit"
+  }
   /** The answer's own sentence saying a spare was optional (on some trims, as an option or a package), for the tip. */
   function optTip(text) {
     var ss = String(text || '').replace(/^\s*answer with ai\s*/i, '').split(/(?<=[.!?])\s+|\n+/).map(function (x) { return x.trim(); }).filter(function (x) { return /[.!?]$/.test(x); });
     var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:optional|option|available on|some trims|certain trims|depend\w*|varies|package)\b/i.test(x) && !/^(?:no spare|full[- ]size spare|compact spare|repair kit|run[- ]flat tires)\.?$/i.test(x) && x.length <= 220; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
-  var TireMath = { leadOverruled:leadOverruled,sameNeeds:sameNeeds,sameDepth:sameDepth,newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
+  var TireMath = { forThisCar:forThisCar,sentenceKind:sentenceKind,variantOf:variantOf,leadOverruled:leadOverruled,sameNeeds:sameNeeds,sameDepth:sameDepth,newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
     CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, instead: instead, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
@@ -735,7 +772,15 @@
   // Brave's answer is written by its AI from this question, so the question says how to answer: a fixed first phrase
   // (read for sure below), and the tip in its own short words. Answers that don't follow it are still read as before.
   // Brave turns away a query over 50 words or 400 characters ("Your query is too long"): this one is 36 words before the car
-  var SPARE_ASK = ' come with a spare tire as standard? Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if a spare is optional or can be added (size).';
+  // (40 words since 0.0.169: "Only this version." keeps it off the model's other versions, e.g. a gas Blazer's answer about the Blazer EV)
+  var SPARE_ASK = ' come with a spare tire as standard? Only this version. Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if a spare is optional or can be added (size).';
+  /** The powertrain, said in the question when the car's name doesn't (a gas Blazer and the Blazer EV share "Blazer"). */
+  function powerWord(c) {
+    var n = String(spareKey(c)), p = c.power || 'gas';
+    if (p === 'ev') return /\b(?:EV|electric)\b/i.test(n) ? '' : ' EV';
+    if (p === 'gas' || p === 'diesel') return /\b(?:gas|diesel)\b/i.test(n) ? '' : ' ' + p;
+    return '';   // hybrids are named in full by carKey; hydrogen cars by their model
+  }
   /** Brave's limits on a query: the car's name gives way (its trim, then words from the end) before the question does. */
   var BRAVE_WORDS = 50, BRAVE_CHARS = 400;
   function braveFit(car, ask) {
@@ -743,7 +788,7 @@
     while (w.length > 3 && (q().split(/\s+/).length > BRAVE_WORDS || q().length > BRAVE_CHARS)) w.pop();
     return q();
   }
-  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(braveFit(spareKey(c), SPARE_ASK)) + '&summary=1'; }
+  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(braveFit(spareKey(c) + powerWord(c), SPARE_ASK)) + '&summary=1'; }
   /** An answer read by the old keyword rules (before 0.0.114): read it again with the model. If that differs and you had
    *  confirmed the old guess, you're asked again. Once per answer. */
   var rechecking = {};
@@ -751,7 +796,7 @@
     var t = tires(c), sp = spare(t), L = sp.lookup;
     if (!L || !L.text || L.by || L.rechecked || rechecking[c.id]) return;
     rechecking[c.id] = true;
-    readSpare(L.text).then(function (pick) {
+    readSpare(L.text, c.power).then(function (pick) {
       rechecking[c.id] = false;
       if (!pick.model) return;                                     // only the model's reading replaces the old one
       L.rechecked = Date.now();
@@ -777,10 +822,10 @@
     (shown ? ask() : G().braveSerial ? G().braveSerial(ask) : ask()).then(function (r) {
       spareBusy[c.id] = false;
       if (shown && !(r && r.text)) { sp.lookup = prev; save(); redraw(c); return; }   // closed before an answer: keep what it said before
-      return readSpare(r && r.text).then(function (pick) {
+      return readSpare(r && r.text, c.power).then(function (pick) {
         var g = pick.kind;
         var text=String(r&&r.text||'').replace(/\s+/g,' ').trim();
-        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 4,location:spareLocation(text),locationV:1 };
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 4,location:spareLocation(pick.text||text),locationV:1, standardV: 1, insteadV: 1, variantV: 1 };
         LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
         save(); redraw(c); onChange();
       });
@@ -788,7 +833,12 @@
     redraw(c);
   }
   /** Brave's answer -> {kind, by, score}: each clause about what the car has, scored by the rating model (keywords if it can't load). */
-  function readSpare(text) {
+  function readSpare(text, power) {
+    // an answer about this model's other versions too (gas and EV): only this car's part, and its own sentences say the kind
+    var fc = forThisCar(text, power);
+    if (fc.mixed && fc.kind) return Promise.resolve({ kind: fc.kind, by: 'answer', score: null, text: fc.text,
+      tip: fc.kind === 'full' || fc.kind === 'compact' ? '' : leadTip(fc.text) || optTip(fc.text) || spareTip(spareClauses(fc.text)) });
+    if (fc.mixed) text = fc.text;
     // the format the question asks for: its first phrase says the kind, its next sentence is the tip
     var lead = spareLead(text);
     if (lead === 'none') lead = instead(text) || lead;   // "No spare. … a repair kit instead" (even when it also says a spare can be added)
@@ -995,6 +1045,8 @@
     if (sp.lookup && sp.lookup.text && sp.lookup.tipV !== 4) { sp.lookup.tip = sp.lookup.tip || optTip(sp.lookup.text); sp.lookup.tipV = 4; }
     // 0.0.153: a saved "No spare" whose answer names a repair kit (or run-flats) is read again; a confirmed misread is asked again
     if (sp.lookup && sp.lookup.text && /^(compact|full)$/.test(sp.lookup.guess) && sp.lookup.by === 'answer' && !sp.lookup.standardV) { var o2 = leadOverruled(sp.lookup.text, sp.lookup.guess); sp.lookup.standardV = 1; if (o2) { if (sp.kind === sp.lookup.guess) sp.kind = ''; LG.info('car', 'Spare tire read again: ' + sp.lookup.guess + ' → ' + o2); sp.lookup.guess = o2; sp.lookup.tip = optTip(sp.lookup.text) || sp.lookup.tip; } save(); }
+    // 0.0.169: an answer about the model's other versions too is read again for this car's part only
+    if (sp.lookup && sp.lookup.text && sp.lookup.guess && !sp.lookup.variantV) { var f2 = forThisCar(sp.lookup.text, c.power); sp.lookup.variantV = 1; if (f2.mixed && f2.kind && f2.kind !== sp.lookup.guess) { if (sp.kind === sp.lookup.guess) sp.kind = ''; LG.info('car', 'Spare tire read again for this version: ' + sp.lookup.guess + ' → ' + f2.kind); sp.lookup.guess = f2.kind; sp.lookup.by = 'answer'; sp.lookup.standardV = sp.lookup.insteadV = 1; sp.lookup.location = spareLocation(f2.text); sp.lookup.tip = f2.kind === 'full' || f2.kind === 'compact' ? '' : optTip(f2.text) || sp.lookup.tip; } save(); }
     if (sp.lookup && sp.lookup.text && sp.lookup.guess === 'none' && !sp.lookup.insteadV) { var i2 = instead(sp.lookup.text); sp.lookup.insteadV = 1; if (i2) { if (sp.kind === 'none') sp.kind = ''; sp.lookup.guess = i2; LG.info('car', 'Spare tire read again: none → ' + i2); } save(); }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
     if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
