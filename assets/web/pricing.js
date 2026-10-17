@@ -338,17 +338,17 @@
   }
 
   /** "$2.89⁹" style: dollars + cents, with the tenth-of-a-cent as superscript (like a pump sign). */
-  // Settings → "Show prices to the cent": every price shown rounded UP to the cent ($3.199 -> $3.20). Display only.
+  // Nearest-cent display only; source prices, optimization and rewards keep full precision.
   var centsOn = false;
   function setCents(on) { centsOn = !!on; }
-  function up(v) { return Math.ceil(v * 100 - 1e-6) / 100; }
+  function nearestCent(v) { return Math.sign(v)*Math.round((Math.abs(v)+1e-9)*100)/100; }
   function fmtSign(v) {
-    if (centsOn) return { main: (v < 0 ? '−$' : '$') + Math.abs(up(v)).toFixed(2), tenth: '' };
+    if (centsOn) return { main: (v < 0 ? '−$' : '$') + Math.abs(nearestCent(v)).toFixed(2), tenth: '' };
     var m = Math.round(v * 1000);
     var tenth = m % 10, cents = (m - tenth) / 1000;
     return { main: '$' + cents.toFixed(2), tenth: tenth ? String(tenth) : '' };
   }
-  function fmt3(v) { if (centsOn) return up(v).toFixed(2); var s = (Math.round(v * 1000) / 1000).toFixed(3); return s.slice(-1) === '0' ? s.slice(0, -1) : s; }
+  function fmt3(v) { if (centsOn) return nearestCent(v).toFixed(2); var s = (Math.round(v * 1000) / 1000).toFixed(3); return s.slice(-1) === '0' ? s.slice(0, -1) : s; }
 
   function haversineMi(a, b, c, d) {
     var R = 3958.8, toR = Math.PI / 180;

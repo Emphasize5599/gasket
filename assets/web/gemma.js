@@ -26,6 +26,7 @@
   function status(value){
     var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
+    if(state.supported&&lastIssue==='Larger AI is unavailable on this app build.')lastIssue='';
     if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if((state.error&&state.error!==priorIssue)||(state.reason&&state.reason!==priorReason))LG.warn('ai','Local model task update',{phase:state.phase,task:state.task||priorTask||'',bytes:state.bytes||0,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if(state.error&&state.error!==priorIssue&&priorTask==='download')A.toast('Model download stopped · '+(state.bytes?'partial file kept.':'not complete.')+' Resume in Settings.');
@@ -42,6 +43,7 @@
   }
   window.onGemmaStatus=status;
   async function command(action){
+    if(typeof A.N.aiCommand!=='function'){lastIssue='Larger AI is unavailable on this app build.';paintSettings();return {error:lastIssue};}
     LG.info('ai','Local model command',{command:action,phase:state.phase,task:state.task||'',bytes:state.bytes||0});
     var r=await call('aiCommand',action);
     if(r.error){lastIssue=r.error;paintSettings();return r;}
@@ -97,10 +99,11 @@
   function paintSettings(){
     var el=document.getElementById('gemmaState');if(!el)return;
     el.textContent=lastIssue||state.error||(!state.supported?'Larger-model runtime is unavailable on this device.':state.busy?'Working · '+state.phase:state.ready?'Model verified and ready'+(state.enabled?' · enabled':' · disabled'):state.bytes?'Partial download saved. Resume when ready.':'Not downloaded.');
-    var enable=document.getElementById('gemmaEnable');enable.textContent=state.enabled?'Disable larger AI':'Enable larger AI';enable.disabled=!state.supported;
-    var download=document.getElementById('gemmaDownload');download.disabled=!state.enabled||state.ready||state.busy;download.textContent=state.bytes?'Resume 3.66 GB download':'Download 3.66 GB';
+    var enable=document.getElementById('gemmaEnable');enable.textContent=state.enabled?'Turn AI off':'Turn AI on';enable.disabled=!state.supported;
+    var download=document.getElementById('gemmaDownload');download.disabled=!state.enabled||state.ready||state.busy;download.textContent=state.bytes?'Resume':'Get model';download.setAttribute('aria-label',state.bytes?'Resume 3.66 GB model download':'Download 3.66 GB model');
+    download.classList.toggle('hidden',!!state.busy);
     document.getElementById('gemmaCancel').classList.toggle('hidden',!state.busy);
-    document.getElementById('gemmaRemove').disabled=state.busy||!state.ready&&!state.bytes;
+    document.getElementById('gemmaRemove').disabled=state.busy||!state.ready&&!state.bytes;document.getElementById('gemmaRemove').textContent='Delete model';
   }
   function bindSettings(){
     if(!document.getElementById('gemmaSettings'))return;paintSettings();

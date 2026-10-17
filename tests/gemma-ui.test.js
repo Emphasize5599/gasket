@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
-assert.equal(await p.locator('#onboarding').count(),1,'first-time setup starts with a focused welcome, not all settings');await p.click('#sDone');
+assert.equal(await p.locator('#onboarding').count(),1,'first-time setup starts with a focused welcome, not all settings');await require('./onboarding-ui')(p);
 await p.evaluate(()=>{
  window.aiCalls=[];window.aiPending=[];window.aiActive=0;window.aiMax=0;window.modelState={enabled:false,ready:false,supported:true,phase:'idle',busy:false,total:3659530240,revision:'fixture'};
  __app.N.aiStatus=()=>JSON.stringify(modelState);

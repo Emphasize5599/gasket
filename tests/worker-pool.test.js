@@ -1,10 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const P=require('../assets/web/pricing.js'),K=require('../assets/web/keylessgas.js');
 const gb=1073741824;
-for(const [ram,count] of [[0,4],[4,4],[8,8],[12,12],[16,16],[32,16]])assert.equal(K.autoWorkers({totalMem:ram*gb}),count);
+for(const [ram,count] of [[0,6],[2,4],[4,6],[6,8],[8,12],[12,16],[16,20],[32,20]])assert.equal(K.autoWorkers({totalMem:ram*gb}),count);
 assert.equal(K.autoWorkers({totalMem:16*gb,lowMemory:true}),4);
 assert.equal(K.readerCount({S:{keylessWorkers:99}}),20);assert.equal(K.readerCount({S:{keylessWorkers:1}}),1);
-assert.equal(K.readerCount({S:{},N:{memoryInfo:()=>JSON.stringify({totalMem:12*gb})}}),12);
+assert.equal(K.readerCount({S:{},N:{memoryInfo:()=>JSON.stringify({totalMem:12*gb})}}),16);
+assert(!K.workerWarning({totalMem:4*gb},13).warn);assert(K.workerWarning({totalMem:4*gb},14).warn,'125% above six means fourteen or more');assert(K.workerWarning({totalMem:8*gb},16).warn,'high absolute override');assert(K.workerWarning({totalMem:16*gb,lowMemory:true},5).warn,'low-memory override');assert(!K.workerWarning({totalMem:16*gb},20).warn);assert.equal(K.autoWorkers({totalMem:NaN}),6);
 const native=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8'),pattern=native.match(/key\.matches\("([^"]+)"\)/)[1],allowed=new RegExp('^'+pattern+'$');
 K.readerKeys(20).forEach(key=>assert(allowed.test(key)));['gasweb0','gasweb1','gasweb21','gasweb99','gasweb2bad'].forEach(key=>assert(!allowed.test(key)));
 assert.match(native,/ActivityManager\.MemoryInfo/);assert.match(native,/public void releaseGasReaders\(/);

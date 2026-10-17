@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
- const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   __mocks.siteRead=(k,a)=>k==='brave'&&a.kind==='trims'?{text:'Trims: Base, Sport, Limited. The Sport adds bigger wheels.',src:'ai'}:{error:'none'};
   const menu=xs=>({menuItem:xs.map(x=>({text:x,value:x}))});__mocks.epa=url=>url.includes('menu/year')?menu(['2005','2006']):url.includes('menu/make')?menu(['Ford']):url.includes('menu/model')?menu(['Test Coupe']):url.includes('menu/options')?{menuItem:[{text:'Auto, 6 cyl, 4.0 L',value:'test-auto'},{text:'Manual, 6 cyl, 4.0 L',value:'test-manual'}]}:{menuItem:[]};

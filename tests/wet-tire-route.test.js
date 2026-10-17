@@ -10,7 +10,7 @@ const c={info:{drive:'fwd'},tires:{type:'Touring All-Season',tread:{mode:'miles'
 assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measured),'same-set mileage estimates are included');
 (async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await browser.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   const A=__app;A.S.trip.departNow=true;A.S.trip.fuel={mode:'miles',miles:'180'};A.S.trip.milesLeft='180';A.S.confirmDeletes=false;
   window.__wetToasts=[];const toast=A.toast;A.toast=function(s){__wetToasts.push(s);return toast(s);};

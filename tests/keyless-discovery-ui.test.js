@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.addInitScript(()=>sessionStorage.setItem('standinRestored',JSON.stringify({s:JSON.stringify({setupDone:true,apiKey:''})})));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href+'#restored');await p.waitForSelector('#btnLocate.live');
  await p.click('#btnSettings');await require('./settings-ui')(p,'connections');assert.match(await p.innerText('#settings'),/Google API key · recommended/i);
- assert.equal(await p.inputValue('#apiKey'),'');await p.click('#sDone');
+ assert.equal(await p.inputValue('#apiKey'),'');await require('./onboarding-ui')(p);
  await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   window.__paid=0;window.__web=0;
@@ -39,7 +39,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await fresh.waitForSelector('#btnLocate.live');
  assert.match(await fresh.innerText('#onboarding'),/No account or API key required/);
  await fresh.evaluate(()=>{window.__paid=0;__app.N.search=()=>__paid++;KeylessGas.discover=async()=>({stations:[{id:'local',brand:'other',name:'Local Fuel',lat:34.745,lng:-92.29,prices:{regular:{price:3.12,observedAt:Date.now()}}}],errors:[],details:[{exhausted:true}]});});
- await fresh.click('#sDone');await fresh.waitForSelector('#onboarding',{state:'detached'});assert.equal(await fresh.evaluate(()=>__paid),0);await fresh.click('#btnRefresh');await fresh.click('[data-refresh="discover"]');await fresh.waitForFunction(()=>document.querySelector('#rows').textContent.includes('Local Fuel'));
+ await require('./onboarding-ui')(fresh);await fresh.waitForSelector('#onboarding',{state:'detached'});assert.equal(await fresh.evaluate(()=>__paid),0);await fresh.click('#btnRefresh');await fresh.click('[data-refresh="discover"]');await fresh.waitForFunction(()=>document.querySelector('#rows').textContent.includes('Local Fuel'));
  assert.equal(await fresh.evaluate(()=>__app.S.apiKey),'');assert.equal(await fresh.evaluate(()=>__paid),0);
  assert.equal(await fresh.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await fresh.close();
  console.log('Blank-key setup, website routing, new-trip station discovery, all-brand history, no paid fallback and 320px UI passed');

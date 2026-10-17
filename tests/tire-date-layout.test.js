@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await browser.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{const c=Garage.car();c.tires={size:'195/65R15',sizeSrc:'user',type:'Touring All-Season',tread:{mode:'miles',miles:38000,rotated:'no',dot:'2324'},corners:{split:false},spare:{kind:'compact',location:'inside'},list:{size:'195/65R15',catalogVersion:5,t:Date.now(),items:[]}};});
  await p.click('#btnTrip');await p.click('#gTires summary');
  assert.equal(await p.locator('#gTires #tzSpareDot').count(),0,'no spare date input in the overview');

@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
  for(const width of [320,448]){
   const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
-  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
   // A real submenu scroll container at enlarged text: stick, collide, then pass.
   await p.evaluate(()=>__app.subPage('Tile headers','<div class="card" id="testTile"><h3>First tile</h3><div style="height:700px">Contents</div></div><div class="card"><h3>Next tile</h3><div style="height:1200px">More contents</div></div>',body=>{body.style.fontSize='130%';}));
   await p.waitForFunction(()=>{const page=document.querySelector('.sub-page');return parseFloat(page.style.getPropertyValue('--sub-head-h'))===page.querySelector('.sub-bar').getBoundingClientRect().height;});

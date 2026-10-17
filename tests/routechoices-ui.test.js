@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await browser.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   const T=Trip,A=__app;A.S.apiKey='TEST';A.S.keylessRegular=false;A.S.trip.fuel={mode:'miles',miles:'250'};A.S.trip.milesLeft='250';A.S.trip.altCompare=true;A.S.trip.bufferMi=40;A.S.trip.altMinSave=.1;A.S.trip.tankPrice='3.50';A.S.limitLookup=false;A.S.trip.departNow=true;A.S.brands={exxon:true};A.siteOn=()=>false;
   const raw=(leg,k)=>{const points=[{lat:34+leg*.7,lng:-92},{lat:34+leg*.7+.35,lng:-92+(k*.025)},{lat:34+(leg+1)*.7,lng:-92}];return {description:'Leg '+(leg+1)+' option '+k,distanceMeters:([60,55,45][k])*1609.344,duration:(3600+k*300)+'s',polyline:{encodedPolyline:T.encodePolyline(points)},legs:[{distanceMeters:([60,55,45][k])*1609.344,duration:(3600+k*300)+'s',steps:[]}]};};

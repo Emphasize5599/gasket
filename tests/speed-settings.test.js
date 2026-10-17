@@ -1,11 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
  const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./settings-ui')(p,'connections');await p.fill('#apiKey','TEST');await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./settings-ui')(p,'connections');await p.fill('#apiKey','TEST');await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{__app.N.memoryInfo=()=>JSON.stringify({totalMem:12*1073741824});__app.S.trip.fuel={mode:'miles',miles:'180'};__app.S.trip.milesLeft='180';__app.S.speed.rule={};});
- await p.click('#btnSettings');await require('./settings-ui')(p,'map');assert.equal(await p.inputValue('#keylessWorkers'),'12');assert.match(await p.innerText('#workerValue'),/Auto/);
- await p.locator('#keylessWorkers').fill('16');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),16);
- await p.click('#btnSettings');await require('./settings-ui')(p,'map');assert.equal(await p.inputValue('#keylessWorkers'),'16');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),null);
+ await p.click('#btnSettings');await require('./settings-ui')(p,'map');assert.equal(await p.inputValue('#keylessWorkers'),'16');assert.match(await p.innerText('#workerValue'),/Auto/);
+ await p.locator('#keylessWorkers').fill('16');await require('./onboarding-ui')(p);assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),16);
+ await p.click('#btnSettings');await require('./settings-ui')(p,'map');assert.equal(await p.inputValue('#keylessWorkers'),'16');await p.click('#workerAuto');await require('./onboarding-ui')(p);assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),null);
  await p.click('#btnTrip');await p.evaluate(()=>__trip.step(4));
  assert.equal(await p.locator('#tLinkSl,#tLinkBox,#tSlowMode,#tMaxUnder').count(),0,'slider coupling UI is removed');
  await p.check('#tRule');assert.equal(await p.inputValue('#tRuleOver'),'0');assert.equal(Number(await p.inputValue('#tRuleCap')),await p.evaluate(()=>Garage.speedModel().rec.speed));
@@ -13,7 +13,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.fill('#tRuleCap','77');await p.dispatchEvent('#tRuleCap','change');await p.fill('#tRuleOver','0');await p.dispatchEvent('#tRuleOver','change');await p.evaluate(()=>__trip.step(4));
  assert.equal(await p.inputValue('#tRuleCap'),'77');assert.equal(await p.inputValue('#tRuleOver'),'0','zero is not replaced by the old +9 default');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(errors.length,0,errors.join('\n'));
- await p.reload();if(await p.locator('#onboarding,#settings:not(.hidden) #sDone').count()){await require('./settings-ui')(p,'connections');await p.fill('#apiKey','TEST');await p.click('#sDone');}await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.reload();if(await p.locator('#onboarding,#settings:not(.hidden) #sDone').count()){await require('./settings-ui')(p,'connections');await p.fill('#apiKey','TEST');await require('./onboarding-ui')(p);}await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   const A=__app,S=A.S;S.trip.fuel={mode:'miles',miles:'180'};S.trip.milesLeft='180';S.trip.bufferMi=30;S.brands={exxon:true};S.speed.rule={on:false};
   const alts=__mocks.route({origin:{placeId:'P-start'},destination:{placeId:'P-end'},computeAlternativeRoutes:true}).routes,m=Trip.buildRoute(alts[0],Garage.carModel());

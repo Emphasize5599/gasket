@@ -1120,8 +1120,7 @@
     if (onboarding) h += '<p class="lead">Start without an API key. Website searches are slower and coverage varies.</p>';
     h+='<button class="btn tonal" id="sDemo">Let me test Gasket out with demo data</button><p class="lead small keep">Adds four example vehicles only—no stations, prices or trips. Your existing vehicles are kept.</p>';
     h += '<div class="card"><h3>Station discovery</h3><div class="field"><div class="lbl">Prefer website discovery<small>Works without an API key for nearby and route searches. Scans overlapping areas and scrolls each result list. Slower and less consistent: websites can omit stations or prices, stall, or restrict access. No automatic paid fallback. Without a key this method is selected automatically; with a key you can choose either method.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
-    var workerAuto=KeylessGas.readerCount({S:{},N:N}),workerCount=KeylessGas.readerCount({S:S,N:N}),workerManual=Number(S.keylessWorkers)>=1;
-    h+='<div class="card"><h3>Website readers</h3><div class="field"><div class="lbl">Parallel workers<small>Default uses phone RAM: 4 on smaller/unknown devices, 8 around 8 GB, 12 around 12 GB, 16 around 16 GB. Low-memory devices default to 4. More readers use more RAM and may trigger website restrictions. The selected 1–20 count is a ceiling, not a guaranteed speedup. Scans start gradually, pause extra readers under memory pressure, then resume them when headroom recovers.</small></div><b id="workerValue">'+(workerManual?'':'Auto · ')+workerCount+'</b></div><input type="range" id="keylessWorkers" min="1" max="20" step="1" value="'+workerCount+'" data-manual="'+(workerManual?'yes':'no')+'" aria-label="Parallel website workers"><div class="lead small keep">1–20 readers · RAM-based default: '+workerAuto+'</div><button class="btn tonal sm" id="workerAuto">Use RAM default</button></div>';
+    h+=WorkerSettings.html({S:S,N:N},S.keylessWorkers);
     h += '<div class="card"><h3>Google API key · recommended</h3><p class="lead small">Optional. Faster station discovery and more reliable trip planning.</p>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
       '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
@@ -1155,7 +1154,7 @@
       '<div class="btns"><button class="btn tonal sm" data-verify="walmart">Walmart</button><button class="btn tonal sm" data-verify="murphy">Murphy</button></div></div>' +
       '<p class="lead" style="font-size:12.5px;margin:4px 0 10px">Official prices supplement API discovery and saved-price refreshes. Website discovery needs no key.</p></div>';
     h += '<div class="card"><h3>Prices</h3>' +
-      '<div class="field"><div class="lbl">Show prices to the cent<small>Rounded up — $3.199 shows as $3.20. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
+      '<div class="field"><div class="lbl">Round prices to the nearest cent<small>$3.199 shows as $3.20; $3.191 shows as $3.19. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
     h += '<div class="card"><h3>Search</h3>' +
       '<div class="field"><div class="lbl">Search radius (miles)</div><input type="number" id="radiusMi" min="2" max="25" step="1" value="' + S.radiusMi + '"></div>' +
       '<div class="field"><div class="lbl">Mark prices stale after (hours)</div><input type="number" id="staleHours" min="1" max="168" step="1" value="' + S.staleHours + '"></div>' +
@@ -1202,8 +1201,7 @@
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
     $('sDone').onclick = function () { closeSettings(true); };
     if (window.Gemma) Gemma.bindSettings();
-    $('keylessWorkers').oninput=function(){this.dataset.manual='yes';$('workerValue').textContent=this.value;};
-    $('workerAuto').onclick=function(){$('keylessWorkers').value=workerAuto;$('keylessWorkers').dataset.manual='no';$('workerValue').textContent='Auto · '+workerAuto;};
+    WorkerSettings.bind({S:S,N:N});
     $('sLogView').onclick = function () { showLog(); };
     $('blOpen').onclick = openBlPage;
     $('licOpen').onclick = openLicPage;

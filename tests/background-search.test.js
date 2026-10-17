@@ -6,7 +6,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
   const b = await chromium.launch({ executablePath: process.env.CHROME || undefined }); try {
     const shots = process.env.SHOT, p = await b.newPage({ viewport: { width: 360, height: 800 } }), errors = [];
     p.on('pageerror', (e) => errors.push(e.message));
-    await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href); await p.click('#sDone');
+    await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href); await require('./onboarding-ui')(p);
     await p.waitForFunction(() => !document.body.classList.contains('job-on'), null, { timeout: 20000 });   // the map's first look around
     await p.evaluate(fs.readFileSync('tests/trip_mocks.js', 'utf8'));
     await p.evaluate(() => {

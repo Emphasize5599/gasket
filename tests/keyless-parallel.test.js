@@ -4,7 +4,7 @@ const source=fs.readFileSync(require.resolve('../assets/web/keylessgas.js'),'utf
 async function run(block){
   const cache=new Map(),active=new Set(),pending=[],calls=[];
   let peak=0;
-  const window={document:{},__app:{P,KV:{get:(_,k)=>cache.get(k),put:(_,k,v)=>cache.set(k,{t:Date.now(),v})}},__trip:{call:(name,key,json)=>{
+  const window={document:{},__app:{P,S:{keylessWorkers:4},KV:{get:(_,k)=>cache.get(k),put:(_,k,v)=>cache.set(k,{t:Date.now(),v})}},__trip:{call:(name,key,json)=>{
     assert.equal(name,'siteRead');assert(!active.has(key),'one request per native reader');
     active.add(key);peak=Math.max(peak,active.size);calls.push(key);
     const args=JSON.parse(json);assert(args.targets.length);
@@ -28,7 +28,7 @@ async function run(block){
 }
 async function cancelled(){
   const callbacks=[],calls=[],cache=new Map(),cancelled=[],observations=[];
-  const window={document:{},__app:{P,KV:{get:(_,k)=>cache.get(k),put:(_,k,v)=>cache.set(k,{v,t:Date.now()})},N:{cancelSiteRead:k=>cancelled.push(k)}},__trip:{call:(fn,key,args)=>{calls.push(key);return new Promise(resolve=>callbacks.push(resolve));}}};
+  const window={document:{},__app:{P,S:{keylessWorkers:4},KV:{get:(_,k)=>cache.get(k),put:(_,k,v)=>cache.set(k,{v,t:Date.now()})},N:{cancelSiteRead:k=>cancelled.push(k)}},__trip:{call:(fn,key,args)=>{calls.push(key);return new Promise(resolve=>callbacks.push(resolve));}}};
   vm.runInNewContext(source,{window,console,setTimeout,setInterval,clearInterval,Date});
   window.PriceHistory={observe:stations=>observations.push(...stations)};
   const known=Array.from({length:4},(_,i)=>({id:'saved'+i,brand:'exxon',lat:34+i,lng:-92,prices:{regular:{price:4}}}));

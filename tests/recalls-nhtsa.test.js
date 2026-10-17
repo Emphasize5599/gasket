@@ -3,7 +3,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
   const p=await b.newPage({viewport:{width:412,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
-  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');
+  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);
   await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
   await p.evaluate(()=>{window.__asked=[];window.__mocks.recalls=u=>{const m=decodeURIComponent(/model=([^&]*)/.exec(u)[1]);window.__asked.push(m);
     if(window.__recallsDown)return {__error:'HTTP 503'};

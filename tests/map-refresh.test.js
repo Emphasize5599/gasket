@@ -10,7 +10,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.equal(await p.evaluate(()=>document.querySelector('#btnMode').parentElement===document.querySelector('#grades').parentElement),true,'fuel controls share the same layer');
   await p.click('#btnSettings');
   assert.equal(await p.evaluate(()=>{const r=document.querySelector('#btnMode').getBoundingClientRect();return !!document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('#settings');}),true,'settings covers the fuel pill');
-  await p.click('#sDone');
+  await require('./onboarding-ui')(p);
   await p.evaluate(()=>{
     window.__paid=0;__app.N.search=()=>__paid++;__app.N.computeRoute=()=>__paid++;
     __app.N.siteRead=(id,key,json)=>{const s=__app.stations()[0];setTimeout(()=>onNativeResult(id,{stores:[{placeId:s.id,name:'Exxon',lat:s.lat,lng:s.lng,prices:{regular:{price:3.12}}}]}),10);};

@@ -1,6 +1,6 @@
 # Open work
 
-The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.176**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
+The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.177**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
 Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 48 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 

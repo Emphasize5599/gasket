@@ -11,7 +11,7 @@ assert(M.lifeMiles({type:'Grand Touring All-Season'})>M.lifeMiles({type:'Max Per
 assert.equal(M.lifeMiles({...tires,warrantyMi:65000}),65000);
 (async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await browser.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{__app.S.apiKey='';const c=Garage.car();c.tires={size:'195/65R15',sizeSrc:'user',corners:{split:false},tread:{mode:'miles',miles:'',rotated:''},spare:{kind:'none'},list:{size:'195/65R15',catalogVersion:5,t:Date.now(),items:[]}};});
  await p.click('#btnTrip');await p.click('#gTires summary');await p.click('#tzDet');assert(await p.isDisabled('#tzDone'));
  assert.equal(await p.locator('#tzMiles[required],#tzRot[required],#tzType[required]').count(),3);

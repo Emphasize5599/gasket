@@ -10,7 +10,7 @@ assert.equal(P.compute({...base,brand:'other'},'regular',P.DEFAULTS).final,3,'un
 assert.equal(K.dedupeDiscovery([{...base,lat:NaN}],P).length,0);
 async function scan(block){
  const data=new Map(),calls=[],active=new Set(),records=[],cancelled=[];let max=0,window;
- window={document:{},PriceHistory:{observe:s=>records.push(...s)},__app:{P,siteOn:()=>false,N:{cancelSiteRead:k=>cancelled.push(k)},KV:{get:(ns,k,age)=>data.get(ns+'|'+k),put:(ns,k,v)=>data.set(ns+'|'+k,{v,t:Date.now()})}},__trip:{call:async(fn,lane,json)=>{
+ window={document:{},PriceHistory:{observe:s=>records.push(...s)},__app:{P,S:{keylessWorkers:4},siteOn:()=>false,N:{cancelSiteRead:k=>cancelled.push(k)},KV:{get:(ns,k,age)=>data.get(ns+'|'+k),put:(ns,k,v)=>data.set(ns+'|'+k,{v,t:Date.now()})}},__trip:{call:async(fn,lane,json)=>{
   assert.equal(fn,'siteRead');assert(!active.has(lane));const args=JSON.parse(json);assert.equal(args.mode,'discover');calls.push(lane);active.add(lane);max=Math.max(max,active.size);
   await new Promise(r=>setTimeout(r,5));active.delete(lane);
   if(block)return {blocked:true,error:'Site restricted'};

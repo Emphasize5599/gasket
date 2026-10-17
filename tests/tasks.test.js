@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
-const p=await b.newPage({viewport:{width,height:900}});p.setDefaultTimeout(6000);await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.click('#sDone');await p.waitForFunction(()=>!__app.job());
+const p=await b.newPage({viewport:{width,height:900}});p.setDefaultTimeout(6000);await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.waitForFunction(()=>!__app.job());
 // no key: no lookup counter, no gear circle under it, and a full-screen menu without a status starts at the top
 await p.evaluate(()=>{__app.S.apiKey='';__apiCount();});assert.equal(await p.locator('#apiCount').isVisible(),false,'no key, no counter');
 await p.click('#btnTrip');await p.waitForSelector('.tp-head');assert.equal(await p.locator('#btnSettings').isVisible(),false,'no settings circle in full-screen menus');
@@ -12,7 +12,7 @@ await p.evaluate(()=>{Tasks.remove('probe');__trip.close();});await p.waitForFun
 await p.click('#btnSettings');await require('./settings-ui')(p,'savings');await p.waitForSelector('#citgoTier');await p.evaluate(()=>Tasks.upsert('probe2',{text:'Downloading Gemma…',cancel:()=>{}}));await p.waitForFunction(()=>!document.getElementById('taskHub').classList.contains('hidden'));
 await p.locator('#citgoTier').scrollIntoViewIfNeeded();await p.click('#citgoTier');await p.waitForSelector('.app-picker-card');
 {const hub=await p.locator('#taskHub .task-top').boundingBox(),card=await p.locator('.app-picker-card').boundingBox();assert(card.y>=hub.y+hub.height,'picker below the status bar: '+JSON.stringify({hub,card}));const pad=await p.locator('.app-picker').evaluate(e=>parseFloat(getComputedStyle(e).paddingTop));assert(pad>=hub.y+hub.height,'a tall picker list also starts below it: '+pad);}
-await p.keyboard.press('Escape');await p.waitForSelector('.app-picker',{state:'detached'});await p.evaluate(()=>Tasks.remove('probe2'));await p.click('#sDone');
+await p.keyboard.press('Escape');await p.waitForSelector('.app-picker',{state:'detached'});await p.evaluate(()=>Tasks.remove('probe2'));await require('./onboarding-ui')(p);
 await p.evaluate(()=>{window.cancelled=[];__app.jobEnd();__app.jobStart({kind:'map',label:'Discovering stations 10/100 · ~5 min',cancel:()=>cancelled.push('stations')});});
 await p.waitForSelector('#jobBar');assert.equal(await p.locator('#taskMore').isVisible(),false);const single=await p.locator('#jobBar').boundingBox();
 assert(single.y+single.height<=(await p.locator('#btnSettings').boundingBox()).y,'main-map controls move below the task dock');
@@ -25,11 +25,11 @@ await p.click('#taskList [data-cancel="download"]');assert.deepEqual(await p.eva
 await p.evaluate(()=>{Tasks.remove('download');Tasks.upsert('generate',{text:'AI: explaining tire setup…',frac:null});});await p.waitForTimeout(60);if(await p.locator('#taskMore').getAttribute('aria-expanded')!=='true')await p.click('#taskMore');assert.equal(await p.locator('#taskList .pbar').getAttribute('aria-valuenow'),null);
 await p.evaluate(()=>__app.jobEnd({text:'Stops ready',action:'Open',onAction:()=>{}}));await p.waitForTimeout(60);assert.equal(await p.locator('#taskMore').isVisible(),false);assert.match(await p.locator('#jobBar').innerText(),/AI:/);assert.equal(await p.locator('#btnSettings').isDisabled(),false,'AI alone does not lock station/settings controls');
 await p.evaluate(()=>{document.body.classList.add('trip-full');Tasks.upsert('second',{text:'Another task',frac:.5});});await p.waitForTimeout(40);bar=await p.locator('#jobBar').boundingBox();assert(bar.y<10,'bar remains above full-screen menu selectors');
-await p.evaluate(()=>__app.openSettings(false));const settingsTitle=await p.locator('.settings-bar h1').boundingBox();assert(settingsTitle.y>=bar.y+bar.height,'task row does not cover Settings title');
+await p.evaluate(()=>__app.openSettings(false));const settingsTitle=await p.locator('.settings-bar h2').boundingBox();assert(settingsTitle.y>=bar.y+bar.height,'task row does not cover Settings title');
 await p.evaluate(()=>Tasks.upsert('generate',{text:'AI: reading every hazard along this route · 17 of 44 road sections checked · waiting for the next hourly forecast and weather warning classification.'}));await p.waitForSelector('#jobBar .jb-expand:not(.hidden)');
 await p.click('#jobBar .jb-expand');assert.equal(await p.locator('#jobBar .jb-expand').getAttribute('aria-expanded'),'true');assert.equal(await p.locator('#jobBar .jb-t').evaluate(el=>getComputedStyle(el).whiteSpace),'normal');
-bar=await p.locator('#jobBar').boundingBox();assert(bar.height>44);assert((await p.locator('.settings-bar h1').boundingBox()).y>=bar.y+bar.height,'expanded message reserves real space');
-await p.click('.settings-bar h1');assert.equal(await p.locator('#jobBar .jb-expand').getAttribute('aria-expanded'),'false');assert.equal(await p.locator('#jobBar .jb-t').evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
+bar=await p.locator('#jobBar').boundingBox();assert(bar.height>44);assert((await p.locator('.settings-bar h2').boundingBox()).y>=bar.y+bar.height,'expanded message reserves real space');
+await p.click('.settings-bar h2');assert.equal(await p.locator('#jobBar .jb-expand').getAttribute('aria-expanded'),'false');assert.equal(await p.locator('#jobBar .jb-t').evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
 await p.click('#taskMore');await p.keyboard.press('Escape');assert.equal(await p.locator('#taskMore').getAttribute('aria-expanded'),'false');
 await p.evaluate(()=>{document.body.style.fontSize='22px';document.querySelectorAll('#taskHub *').forEach(e=>{if(e.classList.contains('jb-t'))e.style.fontSize='22px';});});assert.equal(await p.evaluate(()=>document.getElementById('taskHub').scrollWidth>document.getElementById('taskHub').clientWidth),false);
 await p.evaluate(()=>{Tasks.remove('second');Tasks.remove('generate');});await p.waitForSelector('#taskHub.hidden',{state:'attached'});assert.equal(await p.locator('#taskHub').isVisible(),false);

@@ -820,8 +820,7 @@ body.trip-full #btnSettings { display: none !important; }   /* under the lookup 
 .adv-more { margin:8px 0; font-size:14px; }
 .adv-more > summary, .settings-help > summary { color:var(--accent); cursor:pointer; padding:8px 0; font-weight:650; }
 .settings-bar { display:flex; align-items:center; gap:12px; }
-.settings-bar h1 { margin:6px 0; font-size:24px; }
-.settings-back { width:44px; height:44px; padding:0; font-size:28px; border-radius:14px; flex:none; }
+.settings-bar h2 { margin:6px 0; font-size:18px; line-height:1.25; min-width:0; overflow-wrap:anywhere; color:var(--accent); }
 .settings-link { display:flex; width:100%; gap:12px; align-items:center; justify-content:space-between; text-align:left; padding:18px 16px; margin:0 0 10px; border:1px solid var(--line); border-radius:18px; background:var(--surface); color:var(--ink); }
 .settings-link b { display:block; color:var(--accent); font-size:16px; }
 .settings-link small { display:block; color:var(--ink-2); margin-top:5px; font-size:13px; }
@@ -1903,7 +1902,14 @@ body:not(.api-meter) .page.tpanel.full { padding-top:calc(var(--st) + 8px + var(
 .scan-pending span { height:44px; border-radius:14px; background:var(--line); opacity:.5; }
 body .task-hub .job-bar .pbar { flex-basis:60px; min-width:24px; }
 body .task-hub .job-bar .pct:empty { display:none; }
-.gemma-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.gemma-controls { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:stretch; gap:8px; margin-top:10px; }
+.gemma-controls > .btn { width:100%; min-width:0; height:auto; min-height:54px; margin-top:0; padding:10px 3px; white-space:normal; overflow-wrap:normal; line-height:1.25; }
+.worker-range { width:100%; accent-color:var(--accent); min-height:36px; }
+.worker-warning { border-left:3px solid var(--warn); padding-left:10px; color:var(--warn); font-size:13px; line-height:1.4; }
+.ob-price-preview { display:flex; align-items:center; justify-content:space-around; gap:10px; padding:18px 8px; margin:12px 0; border:1px solid var(--line); border-radius:18px; background:var(--surface); font-variant-numeric:tabular-nums; }
+.ob-price-preview b { font-size:25px; }
+.ob-price-preview sup { font-size:14px; }
+.ob-price-preview small { display:block; color:var(--ink-2); font-size:12px; }
 .gemma-answer { border-left:3px solid var(--accent); padding-left:12px; }
 .tz-spare .tz-rim { fill: var(--surface-2); stroke: var(--ink-2); stroke-width: .6; }
 .tz-spare .tz-rim-lip { fill: none; stroke: var(--ink-2); stroke-width: .35; opacity: .7; }

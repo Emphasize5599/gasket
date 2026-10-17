@@ -131,11 +131,11 @@ const ownerFuel = P.normalize({ id: 'ownerfuel', displayName: { text: 'Owner Fue
 assert.equal(ownerFuel.brand, 'exxon'); assert.equal(P.compute(ownerFuel, 'regular', S, now), null); // no price anywhere -> shown as no price
 console.log('brand tests passed');
 
-// Settings -> Show prices to the cent: rounded UP, display only
+// Nearest-cent display only, including prices that round down.
 {
   const P = require('../assets/web/pricing.js');
   P.setCents(true);
-  assert.equal(P.fmt3(3.199), '3.20'); assert.equal(P.fmt3(3.191), '3.20'); assert.equal(P.fmt3(3.20), '3.20'); assert.equal(P.fmt3(2.8901), '2.90');
+  assert.equal(P.fmt3(3.199), '3.20'); assert.equal(P.fmt3(3.191), '3.19'); assert.equal(P.fmt3(3.20), '3.20'); assert.equal(P.fmt3(2.8901), '2.89');assert.equal(P.fmt3(3.195),'3.20');assert.equal(P.fmt3(-3.195),'-3.20');
   assert.deepEqual(P.fmtSign(3.149), { main: '$3.15', tenth: '' });
   P.setCents(false);
   assert.equal(P.fmt3(3.199), '3.199'); assert.deepEqual(P.fmtSign(3.149), { main: '$3.14', tenth: '9' });

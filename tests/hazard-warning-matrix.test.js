@@ -3,7 +3,7 @@ const W=require('../assets/web/routewx'),wet=new Set(['rain','storm','flood','tr
 for(const kind of Object.keys(W.KINDS))assert.equal(W.tireRisk({tires:[{depth:3}]},[{kind}]).tires.length>0,wet.has(kind),kind);
 (async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await browser.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   const A=__app;A.S.trip.departNow=false;A.S.trip.depart=new Date(Date.now()+86400000).toISOString().slice(0,16);A.S.trip.fuel={mode:'miles',miles:'180'};A.S.trip.milesLeft='180';
   Garage.car().tires={size:'195/65R15',type:'Touring All-Season',tread:{mode:'measure',depth:3,dot:'2324'},corners:{split:false},spare:{kind:'none'},aired:Date.now()};

@@ -6,7 +6,7 @@
   page=pg;current='';var body=pg.querySelector('.settings-body'),bar=pg.querySelector('.settings-bar'),views={};
   var home=document.createElement('div');home.className='settings-home';home.innerHTML=groups.map(function(g){return '<button type="button" class="settings-link" data-settings-group="'+g[0]+'"><span><b>'+A.esc(g[1])+'</b><small>'+A.esc(g[2])+'</small></span><span aria-hidden="true">›</span></button>';}).join('');
   groups.forEach(function(g){var e=document.createElement('div');e.className='settings-group hidden';e.dataset.settingsView=g[0];views[g[0]]=e;});
-  var buckets={'Station discovery':'map','Website readers':'map','Official price sources':'map','Prices':'map','Search':'map','Trip planner':'trip','EV & hydrogen':'trip','Discounts':'savings','Bad CITGO stations':'savings','Google API key · recommended':'connections','Routes API — separate budget':'connections','Local AI explanations · optional':'ai','General':'data','Your data':'data','Debugging':'help','About':'help'};
+  var buckets={'Station discovery':'map','Website readers':'map','Website workers':'map','Official price sources':'map','Prices':'map','Search':'map','Trip planner':'trip','EV & hydrogen':'trip','Discounts':'savings','Bad CITGO stations':'savings','Google API key · recommended':'connections','Routes API — separate budget':'connections','Local AI explanations · optional':'ai','General':'data','Your data':'data','Debugging':'help','About':'help'};
   Array.from(body.children).forEach(function(e){if(e.id==='sDone')return;var title=e.querySelector('h3'),key=e.id==='gemmaSettings'?'ai':buckets[title&&title.textContent.trim()]||'help';views[key].appendChild(e);});
   // These are connections, not EV driving preferences.
   var keys=document.createElement('div');keys.className='card';keys.innerHTML='<h3>Other optional keys</h3>';
@@ -17,7 +17,7 @@
   pg.querySelectorAll('.lbl > small:not(.keep):not([id])').forEach(function(s){var d=document.createElement('details');d.className='settings-help';d.innerHTML='<summary>Details</summary>';s.replaceWith(d);d.appendChild(s);});
   var done=A.$('sDone'),footer=document.createElement('footer');footer.className='settings-footer';footer.appendChild(done);pg.appendChild(footer);
   body.appendChild(home);groups.forEach(function(g){body.appendChild(views[g[0]]);});
-  bar.innerHTML='<button type="button" class="btn tonal settings-back hidden" id="settingsBack" aria-label="Back to Settings">‹</button><h1 id="settingsTitle">Settings</h1>';
+  bar.innerHTML='<button type="button" class="sub-back hidden" id="settingsBack" aria-label="Back to Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button><h2 id="settingsTitle">Settings</h2>';
   function show(key){current=key||'';home.classList.toggle('hidden',!!current);groups.forEach(function(g){views[g[0]].classList.toggle('hidden',g[0]!==current);});A.$('settingsBack').classList.toggle('hidden',!current);A.$('settingsTitle').textContent=current?groups.filter(function(g){return g[0]===current;})[0][1]:'Settings';body.scrollTop=0;}
   home.querySelectorAll('button').forEach(function(b){b.onclick=function(){show(b.dataset.settingsGroup);};});A.$('settingsBack').onclick=function(){show('');};pg._settingsHome=function(){show('');};
  }

@@ -8,7 +8,7 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     const p=require('./editor_guard')(await browser.newPage({viewport:{width,height:900},isMobile:true,hasTouch:true,deviceScaleFactor:2})),errors=[];
     p.on('pageerror',e=>errors.push(e.message));
     await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
-    await p.evaluate(()=>__app.S.setupDone=true);await p.click('#sDone');
+    await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);
     await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));await p.click('#btnTrip');await p.click('#gEdit');
     await p.evaluate(()=>{
       setInsets(24,48,0,0);document.querySelector(':root').dataset.theme='dark';

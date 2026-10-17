@@ -158,7 +158,8 @@
       priced:meta.priced,officialMs:meta.officialMs,errors:meta.errors,mem:meta.mem};
   }
   function memNow(A){try{var m=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');return m.totalMem?{availMB:Math.round(m.availMem/1048576),totalMB:Math.round(m.totalMem/1048576),low:!!m.lowMemory,appHeapMB:Math.round((m.appHeapUsed||0)/1048576),appHeapMaxMB:Math.round((m.appHeapMax||0)/1048576),readerRecycles:m.readerRecycles||0,rendererLosses:m.rendererLosses||0}:null;}catch(e){return null;}}
-  function autoWorkers(memory){var gb=Number(memory&&memory.totalMem)/1073741824;return memory&&memory.lowMemory?4:gb>=15?16:gb>=11?12:gb>=7?8:4;}
+  function autoWorkers(memory){var gb=Number(memory&&memory.totalMem)/1073741824;if(memory&&memory.lowMemory)return 4;if(!Number.isFinite(gb)||gb<=0)return 6;return gb>=15?20:gb>=11?16:gb>=7?12:gb>=5?8:gb>=3?6:4;}
+  function workerWarning(memory,count){var base=autoWorkers(memory),n=Math.max(1,Math.min(20,Math.round(Number(count)||base)));return {warn:n>base&&(n>=Math.ceil(base*2.25)||n>=16||!!(memory&&memory.lowMemory)),base:base,count:n};}
   function readerCount(A){var value=Number(A.S&&A.S.keylessWorkers);if(Number.isFinite(value)&&value>=1)return Math.min(20,Math.max(1,Math.round(value)));var memory={};try{memory=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');}catch(e){}return autoWorkers(memory);}
   // One shared decision per fresh sample: a cached low-memory reading must not
   // retire every extra lane. Pause instead; gradually resume when RAM recovers.
@@ -200,7 +201,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
