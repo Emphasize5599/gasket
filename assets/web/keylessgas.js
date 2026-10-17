@@ -212,7 +212,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={retryable:function(r){return retryable(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -238,14 +238,21 @@
     if(root.FLog)root.FLog.info('keyless','Scan paused for visible website check',{site:key});
     if(control.report)control.report();A.showSiteCheck(key,/^gasweb/.test(key)?'Google Maps':key==='walmart'?'Walmart':'Murphy USA');
   }
+  var RETRY_LANES=8,RETRIES=2,CALM_MS=45000;
+  /** A read that failed to load and found nothing: worth reading again (not a check, a cancel, or a real empty answer). */
+  function retryable(r){return !!r&&!r.blocked&&!r.cancelled&&!!r.error&&!(r.stores||[]).length&&r.code!=='no_prices'&&(/^(network|timeout|http|unreadable|reader)$/.test(r.code||'')||/timed out|could not load|could not be read/i.test(r.error));}
   function verified(key){
     var c=busy,p=c&&c.pause;if(!p||p.key!==key)return false;
+    c.calmUntil=Date.now()+CALM_MS;
     c.pause=null;p.resolve();if(c.report)c.report();
     if(root.FLog)root.FLog.info('keyless','Scan resumes unfinished areas after check closed',{site:key});return true;
   }
   async function scanRead(control,key,args){
     for(;;){
       if(control.pause)await control.pause.promise;
+      // a read the check interrupted waits out the calm too (lanes past the first few), or all of them reload at once
+      while(control.calmUntil>Date.now()&&(control.lanes||[]).indexOf(key)>=RETRY_LANES&&!control.cancelled&&!control.pause)await new Promise(function(r){setTimeout(r,1000);});
+      if(control.pause)continue;
       if(control.cancelled)return {cancelled:true};
       var epoch=control.epoch||0,wake,stop=new Promise(function(resolve){wake=resolve;}),r;
       if(!control.readWake)control.readWake=[];control.readWake.push(wake);
@@ -330,11 +337,17 @@
       control.report=report;timer=setInterval(function(){report();audit.tick();},1000);report();
       var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
       var chainWork=chain([],areas,true,force).finally(function(){sourcesDone=true;officialMs=Date.now()-started;report();});
-      var pool=readerPool(A,lanes,control,audit,function(){return next<areas.length&&!blocked;});
-      async function lane(key){while(next<areas.length&&!blocked&&!control.blocked&&!control.cancelled){
+      // queue: area indexes still to read. A read that failed to load (network, timeout, unreadable page) and found
+      // nothing goes to `again` and is read again after the pass, on a few lanes (RETRY_LANES), up to RETRIES more times:
+      // a check's aftermath or a burst of 50 readers loses pages, and a lost area left a hole in the route's stations.
+      var queue=areas.map(function(_,i){return i;}),again=[],tries={},round=0,retried=0;
+      var pool=readerPool(A,lanes,control,audit,function(){return next<queue.length&&!blocked;});
+      async function lane(key){while(next<queue.length&&!blocked&&!control.blocked&&!control.cancelled){
         if(lanes.indexOf(key)>=pool.target()&&!await pool.permit(key))break;
-        if(next>=areas.length||blocked||control.blocked||control.cancelled)break;
-        var idx=next,a=areas[next++],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake,t0=Date.now();
+        // just after a check closed, only the first few lanes read: 50 pages at once would bring the check back
+        while(control.calmUntil>Date.now()&&lanes.indexOf(key)>=RETRY_LANES&&!control.cancelled&&!control.pause)await new Promise(function(r){setTimeout(r,1000);});
+        if(next>=queue.length||blocked||control.blocked||control.cancelled)break;
+        var idx=queue[next++],a=areas[idx],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake,t0=Date.now();
         if(cache&&cache.v&&cache.v.detail&&cache.v.detail.stopReason==='quiet')cache=null; // Older readers incorrectly cached silence as complete.
         if(cache)r=cache.v;
         else{
@@ -344,22 +357,33 @@
           var at=Date.now();(r.stores||[]).forEach(function(s){Object.keys(s.prices||{}).forEach(function(g){s.prices[g].observedAt=at;});});
           if(!r.blocked&&!r.error&&r.detail&&r.detail.exhausted)A.KV.put('gasweb',cacheKey,r);
         }
+        if(!cache&&retryable(r)&&(tries[idx]||0)<RETRIES){tries[idx]=(tries[idx]||0)+1;again.push(idx);recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,d:r.detail||null,found:0,added:0,err:r.error||null,retry:true});continue;}
         if(r.blocked){blocked=true;control.blocked=true;control.blockedSite=control.blockedSite||'gasweb';errors.push(r.error||'Website restricted discovery');}
         if(r.error&&!r.blocked)errors.push(r.error);
+        if(tries[idx])retried++;
         var found=dedupeDiscovery((r.stores||[]).filter(function(s){return contains(s,a,P);}),P);
         if(root.PriceHistory){var persistAt=Date.now();root.PriceHistory.observe(found);audit.persist(Date.now()-persistAt);}
         var before=rows.length;rows=dedupeDiscovery(rows.concat(found),P);details.push(r.detail||{});
         recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cache:!!cache,d:r.detail||null,found:found.length,added:rows.length-before,err:r.error||null});
         done++;audit.complete(!!cache);report();progressLog();
       }}
-      var finished=await Promise.all([chainWork,Promise.all(lanes.map(lane))]);
+      var webWork=(async function(){
+        await Promise.all(lanes.map(lane));
+        while(again.length&&!control.cancelled&&!blocked&&!control.blocked){
+          round++;queue=again;again=[];next=0;
+          if(LG)LG.info('keyless','Reading again areas that failed to load',{areas:queue.length,round:round,lanes:Math.min(RETRY_LANES,lanes.length)});
+          await new Promise(function(r){setTimeout(r,2000*round);});
+          await Promise.all(lanes.slice(0,RETRY_LANES).map(lane));
+        }
+      })();
+      var finished=await Promise.all([chainWork,webWork]);
       var webRows=rows.length;rows=mergeOfficialDiscovery(rows,finished[0],P);recordObserved(rows);
       if(LG){
-        var el=Date.now()-started,sum=discoveryReport(recs,{elapsedMs:el,areas:areas.length,lanes:lanes.length,stations:webRows,priced:rows.filter(function(s){return s.prices&&s.prices[grade];}).length,officialMs:officialMs,errors:Array.from(new Set(errors)).slice(0,5),mem:{start:mem0,end:memNow(A)}});
-        LG.info('keyless','Discovery finished',Object.assign({withOfficial:rows.length,cancelled:control.cancelled,blocked:blocked||!!control.blocked},sum));
+        var el=Date.now()-started,sum=discoveryReport(recs.filter(function(r){return !r.retry;}),{elapsedMs:el,areas:areas.length,lanes:lanes.length,stations:webRows,priced:rows.filter(function(s){return s.prices&&s.prices[grade];}).length,officialMs:officialMs,errors:Array.from(new Set(errors)).slice(0,5),mem:{start:mem0,end:memNow(A)}});
+        LG.info('keyless','Discovery finished',Object.assign({withOfficial:rows.length,cancelled:control.cancelled,blocked:blocked||!!control.blocked,retriedAreas:retried,retryRounds:round,stillFailed:recs.filter(function(r){return r.err&&!r.retry&&!r.cancelled;}).length},sum));
         // one row per area, in batches that fit a log entry: where each lane spent its time
         var cols='area, lane, start s, total ms, reader ms, list shown ms, last new row ms, stop, scrolls, rows, priced, in area, new, lean, full retry, retry ms, first stop, first rows, omitted graphics, omitted telemetry, feed height, feed scroll height';
-        var line=function(r){var d=r.d||{};return [r.i,r.lane,Math.round(r.at/1000),r.ms,d.elapsedMs==null?null:d.elapsedMs,d.firstFeedMs==null?null:d.firstFeedMs,d.lastGrowthMs==null?null:d.lastGrowthMs,r.cancelled?'cancel':r.err?'error':r.cache?'cache':d.stopReason||'?',d.scrolls||0,d.read||0,d.priced||0,r.found||0,r.added||0,d.leanResources==null?null:!!d.leanResources,!!d.fullResourceRetry,d.retryElapsedMs||0,d.firstAttemptStopReason||'',d.firstAttemptRows||0,d.omittedGraphics||0,d.omittedTelemetry||0,d.feedHeight||0,d.feedScrollHeight||0];};
+        var line=function(r){var d=r.d||{};return [r.i,r.lane,Math.round(r.at/1000),r.ms,d.elapsedMs==null?null:d.elapsedMs,d.firstFeedMs==null?null:d.firstFeedMs,d.lastGrowthMs==null?null:d.lastGrowthMs,r.cancelled?'cancel':r.retry?'retry':r.err?'error':r.cache?'cache':d.stopReason||'?',d.scrolls||0,d.read||0,d.priced||0,r.found||0,r.added||0,d.leanResources==null?null:!!d.leanResources,!!d.fullResourceRetry,d.retryElapsedMs||0,d.firstAttemptStopReason||'',d.firstAttemptRows||0,d.omittedGraphics||0,d.omittedTelemetry||0,d.feedHeight||0,d.feedScrollHeight||0];};
         for(var b=0;b<recs.length;){var from=b,block=[];while(b<recs.length){var row=line(recs[b]);if(block.length&&JSON.stringify({cols:cols,rows:block.concat([row])}).length>1800)break;block.push(row);b++;}LG.debug('keyless','Discovery areas '+(from+1)+'–'+b+' of '+recs.length,{cols:cols,rows:block});}
       }
       outcome=control.cancelled?'cancelled':blocked||control.blocked?'restricted':errors.length?'partial':'finished';

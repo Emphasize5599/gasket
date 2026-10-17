@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.185 - 2026-10-17 (keyless test branch only)
+- Station scans no longer lose areas whose page failed to load: they're read again after the pass (fewer readers, up to three tries), so a route isn't left with a stretch of no stations and no workable plan.
+- After you finish a website check, the scan restarts gently instead of reloading every reader at once.
+- Bug fixes.
+
 ## 0.0.184 - 2026-10-17 (keyless test branch only)
 - Pause website scans immediately for Google, Walmart or Murphy checks; retry unfinished areas after the visible check closes.
 - Show check prompts over the trip and preserve the actual Google challenge URL.

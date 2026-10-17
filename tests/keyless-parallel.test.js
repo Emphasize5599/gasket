@@ -75,4 +75,48 @@ async function officialCheck(site){
 assert.equal((native.match(/public boolean onRenderProcessGone/g)||[]).length,2,'both UI and hidden views handle renderer exit');
 assert(/completedReads % 4/.test(native),'recycle hidden views every four reads');assert(!/old\.view\.clearCache\(false\)/.test(native),'keep shared HTTP resources warm when recycling views');assert(/old\.view\.destroy\(\)/.test(native));assert(/if \(isGasWorker\(key\)\) ws\.setBlockNetworkImage\(true\)/.test(native),'invisible gas readers do not download images');
 assert.match(native,/view\.loadUrl\("about:blank"\); view\.clearHistory\(\)/);
-(async()=>{await run(false);await run(true);await cancelled();await pausedScan(true,false);await pausedScan(false,false);await pausedScan(true,true);await pausedScan(false,true);await officialCheck('walmart');await officialCheck('murphy');console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});
+// Pages that fail to load (a burst of readers, a check's aftermath) are read again after the pass, on at most
+// eight lanes, until they load or have failed three times; before, each became a permanent hole in the route.
+async function lostPages(){
+ const active=new Map(),attempts={},cache=new Map();let peak=0;
+ const window={document:{},__app:{P,S:{keylessWorkers:12},siteOn:()=>false,showSiteCheck:()=>{},KV:{get:(n,k)=>cache.get(n+'|'+k),put:(n,k,v)=>cache.set(n+'|'+k,{v,t:Date.now()})},N:{}},__trip:{call:(fn,key,json)=>{const args=JSON.parse(json);return new Promise(resolve=>{active.set(key,{resolve,args});peak=Math.max(peak,active.size);});}}};
+ vm.runInNewContext(source,{window,Date,setTimeout,clearTimeout,setInterval,clearInterval});
+ const areas=Array.from({length:20},(_,i)=>({lat:34+i*.5,lng:-92,radius:8})),K=window.KeylessGas;
+ const fails={2:1,5:2,7:1,9:9};   // area -> how many times its page fails before it loads
+ const task=K.discover(areas,null,'regular',true),flush=()=>new Promise(r=>setImmediate(r));
+ const areaOf=url=>areas.findIndex(a=>url.includes('@'+a.lat.toFixed(5)+','));
+ let retryPeak=0,safety=0;
+ while(K.isBusy()&&++safety<400){
+   await flush();await new Promise(r=>setTimeout(r,20));
+   for(const [key,x] of [...active]){
+     active.delete(key);const i=areaOf(x.args.url);attempts[i]=(attempts[i]||0)+1;
+     if(attempts[i]>1)retryPeak=Math.max(retryPeak,active.size+1);
+     if(attempts[i]<=(fails[i]||0))x.resolve(i===7?{stores:[],error:'Search response timed out',code:'reader'}:{stores:[],error:'Page could not load',code:'network'});
+     else x.resolve({stores:[{placeId:'p'+i,name:'Exxon',brand:'exxon',lat:areas[i].lat,lng:-92,prices:{regular:{price:3}}}],detail:{exhausted:true,stopReason:'end'}});
+   }
+ }
+ const r=await task;
+ assert(Object.keys(attempts).length===20&&areas.every((_,i)=>attempts[i]>=1),'every area read');
+ assert.equal(attempts[2],2);assert.equal(attempts[5],3);assert.equal(attempts[7],2,'a reader timeout is read again too');assert.equal(attempts[9],3,'three tries at most');
+ assert.equal(r.completedAreas,20);assert.equal(r.stations.filter(s=>/^p/.test(s.placeId)).length,19,'every page that loaded on a retry adds its stations');
+ assert(retryPeak<=8,'retries run on at most eight readers ('+retryPeak+')');
+ assert.deepEqual(K.retryable({stores:[],error:'Google gas results could not be read',code:'unreadable'}),true);
+ assert.equal(K.retryable({stores:[],blocked:true,error:'Site access restricted'}),false,'a check pauses, it is not retried');
+ assert.equal(K.retryable({stores:[{}],error:'Search response timed out',code:'reader'}),false,'a page that found stations keeps them');
+ assert.equal(K.retryable({stores:[],code:'no_prices',error:'Google provided no matching prices'}),false);
+}
+// Just after a check closes, only eight readers take new areas for 45 s, so fifty pages don't bring it straight back.
+async function calmAfterCheck(){
+ const active=new Map();let now=Date.now();class Clock extends Date{static now(){return now;}}
+ const window={document:{},__app:{P,S:{keylessWorkers:16},siteOn:()=>false,showSiteCheck:()=>{},KV:{get:()=>null,put:()=>{}},N:{cancelSiteRead:k=>{const x=active.get(k);if(x){active.delete(k);x.resolve({cancelled:true});}}}},__trip:{call:(fn,key,json)=>new Promise(resolve=>active.set(key,{resolve,args:JSON.parse(json)}))}};
+ vm.runInNewContext(source,{window,Date:Clock,setTimeout,clearTimeout,setInterval,clearInterval});
+ const K=window.KeylessGas,task=K.discover(Array.from({length:60},(_,i)=>({lat:30+i*.3,lng:-92,radius:8})),null,'regular',true),flush=()=>new Promise(r=>setImmediate(r));
+ await flush();assert.equal(active.size,16);
+ const key=[...active.keys()][0],x=active.get(key);active.delete(key);x.resolve({blocked:true,error:'Unusual traffic'});await flush();
+ assert.equal(K.isPaused(),true);assert.equal(K.onVerified(key),true);await flush();await new Promise(r=>setTimeout(r,50));
+ assert(active.size<=8,'right after the check only eight readers ('+active.size+')');
+ now+=46000;await new Promise(r=>setTimeout(r,1200));await flush();
+ assert(active.size>8,'after the calm period every reader works again ('+active.size+')');
+ K.cancel();await task;
+}
+(async()=>{await lostPages();await calmAfterCheck();await run(false);await run(true);await cancelled();await pausedScan(true,false);await pausedScan(false,false);await pausedScan(true,true);await pausedScan(false,true);await officialCheck('walmart');await officialCheck('murphy');console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});
