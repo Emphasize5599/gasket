@@ -276,7 +276,7 @@
   // check). If it fails (or Brave shows a check, which is never got around), the box has a ↻ and "Search Brave yourself"
   // opens the page for you; typing it in always works.
   // ---------- trims: a list to pick from (Brave Search's answer, plus Fuel API's when its key is set) ----------
-  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30, TRIM_V = 'v2|';   // v2: v1 lists could end in Brave's "AI-generated answer"
+  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30, TRIM_V = 'v3|';   // retry old failures with normalized EPA model names
   function trimKey(c) { return c && c.year && c.make && c.model ? tankKey(Object.assign({}, c, { trim: '' })) : ''; }
   function trimUrl(c) {
     var w = trimKey(c).split(' '), q = function () { return 'What are all the trim levels of the ' + w.join(' ') + '? Answer with "Trims:" then each trim name, separated by commas.'; };
@@ -297,10 +297,11 @@
     var k = trimKey(c); if (!k || !call || !N.siteRead || matching) return;
     var st = trimState(c); if (st) return;
     trimMem[k] = { busy: true, list: [], t: Date.now() };
+    c=Object.assign({},c); // queued work must keep the identity it was keyed for
     setTimeout(function () { if (trimKey(car()) === k) drawIdle(); }, 0);   // the bar in the trim box (this starts during a redraw)
     LG.info('car', 'Asking Brave Search for the trims', k);
-    var ask = function () { return Promise.race([call('siteRead', 'brave', JSON.stringify({ url: trimUrl(c), bg: true, kind: 'trims', year: c.year })), new Promise(function (ok) { setTimeout(function () { ok(null); }, 40000); })]); };
-    var r = await Promise.all([braveSerial(ask), window.CarPics && CarPics.trims ? CarPics.trims(c) : Promise.resolve([])]);
+    var ask = function () { return lookupReply(function(){return call('siteRead', 'brave', JSON.stringify({ url: trimUrl(c), bg: true, kind: 'trims', year: c.year }));}); };
+    var r = await Promise.all([braveSerial(ask), Promise.resolve().then(function(){return window.CarPics && CarPics.trims ? CarPics.trims(c) : [];}).catch(function(){return [];})]);
     var brave = r[0] && r[0].text ? TrimMath.parse(r[0].text, c) : [], list = TrimMath.merge(r[1], brave);
     var v = { list: list, t: Date.now(), failed: !list.length };
     trimMem[k] = v; try { A.KV.put('trims', TRIM_V + k, v); } catch (e) { }
@@ -334,17 +335,24 @@
       if (!other) return h;
       h += '<label class="nf wide"><span>Your trim<small>as on your registration or the badge, like “' + esc((c.year || 2020) + ' ' + String(c.model || 'Corolla').replace(DRV_SUFFIX, '').trim()) + ' Two”</small></span>';
     }
-    return h + '<input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
+    return h + '<input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>' + (st&&st.failed?'<button type="button" class="btn tonal sm" id="gTrimRetry">Retry trim lookup</button>':'');
   }
   var tankBusy = {}, TANK_SRC = 'from Brave Search\'s AI answer · check your owner\'s manual';
   // the hidden Brave Search page reads one question at a time (the tank size here, the spare in Tires)
   var braveChain = Promise.resolve();
   function braveSerial(fn) { var p = braveChain.then(fn, fn); braveChain = p.catch(function () { }); return p; }
+  async function lookupReply(fn) {
+    for(var attempt=1;attempt<=2;attempt++){
+      var timer,r;try{r=await Promise.race([Promise.resolve().then(fn),new Promise(function(ok){timer=setTimeout(function(){ok({error:'No reply in 40 s'});},40000);})]);}catch(e){r={error:String(e&&e.message||e)};}finally{clearTimeout(timer);}
+      if(r&&(!r.error||r.blocked||r.closed||r.code==='cancelled')||attempt===2)return r;
+      LG.warn('car','Retrying unanswered vehicle lookup',{attempt:attempt+1,error:r&&r.error||'empty reply'});
+    }
+  }
   /** The car as a search names it: the model's own name (the EPA's "base model" drops words that matter, like Hybrid in
    *  "Corolla Hybrid" -> "Corolla"), with Hybrid / Plug-in added when the name doesn't say so. */
   function tankKey(c) {
     if (!(c && c.year && c.make && c.model)) return '';
-    var m = String(c.model).replace(DRV_SUFFIX, '').trim();
+    var m = TrimMath.modelName(c.model);
     if ((c.power === 'hybrid' || c.type === 'hybrid') && !/hybrid/i.test(m)) m += ' Hybrid';
     else if (c.power === 'phev' && !/hybrid|plug-?in|prime|phev|energi/i.test(m)) m += ' Plug-in Hybrid';
     return [c.year, c.make, m, c.trim || ''].join(' ').replace(/\s+/g, ' ').trim();
@@ -360,8 +368,7 @@
     var key = tankKey(c); if (!key || tankBusy[c.id] || !trimOk(c)) return;
     tankBusy[c.id] = true; draw();
     LG.info('car', 'Asking Brave Search for the tank size' + (shown ? ' (shown to you)' : ''), key);
-    var ask = function () { return Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown, year: c.year })),
-      new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]); };
+    var ask = function () { var fn=function(){return call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: tankUrl(c), bg: !shown, year: c.year }));};return shown?Promise.resolve().then(fn).catch(function(e){return {error:String(e&&e.message||e)};}):lookupReply(fn); };
     var r = await (shown ? ask() : braveSerial(ask));
     tankBusy[c.id] = false;
     if (tankKey(c) !== key) { LG.info('car', 'Tank answer was for another trim: asking again'); if (!(+c.tank > 0)) tankFind(c, shown); return; }
@@ -905,6 +912,7 @@
         delete trimOther[c.id]; setTrim(c, this.value);
       };
       if (trimKey(c) && !trimState(c)) trimFind(c);
+      if($('gTrimRetry'))$('gTrimRetry').onclick=function(){var key=trimKey(c);delete trimMem[key];A.KV.put('trims',TRIM_V+key,null);trimFind(c);};
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
       if ($('gTankShow')) $('gTankShow').onclick = function (e) { e.preventDefault(); tankFind(c, true); };
@@ -1106,6 +1114,8 @@
         try{opts=items(await epaGet('menu/options?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)+'&model='+encodeURIComponent(md)));}catch(e){if(car()===c&&$('eOpt')){eMsg('Could not load engine / transmission options. Choose the model again to retry.',true);needVinFields(c,['eOpt'],'EPA options menu failed');}if(matching)throw e;return;}
         if(car()!==c||!$('eModel')||$('eYear').value!==y||$('eMake').value!==mk||$('eModel').value!==md)return;
         fill($('eOpt'), opts, 'Engine / transmission');
+        // Trims depend on model, not the EPA engine selection; start promptly.
+        if(!presetting)trimFind({id:c.id,year:+y,make:mk,model:md});
         if (opts.length === 1 && !presetting) { $('eOpt').value = opts[0].value; await $('eOpt').onchange(); }
       };
       $('eOpt').onchange = async function () {

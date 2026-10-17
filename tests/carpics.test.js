@@ -66,3 +66,7 @@ assert.equal(C.sig({ year: 2020, make: 'Toyota', model: 'Camry', trim: 'LE' }, t
 const old = { products: [{ productFormats: [{ code: 'color_0640_032_png', assets: [] }, { code: 'color_0640_001_png', assets: [{ url: 's', shotCode: { color: { code: 'UA', oem_name: 'Black' } } }] }] }] };
 assert.deepEqual(C.bestColors(old).map(x => x.url), ['s']); assert.deepEqual(C.bestColors(V).map(x => x.code), ['070', '218'], 'the front three-quarter when there is one');
 console.log('car picture tests passed');
+assert.equal(C.photoModel({model:'Corolla Hybrid (Normal/Eco modes)'}),'Corolla Hybrid');
+assert.equal(C.closestModel([{model:'COROLLA CROSS'},{model:'COROLLA'},{model:'COROLLA HYBRID'}],{model:'Corolla Hybrid (Sport mode)'}),'COROLLA HYBRID');
+assert.equal(C.closestModel([{model:'COROLLA CROSS'},{model:'COROLLA'}],{model:'Corolla Hybrid'}),'COROLLA');
+assert.equal(C.closestModel([{model:'COROLLA CROSS'}],{model:'Corolla Hybrid'}),'Corolla Hybrid','never silently choose a different body');

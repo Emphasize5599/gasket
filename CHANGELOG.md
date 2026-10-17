@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.178 - 2026-10-17 (keyless test branch only)
+- Better NHTSA photo matching, with selected-model and broader photo searches.
+- Fixed EPA mode labels and erased trim caches interfering with vehicle lookups; added trim retry.
+- Corrected the older onboarding AI-off default; downloads still require consent.
+- Detailed, bounded troubleshooting logs enabled by default on fresh setup.
+
 ## 0.0.177 - 2026-10-17 (keyless test branch only)
 - Fixed Settings submenu headers to use the standard Back button.
 - Onboarding now includes price-display choices, a rounding preview and website-worker controls, without an early setup exit.

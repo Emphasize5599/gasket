@@ -53,7 +53,7 @@
       fetchImage: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.image; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 30); },
       saveCarImage: function (req, url, name) { window.__savedCarImage = { url: url, name: name }; setTimeout(function () { window.onNativeResult(req, window.__mocks && window.__mocks.saveCarImage || { path: 'Downloads/Gasket/' + name }); }, 30); },
       fetchIcon: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.icon; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 20); },
-      fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/air-quality-api\.open-meteo/.test(url) ? window.__mocks.aq : /api\.open-meteo/.test(url) ? window.__mocks.wx : /api\.weather\.gov/.test(url) ? window.__mocks.nws : /nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa\.gov\/vehicles\/byYmmt/.test(url) ? window.__mocks.nhtsaPic : /commons\.wikimedia/.test(url) ? window.__mocks.commons : /en\.wikipedia/.test(url) ? window.__mocks.wikipedia : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); var v = m && m(url); window.onNativeResult(req, v && v.__error ? { error: v.__error } : m ? { body: JSON.stringify(v) } : { error: 'offline' }); }, 50); },
+      fetchJson: function (req, url) { setTimeout(function () { var m = window.__mocks && (/air-quality-api\.open-meteo/.test(url) ? window.__mocks.aq : /api\.open-meteo/.test(url) ? window.__mocks.wx : /api\.weather\.gov/.test(url) ? window.__mocks.nws : /nominatim/.test(url) ? window.__mocks.osm : /geo\.dot\.gov/.test(url) ? window.__mocks.hpms : /exxon\.com/.test(url) ? window.__mocks.xom : /nlr\.gov/.test(url) ? window.__mocks.afdc : /vpic\.nhtsa/.test(url) ? window.__mocks.vpic : /api\.nhtsa\.gov\/vehicles\/byYmmt/.test(url) ? window.__mocks.nhtsaPic : /api\.nhtsa\.gov\/products\/vehicle\/models/.test(url) ? window.__mocks.nhtsaModels : /commons\.wikimedia/.test(url) ? window.__mocks.commons : /en\.wikipedia/.test(url) ? window.__mocks.wikipedia : /api\.nhtsa/.test(url) ? window.__mocks.recalls : window.__mocks.epa); var v = m && m(url); window.onNativeResult(req, v && v.__error ? { error: v.__error } : m ? { body: JSON.stringify(v) } : { error: 'offline' }); }, 50); },
       computeRoute: function (req, key, body, cap) { setTimeout(function () { var m = window.__mocks && window.__mocks.route; window.onNativeResult(req, m ? { body: JSON.stringify(m(JSON.parse(body))) } : { error: 'No route mock' }); }, 80); },
       routeSearch: function (req, key, jobs) { var jl = JSON.parse(jobs); window.__progSeen = []; jl.forEach(function (_, i) { setTimeout(function () { window.onNativeProgress && onNativeProgress(req, i, jl.length); window.__progSeen.push(document.getElementById('tNext') && document.getElementById('tNext').textContent); }, 5 * i); }); setTimeout(function () { var m = window.__mocks && window.__mocks.along; window.onNativeResult(req, m ? m(JSON.parse(jobs)) : { results: [], errors: [] }); }, 5 * jl.length + 40); },
       search: function (req, key, queries, lat1, lng1, lat2, lng2) { window.__searchCalls = (window.__searchCalls || 0) + 1; setTimeout(function () { var m = window.__mocks && window.__mocks.search; window.onSearchResult(req, m ? m(JSON.parse(queries), [lat1, lng1, lat2, lng2]) : { places: [], errors: ['No Native bridge'], calls: 0 }); }, 200); }
@@ -119,8 +119,8 @@
     logSetup();
   }
   // debug log: off unless turned on in Settings
-  if (S.debug == null) S.debug = false;
-  if (!S.logLevel) S.logLevel = 3;
+  if (S.debug == null) S.debug = true;
+  if (!S.logLevel) S.logLevel = 5;
   if (S.osmPreview == null) S.osmPreview = true;
   function logSetup() {
     if (P.setCents) P.setCents(S.roundCents);
@@ -939,7 +939,7 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
-    CACHE_NS.concat(['trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
     if(window.PriceHistory)PriceHistory.reset();
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(''); } catch (e) { }
@@ -1312,7 +1312,7 @@
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));
     S.radiusMi = Math.min(25, Math.max(2, parseFloat($('radiusMi').value) || 8));
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
-    S.logLevel = parseInt($('logLevel').value, 10) || 3;
+    S.logLevel = parseInt($('logLevel').value, 10) || 5;
     S.nrelKey = $('nrelKey').value.trim();
     if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
     S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);

@@ -3,6 +3,8 @@
   'use strict';
   var NOT_A_TRIM = /\b(is|are|was|were|the|with|offers?|offered|available|which|include[sd]?|including|levels?|trims?|models?|years?|version|starts?|starting|priced|msrp|price|engine|features?|comes?|option(al)?|package|lineup|range|answer|generated|verify|sources?)\b/i;
   function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  // Remove EPA test-mode qualifiers, not meaningful Hybrid/Prime/Cross names.
+  function modelName(s) { return String(s || '').replace(/\s*\([^)]*\bmodes?\b[^)]*\)/gi, '').replace(/\s+(?:2WD|4WD|AWD|FWD|RWD|4x4)$/i, '').replace(/\s+/g, ' ').trim(); }
   /**
    * The trims in an answer that starts its list with "Trims:" (what the app asks for), else after "trim levels are /
    * include". Words naming the car itself (make, model) are dropped from each name; sentences and prices are not names.
@@ -37,6 +39,6 @@
   }
   /** The list's own spelling of a trim (case and punctuation aside), or ''. */
   function find(list, trim) { var k = norm(trim); if (!k) return ''; for (var i = 0; i < (list || []).length; i++) if (norm(list[i]) === k) return list[i]; return ''; }
-  var api = { parse: parse, merge: merge, find: find, norm: norm };
+  var api = { parse: parse, merge: merge, find: find, norm: norm, modelName: modelName };
   if (typeof module === 'object' && module.exports) module.exports = api; else root.TrimMath = api;
 })(typeof window !== 'undefined' ? window : globalThis);

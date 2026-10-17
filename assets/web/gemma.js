@@ -107,18 +107,24 @@
   }
   function bindSettings(){
     if(!document.getElementById('gemmaSettings'))return;paintSettings();
-    document.getElementById('gemmaEnable').onclick=function(){command(state.enabled?'disable':'enable');};
+    document.getElementById('gemmaEnable').onclick=function(){A.S.largerAIChoice=!state.enabled;A.save();command(state.enabled?'disable':'enable');};
     document.getElementById('gemmaDownload').onclick=async function(){
       var ok=await A.confirmDel({always:true,title:'Download Gemma 4 E4B?',body:'This downloads about 3.66 GB over your current network. Wi-Fi is recommended. You can cancel and resume from Settings.',action:'Download',goClass:'primary'});
       if(ok)command('download');
     };
     document.getElementById('gemmaCancel').onclick=function(){command('cancel');};
-    document.getElementById('gemmaRemove').onclick=async function(){if(await A.confirmDel({always:true,title:'Remove the local model?',body:'Deletes the model and its partial download, not your cars or tire details. Download it again to use larger AI.',action:'Remove'}))command('remove');};
+    document.getElementById('gemmaRemove').onclick=async function(){if(await A.confirmDel({always:true,title:'Remove the local model?',body:'Deletes the model and its partial download, not your cars or tire details. Download it again to use larger AI.',action:'Remove'})){A.S.largerAIChoice=false;A.save();command('remove');}};
   }
   function retry(){var c=current();if(c)try{attempted.delete(input(c).key);}catch(e){}lastIssue='';schedule();}
   var slot=document.getElementById('gemmaSlot');if(slot){slot.outerHTML=settingsHtml();bindSettings();}   // Settings opened before this file loaded (first-time setup)
   window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry,setEnabled:function(on){return command(on?'enable':'disable');}};
   window.addEventListener('garagechange',function(){if(running){var c=current();try{if(!c||input(c).key!==running.key){running.cancelled=true;command('cancelAdvice');}}catch(e){command('cancelAdvice');}}schedule();});
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){}});
-  setTimeout(function(){if(A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){lastIssue='Local model status could not be read.';}},0);
+  setTimeout(function(){if(A.N.aiStatus)try{
+    status(JSON.parse(A.N.aiStatus()));
+    // 176 onboarding saved an automatic opt-out. Establish the requested
+    // default once, independently of whether onboarding was already completed.
+    // Future explicit choices survive replay, upgrades and normal restarts.
+    if(state.supported&&A.S.aiDefaultsVersion!==2){A.S.aiDefaultsVersion=2;A.save();if(A.S.onboardingAIInitialized&&A.S.largerAIChoice!==false&&!state.enabled)command('enable');}
+  }catch(e){lastIssue='Local model status could not be read.';}},0);
 })();

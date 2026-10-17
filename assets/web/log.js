@@ -1,10 +1,10 @@
-/* Debug log. Off unless you turn on "Debug logging" in Settings.
+/* Debug log. Detailed by default; can be disabled in Settings.
  * Levels: 1 errors, 2 + warnings, 3 + steps, 4 + details (requests/answers, summarized), 5 + everything (raw answers, trimmed).
  * Kept in a private file on the phone (newest ~400 KB). Your Google API key and your VIN are never written to it. */
 (function (root) {
   'use strict';
   var LEVELS = { 1: 'ERROR', 2: 'WARN', 3: 'INFO', 4: 'DEBUG', 5: 'TRACE' };
-  var level = 0, entries = [], store = null, saveT = null, MAX = 400 * 1024;
+  var level = 0, entries = [], store = null, saveT = null, MAX = 400 * 1024, held = 0;
   var secret = [];
 
   function scrub(text) {
@@ -21,26 +21,28 @@
     return t.length > n ? t.slice(0, n) + '… (' + t.length + ' chars)' : t;
   }
   function size() { return entries.reduce(function (a, e) { return a + (e.m || '').length + (e.d || '').length + 40; }, 0); }
+  function weight(e) { return (e.m || '').length + (e.d || '').length + 40; }
+  function bound() { while(entries.length > 50 && held > MAX)held-=weight(entries.shift()); }
   function persist() {
-    if (!store) return;
-    clearTimeout(saveT);
+    if (!store || saveT != null) return;
     saveT = setTimeout(function () {
-      while (entries.length > 50 && size() > MAX) entries.splice(0, Math.ceil(entries.length / 10));
+      saveT = null;
       try { store.save(JSON.stringify(entries)); } catch (e) { }
-    }, 150);
+    }, 1000); // coalesce private-file writes during busy scans
   }
   function log(lvl, area, msg, data) {
     if (!level || lvl > level) return;
     var e = { t: new Date().toISOString(), l: LEVELS[lvl], a: area, m: scrub(String(msg)) };
     if (data !== undefined) e.d = clip(data, lvl >= 5 ? 20000 : 2000);
     entries.push(e);
+    held+=weight(e);bound(); // cap live memory independently of disk flushes
     persist();
   }
   var api = {
     LEVELS: LEVELS,
     configure: function (lvl, st, keys) {
       level = lvl | 0; if (st) store = st; secret = (keys || []).filter(Boolean);
-      if (store && !entries.length) { try { entries = JSON.parse(store.load() || '[]') || []; } catch (e) { entries = []; } }
+      if (store && !entries.length) { try { entries = JSON.parse(store.load() || '[]') || []; } catch (e) { entries = []; } held=size();bound(); }
     },
     level: function () { return level; },
     error: function (a, m, d) { log(1, a, m, d); },
@@ -49,7 +51,7 @@
     debug: function (a, m, d) { log(4, a, m, d); },
     trace: function (a, m, d) { log(5, a, m, d); },
     entries: function () { return entries.slice(); },
-    clear: function () { entries = []; if (store) store.save('[]'); },
+    clear: function () { entries = []; held=0; if (store) store.save('[]'); },
     text: function () {
       return entries.map(function (e) { return e.t + ' ' + e.l + ' [' + e.a + '] ' + e.m + (e.d ? '\n    ' + e.d : ''); }).join('\n');
     }

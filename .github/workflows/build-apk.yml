@@ -27,6 +27,9 @@ on:
       - tests/ui-flow.test.js
       - tests/settings-ui.js
       - tests/onboarding-ui.js
+      - tests/fresh-car-lookups.test.js
+      - tests/ai-defaults.test.js
+      - tests/debug-log.test.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js
       - tests/vehicle-weather.test.js
