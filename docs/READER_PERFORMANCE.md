@@ -15,6 +15,8 @@ telemetry endpoint. Unknown Wasm/scripts/RPCs are allowed. Existing image/font/
 media suppression remains. Empty local responses omit network transfers; their
 intentional graphics compile error is captured in benchmark diagnostics, not
 treated as a station-data error.
+Local omission responses explicitly use `Cache-Control: no-store` to avoid
+contaminating the shared cache used by normal pages and recovery attempts.
 
 | Matched area | Before transfer | Lightweight transfer | IDs / price comparison |
 |---|---:|---:|---|

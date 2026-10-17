@@ -488,7 +488,10 @@ public class MainActivity extends Activity {
                         int omitted = GasReaderResources.omission(host,path,req.getMethod(),req.isForMainFrame(),verifying == SiteWorker.this,leanGasResources);
                         if (omitted != GasReaderResources.ALLOW) {
                             omittedGasResources.incrementAndGet(omitted);
-                            return new WebResourceResponse(path.endsWith(".wasm") ? "application/wasm" : "text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
+                            WebResourceResponse empty = new WebResourceResponse(path.endsWith(".wasm") ? "application/wasm" : "text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
+                            // These local omissions must not poison the shared HTTP cache used by normal pages/recovery.
+                            empty.setResponseHeaders(java.util.Collections.singletonMap("Cache-Control", "no-store"));
+                            return empty;
                         }
                     }
                     return null;

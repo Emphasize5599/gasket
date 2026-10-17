@@ -38,6 +38,7 @@ assert.match(native,/GasReaderResources\.omission\(host,path,req\.getMethod\(\),
 assert.match(native,/window\.__gasketLeanResources=/);
 assert.match(native,/w\.leanGasResources = true; w\.retriedGasResources = false/);
 assert.match(native,/setBlockNetworkImage\(false\)/,'visible verification restores images');
+assert.match(native,/empty\.setResponseHeaders\(java\.util\.Collections\.singletonMap\("Cache-Control", "no-store"\)\)/,'local omissions must not poison the shared browser cache');
 console.log('Reader resource policy: narrow graphics/logging filters; scripts, CSS, station data, security, main frames and visible checks retained');
 if(spawnSync('javac',['-version']).error){if(process.env.GASKET_NATIVE_TESTS==='1')throw Error('JDK required');console.log('Native reader resource/fallback execution needs a JDK; enforced in CI');process.exit(0);}
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gasket-reader-policy-')),pkg=path.join(dir,'com/bensanzone/fuelmap');fs.mkdirSync(pkg,{recursive:true});

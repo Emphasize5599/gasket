@@ -69,7 +69,7 @@ for(let repeat=0;repeat<repeats;repeat++)for(const profile of profiles){
         ||profile.telemetry===false&&host==='www.google.com'&&path==='/maps/preview/log204'
         ||profile.tiles===false&&(host==='www.google.com'&&path.startsWith('/maps/vt/')||host==='www.gstatic.com'&&path.startsWith('/maps/res/compactlegend-'))
         ||profile.chrome===false&&(host==='www.gstatic.com'&&path.startsWith('/og/_/')||host==='ogads-pa.clients6.google.com');
-      if(nativeOmit||experimentalOmit){blocked++;return r.fulfill({status:200,body:'',contentType:path.endsWith('.wasm')?'application/wasm':'text/plain'});}
+      if(nativeOmit||experimentalOmit){blocked++;return r.fulfill({status:200,body:'',headers:{'cache-control':'no-store'},contentType:path.endsWith('.wasm')?'application/wasm':'text/plain'});}
       if((profile.block||profile.native)&&req.resourceType()==='image'||profile.block&&(['font','media'].includes(req.resourceType())||profile.css===false&&req.resourceType()==='stylesheet')){blocked++;return r.abort();}
       return r.continue();
     });
