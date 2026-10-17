@@ -1986,7 +1986,7 @@
     var t = c && c.tires; if (!t) t = {};
     var out = [], e = estimate(t), checked = root.TirePolicy ? root.TirePolicy.prepare(c || {}, TireMath) : null;
     // the checked findings that need something: warnings, and tread to plan for (good news stays in the Tires tile and the AI card)
-    if (checked) checked.facts.forEach(function(f){if(f.level!=='warn'&&!(f.kind==='plan'&&/^tread:/.test(f.id)))return;out.push({level:f.level,title:f.kind==='replace'?'Tires: replace the affected tire':f.kind==='replace_soon'?'Tires: replace soon':f.kind==='plan'?'Tires: plan replacement':'Tires: '+f.title.toLowerCase(),text:f.text});});
+    if (checked) checked.facts.forEach(function(f){if(f.level!=='warn'&&!(f.kind==='plan'&&/^tread:/.test(f.id)))return;out.push({policyFact:f.id,level:f.level,title:f.kind==='replace'?'Tires: replace the affected tire':f.kind==='replace_soon'?'Tires: replace soon':f.kind==='plan'?'Tires: plan replacement':'Tires: '+f.title.toLowerCase(),text:f.text});});
     if (e && !checked) {
       var st = status(e.depth), on = e.corner ? ' (' + cname(e.corner, t.corners).toLowerCase() + ')' : '';
       if (st === 'worn') out.push({ level: 'warn', title: 'Tires: replace now', text: (e.measured ? '' : 'About ') + e.depth + '/32 in of tread left' + on + ', at or below the legal limit. Worn tires take much longer to stop on wet roads.' });

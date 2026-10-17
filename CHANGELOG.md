@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.183 - 2026-10-17 (keyless test branch only)
+- Automatically retry failed AI explanations with fresh corrective feedback and affected-answer cache cleanup.
+- Hide duplicate checked tire warnings after validated AI advice appears; keep pressure checks and fallback warnings.
+
 ## 0.0.182 - 2026-10-17 (keyless test branch only)
 - Add optional aggressive website-worker mode with emergency memory backoff.
 - Avoid unnecessary reloads of short station lists; improve scan timing and cancellation logs.

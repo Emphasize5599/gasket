@@ -21,6 +21,16 @@ await p.evaluate(()=>{__app.jobEnd();modelState.phase='idle';modelState.busy=fal
 await p.waitForFunction(()=>aiPending.length===1);assert.equal(await p.evaluate(()=>aiMax),1);
 await p.evaluate(()=>{Garage.car().tires.corners.lr.depth=3;dispatchEvent(new Event('garagechange'));});await p.waitForFunction(()=>aiPending.length===1&&aiCalls.includes('cancelAdvice'));assert.equal(await p.evaluate(()=>aiMax),1,'no overlapping generation');
 await p.evaluate(()=>resolveAI());await p.waitForFunction(()=>!!Gemma.answer(Garage.car()));const answer=await p.evaluate(()=>Gemma.answer(Garage.car()));assert.equal(answer.pack.setup.tires.find(t=>t.id==='lr').depth,3);
+// Mount the real Advice renderer: accepted results must actually appear, not just exist in memory.
+await p.evaluate(()=>{const host=document.createElement('div');host.id='adviceFixture';document.body.appendChild(host);Advisory.render(host);});
+assert.match(await p.locator('#adviceFixture #gemmaAdvice').innerText(),/AI-written/i);
+assert.doesNotMatch(await p.locator('#adviceFixture #advTires').innerText(),/Tires: replace/i);assert.equal(await p.locator('#adviceFixture [data-tchk="tires"]').count(),1,'pressure acknowledgment stays available');
+await p.evaluate(()=>{Garage.car().tires.corners.lr.depth=2.5;dispatchEvent(new Event('garagechange'));});await p.waitForFunction(()=>aiPending.length===1);
+assert.match(await p.locator('#adviceFixture #advTires').innerText(),/Tires: replace/i,'checked warnings return while AI for the new setup is pending');
+await p.evaluate(()=>{const x=aiPending.shift();aiActive--;onNativeResult(x.id,{text:JSON.stringify({summary:'The tires need safe wet stopping.',top:[{n:1,why:'Grip matters.'}]})});modelState.phase='idle';modelState.busy=false;onGemmaStatus({...modelState});});
+await p.waitForFunction(()=>aiPending.length===1&&aiPending[0].prompt.includes('CORRECTION'));
+assert.doesNotMatch(await p.locator('#adviceFixture #gemmaAdvice').innerText(),/AI-written/);
+await p.evaluate(()=>resolveAI());await p.waitForFunction(()=>document.querySelector('#adviceFixture #gemmaAdvice').textContent.includes('AI-written'));
 await p.evaluate(()=>{Garage.car().tires.corners.lr.depth=1;dispatchEvent(new Event('garagechange'));});await p.waitForFunction(()=>aiPending.length===1);assert.equal(await p.evaluate(()=>Gemma.answer(Garage.car())),null,'old result cannot apply to edited setup');
 await p.evaluate(()=>__app.N.aiCommand(-1,'disable'));await p.waitForTimeout(300);assert.equal(await p.evaluate(()=>Gemma.answer(Garage.car())),null);assert.equal(await p.evaluate(()=>aiActive),0);
 assert.deepEqual(errors,[]);assert.equal(await p.evaluate(()=>Object.prototype.hasOwnProperty.call(__app.S,'gemmaEnabled')),false,'restoring settings cannot trigger a model download');

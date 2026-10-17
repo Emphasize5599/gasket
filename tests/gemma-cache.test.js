@@ -1,13 +1,25 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),TireMath=require('../assets/web/tires'),TirePolicy=require('../assets/web/tirepolicy');
 const source=fs.readFileSync('assets/web/gemma.js','utf8'),store=new Map();
 const cars=[2,3,4].map((depth,i)=>({id:'car'+i,name:'Car '+i,info:{drive:'fwd'},tires:{type:'Touring',tread:{mode:'measure',depth},spare:{kind:'kit'}}}));
-function boot(){const timers=new Map(),events={},pending=[],commands=[];let tid=0,total=0,active=0,max=0;const state={enabled:true,supported:true,ready:true,phase:'idle',busy:false,revision:'fixture'};
+function boot(){const timers=new Map(),events={},pending=[],commands=[],prompts=[];let tid=0,total=0,active=0,max=0;const state={enabled:true,supported:true,ready:true,phase:'idle',busy:false,revision:'fixture'};
  const ctx={console,TextEncoder,Map,Set,Date,Promise,TireMath,TirePolicy,Event:function(t){this.type=t;},setTimeout:f=>{timers.set(++tid,f);return tid;},clearTimeout:i=>timers.delete(i),addEventListener:(n,f)=>(events[n]||(events[n]=[])).push(f),dispatchEvent:e=>(events[e.type]||[]).forEach(f=>f()),document:{getElementById:()=>null,addEventListener(){}},Tasks:{upsert(){},remove(){}},__app:{S:{cars,carId:cars[0].id,aiDefaultsVersion:2},N:{aiCommand(){},aiStatus:()=>JSON.stringify(state)},save(){},esc:s=>s,KV:{get:(n,k)=>store.get(n+'|'+k),put:(n,k,v)=>store.set(n+'|'+k,{v})}}};ctx.window=ctx;ctx.Garage={car:()=>cars.find(c=>c.id===ctx.__app.S.carId)};
- ctx.__trip={call:async(fn,arg)=>{if(fn==='aiGenerate'){total++;active++;max=Math.max(max,active);state.busy=true;return new Promise(resolve=>pending.push(resolve));}commands.push(arg);return state;}};
+ ctx.__trip={call:async(fn,arg)=>{if(fn==='aiGenerate'){prompts.push(arg);total++;active++;max=Math.max(max,active);state.busy=true;return new Promise(resolve=>pending.push(resolve));}commands.push(arg);return state;}};
  vm.runInNewContext(source,ctx);
  async function tick(){for(const [id,f]of [...timers]){timers.delete(id);f();}await new Promise(setImmediate);}
- async function complete(){const resolve=pending.shift();assert(resolve);active--;state.busy=false;resolve({text:JSON.stringify({summary:'The checked tread needs attention.',top:[{n:1,why:'Tread affects grip.'}]})});ctx.onGemmaStatus({...state});await new Promise(setImmediate);await tick();}
- return {ctx,tick,complete,pending,commands,total:()=>total,max:()=>max};
+ async function complete(result){const resolve=pending.shift();assert(resolve);active--;state.busy=false;resolve(result||{text:JSON.stringify({summary:'The checked tread needs attention.',top:[{n:1,why:'Tread affects grip.'}]})});ctx.onGemmaStatus({...state});await new Promise(setImmediate);await tick();}
+ return {ctx,tick,complete,pending,commands,prompts,total:()=>total,max:()=>max};
+}
+async function retries(){
+ store.clear();store.set('aiexplanations|other-car',{v:{raw:'unrelated'}});
+ const x=boot();x.ctx.__app.S.cars=[cars[0]];await x.tick();await x.tick();
+ const bad={text:JSON.stringify({summary:'Tread is below the level for safe wet stopping.',top:[{n:1,why:'Grip is reduced.'}]})};
+ await x.complete(bad);assert.equal(x.total(),2);assert.match(x.prompts[1],/CORRECTION.*promises safety/);assert.equal(x.ctx.Gemma.answer(cars[0]),null);
+ assert.equal(store.get('aiexplanations|other-car').v.raw,'unrelated','retry clears only affected answer');
+ await x.complete({error:'runtime failed'});assert.equal(x.total(),3);await x.complete(bad);await x.tick();x.ctx.dispatchEvent(new x.ctx.Event('garagechange'));await x.tick();assert.equal(x.total(),3,'failed attempts are bounded, not an infinite loop');assert.match(x.ctx.Gemma.card(cars[0]),/after 3 attempts/);
+ x.ctx.Gemma.retry();await x.tick();assert.equal(x.total(),4);await x.complete();assert.match(x.ctx.Gemma.card(cars[0]),/AI-written/);assert(x.ctx.Gemma.answer(cars[0]));
+ const key=[...store.keys()].find(k=>k!=='aiexplanations|other-car'&&store.get(k).v);store.get(key).v.raw=bad.text;
+ const y=boot();y.ctx.__app.S.cars=[cars[0]];await y.tick();await y.tick();assert.equal(y.total(),1,'invalid stored answer regenerates');assert.equal(store.get(key).v,null,'invalid persistent answer tombstoned');await y.complete();assert.match(y.ctx.Gemma.card(cars[0]),/AI-written/);
+ const z=boot();z.ctx.__app.S.cars=[cars[0]];await z.tick();await z.tick();assert.equal(z.total(),0,'accepted retry survives restart');
 }
 async function scanCoordination(){
  store.clear();const x=boot();let scanning=true,avail=1024;
@@ -23,4 +35,4 @@ async function scanCoordination(){
  store.clear();const y=boot();y.ctx.KeylessGas={isBusy:()=>true};y.ctx.__app.N.memoryInfo=()=>JSON.stringify({availMem:6*2**30,lowMemory:false});await y.tick();await y.tick();assert.equal(y.total(),1,'ample headroom allows background AI');
 }
 (async()=>{let x=boot();await x.tick();await x.tick();assert.equal(x.total(),1,'startup begins work without visiting Garage');x.ctx.__app.S.carId=cars[2].id;x.ctx.dispatchEvent(new x.ctx.Event('garagechange'));await x.tick();await x.complete();assert(x.ctx.Gemma.answer(cars[0]),'switching cars must not discard the completed result');await x.complete();await x.complete();assert.equal(x.total(),3,'all cars prepared serially');assert.equal(x.max(),1);for(const c of cars)assert(x.ctx.Gemma.answer(c));
- x=boot();await x.tick();await x.tick();assert.equal(x.total(),0,'restart restores validated explanations without generation');for(const c of cars){assert(x.ctx.Gemma.answer(c));assert.match(x.ctx.Gemma.card(c),/AI-written/);}cars[1].tires.tread.depth=1;x.ctx.dispatchEvent(new x.ctx.Event('garagechange'));await x.tick();assert.equal(x.total(),1,'only changed setup regenerates');assert.equal(x.ctx.Gemma.answer(cars[1]),null);await x.complete();store.clear();x.ctx.dispatchEvent(new x.ctx.Event('cacheclear'));await x.tick();assert.equal(x.total(),2,'clearing cache invalidates memory too');await scanCoordination();console.log('Startup all-car queue, non-current completion, restart persistence, changed-only invalidation and cache clearing.');})().catch(e=>{console.error(e);process.exitCode=1;});
+ x=boot();await x.tick();await x.tick();assert.equal(x.total(),0,'restart restores validated explanations without generation');for(const c of cars){assert(x.ctx.Gemma.answer(c));assert.match(x.ctx.Gemma.card(c),/AI-written/);}cars[1].tires.tread.depth=1;x.ctx.dispatchEvent(new x.ctx.Event('garagechange'));await x.tick();assert.equal(x.total(),1,'only changed setup regenerates');assert.equal(x.ctx.Gemma.answer(cars[1]),null);await x.complete();store.clear();x.ctx.dispatchEvent(new x.ctx.Event('cacheclear'));await x.tick();assert.equal(x.total(),2,'clearing cache invalidates memory too');await scanCoordination();await retries();console.log('Startup all-car queue, non-current completion, restart persistence, changed-only invalidation and cache clearing.');})().catch(e=>{console.error(e);process.exitCode=1;});

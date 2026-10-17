@@ -281,7 +281,11 @@
     A.subPage('Emergency cash for towing','<div class="card"><h3>A planning allowance, not a quote</h3><p>$250 is a suggested cash reserve, not a national median or a guarantee that a tow will cost that much. AAA describes typical out-of-pocket towing costs of $150–$250, depending on area and distance. We found no reliable national median specifically for a tow to the nearest repair or tire shop.</p><p>Some roadside operators publish cash-only payment policies. Others accept cards, and local rules may require card acceptance. A cash-only demand is not automatically lawful.</p><p>Ask for the full price, destination and accepted payment methods before dispatch; get a receipt. Check roadside-assistance or insurance coverage first. A trailer, heavy vehicle, rural location, after-hours call, recovery work or a long tow may need a larger reserve. Repairs and replacement tires are extra. Keep emergency cash secure, not visibly in the vehicle.</p></div><div class="card"><h3>Sources · checked October 14, 2026</h3><div class="btns wrap"><button class="btn tonal sm" data-tow-source="https://mwg.aaa.com/news/press-release/april-22-2025">AAA towing costs</button><button class="btn tonal sm" data-tow-source="https://cameronstreettowing.com/roadside-assistance-and-lock-out/">Operator payment example</button><button class="btn tonal sm" data-tow-source="https://www.nyc.gov/site/dca/consumers/shopping-services-towing.page">NYC payment rights</button></div></div>',function(body){body.querySelectorAll('[data-tow-source]').forEach(function(b){b.onclick=function(){N.openUrl(b.dataset.towSource);};});});
   }
   function tireCard(c) {
-    var l = tireAdvice(c); if (!l.length) return '';
+    var l = tireAdvice(c),ai=window.Gemma&&Gemma.answer(c);
+    // The AI card already retains every checked finding, not only its short summary.
+    // Keep actionable pressure checkboxes and warnings not covered by that card.
+    if(ai)l=l.filter(function(x){return !x.policyFact||!ai.pack.facts.some(function(f){return f.id===x.policyFact;});});
+    if (!l.length) return '';
     return '<div class="card adv-card adv-tires' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advTires"><h3>Tires</h3>' +
       l.map(function (x) {
         var short=x.check?(x.check.id==='tires'?'Check cold tires monthly. Use the driver-door pressure label.':'Check the spare monthly and before long trips. Follow its pressure and driving limits.'):x.text;
