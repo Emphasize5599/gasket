@@ -397,18 +397,22 @@
     if (pending && sitePending[key]) { sitePending[key] = false; siteNeedsCheck(key); sourceDone(); }
   };
   window.onSiteVerified = function (key) {
+    if(window.KeylessGas&&KeylessGas.onVerified&&KeylessGas.onVerified(key))return;
     if(/^(brave|nhtsa|tirerack)$/.test(key))return; // vehicle verification must never start station/API discovery
-    if(key==='gasweb'){status('Google Maps check closed. Retry the website price refresh when ready.');return;}
+    if(/^gasweb\d*$/.test(key)){status('Google Maps check closed. Retry the website price refresh when ready.');return;}
     var c = pendingCenter || me || map.getCenter();
     fetchAround(c.lat, c.lng);
   };
   var checkKey = null;
-  function showSiteCheck(key,label){checkKey=key;$('wmCheckTitle').textContent=label+' wants a check';$('wmCheck').classList.remove('hidden');}
+  function showSiteCheck(key,label){
+    var paused=window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused();checkKey=key;
+    $('wmCheckTitle').textContent=label+' wants a check';
+    $('wmCheck').querySelector('span').textContent=paused?'Scan paused. Open the check, complete it, then tap Done to retry unfinished areas. × cancels the scan and keeps completed results.':'Complete the site’s “are you human?” step to continue.';
+    $('wmCheckX').setAttribute('aria-label',paused?'Cancel scan':'Dismiss');$('wmCheck').classList.remove('hidden');
+  }
   function siteNeedsCheck(key) {
     errs.push(SITES[key].label + ' wants a quick “are you human?” check before showing prices.');
-    checkKey = key;
-    $('wmCheckTitle').textContent = SITES[key].label + ' wants a quick check';
-    $('wmCheck').classList.remove('hidden');
+    showSiteCheck(key,SITES[key].label);
   }
   function sourceDone() {
     pendingSources--;
@@ -1337,7 +1341,7 @@
 
   // ---------- buttons ----------
   $('wmCheckGo').onclick = function () { $('wmCheck').classList.add('hidden'); if (checkKey && N.siteVerify) N.siteVerify(checkKey); };
-  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden'); };
+  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
   $('btnSettings').onclick = function () { openSettings(false); };
   $('btnLocate').onclick = function () {
     if (me) { movedByUser = false; map.setView([me.lat, me.lng], Math.max(map.getZoom(), zoomForRadius(S.radiusMi))); $('btnArea').classList.add('hidden'); }

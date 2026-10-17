@@ -218,7 +218,7 @@ ol.steps li { margin: 6px 0; }
 .toast { position: fixed; z-index: 2000; left: 16px; right: 16px; bottom: calc(var(--sb) + 150px); background: var(--ink); color: var(--bg);
   padding: 12px 16px; border-radius: 14px; font-size: 14px; box-shadow: var(--shadow); text-align: center; }
 
-.banner { position: fixed; z-index: 820; left: 12px; right: 12px; top: calc(var(--st) + 98px); display: flex; gap: 8px; align-items: center;
+.banner { position: fixed; z-index: 11010; left: 12px; right: 12px; top: calc(var(--st) + 98px); display: flex; gap: 8px; align-items: center;
   background: var(--surface); border-radius: 18px; padding: 12px 12px 12px 16px; box-shadow: var(--shadow); font-size: 13.5px; }
 .banner > div { flex: 1; }
 .banner span { color: var(--ink-2); }
@@ -234,7 +234,7 @@ ol.steps li { margin: 6px 0; }
   font-weight: 700; transition: bottom .25s; }
 .fab-x svg { width: 22px; height: 22px; fill: currentColor; }
 body.trip-on #listSheet, body.trip-on #detail, body.trip-on #btnArea, body.trip-on #btnTrip, body.trip-on #btnLocate,
-body.trip-on .leaflet-marker-pane .pin-in:not(.tstop), body.trip-on #wmCheck, body.trip-on #status, body.trip-on .top .seg, body.trip-on #btnRefresh { display: none !important; }
+body.trip-on .leaflet-marker-pane .pin-in:not(.tstop), body.trip-on #status, body.trip-on .top .seg, body.trip-on #btnRefresh { display: none !important; }
 body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .t-head { display: flex; align-items: center; gap: 12px; }
 .t-head h1 { flex: 1; }

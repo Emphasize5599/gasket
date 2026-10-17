@@ -379,6 +379,7 @@ public class MainActivity extends Activity {
         int gasFirstRows;
         JSONArray partialGasStores = null;
         String gasRequestedGrade = "regular";
+        String verificationUrl = null;
         final java.util.concurrent.atomic.AtomicIntegerArray omittedGasResources = new java.util.concurrent.atomic.AtomicIntegerArray(4);
 
         void finishRead(int reqId, String json) {
@@ -387,6 +388,10 @@ public class MainActivity extends Activity {
                 try {
                     JSONObject answer = new JSONObject(json);
                     JSONArray stores = answer.optJSONArray("stores");
+                    if(answer.optBoolean("blocked")&&view!=null){
+                        String at=view.getUrl();
+                        if(at!=null&&(at.startsWith("https://www.google.com/")||at.startsWith("https://consent.google.com/")))verificationUrl=at;
+                    }
                     if (view != null && verifying != this && readCall != null
                             && GasReaderResources.retryFull(leanGasResources, answer.optBoolean("blocked"), answer.optBoolean("cancelled"), answer.optString("code"), stores == null ? 0 : stores.length())) {
                         String at = view.getUrl();
@@ -611,6 +616,7 @@ public class MainActivity extends Activity {
         if (old.view != null) return old;
         boolean desktop = isGasWorker(key) || "gmaps".equals(key);
         SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop);
+        fresh.verificationUrl = old.verificationUrl;
         workers.put(key, fresh);
         root.addView(fresh.view, 0, new FrameLayout.LayoutParams(desktop ? 1280 : -1, desktop ? 900 : -1));
         return fresh;
@@ -667,7 +673,7 @@ public class MainActivity extends Activity {
         w.view.getSettings().setBlockNetworkImage(false);
         verifying = w;
         showMargins(w, true);
-        w.view.loadUrl(w.home);
+        w.view.loadUrl(w.verificationUrl != null ? w.verificationUrl : w.home);
         web.setVisibility(View.INVISIBLE);
         wmDone.setVisibility(View.VISIBLE);
         w.view.bringToFront();
@@ -699,7 +705,7 @@ public class MainActivity extends Activity {
             wmDone.setText("Done \u2014 back to the map");
         }
         String key = verifying != null ? verifying.key : "";
-        if (verifying != null) { showMargins(verifying, false); if(isGasWorker(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
+        if (verifying != null) { verifying.verificationUrl=null;showMargins(verifying, false); if(isGasWorker(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
         verifying = null;
         wmDone.setVisibility(View.GONE);
         web.setVisibility(View.VISIBLE);

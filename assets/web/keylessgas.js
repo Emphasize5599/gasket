@@ -220,11 +220,44 @@
   function releaseReaders(){var N=root.__app.N;if(N&&N.releaseGasReaders)N.releaseGasReaders();}
   function cancel(){
     if(!busy||typeof busy!=='object')return;
-    busy.cancelled=true;busy.wake.forEach(function(f){f();});
+    if(busy.pause&&root.document.getElementById){var banner=root.document.getElementById('wmCheck');if(banner)banner.classList.add('hidden');}
+    busy.cancelled=true;if(busy.pause){var p=busy.pause;busy.pause=null;p.resolve();}busy.wake.forEach(function(f){f();});(busy.readWake||[]).slice().forEach(function(f){f();});
     var N=root.__app.N;
     if(N&&N.cancelSiteRead)(busy.lanes||readerKeys(readerCount(root.__app))).concat(['walmart','murphy']).forEach(function(k){N.cancelSiteRead(k);});
   }
   function call(name){return root.__trip.call.apply(null,[name].concat([].slice.call(arguments,1)));}
+  function pausedText(control){return control.pause?'Paused · '+(/^gasweb/.test(control.pause.key)?'Google Maps detected unusual traffic':control.pause.key==='walmart'?'Walmart needs a check':'Murphy needs a check')+' · Open the check to continue':null;}
+  function pauseScan(control,key){
+    if(control.pause||control.cancelled)return;
+    control.epoch=(control.epoch||0)+1;
+    var resolve,promise=new Promise(function(r){resolve=r;});control.pause={key:key,promise:promise,resolve:resolve};
+    // Wake native reads, not area cancellation handlers: each area keeps its place and retries after Done.
+    (control.readWake||[]).slice().forEach(function(f){f({paused:true});});
+    var A=root.__app,N=A.N;
+    if(N&&N.cancelSiteRead)(control.lanes||[]).concat(['walmart','murphy']).forEach(function(k){N.cancelSiteRead(k);});
+    if(root.FLog)root.FLog.info('keyless','Scan paused for visible website check',{site:key});
+    if(control.report)control.report();A.showSiteCheck(key,/^gasweb/.test(key)?'Google Maps':key==='walmart'?'Walmart':'Murphy USA');
+  }
+  function verified(key){
+    var c=busy,p=c&&c.pause;if(!p||p.key!==key)return false;
+    c.pause=null;p.resolve();if(c.report)c.report();
+    if(root.FLog)root.FLog.info('keyless','Scan resumes unfinished areas after check closed',{site:key});return true;
+  }
+  async function scanRead(control,key,args){
+    for(;;){
+      if(control.pause)await control.pause.promise;
+      if(control.cancelled)return {cancelled:true};
+      var epoch=control.epoch||0,wake,stop=new Promise(function(resolve){wake=resolve;}),r;
+      if(!control.readWake)control.readWake=[];control.readWake.push(wake);
+      try{r=await Promise.race([call('siteRead',key,JSON.stringify(args)),stop]);}
+      catch(e){if(control.cancelled)return {cancelled:true};if(epoch!==(control.epoch||0))continue;throw e;}
+      finally{control.readWake=control.readWake.filter(function(f){return f!==wake;});}
+      if(control.cancelled)return {cancelled:true};
+      if(epoch!==(control.epoch||0)||r.paused)continue; // Late results from the canceled generation never advance progress.
+      if(r.blocked&&typeof root.__app.showSiteCheck==='function'){pauseScan(control,r.blockedSite||key);continue;}
+      return r;
+    }
+  }
   function officialReader(control,onLoad,onError,onLabel){
     var A=root.__app,P=A.P,queues={},seenPrices=new Map(),seenNodes=new Map();
     function stopped(){return control.cancelled||control.blocked;}
@@ -246,7 +279,7 @@
         if(stopped())return {cancelled:true};if(onLoad)onLoad();if(onLabel)onLabel(key==='walmart'?'Checking Walmart website prices':'Checking Murphy website prices');
         var endTask=root.Tasks&&A.job&&A.job()?root.Tasks.begin('station-source:'+key,{parent:'stations',text:'Checking '+(key==='walmart'?'Walmart':'Murphy')+' website prices',parentLabels:key==='walmart'?['Checking Walmart website prices','Reading Walmart prices']:['Checking Murphy website prices','Reading Murphy prices'],pendingId:'trip-pending:'+key}):null;
         var wake,stop=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);}),r;
-        try{r=await Promise.race([call('siteRead',key,JSON.stringify(args)),stop]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});if(endTask)endTask();}
+        try{r=await Promise.race([scanRead(control,key,args),stop]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});if(endTask)endTask();}
         if(r.blocked){control.blocked=true;control.blockedSite=key;}if(r.error&&onError&&!(quietTimeout&&r.code==='timeout'))onError((key==='walmart'?'Walmart: ':'Murphy USA: ')+r.error);
         return r;
       });queues[key]=promise.catch(function(){});return promise;
@@ -292,9 +325,9 @@
     var audit=scanAudit(A,'discovery',lanes,areas.length,control),outcome='failed';
     function progressLog(){if(!LG||done%50)return;var recent=recs.slice(-50).filter(function(r){return !r.cache;}),el=Date.now()-started;
       LG.info('keyless','Discovery progress',{done:done,of:areas.length,elapsedS:Math.round(el/1000),areasPerMin:+(done/(el/60000)).toFixed(1),recentAreaMs:recent.length?Math.round(recent.reduce(function(a,r){return a+r.ms;},0)/recent.length):null,stations:rows.length,mem:memNow(A)});}
-    function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:!done?'Preparing… · '+areas.length+' areas to search':'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
+    function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:!done?'Preparing… · '+areas.length+' areas to search':'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');text=pausedText(control)||text;if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
     try{
-      timer=setInterval(function(){report();audit.tick();},1000);report();
+      control.report=report;timer=setInterval(function(){report();audit.tick();},1000);report();
       var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
       var chainWork=chain([],areas,true,force).finally(function(){sourcesDone=true;officialMs=Date.now()-started;report();});
       var pool=readerPool(A,lanes,control,audit,function(){return next<areas.length&&!blocked;});
@@ -306,7 +339,7 @@
         if(cache)r=cache.v;
         else{
           loads++;audit.begin(key);var stopped=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);});
-          try{r=await Promise.race([call('siteRead',key,JSON.stringify({url:webUrl(a),mode:'discover',grade:grade})),stopped]);}catch(e){r={error:e.message};}finally{audit.end(key);control.wake=control.wake.filter(function(f){return f!==wake;});}
+          try{r=await Promise.race([scanRead(control,key,{url:webUrl(a),mode:'discover',grade:grade}),stopped]);}catch(e){r={error:e.message};}finally{audit.end(key);control.wake=control.wake.filter(function(f){return f!==wake;});}
           if(r.cancelled){if(r.code==='renderer'){errors.push(r.error||'Website renderer stopped');cancel();}recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cancelled:true});break;}
           var at=Date.now();(r.stores||[]).forEach(function(s){Object.keys(s.prices||{}).forEach(function(g){s.prices[g].observedAt=at;});});
           if(!r.blocked&&!r.error&&r.detail&&r.detail.exhausted)A.KV.put('gasweb',cacheKey,r);
@@ -393,11 +426,11 @@
       var eta=work==null?null:Math.ceil(work/Math.min(pool.target(),remaining+active.size||1)/1000);
       var text=control.cancelled?'Cancelling; keeping completed prices':!done?'Preparing… · '+ordered.length+' areas to check':'Refreshing saved prices · '+done+'/'+ordered.length+' areas';
       text+=' · '+(eta==null?'Estimating time…':eta>=60?'~'+Math.ceil(eta/60)+' min remaining':'~'+eta+' sec remaining');
-      if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
+      text=pausedText(control)||text;if(onProgress)onProgress(ordered.length?done/ordered.length:1,text,{completed:done,total:ordered.length,remainingSeconds:eta});
     }
-    var ticker=setInterval(function(){report();audit.tick();},1000);
+    control.report=report;var ticker=setInterval(function(){report();audit.tick();},1000);
     var chain=officialReader(control,function(){reads++;},function(e){errors.push(e);});
-    function read(key,args){if(control.cancelled||blocked||control.blocked)return Promise.resolve({cancelled:true});reads++;return call('siteRead',key,JSON.stringify(args));}
+    function read(key,args){if(control.cancelled||blocked||control.blocked)return Promise.resolve({cancelled:true});reads++;return scanRead(control,key,args);}
     async function areaRead(x,key){
       var official=x.g.stations.some(function(s){return s.brand==='walmart'||s.brand==='murphy';})?await chain(x.g.stations,[],false,false):[];
       if(control.blocked)return {blocked:true,blockedSite:control.blockedSite,stores:official};
@@ -469,5 +502,5 @@
     var A=root.__app,groups=knownAreas(known,A.P),o=A.KV.get('gasmeta','timing|'+(grade||'regular')),ms=o&&o.v.averageAreaMs||10000;
     var readers=readerCount(A);return {areas:groups.length,seconds:Math.ceil(groups.length*ms/readers/1000),measured:!!o,readers:readers};
   }
-  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;}});
+  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
 })(typeof window!=='undefined'?window:globalThis);

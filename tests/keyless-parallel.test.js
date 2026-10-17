@@ -45,7 +45,34 @@ async function cancelled(){
   await new Promise(r=>setImmediate(r));assert.equal(result.stations[0].prices.regular.price,3.12,'late cancelled results ignored');
 }
 const native=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');
+async function pausedScan(discovery,cancelPaused){
+ const active=new Map(),calls=[],checks=[],progress=[],cache=new Map();
+ const window={document:{},__app:{P,S:{keylessWorkers:4},siteOn:()=>false,showSiteCheck:k=>checks.push(k),KV:{get:(n,k)=>cache.get(n+'|'+k),put:(n,k,v)=>cache.set(n+'|'+k,{v,t:Date.now()})},N:{cancelSiteRead:k=>{const x=active.get(k);if(x){active.delete(k);x.resolve({cancelled:true});}}}},__trip:{call:(fn,key,json)=>{assert(!active.has(key),'same native reader overlaps');const args=JSON.parse(json);calls.push(args.url);return new Promise(resolve=>active.set(key,{resolve,args}));}}};
+ vm.runInNewContext(source,{window,Date,setTimeout,clearTimeout,setInterval,clearInterval});
+ const known=Array.from({length:9},(_,i)=>({id:'saved'+i,brand:'exxon',lat:34+i*.5,lng:-92,prices:{regular:{price:4}}}));
+ const K=window.KeylessGas,task=discovery?K.discover(known.map(s=>({lat:s.lat,lng:s.lng,radius:8})),(f,t)=>progress.push(t),'regular',true):K.refreshKnown(known,(f,t)=>progress.push(t));
+ const flush=()=>new Promise(r=>setImmediate(r));await flush();
+ function reply(key,r){const x=active.get(key);assert(x);active.delete(key);x.resolve(r);return x;}
+ const first=[...active.keys()][0],doneUrl=active.get(first).args.url;reply(first,{stores:[],detail:{exhausted:true}});await flush();
+ const blockedKey=[...active.keys()][0];reply(blockedKey,{blocked:true,error:'Unusual traffic'});await flush();
+ assert.equal(K.isPaused(),true);assert.equal(checks.length,1);assert.equal(checks[0],blockedKey);assert.equal(active.size,0,'all native reads stop, not just new admissions');assert.match(progress.at(-1),/Paused.*unusual traffic/);
+ const before=calls.length;await flush();assert.equal(calls.length,before,'no scanning while challenge is pending');assert.equal(K.onVerified('wrong-site'),false);
+ if(cancelPaused){K.cancel();const r=await task;assert(r.cancelled);assert.equal(r.completedAreas,1,'blocked/in-flight areas never counted as completed');assert.equal(calls.length,before);return;}
+ assert.equal(K.onVerified(blockedKey),true);await flush();assert(active.size>0,'Done retries unfinished work');
+ // A closed but unsolved challenge must pause again rather than looping through remaining areas.
+ const again=[...active.keys()][0];reply(again,{blocked:true,error:'Unusual traffic'});await flush();assert.equal(checks.length,2);assert.equal(active.size,0);assert.equal(K.isPaused(),true);K.onVerified(again);await flush();
+ let safety=0;while(active.size){assert(++safety<20);for(const key of [...active.keys()])reply(key,{stores:[],detail:{exhausted:true}});await flush();}
+ const r=await task;assert.equal(r.completedAreas,9);assert.equal(r.blocked,false);assert.equal(r.cancelled,false);assert.equal(calls.filter(u=>u===doneUrl).length,1,'completed areas stay complete, even for a forced scan');assert.equal(K.isBusy(),false);
+}
+async function officialCheck(site){
+ const active=new Map(),checks=[];let checked=false,reads=0;
+ const window={document:{},__app:{P,S:{keylessWorkers:4},siteOn:k=>k===site,showSiteCheck:k=>checks.push(k),KV:{get:()=>null,put:()=>true},N:{cancelSiteRead:k=>{const r=active.get(k);if(r){active.delete(k);r({cancelled:true});}}}},__trip:{call:async(fn,key,json)=>{reads++;if(key===site&&!checked)return {blocked:true,error:site==='walmart'?'Robot or human?':'Access denied'};return {stores:[],nodes:[],detail:{exhausted:true}};}}};
+ vm.runInNewContext(source,{window,Date,setTimeout,clearTimeout,setInterval,clearInterval});
+ const K=window.KeylessGas,task=K.refreshKnown([{id:site,brand:site,lat:34,lng:-92,prices:{regular:{price:4}}}]);
+ await new Promise(r=>setImmediate(r));assert.equal(K.isPaused(),true);assert.deepEqual(checks,[site]);const n=reads;await new Promise(r=>setImmediate(r));assert.equal(reads,n);
+ checked=true;assert.equal(K.onVerified(site),true);const result=await task;assert.equal(result.completedAreas,1);assert.equal(result.blocked,false);assert.equal(result.stations[0].prices.regular.price,4,'old prices survive a check with no replacement price');
+}
 assert.equal((native.match(/public boolean onRenderProcessGone/g)||[]).length,2,'both UI and hidden views handle renderer exit');
 assert(/completedReads % 4/.test(native),'recycle hidden views every four reads');assert(!/old\.view\.clearCache\(false\)/.test(native),'keep shared HTTP resources warm when recycling views');assert(/old\.view\.destroy\(\)/.test(native));assert(/if \(isGasWorker\(key\)\) ws\.setBlockNetworkImage\(true\)/.test(native),'invisible gas readers do not download images');
 assert.match(native,/view\.loadUrl\("about:blank"\); view\.clearHistory\(\)/);
-(async()=>{await run(false);await run(true);await cancelled();console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});
+(async()=>{await run(false);await run(true);await cancelled();await pausedScan(true,false);await pausedScan(false,false);await pausedScan(true,true);await pausedScan(false,true);await officialCheck('walmart');await officialCheck('murphy');console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});

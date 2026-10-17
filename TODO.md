@@ -1,8 +1,8 @@
 # Open work
 
-The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.182**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
+The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.184**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 48 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 49 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 ## feat — product features
 
@@ -43,6 +43,8 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 34. [ ] **Visual help behind question marks.** Let applicable (?) controls open video, image or animation explanations when those are more effective than text. Choose the format for the topic rather than using media everywhere; retain a concise accessible text explanation.
 
 ## perf — measurements and efficiency
+
+48. [ ] **Optimize Walmart, Murphy and every other web-based scan.** Apply the same measured approach used for Google Maps: determine the minimum resources and browser capabilities required, reduce redundant requests and parsing work, reuse safe caches, and tune parallelism and reader lifetimes. Benchmark cold/warm scans and real-phone RAM/throughput while comparing station identities and every supported fuel grade. Preserve coverage, explicit site checks, pause/resume, cancellation and data integrity; do not assume Google's resource filter is safe for other sites. Related to items 16 and 17.
 
 16. [ ] **Find new ways past the station-scan performance ceiling.** Continue beyond 0.0.182's measured desktop graphics filter, lower-allocation parser, selective recovery and opt-in aggressive admission. Phone logs confirmed large-AI memory competition; compare identical routes after model work finishes, then standard/aggressive 20 and 50 workers. Investigate redundant work, scheduling, shared route coverage, reader lifecycle and persistence overhead while preserving coverage, cancellation and stability. Measure actual phone concurrency/memory and stress-test the optional 50-reader ceiling; desktop memory savings are not proof of safe phone limits. Measurements and rejected experiments: [reader performance](docs/READER_PERFORMANCE.md). Related to item 17.
 

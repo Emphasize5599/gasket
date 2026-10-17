@@ -85,6 +85,21 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
   assert.ok(await p.evaluate(()=>__trip.state().result.cands.some(c=>c.station.prices.regular.price===3.12)));
   assert.equal(await p.evaluate(()=>__api.places+__api.routes),0);
+  // A restriction during a full-screen trip is visible immediately, not behind the trip.
+  await p.evaluate(()=>{
+    __trip.step(1);__app.KV.clear('gasweb');window.__checks={reads:0,verified:false,pending:new Map(),done:false};
+    __app.N.cancelSiteRead=key=>{const id=__checks.pending.get(key);if(id){__checks.pending.delete(key);onNativeResult(id,{cancelled:true});}};
+    __app.N.siteVerify=key=>{__checks.opened=key;};
+    __app.N.siteRead=(id,key,json)=>{__checks.reads++;__checks.pending.set(key,id);if(!__checks.verified){setTimeout(()=>{if(__checks.pending.get(key)===id){__checks.pending.delete(key);onNativeResult(id,{blocked:true,error:'Unusual traffic'});}},5);}else setTimeout(()=>{__checks.pending.delete(key);onNativeResult(id,{stores:[],detail:{exhausted:true}});},5);};
+    window.__resumeTest=KeylessGas.refreshKnown(__originalStations,(frac,text)=>Tasks.upsert('check-fixture',{text,frac,cancel:()=>KeylessGas.cancel()})).then(r=>{__checks.result=r;__checks.done=true;Tasks.remove('check-fixture');});
+  });
+  await p.waitForFunction(()=>KeylessGas.isPaused());await p.waitForSelector('#wmCheck:not(.hidden)');assert(await p.evaluate(()=>document.body.classList.contains('trip-full')));
+  assert.match(await p.innerText('#jobBar'),/Paused/);
+  assert.equal(await p.locator('#wmCheckGo').evaluate(e=>{const r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}),true,'Open check is above the full-screen trip');
+  const pausedReads=await p.evaluate(()=>__checks.reads);await p.waitForTimeout(40);assert.equal(await p.evaluate(()=>__checks.reads),pausedReads);
+  await p.click('#wmCheckGo');assert(await p.evaluate(()=>!!__checks.opened));assert.equal(await p.evaluate(()=>__checks.done),false,'opening alone does not resume');
+  await p.evaluate(()=>{__checks.verified=true;onSiteVerified(__checks.opened);});await p.waitForFunction(()=>__checks.done);assert.equal(await p.evaluate(()=>__checks.result.completedAreas),2);
+  assert.equal(await p.evaluate(()=>__api.places+__api.routes),0,'closing the check resumes this scan, never starts a paid map lookup');
   await p.click('#tClose');await p.click('#btnSettings');
   assert.equal(await p.inputValue('#routesMonthlyCap'),'9500');
   await require('./settings-ui')(p,'connections');await p.fill('#routesMonthlyCap','9400');await require('./onboarding-ui')(p);
