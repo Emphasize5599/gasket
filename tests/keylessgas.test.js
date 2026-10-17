@@ -57,7 +57,11 @@ async function worker(pg,body,raw,status=200,args={}){
   assert(discovery.detail.scrolls>=5);assert.equal(discovery.detail.exhausted,true);assert.equal(discovery.error,null,'unpriced stations are valid discovery results');
   // a short list with no end marker: done once it's at the bottom and quiet for 4 s, not after the full 12 s
   const short=await worker(pg,'<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'</div>',JSON.stringify([]),200,{mode:'discover'});
-  assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);assert.equal(short.detail.exhausted,true,'a quiet list at its bottom counts as finished (no partial-coverage warning, cacheable)');
+  assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);assert.equal(short.detail.exhausted,false,'silence is not proof of exhaustion and must not cache a possibly stalled list');
+  const late='<div role="feed" style="height:100px;overflow:auto"><div style="height:400px">'+link('0x1:0x2')+'</div></div><script>setTimeout(()=>{document.querySelector(\'[role="feed"]\').onscroll=function(){if(this.scrollTop+this.clientHeight<this.scrollHeight-4)return;this.insertAdjacentHTML(\'beforeend\',\'<div>End of the list</div>\');this.onscroll=null;};},1500);</script>';
+  const lateScroll=await worker(pg,late,JSON.stringify([]),200,{mode:'discover'});
+  assert.equal(lateScroll.detail.stopReason,'end','late pagination listener receives a fresh bottom scroll event');
+  assert.equal(lateScroll.detail.exhausted,true);
   for(const grade of ['regular','midgrade','premium','diesel']){
     const label={regular:'Regular',midgrade:'Midgrade',premium:'Premium',diesel:'Diesel'}[grade];
     const r=await worker(pg,html,JSON.stringify(['0x1:0x2','$4.12/'+label]),200,{grade});
@@ -65,6 +69,10 @@ async function worker(pg,body,raw,status=200,args={}){
   }
   const all=await worker(pg,html,JSON.stringify(['0x1:0x2',['Regular','$3.12'],['Midgrade','$3.42'],['Premium','$3.72'],['Diesel','$3.89']]),200,{grade:'diesel'});
   assert.equal(all.stores[0].prices.diesel.price,3.89);assert.equal(all.stores[0].prices.premium.price,3.72);
+  const sparse=await worker(pg,html,JSON.stringify([Array.from({length:10000},(_,i)=>[i,null,false,'unrelated label']),['0x1:0x2',['Regular','$3.12'],['Diesel','$3.89']],['0x3:0x4',['Regular','$4.12']]]),200,{grade:'diesel'});
+  assert.equal(sparse.stores[0].prices.diesel.price,3.89);assert.equal(sparse.stores[1].prices.regular.price,4.12,'allocation-light traversal preserves evidence across unrelated leaves');
+  const invalidGrade=await worker(pg,html,JSON.stringify(['0x1:0x2',['constructor','$3.12'],['__proto__','$4.12']]));
+  assert.deepEqual(invalidGrade.stores[0].prices,{},'only explicit supported grades are evidence');
   const different=await worker(pg,html,JSON.stringify([['0x1:0x2','$3.12/Regular'],['0x3:0x4','$3.89/Diesel']]),200,{grade:'diesel'});
   assert.equal(different.stores[0].prices.diesel,undefined,'never borrow the neighboring station\'s diesel price');
   assert.equal(different.stores[1].prices.diesel.price,3.89);
@@ -76,6 +84,13 @@ async function worker(pg,body,raw,status=200,args={}){
   const exhausted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']));
   assert.equal(exhausted.stores.length,1);assert(exhausted.detail.elapsedMs<3000,'non-scrollable feed needs no repeated dummy scrolling');
   console.log('Exhausted-feed reader '+exhausted.detail.elapsedMs+' ms simulated time; conservative coordinate completion passed');
+  await pg.evaluate(()=>window.__gasketLeanResources=true);
+  const noFeed=await worker(pg,'<div>You are seeing a limited view of Google Maps.</div>',JSON.stringify([]),200,{mode:'discover'});
+  assert.equal(noFeed.code,'unreadable');assert.equal(noFeed.detail.stopReason,'no_feed');assert.equal(noFeed.detail.limitedView,true);
+  assert(noFeed.detail.elapsedMs>=8000&&noFeed.detail.elapsedMs<10000,'lean unreadable page yields promptly for the one normal-resource retry');
+  const restricted=await worker(pg,'<div>Verify that you are human</div>',JSON.stringify([]),200,{mode:'discover'});
+  assert.equal(restricted.blocked,true,'a restriction must not be turned into a normal-resource retry');
+  await pg.evaluate(()=>delete window.__gasketLeanResources);
   const targeted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'}]});
   assert.equal(targeted.detail.targetsComplete,true,'finish without waiting for end of list when all stable-ID targets are priced');
   for(const [grade,label]of [['regular','Regular'],['midgrade','Midgrade'],['premium','Premium'],['diesel','Diesel']]){

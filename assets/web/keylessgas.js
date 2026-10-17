@@ -290,6 +290,7 @@
         if(lanes.indexOf(key)>=pool.target()&&!await pool.permit(key))break;
         if(next>=areas.length||blocked||control.blocked||control.cancelled)break;
         var idx=next,a=areas[next++],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake,t0=Date.now();
+        if(cache&&cache.v&&cache.v.detail&&cache.v.detail.stopReason==='quiet')cache=null; // Older readers incorrectly cached silence as complete.
         if(cache)r=cache.v;
         else{
           loads++;audit.begin(key);var stopped=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);});

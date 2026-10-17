@@ -34,6 +34,8 @@ on:
       - tests/brave-reader.test.js
       - tests/brave-verification.test.js
       - tests/gemma-cache.test.js
+      - tests/reader-resources.test.js
+      - tools/reader-resource-policy.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js
       - tests/vehicle-weather.test.js
@@ -195,6 +197,7 @@ jobs:
         run: |
           GASKET_NATIVE_TESTS=1 node tests/routes-budget.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-native.test.js
+          GASKET_NATIVE_TESTS=1 node tests/reader-resources.test.js
 
       - name: Build with the existing release key and verify APK
         if: steps.signing.outputs.ready == 'true'

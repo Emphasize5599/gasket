@@ -24,6 +24,8 @@ async function scan(block){
  assert.equal(result.completedAreas,17);assert.equal(result.stations.length,1);assert(records.length>0);
  assert.equal(result.stations[0].brand,'other');
  const cached=await window.KeylessGas.discover(areas,null,'regular');assert.equal(cached.websiteLoads,0);
+ for(const [key,value]of data)if(key.startsWith('gasweb|'))value.v.detail.stopReason='quiet';
+ const oldQuiet=await window.KeylessGas.discover(areas,null,'regular');assert(oldQuiet.websiteLoads>0,'do not reuse an older falsely-complete quiet scan');
  const pending=window.KeylessGas.discover(areas,null,'diesel');window.KeylessGas.cancel();const stopped=await pending;assert.equal(stopped.cancelled,true);assert.equal(cancelled.length,6);
 }
 Promise.all([scan(false),scan(true)]).then(()=>console.log('Keyless discovery: four readers, no paid calls, cache, cancellation, restriction stop, all-brand registry and conservative dedupe passed')).catch(e=>{console.error(e);process.exitCode=1;});

@@ -10,7 +10,8 @@ async function (reqId, args) {
   let loaded = false, responseRead = false, limited = false, rejected = 0;
   let targetsComplete = false;
   const requested=['regular','midgrade','premium','diesel'].includes(args.grade)?args.grade:'regular';
-  const gradeLabel=s=>({'regular':'regular','regular unleaded':'regular','midgrade':'midgrade','mid-grade':'midgrade','mid grade':'midgrade','premium':'premium','premium unleaded':'premium','diesel':'diesel','truck diesel':'diesel','diesel #2':'diesel'})[String(s||'').trim().toLowerCase()]||null;
+  const gradeNames={'regular':'regular','regular unleaded':'regular','midgrade':'midgrade','mid-grade':'midgrade','mid grade':'midgrade','premium':'premium','premium unleaded':'premium','diesel':'diesel','truck diesel':'diesel','diesel #2':'diesel'};
+  const gradeLabel=s=>{const key=String(s||'').trim().toLowerCase();return Object.prototype.hasOwnProperty.call(gradeNames,key)?gradeNames[key]:null;};
   const money=s=>{const m=/^\$(\d{1,2}\.\d{2,3})$/.exec(String(s||'').trim());return m&&+m[1]>=0.5&&+m[1]<=20?+m[1]:null;};
   const rowPrices=id=>{const p=prices.get(id)||{},out={};Object.keys(p).forEach(g=>{if(p[g]!=null)out[g]={price:p[g],updated:null};});return out;};
   let gradeMenu=null,gradeAttempted=false,gradeOpenedAt=0,gradeReadyAt=0;
@@ -31,7 +32,7 @@ async function (reqId, args) {
     }
     return targets.every(t=>Array.from(rows.values()).some(r=>rowPrices(r.featureId)[requested]&&(t.id&&(r.placeId===t.id||r.id===t.id)||t.featureId&&r.featureId===t.featureId)));
   };
-  const blocked = () => /\/sorry\/|consent\.google/.test(location.href) || /unusual traffic|verify (?:that )?you are human|access denied|before you continue to Google|not a robot/i.test(document.body && document.body.innerText || '');
+  const blocked = text => /\/sorry\/|consent\.google/.test(location.href) || /unusual traffic|verify (?:that )?you are human|access denied|before you continue to Google|not a robot/i.test(text);
   const price = (s) => {
     const text=String(s||'').trim(),m=/^(\$\d{1,2}\.\d{2,3})\s*\/\s*([a-z #0-9-]+)$/i.exec(text)||/^(\$\d{1,2}\.\d{2,3})\s+([a-z #0-9-]+)$/i.exec(text);
     if(m){const g=gradeLabel(m[2]),v=money(m[1]);return g&&v!=null?{grade:g,value:v}:null;}
@@ -63,28 +64,38 @@ async function (reqId, args) {
     throw new Error('Search response frame has no data');
     };
     const tree = decode(raw,0);
-    const candidates = new Map(); let nodes = 0;
+    const candidates = new Map(), empty={ids:new Set(),values:new Map()}; let nodes = 0;
     function walk(x, depth) {
       if (++nodes > 250000 || depth > 80) throw new Error('Search response too complex');
+      // Most response leaves are numbers/null or unrelated labels. They carry no
+      // station/price evidence: share an immutable empty result instead of allocating
+      // two collections and a closure per leaf across every page and every reader.
+      let directId=null,directPrice=null;
+      if(typeof x==='string'){
+        directId=/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(x)?x.toLowerCase():null;
+        directPrice=price(x);
+        if(!directId&&!directPrice)return empty;
+      }else if(!Array.isArray(x))return empty;
       const ids = new Set(), values = new Map();
       const add=(g,p)=>{if(!values.has(g))values.set(g,new Set());if(values.get(g).size<2)values.get(g).add(p);};
       if (typeof x === 'string') {
-        if (/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(x)) ids.add(x.toLowerCase());
-        const p = price(x); if (p !== null) add(p.grade,p.value);
+        if (directId) ids.add(directId);
+        if (directPrice) add(directPrice.grade,directPrice.value);
       } else if (Array.isArray(x)) {
         for (const child of x) {
-          const c = walk(child, depth + 1);
+          const c = walk(child, depth + 1);if(c===empty)continue;
           for (const id of c.ids) if (ids.size < 2) ids.add(id);
           for (const [g,ps] of c.values) for(const p of ps)add(g,p);
         }
-        const labels=x.filter(v=>typeof v==='string'&&gradeLabel(v)),amounts=x.filter(v=>typeof v==='string'&&money(v)!=null);
-        if(labels.length===1&&amounts.length===1)add(gradeLabel(labels[0]),money(amounts[0]));
+        let label=null,amount=null,labelCount=0,amountCount=0;
+        for(const v of x)if(typeof v==='string'){const g=gradeLabel(v),p=money(v);if(g){label=g;labelCount++;}if(p!=null){amount=p;amountCount++;}}
+        if(labelCount===1&&amountCount===1)add(label,amount);
         if (ids.size === 1) {
           const id = Array.from(ids)[0];if(!candidates.has(id))candidates.set(id,{});const target=candidates.get(id);
           for(const [g,ps] of values){if(ps.size!==1){target[g]=null;continue;}const p=Array.from(ps)[0];if(target[g]!==undefined&&target[g]!==p)target[g]=null;else if(target[g]===undefined)target[g]=p;}
         }
       }
-      return { ids, values };
+      return ids.size||values.size?{ ids, values }:empty;
     }
     walk(tree, 0);
     for (const [id, p] of candidates){const old=prices.get(id)||{};Object.assign(old,p);prices.set(id,old);}
@@ -93,7 +104,6 @@ async function (reqId, args) {
     const feed = document.querySelector('[role="feed"]');
     if (!feed) return null;
     loaded = true; if (!firstFeedAt) firstFeedAt = Date.now();
-    limited = /limited view of Google Maps/i.test(document.body.innerText);
     for (const a of feed.querySelectorAll('a[href*="/maps/place/"][aria-label]')) {
       const href = a.href, id = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i.exec(href), point = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(href);
       const name = a.getAttribute('aria-label'), card = a.closest('[role="article"]');
@@ -141,9 +151,14 @@ async function (reqId, args) {
   try {
     let stable=0, last='', scrolls=0;
     while (Date.now()-started < deadline) {
-      if (blocked()) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
+      const pageText=document.body&&document.body.innerText||'';
+      limited=/limited view of Google Maps/i.test(pageText);
+      if (blocked(pageText)) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
       const selecting=selectGrade();
       const feed=readRows();
+      // A lean page with no readable feed should not spin for the entire three-minute
+      // discovery deadline. Native retries once with normal graphics under the same deadline.
+      if(!feed&&!loaded&&window.__gasketLeanResources===true&&Date.now()-started>=8000){stopReason='no_feed';break;}
       // A price refresh with every target explicitly priced in the DOM needs
       // neither a response replay nor another scroll. Discovery never skips pages.
       if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
@@ -160,11 +175,18 @@ async function (reqId, args) {
         if(discovery&&rows.size>=5000){stopReason='row_limit';break;}
         const before=feed.scrollTop;
         feed.scrollTop=feed.scrollHeight;
+        // Maps may attach its pagination listener after the first scroll. Writing
+        // the same bottom position again emits no scroll event; nudge only a
+        // stalled, scrollable discovery feed so a late listener gets another chance.
+        if(discovery&&Math.abs(feed.scrollTop-before)<1&&feed.scrollHeight>feed.clientHeight){
+          const bottom=feed.scrollTop;feed.scrollTop=Math.max(0,bottom-32);feed.scrollTop=bottom;
+        }
         // Scrolling the same exhausted/non-scrollable feed three times adds seconds but no rows.
         if(Math.abs(feed.scrollTop-before)<1&&!discovery){stopReason='stalled';break;}
-        // a list that's at its bottom and quiet for 4 s is done (most are short: a dozen rows, two scrolls); 12 s otherwise
+        // Stop a quiet bottom after 4 s (12 s if not at bottom), but report it
+        // as unconfirmed so native can try normal resources once, never cache it as complete.
         const atBottom=feed.scrollTop+feed.clientHeight>=feed.scrollHeight-4;
-        if(discovery&&Date.now()-lastGrowth>(atBottom&&scrolls>=1?4000:12000)){stopReason=atBottom?'quiet':'stalled';if(atBottom)exhausted=true;break;}   // scrolled to the bottom and nothing more came: the list ended without saying so
+        if(discovery&&Date.now()-lastGrowth>(atBottom&&scrolls>=1?4000:12000)){stopReason=atBottom?'quiet':'stalled';break;}   // Quiet is not proof of exhaustion; don't cache a possibly stalled page as complete.
         if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
         scrolls++;stable=0;
       }
@@ -173,7 +195,7 @@ async function (reqId, args) {
     for (const row of rows.values()) row.prices=rowPrices(row.featureId);
     const stores=Array.from(rows.values());
     const priced=stores.filter(s=>s.prices[requested]).length;
-    send({stores,partial:true,code:!loaded?'unreadable':!priced?'no_prices':'limited',
+    send({stores,partial:true,code:!loaded?'unreadable':discovery&&!exhausted&&(stopReason==='quiet'||stopReason==='stalled')?'incomplete_feed':!priced?'no_prices':'limited',
       error:!loaded?'Google gas results could not be read':!priced&&!discovery?'Google provided no matching '+requested+' prices; existing prices are retained':null,
       detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,firstFeedMs:firstFeedAt?firstFeedAt-started:null,firstReplyMs:firstReplyAt?firstReplyAt-started:null,lastGrowthMs:lastGrowth-started,replies,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}

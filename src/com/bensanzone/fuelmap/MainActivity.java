@@ -372,10 +372,58 @@ public class MainActivity extends Activity {
         int readReq = -1;   // set while a page is read in the background by siteRead (answered once)
         String readCall = null;   // its reader: run on every load of the page (it may reload itself), once per load
         Runnable readDeadline = null;
+        volatile boolean leanGasResources = true;
+        boolean retriedGasResources = false;
+        JSONArray partialGasStores = null;
+        String gasRequestedGrade = "regular";
+        final java.util.concurrent.atomic.AtomicIntegerArray omittedGasResources = new java.util.concurrent.atomic.AtomicIntegerArray(4);
 
         void finishRead(int reqId, String json) {
             if (readReq != reqId) return;
-            readReq = -1; readCall = null;
+            if (isGasWorker(key)) {
+                try {
+                    JSONObject answer = new JSONObject(json);
+                    JSONArray stores = answer.optJSONArray("stores");
+                    if (view != null && verifying != this && readCall != null
+                            && GasReaderResources.retryFull(leanGasResources, answer.optBoolean("blocked"), answer.optBoolean("cancelled"), answer.optString("code"), stores == null ? 0 : stores.length())) {
+                        String at = view.getUrl();
+                        if (at != null && at.startsWith("https://www.google.com/maps/search/gas+stations/@")) {
+                            // Same request, cookies and overall deadline; never retry restrictions or missing-grade prices.
+                            partialGasStores = stores;
+                            leanGasResources = false; retriedGasResources = true; ready = false;
+                            view.stopLoading(); view.loadUrl(at); return;
+                        }
+                    }
+                    JSONObject detail = answer.optJSONObject("detail");
+                    if (detail == null) { detail = new JSONObject(); answer.put("detail", detail); }
+                    if (partialGasStores != null && partialGasStores.length() > 0 && !answer.optBoolean("cancelled")) {
+                        // Keep observations already obtained if recovery is restricted or has fewer results.
+                        // Exact identity only; the newer record wins, including its price ambiguity checks.
+                        Map<String,JSONObject> combined = new java.util.LinkedHashMap<String,JSONObject>();
+                        for (JSONArray list : new JSONArray[] { partialGasStores, stores }) if (list != null) {
+                            for (int i = 0; i < list.length(); i++) {
+                                JSONObject station = list.optJSONObject(i); if (station == null) continue;
+                                String identity = station.optString("featureId", station.optString("id"));
+                                if (identity.length() > 0) combined.put(identity, station);
+                            }
+                        }
+                        JSONArray merged = new JSONArray(); int priced = 0;
+                        for (JSONObject station : combined.values()) {
+                            merged.put(station); JSONObject prices = station.optJSONObject("prices");
+                            JSONObject price = prices == null ? null : prices.optJSONObject(gasRequestedGrade);
+                            if (price != null && price.optDouble("price", 0) > 0) priced++;
+                        }
+                        answer.put("stores", merged); detail.put("retainedPartialStores", partialGasStores.length());
+                        detail.put("read", merged.length()); detail.put("priced", priced);
+                    }
+                    detail.put("leanResources", leanGasResources); detail.put("fullResourceRetry", retriedGasResources);
+                    detail.put("omittedVisual", omittedGasResources.get(GasReaderResources.VISUAL));
+                    detail.put("omittedGraphics", omittedGasResources.get(GasReaderResources.GRAPHICS));
+                    detail.put("omittedTelemetry", omittedGasResources.get(GasReaderResources.TELEMETRY));
+                    json = answer.toString();
+                } catch (Exception ignored) { }
+            }
+            readReq = -1; readCall = null; partialGasStores = null;
             if (readDeadline != null) main.removeCallbacks(readDeadline);
             readDeadline = null;
             if (isGasWorker(key) && view != null && verifying != this) {
@@ -434,11 +482,14 @@ public class MainActivity extends Activity {
                 public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
                     // Keep page JS, CSS, DOM/storage, fetch/XHR and pagination intact.
                     // Visible human-verification pages retain all resources.
-                    if(isGasWorker(key) && verifying != SiteWorker.this && !req.isForMainFrame() && "GET".equals(req.getMethod())) {
+                    if(isGasWorker(key)) {
                         String host=String.valueOf(req.getUrl().getHost()).toLowerCase(Locale.US);
                         String path=String.valueOf(req.getUrl().getPath()).toLowerCase(Locale.US);
-                        if(host.equals("fonts.gstatic.com") || host.equals("fonts.googleapis.com") || path.matches(".*\\.(woff2?|ttf|otf|mp4|webm|mp3|ogg|wav)$"))
-                            return new WebResourceResponse("text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
+                        int omitted = GasReaderResources.omission(host,path,req.getMethod(),req.isForMainFrame(),verifying == SiteWorker.this,leanGasResources);
+                        if (omitted != GasReaderResources.ALLOW) {
+                            omittedGasResources.incrementAndGet(omitted);
+                            return new WebResourceResponse(path.endsWith(".wasm") ? "application/wasm" : "text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
+                        }
                     }
                     return null;
                 }
@@ -508,7 +559,7 @@ public class MainActivity extends Activity {
             if (readCall == null || view == null) return;
             // The document guards by request ID. A previous request or a callback from the old document must not
             // consume the new request; a real page reload needs the reader again because its JS was destroyed.
-            view.evaluateJavascript(readCall, null);
+            view.evaluateJavascript((isGasWorker(key) ? "window.__gasketLeanResources=" + leanGasResources + ";" : "") + readCall, null);
         }
 
         void runQueue() {
@@ -1853,6 +1904,9 @@ public class MainActivity extends Activity {
                     }
                     if (w.readReq >= 0) w.finishRead(w.readReq, "{\"error\":\"Lookup replaced by another request\",\"code\":\"cancelled\"}");
                     w.readReq = reqId;
+                    w.leanGasResources = true; w.retriedGasResources = false; w.partialGasStores = null;
+                    try { w.gasRequestedGrade = new JSONObject(argsJson).optString("grade", "regular"); } catch (Exception ignored) { w.gasRequestedGrade = "regular"; }
+                    for (int i = 0; i < 4; i++) w.omittedGasResources.set(i, 0);
                     // once per page load (the page keeps a flag; a reload clears it and gets the reader again)
                     w.readCall = "if(window.__gasketRead!==" + reqId + "){window.__gasketRead=" + reqId + ";Promise.resolve((" + script + ")(" + reqId + "," + argsJson + ")).catch(function(){GasketSite.result(" + reqId + ",JSON.stringify({error:'Page reader failed',code:'reader'}));});}";
                     w.queue.clear();

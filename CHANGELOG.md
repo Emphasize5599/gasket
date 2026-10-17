@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.181 - 2026-10-17 (keyless test branch only)
+- Reduce background Maps graphics downloads and memory overhead while preserving station data.
+- Retry unreadable or stalled discovery once with normal resources, retaining partial results.
+- Reduce price-parser allocations; don't cache a quiet list as proven complete.
+
 ## 0.0.180 - 2026-10-17 (keyless test branch only)
 - Remember validated AI explanations and prepare all saved vehicles in the background, one at a time.
 - Keep completed explanations when switching cars; clear them with the lookup cache.
