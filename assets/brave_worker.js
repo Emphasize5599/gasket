@@ -66,12 +66,18 @@ async function (reqId, args) {
       if (bg) { send({ blocked: true }); return; }
     } else {
       const ai = aiText();
+      if(trims&&window.TrimMath){
+        const names=TrimMath.parse(ai||'',args), fallback=AI_FAILED.test(t)||Date.now()-t0>AI_WAIT;
+        if(names.length){same=ai===last?same+1:0;last=ai;if(same>=3){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
+        else if(fallback){const list=TrimMath.parse(t,args);if(list.length){send({text:'Trims: '+list.join(', '),src:'results'});return;}}
+        await sleep(400);continue;
+      }
       if (words) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
         if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= 3) { send({ text: ai.slice(0, 1500), src: 'ai' }); return; } }
         else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
-          const at = Math.max(0, t.search(trims ? /\btrim(s| levels?)\b/i : /spare tire/i));
-          if (at > 0) { send({ text: t.slice(at, at + 1500), src: 'results' }); return; }
+          const at = t.search(trims ? /\btrim(s| levels?)\b/i : /spare tire/i);
+          if (at >= 0) { send({ text: t.slice(at, at + 1500), src: 'results' }); return; }
         }
         await sleep(400); continue;
       }

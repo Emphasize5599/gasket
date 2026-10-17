@@ -112,13 +112,13 @@
   }
   mergeLookups();
   function save() {
-    if (window.__restoring) return;   // a restore in progress owns the settings
+    if (window.__restoring || window.__erasing) return;   // teardown owns storage, not late background completions
     var o = JSON.parse(JSON.stringify(S)), cc = splitLookups(o), cs = JSON.stringify(cc);
     N.saveSettings(JSON.stringify(o));
     if (cs !== lastLookups && N.kvPut) { try { N.kvPut('lookups', 'cars', JSON.stringify({ t: Date.now(), v: cc })); lastLookups = cs; } catch (e) { } }
     logSetup();
   }
-  // debug log: off unless turned on in Settings
+  // Detailed troubleshooting by default; explicit user opt-outs remain honored.
   if (S.debug == null) S.debug = true;
   if (!S.logLevel) S.logLevel = 5;
   if (S.osmPreview == null) S.osmPreview = true;
@@ -397,6 +397,7 @@
     if (pending && sitePending[key]) { sitePending[key] = false; siteNeedsCheck(key); sourceDone(); }
   };
   window.onSiteVerified = function (key) {
+    if(/^(brave|nhtsa|tirerack)$/.test(key))return; // vehicle verification must never start station/API discovery
     if(key==='gasweb'){status('Google Maps check closed. Retry the website price refresh when ready.');return;}
     var c = pendingCenter || me || map.getCenter();
     fetchAround(c.lat, c.lng);
@@ -939,11 +940,12 @@
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   function eraseAll() {
+    window.__erasing=true;
     CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
     if(window.PriceHistory)PriceHistory.reset();
     try { N.saveCache(''); } catch (e) { }
-    try { N.saveSettings(''); } catch (e) { }
-    if (window.FLog) FLog.clear();
+    try { N.saveSettings(JSON.stringify({debug:true,logLevel:5})); } catch (e) { }
+    if (window.FLog) { FLog.configure(0); FLog.clear(); }
     if (window.__eraseNoReload) { window.__erased = true; return; }
     location.reload();
   }
@@ -1475,7 +1477,7 @@
     get: function (ns, key, maxAgeMs) {
       try { if (!N.kvGet) return null; var s = N.kvGet(ns, key); if (!s) return null; var o = JSON.parse(s); return maxAgeMs && Date.now() - o.t > maxAgeMs ? null : o; } catch (e) { return null; }
     },
-    put: function (ns, key, v) { try { if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { } return false; },
+    put: function (ns, key, v) { if(window.__erasing)return false;try { if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { } return false; },
     clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
   };
   var lastScan=KV.get('gasmeta','last-scan');

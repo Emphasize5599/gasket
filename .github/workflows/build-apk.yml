@@ -30,6 +30,9 @@ on:
       - tests/fresh-car-lookups.test.js
       - tests/ai-defaults.test.js
       - tests/debug-log.test.js
+      - tests/erase-logging.test.js
+      - tests/brave-reader.test.js
+      - tests/brave-verification.test.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js
       - tests/vehicle-weather.test.js

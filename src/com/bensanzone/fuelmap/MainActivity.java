@@ -552,6 +552,14 @@ public class MainActivity extends Activity {
                 public void run() {
                     SiteWorker w = workers.get(key);
                     if (w != null && w.readReq == id) { w.finishRead(id, payload); return; }
+                    if ("brave".equals(key) && w != null && verifying == w && w.showReq == id) {
+                        // A human completed any check; the reader supplies the answer,
+                        // then return automatically without requiring copying or Done.
+                        w.showReq = -1; w.queue.clear();
+                        js("window.onNativeResult&&onNativeResult(" + id + ",JSON.parse(" + q(payload) + "))");
+                        endVerify();
+                        return;
+                    }
                     // Ignore late/duplicate background replies. Visible reads and price workers use onSiteResult.
                     if ("tirerack".equals(key) || isGasWorker(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
                     js("window.onSiteResult&&onSiteResult(" + q(key) + "," + id + ",JSON.parse(" + q(payload) + "))");
@@ -1809,6 +1817,7 @@ public class MainActivity extends Activity {
                 public void run() {
                     SiteWorker w = ensureWorker(key);
                     String script = w != null ? asset((isGasWorker(key) ? "gasweb" : key) + "_worker.js") : "";
+                    if ("brave".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
                     // Reuse the exact application matcher, not a weaker price/coordinate heuristic.
                     if (isGasWorker(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/pricing.js") + "\n" + asset("web/keylessgas.js") + "\nreturn (" + script + ")(reqId,args);}";
                     String url;
@@ -1876,6 +1885,7 @@ public class MainActivity extends Activity {
                 public void run() {
                     SiteWorker w = ensureWorker(key);
                     String script = w != null ? asset(key + "_worker.js") : "";
+                    if ("brave".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
                     String url;
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only NHTSA's recall page and Brave Search may be opened this way

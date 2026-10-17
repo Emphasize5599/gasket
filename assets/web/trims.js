@@ -1,7 +1,7 @@
 /* Trim names for a year / make / model, read from an answer's text. Pure: tested in Node (tests/trims.test.js). */
 (function (root) {
   'use strict';
-  var NOT_A_TRIM = /\b(is|are|was|were|the|with|offers?|offered|available|which|include[sd]?|including|levels?|trims?|models?|years?|version|starts?|starting|priced|msrp|price|engine|features?|comes?|option(al)?|package|lineup|range|answer|generated|verify|sources?)\b/i;
+  var NOT_A_TRIM = /\b(is|are|was|were|the|with|offers?|offered|available|which|include[sd]?|including|levels?|trims?|models?|years?|version|starts?|starting|priced|msrp|price|engine|features?|comes?|option(al)?|package|lineup|range|answer|generated|verify|sources?|separated|commas|then|each|following|search|question)\b/i;
   function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
   // Remove EPA test-mode qualifiers, not meaningful Hybrid/Prime/Cross names.
   function modelName(s) { return String(s || '').replace(/\s*\([^)]*\bmodes?\b[^)]*\)/gi, '').replace(/\s+(?:2WD|4WD|AWD|FWD|RWD|4x4)$/i, '').replace(/\s+/g, ' ').trim(); }
@@ -12,12 +12,14 @@
    */
   function parse(text, car) {
     var t = String(text || '').replace(/\s+/g, ' ');
-    var m = /\btrims?\s*:\s*/i.exec(t) || /\btrim(?: levels?)?(?: options)?\s+(?:are|include|includes)\s*:?\s*/i.exec(t);
+    var m = /\btrims?\s*:\s*/i.exec(t) || /\btrim(?: levels?)?(?: options)?\s*(?::|(?:are|include[sd]?|consist of)\s*:?\s*)/i.exec(t);
+    // Natural summaries do not always obey the requested "Trims:" format.
+    if(!m){var offered=/\b(?:available|offered)\s+in\s+(?:the\s+)?([^.!?]{2,180}?)\s+trims?\b/i.exec(t);if(offered&&/[,]|\band\b/i.test(offered[1]))return parse('Trims: '+offered[1],car);}
     if (!m) return [];
     var rest = t.slice(m.index + m[0].length, m.index + m[0].length + 600).replace(/\([^)]*\)/g, ' ');   // asides first: they hold commas ($35,000)
     rest = rest.split(/\s*(?:AI[- ]generated|Please verify|verify critical facts|Sources?\b|Ask a follow|Was this helpful)/i)[0];   // Brave's own words after its answer
     rest = rest.split(/(?:\.\s+[A-Z]|\. *$|\s+[-–—]\s+[A-Z][a-z]+\s+[a-z]|\bwhile\b)/)[0];   // the list, not the sentence after it
-    var drop = norm([car && car.make, car && car.model].join(' ')).split(' ').filter(function (w) { return w.length > 1 && !/^\d+$/.test(w); });
+    var drop = norm([car && car.make, modelName(car && car.model)].join(' ')).split(' ').filter(function (w) { return w.length > 1 && !/^\d+$/.test(w); });
     var seen = {}, out = [];
     rest.split(/\s*(?:,|;|•|\||\/|\band\b|\bor\b)\s*/i).forEach(function (raw) {
       var s = raw.replace(/\([^)]*\)/g, ' ').replace(/^\s*(?:\d{1,2}[.)]\s+|[-*]\s*)/, '').replace(/[.:!?"“”*]+$/g, '').replace(/^["“]+/, '').trim();
@@ -27,7 +29,7 @@
       var k = norm(s); if (!k || seen[k]) return;
       seen[k] = 1; out.push(s);
     });
-    return out.slice(0, 30);
+    return out.length?out.slice(0, 30):parse(t.slice(m.index+m[0].length),car); // skip an echoed query, try the actual answer
   }
   /** Several sources' lists as one, each name once (the first source's spelling wins). */
   function merge() {

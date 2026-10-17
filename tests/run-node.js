@@ -12,6 +12,7 @@ release.push('tire-estimate-ui','planner-worker');
 release.push('tasks','gemma','gemma-ui');
 release.push('trims');
 release.push('fresh-car-lookups','ai-defaults','debug-log');
+release.push('erase-logging','brave-reader','brave-verification');
 release.push('tire-date-layout');
 release.push('wet-tire-route');
 release.push('hazard-warning-matrix');

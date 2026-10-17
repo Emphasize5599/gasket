@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.179 - 2026-10-17 (keyless test branch only)
+- Failed Brave lookups offer a bot-check screen and read the answer automatically afterward.
+- Improved trim parsing for ordinary summaries and pages echoing the search question.
+- Fixed a late-save race after erasing data; detailed logging stays enabled on the fresh setup.
+
 ## 0.0.178 - 2026-10-17 (keyless test branch only)
 - Better NHTSA photo matching, with selected-model and broader photo searches.
 - Fixed EPA mode labels and erased trim caches interfering with vehicle lookups; added trim retry.

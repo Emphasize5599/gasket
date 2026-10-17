@@ -19,6 +19,9 @@ assert.deepEqual(T.parse('Trims: 2LT, 3LT, RS, Premier Please verify critical fa
 // no list at all
 assert.deepEqual(T.parse('The Accord is a midsize sedan sold since 1976.', accord), []);
 assert.deepEqual(T.parse('', accord), []);
+assert.deepEqual(T.parse('The 2024 Toyota Corolla Hybrid has three trim levels: LE, SE, and XLE.',{year:2024,make:'Toyota',model:'Corolla Hybrid (Normal/Eco modes)'}),['LE','SE','XLE']);
+assert.deepEqual(T.parse('Available in LE, SE and XLE trims.',accord),['LE','SE','XLE']);
+assert.deepEqual(T.parse('Answer with "Trims:" then each trim name, separated by commas. The 2024 Toyota Corolla Hybrid has three trim levels: LE, SE, XLE.',{year:2024,make:'Toyota',model:'Corolla Hybrid'}),['LE','SE','XLE']);
 // merging sources, and finding a typed trim in the list
 assert.deepEqual(T.merge(['LX', 'Sport'], ['sport', 'EX-L'], null), ['LX', 'Sport', 'EX-L']);
 assert.equal(T.find(['LX', 'EX-L'], 'ex l'), 'EX-L');

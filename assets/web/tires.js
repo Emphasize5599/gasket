@@ -843,8 +843,8 @@
     var prev = sp.lookup;
     spareBusy[c.id] = true; sp.lookup = { key: key, t: Date.now() };
     LG.info('car', 'Asking Brave Search about the spare tire' + (shown ? ' (shown to you)' : ''), key);
-    var ask = function () { return Promise.race([call(shown ? 'siteShow' : 'siteRead', 'brave', JSON.stringify({ url: spareUrl(c), bg: !shown, kind: 'spare' })), new Promise(function (ok) { if (!shown) setTimeout(function () { ok(null); }, 40000); })]); };
-    (shown ? ask() : G().braveSerial ? G().braveSerial(ask) : ask()).then(function (r) {
+    var ask = function () { return BraveLookup.read({url:spareUrl(c),kind:'spare'},{call:call,shown:shown,label:'spare tire',current:function(){return !window.__erasing&&G().car()===c&&spareKey(c)===key;}}); };
+    (G().braveSerial ? G().braveSerial(ask) : ask()).then(function (r) {
       spareBusy[c.id] = false;
       if (shown && !(r && r.text)) { sp.lookup = prev; save(); redraw(c); return; }   // closed before an answer: keep what it said before
       return readSpare(r && r.text, c.power).then(function (pick) {
