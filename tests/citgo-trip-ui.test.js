@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.clock.setFixedTime(new Date(2026,9,6,12));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);
- assert.equal(await p.getAttribute('#keylessWorkers','max'),'20');await p.fill('#keylessWorkers','20');await p.dispatchEvent('#keylessWorkers','input');await p.click('#sDone');
+ await require('./settings-ui')(p,'map');assert.equal(await p.getAttribute('#keylessWorkers','max'),'20');await p.fill('#keylessWorkers','20');await p.dispatchEvent('#keylessWorkers','input');await p.click('#sDone');
  assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),20);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   const A=__app,S=A.S;S.cars[0].tank=2.5;S.trip.fuel={mode:'miles',miles:'60'};S.trip.milesLeft='60';S.trip.bufferMi=5;S.trip.minSave=0;S.trip.fillUp=true;S.brands={citgo:true};S.citgoTier='club';S.citgoUsed={};S.citgoHistory={};
@@ -25,7 +25,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('[data-citgo-fill="0"]');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','cancel does not redeem');
  await p.click('[data-citgo-fill="0"]');await p.click('#cfmYes');await p.waitForFunction(()=>Pricing.citgoBonus(__app.S,new Date())==='none');
  assert.equal(await p.evaluate(()=>__trip.state().result.plan.stops.filter(s=>s.citgoRedemption).length),0,'confirm reprices existing choices without network');assert.equal(await p.evaluate(()=>__paid),0);
- await p.evaluate(()=>window.__priorPlan=__trip.state().result.plan);await p.click('#tClose');await p.click('#btnSettings');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__trip.state().result.plan===__priorPlan),true,'unrelated settings do not discard the chosen plan/top-up');
- await p.click('#btnSettings');assert.equal(await p.locator('[data-cu="tuesday"]').evaluate(e=>e.classList.contains('on')),true);await p.click('[data-cu="tuesday"]');await p.click('#sDone');assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','settings can undo actual redemption');
+ await p.evaluate(()=>window.__priorPlan=__trip.state().result.plan);await p.click('#tClose');await p.click('#btnSettings');await require('./settings-ui')(p,'map');await p.click('#workerAuto');await p.click('#sDone');assert.equal(await p.evaluate(()=>__trip.state().result.plan===__priorPlan),true,'unrelated settings do not discard the chosen plan/top-up');
+ await p.click('#btnSettings');await require('./settings-ui')(p,'savings');assert.equal(await p.locator('[data-cu="tuesday"]').evaluate(e=>e.classList.contains('on')),true);await p.click('[data-cu="tuesday"]');await p.click('#sDone');assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','settings can undo actual redemption');
  assert.equal(errors.length,0,errors.join('\n'));await p.close();
 }console.log('320/448px CITGO first-fill UI, 20-reader settings, confirmed redemption/cancel/undo and no-API repricing passed');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

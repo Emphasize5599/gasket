@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.176 - 2026-10-17 (keyless test branch only)
+- Shorter Advice with expandable explanations; important warnings and acknowledgments remain visible.
+- Fuel economy and expandable car details now live in Your car.
+- Settings reorganized into seven focused submenus.
+- New five-step onboarding, with optional keys, savings setup and explicit local-AI download consent.
+
 ## 0.0.175 - 2026-10-16 (keyless test branch only)
 - Route review has a square Back arrow beside No/Yes; remembering off asks again when returning to Hazards and never writes temporary answers into settings.
 - Demo vehicles prefill fuel/charge and trip-planning values.

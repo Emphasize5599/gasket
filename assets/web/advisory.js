@@ -177,7 +177,7 @@
     stale = false;
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
-    var h = '<p class="lead small keep adv-lead">Things worth knowing about your ' + esc(G().shortName(c)) + ' before you drive.</p>';
+    var h = '';
     h += recallCard(c) + (window.Gemma ? Gemma.card(c) : '') + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);
@@ -274,7 +274,8 @@
     return list.slice().sort(function (a, b) { return lv(b) - lv(a) || ((dmy(b.date) || 0) - (dmy(a.date) || 0)); });
   }
   function tireAdvice(c) { return window.Tires ? Tires.advice(c) : []; }
-  function roadsideCard(){return '<div class="card adv-card" id="advRoadside"><h3>Emergency cash <button type="button" class="qi" data-sub-help id="advTowHelp" aria-label="Emergency towing cash guidance">?</button></h3><div class="adv-item due"><p>Consider keeping $250 available for a local tow to a repair or tire shop. Some operators require cash; confirm the total and payment method before dispatch.</p></div></div>';}
+  function roadsideCard(){return '<div class="card adv-card" id="advRoadside"><h3>Emergency cash <button type="button" class="qi" data-sub-help id="advTowHelp" aria-label="Emergency towing cash guidance">?</button></h3><p class="lead small keep">Some operators require cash. Consider a $250 tow reserve; confirm price and payment first.</p></div>';}
+  function more(html,label){return '<details class="adv-more"><summary>'+esc(label||'Details')+'</summary>'+html+'</details>';}
   function roadsideHelp(){
     if(window.__closeQ)window.__closeQ();
     A.subPage('Emergency cash for towing','<div class="card"><h3>A planning allowance, not a quote</h3><p>$250 is a suggested cash reserve, not a national median or a guarantee that a tow will cost that much. AAA describes typical out-of-pocket towing costs of $150–$250, depending on area and distance. We found no reliable national median specifically for a tow to the nearest repair or tire shop.</p><p>Some roadside operators publish cash-only payment policies. Others accept cards, and local rules may require card acceptance. A cash-only demand is not automatically lawful.</p><p>Ask for the full price, destination and accepted payment methods before dispatch; get a receipt. Check roadside-assistance or insurance coverage first. A trailer, heavy vehicle, rural location, after-hours call, recovery work or a long tow may need a larger reserve. Repairs and replacement tires are extra. Keep emergency cash secure, not visibly in the vehicle.</p></div><div class="card"><h3>Sources · checked October 14, 2026</h3><div class="btns wrap"><button class="btn tonal sm" data-tow-source="https://mwg.aaa.com/news/press-release/april-22-2025">AAA towing costs</button><button class="btn tonal sm" data-tow-source="https://cameronstreettowing.com/roadside-assistance-and-lock-out/">Operator payment example</button><button class="btn tonal sm" data-tow-source="https://www.nyc.gov/site/dca/consumers/shopping-services-towing.page">NYC payment rights</button></div></div>',function(body){body.querySelectorAll('[data-tow-source]').forEach(function(b){b.onclick=function(){N.openUrl(b.dataset.towSource);};});});
@@ -283,7 +284,8 @@
     var l = tireAdvice(c); if (!l.length) return '';
     return '<div class="card adv-card adv-tires' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advTires"><h3>Tires</h3>' +
       l.map(function (x) {
-        return '<div class="adv-item' + (x.level === 'done' ? ' done' : x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(x.text) + '</p>' +
+        var short=x.check?(x.check.id==='tires'?'Check cold tires monthly. Use the driver-door pressure label.':'Check the spare monthly and before long trips. Follow its pressure and driving limits.'):x.text;
+        return '<div class="adv-item' + (x.level === 'done' ? ' done' : x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div><p>' + esc(short) + '</p>'+(short!==x.text?more('<p>'+esc(x.text)+'</p>'):'') +
           (x.check ? '<label class="adv-chk"><input type="checkbox" data-tchk="' + esc(x.check.id) + '"' + (x.check.on ? ' checked' : '') + '><span>' + esc(x.check.label) + '</span></label>' : '') + '</div>';
       }).join('') + '</div>';
   }
@@ -291,19 +293,21 @@
   function climateCard(c) {
     var l = window.Climate ? Climate.advice(c) : []; if (!l.length) return '';
     return '<div class="card adv-card adv-clim' + (l.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '') + '" id="advClimate"><h3>Cabin climate</h3>' + l.map(function (x) {
-      return '<div class="adv-item' + (x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div>' + x.paras.map(function (t) { return '<p>' + esc(t) + '</p>'; }).join('') +
+      var body=x.paras.map(function(t){return '<p>'+esc(t)+'</p>';}).join('');
+      if(x.check)body='<p>Use fresh air normally; recirculate only briefly. Stop safely if drowsy or visibility is poor.</p>'+more(body,'When to use recirculate');
+      else if(x.level!=='warn')return '<div class="adv-item">'+more(body,x.title)+'</div>';
+      return '<div class="adv-item' + (x.level === 'warn' ? ' due' : '') + '"><div class="adv-t"><b>' + esc(x.title) + '</b></div>' + body +
         (x.check ? '<label class="adv-chk"><input type="checkbox" data-cchk="' + esc(x.check.id) + '"' + (x.check.on ? ' checked' : '') + '><span>' + esc(x.check.label) + '</span></label>' : '') + '</div>';
     }).join('') + '</div>';
   }
   function adviceCards(c) {
     var l = adviceFor(c);
-    if (!l.length) return '<div class="card adv-card"><h3>Engine-friendly settings</h3><div class="lead small keep">Nothing to change. Your ' + esc(G().shortName(c)) + ' doesn\'t have features that trade engine life for a little gas, as far as Gasket knows. ' +
-      'If it does, check them under About this car in the Garage.</div></div>';
+    if (!l.length) return '';
     return '<div class="card adv-card"><h3>Worth turning off ' + A.qBtn('Some features save a little gas but put extra wear on the engine. Gasket suggests turning these off. The choice is yours, and it doesn\'t mean there\'s anything wrong with your car.') + '</h3>' +
       l.map(function (a, i) {
         var ch = choice(c, a);
         return '<div class="adv-item' + (ch ? ' done' : '') + '"><div class="adv-t"><b>' + esc(a.title) + '</b>' + A.qBtn(a.q) + (ch ? '<span class="adv-tag">' + (ch === 'off' ? 'Turned off' : 'Kept on') + '</span>' : '') + '</div>' +
-          (ch ? '' : '<p>' + esc(a.what) + ' ' + esc(a.why) + '</p><p><b>How:</b> ' + esc(a.how) + '</p>') +
+          (ch ? '' : more('<p>' + esc(a.what) + ' ' + esc(a.why) + '</p><p><b>How:</b> ' + esc(a.how) + '</p>','Why and how')) +
           '<div class="btns wrap">' + (ch ? '<button class="btn tonal sm" data-adv="' + i + '" data-v="">Change</button>' :
             '<button class="btn tonal sm" data-adv="' + i + '" data-v="off">I\'ve turned it off</button><button class="btn tonal sm" data-adv="' + i + '" data-v="keep">Keep it on</button>') + '</div></div>';
       }).join('') + '</div>';

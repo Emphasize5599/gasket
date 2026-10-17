@@ -1,0 +1,25 @@
+/* Keep live settings controls in the DOM: submenu navigation never discards a draft. */
+(function(root){'use strict';
+ var groups=[['map','Map & stations','Display, discovery and refresh'],['trip','Trip defaults','Routes, speed limits and energy prices'],['savings','Savings','Memberships and rewards'],['connections','Connections & usage','Optional keys and API budgets'],['ai','Local AI','Download and manage the larger model'],['data','Data & privacy','Backups, exports and deletion'],['help','Help & troubleshooting','Setup guide, logs and app information']];
+ var current='',page=null;
+ function attach(A,pg){
+  page=pg;current='';var body=pg.querySelector('.settings-body'),bar=pg.querySelector('.settings-bar'),views={};
+  var home=document.createElement('div');home.className='settings-home';home.innerHTML=groups.map(function(g){return '<button type="button" class="settings-link" data-settings-group="'+g[0]+'"><span><b>'+A.esc(g[1])+'</b><small>'+A.esc(g[2])+'</small></span><span aria-hidden="true">›</span></button>';}).join('');
+  groups.forEach(function(g){var e=document.createElement('div');e.className='settings-group hidden';e.dataset.settingsView=g[0];views[g[0]]=e;});
+  var buckets={'Station discovery':'map','Website readers':'map','Official price sources':'map','Prices':'map','Search':'map','Trip planner':'trip','EV & hydrogen':'trip','Discounts':'savings','Bad CITGO stations':'savings','Google API key · recommended':'connections','Routes API — separate budget':'connections','Local AI explanations · optional':'ai','General':'data','Your data':'data','Debugging':'help','About':'help'};
+  Array.from(body.children).forEach(function(e){if(e.id==='sDone')return;var title=e.querySelector('h3'),key=e.id==='gemmaSettings'?'ai':buckets[title&&title.textContent.trim()]||'help';views[key].appendChild(e);});
+  // These are connections, not EV driving preferences.
+  var keys=document.createElement('div');keys.className='card';keys.innerHTML='<h3>Other optional keys</h3>';
+  ['nrelKey','fuelKey'].forEach(function(id){var e=A.$(id);if(e)keys.appendChild(e.closest('.field'));});views.connections.appendChild(keys);
+  var t=A.S.trip||{},defaults=document.createElement('div');defaults.className='card';defaults.innerHTML='<h3>Planning defaults</h3><div class="grid2">'+[['prefBuffer','Buffer (miles)',t.bufferMi,1],['prefMinSave','Minimum savings ($)',t.minSave,.01],['prefDetour','Max. extra time (min)',t.maxDetourMin,.5],['prefAltSave','Worth switching for ($)',t.altMinSave,.01]].map(function(x){return '<label class="nf"><span>'+x[1]+'</span><input type="number" inputmode="decimal" min="0" step="'+x[3]+'" id="'+x[0]+'" value="'+A.esc(x[2]==null?'':x[2])+'"></label>';}).join('')+'</div>';views.trip.prepend(defaults);
+  var tour=document.createElement('button');tour.type='button';tour.className='btn tonal';tour.id='settingsTour';tour.textContent='Show setup walkthrough';tour.onclick=function(){A.$('sDone').click();if(root.Onboarding)Onboarding.start(true);};views.help.prepend(tour);
+  // Hide long descriptions, not values, counters, warnings or controls.
+  pg.querySelectorAll('.lbl > small:not(.keep):not([id])').forEach(function(s){var d=document.createElement('details');d.className='settings-help';d.innerHTML='<summary>Details</summary>';s.replaceWith(d);d.appendChild(s);});
+  var done=A.$('sDone'),footer=document.createElement('footer');footer.className='settings-footer';footer.appendChild(done);pg.appendChild(footer);
+  body.appendChild(home);groups.forEach(function(g){body.appendChild(views[g[0]]);});
+  bar.innerHTML='<button type="button" class="btn tonal settings-back hidden" id="settingsBack" aria-label="Back to Settings">‹</button><h1 id="settingsTitle">Settings</h1>';
+  function show(key){current=key||'';home.classList.toggle('hidden',!!current);groups.forEach(function(g){views[g[0]].classList.toggle('hidden',g[0]!==current);});A.$('settingsBack').classList.toggle('hidden',!current);A.$('settingsTitle').textContent=current?groups.filter(function(g){return g[0]===current;})[0][1]:'Settings';body.scrollTop=0;}
+  home.querySelectorAll('button').forEach(function(b){b.onclick=function(){show(b.dataset.settingsGroup);};});A.$('settingsBack').onclick=function(){show('');};pg._settingsHome=function(){show('');};
+ }
+ root.SettingsNav={attach:attach,back:function(){if(!page||page.classList.contains('hidden')||!current)return false;page._settingsHome();return true;}};
+})(window);

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     const p = await b.newPage({ viewport: { width: 320, height: 900 } }), errors = [];
     p.on('pageerror', (e) => errors.push(e.message));
     await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
-    await p.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop'); await p.click('#sDone');
+    await require('./settings-ui')(p,'connections');await p.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop'); await p.click('#sDone');
     await p.evaluate(fs.readFileSync('tests/trip_mocks.js', 'utf8'));
     await p.evaluate(() => {   // the three places, as Google's lookup would find them
       const find = __mocks.find, P = { 'Arkansas State Capitol, Little Rock, AR': ['P-cap-ar', 34.7465, -92.2890], '100 Main St, Testville, AR': ['P-test-ar', 34.1, -93.0], 'Texas State Capitol, Austin, TX': ['P-cap-tx', 30.2747, -97.7404] };

@@ -31,7 +31,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{__incomplete=true;__app.S.trip.departNow=false;__app.S.trip.depart=new Date(Date.now()+86400000).toISOString().slice(0,16);__trip.step(5);});await p.waitForFunction(()=>__weatherReads===4);
  assert.equal(await p.locator('.hz-fit strong').evaluateAll(es=>es.every(e=>e.textContent.includes('Not ranked'))),true,'missing data is never promoted to best');
  if(process.env.UI_SHOTS)await p.screenshot({path:path.join(process.env.UI_SHOTS,'vehicle-fit-'+width+'.png')});
- await p.evaluate(()=>__trip.step(1));await p.check('#clAcBroken');await p.evaluate(()=>__trip.close());await p.click('#btnSettings');await p.click('#exAll');
+ await p.evaluate(()=>__trip.step(1));await p.check('#clAcBroken');await p.evaluate(()=>__trip.close());await p.click('#btnSettings');await require('./settings-ui')(p,'data');await p.click('#exAll');
  const exported=await p.evaluate(()=>JSON.parse(__saved.text));assert.equal(exported.settings.cars[0].climate.acBroken,true);assert.equal(exported.settings.cars[0].info.hazardProfile,'low');
  await p.evaluate(()=>{__app.N.backupAll=(id)=>{window.__backupPrefs=JSON.parse(__app.N.loadSettings());onNativeResult(id,{path:'test backup',prefs:1,kv:0});};});await p.click('#bkSave');
  await p.waitForFunction(()=>!!window.__backupPrefs);assert.equal(await p.evaluate(()=>__backupPrefs.cars[0].climate.acBroken),true);

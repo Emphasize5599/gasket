@@ -119,7 +119,7 @@ async function worker(pg,body,raw,status=200,args={}){
   await ui.evaluate(()=>{window.__paid=0;window.__xom=async()=>0;__app.S.setupDone=true;__app.N.search=()=>__paid++;__app.S.keylessRegular=true;__app.S.brands={exxon:true};__app.S.apiKey='TEST';__app.S.radiusMi=8;window.KeylessGas.discover=async()=>({stations:[{id:'k',name:'Exxon',brand:'exxon',lat:34.745,lng:-92.29,prices:{regular:{price:3.12,updated:null}},google:true,source:'Google Maps web'}],errors:[],details:[{exhausted:false}]});});
   await ui.click('#sDone');
   // Settings form overwrites S, so enable using the actual checkbox and leave the API key installed.
-  await ui.click('#btnSettings');await ui.check('[data-k="keylessRegular"]');await ui.fill('#apiKey','TEST');await ui.click('#sDone');
+  await ui.click('#btnSettings');await require('./settings-ui')(ui,'map');await ui.check('[data-k="keylessRegular"]');await require('./settings-ui')(ui,'connections');await ui.fill('#apiKey','TEST');await ui.click('#sDone');
   await ui.evaluate(()=>__app.fetchAround(34.745,-92.29));
   // Capture one settled frame: the clock-driven map redraw can replace this message between separate reads.
   const discovered=await (await ui.waitForFunction(()=>{const status=document.getElementById('status').textContent,rows=document.getElementById('rows').textContent;return status.includes('Website discovery')&&rows.includes('Exxon')?{status,rows}:false;})).jsonValue();

@@ -1253,8 +1253,9 @@
       bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };
     });
     $('sDemo').onclick = function () {
-      if(window.Garage)Garage.installDemo();closeSettings(false);
+      closeSettings(false);if(window.Garage)Garage.installDemo();
     };
+    if(window.SettingsNav)SettingsNav.attach(window.__app,pg);
   }
   function logHeader() {
     return 'Gasket ' + (N.appVersion ? N.appVersion() : '') + ' debug log · ' + new Date().toString() + ' · level ' + S.logLevel + '\n';
@@ -1318,6 +1319,7 @@
     if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
     S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);
     S.h2Price = Math.max(0, parseFloat($('h2Price').value) || 36);
+    if($('prefBuffer')){var tripPrefs=S.trip||(S.trip={});[['prefBuffer','bufferMi'],['prefMinSave','minSave'],['prefDetour','maxDetourMin'],['prefAltSave','altMinSave']].forEach(function(x){var v=parseFloat($(x[0]).value);if(Number.isFinite(v))tripPrefs[x[1]]=Math.max(0,v);});}
     pg.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
       var k = cb.dataset.k;
       if (k.indexOf('brand:') === 0) S.brands[k.slice(6)] = cb.checked; else S[k] = cb.checked;
@@ -1446,6 +1448,9 @@
   window.onBack = function () { if (window.__cfmClose) { window.__cfmClose(); return true; } if (window.Tasks && Tasks.back()) return true; if (document.querySelector('.qpop')) { window.__closeQ(); return true; } if (window.__subClose) { window.__subClose(); return true; } var lp = $('logPage'); if (lp && !lp.classList.contains('hidden')) { lp.classList.add('hidden'); return true; }
     if (!$('blPage').classList.contains('hidden')) { $('blPage').classList.add('hidden'); return true; }
     if (!$('licPage').classList.contains('hidden')) { $('licPage').classList.add('hidden'); return true; }
+    if(window.Onboarding&&Onboarding.back())return true;
+    if(window.SettingsNav&&SettingsNav.back())return true;
+    if(!$('settings').classList.contains('hidden'))return closeSettings(true);
     return (window.__tripBack && window.__tripBack()) || closeSettings(true) || closeDetail() || (function () {
     if ($('listSheet').classList.contains('open')) { setListOpen(false); return true; } return false; })(); };
 
@@ -1463,7 +1468,7 @@
   loadCache();
   if (lastFetch) map.setView([lastFetch.lat, lastFetch.lng], zoomForRadius(S.radiusMi));
   render();
-  if (!S.apiKey && !S.setupDone) openSettings(true);
+  // The short first-run walkthrough starts after all feature modules have loaded.
   N.locate();
   window.addEventListener('resize', sizeSheet);
   setTimeout(function () { loadLogos(); }, 0);

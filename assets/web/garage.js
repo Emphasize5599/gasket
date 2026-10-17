@@ -241,20 +241,18 @@
     if(editing&&(!editSnap||editSnap.id!==c.id))editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};
     // the car's editor is its own submenu: the tile keeps the picture (its ids live in one place at a time)
     var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><span class="g-top-btns">' + (publicPhoto(c) ? '<button class="btn tonal sm g-newpic" id="gNewPic">' + REFRESH + 'New photo</button>' : '') + '<button class="btn tonal sm" id="gEdit">Edit</button><button type="button" class="btn primary sm g-add" data-car="+">+ Add car</button></span></div>' + (editing ? '' : carousel(c));
-    h += '</div>';
-    h += '<div class="card spd" id="tSpeed"></div>';
-    h += '<div class="card g-econ"><h3>' + U.econ + '</h3>';
+    h += '<section class="g-econ g-car-section"><h4>' + U.econ + '</h4>';
     if (hasEpa(c)) {
       var tile = function (v, label, q) { return '<div><b>' + fmtPer(v) + '</b><span>' + label + '</span>' + A.qBtn(q + (EPA_Q[k] || '')) + '</div>'; };
       h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city) + tile(c.epa.hwy, 'Highway', EPA_Q.hwy) +
         tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb) + rangeTile(c) + '</div>';
       if (k === 'ev' && c.epa.kwh) h += '<div class="lead small keep">EPA: ' + c.epa.kwh.city + ' / ' + c.epa.kwh.hwy + ' / ' + c.epa.kwh.comb + ' kWh per 100 mi' + (c.epa.range ? ' · ' + c.epa.range + ' mi range' : '') + '</div>';
-    } else h += '<div class="msg">No EPA rating selected. Look up a rated version under Edit, or enter your city/highway mileage under Observed mileage. Some heavy-duty vehicles have no EPA rating.</div>';
-    if(c.demoMileage)h += '<div class="lead small keep demo-data-note" style="color:var(--warn)">'+(hasEpa(c)?'':'Demo mileage is illustrative; this vehicle has no EPA rating. ')+(c.entries&&c.entries.length?'Demo mileage log, ':'')+'capacity, tire wear and configuration presets are illustrative, not EPA data. Verify these sample values before travel.</div>';
+    } else h += '<p class="lead small keep">No EPA rating. Enter your observed mileage below.</p>';
+    h += '</section><details class="g-obs g-info g-car-section" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary>About this car</summary>' + infoView(c);
+    if(c.demoMileage)h += '<p class="lead small keep demo-data-note" style="color:var(--warn)">Demo setup values are illustrative; verify them before travel.'+(hasEpa(c)?' EPA mileage is sourced from the EPA.':' Mileage is illustrative, not EPA data.')+'</p>';
     if(c.demoFeatures)h+='<p class="lead small keep">Demo coverage: '+esc(c.demoFeatures)+'</p>';
-    h += '</div>';
+    h += '</details></div><div class="card spd" id="tSpeed"></div>';
     h += '<details class="card g-obs" id="gObs"' + (obsOpen ? ' open' : '') + '><summary>Observed mileage</summary>' + obsPanel(c) + '</details>';
-    h += '<details class="card g-obs g-info" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary><span>About this car<small>' + esc(infoLine(c)) + '</small></span></summary>' + infoView(c) + '</details>';
     h += '<details class="card g-obs g-tires" id="gTires"' + (tiresOpen ? ' open' : '') + '><summary><span>Tires<small id="gTiresLine">' + (window.Tires ? Tires.summaryHtml(c) : '') + '</small></span></summary><div id="gTiresIn"></div></details>';
     h += '<details class="card g-obs g-clim" id="gClimate"' + (climOpen ? ' open' : '') + '><summary><span>Climate control</span></summary><div id="gClimIn"></div></details>';
     host.innerHTML = h;

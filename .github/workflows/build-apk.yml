@@ -24,6 +24,8 @@ on:
       - tests/routechoices.test.js
       - tests/routechoices-ui.test.js
       - tests/route-memory-ui.test.js
+      - tests/ui-flow.test.js
+      - tests/settings-ui.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js
       - tests/vehicle-weather.test.js

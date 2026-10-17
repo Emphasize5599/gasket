@@ -79,14 +79,15 @@
   function answer(c){if(!state.enabled)return null;try{return cache.get(input(c).key)||null;}catch(e){return null;}}
   function card(c){
     if(!state.enabled)return '';
+    if(!state.ready&&!state.error&&!lastIssue)return ''; // Setup/download belongs in Settings and the task dock, not another Advice tile.
     var got=answer(c),esc=A.esc;
     if(got){
       // the AI's summary and why its top findings matter; the checked findings themselves, folded, are the record
       var facts=got.pack.facts,find=function(id){return facts.filter(function(f){return f.id===id;})[0];};
-      var top=got.answer.top.map(function(a){var f=find(a.id);return f?'<li class="'+(f.level==='warn'?'warn':'')+'"><b>'+esc(f.title)+'</b> '+esc(a.why)+'<small>'+esc(f.text)+'</small></li>':'';}).join('');
+      var top=got.answer.top.map(function(a){var f=find(a.id);return f?'<li class="'+(f.level==='warn'?'warn':'')+'"><b>'+esc(f.title)+'</b> '+esc(a.why)+'</li>':'';}).join('');
       return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup · AI-written</h3><div class="gemma-answer"><p>'+esc(got.answer.summary)+'</p>'+(top?'<ul class="gemma-top">'+top+'</ul>':'')+'</div>'+
         '<details class="gemma-all"><summary><span>All checked findings ('+facts.length+')</span></summary><ul>'+facts.map(function(f){return '<li class="'+(f.level==='warn'?'warn':'')+'">'+esc(f.text)+'</li>';}).join('')+'</ul></details>'+
-        '<p class="lead small keep">Written by the on-phone AI from Gasket’s checked findings, not a tire inspection.</p></div>';
+        '<p class="lead small keep">AI summary—not a tire inspection.</p></div>';
     }
     var eligible=false;try{eligible=input(c).pack.setup.tires.some(function(t){return t.depth!=null;});}catch(e){}
     var label=state.ready?(running?'Local AI is preparing an explanation.':eligible?'Checked tire notices are available below.':'Add tire mileage and type, or measured tread, before requesting an explanation.'):'Download Gemma in Settings to enable local explanations.';
@@ -113,7 +114,7 @@
   }
   function retry(){var c=current();if(c)try{attempted.delete(input(c).key);}catch(e){}lastIssue='';schedule();}
   var slot=document.getElementById('gemmaSlot');if(slot){slot.outerHTML=settingsHtml();bindSettings();}   // Settings opened before this file loaded (first-time setup)
-  window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry};
+  window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry,setEnabled:function(on){return command(on?'enable':'disable');}};
   window.addEventListener('garagechange',function(){if(running){var c=current();try{if(!c||input(c).key!==running.key){running.cancelled=true;command('cancelAdvice');}}catch(e){command('cancelAdvice');}}schedule();});
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){}});
   setTimeout(function(){if(A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){lastIssue='Local model status could not be read.';}},0);

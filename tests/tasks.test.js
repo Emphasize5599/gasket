@@ -9,7 +9,7 @@ await p.evaluate(()=>Tasks.upsert('probe',{text:'Reading hazards…'}));await p.
 {const jb=await p.locator('#jobBar').boundingBox(),hd=await p.locator('.tp-head').boundingBox();assert(jb.x<=14,'no counter: the status bar is not indented');assert(hd.y>=jb.y+jb.height,'a status: the menu moves down for it');}
 await p.evaluate(()=>{Tasks.remove('probe');__trip.close();});await p.waitForFunction(()=>!document.body.classList.contains('trip-on'));
 // popups clear the status bar too: a themed picker's card (and its ✕) starts below the dock
-await p.click('#btnSettings');await p.waitForSelector('#citgoTier');await p.evaluate(()=>Tasks.upsert('probe2',{text:'Downloading Gemma…',cancel:()=>{}}));await p.waitForFunction(()=>!document.getElementById('taskHub').classList.contains('hidden'));
+await p.click('#btnSettings');await require('./settings-ui')(p,'savings');await p.waitForSelector('#citgoTier');await p.evaluate(()=>Tasks.upsert('probe2',{text:'Downloading Gemma…',cancel:()=>{}}));await p.waitForFunction(()=>!document.getElementById('taskHub').classList.contains('hidden'));
 await p.locator('#citgoTier').scrollIntoViewIfNeeded();await p.click('#citgoTier');await p.waitForSelector('.app-picker-card');
 {const hub=await p.locator('#taskHub .task-top').boundingBox(),card=await p.locator('.app-picker-card').boundingBox();assert(card.y>=hub.y+hub.height,'picker below the status bar: '+JSON.stringify({hub,card}));const pad=await p.locator('.app-picker').evaluate(e=>parseFloat(getComputedStyle(e).paddingTop));assert(pad>=hub.y+hub.height,'a tall picker list also starts below it: '+pad);}
 await p.keyboard.press('Escape');await p.waitForSelector('.app-picker',{state:'detached'});await p.evaluate(()=>Tasks.remove('probe2'));await p.click('#sDone');
