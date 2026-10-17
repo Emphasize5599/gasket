@@ -55,9 +55,13 @@ async function worker(pg,body,raw,status=200,args={}){
   const discovery=await worker(pg,paged,JSON.stringify([]),200,{mode:'discover',targets:[{featureId:'0x1:0x2'}]});
   assert.equal(discovery.stores.length,6,'discovery loads all five additional pages, even with a matched target');
   assert(discovery.detail.scrolls>=5);assert.equal(discovery.detail.exhausted,true);assert.equal(discovery.error,null,'unpriced stations are valid discovery results');
+  // A full first page without pagination merits recovery; ordinary short quiet lists do not.
+  const firstPage='<div role="feed" style="height:180px;overflow:auto">'+Array.from({length:20},(_,i)=>link('0x'+(i+1).toString(16)+':0xff')).join('')+'</div>';
+  const stalledPage=await worker(pg,firstPage,JSON.stringify([]),200,{mode:'discover'});
+  assert.equal(stalledPage.code,'pagination_stalled');assert.equal(stalledPage.detail.paginationStalled,true);assert.equal(stalledPage.detail.exhausted,false);
   // a short list with no end marker: done once it's at the bottom and quiet for 4 s, not after the full 12 s
   const short=await worker(pg,'<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'</div>',JSON.stringify([]),200,{mode:'discover'});
-  assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);assert.equal(short.detail.exhausted,false,'silence is not proof of exhaustion and must not cache a possibly stalled list');
+  assert.equal(short.code,'incomplete_feed');assert.equal(short.detail.paginationStalled,false);assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);assert.equal(short.detail.exhausted,false,'silence is not proof of exhaustion and must not cache a possibly stalled list');
   const late='<div role="feed" style="height:100px;overflow:auto"><div style="height:400px">'+link('0x1:0x2')+'</div></div><script>setTimeout(()=>{document.querySelector(\'[role="feed"]\').onscroll=function(){if(this.scrollTop+this.clientHeight<this.scrollHeight-4)return;this.insertAdjacentHTML(\'beforeend\',\'<div>End of the list</div>\');this.onscroll=null;};},1500);</script>';
   const lateScroll=await worker(pg,late,JSON.stringify([]),200,{mode:'discover'});
   assert.equal(lateScroll.detail.stopReason,'end','late pagination listener receives a fresh bottom scroll event');

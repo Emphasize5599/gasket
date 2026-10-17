@@ -1,6 +1,6 @@
 # Open work
 
-The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.181**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
+The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.182**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
 Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 48 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
@@ -44,7 +44,7 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 
 ## perf — measurements and efficiency
 
-16. [ ] **Find new ways past the station-scan performance ceiling.** Continue beyond 0.0.181's measured desktop graphics/telemetry omission, lower-allocation parser and stalled-feed recovery. Investigate redundant work, scheduling, shared route coverage, reader lifecycle and persistence overhead while preserving coverage, cancellation and stability. Measure actual phone concurrency/memory and stress-test the optional 50-reader ceiling; desktop memory savings are not proof of safe phone limits. Measurements and rejected experiments: [reader performance](docs/READER_PERFORMANCE.md). Related to item 17.
+16. [ ] **Find new ways past the station-scan performance ceiling.** Continue beyond 0.0.182's measured desktop graphics filter, lower-allocation parser, selective recovery and opt-in aggressive admission. Phone logs confirmed large-AI memory competition; compare identical routes after model work finishes, then standard/aggressive 20 and 50 workers. Investigate redundant work, scheduling, shared route coverage, reader lifecycle and persistence overhead while preserving coverage, cancellation and stability. Measure actual phone concurrency/memory and stress-test the optional 50-reader ceiling; desktop memory savings are not proof of safe phone limits. Measurements and rejected experiments: [reader performance](docs/READER_PERFORMANCE.md). Related to item 17.
 
 17. [ ] **Actual web traffic and cache efficiency.** Extend 0.0.181's desktop transfer/renderer-memory and exact-frame parser measurements to actual Android WebView cache hits/misses and more areas/grades. Compare station identities and prices, not only counts; check recovery frequency and non-regular price availability on phones. Investigate safe response reuse beyond the measured graphics filter; a fetch/XHR observer and disabling WebGL were measured and rejected. See [reader performance](docs/READER_PERFORMANCE.md); related to item 16.
 

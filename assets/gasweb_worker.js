@@ -149,13 +149,14 @@ async function (reqId, args) {
     } finally {clearTimeout(timer);}
   };
   try {
-    let stable=0, last='', scrolls=0;
+    let stable=0, last='', scrolls=0, lastFeed=null;
     while (Date.now()-started < deadline) {
       const pageText=document.body&&document.body.innerText||'';
       limited=/limited view of Google Maps/i.test(pageText);
       if (blocked(pageText)) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
       const selecting=selectGrade();
       const feed=readRows();
+      if(feed)lastFeed=feed;
       // A lean page with no readable feed should not spin for the entire three-minute
       // discovery deadline. Native retries once with normal graphics under the same deadline.
       if(!feed&&!loaded&&window.__gasketLeanResources===true&&Date.now()-started>=8000){stopReason='no_feed';break;}
@@ -184,7 +185,7 @@ async function (reqId, args) {
         // Scrolling the same exhausted/non-scrollable feed three times adds seconds but no rows.
         if(Math.abs(feed.scrollTop-before)<1&&!discovery){stopReason='stalled';break;}
         // Stop a quiet bottom after 4 s (12 s if not at bottom), but report it
-        // as unconfirmed so native can try normal resources once, never cache it as complete.
+        // as unconfirmed; an ordinary short list does not justify a second navigation.
         const atBottom=feed.scrollTop+feed.clientHeight>=feed.scrollHeight-4;
         if(discovery&&Date.now()-lastGrowth>(atBottom&&scrolls>=1?4000:12000)){stopReason=atBottom?'quiet':'stalled';break;}   // Quiet is not proof of exhaustion; don't cache a possibly stalled page as complete.
         if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
@@ -195,8 +196,12 @@ async function (reqId, args) {
     for (const row of rows.values()) row.prices=rowPrices(row.featureId);
     const stores=Array.from(rows.values());
     const priced=stores.filter(s=>s.prices[requested]).length;
-    send({stores,partial:true,code:!loaded?'unreadable':discovery&&!exhausted&&(stopReason==='quiet'||stopReason==='stalled')?'incomplete_feed':!priced?'no_prices':'limited',
+    const unconfirmed=discovery&&!exhausted&&(stopReason==='quiet'||stopReason==='stalled');
+    const moreVisible=lastFeed&&Array.from(lastFeed.querySelectorAll('button')).some(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));
+    // A full first page that never paginated is suspicious, not proof of exhaustion.
+    const paginationStalled=!!(unconfirmed&&lastFeed&&(moreVisible||lastFeed.scrollHeight>lastFeed.clientHeight&&lastFeed.querySelectorAll('[role="article"]').length>=20&&replies<=1));
+    send({stores,partial:true,code:!loaded?'unreadable':paginationStalled?'pagination_stalled':unconfirmed?'incomplete_feed':!priced?'no_prices':'limited',
       error:!loaded?'Google gas results could not be read':!priced&&!discovery?'Google provided no matching '+requested+' prices; existing prices are retained':null,
-      detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,firstFeedMs:firstFeedAt?firstFeedAt-started:null,firstReplyMs:firstReplyAt?firstReplyAt-started:null,lastGrowthMs:lastGrowth-started,replies,coverage:'Search results, not an exhaustive station catalog'}});
+      detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,paginationStalled,feedHeight:lastFeed?lastFeed.clientHeight:0,feedScrollHeight:lastFeed?lastFeed.scrollHeight:0,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,firstFeedMs:firstFeedAt?firstFeedAt-started:null,firstReplyMs:firstReplyAt?firstReplyAt-started:null,lastGrowthMs:lastGrowth-started,replies,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}
 }

@@ -3,9 +3,25 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 if(spawnSync('javac',['-version']).error){if(process.env.GASKET_NATIVE_TESTS==='1')throw Error('JDK required');console.log('Native model downloader needs a JDK; enforced in CI');process.exit(0);}
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gasket-model-')),pkg=path.join(dir,'com/bensanzone/fuelmap');fs.mkdirSync(pkg,{recursive:true});
 fs.copyFileSync(path.resolve('src/com/bensanzone/fuelmap/ModelDownload.java'),path.join(pkg,'ModelDownload.java'));
+const service=fs.readFileSync('src/com/bensanzone/fuelmap/GemmaService.java','utf8');
+const idleCommand=service.slice(service.indexOf('        if ("releaseIdle".equals(command))'),service.indexOf('        if("cancelAdvice".equals(command)'));
+assert(idleCommand.includes('worker.execute'));
 const java=`package com.bensanzone.fuelmap;
 import java.io.*;import java.net.*;import java.nio.file.*;import java.security.*;import com.sun.net.httpserver.*;
 public class DownloadTest {
+ static class Engine {boolean closed;void close(){closed=true;}}
+ static class Queue {Runnable pending;void execute(Runnable r){pending=r;}}
+ static class Listener {int replies;void result(int id,Object value){replies++;}}
+ static class Service {
+  java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();Queue worker=new Queue();Listener listener=new Listener();Engine runtime=new Engine();int notices;
+  Object status(){return null;}void notifyStatus(){notices++;}
+  void command(int id,String command){${idleCommand}}
+ }
+ static void checkIdle(){
+  Service s=new Service();Engine original=s.runtime;s.command(1,"releaseIdle");check(!original.closed&&s.listener.replies==1,"idle release must queue without blocking");s.worker.pending.run();check(original.closed&&s.runtime==null&&s.notices==1,"idle engine retained");
+  s=new Service();s.busy.set(true);s.command(1,"releaseIdle");check(s.worker.pending==null&&!s.runtime.closed&&s.listener.replies==1,"active generation/download interrupted");
+  s=new Service();s.command(1,"releaseIdle");s.busy.set(true);s.worker.pending.run();check(s.runtime!=null&&!s.runtime.closed,"new task raced idle release");
+ }
  static byte[] data=new byte[1024*1024];static String hash;static File folder;static String base;static int requests,flaky;
  static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
  static class Control implements ModelDownload.Control {long bytes;boolean cancel=false;public boolean cancelled(){return cancel;}public void progress(long b,boolean verify){bytes=b;}}
@@ -16,6 +32,7 @@ public class DownloadTest {
   if(!fail)check(java.util.Arrays.equals(Files.readAllBytes(dest.toPath()),data),"Wrong bytes "+mode);
  }
  public static void main(String[] args)throws Exception{
+  checkIdle();
   folder=Files.createTempDirectory("gasket-model-fixture-").toFile();for(int i=0;i<data.length;i++)data[i]=(byte)(i*31);
   StringBuilder digest=new StringBuilder();for(byte b:MessageDigest.getInstance("SHA-256").digest(data))digest.append(String.format("%02x",b&255));hash=digest.toString();
   HttpServer server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);

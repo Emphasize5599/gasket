@@ -1,5 +1,36 @@
 # Reader measurements
 
+## 0.0.182 — phone-log findings and opt-in aggressive admission
+
+The owner's two 0.0.181 scans were not controlled comparisons: different routes,
+both canceled, with large-model generation overlapping the first scan. At a
+configured ceiling of 50 the phone mostly admitted 4–8 readers (peak 9), reaching
+6 MB available RAM; 46 areas completed in 207 seconds. The later 20-reader scan
+sustained 20 with at least 4.4 GB available; 55 areas completed in 150 seconds.
+These numbers do not establish a speedup from resource filtering or worker count.
+
+Every final feed stopped quiet. Previously all quiet discovery feeds triggered a
+second navigation, including ordinary short lists. Now only unreadable empty
+feeds or suspected first-page pagination stalls qualify for one normal-resource
+retry. Quiet still does not mean exhaustive, so these partial lists stay uncached.
+Per-area diagnostics include retry flag/time, first stop/rows, omitted resources
+and feed geometry; canceled in-flight areas no longer inflate completed/cache
+counts. Page-load estimates exclude the first attempt's recovery overhead.
+
+Aggressive mode is opt-in in Website workers (Settings and onboarding), ceiling
+50. It starts up to 8 and ramps by 4 every 2 seconds with >=512 MB free. It halves
+new admission below160 MB or OS-low below300 MB, waits 6 seconds before recovery,
+and respects the four-reader floor or smaller manual limit. Active reads are not
+canceled to change admission. Heat, OS kills and throttling remain possible.
+Queued Gemma explanation work defers under low-memory scans until completion;
+in-flight generation finishes and an idle model may unload without deleting it.
+
+Next phone check: finish the model download/generation first; compare the same
+trip, grade, forced fresh scan and 20-worker setting with aggressive off/on.
+Then try 50 aggressive only if stable. Compare completed areas/minute, identities,
+prices, actual concurrency, retries, available RAM and renderer losses—not the
+configured ceiling. Android low-memory handling remains device-dependent.
+
 ## 0.0.181 — invisible desktop reader resource filter (2026-10-17)
 
 Visible Edge, Linux-desktop Chrome 141 user agent matching Android's gas readers,

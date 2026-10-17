@@ -374,6 +374,9 @@ public class MainActivity extends Activity {
         Runnable readDeadline = null;
         volatile boolean leanGasResources = true;
         boolean retriedGasResources = false;
+        long gasReadStarted, gasRetryAt;
+        String gasFirstStop = "";
+        int gasFirstRows;
         JSONArray partialGasStores = null;
         String gasRequestedGrade = "regular";
         final java.util.concurrent.atomic.AtomicIntegerArray omittedGasResources = new java.util.concurrent.atomic.AtomicIntegerArray(4);
@@ -390,6 +393,10 @@ public class MainActivity extends Activity {
                         if (at != null && at.startsWith("https://www.google.com/maps/search/gas+stations/@")) {
                             // Same request, cookies and overall deadline; never retry restrictions or missing-grade prices.
                             partialGasStores = stores;
+                            gasRetryAt = System.nanoTime() / 1000000L;
+                            JSONObject firstDetail = answer.optJSONObject("detail");
+                            gasFirstStop = firstDetail == null ? answer.optString("code") : firstDetail.optString("stopReason");
+                            gasFirstRows = stores == null ? 0 : stores.length();
                             leanGasResources = false; retriedGasResources = true; ready = false;
                             view.stopLoading(); view.loadUrl(at); return;
                         }
@@ -417,6 +424,8 @@ public class MainActivity extends Activity {
                         detail.put("read", merged.length()); detail.put("priced", priced);
                     }
                     detail.put("leanResources", leanGasResources); detail.put("fullResourceRetry", retriedGasResources);
+                    detail.put("retryElapsedMs", retriedGasResources ? Math.max(0, gasRetryAt - gasReadStarted) : 0);
+                    detail.put("firstAttemptStopReason", gasFirstStop); detail.put("firstAttemptRows", gasFirstRows);
                     detail.put("omittedVisual", omittedGasResources.get(GasReaderResources.VISUAL));
                     detail.put("omittedGraphics", omittedGasResources.get(GasReaderResources.GRAPHICS));
                     detail.put("omittedTelemetry", omittedGasResources.get(GasReaderResources.TELEMETRY));
@@ -1908,6 +1917,7 @@ public class MainActivity extends Activity {
                     if (w.readReq >= 0) w.finishRead(w.readReq, "{\"error\":\"Lookup replaced by another request\",\"code\":\"cancelled\"}");
                     w.readReq = reqId;
                     w.leanGasResources = true; w.retriedGasResources = false; w.partialGasStores = null;
+                    w.gasReadStarted = System.nanoTime() / 1000000L; w.gasRetryAt = 0; w.gasFirstStop = ""; w.gasFirstRows = 0;
                     try { w.gasRequestedGrade = new JSONObject(argsJson).optString("grade", "regular"); } catch (Exception ignored) { w.gasRequestedGrade = "regular"; }
                     for (int i = 0; i < 4; i++) w.omittedGasResources.set(i, 0);
                     // once per page load (the page keeps a flag; a reload clears it and gets the reader again)

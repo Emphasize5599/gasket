@@ -3,6 +3,7 @@
   'use strict';
   var A=window.__app, state={enabled:false,ready:false,supported:false,phase:'idle'}, running=null, desired=[];
   var cache=new Map(), attempted=new Set(), issues=new Map(), scheduled=0, revision='', lastIssue='';
+  var scanDeferred=false,releasedForScan=false;
   var LG=window.FLog||{info:function(){},warn:function(){}};
   function call(fn,arg){return window.__trip.call(fn,arg);}
   function current(){return window.Garage&&Garage.car();}
@@ -57,12 +58,25 @@
     lastIssue='';status(r);return r;
   }
   function schedule(){clearTimeout(scheduled);scheduled=setTimeout(prefetch,250);}
+  function deferForScan(){
+    var busy=window.KeylessGas&&KeylessGas.isBusy&&KeylessGas.isBusy(),m=null;
+    if(!busy){if(scanDeferred)LG.info('ai','Local explanation queue resumed after station scan');scanDeferred=false;releasedForScan=false;return false;}
+    try{m=JSON.parse(A.N.memoryInfo());}catch(e){}
+    if(!scanDeferred&&m&&(m.lowMemory||Number(m.availMem)<2*1024*1024*1024)){
+      scanDeferred=true;LG.info('ai','Local explanation queue deferred for station scan memory headroom');
+    }
+    if(!scanDeferred)return false;
+    // Once deferred, wait for scan completion rather than oscillating as unloading frees RAM.
+    // A generation already running is allowed to finish and its validated result is retained.
+    if(!running&&!state.busy&&!releasedForScan){releasedForScan=true;command('releaseIdle');}
+    clearTimeout(scheduled);scheduled=setTimeout(prefetch,2000);return true;
+  }
   function prefetch(){
     if(!state.enabled||!state.ready||!state.supported)return;
     var c=current(),cars=(A.S.cars||[]).slice();cars.sort(function(a,b){return (b===c?1:0)-(a===c?1:0);});desired=[];
     var seen=new Set();cars.forEach(function(car){try{var next=input(car);if(seen.has(next.key))return;seen.add(next.key);if(next.pack.setup.tires.some(function(t){return t.depth!=null;})&&!remembered(next)&&!attempted.has(next.key))desired.push(next);}catch(e){if(car===c)lastIssue=e.message;}});
     if(running){if(!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}return;}
-    if(!state.busy)run();
+    if(!deferForScan()&&!state.busy)run();
   }
   async function run(){
     if(running||!desired.length||state.busy||!state.enabled)return;
@@ -127,6 +141,7 @@
   window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry,setEnabled:function(on){return command(on?'enable':'disable');}};
   window.addEventListener('garagechange',function(){if(running&&!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}schedule();});
   window.addEventListener('cacheclear',clearCache);
+  window.addEventListener('keylessscanchange',schedule);
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{
     // Android's Clear cache can remove files while our process survives.
     if(A.KV)cache.forEach(function(_,key){if(!A.KV.get('aiexplanations',key)){cache.delete(key);attempted.delete(key);}});

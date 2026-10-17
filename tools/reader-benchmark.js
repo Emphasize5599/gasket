@@ -87,7 +87,7 @@ for(let repeat=0;repeat<repeats;repeat++)for(const profile of profiles){
       async function runReader(){let timer;try{await Promise.race([p.evaluate('window.__gasketLeanResources='+leanResources+';('+source+')(1,'+JSON.stringify({mode,grade})+')'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Reader watchdog expired')),Math.max(1,until-Date.now()));})]);}finally{clearTimeout(timer);}}
       await runReader();
       const first=await p.evaluate(()=>window.__readerResult);
-      if(profile.native&&leanResources&&first&&!first.blocked&&!first.cancelled&&(first.code==='incomplete_feed'||first.code==='unreadable'&&!(first.stores||[]).length)){
+      if(profile.native&&leanResources&&first&&!first.blocked&&!first.cancelled&&(first.code==='pagination_stalled'||first.code==='unreadable'&&!(first.stores||[]).length)){
         firstAttempt={code:first.code,detail:first.detail};leanResources=false;
         await p.reload({waitUntil:'domcontentloaded',timeout:Math.min(30000,Math.max(1,until-Date.now()))});await runReader();
         await p.evaluate(({previous,grade})=>{const r=window.__readerResult;if(!r||r.cancelled)return;const joined=new Map();for(const row of previous.concat(r.stores||[]))joined.set(row.featureId||row.id,row);r.stores=Array.from(joined.values());r.detail=r.detail||{};r.detail.read=r.stores.length;r.detail.priced=r.stores.filter(s=>s.prices&&s.prices[grade]).length;r.detail.fullResourceRetry=true;},{previous:first.stores||[],grade});

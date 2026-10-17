@@ -67,6 +67,14 @@ final class GemmaService {
     }
     synchronized void command(int id, String command) {
         if (closed) return;
+        if ("releaseIdle".equals(command)) {
+            // Never interrupt generation/download, change the enabled preference, or delete files.
+            if (!busy.get()) worker.execute(() -> {
+                if (!busy.get() && runtime != null) { runtime.close(); runtime = null; }
+                notifyStatus();
+            });
+            listener.result(id, status()); return;
+        }
         if("cancelAdvice".equals(command)&&!"advice".equals(task)){listener.result(id,status());return;}
         if ("cancel".equals(command) || "cancelAdvice".equals(command) || "disable".equals(command)) {
             reason="disable".equals(command)?"Larger AI disabled by user":"cancelAdvice".equals(command)?"Advice cancelled after setup change or timeout":"Task paused by user";

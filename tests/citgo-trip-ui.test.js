@@ -2,8 +2,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.clock.setFixedTime(new Date(2026,9,6,12));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);
- await require('./settings-ui')(p,'map');assert.equal(await p.getAttribute('#keylessWorkers','max'),'50');await p.fill('#keylessWorkers','50');await p.dispatchEvent('#keylessWorkers','input');await require('./onboarding-ui')(p);
- assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),50);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await require('./settings-ui')(p,'map');assert.equal(await p.getAttribute('#keylessWorkers','max'),'50');assert.equal(await p.isChecked('#keylessAggressive'),false);await p.check('#keylessAggressive');await p.fill('#keylessWorkers','50');await p.dispatchEvent('#keylessWorkers','input');await require('./onboarding-ui')(p);
+ assert.equal(await p.evaluate(()=>__app.S.keylessWorkers),50);assert.equal(await p.evaluate(()=>__app.S.keylessAggressive),true);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{
   const A=__app,S=A.S;S.cars[0].tank=2.5;S.trip.fuel={mode:'miles',miles:'60'};S.trip.milesLeft='60';S.trip.bufferMi=5;S.trip.minSave=0;S.trip.fillUp=true;S.brands={citgo:true};S.citgoTier='club';S.citgoUsed={};S.citgoHistory={};
   const alts=__mocks.route({origin:{placeId:'P-start'},destination:{placeId:'P-end'},computeAlternativeRoutes:true}).routes,m=Trip.buildRoute(alts[0],Garage.carModel());

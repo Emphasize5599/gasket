@@ -23,6 +23,6 @@ final class GasReaderResources {
     }
 
     static boolean retryFull(boolean lean, boolean blocked, boolean cancelled, String code, int stores) {
-        return lean && !blocked && !cancelled && (stores == 0 && "unreadable".equals(code) || "incomplete_feed".equals(code));
+        return lean && !blocked && !cancelled && (stores == 0 && "unreadable".equals(code) || "pagination_stalled".equals(code));
     }
 }

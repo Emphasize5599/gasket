@@ -139,22 +139,23 @@
   function discoveryReport(recs,meta){
     var q=function(list,f){if(!list.length)return null;var v=list.slice().sort(function(a,b){return a-b;});return v[Math.min(v.length-1,Math.floor(f*v.length))];};
     var sum=function(list){return list.reduce(function(a,b){return a+b;},0);};
-    var live=recs.filter(function(r){return !r.cache&&!r.cancelled;}),el=meta.elapsedMs||1,lanes=meta.lanes||1;
+    var completed=recs.filter(function(r){return !r.cancelled;}),live=completed.filter(function(r){return !r.cache;}),el=meta.elapsedMs||1,lanes=meta.lanes||1;
     var ms=live.map(function(r){return r.ms;}),work=live.filter(function(r){return r.d&&r.d.elapsedMs!=null;});
-    var load=work.map(function(r){return Math.max(0,r.ms-r.d.elapsedMs);}),after=work.map(function(r){return Math.max(0,r.d.elapsedMs-(r.d.lastGrowthMs||0));});
-    var stops={};recs.forEach(function(r){var k=r.err?'error':r.cache?'cache':r.d&&r.d.stopReason||'?';stops[k]=(stops[k]||0)+1;});
+    var load=work.map(function(r){return Math.max(0,r.ms-r.d.elapsedMs-(r.d.retryElapsedMs||0));}),after=work.map(function(r){return Math.max(0,r.d.elapsedMs-(r.d.lastGrowthMs||0));});
+    var stops={};recs.forEach(function(r){var k=r.cancelled?'cancel':r.err?'error':r.cache?'cache':r.d&&r.d.stopReason||'?';stops[k]=(stops[k]||0)+1;});
     var lastStart=live.length?Math.max.apply(null,live.map(function(r){return r.at;})):0,read=sum(recs.map(function(r){return r.d&&r.d.read||0;}));
     var busy=sum(ms);
-    return {elapsedMs:el,areas:meta.areas,done:recs.length,cached:recs.length-live.length,lanes:lanes,
+    return {elapsedMs:el,areas:meta.areas,done:completed.length,attempted:recs.length,cancelledAreas:recs.length-completed.length,cached:completed.length-live.length,lanes:lanes,
       laneUse:+(busy/(lanes*el)).toFixed(2),                                   // 1 = every lane busy the whole time
       tailMs:Math.max(0,el-lastStart),                                         // after the last area started: fewer lanes busy
       areaMs:{p50:q(ms,0.5),p90:q(ms,0.9),max:q(ms,1)},
       pageLoadMs:{p50:q(load,0.5),p90:q(load,0.9),total:sum(load)},           // before the reader starts (page load, injection)
+      resourceRecovery:{areas:work.filter(function(r){return r.d.fullResourceRetry;}).length,totalMs:sum(work.map(function(r){return r.d.retryElapsedMs||0;})),omittedGraphics:sum(work.map(function(r){return r.d.omittedGraphics||0;})),omittedTelemetry:sum(work.map(function(r){return r.d.omittedTelemetry||0;}))},
       firstListMs:q(work.map(function(r){return r.d.firstFeedMs;}).filter(function(v){return v!=null;}),0.5),
       afterLastRowMs:{p50:q(after,0.5),total:sum(after),share:+(sum(after)/(busy||1)).toFixed(2)},   // waiting for more rows that never came
       stops:stops,scrollsAvg:work.length?+(sum(work.map(function(r){return r.d.scrolls||0;}))/work.length).toFixed(1):null,
       rowsRead:read,stations:meta.stations,overlap:read?+(1-meta.stations/read).toFixed(2):null,   // share of rows already found by another area
-      areasAddingNothing:recs.filter(function(r){return !r.added;}).length,
+      areasAddingNothing:completed.filter(function(r){return !r.added;}).length,
       priced:meta.priced,officialMs:meta.officialMs,errors:meta.errors,mem:meta.mem};
   }
   function memNow(A){try{var m=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');return m.totalMem?{availMB:Math.round(m.availMem/1048576),totalMB:Math.round(m.totalMem/1048576),low:!!m.lowMemory,appHeapMB:Math.round((m.appHeapUsed||0)/1048576),appHeapMaxMB:Math.round((m.appHeapMax||0)/1048576),readerRecycles:m.readerRecycles||0,rendererLosses:m.rendererLosses||0}:null;}catch(e){return null;}}
@@ -163,9 +164,19 @@
   function readerCount(A){var value=Number(A.S&&A.S.keylessWorkers);if(Number.isFinite(value)&&value>=1)return Math.min(50,Math.max(1,Math.round(value)));var memory={};try{memory=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');}catch(e){}return autoWorkers(memory);}
   // One shared decision per fresh sample: a cached low-memory reading must not
   // retire every extra lane. Pause instead; gradually resume when RAM recovers.
-  function poolTarget(state,m,now,max){
+  function poolTarget(state,m,now,max,aggressive){
     var floor=Math.min(4,max);
     if(!m){state.target=max;return max;}
+    if(aggressive){
+      // Aggressive mode spends headroom, but still retreats from an actual emergency.
+      // Admit in chunks instead of constructing fifty WebViews in one UI-thread burst.
+      var emergency=m.availMB<160||m.low&&m.availMB<300;
+      if(state.target==null){state.target=Math.min(max,emergency?floor:8);state.at=now;state.cooldown=emergency?now+6000:now;}
+      if(now-state.at<2000)return state.target;state.at=now;
+      if(emergency){state.target=Math.max(floor,Math.floor(state.target/2));state.cooldown=now+6000;}
+      else if(m.availMB>=512&&now>=state.cooldown)state.target=Math.min(max,state.target+4);
+      return state.target;
+    }
     if(state.target==null){state.target=Math.min(max,m.low||m.availMB<1200?floor:m.availMB>=2200?8:6);state.at=now;state.cooldown=now;}
     if(now-state.at<2000)return state.target;
     state.at=now;
@@ -174,8 +185,8 @@
     return state.target;
   }
   function readerPool(A,lanes,control,audit,more){
-    var state={},sampleAt=0,sample=null,paused=new Set();
-    function target(){var now=Date.now();if(!sampleAt||now-sampleAt>=2000){sampleAt=now;sample=memNow(A);}return poolTarget(state,sample,now,lanes.length);}
+    var state={aggressive:!!(A.S&&A.S.keylessAggressive)},sampleAt=0,sample=null,paused=new Set();
+    function target(){var now=Date.now();if(!sampleAt||now-sampleAt>=2000){sampleAt=now;sample=memNow(A);}return poolTarget(state,sample,now,lanes.length,state.aggressive);}
     control.pool=state;target();
     return {target:target,permit:async function(key){
       var index=lanes.indexOf(key);
@@ -196,7 +207,7 @@
     if(previous&&previous.v&&previous.v.status==='running'&&LG)LG.info('keyless','Previous scan was unfinished',{id:previous.v.id,kind:previous.v.kind,completed:previous.v.completed,total:previous.v.total,elapsedMs:previous.v.elapsedMs});
     function sampleMemory(){sampleAt=Date.now();sample=memNow(A);if(sample){peak=Math.max(peak,sample.appHeapMB);min=min==null?sample.availMB:Math.min(min,sample.availMB);}}
     function snapshot(status){sampleMemory();var oldest=0;active.forEach(function(t){oldest=Math.max(oldest,Date.now()-t);});return {id:id,kind:kind,status:status,elapsedMs:Date.now()-started,completed:done,total:total,readers:lanes.length,manual:!!(A.S&&Number(A.S.keylessWorkers)>=1),active:active.size,maxActive:maxActive,oldestActiveMs:oldest,retired:retired,cached:cached,checkpoints:checkpoints,persistMs:persistMs,minSystemAvailableMB:min,peakAppJavaHeapMB:peak,memory:sample};}
-    function write(status){var s=snapshot(status);s.targetReaders=control.pool&&control.pool.target!=null?control.pool.target:lanes.length;try{A.KV.put('gasmeta','last-scan',s);}catch(e){}if(LG)LG.info('keyless',status==='running'?'Scan heartbeat':'Scan diagnostics',s);return s;}
+    function write(status){var s=snapshot(status);s.targetReaders=control.pool&&control.pool.target!=null?control.pool.target:null;s.aggressive=!!(control.pool&&control.pool.aggressive);try{A.KV.put('gasmeta','last-scan',s);}catch(e){}if(LG)LG.info('keyless',status==='running'?'Scan heartbeat':'Scan diagnostics',s);return s;}
     write('running');last=Date.now();
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
@@ -205,6 +216,7 @@
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
+  function scanChanged(){if(root.dispatchEvent&&root.Event)root.dispatchEvent(new root.Event('keylessscanchange'));}
   function releaseReaders(){var N=root.__app.N;if(N&&N.releaseGasReaders)N.releaseGasReaders();}
   function cancel(){
     if(!busy||typeof busy!=='object')return;
@@ -273,10 +285,10 @@
   async function discover(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
-    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||50,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;
+    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||50,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;scanChanged();
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
-    if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,grade:grade,force:!!force,mem:mem0});
+    if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,aggressive:!!A.S.keylessAggressive,grade:grade,force:!!force,mem:mem0});
     var audit=scanAudit(A,'discovery',lanes,areas.length,control),outcome='failed';
     function progressLog(){if(!LG||done%50)return;var recent=recs.slice(-50).filter(function(r){return !r.cache;}),el=Date.now()-started;
       LG.info('keyless','Discovery progress',{done:done,of:areas.length,elapsedS:Math.round(el/1000),areasPerMin:+(done/(el/60000)).toFixed(1),recentAreaMs:recent.length?Math.round(recent.reduce(function(a,r){return a+r.ms;},0)/recent.length):null,stations:rows.length,mem:memNow(A)});}
@@ -313,20 +325,20 @@
         var el=Date.now()-started,sum=discoveryReport(recs,{elapsedMs:el,areas:areas.length,lanes:lanes.length,stations:webRows,priced:rows.filter(function(s){return s.prices&&s.prices[grade];}).length,officialMs:officialMs,errors:Array.from(new Set(errors)).slice(0,5),mem:{start:mem0,end:memNow(A)}});
         LG.info('keyless','Discovery finished',Object.assign({withOfficial:rows.length,cancelled:control.cancelled,blocked:blocked||!!control.blocked},sum));
         // one row per area, in batches that fit a log entry: where each lane spent its time
-        var cols='area, lane, start s, total ms, reader ms, list shown ms, last new row ms, stop, scrolls, rows, priced, in area, new';
-        var line=function(r){var d=r.d||{};return [r.i,r.lane,Math.round(r.at/1000),r.ms,d.elapsedMs==null?null:d.elapsedMs,d.firstFeedMs==null?null:d.firstFeedMs,d.lastGrowthMs==null?null:d.lastGrowthMs,r.err?'error':r.cache?'cache':r.cancelled?'cancel':d.stopReason||'?',d.scrolls||0,d.read||0,d.priced||0,r.found||0,r.added||0];};
-        for(var b=0;b<recs.length;b+=20)LG.debug('keyless','Discovery areas '+(b+1)+'–'+Math.min(recs.length,b+20)+' of '+recs.length,{cols:cols,rows:recs.slice(b,b+20).map(line)});
+        var cols='area, lane, start s, total ms, reader ms, list shown ms, last new row ms, stop, scrolls, rows, priced, in area, new, lean, full retry, retry ms, first stop, first rows, omitted graphics, omitted telemetry, feed height, feed scroll height';
+        var line=function(r){var d=r.d||{};return [r.i,r.lane,Math.round(r.at/1000),r.ms,d.elapsedMs==null?null:d.elapsedMs,d.firstFeedMs==null?null:d.firstFeedMs,d.lastGrowthMs==null?null:d.lastGrowthMs,r.cancelled?'cancel':r.err?'error':r.cache?'cache':d.stopReason||'?',d.scrolls||0,d.read||0,d.priced||0,r.found||0,r.added||0,d.leanResources==null?null:!!d.leanResources,!!d.fullResourceRetry,d.retryElapsedMs||0,d.firstAttemptStopReason||'',d.firstAttemptRows||0,d.omittedGraphics||0,d.omittedTelemetry||0,d.feedHeight||0,d.feedScrollHeight||0];};
+        for(var b=0;b<recs.length;){var from=b,block=[];while(b<recs.length){var row=line(recs[b]);if(block.length&&JSON.stringify({cols:cols,rows:block.concat([row])}).length>1800)break;block.push(row);b++;}LG.debug('keyless','Discovery areas '+(from+1)+'–'+b+' of '+recs.length,{cols:cols,rows:block});}
       }
       outcome=control.cancelled?'cancelled':blocked||control.blocked?'restricted':errors.length?'partial':'finished';
       return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked||!!control.blocked,blockedSite:control.blockedSite||'gasweb',cancelled:control.cancelled,areas:areas.length,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
-    }finally{clearInterval(timer);audit.finish(outcome);busy=null;releaseReaders();}
+    }finally{clearInterval(timer);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
   }
   async function search(lat,lng,radius){
     if(busy)throw new Error('A keyless gas lookup is already running');
     var A=root.__app,P=A.P,a=area(lat,lng,radius),key=[a.lat.toFixed(3),a.lng.toFixed(3),a.radius].join('|');
     var cached=A.KV.get('gasweb',key,15*60000);
     if(cached)return cached.v;
-    busy=true;
+    busy=true;scanChanged();
     try{
       var errors=[],open=[],web=[],details={area:a,apiCalls:0};
       // One bounded Overpass query, cached for a week. No route-wide fanout, no automatic retries.
@@ -359,12 +371,12 @@
       if(!errors.length)A.KV.put('gasweb',key,result);
       if(root.FLog)FLog.info('keyless','Nearby regular lookup',details);
       return result;
-    }finally{busy=null;}
+    }finally{busy=null;scanChanged();}
   }
   async function refreshKnown(known,onProgress,priority,grade){
     grade=grade||'regular';if(!root.__app.P.GRADES[grade])throw new Error('Unsupported fuel grade');
     if(busy)throw new Error('A keyless lookup is already running');
-    var A=root.__app,lanes=readerKeys(readerCount(A)),control={cancelled:false,wake:[],lanes:lanes};busy=control;
+    var A=root.__app,lanes=readerKeys(readerCount(A)),control={cancelled:false,wake:[],lanes:lanes};busy=control;scanChanged();
     var P=A.P,groups=knownAreas(known,P,priority),rows=new Map(),errors=[],reads=0,blocked=false,start=Date.now();
     var buckets=new Map();known.forEach(function(s){var key=Math.floor(s.lat*50)+'|'+Math.floor(s.lng*50);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(s);});
     function nearby(w){var x=Math.floor(w.lat*50),y=Math.floor(w.lng*50);for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var candidates=buckets.get((x+dx)+'|'+(y+dy))||[];if(candidates.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w);}))return true;}return false;}
@@ -450,12 +462,12 @@
       if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,readerConcurrency:lanes.length,averageAreaMs:samples?Math.round(totalMs/samples):null,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
       outcome=control.cancelled?'cancelled':blocked||control.blocked?'restricted':errors.length?'partial':'finished';
       return result;
-    }finally{clearInterval(ticker);audit.finish(outcome);busy=null;releaseReaders();}
+    }finally{clearInterval(ticker);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
   }
   function recordObserved(stations){if(!root.PriceHistory)return;root.PriceHistory.observe(stations.map(function(s){var prices={};Object.keys(s.prices||{}).forEach(function(g){if(s.prices[g].observedAt)prices[g]=s.prices[g];});return Object.assign({},s,{prices:prices});}));}
   function estimate(known,grade){
     var A=root.__app,groups=knownAreas(known,A.P),o=A.KV.get('gasmeta','timing|'+(grade||'regular')),ms=o&&o.v.averageAreaMs||10000;
     var readers=readerCount(A);return {areas:groups.length,seconds:Math.ceil(groups.length*ms/readers/1000),measured:!!o,readers:readers};
   }
-  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,cancel:cancel,estimate:estimate});
+  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;}});
 })(typeof window!=='undefined'?window:globalThis);

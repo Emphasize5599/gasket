@@ -8,16 +8,20 @@ const rep=K.discoveryReport([
   {i:0,lane:0,at:0,ms:20000,d:d(17000,5000,'stalled',40),found:30,added:30},
   {i:1,lane:1,at:0,ms:10000,d:d(8000,7000,'end',40),found:30,added:10},
   {i:2,lane:0,at:20000,ms:4000,cache:true,found:30,added:0},
-  {i:3,lane:1,at:10000,ms:15000,err:'Keyless lookup timed out',found:0,added:0}],
+  {i:3,lane:1,at:10000,ms:15000,err:'Keyless lookup timed out',found:0,added:0},
+  {i:4,lane:1,at:20000,ms:5000,cancelled:true,cache:true}],
   {elapsedMs:25000,areas:4,lanes:2,stations:40,priced:20,officialMs:3000,errors:[]});
 assert.equal(rep.cached,1);assert.equal(rep.done,4);
+assert.equal(rep.attempted,5);assert.equal(rep.cancelledAreas,1);
 assert.equal(rep.laneUse,+(45000/50000).toFixed(2),'busy share of every lane over the whole scan');
 assert.equal(rep.tailMs,15000,'after the last area started');
 assert.equal(rep.pageLoadMs.total,3000+2000,'whole read minus the reader\'s own time');
 assert.equal(rep.afterLastRowMs.total,12000+1000,'waiting after the last new row');
-assert.deepEqual(rep.stops,{stalled:1,end:1,cache:1,error:1});
+assert.deepEqual(rep.stops,{stalled:1,end:1,cache:1,error:1,cancel:1});
 assert.equal(rep.rowsRead,80);assert.equal(rep.overlap,+(1-40/80).toFixed(2));
 assert.equal(rep.areasAddingNothing,2);
+const recovered=K.discoveryReport([{ms:30000,at:0,d:{elapsedMs:8000,retryElapsedMs:19000,fullResourceRetry:true,omittedGraphics:3,omittedTelemetry:2}}],{elapsedMs:30000});
+assert.equal(recovered.pageLoadMs.total,3000,'do not mislabel first-attempt recovery as final page loading');assert.deepEqual(recovered.resourceRecovery,{areas:1,totalMs:19000,omittedGraphics:3,omittedTelemetry:2});
 
 // a whole scan: started, progress, finished, and the per-area table in entries that fit (2,000 characters at DEBUG)
 (async()=>{
