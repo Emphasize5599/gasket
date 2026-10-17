@@ -899,7 +899,7 @@
     $('dBlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) { BL.remove(e); $('dClose').onclick(); } }); };
   }
 
-  var CACHE_NS = ['along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb'];
+  var CACHE_NS = ['aiexplanations', 'along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb'];
   function askDeleteBl() {
     var n = BL.list().length; if (!n) { deleteBl(); return Promise.resolve(false); }
     return confirmDel({ title: 'Delete your bad CITGO list?', body: 'All ' + n + ' station' + (n === 1 ? '' : 's') + ' will get the Walmart+ discount again.', action: 'Delete' })
@@ -1229,7 +1229,7 @@
     };
     $('kvClear').onclick = function () {
       confirmDel({ title: 'Clear the cache?', body: 'Stations, prices, speed limits and routes saved from recent searches. Searching the same places again will use lookups. Your trips, cars and settings stay.', action: 'Clear' }).then(function (ok) {
-        if (!ok) return; var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); }); toast('Cleared ' + n + ' saved answers.');
+        if (!ok) return; var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); });window.dispatchEvent(new Event('cacheclear')); toast('Cleared ' + n + ' saved answers.');
       });
     };
     $('blDelAll').onclick = function () { askDeleteBl().then(function (ok) { if (ok) { $('blCount2').textContent = '0 stations'; $('blCount').textContent = '0 stations'; } }); };
@@ -1308,7 +1308,7 @@
     S.apiKey = $('apiKey').value.trim(); apiCount();
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
-    S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(20,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;
+    S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(50,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;
     S.citgoTier = $('citgoTier').value;
     S.samsMode = $('samsMode').value;
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));

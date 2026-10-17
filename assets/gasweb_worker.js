@@ -13,11 +13,11 @@ async function (reqId, args) {
   const gradeLabel=s=>({'regular':'regular','regular unleaded':'regular','midgrade':'midgrade','mid-grade':'midgrade','mid grade':'midgrade','premium':'premium','premium unleaded':'premium','diesel':'diesel','truck diesel':'diesel','diesel #2':'diesel'})[String(s||'').trim().toLowerCase()]||null;
   const money=s=>{const m=/^\$(\d{1,2}\.\d{2,3})$/.exec(String(s||'').trim());return m&&+m[1]>=0.5&&+m[1]<=20?+m[1]:null;};
   const rowPrices=id=>{const p=prices.get(id)||{},out={};Object.keys(p).forEach(g=>{if(p[g]!=null)out[g]={price:p[g],updated:null};});return out;};
-  let gradeMenu=null,gradeAttempted=false,gradeOpenedAt=0;
+  let gradeMenu=null,gradeAttempted=false,gradeOpenedAt=0,gradeReadyAt=0;
   const selectGrade=()=>{
-    if(requested==='regular'||gradeAttempted)return false;
+    if(requested==='regular')return false;if(gradeAttempted)return Date.now()<gradeReadyAt;
     const option=Array.from(document.querySelectorAll('[role="listbox"] [role="option"],[role="menu"] [role="menuitemradio"],[role="menu"] [role="menuitem"]')).find(e=>e.getClientRects().length&&!e.closest('[aria-hidden="true"]')&&gradeLabel(e.getAttribute('aria-label')||e.innerText)===requested);
-    if(option){option.click();gradeAttempted=true;readReply.last=null;return true;}
+    if(option){option.click();gradeAttempted=true;gradeReadyAt=Date.now()+1000;readReply.last=null;return true;}
     if(gradeMenu){if(Date.now()-gradeOpenedAt<2000)return true;gradeMenu.click();gradeAttempted=true;return false;}
     gradeMenu=Array.from(document.querySelectorAll('button[aria-haspopup="listbox"],button[aria-haspopup="menu"],button[aria-haspopup="true"]')).find(e=>e.getClientRects().length&&(gradeLabel(e.getAttribute('aria-label'))||gradeLabel(e.innerText))==='regular');
     if(gradeMenu){gradeMenu.click();gradeOpenedAt=Date.now();return true;}return false;
@@ -102,7 +102,10 @@ async function (reqId, args) {
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
       const t = card.innerText || '';
       if (/permanently closed|temporarily closed/i.test(t)) continue;
-      const visible = t.split('\n').map(price).filter((p)=>p!==null),vp={};
+      const lines=t.split('\n'),visible = lines.map(price).filter((p)=>p!==null),vp={};
+      // Maps also renders the explicit grade and price on adjacent lines.
+      // Never infer a grade from an unlabeled dollar amount.
+      for(let i=0;i<lines.length-1;i++){const p=price(lines[i]+' '+lines[i+1]);if(p)visible.push(p);}
       visible.forEach(p=>{if(vp[p.grade]===undefined)vp[p.grade]=p.value;else if(vp[p.grade]!==p.value)vp[p.grade]=null;});
       if(visible.length)prices.set(id[1].toLowerCase(),Object.assign({},prices.get(id[1].toLowerCase()),vp));
       const website = card.querySelector('a[data-value="Website"]');
@@ -141,12 +144,17 @@ async function (reqId, args) {
       if (blocked()) {send({blocked:true,code:'blocked',error:'Google needs a visible security or consent check',stores:[]});return;}
       const selecting=selectGrade();
       const feed=readRows();
+      // A price refresh with every target explicitly priced in the DOM needs
+      // neither a response replay nor another scroll. Discovery never skips pages.
+      if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
       await readReply();
       if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
       const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices)]);
       if(now!==last)lastGrowth=Date.now();
       stable=now===last ? stable+1 : 0;last=now;
-      if (!selecting&&feed && stable>=3) {
+      const indicator=feed&&feed.querySelector&&feed.querySelector('[role="progressbar"]');
+      const loading=feed&&(feed.getAttribute&&feed.getAttribute('aria-busy')==='true'||indicator&&indicator.getClientRects&&indicator.getClientRects().length);
+      if (!selecting&&feed&&!loading && stable>=2) {
         if (/end of the list/i.test(feed.innerText)) {exhausted=true;stopReason='end';break;}
         if (!discovery&&scrolls>=3) {stopReason='scroll_limit';break;}
         if(discovery&&rows.size>=5000){stopReason='row_limit';break;}
@@ -160,7 +168,7 @@ async function (reqId, args) {
         if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
         scrolls++;stable=0;
       }
-      await sleep(300);
+      await sleep(150);
     }
     for (const row of rows.values()) row.prices=rowPrices(row.featureId);
     const stores=Array.from(rows.values());

@@ -78,6 +78,11 @@ async function worker(pg,body,raw,status=200,args={}){
   console.log('Exhausted-feed reader '+exhausted.detail.elapsedMs+' ms simulated time; conservative coordinate completion passed');
   const targeted=await worker(pg,'<div role="feed">'+link('0x1:0x2')+'</div>',JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'}]});
   assert.equal(targeted.detail.targetsComplete,true,'finish without waiting for end of list when all stable-ID targets are priced');
+  for(const [grade,label]of [['regular','Regular'],['midgrade','Midgrade'],['premium','Premium'],['diesel','Diesel']]){
+    const card=link('0x1:0x2').replace('</article>','<div>$3.12</div><div>'+label+'</div></article>');
+    const direct=await worker(pg,'<div role="feed">'+card+'</div>','bad JSON',200,{grade,targets:[{featureId:'0x1:0x2'}]});
+    assert.equal(direct.detail.targetsComplete,true);assert.equal(direct.detail.replies,0,'fully priced DOM targets need no duplicate response download');assert.equal(direct.stores[0].prices[grade].price,3.12);
+  }
   const incomplete=await worker(pg,html,JSON.stringify(['0x1:0x2','$3.12/Regular']),200,{targets:[{featureId:'0x1:0x2'},{id:'missing'}]});
   assert.equal(incomplete.detail.targetsComplete,false,'one missing saved station prevents premature completion');
   const r=await worker(pg,html,")]}'\n"+JSON.stringify([['0x1:0x2',['$3.123/Regular','Escaped \\" ] bracket']],['0x3:0x4',['$4.56/Regular']]])+'\n/* trailing frame */');

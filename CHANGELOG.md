@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.180 - 2026-10-17 (keyless test branch only)
+- Remember validated AI explanations and prepare all saved vehicles in the background, one at a time.
+- Keep completed explanations when switching cars; clear them with the lookup cache.
+- Faster station-reader pagination and direct labeled-price refreshes, with fewer visual resources.
+- Website-worker ceiling raised to 50; memory safeguards remain.
+
 ## 0.0.179 - 2026-10-17 (keyless test branch only)
 - Failed Brave lookups offer a bot-check screen and read the answer automatically afterward.
 - Improved trim parsing for ordinary summaries and pages echoing the search question.

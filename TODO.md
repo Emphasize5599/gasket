@@ -1,6 +1,6 @@
 # Open work
 
-The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.177**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
+The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.180**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
 Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 48 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
@@ -44,9 +44,9 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 
 ## perf — measurements and efficiency
 
-16. [ ] **Find new ways past the station-scan performance ceiling.** Devise and test further discovery/refresh optimizations rather than only raising worker counts. Investigate redundant work, scheduling, shared route coverage, reader lifecycle and persistence overhead while preserving complete coverage, cancellation and stability. Use item 17's traffic/cache measurements and existing scan diagnostics to establish baselines and verify gains.
+16. [ ] **Find new ways past the station-scan performance ceiling.** Continue beyond 0.0.180's faster stable-feed polling and direct labeled-price completion. Investigate redundant work, scheduling, shared route coverage, reader lifecycle and persistence overhead while preserving complete coverage, cancellation and stability. Stress-test the optional 50-reader ceiling on phones. Measurements and rejected experiments: [reader performance](docs/READER_PERFORMANCE.md).
 
-17. [ ] **Actual web traffic and cache efficiency.** Measure requests, transferred bytes and time, including resources loaded by Maps itself and Android WebView cache misses. Identify bottlenecks and reusable work to guide item 16's performance improvements; verify that speedups do not reduce station coverage.
+17. [ ] **Actual web traffic and cache efficiency.** Extend 0.0.180's opt-in desktop/CDP request, byte, timing and capability measurements to actual Android WebView cache hits/misses and more areas/grades. Compare station identities and prices, not only counts. Investigate Maps-owned worker/RPC traffic and safe response reuse; a fetch/XHR observer was measured and rejected as slower. See [reader performance](docs/READER_PERFORMANCE.md); related to item 16.
 
 ## chore — release, services and rights decisions
 

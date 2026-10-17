@@ -33,6 +33,7 @@ on:
       - tests/erase-logging.test.js
       - tests/brave-reader.test.js
       - tests/brave-verification.test.js
+      - tests/gemma-cache.test.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js
       - tests/vehicle-weather.test.js

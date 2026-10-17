@@ -1,16 +1,23 @@
-/* Optional Gemma controller. One current vehicle request, one coalesced replacement, no generation queue growth. */
+/* Validated persistent explanations; one generation at a time across saved vehicles. */
 (function(){
   'use strict';
-  var A=window.__app, state={enabled:false,ready:false,supported:false,phase:'idle'}, running=null, desired=null;
-  var cache=new Map(), attempted=new Set(), scheduled=0, revision='', lastIssue='';
+  var A=window.__app, state={enabled:false,ready:false,supported:false,phase:'idle'}, running=null, desired=[];
+  var cache=new Map(), attempted=new Set(), issues=new Map(), scheduled=0, revision='', lastIssue='';
   var LG=window.FLog||{info:function(){},warn:function(){}};
   function call(fn,arg){return window.__trip.call(fn,arg);}
   function current(){return window.Garage&&Garage.car();}
   function input(c){
     var pack=TirePolicy.prepare(c,TireMath),prompt=TirePolicy.prompt(pack);
     if(new TextEncoder().encode(prompt).length>27000)throw new Error('The complete setup is too large for local AI; checked notices remain available.');
-    return {car:c,pack:pack,prompt:prompt,key:revision+'|'+JSON.stringify(pack)};
+    return {car:c,pack:pack,prompt:prompt,key:'explanation-v2|'+TirePolicy.version+'|'+revision+'|'+JSON.stringify(pack.setup)+'|'+prompt};
   }
+  function remembered(item){
+    if(cache.has(item.key))return cache.get(item.key);
+    var o=A.KV&&A.KV.get('aiexplanations',item.key),v=o&&o.v;
+    if(v&&v.key===item.key&&typeof v.raw==='string'){var checked=TirePolicy.check(v.raw,item.pack);if(checked.ok){var got={answer:checked.ok,pack:item.pack,t:v.t};cache.set(item.key,got);return got;}}
+    return null;
+  }
+  function liveItem(item){return (A.S.cars||[]).some(function(c){try{return input(c).key===item.key;}catch(e){return false;}});}
   function changed(){window.dispatchEvent(new Event('gemmachange'));}
   // time left: the speed over the last 30 s of progress (a stall or a resume starts it over)
   var rateS=[];
@@ -35,10 +42,10 @@
     if(window.Tasks){
       if(downloading)Tasks.upsert('gemma-download',{text:state.phase==='cancelling'?'Pausing model download…':state.phase==='verify'?'Verifying Gemma model…':state.phase==='retry'?'Resuming model download · attempt '+(state.attempt||2)+' / 4':'Downloading Gemma · '+(Number(state.bytes||0)/1e9).toFixed(2)+' / 3.66 GB'+leftText(Number(state.bytes||0),Number(state.total||3659530240)),frac:/verify|cancelling/.test(state.phase)?null:Number(state.bytes||0)/Number(state.total||3659530240),cancel:function(){command('cancel');}});
       else Tasks.remove('gemma-download',priorTask==='download'&&!state.ready&&priorPhase!=='idle'?{text:'Model download paused · '+(state.bytes?'partial file kept':'not complete'),action:'Resume',onAction:function(){if(state.enabled&&state.supported)command('download');else A.openSettings(false);}}:null);
-      if(generating)Tasks.upsert('gemma-advice',{text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining your tire setup…',frac:null,cancel:function(){if(running)attempted.add(running.key);desired=null;command('cancelAdvice');}});
+      if(generating)Tasks.upsert('gemma-advice',{text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining '+(running&&(running.car.nick||running.car.name)||'tire setup')+'…',frac:null,cancel:function(){if(running){running.cancelled=true;attempted.add(running.key);}desired=[];command('cancelAdvice');}});
       else Tasks.remove('gemma-advice');
     }
-    if(!state.enabled){desired=null;cache.clear();attempted.clear();}
+    if(!state.enabled){desired=[];attempted.clear();} // opting out does not erase accepted explanations
     paintSettings();changed();if(!state.busy)schedule();
   }
   window.onGemmaStatus=status;
@@ -51,38 +58,37 @@
   }
   function schedule(){clearTimeout(scheduled);scheduled=setTimeout(prefetch,250);}
   function prefetch(){
-    if(!state.enabled||!state.ready||!state.supported||!current())return;
-    var next;try{next=input(current());}catch(e){lastIssue=e.message;changed();return;}
-    if(!next.pack.setup.tires.some(function(t){return t.depth!=null;}))return;
-    if(cache.has(next.key)||attempted.has(next.key)){desired=null;return;}
-    desired=next;
-    if(running){if(running.key!==next.key&&!running.cancelled){running.cancelled=true;command('cancelAdvice');}return;}
+    if(!state.enabled||!state.ready||!state.supported)return;
+    var c=current(),cars=(A.S.cars||[]).slice();cars.sort(function(a,b){return (b===c?1:0)-(a===c?1:0);});desired=[];
+    var seen=new Set();cars.forEach(function(car){try{var next=input(car);if(seen.has(next.key))return;seen.add(next.key);if(next.pack.setup.tires.some(function(t){return t.depth!=null;})&&!remembered(next)&&!attempted.has(next.key))desired.push(next);}catch(e){if(car===c)lastIssue=e.message;}});
+    if(running){if(!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}return;}
     if(!state.busy)run();
   }
   async function run(){
-    if(running||!desired||state.busy||!state.enabled)return;
-    var item=desired;desired=null;running=item;attempted.add(item.key);lastIssue='';
-    var started=Date.now();LG.info('ai','Local tire explanation started',{positions:item.pack.setup.tires.length,facts:item.pack.facts.length,inputBytes:new TextEncoder().encode(item.prompt).length});
+    if(running||!desired.length||state.busy||!state.enabled)return;
+    var item=desired.shift();running=item;attempted.add(item.key);issues.delete(item.key);lastIssue='';
+    var started=Date.now();LG.info('ai','Local tire explanation started',{carId:item.car.id,positions:item.pack.setup.tires.length,facts:item.pack.facts.length,inputBytes:new TextEncoder().encode(item.prompt).length});
     // Start status immediately; native initialization happens off-thread and reports the precise phase.
     Tasks.upsert('gemma-advice',{text:'Preparing local tire advice…',frac:null,cancel:function(){command('cancelAdvice');}});changed();
     try{
       var result=await call('aiGenerate',item.prompt);
-      var now=current(), live=now&&input(now);
-      if(!state.enabled||item.cancelled||!live||live.key!==item.key)return;
-      if(result.error){lastIssue=result.error;LG.warn('ai','Local tire explanation failed',{elapsedMs:Date.now()-started});return;}
+      if(!state.enabled||item.cancelled||!liveItem(item)||window.__erasing)return;
+      if(result.error){lastIssue=result.error;issues.set(item.key,lastIssue);LG.warn('ai','Local tire explanation failed',{elapsedMs:Date.now()-started});return;}
       var checked=TirePolicy.check(result.text,item.pack),accepted=checked.ok;
-      if(!accepted){lastIssue='AI explanation could not be checked. Use the checked tire notices below.';LG.warn('ai','Local explanation rejected by output guard',{elapsedMs:Date.now()-started,responseChars:String(result.text||'').length,reason:checked.reason,start:String(result.text||'').slice(0,160)});return;}
-      LG.info('ai','Local tire explanation accepted',{elapsedMs:Date.now()-started});
-      cache.set(item.key,{answer:accepted,pack:item.pack});
+      if(!accepted){lastIssue='AI explanation could not be checked. Use the checked tire notices below.';issues.set(item.key,lastIssue);LG.warn('ai','Local explanation rejected by output guard',{elapsedMs:Date.now()-started,responseChars:String(result.text||'').length,reason:checked.reason,start:String(result.text||'').slice(0,160)});return;}
+      LG.info('ai','Local tire explanation accepted',{carId:item.car.id,elapsedMs:Date.now()-started});
+      var saved={key:item.key,raw:result.text,t:Date.now()};if(A.KV)A.KV.put('aiexplanations',item.key,saved);
+      cache.set(item.key,{answer:accepted,pack:item.pack,t:saved.t});
       while(cache.size>12)cache.delete(cache.keys().next().value);
-    }catch(e){lastIssue='Local AI could not finish. Checked tire notices remain available.';}
+    }catch(e){lastIssue='Local AI could not finish. Checked tire notices remain available.';issues.set(item.key,lastIssue);}
     finally{running=null;Tasks.remove('gemma-advice');changed();schedule();}
   }
-  function answer(c){if(!state.enabled)return null;try{return cache.get(input(c).key)||null;}catch(e){return null;}}
+  function answer(c){if(!state.enabled)return null;try{return remembered(input(c));}catch(e){return null;}}
+  function clearCache(){cache.clear();attempted.clear();issues.clear();desired=[];if(running){running.cancelled=true;command('cancelAdvice');}schedule();changed();}
   function card(c){
     if(!state.enabled)return '';
-    if(!state.ready&&!state.error&&!lastIssue)return ''; // Setup/download belongs in Settings and the task dock, not another Advice tile.
     var got=answer(c),esc=A.esc;
+    if(!got&&!state.ready&&!state.error&&!lastIssue)return ''; // Existing accepted explanations do not require a loaded model.
     if(got){
       // the AI's summary and why its top findings matter; the checked findings themselves, folded, are the record
       var facts=got.pack.facts,find=function(id){return facts.filter(function(f){return f.id===id;})[0];};
@@ -93,7 +99,8 @@
     }
     var eligible=false;try{eligible=input(c).pack.setup.tires.some(function(t){return t.depth!=null;});}catch(e){}
     var label=state.ready?(running?'Local AI is preparing an explanation.':eligible?'Checked tire notices are available below.':'Add tire mileage and type, or measured tread, before requesting an explanation.'):'Download Gemma in Settings to enable local explanations.';
-    return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup</h3><p class="lead small keep">'+esc(lastIssue||state.error||label)+'</p>'+(state.ready&&eligible&&!running?'<button class="btn tonal sm" id="gemmaRetry">Try AI explanation</button>':'')+'</div>';
+    var issue;try{issue=issues.get(input(c).key);}catch(e){}
+    return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup</h3><p class="lead small keep">'+esc(issue||(!state.supported?lastIssue:'')||label)+'</p>'+(state.ready&&eligible&&!running?'<button class="btn tonal sm" id="gemmaRetry">Try AI explanation</button>':'')+'</div>';
   }
   function settingsHtml(){return '<div class="card" id="gemmaSettings"><h3>Local AI explanations · optional</h3><p class="lead small keep">Gemma 4 E4B explains complex tire setups on your phone, one task at a time. The lightweight ratings model stays in use. No API key or cloud inference.</p><div id="gemmaState" class="lead small keep"></div><p class="lead small keep">Separate 3.66 GB download. Wi-Fi recommended; allow extra storage for runtime work. Leaving the app may pause the download. Existing tire notices work without it.</p><div class="gemma-controls"><button class="btn tonal" id="gemmaEnable"></button><button class="btn primary" id="gemmaDownload">Download 3.66 GB</button><button class="btn tonal" id="gemmaCancel">Cancel task</button><button class="btn tonal" id="gemmaRemove">Remove model</button></div></div>';}
   function paintSettings(){
@@ -118,8 +125,13 @@
   function retry(){var c=current();if(c)try{attempted.delete(input(c).key);}catch(e){}lastIssue='';schedule();}
   var slot=document.getElementById('gemmaSlot');if(slot){slot.outerHTML=settingsHtml();bindSettings();}   // Settings opened before this file loaded (first-time setup)
   window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry,setEnabled:function(on){return command(on?'enable':'disable');}};
-  window.addEventListener('garagechange',function(){if(running){var c=current();try{if(!c||input(c).key!==running.key){running.cancelled=true;command('cancelAdvice');}}catch(e){command('cancelAdvice');}}schedule();});
-  document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{status(JSON.parse(A.N.aiStatus()));}catch(e){}});
+  window.addEventListener('garagechange',function(){if(running&&!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}schedule();});
+  window.addEventListener('cacheclear',clearCache);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&A.N.aiStatus)try{
+    // Android's Clear cache can remove files while our process survives.
+    if(A.KV)cache.forEach(function(_,key){if(!A.KV.get('aiexplanations',key)){cache.delete(key);attempted.delete(key);}});
+    status(JSON.parse(A.N.aiStatus()));
+  }catch(e){}});
   setTimeout(function(){if(A.N.aiStatus)try{
     status(JSON.parse(A.N.aiStatus()));
     // 176 onboarding saved an automatic opt-out. Establish the requested

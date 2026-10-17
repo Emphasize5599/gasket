@@ -159,8 +159,8 @@
   }
   function memNow(A){try{var m=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');return m.totalMem?{availMB:Math.round(m.availMem/1048576),totalMB:Math.round(m.totalMem/1048576),low:!!m.lowMemory,appHeapMB:Math.round((m.appHeapUsed||0)/1048576),appHeapMaxMB:Math.round((m.appHeapMax||0)/1048576),readerRecycles:m.readerRecycles||0,rendererLosses:m.rendererLosses||0}:null;}catch(e){return null;}}
   function autoWorkers(memory){var gb=Number(memory&&memory.totalMem)/1073741824;if(memory&&memory.lowMemory)return 4;if(!Number.isFinite(gb)||gb<=0)return 6;return gb>=15?20:gb>=11?16:gb>=7?12:gb>=5?8:gb>=3?6:4;}
-  function workerWarning(memory,count){var base=autoWorkers(memory),n=Math.max(1,Math.min(20,Math.round(Number(count)||base)));return {warn:n>base&&(n>=Math.ceil(base*2.25)||n>=16||!!(memory&&memory.lowMemory)),base:base,count:n};}
-  function readerCount(A){var value=Number(A.S&&A.S.keylessWorkers);if(Number.isFinite(value)&&value>=1)return Math.min(20,Math.max(1,Math.round(value)));var memory={};try{memory=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');}catch(e){}return autoWorkers(memory);}
+  function workerWarning(memory,count){var base=autoWorkers(memory),n=Math.max(1,Math.min(50,Math.round(Number(count)||base)));return {warn:n>base&&(n>=Math.ceil(base*2.25)||n>=16||!!(memory&&memory.lowMemory)),base:base,count:n};}
+  function readerCount(A){var value=Number(A.S&&A.S.keylessWorkers);if(Number.isFinite(value)&&value>=1)return Math.min(50,Math.max(1,Math.round(value)));var memory={};try{memory=JSON.parse(A.N&&A.N.memoryInfo?A.N.memoryInfo():'{}');}catch(e){}return autoWorkers(memory);}
   // One shared decision per fresh sample: a cached low-memory reading must not
   // retire every extra lane. Pause instead; gradually resume when RAM recovers.
   function poolTarget(state,m,now,max){
@@ -273,7 +273,7 @@
   async function discover(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
-    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||20,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;
+    var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||50,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
     if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,grade:grade,force:!!force,mem:mem0});

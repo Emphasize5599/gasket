@@ -66,7 +66,7 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
-    private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|1[0-9]|20)?"); }
+    private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|[1-4][0-9]|50)?"); }
     private volatile int gasReaderRecycles = 0, gasRendererLosses = 0;
 
     private static final int REQ_LOC = 42;
@@ -101,7 +101,7 @@ public class MainActivity extends Activity {
      *  (see assets/<key>_worker.js). Each runs the same requests the site's own store finder makes. */
     private FrameLayout root;
     private TextView wmDone;
-    private SiteWorker verifying = null;
+    private volatile SiteWorker verifying = null;
     private final Map<String, SiteWorker> workers = new HashMap<String, SiteWorker>();
     private LocationManager lm;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -403,6 +403,11 @@ public class MainActivity extends Activity {
             WebSettings ws = view.getSettings();
             ws.setJavaScriptEnabled(true);
             ws.setDomStorageEnabled(true);
+            if(isGasWorker(key)) {
+                ws.setAllowFileAccess(false); ws.setAllowContentAccess(false);
+                ws.setGeolocationEnabled(false); ws.setMediaPlaybackRequiresUserGesture(true);
+                ws.setJavaScriptCanOpenWindowsAutomatically(false); ws.setSupportMultipleWindows(false);
+            }
             // Station results/prices are text. Do not download map/photo tiles for invisible readers.
             if (isGasWorker(key)) ws.setBlockNetworkImage(true);
             if (desktop) {
@@ -423,6 +428,19 @@ public class MainActivity extends Activity {
                     if (verifying == SiteWorker.this || readReq < 0 || !url.startsWith(SiteWorker.this.origin) || !url.equals(v.getUrl())) return;
                     if (isGasWorker(key)) v.clearHistory();
                     runRead();
+                }
+
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                    // Keep page JS, CSS, DOM/storage, fetch/XHR and pagination intact.
+                    // Visible human-verification pages retain all resources.
+                    if(isGasWorker(key) && verifying != SiteWorker.this && !req.isForMainFrame() && "GET".equals(req.getMethod())) {
+                        String host=String.valueOf(req.getUrl().getHost()).toLowerCase(Locale.US);
+                        String path=String.valueOf(req.getUrl().getPath()).toLowerCase(Locale.US);
+                        if(host.equals("fonts.gstatic.com") || host.equals("fonts.googleapis.com") || path.matches(".*\\.(woff2?|ttf|otf|mp4|webm|mp3|ogg|wav)$"))
+                            return new WebResourceResponse("text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
+                    }
+                    return null;
                 }
 
                 @Override
