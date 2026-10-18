@@ -7,6 +7,9 @@
  *   unknown amount; no tollInfo at all on a route asked about = no tolls. The estimate is for a car with no toll pass.
  * - Without a key, the Google Maps website says only "This route has tolls" (no amount; checked on the Turner
  *   Turnpike in 2026-10), so the amount is yours to enter.
+ * - With the optional HERE key (free: 2,500 toll lookups a month), HERE's Routing v8 prices one route option per
+ *   request: the same road, held by pass-through points along our line (hereQuery), its answer accepted only when
+ *   its length matches ours within 3% (hereRead). Asked only for options Maps says have tolls of no known amount.
  * - A route fetched with "avoid tolls" has none.
  * An amount you enter (by the route's signature) always wins. Unknown stays unknown: a comparison never treats an
  * unknown toll as $0.
@@ -27,6 +30,8 @@
       return usd.length ? { has: true, cost: Math.round(usd.reduce(function (s, p) { return s + money(p); }, 0) * 100) / 100, src: 'google' } : { has: true, cost: null, src: 'google' };
     }
     if (a.tollsAsked) return { has: false, cost: 0, src: 'google' };
+    var here = a.hereTolls;
+    if (here && here.ok && Number.isFinite(here.cost)) return { has: here.cost > 0, cost: here.cost, src: 'here' };
     if (a.websiteTolls === true) return { has: true, cost: null, src: 'maps' };
     if (a.websiteTolls === false) return { has: false, cost: 0, src: 'maps' };
     return { has: null, cost: null, src: null };
@@ -58,8 +63,45 @@
     });
     return out;
   }
+  var VIA = 8;
+  /**
+   * HERE Routing v8 query (without the key) for one option's line pts [{lat, lng}]: its ends plus VIA pass-through
+   * points spread along it (so HERE prices these roads, not its own pick), car, one route, the toll total in USD.
+   * veh {axles, trailers, trailerAxles}: a hooked trailer changes what tolls cost (axles in total include the trailer's).
+   */
+  function hereQuery(pts, veh) {
+    var n = pts.length, at = function (p) { return p.lat.toFixed(5) + ',' + p.lng.toFixed(5); }, enc = function (k) { return k.replace(/\[/g, '%5B').replace(/\]/g, '%5D'); };
+    var q = ['transportMode=car', 'origin=' + at(pts[0]), 'destination=' + at(pts[n - 1])];
+    for (var k = 1; k <= VIA && n > 2; k++) q.push('via=' + at(pts[Math.round(k * (n - 1) / (VIA + 1))]) + '!passThrough=true');
+    q.push('return=summary,tolls', enc('tolls[summaries]') + '=total', 'currency=USD');
+    if (veh && veh.trailers > 0) q.push(enc('vehicle[axleCount]') + '=' + ((veh.axles || 2) + veh.trailerAxles), enc('vehicle[trailerCount]') + '=' + veh.trailers, enc('vehicle[trailerAxleCount]') + '=' + veh.trailerAxles);
+    return q.join('&');
+  }
+  /**
+   * HERE's answer → {ok, cost, mi}: the route's length (all sections) against ours (wantMi, 3%), the toll total in
+   * USD (each section's summary.tolls.total, else each toll's cheapest fare). No tolls listed = $0. Another currency
+   * or a shape we don't know = not ok (asked again never: the caller keeps the failure for this route).
+   */
+  function hereRead(json, wantMi) {
+    var r = json && json.routes && json.routes[0];
+    if (!r || !Array.isArray(r.sections) || !r.sections.length) return { ok: false, why: 'no route' };
+    var m = 0, cost = 0, bad = false;
+    r.sections.forEach(function (s) {
+      m += (s.summary && s.summary.length) || 0;
+      var tot = s.summary && s.summary.tolls && s.summary.tolls.total;
+      if (tot) { if (tot.currency && tot.currency !== 'USD') bad = true; cost += Number(tot.value) || 0; return; }
+      (s.tolls || []).forEach(function (t) {
+        var fares = (t.fares || []).map(function (f) { var p = f.price || f.convertedPrice || {}; if (p.currency && p.currency !== 'USD') return null; return Number(p.value); }).filter(Number.isFinite);
+        if (fares.length) cost += Math.min.apply(null, fares); else if ((t.fares || []).length) bad = true;
+      });
+    });
+    var mi = m / 1609.344;
+    if (bad) return { ok: false, why: 'currency', mi: mi };
+    if (!(wantMi > 0) || Math.abs(mi - wantMi) > wantMi * 0.03) return { ok: false, why: 'different route', mi: mi };
+    return { ok: true, cost: Math.round(cost * 100) / 100, mi: mi };
+  }
   function text(t) { return t.has === false ? 'No tolls' : t.cost != null ? 'Tolls about $' + t.cost.toFixed(2) : t.has ? 'Has tolls (amount unknown)' : ''; }
-  var api = { sig: sig, ofRoute: ofRoute, ofTrip: ofTrip, diff: diff, addTollFree: addTollFree, text: text };
+  var api = { sig: sig, hereQuery: hereQuery, hereRead: hereRead, ofRoute: ofRoute, ofTrip: ofTrip, diff: diff, addTollFree: addTollFree, text: text };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.Tolls = api;
 })(typeof window !== 'undefined' ? window : this);

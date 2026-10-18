@@ -275,7 +275,7 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "tolls"));
 
     /** Pictures are user data, including imported images. Upgrade the old cache without
      * overwriting a newer stored image or deleting the only copy if a move fails. */
@@ -894,6 +894,10 @@ public class MainActivity extends Activity {
             + "routes.travelAdvisory.tollInfo";
     private static final String ALONG_MASK = FIELD_MASK + ",routingSummaries,nextPageToken";
 
+    private static String hereMonthKey() {
+        return "hcalls_" + new SimpleDateFormat("yyyy-MM", Locale.US).format(new Date());
+    }
+
     private static String routeMonthKey() {
         return "rcalls_" + new SimpleDateFormat("yyyy-MM", Locale.US).format(new Date());
     }
@@ -1482,6 +1486,44 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public int routeCallsThisMonth() { return prefs().getInt(routeMonthKey(), 0); }
+
+        @JavascriptInterface
+        public int hereCallsThisMonth() { return prefs().getInt(hereMonthKey(), 0); }
+
+        /**
+         * HERE Routing v8 toll prices for one route option (optional HERE key; Route compares toll and toll-free roads).
+         * query = the request without the key (only HERE's own parameter characters); the key is added here, never in
+         * a URL the page builds or logs. Each request is counted (it uses one HERE car route and one toll cost
+         * transaction) and refused at the monthly cap, atomically, like the Routes cap.
+         */
+        @JavascriptInterface
+        public void fetchHere(final int reqId, final String key, final String query, final int monthlyCap) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject o = new JSONObject();
+                    try {
+                        if (key == null || !key.matches("[A-Za-z0-9_\\-]{10,128}")) throw new Exception("That HERE key doesn't look right");
+                        if (query == null || query.length() > 4000 || !query.matches("[A-Za-z0-9=&%,._!\\-]+")) throw new Exception("Bad HERE request");
+                        synchronized (MainActivity.this) {
+                            int used = prefs().getInt(hereMonthKey(), 0);
+                            if (monthlyCap > 0 && used >= monthlyCap) {
+                                o.put("error", "Monthly HERE toll lookup cap reached (" + used + "/" + monthlyCap + ").");
+                                o.put("code", "here_cap"); reply(reqId, o); return;
+                            }
+                            if (!prefs().edit().putInt(hereMonthKey(), used + 1).commit()) throw new Exception("Could not save HERE usage; request stopped");
+                        }
+                        HttpURLConnection c = (HttpURLConnection) new URL("https://router.hereapi.com/v8/routes?" + query + "&apiKey=" + java.net.URLEncoder.encode(key, "UTF-8")).openConnection();
+                        c.setConnectTimeout(15000); c.setReadTimeout(30000);
+                        c.setRequestProperty("Accept", "application/json");
+                        int st = c.getResponseCode();
+                        String body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
+                        if (st >= 400) { o.put("status", st); o.put("error", "HERE error " + st); }
+                        o.put("body", body);
+                    } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    reply(reqId, o);
+                }
+            }).start();
+        }
 
         /**
          * Address / place lookup: returns full Google addresses with place IDs and coordinates, biased toward

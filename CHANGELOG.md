@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.191 - 2026-10-18 (keyless test branch only)
+- Toll prices from HERE: add your free HERE key in Settings → Connections and, when Route compares toll and toll-free roads, each toll road gets its price automatically (with your trailer's axles when you tow). Only roads with tolls of an unknown amount are asked, once each, and each answer is kept 30 days; a monthly limit (2,000 by default, under HERE's free 2,500) stops it before any charge.
+
 ## 0.0.190 - 2026-10-18 (keyless test branch only)
 - Compare with and without tolls (Route → Other routes): each leg's toll-free routes are fetched too and join the alternatives, and the route comparisons count each route's tolls, so a toll road with cheap stations can still win. With the API key Google estimates the toll amounts; without it the Google Maps website only says a route has tolls, so Route's new Tolls card takes the amount (also for a toll pass or a trailer). A trip whose tolls aren't known isn't recommended.
 - Hazards shows each route option's tolls.

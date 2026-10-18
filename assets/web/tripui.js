@@ -1643,6 +1643,49 @@
     if (!tollPair() && !t.has) return '';
     return t.has === false ? 'no tolls' : t.cost != null ? '$' + t.cost.toFixed(2) + ' tolls' : t.has ? 'tolls' : '';
   }
+  /**
+   * HERE toll prices (optional key in Settings → Connections), as few calls as possible: only options Maps or Google
+   * say have tolls of no known amount (not ones you typed, toll-free ones or Google's own estimates), only while tolls
+   * are compared, one request per distinct option (a leg's option, never per whole-trip combination), one at a time,
+   * each answer kept 30 days in KV `tolls` (by the option, its ends and the vehicle) and on the saved route option;
+   * a failure or a different route HERE found is kept too, so it is never asked again on its own. The monthly cap is
+   * enforced natively (`fetchHere`).
+   */
+  var hereBusy = false, hereSeen = new WeakSet();
+  function hereVehicle() {
+    var t = (Garage.car() || {}).tires || {}, hooked = t.towMode ? (t.trailers || []).filter(function (x) { return x.hooked; }) : [];
+    return { axles: 2, trailers: hooked.length, trailerAxles: hooked.reduce(function (n, x) { return n + Math.max(1, Math.min(3, +x.axles || 1)); }, 0) };
+  }
+  function hereWanted(a) { var t = tollsOf(a); return t.has === true && t.cost == null && !a.hereTolls && !hereSeen.has(a); }
+  async function hereTolls() {
+    if (hereBusy || !S.hereKey || !tollPair() || !window.Tolls || !model) return;
+    var todo = []; choiceLists().forEach(function (l) { l.forEach(function (a) { if (hereWanted(a) && todo.indexOf(a) < 0) todo.push(a); }); });
+    if (!todo.length) return;
+    hereBusy = true; var owner = route, veh = hereVehicle(), vk = veh.trailers + 't' + veh.trailerAxles, cached = 0, asked = 0;
+    var end = window.Tasks ? Tasks.begin('here-tolls', { text: 'Getting toll prices from HERE' }) : function () { };
+    try {
+      for (var i = 0; i < todo.length && route === owner; i++) {
+        var a = todo[i], pts = decoded(a), mi = (a.distanceMeters || 0) / 1609.344;
+        hereSeen.add(a);
+        if (pts.length < 2) continue;
+        var key = 'v1|' + Tolls.sig(a) + '|' + [pts[0], pts[pts.length - 1]].map(function (p) { return p.lat.toFixed(3) + ',' + p.lng.toFixed(3); }).join('>') + '|' + vk;
+        var o = A.KV.get('tolls', key, 30 * 24 * 3600e3);
+        if (o) { a.hereTolls = o.v; cached++; continue; }
+        asked++;
+        var res = await call('fetchHere', S.hereKey, Tolls.hereQuery(pts, veh), S.hereMonthlyCap == null ? 2000 : Math.max(0, parseInt(S.hereMonthlyCap, 10) || 0));
+        if (res.code === 'here_cap') { LG.warn('route', res.error); toastMsg(res.error); break; }
+        var j = null; try { j = res.body ? JSON.parse(res.body) : null; } catch (e) { }
+        if (res.error || !j) { a.hereTolls = { ok: false, why: res.error || 'unreadable', at: Date.now() }; LG.warn('route', 'HERE toll price failed', { via: a.description, error: res.error || 'unreadable', detail: j && (j.title || j.cause) }); continue; }
+        a.hereTolls = Object.assign(Tolls.hereRead(j, mi), { at: Date.now() });
+        A.KV.put('tolls', key, a.hereTolls);
+      }
+    } finally { hereBusy = false; end(); }
+    LG.info('route', 'HERE toll prices', { options: todo.length, fromCache: cached, asked: asked, month: N.hereCallsThisMonth ? N.hereCallsThisMonth() : null,
+      results: todo.map(function (a) { var h = a.hereTolls || {}; return { via: a.description, ok: !!h.ok, cost: h.cost, mi: h.mi && Math.round(h.mi), why: h.why }; }) });
+    if (route !== owner) return;
+    if ($('tTolls')) { var y = tpBody().scrollTop; renderInfo(); tpBody().scrollTop = y; }
+    if (step === ST_HAZ) renderHz();
+  }
   function tollPair() { return !!S.trip.tollCompare && !(S.trip.avoid || {}).tolls; }
   function tollsOf(a) { return window.Tolls ? Tolls.ofRoute(a, S.trip.tollAmounts) : { has: null, cost: null }; }
   async function withTollFree(r, list, body) {
@@ -1760,7 +1803,7 @@
     var el = $('tRouteInfo'); if (!el) return;
     if (!model) { el.innerHTML = ''; alts = []; return; }
     el.innerHTML = tollsHtml();   // the routes, their weather and the lookup notes are on Hazards and Adjustments
-    bindTolls();
+    bindTolls(); hereTolls();
   }
   /** Route: each option's tolls, when you compare with and without them (or any route has tolls): Google's estimate,
    *  or a box for the amount (Google Maps' website doesn't give one). Saved by the route, in S.trip.tollAmounts. */
@@ -1773,11 +1816,13 @@
       if (lists.length > 1) rows += '<div class="sub-h">Leg ' + (i + 1) + ' · ' + esc(legName(route, i)) + '</div>';
       list.forEach(function (a) {
         var t = tollsOf(a), sg = Tolls.sig(a), mine = (S.trip.tollAmounts || {})[sg];
-        rows += '<div class="field toll-row"><div class="lbl">via ' + esc(a.description || 'route') + '<small>' + esc(Tolls.text(t) || 'Tolls not known') + (t.src === 'google' && t.cost != null ? ' (Google\'s estimate)' : '') + '</small></div>' +
+        rows += '<div class="field toll-row"><div class="lbl">via ' + esc(a.description || 'route') + '<small class="keep">' + esc(Tolls.text(t) || 'Tolls not known') + (t.src === 'google' && t.cost != null ? ' (Google\'s estimate)' : t.src === 'here' ? ' (HERE\'s price' + (hereVehicle().trailers ? ', with your trailer' : '') + ')' : a.hereTolls && !a.hereTolls.ok ? ' · HERE couldn\'t price it' + (a.hereTolls.why === 'different route' ? ' (it found another road)' : '') : S.hereKey && tollPair() && t.has && t.cost == null && !a.hereTolls ? ' · asking HERE…' : '') + '</small></div>' +
           (t.has === false && t.src !== 'you' ? '' : '<input type="number" inputmode="decimal" min="0" step="0.01" class="toll-in" data-toll="' + esc(sg) + '" aria-label="Tolls on this route ($)" placeholder="' + (t.cost != null ? t.cost.toFixed(2) : '$') + '" value="' + (Number.isFinite(mine) ? mine : '') + '">') + '</div>';
       });
     });
-    return '<div class="card" id="tTolls"><h3>Tolls</h3><p class="lead small keep">Counted in the route comparisons. Type an amount to use your own (a toll pass, a trailer, or Google didn\'t say); leave it blank for Google\'s.</p>' + rows + '</div>';
+    var hereUsed = lists.some(function (l) { return l.some(function (a) { return tollsOf(a).src === 'here'; }); });
+    if (hereUsed) rows += '<div class="lead small keep here-attr">Toll prices © HERE</div>';
+    return '<div class="card" id="tTolls"><h3>Tolls</h3><p class="lead small keep">Counted in the route comparisons. Type an amount to use your own (a toll pass, or no price found); leave it blank for the one shown.</p>' + rows + '</div>';
   }
   function bindTolls() {
     document.querySelectorAll('#tTolls .toll-in').forEach(function (inp) {
@@ -3436,6 +3481,7 @@
     return h;
   }
   function renderHz() {
+    hereTolls();
     var el = $('tHz'); if (!el) return;
     var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
     var list = hzAlts(hzLeg), sel = routeReview?routeReview.k:hzSel(hzLeg);

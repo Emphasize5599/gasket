@@ -49,6 +49,9 @@
       routeCallsThisMonth: function () { return 0; },
       placesFind: function (req, key, q, lat, lng, bias, radius) { setTimeout(function () { var m = window.__mocks && window.__mocks.find; window.onNativeResult(req, m ? { body: JSON.stringify(m(q, lat, lng, radius)) } : { error: 'No find mock' }); }, 50); },
       resolveLink: function (req, url) { setTimeout(function () { window.onNativeResult(req, (window.__mocks && window.__mocks.link) || { url: url }); }, 50); },
+      // HERE toll prices: tests answer through __mocks.here(query); the monthly count/cap as the native side keeps them
+      hereCallsThisMonth: function () { return window.__hereCalls || 0; },
+      fetchHere: function (req, key, query, cap) { setTimeout(function () { var m = window.__mocks && window.__mocks.here; if (cap > 0 && (window.__hereCalls || 0) >= cap) return window.onNativeResult(req, { error: 'Monthly HERE toll lookup cap reached (' + window.__hereCalls + '/' + cap + ').', code: 'here_cap' }); window.__hereCalls = (window.__hereCalls || 0) + 1; var v = m && m(query, key); window.onNativeResult(req, v && v.__error ? { error: v.__error } : m ? { body: JSON.stringify(v) } : { error: 'offline' }); }, 30); },
       fetchFuel: function (req, path, key) { setTimeout(function () { var m = window.__mocks && window.__mocks.fuel; window.onNativeResult(req, m ? m(path, key) : { error: 'offline' }); }, 30); },
       fetchImage: function (req, url) { setTimeout(function () { var m = window.__mocks && window.__mocks.image; window.onNativeResult(req, m ? m(url) : { error: 'offline' }); }, 30); },
       saveCarImage: function (req, url, name) { window.__savedCarImage = { url: url, name: name }; setTimeout(function () { window.onNativeResult(req, window.__mocks && window.__mocks.saveCarImage || { path: 'Downloads/Gasket/' + name }); }, 30); },
@@ -125,7 +128,7 @@
   function logSetup() {
     if (P.setCents) P.setCents(S.roundCents);
     if (!window.FLog) return;
-    FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.fuelKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
+    FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.fuelKey, S.hereKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
   }
   logSetup();
   if (window.FLog) FLog.info('app', 'Started Gasket ' + (N.appVersion ? N.appVersion() : ''));
@@ -965,7 +968,7 @@
   function exportData(kind) {
     var d = { gasketData: 1, kind: kind, app: N.appVersion ? N.appVersion() : '', exported: new Date().toISOString(), blacklist: BL.list() };
     if (kind === 'all') {
-      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.nrelKey; delete st.fuelKey; delete st.blacklist;   // API keys are never exported
+      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.nrelKey; delete st.fuelKey; delete st.hereKey; delete st.blacklist;   // API keys are never exported
       d.settings = st;
       var idx = (KV.get('trips', 'index') || {}).v || [];
       d.trips = idx.map(function (x) { var o = KV.get('trips', 'trip|' + x.id); return o ? { entry: x, t: o.t, trip: o.v } : null; }).filter(Boolean);
@@ -1047,7 +1050,7 @@
     Object.keys(st.dieselRisk || {}).forEach(function (k) { if (!S.dieselRisk[k]) { S.dieselRisk[k] = true; r.settings++; } });
     // other settings: only ones you've never set
     Object.keys(st).forEach(function (k) {
-      if (k === 'apiKey' || k === 'nrelKey' || k === 'fuelKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
+      if (k === 'apiKey' || k === 'nrelKey' || k === 'fuelKey' || k === 'hereKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
       if (S[k] === undefined) { S[k] = st[k]; r.settings++; }
     });
     // saved trips you don't have
@@ -1184,6 +1187,8 @@
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
       '<div class="field col"><div class="lbl">Station finder key (optional)<small>EV chargers and hydrogen stations come from the U.S. Department of Energy\'s free station finder. Blank uses the shared DEMO_KEY (about 30 lookups an hour). A free key of your own: <a href="#" data-url="https://developer.nlr.gov/signup/">sign up</a>. Never logged or exported.</small></div><input type="password" id="nrelKey" placeholder="DEMO_KEY" autocomplete="off" spellcheck="false" value="' + esc(S.nrelKey || '') + '"></div>' +
+      '<div class="field col"><div class="lbl">Toll prices key (optional)<small>HERE: when Route compares toll and toll-free roads, fills in each toll road\'s price (priced for your trailer when you tow). Free for 2,500 toll lookups a month; only roads that have tolls of an unknown amount are asked, and each answer is kept 30 days. Get one: <a href="#" data-url="https://platform.here.com/">platform.here.com</a> → Access Manager → Apps → Register new app → Credentials → API Keys. Never logged or exported.</small></div><input type="password" id="hereKey" autocomplete="off" spellcheck="false" value="' + esc(S.hereKey || '') + '"></div>' +
+      '<div class="field"><div class="lbl">HERE toll lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); HERE\'s free tier is 2,500.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
       '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Fast-charging price ($/kWh)<small>What you expect to pay at DC fast chargers — most don\'t publish prices to the finder. Typical: $0.40–0.60.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
       '<div class="field"><div class="lbl">Hydrogen price ($/kg)<small>What you expect to pay. California stations have been around $30–36.</small></div><input type="number" id="h2Price" min="0" max="100" step="0.5" value="' + (S.h2Price || 36) + '"></div></div>';
@@ -1326,6 +1331,8 @@
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
     S.logLevel = parseInt($('logLevel').value, 10) || 5;
     S.nrelKey = $('nrelKey').value.trim();
+    if ($('hereKey')) S.hereKey = $('hereKey').value.trim();
+    if ($('hereMonthlyCap')) S.hereMonthlyCap = Math.max(0, parseInt($('hereMonthlyCap').value, 10) || 0);
     if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
     S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);
     S.h2Price = Math.max(0, parseFloat($('h2Price').value) || 36);
