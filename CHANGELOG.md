@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.194 - 2026-10-18 (keyless test branch only)
+- Switching to a cheaper whole-trip recommendation keeps Hazards done: the routes it replaces stay approved alternatives, so Hazards no longer asks about them again, the later steps stay open, and the next station search uses the saved stations instead of searching again.
+
 ## 0.0.193 - 2026-10-18 (keyless test branch only)
 - Saved trips get toll prices too: a trip saved before toll comparison existed (or with it off) now fetches its toll-free routes when you open it with "Compare with and without tolls" on, and HERE prices its routes (before, HERE was never asked for saved trips' routes).
 - The log says why HERE wasn't asked (the comparison switch is off, or you're avoiding tolls).

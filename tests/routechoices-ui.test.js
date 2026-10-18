@@ -59,6 +59,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{window.__goodRun=Planner.run;Planner.run=function(){Planner.run=__goodRun;return Promise.reject(new Error('Synthetic failure'));};});
  await p.click('[data-replace="'+chosen+'"]');await p.waitForFunction(()=>!document.querySelector('[data-replace]').disabled);assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[0,0],'failed replacement leaves the trip unchanged');
  await p.click('[data-replace="'+chosen+'"]');await p.waitForFunction(()=>__trip.state().step===6&&!Tasks.list().some(t=>t.id==='route-comparison'));
+ // the replaced routes stay approved: Hazards still counts as done (its tabs past it stay open, no question again)
+ assert.deepEqual(await p.evaluate(()=>[...document.querySelectorAll('#tpSteps [data-step]')].filter(b=>b.classList.contains('dim')).map(b=>+b.dataset.step)),[],'every step stays reachable after a replacement');
  // a replacement returns to Adjustments; its Next compares the trips once more before the stops
  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===7&&!Tasks.list().some(t=>t.id==='route-comparison')&&!!document.querySelector('.trip-proposal,#tsResults .msg,#tsResults .note'));
  if(!await p.locator('#tsIdeal:visible').count()){await p.click('#tNext');}await p.waitForSelector('#tsIdeal',{state:'visible'});

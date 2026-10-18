@@ -231,6 +231,11 @@
       if(epoch!==recommendationEpoch||route!==owner||result!==base)return;
       if(!p.ok)throw Error('No plan meets your limits');
       // Commit only after the replacement has a valid plan; failures never change the current selection.
+      // The routes it replaces were your picks, so they stay approved alternatives: without an answer Hazards asked
+      // about them again (and the saved stations left them out, so the next search started over).
+      var lists=choiceLists(),answers=choiceAnswers();
+      previous.selections.forEach(function(k,i){if(k===proposal.sel[i]||!lists[i]||!lists[i][k])return;var id=RouteChoices.key(i,lists[i][k]);answers[id]=Object.assign({},answers[id],{consider:true});});
+      saveChoices();
       if(legsMode()){route.legs.forEach(function(l,i){l.sel=proposal.sel[i];});rebuildAlts();raw=alts[0];}else altSel=proposal.sel[0];
       rawRoute=raw;model=m;result={plan:p,opts:opts,cands:g.cands,notes:g.notes,unpriced:g.unpriced,stale:g.stale,grade:g.grade,startGal:base.startGal,bufMi:base.bufMi,topMi:base.topMi,topSel:-1,planOffs:''};
       choiceComplete=true;recompute();if(choicePool){var stations=Array.from(new Map((choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]).map(function(s){return [P.stationKey(s),s];})).values()),ks=[altSel].concat(altCompareList());saveTrip({official:stations.map(function(s){var c=Object.assign({},s);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:ks.map(function(){return [];}),kind:choicePool.kind||'gas'},ks);}else rememberSel();startSweep();hzPreload();
