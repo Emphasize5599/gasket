@@ -11,10 +11,10 @@ K.readerKeys(50).forEach(key=>assert(allowed.test(key)));['gasweb0','gasweb1','g
 assert.match(native,/ActivityManager\.MemoryInfo/);assert.match(native,/public void releaseGasReaders\(/);
 async function run(count,discovery){
  const active=new Set(),pending=[],calls=[],cancelled=[],window={document:{},__app:{P,S:{keylessWorkers:count},siteOn:()=>false,N:{cancelSiteRead:k=>cancelled.push(k),releaseGasReaders:()=>{window.released=true;}},KV:{get:()=>null,put:()=>true}},__trip:{call:(fn,key,args)=>{assert.equal(fn,'siteRead');assert(allowed.test(key));assert(!active.has(key));active.add(key);calls.push(key);return new Promise(resolve=>pending.push(r=>{active.delete(key);resolve(r);}));}}};
- vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date,setInterval,clearInterval,setTimeout});
+ vm.runInNewContext(fs.readFileSync('assets/web/keylessgas.js','utf8'),{window,Date,setInterval,clearInterval,setTimeout,clearTimeout});
  const known=Array.from({length:70},(_,i)=>({id:'s'+i,name:'Exxon',brand:'exxon',lat:34,lng:-100+i*.2,prices:{}}));
  const task=discovery?window.KeylessGas.discover(known.map(s=>K.area(s.lat,s.lng,8)),null,'regular'):window.KeylessGas.refreshKnown(known,null,[],'regular');
- assert.equal(calls.length,count,'start the configured pool before waiting for responses');
+ assert.equal(calls.length,Math.min(count,8),'start up to eight readers before pages show what the connection carries');
  window.__app.S.keylessWorkers=1;window.KeylessGas.cancel();const result=await task;
  assert(result.cancelled);assert.equal(cancelled.length,count+2,'cancel the starting pool, not a changed setting');assert(window.released,'idle native readers are released after scans');
 }
