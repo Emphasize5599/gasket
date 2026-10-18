@@ -34,7 +34,7 @@ assert.equal(K.updateKnown([savedStation,{...savedStation,id:'other'}],[w],P,123
 assert.equal(P.DEFAULTS.routesMonthlyCap,9500);
 const link=(id,name='Exxon',lng=-92.29)=>`<article role="article"><a aria-label="${name}" href="https://www.google.com/maps/place/${name}/data=!1s${id}!3d34.745!4d${lng}">${name}</a></article>`;
 const html='<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'End of the list</div>';
-async function worker(pg,body,raw,status=200,args={}){
+async function worker(pg,body,raw,status=200,args={},realMs=0){
   if(!pg.__fixtureClock){await pg.clock.install();pg.__fixtureClock=true;}
   await pg.setContent(body);
   await pg.evaluate(({raw,status})=>{
@@ -43,7 +43,7 @@ async function worker(pg,body,raw,status=200,args={}){
     window.fetch=async()=>({ok:status===200,status,url:'https://www.google.com/search',text:async()=>raw});
   },{raw,status});
   await pg.evaluate(({s,args})=>{(0,eval)('('+s+')')(1,args);},{s:nativeScript,args});
-  for(let i=0;i<650&&!(await pg.evaluate(()=>answers.length));i++)await pg.clock.fastForward(300);
+  for(let i=0;i<650&&!(await pg.evaluate(()=>answers.length));i++){await pg.clock.fastForward(300);if(realMs)await pg.waitForTimeout(realMs);}   // realMs: Chrome delivers scroll events on real frames, not the fake clock
   assert((await pg.evaluate(()=>answers.length))>0,'worker must settle within its simulated deadline');
   return pg.evaluate(()=>answers[0]);
 }
@@ -63,7 +63,7 @@ async function worker(pg,body,raw,status=200,args={}){
   const short=await worker(pg,'<div role="feed">'+link('0x1:0x2')+link('0x3:0x4','Mobil',-92.30)+'</div>',JSON.stringify([]),200,{mode:'discover'});
   assert.equal(short.code,'incomplete_feed');assert.equal(short.detail.paginationStalled,false);assert.equal(short.detail.stopReason,'quiet');assert.ok(short.detail.elapsedMs<7000,'quiet list: '+short.detail.elapsedMs+' ms');assert.equal(short.stores.length,2);assert.equal(short.detail.exhausted,false,'silence is not proof of exhaustion and must not cache a possibly stalled list');
   const late='<div role="feed" style="height:100px;overflow:auto"><div style="height:400px">'+link('0x1:0x2')+'</div></div><script>setTimeout(()=>{document.querySelector(\'[role="feed"]\').onscroll=function(){if(this.scrollTop+this.clientHeight<this.scrollHeight-4)return;this.insertAdjacentHTML(\'beforeend\',\'<div>End of the list</div>\');this.onscroll=null;};},1500);</script>';
-  const lateScroll=await worker(pg,late,JSON.stringify([]),200,{mode:'discover'});
+  const lateScroll=await worker(pg,late,JSON.stringify([]),200,{mode:'discover'},20);
   assert.equal(lateScroll.detail.stopReason,'end','late pagination listener receives a fresh bottom scroll event');
   assert.equal(lateScroll.detail.exhausted,true);
   for(const grade of ['regular','midgrade','premium','diesel']){
