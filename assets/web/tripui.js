@@ -151,18 +151,22 @@
     try{
       await breathe();
       await prepareRecommendationSpeeds(valid);
+      // a few combinations in flight at once, one per planner worker (lazily: the product can be huge)
+      var flight=[],width=window.Planner&&Planner.size?Planner.size():1;
+      async function settle(job){var p=await job.p;if(!valid())return false;var sel=job.sel,m=job.m,opts=job.opts,raw=job.raw;
+        if(p.ok&&!p.firstDip){var res={plan:p,startGal:base.startGal,opts:opts},saves=baseCost-choiceCost(res);
+          if(saves>0.005&&saves+1e-8>=Math.max(0,Number(S.trip.altMinSave)||0))recommendations.push({sel:sel.slice(),saves:saves,extraMin:routeMin({model:m,res:res})-baseTime,delays:choiceLists().map(function(_,i){return p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-(i?(m.legEnds[i-1]||0):0),min:(s.c.detourMin||0)+(opts.stopMinutes||0)+(KIND()==='ev'&&s.c.kw?s.buyGal/s.c.kw*60:0)};});}),description:raw.description||'Alternative trip'});
+        }
+        done++;progress();return true;}
       for(var next=iterator.next();!next.done;next=iterator.next()){
         var sel=next.value;if(sel.every(function(k,i){return k===current[i];}))continue;
         if(!valid())return;
         await breathe();var raw=recommendationRaw(sel),m=T.buildRoute(raw,cm),g=cachedChoiceCandidates(raw,m);
         if(!g||sel.some(function(k,i){return !recommendationSpeeds.has(RouteChoices.key(i,choiceLists()[i][k]));})){missing++;done++;progress();continue;}
-        var opts=recommendationOpts(m,g,sel),p=await planAsync(opts);
-        if(!valid())return;
-        if(p.ok&&!p.firstDip){var res={plan:p,startGal:base.startGal,opts:opts},saves=baseCost-choiceCost(res);
-          if(saves>0.005&&saves+1e-8>=Math.max(0,Number(S.trip.altMinSave)||0))recommendations.push({sel:sel.slice(),saves:saves,extraMin:routeMin({model:m,res:res})-baseTime,delays:choiceLists().map(function(_,i){return p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-(i?(m.legEnds[i-1]||0):0),min:(s.c.detourMin||0)+(opts.stopMinutes||0)+(KIND()==='ev'&&s.c.kw?s.buyGal/s.c.kw*60:0)};});}),description:raw.description||'Alternative trip'});
-        }
-        done++;progress();
+        var opts=recommendationOpts(m,g,sel);flight.push({sel:sel.slice(),m:m,opts:opts,raw:raw,p:planAsync(opts)});
+        if(flight.length>=width&&!await settle(flight.shift()))return;
       }
+      while(flight.length)if(!await settle(flight.shift()))return;
       if(!valid())return;
       recommendations.sort(function(a,b){return b.saves-a.saves;});recommendationState=missing?'incomplete':'done';
       LG.info('routes','Whole-trip comparison complete',{checked:done,missing:missing,qualifying:recommendations.length});
@@ -2383,12 +2387,24 @@
     var r = result, cx = speedCx(); if (!r || !r.opts) return false;
     var o = Object.assign({}, r.opts, { model: cx ? T.withSpeeds(model, ratesOf(cx, cx.offs)) : model, lite: false });
     if (mi != null) { o.bufferGal = mi * model.combGpm; o.arriveGal = mi * model.combGpm; }
-    var p = T.plan(o);
-    if (!p.ok) { LG.warn('plan', 'No plan at these speeds', { buffer: mi != null ? mi : r.bufMi }); toastMsg('No plan works at those speeds with this buffer.'); return false; }
-    r.plan = p; r.opts = o; if (mi != null) r.bufMi = mi; r.topSel = -1; r.sweep = null; r.dsweep = null; r.planOffs = cx ? cx.offs.join(',') : '';
-    recompute(); startSweep(); keepScroll(showResult);
+    planLater(r, o, 'Planning at these speeds', function (p) {
+      if (!p.ok) { LG.warn('plan', 'No plan at these speeds', { buffer: mi != null ? mi : r.bufMi }); toastMsg('No plan works at those speeds with this buffer.'); return; }
+      r.plan = p; r.opts = o; if (mi != null) r.bufMi = mi; r.topSel = -1; r.sweep = null; r.dsweep = null; r.planOffs = cx ? cx.offs.join(',') : '';
+      recompute(); startSweep(); keepScroll(showResult);
+    });
     return true;
   }
+  // A plan of a long trip takes the phone ~20-30 s: always in the background planner pool (planner.js), never on the
+  // page (the buffer slider froze the app for that long). The newest request wins; the top bar shows it working.
+  var planSeq = 0, planning = 0;
+  function planLater(r, opts, label, done) {
+    var my = ++planSeq, end0 = window.Tasks ? Tasks.begin('trip-replan', { text: label, priority: 1 }) : function () { };
+    planning++; var end = function () { planning--; end0(); };
+    planAsync(opts).then(function (p) { end(); if (my === planSeq && result === r) done(p); },
+      function (e) { end(); if (my !== planSeq) return; LG.warn('plan', 'Background plan failed', { error: e.message }); toastMsg(e.message); });
+  }
+  /** Plans for several option sets side by side across the planner pool; resolves in the same order. */
+  function planAll(list) { return Promise.all(list.map(function (o) { return planAsync(o); })); }
   /** The buffer the speeds allow, as warnings: "keeps this at N mi or less". */
   function bufLimits() {
     var r = result, cx = speedCx(), sw = r && r.sweep;
@@ -2413,8 +2429,8 @@
   /** Switch the trip to this buffer (the slider's quick plan -> the full one). */
   function setBuffer(x) {
     var r = result;
-    var fo = Object.assign({}, x.opts, { lite: false }); r.plan = T.plan(fo); r.opts = fo; r.bufMi = x.mi; r.topSel = -1; r.dsweep = null;
-    recompute(); keepScroll(showResult);
+    var fo = Object.assign({}, x.opts, { lite: false });
+    planLater(r, fo, 'Planning with a ' + x.mi + '-mile buffer', function (p) { r.plan = p; r.opts = fo; r.bufMi = x.mi; r.topSel = -1; r.dsweep = null; recompute(); keepScroll(showResult); });
   }
 
   // ---------- buffer slider ----------
@@ -2426,16 +2442,20 @@
     for (var b = 5; b <= top; b += 5) list.push(b);
     [S.trip.bufferMi, tripBuf(), bufFloor(), r.bufMi].forEach(function (v) { if (v > 0 && list.indexOf(v) < 0) list.push(v); });
     list.sort(function (a, b2) { return a - b2; });
-    var rows = [], i = 0, t0 = Date.now();
-    setTimeout(function next() {
+    var t0 = Date.now(), o = r.opts, opts = list.map(function (mi) { return Object.assign({}, o, { bufferGal: mi * o.model.combGpm, arriveGal: mi * o.model.combGpm, refPrice: o.refPrice, lite: true }); });
+    setTimeout(function () {
       if (result !== r) { r.sweeping = false; return; }
-      var end = Date.now() + 40;
-      while (i < list.length && Date.now() < end) rows.push(T.bufferSweep(r.opts, [list[i++]], r.opts.refPrice)[0]);
-      if (i < list.length) return setTimeout(next, 0);
+      planAll(opts).then(function (plans) {
+      if (result !== r) { r.sweeping = false; return; }
+      // the plan changed while the sweep ran (a speed, the detour limit): these rows are for the old one
+      if (r.opts !== o) { r.sweeping = false; r.sweep = null; return startSweep(); }
+      // as T.bufferSweep, one buffer per worker
+      var rows = plans.map(function (p, k) { return { mi: list[k], ok: p.ok, net: p.ok ? p.totals.net + (o.timeValue || 0) * (p.totals.detourMin + p.stops.length * (o.stopMinutes || 0)) / 60 : null, plan: p, opts: opts[k] }; });
       r.sweep = T.marks(rows); r.sweeping = false;
       LG.debug('plan', 'Buffer sweep in ' + (Date.now() - t0) + ' ms', rows.map(function (x) { return x.mi + ':' + (x.net == null ? '-' : x.net.toFixed(2)) + (x.mark ? '*' : ''); }).join(' '));
       if (floorUp(r)) return;
       if (result === r && $('tsBufBox')) { var el = $('tsBufBox'); el.outerHTML = bufBox(); bindBuf(); if (r.plan.ok && $('tsSpeed')) renderTripSpeed(); }
+      }, function (e) { r.sweeping = false; LG.warn('plan', 'Buffer sweep failed', { error: e.message }); });
     }, 300);
   }
   // ---------- how much gas to leave with ----------
@@ -2652,17 +2672,16 @@
     var list = DET_STEPS.slice();
     [+S.trip.maxDetourMin, detMinOf(r)].forEach(function (v) { if (v > 0 && list.indexOf(v) < 0) list.push(v); });
     list.sort(function (a, b) { return a - b; });
-    var rows = [], i = 0, tv = function (p) { return (r.opts.timeValue || 0) * (p.totals.detourMin + p.stops.length * (r.opts.stopMinutes || 0)) / 60; };
-    setTimeout(function next() {
+    var tv = function (p) { return (r.opts.timeValue || 0) * (p.totals.detourMin + p.stops.length * (r.opts.stopMinutes || 0)) / 60; };
+    setTimeout(function () {
       if (result !== r) { r.dsweeping = false; return; }
-      var end = Date.now() + 40;
-      while (i < list.length && Date.now() < end) {
-        var m = list[i++], p = T.plan(Object.assign({}, r.opts, { maxDetourMin: m, lite: true }));
-        rows.push({ mi: m, ok: p.ok, net: p.ok ? p.totals.net + tv(p) : null, plan: p });
-      }
-      if (i < list.length) return setTimeout(next, 0);
-      r.dsweep = rows; r.dsweeping = false;
-      if (result === r && $('tsDetBox')) keepScroll(function () { $('tsDetBox').outerHTML = detBox(); bindDet(); });
+      var o = r.opts;
+      planAll(list.map(function (m) { return Object.assign({}, o, { maxDetourMin: m, lite: true }); })).then(function (plans) {
+        r.dsweeping = false; if (result !== r) return;
+        if (r.opts !== o) { r.dsweep = null; return startDetSweep(); }
+        r.dsweep = plans.map(function (p, k) { return { mi: list[k], ok: p.ok, net: p.ok ? p.totals.net + tv(p) : null, plan: p }; });
+        if ($('tsDetBox')) keepScroll(function () { $('tsDetBox').outerHTML = detBox(); bindDet(); });
+      }, function (e) { r.dsweeping = false; LG.warn('plan', 'Detour sweep failed', { error: e.message }); });
     }, 450);
   }
   function detRow(v) { var best = null; (result.dsweep || []).forEach(function (x) { if (!best || Math.abs(x.mi - v) < Math.abs(best.mi - v)) best = x; }); return best; }
@@ -2724,8 +2743,7 @@
       var x = sw[+inp.value]; if (!x || !x.ok || Math.abs(x.mi - detMinOf(r)) < 0.01) return;
       LG.info('plan', 'Max. detour slider: ' + detMinOf(r) + ' → ' + x.mi + ' min', { net: x.net });
       var fo = Object.assign({}, r.opts, { maxDetourMin: x.mi, lite: false });
-      r.plan = T.plan(fo); r.opts = fo; r.topSel = -1; r.sweep = null;
-      recompute(); startSweep(); keepScroll(showResult);
+      planLater(r, fo, 'Planning with a ' + minTxt(x.mi) + ' detour limit', function (p) { r.plan = p; r.opts = fo; r.topSel = -1; r.sweep = null; recompute(); startSweep(); keepScroll(showResult); });
     };
     $('tsDetBox').querySelectorAll('[data-dm]').forEach(function (m) {
       m.onclick = function () { var k = 0; sw.forEach(function (x, i) { if (Math.abs(x.mi - +m.dataset.dm) < 0.01) k = i; }); inp.value = k; inp.oninput(); inp.onchange(); };
@@ -2744,10 +2762,13 @@
   function repriceRewards(){
     if(!result)return;
     var list=[result].concat((result.routes||[]).map(function(x){return x.res;})),seen=new Set();
+    var top=result,jobs=[];
     list.forEach(function(r){if(seen.has(r)||!r.opts)return;seen.add(r);var m=r.opts.model;
       r.cands.forEach(function(c){if(c.est)return;var q=P.tripPrice(c.station,r.grade,S,new Date(),rewardArrival(m,c.d));if(q){delete c.citgo;Object.assign(c,q);}});
-      r.opts=Object.assign({},r.opts,{cands:r.cands});r.plan=T.plan(r.opts);r.sweep=null;r.dsweep=null;r.topSel=-1;
-    });recompute();keepScroll(showResult);
+      r.opts=Object.assign({},r.opts,{cands:r.cands});jobs.push(r);
+    });
+    var end0=window.Tasks?Tasks.begin('trip-replan',{text:'Pricing CITGO rewards',priority:1}):function(){};planning++;var end=function(){planning--;end0();};
+    planAll(jobs.map(function(r){return r.opts;})).then(function(plans){end();if(result!==top)return;jobs.forEach(function(r,k){r.plan=plans[k];r.sweep=null;r.dsweep=null;r.topSel=-1;});recompute();keepScroll(showResult);},function(e){end();toastMsg(e.message);});
   }
   function makeOpts(model,cands,startGal,raw){
     return makeBaseOpts(model,cands,startGal);
@@ -2966,16 +2987,20 @@
     // other routes Google suggested: same trip, same rules, gas valued at the same price so totals compare fairly
     if (others.length) {
       result.routes = [{ k: altSel, model: model, res: result }];
-      var gi = 1;
+      var gi = 1, jobs = [];
+      // every other route planned at once across the planner pool (one after another took about a minute)
       for (var oi = 0; oi < others.length; oi++) {
-        await breathe();
         var k = others[oi], m2 = models[oi + 1];
-        if (!m2) { result.routes.push({ k: k, model: model, res: { plan: { ok: false } }, error: 'couldn\'t read that route' }); continue; }
-        var g2 = ga.per[gi++];
-        var o2 = makeOpts(m2, g2.cands, startGal,alts[k]);
+        if (!m2) { jobs.push({ k: k, error: true }); continue; }
+        var g2 = ga.per[gi++], o2 = makeOpts(m2, g2.cands, startGal,alts[k]);
         if (plan.ok) o2.refPrice = plan.refPrice;
-        var p2 = await planAsync(o2);
-        result.routes.push({ k: k, model: m2, res: { plan: p2, opts: o2, cands: g2.cands, notes: g2.notes, unpriced: g2.unpriced, stale: g2.stale, grade: g2.grade,
+        jobs.push({ k: k, m2: m2, g2: g2, o2: o2, p: planAsync(o2) });
+      }
+      for (var ji = 0; ji < jobs.length; ji++) {
+        var jb = jobs[ji];
+        if (jb.error) { result.routes.push({ k: jb.k, model: model, res: { plan: { ok: false } }, error: 'couldn\'t read that route' }); continue; }
+        var p2 = await jb.p;
+        result.routes.push({ k: jb.k, model: jb.m2, res: { plan: p2, opts: jb.o2, cands: jb.g2.cands, notes: jb.g2.notes, unpriced: jb.g2.unpriced, stale: jb.g2.stale, grade: jb.g2.grade,
           startGal: startGal, topMi: S.trip.topUpMi, topSel: -1, bufMi: tripBuf(), cachedAgeMs: ga.cachedAgeMs } });
       }
       LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
@@ -4103,5 +4128,5 @@
       for (var i = 0; i < leads.length; i++) for (var j = i + 1; j < leads.length; j++) if (Labels._segX(leads[i][0], leads[i][1], leads[j][0], leads[j][1])) cross++;
       return { pins: out, leads: leads.length, overRoute: over, crossings: cross };
     },
-    state: function () { var nl = model ? hzLegs() : 0, no = 0; for (var i = 0; i < nl; i++) no += hzAlts(i).length; return { route: route, model: model, result: result, busy: busy, step: step, legs: nl, options: no }; } };
+    state: function () { var nl = model ? hzLegs() : 0, no = 0; for (var i = 0; i < nl; i++) no += hzAlts(i).length; return { route: route, model: model, result: result, busy: busy || planning > 0, planning: planning, step: step, legs: nl, options: no }; } };
 })();

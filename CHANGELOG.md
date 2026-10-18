@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.189 - 2026-10-18 (keyless test branch only)
+- Trip planning runs on several background workers at once. The buffer and detour sliders, the other routes and the whole-trip comparison no longer plan one after another, and moving a slider no longer freezes the app while the trip is planned again (the top bar shows it working).
+- Bug fixes.
+
 ## 0.0.188 - 2026-10-18 (keyless test branch only)
 - Zoomed out, the map shows only the cheapest stations: the cheapest 1% a few states across, more as you zoom in, and every station once the map is a couple of towns across. The list says how many it's showing. Zooming out on a long trip no longer lags.
 - A gas station that Google Maps lists several times (the fuel brand, the store's name, an old brand) is now one station, and alternative routes no longer list the stations they share with your main route twice.

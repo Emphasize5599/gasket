@@ -13,7 +13,10 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   const station={id:'reward',brand:'citgo',prices:{regular:{price:3,updated:date.toISOString()}}},context={departAt:+date,now:+date,discounts:{citgoTier:'club',citgoUsed:{},citgoHistory:{}},grade:'regular'};
   const dated={...opts,cands:opts.cands.map(c=>({...c,station})),rewardDepartAt:+date};dated.rewardPriceAt=(c,m,stops)=>{const arrival=new Date(+date+(m.timeTo(c.d)+(stops||[]).filter(s=>s.c.d<c.d).reduce((n,s)=>n+(s.c.detourMin||0)+8,0)*60)*1000);return {...c,...Pricing.tripPrice(station,'regular',context.discounts,date,arrival)};};
   const calendar=await Planner.run({...dated},context),calendarDirect=Trip.plan({...dated});
-  return {maxError,workerCreations,ticks,workerMs,mainMs,same:JSON.stringify(background)===JSON.stringify(direct),calendarSame:JSON.stringify(calendar)===JSON.stringify(calendarDirect)};
+  // several plans at once go to several workers (the buffer sweep, other routes), each the same as on the page
+  const buffers=[1,2,3,4],t2=performance.now(),many=await Promise.all(buffers.map(g=>Planner.run({...opts,bufferGal:g,arriveGal:g}))),parallelMs=performance.now()-t2;
+  const manySame=many.every((x,i)=>JSON.stringify(x)===JSON.stringify(Trip.plan({...opts,bufferGal:buffers[i],arriveGal:buffers[i]})));
+  return {pool:Planner.workers(),size:Planner.size(),parallelMs,manySame,maxError,workerCreations,ticks,workerMs,mainMs,same:JSON.stringify(background)===JSON.stringify(direct),calendarSame:JSON.stringify(calendar)===JSON.stringify(calendarDirect)};
  });
- assert(result.maxError<1e-8);assert.equal(result.workerCreations,1,'reuse an actual worker, not a synchronous stand-in');assert(result.ticks>1,'UI timer keeps running during planner work');assert(result.same);assert(result.calendarSame);console.log('Worker parity, CITGO calendar, speed overrides, binary fuel integration and UI responsiveness:',JSON.stringify(result));
+ assert(result.maxError<1e-8);assert(result.workerCreations>=1&&result.workerCreations<=result.size,'actual workers, at most the pool size');assert(result.manySame,'parallel plans match the page');assert(result.size<2||result.pool>1,'plans run side by side in several workers');assert(result.ticks>1,'UI timer keeps running during planner work');assert(result.same);assert(result.calendarSame);console.log('Worker parity, CITGO calendar, speed overrides, binary fuel integration and UI responsiveness:',JSON.stringify(result));
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
