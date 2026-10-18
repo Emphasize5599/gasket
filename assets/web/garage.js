@@ -535,22 +535,24 @@
     var recVin = !c.vin;
     h += '<div class="vin-row' + (recVin ? ' rec' : '') + '"><label class="nf"><span>VIN' + (recVin ? '<span class="rec-tag">Recommended</span>' : '') + '<small>NHTSA decodes available vehicle details free, checks open recalls and helps find factory tire sizes. EPA mileage may need an engine / transmission choice. 17 characters — on your insurance card, registration, or the driver-side dashboard (through the windshield)</small></span>' +
         '<span class="vin-box"><input type="text" id="gVin" class="' + (vinShown ? '' : 'masked') + '" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(c.vin || '') + '">' +
-        '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button>' + (window.VinScan ? '<button type="button" class="vin-scan-btn" id="gVinScan" aria-label="Scan the VIN barcode">' + VinScan.icon + '</button>' : '') + '</span></label>' +
+        '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button></span></label>' +
+        (window.VinScan ? '<button type="button" class="btn primary sm vin-scan-btn" id="gVinScan" aria-label="Scan the VIN barcode">' + VinScan.icon + '</button>' : '') +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>';
     h += '<div class="seg2" id="gEntryMode" aria-label="Vehicle data source"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">EPA vehicle</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">Non-EPA / custom</button></div>';
     if(!custom)h+='<div class="epa-tip"><span>Can\'t find your car? It might be exempt from the EPA.</span><button type="button" class="btn tonal sm" id="gNhtsaTip">NHTSA lookup</button></div>';
-    if(!custom)h += '<details class="epa" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id ? '' : ' open') + '><summary>Year / make / model<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model].join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
+    // one tile for who the car is, down to the trim (folded once it's all known; never while the required trim is missing)
+    var ymmTitle = 'Year / make / model / trim';
+    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id && trimOk(c) ? '' : ' open') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
       '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
-      '<div class="epa-msg" id="eMsg"></div></details>';
+      '<div class="epa-msg" id="eMsg"></div>' + trimHtml(c) + '</details>';
     if(custom&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
     if(custom)h+='<button type="button" class="btn tonal sm" id="gBuildCustom">Build completely custom vehicle</button>';
-    if(custom&&c.vin)h+='<p class="lead small keep">Vehicle identity from your VIN: '+esc([c.year,c.make,c.model].filter(Boolean).join(' '))+'. Enter your mileage under Observed mileage; switch to EPA vehicle to find a rating.</p>';
-    if (custom && !c.vin) h += '<details class="epa" id="gCustom" open><summary>Year / make / model<small>Enter custom details. Changing identity clears the previous EPA match.</small></summary>' +
+    if(custom&&c.vin)h+='<details class="epa ymm" id="gVinIdentity" open><summary>'+ymmTitle+'<small>from your VIN</small></summary><p class="lead small keep">'+esc([c.year,c.make,c.model].filter(Boolean).join(' '))+'. Enter your mileage under Observed mileage; switch to EPA vehicle to find a rating.</p>'+trimHtml(c)+'</details>';
+    if (custom && !c.vin) h += '<details class="epa ymm" id="gCustom" open><summary>'+ymmTitle+'<small>Enter custom details. Changing identity clears the previous EPA match.</small></summary>' +
       '<div class="grid2"><label class="nf"><span>Year</span><input id="gCustomYear" type="number" inputmode="numeric" step="1" min="1886" max="9999" value="'+esc(c.year||'')+'"></label>' +
       '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
       '<label class="nf wide"><span>Model</span><input id="gCustomModel" type="text" value="'+esc(c.model||'')+'"></label>' +
-      '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
-    h += trimHtml(c);
+      trimHtml(c) + '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
     h += paintHtml(c);
     h += carousel(c, true);
     var tankFindable = k === 'gas' && !!tankKey(c), tankLocked = !trimOk(c);   // the trim can change it: pick that first

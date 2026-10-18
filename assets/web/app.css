@@ -264,6 +264,12 @@ body.trip-on .leaflet-marker-pane .pin-in.tstop { display: flex !important; }
 .nf small { font-size: 11.5px; opacity: .85; }
 .nf input { font: inherit; font-size: 16px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; }
 .seg2 { display: flex; background: var(--surface-2); border-radius: 14px; padding: 4px; margin: 4px 0; }
+.vin-row + .epa-msg + #gEntryMode { margin-top: 12px; }
+/* the car's identity tile (year / make / model / trim), EPA or custom: one rounded box */
+details.epa.ymm { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 0 12px 12px; margin: 10px 0; }
+details.epa.ymm:not([open]) { padding-bottom: 0; }
+details.epa.ymm > summary { padding: 12px 0 10px; }
+details.epa.ymm .nf.wide { margin-top: 8px; }
 .seg2 button { flex: 1; padding: 10px 6px; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
 .seg2 button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .msg { font-size: 13.5px; padding: 8px 0; }
@@ -1473,11 +1479,12 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 /* the VIN: dots like a password, with an eye to show it */
 .vin-box { position: relative; display: block; min-width: 0; }
 #gVin.masked { -webkit-text-security: disc; text-security: disc; letter-spacing: 1px; }
-.vin-box #gVin { padding-right: 76px !important; }
-.vin-eye { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--ink-2); display: grid; place-items: center; z-index: 2; }
+.vin-box #gVin { padding-right: 42px !important; }
+.vin-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--ink-2); display: grid; place-items: center; z-index: 2; }
 .vin-eye svg { width: 22px; height: 22px; fill: currentColor; }
-.vin-scan-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--ink-2); display: grid; place-items: center; z-index: 2; }
-.vin-scan-btn svg { width: 22px; height: 22px; fill: currentColor; }
+/* scan: a square twin of Look up, the route button's viewfinder around a barcode */
+.vin-row .btn.vin-scan-btn { width: 44px; padding: 0; display: grid; place-items: center; }
+.vin-scan-btn svg { width: 26px; height: 26px; fill: currentColor; }
 /* the VIN barcode scanner: the camera full screen, a guide band, Close (and the light when the camera has one) */
 .vin-scan { position: fixed; inset: 0; z-index: 12000; background: #000; color: #fff; }
 .vin-scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -1486,6 +1493,7 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .vin-scan .vs-top button { width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; padding: 0; }
 .vin-scan .vs-top button svg { width: 26px; height: 26px; fill: currentColor; }
 .vin-scan .vs-torch.on { background: #fff; color: #000; }
+.vin-scan:not(.live) .vs-frame, .vin-scan:not(.live) .vs-hint, .vin-scan:not(.live) video { visibility: hidden; }
 .vin-scan .vs-hint, .vin-scan .vs-msg { position: absolute; left: 16px; right: 16px; margin: 0; text-align: center; font-size: 15px; line-height: 1.4; text-shadow: 0 1px 3px #000; overflow-wrap: anywhere; }
 .vin-scan .vs-hint { bottom: calc(var(--sb, 0px) + 96px); }
 .vin-scan .vs-msg { bottom: calc(var(--sb, 0px) + 40px); font-weight: 600; }

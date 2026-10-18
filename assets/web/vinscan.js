@@ -46,7 +46,8 @@
       document.head.appendChild(s);
     }));
   }
-  var CAM = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h2v14H3zm3 0h1v14H6zm2 0h2v14H8zm3 0h1v14h-1zm2 0h3v14h-3zm4 0h1v14h-1zm2 0h2v14h-2z"/></svg>';
+  // the route button's viewfinder corners around barcode bars
+  var CAM = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zM3 15h2v4h4v2H3zm16 0h2v6h-6v-2h4z"/><path d="M7 8h1.5v8H7zm2.5 0h1v8h-1zm2 0h2v8h-2zm3 0h1v8h-1zm2 0h.5v8H16z"/></svg>';
 
   /** Open the camera; resolves with the VIN, or null when closed. */
   function open() {
@@ -93,7 +94,6 @@
         timer = setTimeout(frame, 120);
       }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { fail('This phone\'s camera isn\'t available here. Type the VIN instead.'); return; }
-      msg.textContent = 'Starting the camera…';
       Promise.all([loadLib(), navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } })]).then(function (r) {
         ZX = r[0]; stream = r[1];
         if (done) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
@@ -101,8 +101,9 @@
         hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.CODE_39, ZX.BarcodeFormat.CODE_128, ZX.BarcodeFormat.DATA_MATRIX, ZX.BarcodeFormat.QR_CODE]);
         hints.set(ZX.DecodeHintType.TRY_HARDER, true);
         reader = new ZX.MultiFormatReader(); reader.setHints(hints);
+        // plain black (only Close) until the picture is there: then the guide and the hint
+        video.addEventListener('playing', function () { el.classList.add('live'); }, { once: true });
         video.srcObject = stream; var pl = video.play(); if (pl && pl.catch) pl.catch(function () { });
-        msg.textContent = '';
         var track = stream.getVideoTracks()[0], caps = track && track.getCapabilities ? track.getCapabilities() : {};
         if (caps.torch) {
           var tb = el.querySelector('.vs-torch'), on = false; tb.classList.remove('hidden');

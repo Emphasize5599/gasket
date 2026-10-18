@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.197 - 2026-10-18 (keyless test branch only)
+- The VIN scan button sits beside Look up and matches it: a barcode in a viewfinder like the Route button.
+- The scanner stays plain black until the camera picture is there.
+- Year / make / model / trim is one rounded tile that includes the trim, for EPA and custom cars alike, with a little more room above the EPA / custom choice.
+
 ## 0.0.196 - 2026-10-18 (keyless test branch only)
 - Scan your VIN: the barcode button in the car editor's VIN box opens the camera and reads the VIN label on the driver's door jamb or windshield (Code 39, Data Matrix or QR), then looks it up. It works without Google Play services; the camera picture stays on the phone. The app asks for camera permission the first time.
 
