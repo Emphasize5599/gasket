@@ -29,10 +29,15 @@ async function (reqId, args) {
       const before = s.slice(Math.max(0, m.index - 160), m.index);
       const k = Math.max(before.lastIndexOf('. '), before.lastIndexOf('? '), before.lastIndexOf('! '));
       const sent = before.slice(k + 1) + s.slice(m.index, m.index + m[0].length + 60).split(/[.?!]\s/)[0];
-      out.push({ gal: v, text: near.trim(), near: sent });
+      // how sure it's the tank's size: "tank" / "capacity" right beside it, not a reserve, warning light or amount left
+      const close = s.slice(Math.max(0, m.index - 60), m.index + m[0].length + 30);
+      const rank = (/tank|capacity/i.test(close) ? 2 : 0) - (/reserve|remaining|left in|low[- ]fuel|warning|light comes|refill|per\s+(mile|hour)|range/i.test(close) ? 3 : 0);
+      out.push({ gal: v, text: near.trim(), near: sent, rank: rank });
     }
     return out;
   };
+  // the best-ranked figure (the first of those): a "20-gallon tank, light at 4 gallons left" answer is 20, not 4
+  const best = (list) => list.reduce((a, x) => (!a || x.rank > a.rank ? x : a), null);
   // the AI answer's own text, or '' (not there yet)
   const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), words = spare || trims;   // text answers, not a number
   const aiText = () => {
@@ -50,7 +55,7 @@ async function (reqId, args) {
     const all = matches(t.slice(at, at + 12000));
     if (!all.length) return null;
     const otherYear = (s) => (s.match(/\b(19|20)\d{2}\b/g) || []).some((y) => y !== year);
-    const score = (x) => (year && x.near.includes(year) ? 2 : 0) - (/\bgen(eration)?\s*(one|two|three|four|1|2|3|4)\b|\b(1st|2nd|3rd|4th)\s+gen/i.test(x.near) ? 1 : 0) - (year && otherYear(x.near) && !x.near.includes(year) ? 1 : 0);
+    const score = (x) => (year && x.near.includes(year) ? 2 : 0) - (/\bgen(eration)?\s*(one|two|three|four|1|2|3|4)\b|\b(1st|2nd|3rd|4th)\s+gen/i.test(x.near) ? 1 : 0) - (year && otherYear(x.near) && !x.near.includes(year) ? 1 : 0) + x.rank;
     const top = Math.max(...all.map(score)), pool = all.filter((x) => score(x) === top);
     const n = {};
     pool.forEach((x) => { n[x.gal] = (n[x.gal] || 0) + 1; });
@@ -81,7 +86,7 @@ async function (reqId, args) {
         }
         await sleep(400); continue;
       }
-      const f = ai ? matches(ai)[0] : null;
+      const f = ai ? best(matches(ai)) : null;
       if (f) {
         // the answer streams in: take it once it has stopped changing for a moment
         same = ai === last ? same + 1 : 0; last = ai;

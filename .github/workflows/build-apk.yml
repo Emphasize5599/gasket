@@ -27,6 +27,7 @@ on:
       - tests/saved-partial-search.test.js
       - tests/vinscan.test.js
       - tests/vinscan-ui.test.js
+      - tests/tank-answer-ui.test.js
       - src/com/bensanzone/fuelmap/BackupIO.java
       - tests/pricehistory.test.js
       - tests/station-reconcile.test.js

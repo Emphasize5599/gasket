@@ -352,11 +352,21 @@
   }
   function tankUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&summary=1'; }
   function tankAuto(c) {
+    // an earlier answer too small for the car (0.0.198 and before took a "4 gallons left" as a 2020 Sienna's tank)
+    if (c && c.tankSrc === TANK_SRC && +c.tank > 0 && +c.tank < tankMin(c)) {
+      LG.warn('car', 'Saved tank size from Brave too small for this car: ' + c.tank + ' gal (cleared)');
+      c.tankLookup = Object.assign({}, c.tankLookup, { failed: true, odd: true, gal: c.tank }); c.tank = ''; c.tankSrc = ''; save();
+    }
     if (!c || +c.tank > 0 || kind(c) !== 'gas' || !call || !N.siteRead || tankBusy[c.id] || matching) return;
     var key = tankKey(c); if (!key || !trimOk(c)) return;   // the trim can change the tank: wait for it
     var L = c.tankLookup; if (L && L.key === key && (!L.failed || Date.now() - L.t < 6 * 3600e3)) return;   // once per car (a failure: again after 6 h)
     tankFind(c, false);
   }
+  /** The smallest tank Brave's answer may give this car: plug-in hybrids can be tiny (a few gallons), others aren't
+   *  under 7 (the smallest US gas cars have ~9). Below = a reserve / warning-light figure, never filled in. */
+  function tankMin(c) { return c.power === 'phev' ? 2 : 7; }
+  // what Brave's answer said, quoted around the number (the spare's "Brave Search says" box, for the tank)
+  function tankSaid(L) { var t = String(L.text || '').replace(/\s+/g, ' ').trim(); return t ? '<q class="tk-quote">' + esc(t.length > 220 ? t.slice(0, 220) + '…' : t) + '</q>' : ''; }
   async function tankFind(c, shown) {
     var key = tankKey(c); if (!key || tankBusy[c.id] || !trimOk(c)) return;
     tankBusy[c.id] = true; draw();
@@ -365,8 +375,12 @@
     var r = await braveSerial(ask);
     tankBusy[c.id] = false;
     if (tankKey(c) !== key) { LG.info('car', 'Tank answer was for another trim: asking again'); if (!(+c.tank > 0)) tankFind(c, shown); return; }
-    if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it') {
-      c.tank = r2(r.gal); c.tankSrc = TANK_SRC; c.tankLookup = { key: key, t: Date.now(), gal: r.gal };
+    if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it' && r.gal < tankMin(c)) {
+      // too small for this car (a reserve or warning-light figure read as the tank): shown, not filled in
+      c.tankLookup = { key: key, t: Date.now(), failed: true, odd: true, gal: r.gal, text: r.text || '', src: r.src || '' }; save();
+      LG.warn('car', 'Tank answer too small for this car: ' + r.gal + ' gal (not filled in)', r.text || '');
+    } else if (r && r.gal >= 4 && r.gal <= 45 && c.tankSrc !== 'you entered it') {
+      c.tank = r2(r.gal); c.tankSrc = TANK_SRC; c.tankLookup = { key: key, t: Date.now(), gal: r.gal, text: r.text || '', src: r.src || '' };
       LG.info('car', 'Tank size from Brave Search' + (r.src === 'results' ? '\'s results (no AI answer)' : r.src === 'ai' ? '\'s AI answer' : '') + ': ' + r.gal + ' gal', r.text || '');
       changed();
     } else if (!(r && r.closed)) {
@@ -560,7 +574,11 @@
       '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" min="0.1" required id="gTank" value="' + esc(c.tank || '') + '"' + (tankLocked ? ' disabled' : '') + '>' +
       (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
     // under the row, so the two boxes stay level
-    var tkExtra = tankLocked ? '' : tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') : tankFindable && c.tankLookup && c.tankLookup.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' : '';
+    var TL = c.tankLookup, seeBtn = '<button type="button" class="btn tonal sm" id="gTankSee">See Brave\'s answer</button>';
+    var tkExtra = tankLocked ? '' : tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') :
+      tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + tankSaid(TL) + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
+      tankFindable && TL && TL.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' :
+      TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + tankSaid(TL) + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
@@ -913,6 +931,9 @@
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
       if ($('gTankShow')) $('gTankShow').onclick = function (e) { e.preventDefault(); tankFind(c, true); };
+      // Brave's tank answer, like the spare's: confirm it, or open Brave's page to read it yourself
+      if ($('gTankYes')) $('gTankYes').onclick = function () { c.tankLookup.ok = true; c.tankSrc = 'from Brave Search · you confirmed it'; LG.info('car', 'Tank size confirmed: ' + c.tank + ' gal'); changed(); draw(); };
+      if ($('gTankSee')) $('gTankSee').onclick = function () { tankFind(c, true); };
       if ($('gType')) $('gType').onchange = function () { c.type = this.value; changed(); draw(); };
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };

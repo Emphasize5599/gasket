@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.199 - 2026-10-18 (keyless test branch only)
+- The tank size from Brave Search is shown like the spare tire's: what Brave said, with That's right and See Brave's answer.
+- Tank sizes are read better: the figure next to "tank capacity" wins over a reserve or warning-light amount (a 2020 Sienna read as 4 gallons), and a figure too small for the car is shown but not filled in. An earlier too-small answer is cleared and asked again.
+
 ## 0.0.198 - 2026-10-18 (keyless test branch only)
 - Bug fixes
 

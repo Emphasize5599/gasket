@@ -1517,6 +1517,8 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .tz-gbtns { display:flex; align-items:stretch; gap:8px; margin-top:8px; }
 .tz-gbtns .btn { flex:1; width:auto; margin:0; padding:6px 8px; min-height:40px; height:auto; white-space:normal; }
 .tz-guess { display:block; white-space:normal; }
+.tk-guess { margin: 6px 0 10px; }
+.tk-quote { display: block; margin-top: 6px; padding-left: 10px; border-left: 3px solid var(--line); color: var(--ink-2); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; quotes: none; }
 .hz-ai { border-left-color:var(--warn); color:var(--warn) !important; }
 .wx-ai, .hz-opt .hz-ai-note { color:var(--warn); }
 .tread-general { color:var(--warn); border-left:3px solid var(--warn); padding-left:8px; font-size:13px; }
