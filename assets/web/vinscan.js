@@ -57,32 +57,68 @@
     return new Promise(function (resolve) {
       var el = document.createElement('div');
       el.className = 'vin-scan'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Scan the VIN barcode');
-      el.innerHTML = '<video playsinline muted></video><div class="vs-frame" aria-hidden="true"></div>' +
+      el.innerHTML = '<video playsinline muted></video><div class="vs-frame" aria-hidden="true"></div><div class="vs-square" aria-hidden="true"></div>' +
         '<div class="vs-top"><button type="button" class="vs-close" aria-label="Close the scanner"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg></button>' +
         '<button type="button" class="vs-torch hidden" aria-label="Light" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v3l-2 4v13H9V9L7 5z"/></svg></button></div>' +
-        '<p class="vs-hint">Point at the VIN barcode: on the driver\'s door jamb, or the windshield corner on newer cars. Turn the phone so the barcode runs across the screen.</p><p class="vs-msg" aria-live="polite"></p>';
+        '<p class="vs-hint">Point at the VIN barcode: on the driver\'s door jamb, or the windshield corner on newer cars. Put a small QR code in the square; zoom in if it\'s tiny. Tap to focus.</p>' +
+        '<label class="vs-zoom hidden"><span>Zoom</span><input type="range" min="1" max="1" step="0.1" value="1" aria-label="Zoom"></label><p class="vs-msg" aria-live="polite"></p>';
       document.body.appendChild(el);
-      var video = el.querySelector('video'), msg = el.querySelector('.vs-msg'), stream = null, timer = 0, done = false, last = null, reader = null, ZX = null;
-      var canvas = document.createElement('canvas'), turn = document.createElement('canvas'), n = 0;
+      var video = el.querySelector('video'), msg = el.querySelector('.vs-msg'), stream = null, timer = 0, done = false, last = null, reader = null, square = null, ZX = null;
+      var canvas = document.createElement('canvas'), turn = document.createElement('canvas'), n = 0, focusT = 0;
       function finish(vin) {
-        if (done) return; done = true; clearTimeout(timer); root.__vinScanClose = null;
+        if (done) return; done = true; clearTimeout(timer); clearInterval(focusT); root.__vinScanClose = null;
         if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
         el.remove(); resolve(vin || null);
       }
       root.__vinScanClose = function () { finish(null); };
       el.querySelector('.vs-close').onclick = function () { finish(null); };
       function fail(text) { msg.textContent = text; msg.classList.add('err'); }
-      // one frame: the middle band (where the guide is), as is and turned a quarter (door-jamb labels stand upright)
+      // what the camera lets a page do (Chrome on Android: focus on a point, zoom, the light), like GrapheneOS Camera's
+      // QR mode: focus refreshed on the square every 2 s, a tap focuses there for a while, pinch or the slider zooms
+      function camControls(track, caps) {
+        var set = function (c) { return track.applyConstraints({ advanced: [c] }).catch(function () { }); };
+        var modes = caps.focusMode || [], at = null, atUntil = 0;
+        var focus = function () {
+          var poi = at && Date.now() < atUntil ? at : { x: 0.5, y: 0.5 };
+          if (modes.indexOf('single-shot') >= 0) set({ focusMode: 'single-shot', pointsOfInterest: [poi] });
+          else if (modes.indexOf('continuous') >= 0) set({ focusMode: 'continuous', pointsOfInterest: [poi] });
+        };
+        if (modes.length) { focus(); focusT = setInterval(focus, 2000); }
+        video.addEventListener('click', function (e) {
+          var r = video.getBoundingClientRect(); at = { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; atUntil = Date.now() + 5000; focus();
+        });
+        var z = caps.zoom;
+        if (z && z.max > z.min) {
+          var box = el.querySelector('.vs-zoom'), range = box.querySelector('input'), cur = (track.getSettings && track.getSettings().zoom) || z.min;
+          range.min = z.min; range.max = Math.min(z.max, z.min * 10); range.step = z.step || 0.1; range.value = cur; box.classList.remove('hidden');
+          var zoomTo = function (v) { cur = Math.max(+range.min, Math.min(+range.max, v)); range.value = cur; set({ zoom: cur }); };
+          range.oninput = function () { zoomTo(+range.value); };
+          var pinch = null, gap = function (t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); };
+          el.addEventListener('touchstart', function (e) { if (e.touches.length === 2) pinch = { d: gap(e.touches), z: cur }; }, { passive: true });
+          el.addEventListener('touchmove', function (e) { if (pinch && e.touches.length === 2) zoomTo(pinch.z * gap(e.touches) / pinch.d); }, { passive: true });
+          el.addEventListener('touchend', function (e) { if (e.touches.length < 2) pinch = null; }, { passive: true });
+        }
+      }
+      // one frame of three: the middle band (where the guide is), the band turned a quarter (door-jamb labels stand
+      // upright), and the center square (the small QR / Data Matrix codes on newer labels), enlarged when small so a
+      // tiny code's dots are a few pixels each (GrapheneOS Camera also scans only a square)
       function frame() {
         if (done) return;
         var w = video.videoWidth, h = video.videoHeight;
         if (w && h && reader) {
-          var cw = Math.round(w * 0.9), ch = Math.round(h * 0.5), sx = Math.round((w - cw) / 2), sy = Math.round((h - ch) / 2);
-          var src = canvas, odd = n++ % 2;
-          canvas.width = cw; canvas.height = ch; canvas.getContext('2d').drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-          if (odd) { turn.width = ch; turn.height = cw; var t = turn.getContext('2d'); t.save(); t.translate(ch, 0); t.rotate(Math.PI / 2); t.drawImage(canvas, 0, 0); t.restore(); src = turn; }
+          var pass = n++ % 3, src = canvas, use = reader, g = canvas.getContext('2d');
+          if (pass === 2) {
+            var side = Math.round(Math.min(w, h) * 0.5), up = side < 700 ? 2 : 1;
+            canvas.width = canvas.height = side * up; g.imageSmoothingEnabled = false;
+            g.drawImage(video, Math.round((w - side) / 2), Math.round((h - side) / 2), side, side, 0, 0, side * up, side * up); use = square;
+          } else {
+            var cw = Math.round(w * 0.9), ch = Math.round(h * 0.5), k = Math.min(1, 1600 / cw);   // the band: at most 1600 px wide (quick)
+            canvas.width = Math.round(cw * k); canvas.height = Math.round(ch * k); g.imageSmoothingEnabled = true;
+            g.drawImage(video, Math.round((w - cw) / 2), Math.round((h - ch) / 2), cw, ch, 0, 0, canvas.width, canvas.height);
+            if (pass === 1) { turn.width = canvas.height; turn.height = canvas.width; var t = turn.getContext('2d'); t.save(); t.translate(canvas.height, 0); t.rotate(Math.PI / 2); t.drawImage(canvas, 0, 0); t.restore(); src = turn; }
+          }
           try {
-            var res = reader.decode(new ZX.BinaryBitmap(new ZX.HybridBinarizer(new ZX.HTMLCanvasElementLuminanceSource(src))));
+            var res = use.decode(new ZX.BinaryBitmap(new ZX.HybridBinarizer(new ZX.HTMLCanvasElementLuminanceSource(src))));
             var p = pick(res.getText());
             if (p && (p.checked || last === p.vin)) {
               LG.info('car', 'VIN barcode read', { format: ZX.BarcodeFormat[res.getBarcodeFormat()], checkDigit: p.checked });
@@ -91,26 +127,34 @@
             }
             last = p ? p.vin : null;
             if (!p) msg.textContent = 'That barcode isn\'t a VIN. Look for the one labeled VIN.';
-          } catch (e) { /* nothing readable in this frame */ } finally { if (reader) reader.reset(); }
+          } catch (e) { /* nothing readable in this frame */ } finally { if (use) use.reset(); }
         }
         timer = setTimeout(frame, 120);
       }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { fail('This phone\'s camera isn\'t available here. Type the VIN instead.'); return; }
-      Promise.all([loadLib(), navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } })]).then(function (r) {
+      Promise.all([loadLib(), navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } } })]).then(function (r) {
         ZX = r[0]; stream = r[1];
         if (done) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
         var hints = new Map();
         hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.CODE_39, ZX.BarcodeFormat.CODE_128, ZX.BarcodeFormat.DATA_MATRIX, ZX.BarcodeFormat.QR_CODE]);
         hints.set(ZX.DecodeHintType.TRY_HARDER, true);
         reader = new ZX.MultiFormatReader(); reader.setHints(hints);
+        var sq = new Map(); sq.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE, ZX.BarcodeFormat.DATA_MATRIX]); sq.set(ZX.DecodeHintType.TRY_HARDER, true);
+        square = new ZX.MultiFormatReader(); square.setHints(sq);
         // plain black (only Close) until the picture is there: then the guide and the hint
-        video.addEventListener('playing', function () { el.classList.add('live'); }, { once: true });
+        video.addEventListener('playing', function () { el.classList.add('live'); placeSquare(); }, { once: true });
+        // the square drawn where the QR pass reads: half the frame's shorter side, scaled the way the preview is
+        // (object-fit: cover crops the frame to fill the screen)
+        var placeSquare = function () { var vw = video.videoWidth, vh = video.videoHeight, r = video.getBoundingClientRect(); if (!vw || !vh || !r.width) return;
+          var side = Math.min(vw, vh) * 0.5 * Math.max(r.width / vw, r.height / vh), q = el.querySelector('.vs-square'); q.style.width = q.style.height = Math.round(side) + 'px'; };
+        video.addEventListener('resize', placeSquare); addEventListener('resize', placeSquare);
         video.srcObject = stream; var pl = video.play(); if (pl && pl.catch) pl.catch(function () { });
         var track = stream.getVideoTracks()[0], caps = track && track.getCapabilities ? track.getCapabilities() : {};
         if (caps.torch) {
           var tb = el.querySelector('.vs-torch'), on = false; tb.classList.remove('hidden');
           tb.onclick = function () { on = !on; track.applyConstraints({ advanced: [{ torch: on }] }).catch(function () { }); tb.setAttribute('aria-pressed', String(on)); tb.classList.toggle('on', on); };
         }
+        camControls(track, caps);
         frame();
       }).catch(function (e) {
         if (done) return;

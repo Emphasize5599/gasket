@@ -1493,7 +1493,11 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .vin-scan .vs-top button { width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; padding: 0; }
 .vin-scan .vs-top button svg { width: 26px; height: 26px; fill: currentColor; }
 .vin-scan .vs-torch.on { background: #fff; color: #000; }
-.vin-scan:not(.live) .vs-frame, .vin-scan:not(.live) .vs-hint, .vin-scan:not(.live) video { visibility: hidden; }
+.vin-scan:not(.live) .vs-frame, .vin-scan:not(.live) .vs-hint, .vin-scan:not(.live) video, .vin-scan:not(.live) .vs-square, .vin-scan:not(.live) .vs-zoom { visibility: hidden; }
+/* the center square the QR pass reads (half the shorter side, like the frame drawn over the video) */
+.vin-scan .vs-square { position: absolute; left: 50%; top: 50%; width: 50vmin; height: 50vmin; transform: translate(-50%, -50%); border: 2px dashed rgba(255,255,255,.75); border-radius: 10px; pointer-events: none; }
+.vin-scan .vs-zoom { position: absolute; left: 24px; right: 24px; bottom: calc(var(--sb, 0px) + 150px); display: flex; align-items: center; gap: 10px; font-size: 14px; text-shadow: 0 1px 3px #000; }
+.vin-scan .vs-zoom input { flex: 1; min-width: 0; accent-color: #fff; }
 .vin-scan .vs-hint, .vin-scan .vs-msg { position: absolute; left: 16px; right: 16px; margin: 0; text-align: center; font-size: 15px; line-height: 1.4; text-shadow: 0 1px 3px #000; overflow-wrap: anywhere; }
 .vin-scan .vs-hint { bottom: calc(var(--sb, 0px) + 96px); }
 .vin-scan .vs-msg { bottom: calc(var(--sb, 0px) + 40px); font-weight: 600; }

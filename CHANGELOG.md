@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.201 - 2026-10-18 (keyless test branch only)
+- VIN scanner, for small QR codes: a center square it reads at higher detail, zoom (slider or pinch) when the camera allows it, focus refreshed on the square every 2 seconds, and tap to focus. Modeled on GrapheneOS Camera's QR mode.
+
 ## 0.0.200 - 2026-10-18 (keyless test branch only)
 - The VIN scanner reads QR codes that hold more than the VIN: a link with the VIN in it, "VIN" written against it, or several fields.
 

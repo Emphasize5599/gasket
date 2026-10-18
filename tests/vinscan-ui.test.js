@@ -3,6 +3,9 @@
 // stops; a refused camera says so; phone Back closes it. 320 / 448 px, 130% text, no horizontal scroll.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 const VIN='1M8GDM9AXKP042788';   // the textbook check-digit example, not a real car's
+// a QR link for the tiny-code case, made here with ZXing's writer: its dots as rows of 0/1
+const Z=require('../assets/web/lib/zxing.min.js'),qm=new Z.QRCodeWriter().encode('https://vin.example.test/d?vin='+VIN,Z.BarcodeFormat.QR_CODE,0,0,new Map()),QR=[];
+for(let y=0;y<qm.getHeight();y++){let row='';for(let x=0;x<qm.getWidth();x++)row+=qm.get(x,y)?1:0;QR.push(row);}
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const [width,big] of [[320,true],[448,false]]){
  const p=await b.newPage({viewport:{width,height:800}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
@@ -14,9 +17,15 @@ const VIN='1M8GDM9AXKP042788';   // the textbook check-digit example, not a real
   window.__camera=(text,upright)=>{const c=document.createElement('canvas');c.width=720;c.height=1280;const g=c.getContext('2d'),bars=__bars(text),len=bars.reduce((s,x)=>s+x.w,0);
    const paint=()=>{g.fillStyle='#fff';g.fillRect(0,0,720,1280);g.fillStyle='#000';let at=(upright?1280:720)/2-len/2;bars.forEach(x=>{if(x.bar){if(upright)g.fillRect(260,at,200,x.w);else g.fillRect(at,540,x.w,200);}at+=x.w;});};
    paint();const s=c.captureStream(15);window.__paint=setInterval(paint,60);window.__stream=s;return s;};
-  window.__camMode='flat';navigator.mediaDevices.getUserMedia=async()=>{if(__camMode==='denied')throw new DOMException('denied','NotAllowedError');return __camera('I'+'1M8GDM9AXKP042788',__camMode==='upright');};
+  window.__camMode='flat';navigator.mediaDevices.getUserMedia=async()=>{if(__camMode==='denied')throw new DOMException('denied','NotAllowedError');if(__camMode==='qr')return __qrCamera();return __camera('I'+'1M8GDM9AXKP042788',__camMode==='upright');};
+  // a tiny QR in the middle (about 1.5 px a dot), on a camera that says it can zoom and focus on a point
+  window.__qrCamera=()=>{const c=document.createElement('canvas');c.width=720;c.height=1280;const g=c.getContext('2d'),q=__QR,d=1.5,n=q.length*d;
+   const paint=()=>{g.fillStyle='#fff';g.fillRect(0,0,720,1280);g.fillStyle='#000';q.forEach((row,y)=>[...row].forEach((b,x)=>{if(b==='1')g.fillRect(360-n/2+x*d,640-n/2+y*d,d,d);}));};
+   paint();const s=c.captureStream(15);window.__paint=setInterval(paint,60);window.__stream=s;window.__applied=[];const t=s.getVideoTracks()[0];
+   t.getCapabilities=()=>({zoom:{min:1,max:8,step:0.1},focusMode:['continuous','single-shot']});t.applyConstraints=c=>{__applied.push(c);return Promise.resolve();};return s;};
   const original=__app.N.fetchJson;__app.N.fetchJson=(id,url)=>{if(url.includes('DecodeVinValuesExtended')){window.__vinUrl=url;window.__vinId=id;return;}original(id,url);};
  });
+ await p.evaluate(q=>{window.__QR=q;},QR);
  await p.click('#btnTrip');await p.click('[data-car="+"]');await p.waitForSelector('#gVinScan');
  // a square twin of Look up between the VIN box and it; a bit more room above the EPA / custom selector; no horizontal scroll
  const g=await p.evaluate(()=>{const r=s=>document.querySelector(s).getBoundingClientRect(),box=r('#gVin'),scan=r('#gVinScan'),go=r('#gVinGo'),seg=r('#gEntryMode'),row=r('.vin-row');
@@ -38,6 +47,12 @@ const VIN='1M8GDM9AXKP042788';   // the textbook check-digit example, not a real
   assert.equal(await p.evaluate(()=>{clearInterval(__paint);return __stream.getVideoTracks()[0].readyState;}),'ended','the camera stopped');
   await p.evaluate(()=>onNativeResult(__vinId,{error:'test: no NHTSA here'}));await p.waitForFunction(()=>!document.querySelector('#gVinGo').disabled);
  }
+ // a tiny QR code in the center square: read (the square is enlarged); zoom offered, focus set on the square
+ await p.evaluate(()=>{window.__camMode='qr';window.__vinUrl=null;document.getElementById('gVin').value='';});
+ await p.click('#gVinScan');await p.waitForSelector('.vin-scan .vs-zoom:not(.hidden)');
+ const fx=await p.evaluate(()=>__applied.find(c=>c.advanced&&c.advanced[0].focusMode));assert.deepEqual(fx.advanced[0],{focusMode:'single-shot',pointsOfInterest:[{x:0.5,y:0.5}]},'focus on the square');
+ await p.waitForFunction(()=>!!window.__vinUrl,null,{timeout:15000});assert.equal(await p.inputValue('#gVin'),VIN,'the tiny QR link resolved to the VIN');
+ await p.evaluate(()=>{clearInterval(__paint);onNativeResult(__vinId,{error:'test: no NHTSA here'});});await p.waitForFunction(()=>!document.querySelector('#gVinGo').disabled);
  // waiting for the camera (the permission prompt): plain black, only Close
  await p.evaluate(()=>{window.__gum=navigator.mediaDevices.getUserMedia;navigator.mediaDevices.getUserMedia=()=>new Promise(()=>{});});await p.click('#gVinScan');await p.waitForSelector('.vin-scan');
  assert.deepEqual(await p.evaluate(()=>['.vs-frame','.vs-hint','video'].map(s=>getComputedStyle(document.querySelector('.vin-scan '+s)).visibility).concat(document.querySelector('.vs-msg').textContent,getComputedStyle(document.querySelector('.vin-scan')).backgroundColor)),['hidden','hidden','hidden','','rgb(0, 0, 0)']);
