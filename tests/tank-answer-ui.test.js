@@ -10,7 +10,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await setup(20,'the 2020 Toyota Sienna LE has a fuel tank capacity of 20 gallons');
  await p.click('#btnTrip');await p.click('#gEdit');await p.waitForSelector('.tk-guess',{timeout:10000});
  assert.equal(await p.inputValue('#gTank'),'20');
- let box=await p.innerText('.tk-guess');assert.match(box,/Brave Search says: 20 gal/);assert.match(box,/fuel tank capacity of 20 gallons/,'the sentence it came from');
+ let box=await p.innerText('.tk-guess');assert.match(box,/Brave Search says: 20 gal/);assert.doesNotMatch(box,/fuel tank capacity of 20 gallons/,'just the figure and the buttons, no quote');
  assert.equal(await p.locator('#gTankYes').count(),1);assert.equal(await p.locator('#gTankSee').count(),1);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await p.click('#gTankYes');await p.waitForSelector('.tk-guess',{state:'detached'});assert.match(await p.evaluate(()=>Garage.car().tankSrc),/you confirmed/);
@@ -19,7 +19,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await setup(4,'With about 4 gallons left, the low fuel warning light comes on');
  await p.click('#gEdit');await p.waitForSelector('.tk-guess',{timeout:10000});
  assert.equal(await p.inputValue('#gTank'),'','4 gal is not filled in');box=await p.innerText('.tk-guess');
- assert.match(box,/says 4 gal, too small for this car/);assert.match(box,/warning light/);assert.equal(await p.locator('#gTankYes').count(),0);assert.equal(await p.locator('#gTankSee').count(),1);
+ assert.match(box,/says 4 gal, too small for this car/);assert.doesNotMatch(box,/warning light/);assert.equal(await p.locator('#gTankYes').count(),0);assert.equal(await p.locator('#gTankSee').count(),1);
  await p.click('#gDiscard');await p.click('#cfmYes');await p.waitForSelector('.car-edit',{state:'detached'});
  // a 4 saved by an older version: cleared when the Garage draws, and asked again
  await p.evaluate(()=>{const c=Garage.car();Object.assign(c,{tank:4,tankSrc:"from Brave Search's AI answer · check your owner's manual",tankLookup:{key:'old',t:0,gal:4}});__mocks.siteRead=(k,a)=>k==='brave'&&a.kind!=='trims'?{gal:20,text:'a 20-gallon fuel tank',src:'ai'}:k==='brave'?{text:'Trims: LE, XLE',src:'ai'}:{error:'none'};__app.save();Garage.redraw();});

@@ -366,7 +366,6 @@
    *  under 7 (the smallest US gas cars have ~9). Below = a reserve / warning-light figure, never filled in. */
   function tankMin(c) { return c.power === 'phev' ? 2 : 7; }
   // what Brave's answer said, quoted around the number (the spare's "Brave Search says" box, for the tank)
-  function tankSaid(L) { var t = String(L.text || '').replace(/\s+/g, ' ').trim(); return t ? '<q class="tk-quote">' + esc(t.length > 220 ? t.slice(0, 220) + '…' : t) + '</q>' : ''; }
   async function tankFind(c, shown) {
     var key = tankKey(c); if (!key || tankBusy[c.id] || !trimOk(c)) return;
     tankBusy[c.id] = true; draw();
@@ -576,9 +575,9 @@
     // under the row, so the two boxes stay level
     var TL = c.tankLookup, seeBtn = '<button type="button" class="btn tonal sm" id="gTankSee">See Brave\'s answer</button>';
     var tkExtra = tankLocked ? '' : tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') :
-      tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + tankSaid(TL) + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
+      tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
       tankFindable && TL && TL.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' :
-      TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + tankSaid(TL) + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
+      TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';

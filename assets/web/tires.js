@@ -1077,6 +1077,8 @@
     if (sp.lookup && sp.lookup.tip && !(sp.lookup.tipV >= 3) && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
     // 0.0.151: an answer that says a spare was optional gets that sentence as its tip
     if (sp.lookup && sp.lookup.text && sp.lookup.tipV !== 4) { sp.lookup.tip = sp.lookup.tip || optTip(sp.lookup.text); sp.lookup.tipV = 4; }
+    // 0.0.204: an answer that was Ask Brave's echo of our own question (it lists every kind) is asked again
+    if (sp.lookup && sp.lookup.text && /Run-flat tires,? or No spare|Start with:? Full-size spare/i.test(sp.lookup.text)) { if (sp.kind === sp.lookup.guess) sp.kind = ''; LG.info('car', 'Spare tire answer was the question itself: asking again'); delete sp.lookup; save(); }
     // 0.0.153: a saved "No spare" whose answer names a repair kit (or run-flats) is read again; a confirmed misread is asked again
     if (sp.lookup && sp.lookup.text && /^(compact|full)$/.test(sp.lookup.guess) && sp.lookup.by === 'answer' && !sp.lookup.standardV) { var o2 = leadOverruled(sp.lookup.text, sp.lookup.guess); sp.lookup.standardV = 1; if (o2) { if (sp.kind === sp.lookup.guess) sp.kind = ''; LG.info('car', 'Spare tire read again: ' + sp.lookup.guess + ' → ' + o2); sp.lookup.guess = o2; sp.lookup.tip = optTip(sp.lookup.text) || sp.lookup.tip; } save(); }
     // 0.0.169: an answer about the model's other versions too is read again for this car's part only

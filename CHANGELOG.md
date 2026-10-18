@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.204 - 2026-10-18 (keyless test branch only)
+- The spare tire lookup waits for Ask Brave's real answer instead of reading our own question back (it lists every kind of spare); a wrong answer saved that way is asked again.
+- Tank size from Brave shows just the figure and the buttons.
+
 ## 0.0.203 - 2026-10-18 (keyless test branch only)
 - Tank size, spare tire and trim lookups ask Ask Brave (Brave's AI chat, which always answers) first, and only read the Brave search page when the chat gives no answer.
 

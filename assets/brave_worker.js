@@ -43,22 +43,38 @@ async function (reqId, args) {
   const loc = typeof location !== 'undefined' ? location : { pathname: '', search: '' };
   const ask = loc.pathname.indexOf('/ask') === 0;
   const q = flat(new URLSearchParams(loc.search).get('q') || ''), qHead = q.slice(0, 40);
-  const STEADY = ask ? 5 : 3;   // a chat answer can pause between sentences
+  const STEADY = ask ? 6 : 3;   // a chat answer can pause between sentences
+  // Ask Brave shows our question on the page, and the spare question names every answer ("Run-flat tires, or No spare"):
+  // each of its sentences is taken out before reading, so the echo alone is never taken for the answer
+  const qParts = q.split(/(?<=[.?!])\s+/).map((x) => x.trim()).filter((x) => x.length >= 8).sort((a, b) => b.length - a.length);
+  const lower = (x) => x.toLowerCase();
+  const unask = (t) => {
+    if (!ask) return t;
+    // what follows the question's last sentence on the page (the chat's own labels come before it)
+    const lt = lower(t);
+    let cut = 0;
+    [q].concat(qParts).forEach((x) => { const i = x ? lt.lastIndexOf(lower(x)) : -1; if (i >= 0) cut = Math.max(cut, i + x.length); });
+    let a = t.slice(cut);
+    [q].concat(qParts).forEach((x) => { let i; while (x && (i = lower(a).indexOf(lower(x))) >= 0) a = a.slice(0, i) + ' ' + a.slice(i + x.length); });
+    if (spare) a = a.replace(/Start with:?\s*Full-size spare,?\s*Compact spare,?\s*Repair kit,?\s*Run-flat tires,?\s*(or\s+)?No spare\.?/gi, ' ');
+    return flat(a);
+  };
+  const want = spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /gal/i;
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {
       const t = el.innerText || '';
-      if (!AI_END.test(t) || !(spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /gal/i).test(t)) return;
+      if (!AI_END.test(t) || !want.test(unask(t))) return;
       if (!best || t.length < best.length) best = t;
     });
-    if (best) return flat(best);
-    // Ask Brave (/ask, the chat page: it always answers): the text after our echoed question, cut at the disclaimer
+    if (best) return unask(flat(best));
+    // Ask Brave (/ask, the chat page: it always answers): the page without our question, cut at the disclaimer
     if (!ask) return '';
-    const t = text(), at = qHead ? t.indexOf(qHead) : -1;
-    let a = at >= 0 ? t.slice(at + q.length) : t;
+    let a = text();
     const end = a.search(AI_END);
     if (end >= 0) a = a.slice(0, end);
-    return (spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /\d\s*(?:-|\s)?\s*gal/i).test(a) ? flat(a) : '';
+    a = unask(a);
+    return (spare ? want : trims ? want : /\d\s*(?:-|\s)?\s*gal/i).test(a) ? a : '';
   };
   // no AI answer: the search results, ones about this model year first, then the value most of them give
   const fromResults = (t) => {
@@ -74,10 +90,10 @@ async function (reqId, args) {
     return { gal: pick.gal, text: pick.text, src: 'results' };
   };
   const bg = !!(args && args.bg);
-  const t0 = Date.now(), AI_WAIT = 20000, LIMIT = bg ? 30000 : 120000;
+  const t0 = Date.now(), AI_WAIT = ask ? 25000 : 20000, LIMIT = bg ? (ask ? 36000 : 30000) : 120000;   // the chat takes 5 s or more to answer
   let last = '', same = 0;
   while (Date.now() - t0 < LIMIT) {
-    const t = text();
+    const t = unask(text());
     if (refused(t)) {
       if (bg) { send({ blocked: true }); return; }
     } else {
