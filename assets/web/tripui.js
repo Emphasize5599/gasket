@@ -119,24 +119,35 @@
   function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
   async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
-  var recommendationTollGaps=0, recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
+  var recommendationMissing={speed:0,stations:0,routes:[]},recommendationTollGaps=0, recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||p.refPrice,[{stops:p.stops.map(function(s){return {arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price};}),arriveGal:p.arriveGal}]).legs[0].cost;}
   function recommendationRaw(sel){if(!legsMode())return alts[sel[0]];return Object.assign(T.joinRoutes(route.legs.map(function(l,i){return l.alts[sel[i]];})),{_sel:sel.slice(),description:sel.map(function(k,i){return route.legs[i].alts[k].description||'Leg '+(i+1);}).join(' / ')});}
   function clearRecommendationMaps(){if(recommendationObserver)recommendationObserver.disconnect();recommendationObserver=null;recommendationMaps.forEach(function(m){m.remove();});recommendationMaps=[];}
   function stopRecommendations(){recommendationEpoch++;choicePlanning=false;if(recommendationState==='running')recommendationState='cancelled';if(window.Tasks)Tasks.remove('route-comparison');}
   function recommendationActive(){return step===ST_STOPS&&routeFlow()&&!choiceComplete;}
-  async function prepareRecommendationSpeeds(valid){
+  var SPEED_TRIES=3;   // automatic tries per route before the comparison says it couldn't read them (and offers Try again)
+  // The other routes' speed limits, one route at a time (all at once they took 30-40 s each with errors, past the old
+  // 15 s wait, and every combination was skipped); each is quick alone and kept 90 days. A failed lookup is asked again by itself (SPEED_TRIES in all, 2 s / 4 s apart).
+  async function prepareRecommendationSpeeds(valid,onProg){
     if(!valid())return;
-    recommendationSpeeds.clear();var entries=choiceEntries(),sf=Garage.speedFn&&Garage.speedFn();
-    await Promise.all(entries.map(async function(item){
+    recommendationSpeeds.clear();var entries=choiceEntries(),sf=Garage.speedFn&&Garage.speedFn(),todo=[];
+    entries.forEach(function(item){
       if(item.primary){var from=item.leg?(model.legEnds[item.leg-1]||0):0,to=model.legEnds[item.leg]||model.totalMi;recommendationSpeeds.set(item.key,(result.opts.model.speedRates||[]).filter(function(r){return r.to>from&&r.from<to;}).map(function(r){return {from:Math.max(from,r.from)-from,to:Math.min(to,r.to)-from,rate:r.rate};}));return;}
       var m=hzModel(item.route);if(!sf||speedOff(m)){recommendationSpeeds.set(item.key,[]);return;}
-      ensureLimits(m);var until=Date.now()+15000;
-      while(valid()&&m._lim==='loading'&&Date.now()<until)await new Promise(function(r){setTimeout(r,100);});
+      todo.push({item:item,m:m});
+    });
+    for(var i=0;i<todo.length&&valid();i++){
+      var m=todo[i].m;if(onProg)onProg(i,todo.length);
+      for(var attempt=0;attempt<SPEED_TRIES&&valid();attempt++){
+        if(m._lim&&m._lim.error){m._lim=null;await new Promise(function(r){setTimeout(r,2000*attempt);});if(!valid())return;}
+        ensureLimits(m);var until=Date.now()+120000;
+        while(valid()&&m._lim==='loading'&&Date.now()<until)await new Promise(function(r){setTimeout(r,100);});
+        if(m._lim&&m._lim!=='loading'&&!m._lim.error)break;
+      }
       if(!valid())return;
-      if(!m._lim||m._lim==='loading'||m._lim.error)return; // Do not advertise savings by dropping unknown cruising-speed costs.
-      var secs=flatSecs(m);recommendationSpeeds.set(item.key,T.speedRates(secs,secs.map(function(sc){return Garage.ruleOff(sc.limit);}),sf.f,sf.lo,sf.hi));
-    }));
+      if(!m._lim||m._lim==='loading'||m._lim.error)continue; // Do not advertise savings by dropping unknown cruising-speed costs.
+      var secs=flatSecs(m);recommendationSpeeds.set(todo[i].item.key,T.speedRates(secs,secs.map(function(sc){return Garage.ruleOff(sc.limit);}),sf.f,sf.lo,sf.hi));
+    }
   }
   function recommendationOpts(m,g,sel){var o=makeBaseOpts(m,g.cands,result.startGal),rates=[];choiceLists().forEach(function(list,i){var from=i?(m.legEnds[i-1]||0):0;rates=rates.concat((recommendationSpeeds.get(RouteChoices.key(i,list[sel[i]]))||[]).map(function(r){return {from:from+r.from,to:from+r.to,rate:r.rate};}));});o.model=T.withSpeeds(m,rates);o.bufferGal=result.bufMi*m.combGpm;o.arriveGal=o.bufferGal;o.maxDetourMin=result.opts.maxDetourMin;o.refPrice=result.plan.refPrice;return o;}
   async function startRecommendations(){
@@ -144,13 +155,15 @@
     if(recommendationBase===result&&recommendationPlan===result.plan&&recommendationState!=='idle')return;
     stopRecommendations();var epoch=recommendationEpoch,base=result,basePlan=result.plan,owner=route,cm=carModel(),current=choiceSelections(),iterator=RouteChoices.combinations(choiceLists(),current,choiceAnswers());
     recommendations=[];recommendationPage=0;recommendationDeclined=0;recommendationBase=base;recommendationPlan=basePlan;recommendationState='running';choicePlanning=true;
+    var miss={speed:0,stations:0,routes:[]};recommendationMissing=miss;
     var total=iterator.total-1,done=0,missing=0,tollGaps=0,baseCost=choiceCost(base),baseTime=routeMin({model:model,res:base}),baseTolls=tripTolls(recommendationRaw(current));
     function valid(){return epoch===recommendationEpoch&&route===owner&&result===base&&result.plan===basePlan;}
     function progress(){if(window.Tasks)Tasks.upsert('route-comparison',{text:'Comparing trips '+done+' / '+total,frac:total?done/total:1,cancel:function(){stopRecommendations();recommendationState='cancelled';renderResults();}});}
     progress();
     try{
       await breathe();
-      await prepareRecommendationSpeeds(valid);
+      await prepareRecommendationSpeeds(valid,function(i,n){if(window.Tasks)Tasks.upsert('route-comparison',{text:'Getting speed limits for the other routes '+i+' / '+n,frac:n?i/n:1,cancel:function(){stopRecommendations();recommendationState='cancelled';renderResults();}});});
+      progress();
       // a few combinations in flight at once, one per planner worker (lazily: the product can be huge)
       var flight=[],width=window.Planner&&Planner.size?Planner.size():1;
       async function settle(job){var p=await job.p;if(!valid())return false;var sel=job.sel,m=job.m,opts=job.opts,raw=job.raw;
@@ -164,7 +177,11 @@
         var sel=next.value;if(sel.every(function(k,i){return k===current[i];}))continue;
         if(!valid())return;
         await breathe();var raw=recommendationRaw(sel),m=T.buildRoute(raw,cm),g=cachedChoiceCandidates(raw,m);
-        if(!g||sel.some(function(k,i){return !recommendationSpeeds.has(RouteChoices.key(i,choiceLists()[i][k]));})){missing++;done++;progress();continue;}
+        if(!g||g.guessed||sel.some(function(k,i){return !recommendationSpeeds.has(RouteChoices.key(i,choiceLists()[i][k]));})){
+          missing++;done++;
+          // what was missing, per leg route: its stations (search them again) or its speed limits (try again)
+          sel.forEach(function(k,i){var a=choiceLists()[i][k],key=RouteChoices.key(i,a),why=!choiceCandidates.has(key)||choiceCandidates.get(key).guessed?'stations':!recommendationSpeeds.has(key)?'speed':null;if(!why)return;miss[why]++;var name=(a.description||'Route')+(choiceLists().length>1?' on leg '+(i+1):'');if(why==='stations'&&miss.routes.indexOf(name)<0)miss.routes.push(name);});
+          progress();continue;}
         var opts=recommendationOpts(m,g,sel);flight.push({sel:sel.slice(),m:m,opts:opts,raw:raw,p:planAsync(opts)});
         if(flight.length>=width&&!await settle(flight.shift()))return;
       }
@@ -179,7 +196,13 @@
     var h='<div class="card"><h3>Cheaper trips</h3><p class="lead small keep">Your buffer and maximum detour apply to the entire trip. Next keeps your current trip; choosing an alternative is optional.</p></div>';
     if(recommendationState==='running')h+=A.ldBar('Comparing approved route combinations… You can continue without waiting.');
     if(recommendationTollGaps&&recommendationState!=='running')h+='<div class="note">'+recommendationTollGaps+' trip'+(recommendationTollGaps===1?' wasn\'t':'s weren\'t')+' compared: their tolls aren\'t known. Type the amounts in Route\'s Tolls card.</div>';
-    if(recommendationState==='incomplete'||recommendationState==='error'||recommendationState==='cancelled')h+='<div class="note">Comparison '+(recommendationState==='cancelled'?'cancelled':recommendationState==='incomplete'?'incomplete: some approved legs lack station coverage or speed data':'could not finish')+'. Your current trip is unchanged.</div>';
+    var rm=recommendationMissing;
+    if(recommendationState==='incomplete'){
+      if(rm.stations)h+='<div class="note">Some trips weren\'t compared: no stations were searched along '+esc(rm.routes.join(', '))+'.<div class="proposal-buttons"><button class="btn tonal" data-rec-scan>Search '+(rm.routes.length===1?'that route':'those routes')+'</button></div></div>';
+      if(rm.speed)h+='<div class="note">Some trips weren\'t compared: the speed limits along '+(rm.speed===1?'one route':'some routes')+' couldn\'t be read after '+SPEED_TRIES+' tries.<div class="proposal-buttons"><button class="btn tonal" data-rec-retry>Try again</button></div></div>';
+      h+='<div class="note">Your current trip is unchanged.</div>';
+    }
+    if(recommendationState==='error'||recommendationState==='cancelled')h+='<div class="note">Comparison '+(recommendationState==='cancelled'?'cancelled':'could not finish')+'. Your current trip is unchanged.</div>';
     if(!recommendations.length&&recommendationState==='done')h+='<div class="msg">'+(recommendationDeclined?'All recommendations declined. Next keeps your current trip.':'No approved alternative saves your requested '+money(S.trip.altMinSave||0)+'.')+'</div>';
     recommendations.slice(recommendationPage*5,recommendationPage*5+5).forEach(function(r,j){var i=recommendationPage*5+j;
       h+='<div class="card trip-proposal" data-proposal="'+i+'"><div class="proposal-delta"><span>'+(Math.round(r.extraMin)>0?'+':'')+Math.round(r.extraMin)+' min</span><b class="good">−'+money(r.saves)+'</b></div><p class="lead small keep">'+esc(r.description)+(r.tollDiff?' · '+(r.tollDiff>0?money(r.tollDiff)+' more':money(-r.tollDiff)+' less')+' in tolls, counted':'')+'</p><div class="proposal-map" id="proposalMap'+i+'" aria-label="Proposed route and hazards"></div><p class="lead small keep proposal-weather">Checking forecast timing…</p><div class="proposal-buttons"><button class="btn proposal-decline" data-decline="'+i+'">Decline</button><button class="btn tonal" data-replace="'+i+'">Replace trip</button></div></div>';
@@ -188,6 +211,9 @@
     return h;
   }
   function bindRecommendations(){
+    document.querySelectorAll('[data-rec-retry]').forEach(function(b){b.onclick=function(){recommendationState='idle';recommendationBase=null;renderResults();startRecommendations();};});
+    // the routes the saved trip never searched: searched now (the others keep their saved stations); the comparison runs again after
+    document.querySelectorAll('[data-rec-scan]').forEach(function(b){b.onclick=function(){b.disabled=true;LG.info('routes','Search the routes the comparison lacked',{routes:recommendationMissing.routes});stopRecommendations();recommendationState='idle';findStops('missing').then(function(){if(recommendationActive()){renderResults();startRecommendations();}});};});
     if($('proposalPrev'))$('proposalPrev').onclick=function(){recommendationPage--;renderResults();};
     if($('proposalNext'))$('proposalNext').onclick=function(){recommendationPage++;renderResults();};
     document.querySelectorAll('[data-decline]').forEach(function(b){b.onclick=function(){recommendationDeclined++;recommendations.splice(+b.dataset.decline,1);recommendationPage=Math.min(recommendationPage,Math.max(0,Math.ceil(recommendations.length/5)-1));renderResults();};});
@@ -247,13 +273,14 @@
   function cacheChoiceCandidates(raw,m,g){
     if(!routeFlow())return;choiceLists().forEach(function(list,i){var k=legsMode()?raw._sel[i]:alts.indexOf(raw),a=list[k];if(!a)return;var from=i?(m.legEnds[i-1]||0):0,to=m.legEnds[i]||m.totalMi;
       var take=function(cs){return (cs||[]).filter(function(c){return (c.leg||0)===i;}).map(function(c){return Object.assign({},c,{d:c.d-from});});};
-      var cands=take(g.cands),unpriced=take(g.unpricedCands);choiceCandidates.set(RouteChoices.key(i,a),{cands:cands,unpricedCands:unpriced,notes:g.notes.slice(),stale:cands.filter(function(c){return c.calc&&c.calc.stale;}).length,unpriced:unpriced.length,grade:g.grade,miles:to-from});
+      var key=RouteChoices.key(i,a),had=choiceCandidates.get(key);if(g.guessed&&had&&!had.guessed)return;   // another route's guess never replaces this leg's searched stations
+      var cands=take(g.cands),unpriced=take(g.unpricedCands);choiceCandidates.set(key,{cands:cands,unpricedCands:unpriced,notes:g.notes.slice(),stale:cands.filter(function(c){return c.calc&&c.calc.stale;}).length,unpriced:unpriced.length,grade:g.grade,miles:to-from,guessed:!!g.guessed});
     });
   }
   function cachedChoiceCandidates(raw,m){
     var result={cands:[],unpricedCands:[],notes:[],stale:0,unpriced:0,grade:gradeOf()},ok=true;
     choiceLists().forEach(function(list,i){var k=legsMode()?raw._sel[i]:alts.indexOf(raw),g=choiceCandidates.get(RouteChoices.key(i,list[k]));if(!g){ok=false;return;}var from=i?(m.legEnds[i-1]||0):0;['cands','unpricedCands'].forEach(function(field){result[field]=result[field].concat(g[field].map(function(c){var copy=Object.assign({},c,{d:from+c.d,leg:i,id:c.station.id+(i?'@'+i:'')});delete copy.detourExact;return copy;}));});result.notes=result.notes.concat(g.notes);result.stale+=g.stale;result.unpriced+=g.unpriced;});
-    result.notes=Array.from(new Set(result.notes));return ok?result:null;
+    result.notes=Array.from(new Set(result.notes));result.guessed=choiceLists().some(function(list,i){var k=legsMode()?raw._sel[i]:alts.indexOf(raw),g=choiceCandidates.get(RouteChoices.key(i,list[k]));return g&&g.guessed;});return ok?result:null;
   }
   var layer = L.layerGroup();
   var busy = false;
@@ -2121,19 +2148,21 @@
   async function gatherAll(models, pg, dbgS, force, replay, ks,areaPlan) {
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay);
     if(!(replay&&replay.localOnly)&&S.xomCheck!==false)scanPending('discounts','Checking station discount eligibility',15);
-    var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; });
+    var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; }), guessed = [];
     var webDiscovery=force==='discover'||force==='discover-cache'||force!==true&&(!S.apiKey||S.keylessRegular);
     if (replay) {
       // a saved trip: the stations (with their prices) it found then — no lookups at all
       official = window.PriceHistoryRecovery?PriceHistoryRecovery(replay.official||[]):(replay.official || []).slice();
-      perModel = (ks || []).map(function (k) {
+      perModel = (ks || []).map(function (k, mi) {
         var sg = altSig(alts[k]), hit = (replay.google || []).filter(function (g) { return g.sig ? g.sig === sg : g.k === k; })[0];
         if (hit) return window.PriceHistoryRecovery?PriceHistoryRecovery(hit.list):hit.list.slice();
+        if (!replay.localOnly) guessed[mi] = true;   // never searched (while your route was): the comparison asks before trusting it
         // a route it didn't check then: every station it found, with Google's exact detours dropped (they were for another route)
         var all = []; (replay.google || []).forEach(function (g) { g.list.forEach(function (st) { var c = Object.assign({}, st); delete c.detourExact; delete c.detourMi; all.push(c); }); });
         return all;
       }).map(function (list) { return P.mergeSites(P.reconcileStations(list)); });   // trips saved before 0.0.188 listed shared stations twice
       while (perModel.length < models.length) perModel.push([]);
+      if (guessed[0]) guessed = [];   // your own route has no list of its own either: an older save, not one route missing
     }
     var maxAge = force===true || force==='discover' || S.alwaysRefresh ? 0 : (Number(S.staleHours) || 24) * 3600e3, oldest = 0, saved = 0;
     var use = function (o) { if (!o) return null; oldest = Math.max(oldest, Date.now() - o.t); saved++; return o.v; };
@@ -2321,7 +2350,7 @@
       var ageNotes=notes.slice();
       if(unknownTimes)ageNotes.push(unknownTimes+' prices have unknown pump-update times. A recent website retrieval does not establish when a price changed.');
       if(oldObservations)ageNotes.push(oldObservations+' website prices were last retrieved over '+S.staleHours+' hours ago.');
-      per.push({ cands: cands, notes: ageNotes, unpriced: unpriced, stale: stale, grade: grade, unpricedCands: unpricedCands });
+      per.push({ cands: cands, notes: ageNotes, unpriced: unpriced, stale: stale, grade: grade, unpricedCands: unpricedCands, guessed: !!guessed[per.length] });
     }
     LG.debug('stations', 'Matched stations to ' + models.length + ' route(s) in ' + (Date.now() - t0) + ' ms', per.map(function (x) { return x.cands.length; }));
     return { per: per, cachedAgeMs: saved ? oldest : 0, raw: { official: official, google: perModel } };
@@ -3075,22 +3104,44 @@
       dbg.search.keyless=cloned.priceRefresh;
       if(webSummary.blocked)A.showSiteCheck(webSummary.blockedSite||'gasweb',webSummary.blockedSite==='walmart'?'Walmart':webSummary.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
     }
-    var rp = (force === true||force==='discover'||noReplay)&&!webRefresh ? null : replay, rpSt = null;
+    var rp = (force === true||force==='discover'||noReplay)&&!webRefresh ? null : replay, rpSt = null, partialKs = null;
     if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null;   // saved for another kind of car (or EV stations: the finder's own cache covers them)
     if (rp) {
       // which route each saved station list was for (older saves: worked out from the saved route options)
       rpSt = { official: rp.stations.official, google: (rp.stations.google || []).map(function (g) { return Object.assign({}, g, { sig: g.sig || (rp.alts && rp.alts[g.k] ? altSig(rp.alts[g.k]) : '') }); }) };
-      if (rp.partial && !webRefresh) {
-        var have = rpSt.google.map(function (g) { return g.sig; });
-        if (!okKs.every(function (k) { return have.indexOf(altSig(alts[k])) >= 0; })) {
+      if ((rp.partial || force === 'missing') && !webRefresh) {
+        var have = rpSt.google.map(function (g) { return g.sig; }), missKs = okKs.filter(function (k) { return have.indexOf(altSig(alts[k])) < 0; });
+        if (missKs.length && missKs[0] === okKs[0]) {
           LG.info('stations', 'A different route than the saved trip used — searching it'); rp = null; rpSt = null;
-        }
+        } else if (missKs.length) partialKs = missKs;   // your route was searched; only the routes it never covered are
       }
     }
+    var ga = null;
+    if (partialKs) {
+      // the saved trip covers your route and some approved alternatives: search only the others, keep the rest
+      LG.info('stations', 'Using the stations saved with this trip (' + agoText(Date.now() - rp.t) + '); searching only the ' + partialKs.length + ' route(s) it never covered');
+      var keepKs = okKs.filter(function (k) { return partialKs.indexOf(k) < 0; }), modelOf = function (k) { return okModels[okKs.indexOf(k)]; };
+      var kept = await gatherAll(keepKs.map(modelOf), function () { }, {}, false, rpSt, keepKs);
+      var legOnly = partialKs.map(function (k) { var a = alts[k]; return legsMode() && a._leg != null ? hzModel(hzAlts(a._leg)[a._sel[a._leg]]) : modelOf(k); });
+      var cover = discovering || !S.apiKey || S.keylessRegular ? KeylessGas.discoveryPhases([okModels[0]], legOnly, T, P) : null, missDebug = {};
+      scanPending('alternatives', 'Searching approved alternative routes', 20); finishScanPending('alternatives');
+      var found = await gatherAll(legOnly, function (f, l) { prog(.02 + f * .85, 'Approved alternatives · ' + l); }, missDebug, S.apiKey && !S.keylessRegular ? false : 'discover-cache', null, partialKs, cover && cover.alternatives);
+      var pool = (rpSt.official || []).concat.apply(rpSt.official || [], rpSt.google.map(function (g) { return g.list || []; }));
+      var dropX = function (s) { var c = Object.assign({}, s); delete c.detourExact; delete c.detourMi; delete c.detourRange; return c; };
+      var proj = { localOnly: true, official: found.raw.official || [], google: partialKs.map(function (k, i) { var a = alts[k], shift = a._leg > 0 ? (modelOf(k).legEnds || [])[a._leg - 1] || 0 : 0;
+        return { k: k, sig: altSig(a), list: P.mergeSites(P.reconcileStations(pool.map(dropX).concat((found.raw.google[i] || []).map(function (s) { var c = Object.assign({}, s); if (c.detourRange) c.detourRange = c.detourRange.map(function (d) { return d + shift; }); return c; })))) }; }) };
+      var added = await gatherAll(partialKs.map(modelOf), function () { }, {}, false, proj, partialKs);
+      added.per.forEach(function (g, i) { g.notes = g.notes.concat(found.per[i].notes || []); });
+      var pick = function (k, field) { var i = keepKs.indexOf(k); return i >= 0 ? kept[field][i] : added[field][partialKs.indexOf(k)]; };
+      ga = { per: okKs.map(function (k) { return pick(k, 'per'); }), cachedAgeMs: Date.now() - rp.t,
+        raw: { official: P.reconcileStations((kept.raw.official || []).concat(added.raw.official || [])), google: okKs.map(function (k) { var i = keepKs.indexOf(k); return i >= 0 ? kept.raw.google[i] : added.raw.google[partialKs.indexOf(k)]; }), kind: 'gas' } };
+      dbg.search = { alternatives: missDebug, keyless: missDebug.keyless };
+      rp = null;   // saved again below with every route's stations
+    }
     if (rp) LG.info('stations', 'Using the stations saved with this trip (' + agoText(Date.now() - rp.t) + ') — no lookups');
-    var ga;
-    if(others.length&&!rpSt)scanPending('alternatives','Searching approved alternative routes',20);
-    if(others.length&&!rpSt){
+    if(!ga&&others.length&&!rpSt)scanPending('alternatives','Searching approved alternative routes',20);
+    if(ga){ /* searched only the routes the saved trip never covered (above) */ }
+    else if(others.length&&!rpSt){
       var firstDebug={},restDebug={};
       var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
       var coverage=discovering?KeylessGas.discoveryPhases([okModels[0]],extraModels,T,P):null;
@@ -3278,7 +3329,6 @@
       } else h += '<div class="msg ok">No stop needed — checked ' + r.cands.length.toLocaleString() + ' stations.</div>';
       if(!routeFlow())h += routeBox();
       h += '<div class="gas-tiles">' + idealBox() + arriveBox() + '</div>';
-      if(routeFlow()&&step===ST_STOPS)h+='<div class="spdbox" data-trip-speed></div>';
       h += A.gAttr();                                   // the route, and most stations, come from Google
       // Adjustments: the buffer, max. detour and speeds (and the optional top-up)
       ah += bufBox();ah += detBox();ah += '<div class="spdbox" data-trip-speed></div>';if (S.trip.arrive === 'full') ah += topUpBox();

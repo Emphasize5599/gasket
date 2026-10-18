@@ -1050,11 +1050,12 @@ public class MainActivity extends Activity {
             throw new Exception("Could not preserve all car pictures. Free some app storage and retry the backup.");
         android.content.ContentValues v = new android.content.ContentValues();
         v.put("_display_name", name.replaceAll("[^A-Za-z0-9._ -]", "_"));
-        v.put("mime_type", "application/json");
+        v.put("mime_type", name.endsWith(".gz") ? "application/gzip" : "application/json");
         v.put("relative_path", "Download/Gasket");
         Uri uri = getContentResolver().insert(Uri.parse("content://media/external/downloads"), v);
         if (uri == null) throw new Exception("couldn't create the file");
         OutputStream os = getContentResolver().openOutputStream(uri);
+        if (name.endsWith(".gz")) os = BackupIO.compress(os);
         android.util.JsonWriter w = new android.util.JsonWriter(new java.io.BufferedWriter(new java.io.OutputStreamWriter(os, "UTF-8"), 65536));
         int nPrefs = 0, nKv = 0;
         w.beginObject();
@@ -1104,7 +1105,7 @@ public class MainActivity extends Activity {
      * and this install's count is kept, so a restore can't hand you a fresh monthly cap.
      */
     private JSONObject readBackup(Uri uri) throws Exception {
-        android.util.JsonReader r = new android.util.JsonReader(new java.io.BufferedReader(new java.io.InputStreamReader(getContentResolver().openInputStream(uri), "UTF-8"), 65536));
+        android.util.JsonReader r = new android.util.JsonReader(new java.io.BufferedReader(new java.io.InputStreamReader(BackupIO.open(getContentResolver().openInputStream(uri)), "UTF-8"), 65536));
         SharedPreferences p = prefs();
         Map<String, Object> before = new HashMap<String, Object>(p.getAll());
         java.util.Set<String> set = new java.util.HashSet<String>();

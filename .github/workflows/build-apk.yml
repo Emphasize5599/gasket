@@ -23,6 +23,9 @@ on:
       - tests/map-tiers-ui.test.js
       - tests/tolls.test.js
       - tests/tolls-ui.test.js
+      - tests/backup-io.test.js
+      - tests/saved-partial-search.test.js
+      - src/com/bensanzone/fuelmap/BackupIO.java
       - tests/pricehistory.test.js
       - tests/station-reconcile.test.js
       - tests/map-scan-merge.test.js
@@ -202,6 +205,7 @@ jobs:
         run: |
           GASKET_NATIVE_TESTS=1 node tests/routes-budget.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-native.test.js
+          GASKET_NATIVE_TESTS=1 node tests/backup-io.test.js
           GASKET_NATIVE_TESTS=1 node tests/reader-resources.test.js
 
       - name: Build with the existing release key and verify APK

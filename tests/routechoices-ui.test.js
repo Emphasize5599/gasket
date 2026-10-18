@@ -46,7 +46,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.match(await p.locator('.proposal-delta').first().innerText(),/min/);
  await p.click('[data-decline="0"]');assert.equal(await p.locator('.trip-proposal').count(),2);
  await p.click('#tNext');await p.waitForSelector('#tsIdeal');
- assert.equal(await p.locator('#tsSpeed').count(),1,'only the visible speed tile owns its ID');assert((await p.locator('#tpS7 #tsSpeed').innerText()).trim().length>0,'Stops has populated speed controls, not an empty tile');
+ assert.equal(await p.locator('#tpS7 [data-trip-speed]').count(),0,'cruising speed lives in Adjustments, not Stops');
  assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[0,0],'Next skips recommendations without changing the trip');
  if(width===320){
   await p.evaluate(()=>{window.__plannerRun=Planner.run;window.__holdPlan=true;Planner.run=function(o,c){if(!__holdPlan)return __plannerRun(o,c);__holdPlan=false;return new Promise(resolve=>{window.__releasePlan=()=>__plannerRun(o,c).then(resolve);});};__trip.step(6);});

@@ -991,7 +991,7 @@
     if (!N.backupAll || !window.__trip) { toast('This needs the app.'); return; }
     save(); // Include upgraded photo metadata and the current car edits before native streaming starts.
     btn.disabled = true; var lbl = btn.textContent; btn.textContent = 'Saving…';
-    window.__trip.call('backupAll', 'gasket-full-backup-' + stamp() + '.json').then(function (r) {
+    window.__trip.call('backupAll', 'gasket-full-backup-' + stamp() + '.json.gz').then(function (r) {
       btn.disabled = false; btn.textContent = lbl;
       if (!r || r.error) { toast('Couldn\'t save the backup' + (r && r.error ? ': ' + r.error : '') + '.'); return; }
       toast('Saved to ' + r.path + ' (' + r.kv + ' saved items).');

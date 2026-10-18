@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.195 - 2026-10-18 (keyless test branch only)
+- Whole-trip comparison works on long trips: the other routes' speed limits are read one at a time and retried by themselves (they were all read at once and given up on after 15 seconds, so every trip was skipped). Try again only shows if they fail three times.
+- Routes a saved trip never searched aren't compared on guesses anymore: the comparison names them and offers to search just those routes. A saved trip missing some approved routes also searches only those, not the whole trip again.
+- Full backups are compressed (.json.gz, several times smaller); older .json backups still restore.
+- Cruising speed for this trip is only in Adjustments, not Stops.
+- Bug fixes
+
 ## 0.0.194 - 2026-10-18 (keyless test branch only)
 - Switching to a cheaper whole-trip recommendation keeps Hazards done: the routes it replaces stay approved alternatives, so Hazards no longer asks about them again, the later steps stay open, and the next station search uses the saved stations instead of searching again.
 
