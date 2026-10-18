@@ -51,10 +51,13 @@ async function (reqId, args) {
         if (pts.length > 2000 || pts.full) thin = pts;     // the full line, already simplified
         else for (let k = 0, j = 0; k <= 2000; k++) { const want = L * k / 2000; while (j < pts.length - 1 && cum[j] < want) j++; const p = pts[j]; if (p && (!thin.length || thin[thin.length - 1] !== p)) thin.push(p); }
         return { via: String(head[1] || ''), miles: head[2] ? head[2][0] / 1609.344 : null, minutes: head[3] ? head[3][0] / 60 : null,
-          pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]), steps: steps(r, head) };
+          pts: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]), steps: steps(r, head), tolls: hasTolls(r) };
       }).filter((x) => x.pts.length > 5);
     } catch (e) { return []; }
   }
+  /** Maps' own note on the route ("This route has tolls.", "Toll road" on a step, and its toll icon). No amount: the
+   *  website doesn't send one. */
+  function hasTolls(r) { try { const t = JSON.stringify(r); return /This route has tolls|"Toll road"|advisory\/svg(?:_light)?\/toll/.test(t); } catch (e) { return null; } }
   /** The route's whole line, as the page draws it: [lat × 1e7 steps, lng × 1e7 steps, …] added up point by point. Kept
    *  only when it's as long as the route, then simplified to about 10 m (a turn's shape stays, straight road thins out
    *  to a point every quarter mile), at most 25,000 points. */
@@ -114,7 +117,7 @@ async function (reqId, args) {
     if (!r.length) return ps;
     r.forEach((x) => {
       let best = null; ps.forEach((p) => { const dd = Math.abs(p.miles - x.miles); if (dd < x.miles * 0.01 && (!best || dd < Math.abs(best.miles - x.miles))) best = p; });
-      if (best) { x.pts = best.pts; x.steps = best.steps; if (!x.minutes) x.minutes = best.minutes; }
+      if (best) { x.pts = best.pts; x.steps = best.steps; x.tolls = best.tolls; if (!x.minutes) x.minutes = best.minutes; }
     });
     return r;
   }

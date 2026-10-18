@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.190 - 2026-10-18 (keyless test branch only)
+- Compare with and without tolls (Route → Other routes): each leg's toll-free routes are fetched too and join the alternatives, and the route comparisons count each route's tolls, so a toll road with cheap stations can still win. With the API key Google estimates the toll amounts; without it the Google Maps website only says a route has tolls, so Route's new Tolls card takes the amount (also for a toll pass or a trailer). A trip whose tolls aren't known isn't recommended.
+- Hazards shows each route option's tolls.
+
 ## 0.0.189 - 2026-10-18 (keyless test branch only)
 - Trip planning runs on several background workers at once. The buffer and detour sliders, the other routes and the whole-trip comparison no longer plan one after another, and moving a slider no longer freezes the app while the trip is planned again (the top bar shows it working).
 - Bug fixes.

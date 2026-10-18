@@ -21,6 +21,8 @@ on:
       - tests/slow-link.test.js
       - tests/map-tiers.test.js
       - tests/map-tiers-ui.test.js
+      - tests/tolls.test.js
+      - tests/tolls-ui.test.js
       - tests/pricehistory.test.js
       - tests/station-reconcile.test.js
       - tests/map-scan-merge.test.js

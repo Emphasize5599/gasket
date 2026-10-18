@@ -119,7 +119,7 @@
   function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
   async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
-  var recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
+  var recommendationTollGaps=0, recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||p.refPrice,[{stops:p.stops.map(function(s){return {arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price};}),arriveGal:p.arriveGal}]).legs[0].cost;}
   function recommendationRaw(sel){if(!legsMode())return alts[sel[0]];return Object.assign(T.joinRoutes(route.legs.map(function(l,i){return l.alts[sel[i]];})),{_sel:sel.slice(),description:sel.map(function(k,i){return route.legs[i].alts[k].description||'Leg '+(i+1);}).join(' / ')});}
   function clearRecommendationMaps(){if(recommendationObserver)recommendationObserver.disconnect();recommendationObserver=null;recommendationMaps.forEach(function(m){m.remove();});recommendationMaps=[];}
@@ -144,7 +144,7 @@
     if(recommendationBase===result&&recommendationPlan===result.plan&&recommendationState!=='idle')return;
     stopRecommendations();var epoch=recommendationEpoch,base=result,basePlan=result.plan,owner=route,cm=carModel(),current=choiceSelections(),iterator=RouteChoices.combinations(choiceLists(),current,choiceAnswers());
     recommendations=[];recommendationPage=0;recommendationDeclined=0;recommendationBase=base;recommendationPlan=basePlan;recommendationState='running';choicePlanning=true;
-    var total=iterator.total-1,done=0,missing=0,baseCost=choiceCost(base),baseTime=routeMin({model:model,res:base});
+    var total=iterator.total-1,done=0,missing=0,tollGaps=0,baseCost=choiceCost(base),baseTime=routeMin({model:model,res:base}),baseTolls=tripTolls(recommendationRaw(current));
     function valid(){return epoch===recommendationEpoch&&route===owner&&result===base&&result.plan===basePlan;}
     function progress(){if(window.Tasks)Tasks.upsert('route-comparison',{text:'Comparing trips '+done+' / '+total,frac:total?done/total:1,cancel:function(){stopRecommendations();recommendationState='cancelled';renderResults();}});}
     progress();
@@ -154,8 +154,10 @@
       // a few combinations in flight at once, one per planner worker (lazily: the product can be huge)
       var flight=[],width=window.Planner&&Planner.size?Planner.size():1;
       async function settle(job){var p=await job.p;if(!valid())return false;var sel=job.sel,m=job.m,opts=job.opts,raw=job.raw;
-        if(p.ok&&!p.firstDip){var res={plan:p,startGal:base.startGal,opts:opts},saves=baseCost-choiceCost(res);
-          if(saves>0.005&&saves+1e-8>=Math.max(0,Number(S.trip.altMinSave)||0))recommendations.push({sel:sel.slice(),saves:saves,extraMin:routeMin({model:m,res:res})-baseTime,delays:choiceLists().map(function(_,i){return p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-(i?(m.legEnds[i-1]||0):0),min:(s.c.detourMin||0)+(opts.stopMinutes||0)+(KIND()==='ev'&&s.c.kw?s.buyGal/s.c.kw*60:0)};});}),description:raw.description||'Alternative trip'});
+        // tolls count: the trip's fuel plus its tolls against yours; an unknown toll amount can't be compared
+        var td=window.Tolls?Tolls.diff(tripTolls(raw),baseTolls):0;if(td==null&&p.ok){tollGaps++;done++;progress();return true;}
+        if(p.ok&&!p.firstDip){var res={plan:p,startGal:base.startGal,opts:opts},saves=baseCost-choiceCost(res)-(td||0);
+          if(saves>0.005&&saves+1e-8>=Math.max(0,Number(S.trip.altMinSave)||0))recommendations.push({sel:sel.slice(),saves:saves,tollDiff:td||0,extraMin:routeMin({model:m,res:res})-baseTime,delays:choiceLists().map(function(_,i){return p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-(i?(m.legEnds[i-1]||0):0),min:(s.c.detourMin||0)+(opts.stopMinutes||0)+(KIND()==='ev'&&s.c.kw?s.buyGal/s.c.kw*60:0)};});}),description:raw.description||'Alternative trip'});
         }
         done++;progress();return true;}
       for(var next=iterator.next();!next.done;next=iterator.next()){
@@ -168,18 +170,19 @@
       }
       while(flight.length)if(!await settle(flight.shift()))return;
       if(!valid())return;
-      recommendations.sort(function(a,b){return b.saves-a.saves;});recommendationState=missing?'incomplete':'done';
-      LG.info('routes','Whole-trip comparison complete',{checked:done,missing:missing,qualifying:recommendations.length});
+      recommendations.sort(function(a,b){return b.saves-a.saves;});recommendationState=missing?'incomplete':'done';recommendationTollGaps=tollGaps;
+      LG.info('routes','Whole-trip comparison complete',{checked:done,missing:missing,tollsUnknown:tollGaps,qualifying:recommendations.length});
     }catch(e){if(valid()){recommendationState='error';LG.warn('routes','Trip comparison failed',String(e&&e.message||e));}}
     finally{if(epoch===recommendationEpoch){choicePlanning=false;if(window.Tasks)Tasks.remove('route-comparison');if(recommendationActive())renderResults();}}
   }
   function recommendationsHtml(){
     var h='<div class="card"><h3>Cheaper trips</h3><p class="lead small keep">Your buffer and maximum detour apply to the entire trip. Next keeps your current trip; choosing an alternative is optional.</p></div>';
     if(recommendationState==='running')h+=A.ldBar('Comparing approved route combinations… You can continue without waiting.');
+    if(recommendationTollGaps&&recommendationState!=='running')h+='<div class="note">'+recommendationTollGaps+' trip'+(recommendationTollGaps===1?' wasn\'t':'s weren\'t')+' compared: their tolls aren\'t known. Type the amounts in Route\'s Tolls card.</div>';
     if(recommendationState==='incomplete'||recommendationState==='error'||recommendationState==='cancelled')h+='<div class="note">Comparison '+(recommendationState==='cancelled'?'cancelled':recommendationState==='incomplete'?'incomplete: some approved legs lack station coverage or speed data':'could not finish')+'. Your current trip is unchanged.</div>';
     if(!recommendations.length&&recommendationState==='done')h+='<div class="msg">'+(recommendationDeclined?'All recommendations declined. Next keeps your current trip.':'No approved alternative saves your requested '+money(S.trip.altMinSave||0)+'.')+'</div>';
     recommendations.slice(recommendationPage*5,recommendationPage*5+5).forEach(function(r,j){var i=recommendationPage*5+j;
-      h+='<div class="card trip-proposal" data-proposal="'+i+'"><div class="proposal-delta"><span>'+(Math.round(r.extraMin)>0?'+':'')+Math.round(r.extraMin)+' min</span><b class="good">−'+money(r.saves)+'</b></div><p class="lead small keep">'+esc(r.description)+'</p><div class="proposal-map" id="proposalMap'+i+'" aria-label="Proposed route and hazards"></div><p class="lead small keep proposal-weather">Checking forecast timing…</p><div class="proposal-buttons"><button class="btn proposal-decline" data-decline="'+i+'">Decline</button><button class="btn tonal" data-replace="'+i+'">Replace trip</button></div></div>';
+      h+='<div class="card trip-proposal" data-proposal="'+i+'"><div class="proposal-delta"><span>'+(Math.round(r.extraMin)>0?'+':'')+Math.round(r.extraMin)+' min</span><b class="good">−'+money(r.saves)+'</b></div><p class="lead small keep">'+esc(r.description)+(r.tollDiff?' · '+(r.tollDiff>0?money(r.tollDiff)+' more':money(-r.tollDiff)+' less')+' in tolls, counted':'')+'</p><div class="proposal-map" id="proposalMap'+i+'" aria-label="Proposed route and hazards"></div><p class="lead small keep proposal-weather">Checking forecast timing…</p><div class="proposal-buttons"><button class="btn proposal-decline" data-decline="'+i+'">Decline</button><button class="btn tonal" data-replace="'+i+'">Replace trip</button></div></div>';
     });
     if(recommendations.length>5)h+='<div class="proposal-buttons"><button class="btn tonal" id="proposalPrev"'+(!recommendationPage?' disabled':'')+'>Previous</button><span>'+ (recommendationPage+1)+' / '+Math.ceil(recommendations.length/5)+'</span><button class="btn tonal" id="proposalNext"'+((recommendationPage+1)*5>=recommendations.length?' disabled':'')+'>More trips</button></div>';
     return h;
@@ -650,7 +653,7 @@
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
         '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
         '<div id="tRouteGo"></div></div>' +
-        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div><div id="tRouteInfo"></div>';
+        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div><div id="tRouteInfo"></div>';
     }
     if (k === ST_PARAMS) {
       var kd = KIND();
@@ -709,6 +712,7 @@
   /** Head back right away (no time picked): on unless a time was picked and the switch turned off. */
   function backAuto() { var t = S.trip; return t.backAuto != null ? !!t.backAuto : !t.backAt; }
   function bindRoute() {
+    $('tTollCmp').onchange=function(){S.trip.tollCompare=this.checked;if(this.checked&&!S.trip.altCompare){S.trip.altCompare=true;$('tAltCmp').checked=true;$('tAltBox').classList.remove('hidden');}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
     $('tAltCmp').onchange=function(){$('tAltBox').classList.toggle('hidden',!this.checked);S.trip.altCompare=this.checked;routeReview=null;choiceComplete=false;result=null;A.save();gateTabs();};
     $('tRememberRoutes').onchange=function(){choiceOwnerSync();Garage.car().rememberRouteChoices=this.checked;saveChoices();A.save();};
     $('tAltSave').onchange=function(){S.trip.altMinSave=Math.max(0,Number(this.value)||0);A.save();};
@@ -906,6 +910,7 @@
     if (v('tBackAt') != null) t.backAt = v('tBackAt') || '';
     if (segOn('tSrc', 'src')) t.src = segOn('tSrc', 'src');
     if (v('tDepart') != null) t.depart = v('tDepart') || '';
+    if (on('tTollCmp') != null) t.tollCompare = on('tTollCmp');
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
     if (v('tTankPrice') != null) t.tankPrice = v('tTankPrice').trim();
     if (v('tBuffer') != null) t.bufferMi = Math.max(0, parseFloat(v('tBuffer')) || 0);
@@ -1364,15 +1369,15 @@
   function legName(r, i) { return stopName(r.stops[i]) + ' → ' + stopName(r.stops[i + 1]); }
   function legBody(a, b) {
     var avoid = S.trip.avoid;
-    return { origin: wp(a), destination: wp(b), travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE', polylineQuality: 'HIGH_QUALITY', units: 'IMPERIAL',
-      computeAlternativeRoutes: true, routeModifiers: { avoidTolls: !!avoid.tolls, avoidHighways: !!avoid.highways, avoidFerries: !!avoid.ferries } };
+    return Object.assign({ origin: wp(a), destination: wp(b), travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE', polylineQuality: 'HIGH_QUALITY', units: 'IMPERIAL',
+      computeAlternativeRoutes: true, routeModifiers: { avoidTolls: !!avoid.tolls, avoidHighways: !!avoid.highways, avoidFerries: !!avoid.ferries } }, tollPair() ? { extraComputations: ['TOLLS'] } : {});
   }
-  function legKey(r, i) { return [r.stops[i], r.stops[i + 1]].map(function (st) { return st.current ? 'here' : st.lat != null ? st.lat.toFixed(4) + ',' + st.lng.toFixed(4) : st.address; }).join('>') + '|' + JSON.stringify(S.trip.avoid); }
+  function legKey(r, i) { return [r.stops[i], r.stops[i + 1]].map(function (st) { return st.current ? 'here' : st.lat != null ? st.lat.toFixed(4) + ',' + st.lng.toFixed(4) : st.address; }).join('>') + '|' + JSON.stringify(S.trip.avoid) + (tollPair() ? '|tolls' : ''); }
   async function routeLeg(r, i) {
     var prev = r.legs && r.legs[i];
     if (prev && prev.key !== legKey(r, i)) prev = null;
     var sub = { stops: [r.stops[i], r.stops[i + 1]], avoid: r.avoid, mapsRoutes: prev && prev.mapsRoutes || null };
-    if(!S.apiKey){var wa=await websiteRoutes(sub);return {key:legKey(r,i),alts:wa,sel:Math.min(prev&&prev.sel||0,wa.length-1),mapsRoutes:sub.mapsRoutes};}
+    if(!S.apiKey){var wa=await withTollFree(sub,await websiteRoutes(sub));return {key:legKey(r,i),alts:wa,sel:Math.min(prev&&prev.sel||0,wa.length-1),mapsRoutes:sub.mapsRoutes};}
     var body = legBody(sub.stops[0], sub.stops[1]);
     var res = await routesCall(body);
     if (res.error) throw new Error('Leg ' + (i + 1) + ' (' + legName(r, i) + '): ' + res.error);
@@ -1380,6 +1385,7 @@
     if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for leg ' + (i + 1) + ' (' + legName(r, i) + ').');
     var cx = { alts: j.routes };
     await allMapsRoutes(sub, body, cx);
+    cx.alts = await withTollFree(sub, cx.alts, body);
     // same pick as before when this leg was routed already
     var sel = 0, want = prev && prev.alts && prev.alts[prev.sel] && prev.alts[prev.sel].description;
     if (want) cx.alts.forEach(function (a, k) { if (a.description === want) sel = k; });
@@ -1498,7 +1504,7 @@
       } else {
         prog(0.6, 'Asking Google for the route');
         if(!S.apiKey){
-          alts=await websiteRoutes(r);altSel=r.routeIndex==null?0:alts.findIndex(function(a){return a.websiteOptionIndex===r.routeIndex;});altSure=false;
+          alts=await withTollFree(r,await websiteRoutes(r));altSel=r.routeIndex==null?0:alts.findIndex(function(a){return a.websiteOptionIndex===r.routeIndex;});altSure=false;
           if(altSel<0)throw new Error('The selected website route has no usable geometry. Choose another route, retry, or add the recommended API key.');
           rawRoute=alts[altSel];model=T.buildRoute(rawRoute,carModel());ensureLimits(model);
         }else{
@@ -1511,6 +1517,7 @@
         };
         if (body.intermediates.length > 10) throw new Error('Google routes allow up to 10 stops in between.');
         if (!body.intermediates.length) body.computeAlternativeRoutes = true;   // so you can pick the same one as in Google Maps
+        if (tollPair()) body.extraComputations = ['TOLLS'];
         dbg.routeBody = body;
         LG.debug('route', 'Routes request', body);
         var res = await routesCall(body);
@@ -1521,6 +1528,7 @@
         if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for that trip.');
         alts = j.routes;
         if (!body.intermediates.length) await allMapsRoutes(r, body);
+        alts = await withTollFree(r, alts, body);
         var picked = pickedRoute(r);
         altSure = false;
         if (picked && alts.length > 1) { var mt = matchRoute(alts, picked); altSel = mt.index; altSure = mt.sure; }
@@ -1579,13 +1587,14 @@
     return n ? near / n : 0;
   }
   var scanning = {};     // Google Maps route scans in progress, by address (so a leg is never scanned twice at once)
-  async function mapsOptions(r) {
-    if (r.mapsRoutes && r.mapsRoutes.length && r.mapsRoutes[0].pts&&(S.apiKey||r.websiteAvoid===JSON.stringify(S.trip.avoid||{}))) return r.mapsRoutes;
+  async function mapsOptions(r, avoidOver) {
+    var avoid=avoidOver||S.trip.avoid||{};
+    if (r.mapsRoutes && r.mapsRoutes.length && r.mapsRoutes[0].pts&&(S.apiKey||r.websiteAvoid===JSON.stringify(avoid))) return r.mapsRoutes;
     if (r.stops.length !== 2 || r.stops.some(function (s) { return s.current&&!A.me(); })) return r.mapsRoutes || null;
     // exact spots when known: Google Maps on a desktop page sometimes "can't find" a street-only name from a phone link
     var place = function (s) { var p=s.current?A.me():s;return p.lat != null ? p.lat.toFixed(7) + ',' + p.lng.toFixed(7) : (s.address || s.label); };
     var url = 'https://www.google.com/maps/dir/' + encodeURIComponent(place(r.stops[0])) + '/' + encodeURIComponent(place(r.stops[1])) + '/';
-    var avoid=S.trip.avoid||{},avoidNames=['tolls','highways','ferries'].filter(function(k){return avoid[k];});
+    var avoidNames=['tolls','highways','ferries'].filter(function(k){return avoid[k];});
     if(avoidNames.length)url='https://www.google.com/maps/dir/?api=1&travelmode=driving&origin='+encodeURIComponent(place(r.stops[0]))+'&destination='+encodeURIComponent(place(r.stops[1]))+'&avoid='+encodeURIComponent(avoidNames.join('|'));
     var o = A.KV.get('mapsopts', url, 2 * 3600e3), g;
     if (o) g = o.v;
@@ -1599,8 +1608,8 @@
     if (g && g.routes && g.routes.length){r.mapsRoutes = g.routes;r.websiteAvoid=JSON.stringify(avoid);}
     return r.mapsRoutes || null;
   }
-  async function websiteRoutes(r){
-    var options=await mapsOptions(r),out=[];
+  async function websiteRoutes(r,avoidOver){
+    var options=await mapsOptions(r,avoidOver),out=[];
     (options||[]).forEach(function(m,optionIndex){
       if(!Number.isFinite(m.miles)||m.miles<=0||!Number.isFinite(m.minutes)||m.minutes<=0||!Array.isArray(m.pts)||m.pts.length<6)return;
       var pts=m.pts.filter(function(p){return Array.isArray(p)&&p.length===2&&Number.isFinite(p[0])&&Number.isFinite(p[1])&&Math.abs(p[0])<=85&&Math.abs(p[1])<=180;}).map(function(p){return {lat:p[0],lng:p[1]};});
@@ -1610,10 +1619,47 @@
       // its turn-by-turn steps (road names, each stretch's length and time), when Maps sent all of them
       var steps=Array.isArray(m.steps)?m.steps.filter(function(x){return Array.isArray(x)&&Number.isFinite(x[0])&&x[0]>=0&&Number.isFinite(x[1]);}).map(function(x){return {distanceMeters:x[0],staticDuration:Math.round(x[1])+'s',navigationInstruction:{instructions:String(x[2]||'')}};}):[];
       var legs=steps.length?[{distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',steps:steps}]:[];
-      out.push({description:m.via||'Website route',distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:legs,websiteApproximate:true,websiteSteps:steps.length>0,websiteOptionIndex:optionIndex});
+      out.push({description:m.via||'Website route',distanceMeters:m.miles*1609.344,duration:Math.round(m.minutes*60)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:legs,websiteApproximate:true,websiteSteps:steps.length>0,websiteOptionIndex:optionIndex,websiteTolls:typeof m.tolls==='boolean'?m.tolls:undefined});
     });
     if(!out.length)throw new Error('The Maps website did not provide usable route geometry. Retry, paste a full Google Maps directions link, or add the recommended API key in Settings.');
     var endpoints=T.decodePolyline(out[0].polyline.encodedPolyline);r.stops.forEach(function(s,i){if(s.lat==null){var p=i?endpoints[endpoints.length-1]:endpoints[0];s.lat=p.lat;s.lng=p.lng;}});
+    return out;
+  }
+  /**
+   * "Compare with and without tolls": with tolls allowed, each leg's options also come with tolls avoided, so the
+   * toll-free roads join the alternatives (Hazards asks about them like any other) and the comparisons count each
+   * option's tolls (tolls.js). With the key, Google estimates the amounts (TOLLS); without it, Maps only says a route
+   * has tolls and you type the amount on Route. One more Maps page (or Routes call) per leg.
+   */
+  /** A whole trip option's tolls: its legs' (a joined multi-leg option keeps which option each leg is, _sel). */
+  function tripTolls(raw) {
+    if (!window.Tolls || !raw) return { has: null, cost: null };
+    var parts = raw._sel && route && route.legs ? route.legs.map(function (l, i) { return l.alts[raw._sel[i]]; }) : [raw];
+    return Tolls.ofTrip(parts, S.trip.tollAmounts);
+  }
+  /** Short toll text for a route tile ("no tolls", "$12.50 tolls", "tolls"), only when tolls are being compared or known. */
+  function tollTag(a) {
+    if (!window.Tolls) return ''; var t = tollsOf(a);
+    if (!tollPair() && !t.has) return '';
+    return t.has === false ? 'no tolls' : t.cost != null ? '$' + t.cost.toFixed(2) + ' tolls' : t.has ? 'tolls' : '';
+  }
+  function tollPair() { return !!S.trip.tollCompare && !(S.trip.avoid || {}).tolls; }
+  function tollsOf(a) { return window.Tolls ? Tolls.ofRoute(a, S.trip.tollAmounts) : { has: null, cost: null }; }
+  async function withTollFree(r, list, body) {
+    if (body && body.extraComputations) list.forEach(function (a) { a.tollsAsked = true; });
+    if (!tollPair() || !window.Tolls || !list.length) return list;
+    var free = [];
+    try {
+      if (!S.apiKey) free = await websiteRoutes({ stops: r.stops }, Object.assign({}, S.trip.avoid, { tolls: true }));
+      else if (body) {
+        var b2 = Object.assign({}, body, { routeModifiers: Object.assign({}, body.routeModifiers, { avoidTolls: true }) }); delete b2.extraComputations;
+        var res = await routesCall(b2);
+        if (res.error) throw new Error(res.error);
+        free = JSON.parse(res.body).routes || [];
+      }
+    } catch (e) { LG.warn('route', 'Toll-free routes not found', { error: e.message || String(e) }); return list; }
+    var out = Tolls.addTollFree(list, free, function (a, b) { return overlap(a, b); });
+    LG.info('route', 'Toll and toll-free routes', out.map(function (a) { var t = tollsOf(a); return { via: a.description, tolls: t.has, cost: t.cost, src: t.src }; }));
     return out;
   }
   /** A route's points, decoded once (long trips have 100,000+). */
@@ -1713,7 +1759,37 @@
     routeGate();
     var el = $('tRouteInfo'); if (!el) return;
     if (!model) { el.innerHTML = ''; alts = []; return; }
-    el.innerHTML = '';   // the routes, their weather and the lookup notes are on Hazards and Adjustments
+    el.innerHTML = tollsHtml();   // the routes, their weather and the lookup notes are on Hazards and Adjustments
+    bindTolls();
+  }
+  /** Route: each option's tolls, when you compare with and without them (or any route has tolls): Google's estimate,
+   *  or a box for the amount (Google Maps' website doesn't give one). Saved by the route, in S.trip.tollAmounts. */
+  function tollsHtml() {
+    if (!model || !window.Tolls) return '';
+    var lists = choiceLists(), rows = '';
+    var any = lists.some(function (l) { return l.some(function (a) { return tollsOf(a).has; }); });
+    if (!tollPair() && !any) return '';
+    lists.forEach(function (list, i) {
+      if (lists.length > 1) rows += '<div class="sub-h">Leg ' + (i + 1) + ' · ' + esc(legName(route, i)) + '</div>';
+      list.forEach(function (a) {
+        var t = tollsOf(a), sg = Tolls.sig(a), mine = (S.trip.tollAmounts || {})[sg];
+        rows += '<div class="field toll-row"><div class="lbl">via ' + esc(a.description || 'route') + '<small>' + esc(Tolls.text(t) || 'Tolls not known') + (t.src === 'google' && t.cost != null ? ' (Google\'s estimate)' : '') + '</small></div>' +
+          (t.has === false && t.src !== 'you' ? '' : '<input type="number" inputmode="decimal" min="0" step="0.01" class="toll-in" data-toll="' + esc(sg) + '" aria-label="Tolls on this route ($)" placeholder="' + (t.cost != null ? t.cost.toFixed(2) : '$') + '" value="' + (Number.isFinite(mine) ? mine : '') + '">') + '</div>';
+      });
+    });
+    return '<div class="card" id="tTolls"><h3>Tolls</h3><p class="lead small keep">Counted in the route comparisons. Type an amount to use your own (a toll pass, a trailer, or Google didn\'t say); leave it blank for Google\'s.</p>' + rows + '</div>';
+  }
+  function bindTolls() {
+    document.querySelectorAll('#tTolls .toll-in').forEach(function (inp) {
+      inp.onchange = function () {
+        var v = parseFloat(inp.value), all = S.trip.tollAmounts = Object.assign({}, S.trip.tollAmounts), was = all[inp.dataset.toll];
+        if (Number.isFinite(v) && v >= 0) all[inp.dataset.toll] = Math.round(v * 100) / 100; else delete all[inp.dataset.toll];
+        if (all[inp.dataset.toll] === was) return;
+        A.save(); stopRecommendations(); recommendationBase = null;
+        // redrawn a moment later: replacing the box from inside its own change (and the blur that follows) throws
+        setTimeout(function () { if (!$('tTolls')) return; var y = tpBody().scrollTop; renderInfo(); tpBody().scrollTop = y; }, 0);
+      };
+    });
   }
   /** A tap on a route option: highlighted at once; its route (long ones take a moment) is read right after. */
   var picking = false;
@@ -2172,7 +2248,11 @@
       var c = { k: e.k, via: a.description || 'route ' + (e.k + 1), ok: e.res.plan.ok, error: e.error,
         extraMi: e.model.totalMi - cur.model.totalMi, extraMin: routeMin(e) - routeMin(cur), stops: e.res.plan.ok ? e.res.plan.stops.length : 0 };
       c.saves = no != null && nc != null ? nc - no : null;
-      c.worth = !c.error && c.ok && (nc == null || c.saves >= (S.trip.altMinSave || 0));
+      // tolls count too: a toll road with cheap stations can still come out ahead (or not)
+      var td = window.Tolls ? Tolls.diff(tripTolls(a), tripTolls(alts[altSel])) : 0;
+      c.tolls = tripTolls(a); c.tollDiff = td; c.tollUnknown = td == null;
+      if (c.saves != null && td != null) c.saves -= td;
+      c.worth = !c.error && c.ok && !c.tollUnknown && (nc == null || c.saves >= (S.trip.altMinSave || 0));
       return c;
     }).sort(function (x, y) { return (y.saves || -1e9) - (x.saves || -1e9); });
   }
@@ -2184,6 +2264,8 @@
     if (alts[k]._sel && route.legs) route.legs.forEach(function (L, i) { L.sel = alts[k]._sel[i]; });   // that leg's pick changes too
     recompute(); startSweep(); showResult();
   }
+  /** ", tolls included ($4.50 more in tolls)" for a comparison that counted them. */
+  function tollNote(c) { return c.tollDiff ? ', counting ' + money(Math.abs(c.tollDiff)) + (c.tollDiff > 0 ? ' more' : ' less') + ' in tolls' : ''; }
   function routeBox() {
     var cs = compareRoutes(); if (!cs.length) return '';
     var h = '', best = cs.filter(function (c) { return c.worth; })[0];
@@ -2191,7 +2273,7 @@
     var dmin = function (v) { return Math.abs(v) < 1 ? 'about the same time' : Math.round(Math.abs(v)) + ' min ' + (v > 0 ? 'longer' : 'shorter'); };
     if (best) {
       h += '<div class="routebox good"><div class="tb-h">Cheaper route: via ' + esc(best.via) + '</div>' +
-        '<div class="lead small keep">' + (best.saves != null ? 'Saves about <b>' + money(best.saves) + '</b>' : 'Works with your buffer when this one doesn\'t') + ' · ' + dmi(best.extraMi) + ' · ' + dmin(best.extraMin) +
+        '<div class="lead small keep">' + (best.saves != null ? 'Saves about <b>' + money(best.saves) + '</b>' + tollNote(best) : 'Works with your buffer when this one doesn\'t') + ' · ' + dmi(best.extraMi) + ' · ' + dmin(best.extraMin) +
         ' · ' + best.stops + ' stop' + (best.stops === 1 ? '' : 's') + '.</div>' +
         '<button class="btn tonal" data-route="' + best.k + '">Switch to this route</button></div>';
     }
@@ -2199,7 +2281,8 @@
     if (rest.length) h += '<div class="lead small keep">Also checked: ' + rest.map(function (c) {
       if (c.error) return 'via ' + esc(c.via) + ' (couldn\'t check: ' + esc(c.error) + ')';
       if (!c.ok) return 'via ' + esc(c.via) + ' (no plan keeps your buffer)';
-      return 'via ' + esc(c.via) + ' — ' + (c.saves > 0.005 ? 'saves only ' + money(c.saves) + ' (your bar is ' + money(S.trip.altMinSave) + ')' : money(-c.saves) + ' more') + ', ' + dmin(c.extraMin) +
+      if (c.tollUnknown) return 'via ' + esc(c.via) + ' — ' + (c.saves > 0.005 ? money(c.saves) + ' less on fuel' : money(-c.saves) + ' more on fuel') + ', but its tolls aren\'t known (type them on Route) · <a href="#" data-route="' + c.k + '">use this route</a>';
+      return 'via ' + esc(c.via) + ' — ' + (c.saves > 0.005 ? 'saves only ' + money(c.saves) + ' (your bar is ' + money(S.trip.altMinSave) + ')' : money(-c.saves) + ' more') + tollNote(c) + ', ' + dmin(c.extraMin) +
         ' · <a href="#" data-route="' + c.k + '">use this route</a>';
     }).join('; ') + '.</div>';
     return h;
@@ -3371,7 +3454,7 @@
       else { var ks = hzKinds(e.hz); chips = ks.length ? ks.map(hzDot).join('') + '<span class="hz-n">' + e.hz.length + ' hazard' + (e.hz.length === 1 ? '' : 's') + '</span>' : '<span class="hz-ok">✓ nothing found</span>'; if(e.aiRating||e.stats.aiPending)chips+='<span class="hz-ai-note">⚠ AI still rating warnings…</span>'; }
       // which one Google Maps had (your link), as before
       var note = list.length === 1 ? 'Google\'s only route' : legsMode() ? '' : k === altSel && pickedRoute(route) ? (altSure ? '✓ same as in Google Maps' : 'closest to what you picked') : (!pickedRoute(route) && route && route.routeIndex === k ? 'matches your link' : '');
-      return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + '</span></span>' +
+      return '<button class="hz-opt' + (k === sel ? ' on' : '') + '" data-hzk="' + k + '"><span class="hz-o1"><b>' + (a.description ? 'via ' + esc(a.description) : 'Route ' + (k + 1)) + '</b><span>' + mi.toLocaleString() + ' mi · ' + fmtDur(sec) + (tollTag(a) ? ' · ' + esc(tollTag(a)) : '') + '</span></span>' +
         (note ? '<span class="hz-note">' + esc(note) + '</span>' : '') + '<span class="hz-o2">' + chips + '</span><span class="hz-fit"><strong>'+(fit.complete?'Vehicle fit '+fit.rows[k].rank+' of '+list.length:'Not ranked — comparison incomplete')+'</strong>'+(e&&e.st==='done'?'<span>'+esc(fit.rows[k].fit.reasons.join(' · '))+'</span>':'')+'</span></button>';
     }).join('') + '</div>';
     if(routeReview)h='<div class="card"><h3>Would you consider this route if it were cheaper?</h3><p class="lead small keep">Leg '+(hzLeg+1)+' · '+esc(legName(route,hzLeg))+'. No skips its station search; Yes includes it after your primary routes.</p></div>'+h;
@@ -4128,5 +4211,6 @@
       for (var i = 0; i < leads.length; i++) for (var j = i + 1; j < leads.length; j++) if (Labels._segX(leads[i][0], leads[i][1], leads[j][0], leads[j][1])) cross++;
       return { pins: out, leads: leads.length, overRoute: over, crossings: cross };
     },
+    tolls: function () { return choiceLists().map(function (l) { return l.map(function (a) { return { via: a.description, tolls: tollsOf(a), tag: tollTag(a) }; }); }); },
     state: function () { var nl = model ? hzLegs() : 0, no = 0; for (var i = 0; i < nl; i++) no += hzAlts(i).length; return { route: route, model: model, result: result, busy: busy || planning > 0, planning: planning, step: step, legs: nl, options: no }; } };
 })();

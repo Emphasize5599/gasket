@@ -890,7 +890,8 @@ public class MainActivity extends Activity {
 
     private static final String ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
     private static final String ROUTES_MASK = "routes.description,routes.routeLabels,routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,"
-            + "routes.legs.distanceMeters,routes.legs.duration,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction";
+            + "routes.legs.distanceMeters,routes.legs.duration,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction,"
+            + "routes.travelAdvisory.tollInfo";
     private static final String ALONG_MASK = FIELD_MASK + ",routingSummaries,nextPageToken";
 
     private static String routeMonthKey() {
