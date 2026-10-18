@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.186 - 2026-10-18 (keyless test branch only)
+- Station scans adjust how many website readers run to what your connection can carry: pages timing out cut the readers back, pages loading add them again. Too many readers at once was slowing scans down.
+- Bug fixes.
+
 ## 0.0.185 - 2026-10-17 (keyless test branch only)
 - Station scans no longer lose areas whose page failed to load: they're read again after the pass (fewer readers, up to three tries), so a route isn't left with a stretch of no stations and no workable plan.
 - After you finish a website check, the scan restarts gently instead of reloading every reader at once.

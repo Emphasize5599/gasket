@@ -184,15 +184,28 @@
     else if(m.availMB>=850&&now>=state.cooldown)state.target=Math.min(max,state.target+(m.availMB>=1800?2:1));
     return state.target;
   }
+  /**
+   * Readers the connection can carry, learned from the pages themselves (memory is only half of it): a page that times
+   * out or fails to load cuts the cap to 60% (at most every 8 s, never below 4), four loaded pages in a row add two back
+   * (15 s after the last cut). A phone log: 50 readers on cellular timed out 187 of 287 pages, while 8 readers then read
+   * all 187 again in less time. state.cap starts at max; ok = whether the page loaded.
+   */
+  function netStep(state,ok,now,max){
+    var floor=Math.min(4,max);if(state.cap==null)state.cap=max;
+    if(!ok){state.wins=0;if(!(now-(state.cut==null?-1e9:state.cut)<8000)&&state.cap>floor){state.cap=Math.max(floor,Math.floor(state.cap*0.6));state.cut=now;return 'cut';}return null;}
+    state.wins=(state.wins||0)+1;
+    if(state.wins>=4&&state.cap<max&&now-(state.cut==null?-1e9:state.cut)>=15000){state.wins=0;state.cap=Math.min(max,state.cap+2);return 'grow';}
+    return null;
+  }
   function readerPool(A,lanes,control,audit,more){
-    var state={aggressive:!!(A.S&&A.S.keylessAggressive)},sampleAt=0,sample=null,paused=new Set();
-    function target(){var now=Date.now();if(!sampleAt||now-sampleAt>=2000){sampleAt=now;sample=memNow(A);}return poolTarget(state,sample,now,lanes.length,state.aggressive);}
-    control.pool=state;target();
-    return {target:target,permit:async function(key){
+    var state={aggressive:!!(A.S&&A.S.keylessAggressive)},net={cap:lanes.length},sampleAt=0,sample=null,paused=new Set();
+    function target(){var now=Date.now();if(!sampleAt||now-sampleAt>=2000){sampleAt=now;sample=memNow(A);}return Math.min(poolTarget(state,sample,now,lanes.length,state.aggressive),net.cap);}
+    control.pool=state;state.net=net;target();
+    return {target:target,outcome:function(ok){var step=netStep(net,ok,Date.now(),lanes.length);if(step&&root.FLog)root.FLog.info('keyless',step==='cut'?'Fewer readers: pages are timing out':'More readers: pages are loading',{cap:net.cap,of:lanes.length});},permit:async function(key){
       var index=lanes.indexOf(key);
       while(more()&&!control.cancelled&&!control.blocked){
         if(index<target()){if(paused.delete(key)&&root.FLog)root.FLog.info('keyless','Website reader resumes',{lane:index,target:state.target});return true;}
-        if(!paused.has(key)){paused.add(key);audit.retire();if(A.N&&A.N.releaseGasReader)A.N.releaseGasReader(key);if(root.FLog)root.FLog.info('keyless','Website reader pauses for memory headroom',{lane:index,target:state.target});}
+        if(!paused.has(key)){paused.add(key);audit.retire();if(A.N&&A.N.releaseGasReader)A.N.releaseGasReader(key);if(root.FLog)root.FLog.info('keyless',net.cap<=index?'Website reader pauses: connection busy':'Website reader pauses for memory headroom',{lane:index,target:state.target,cap:net.cap});}
         await new Promise(function(resolve){var timer,wake=function(){clearTimeout(timer);control.wake=control.wake.filter(function(f){return f!==wake;});resolve();};control.wake.push(wake);timer=setTimeout(wake,500);});
       }
       return false;
@@ -212,7 +225,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={retryable:function(r){return retryable(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={netStep:netStep,retryable:function(r){return retryable(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -357,6 +370,7 @@
           var at=Date.now();(r.stores||[]).forEach(function(s){Object.keys(s.prices||{}).forEach(function(g){s.prices[g].observedAt=at;});});
           if(!r.blocked&&!r.error&&r.detail&&r.detail.exhausted)A.KV.put('gasweb',cacheKey,r);
         }
+        if(!cache&&!r.blocked)pool.outcome(!retryable(r));
         if(!cache&&retryable(r)&&(tries[idx]||0)<RETRIES){tries[idx]=(tries[idx]||0)+1;again.push(idx);recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,d:r.detail||null,found:0,added:0,err:r.error||null,retry:true});continue;}
         if(r.blocked){blocked=true;control.blocked=true;control.blockedSite=control.blockedSite||'gasweb';errors.push(r.error||'Website restricted discovery');}
         if(r.error&&!r.blocked)errors.push(r.error);
@@ -462,6 +476,7 @@
       var suppliedAt=Date.now(),complete=updateKnown(x.g.stations,official,P,suppliedAt,grade);
       if(official.length&&complete.updated===x.g.stations.length)return {stores:official};
       var gr=await read(key,{url:webUrl(area(x.g.lat,x.g.lng,8)),grade:grade,targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId,brand:s.brand,lat:s.lat,lng:s.lng,address:s.address};})});
+      if(gr&&!gr.cancelled&&!gr.blocked)pool.outcome(!retryable(gr));
       // Keep trusted official records separate; do not transfer a regular label to another grade.
       var supplied=new Set(complete.stations.filter(function(s){return s.prices&&s.prices[grade]&&s.prices[grade].observedAt===suppliedAt;}).map(knownKey));
       var google=(gr.stores||[]).filter(function(w){return !x.g.stations.some(function(s){return s.brand===(P.detectBrand(w.name,w.website)||w.brand)&&supplied.has(knownKey(s))&&P.haversineMi(s.lat,s.lng,w.lat,w.lng)<0.1;});});

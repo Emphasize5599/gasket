@@ -105,6 +105,31 @@ async function lostPages(){
  assert.equal(K.retryable({stores:[{}],error:'Search response timed out',code:'reader'}),false,'a page that found stations keeps them');
  assert.equal(K.retryable({stores:[],code:'no_prices',error:'Google provided no matching prices'}),false);
 }
+// The connection decides too: timeouts cut the readers to 60% (every 8 s at most, never below 4), loaded pages add two back.
+function netCap(){
+ const K=require('../assets/web/keylessgas.js'),st={};let t=0;
+ assert.equal(K.netStep(st,false,t,50),'cut');assert.equal(st.cap,30);
+ assert.equal(K.netStep(st,false,t+1000,50),null,'one cut per 8 s');assert.equal(st.cap,30);
+ K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);assert.equal(st.cap,4,'never below four');
+ for(let i=0;i<4;i++)K.netStep(st,true,t+1000,50);assert.equal(st.cap,4,'no growth right after a cut');
+ for(let i=0;i<4;i++)K.netStep(st,true,t+16000,50);assert.equal(st.cap,6,'four loaded pages add two');
+ K.netStep(st,true,t+17000,50);K.netStep(st,false,t+17500,50);assert.equal(st.wins,0,'a failure resets the run');
+}
+async function timeoutsShrinkPool(){
+ const active=new Map();
+ const window={document:{},__app:{P,S:{keylessWorkers:16},siteOn:()=>false,showSiteCheck:()=>{},KV:{get:()=>null,put:()=>{}},N:{}},__trip:{call:(fn,key,json)=>new Promise(resolve=>active.set(key,{resolve,args:JSON.parse(json)}))}};
+ vm.runInNewContext(source,{window,Date,setTimeout,clearTimeout,setInterval,clearInterval});
+ const K=window.KeylessGas,task=K.discover(Array.from({length:80},(_,i)=>({lat:30+i*.2,lng:-92,radius:8})),null,'regular',true),flush=()=>new Promise(r=>setImmediate(r));
+ await flush();assert.equal(active.size,16);
+ for(const [key,x] of [...active].slice(0,3)){active.delete(key);x.resolve({stores:[],error:'Search response timed out',code:'reader'});}
+ await flush();await new Promise(r=>setTimeout(r,30));
+ // pages already loading finish; then only nine readers take new areas
+ const loading=[...active];
+ for(const [key,x] of loading){active.delete(key);x.resolve({stores:[],detail:{exhausted:true,stopReason:'end'}});}
+ for(let i=0;i<6;i++){await flush();await new Promise(r=>setTimeout(r,30));}
+ assert(active.size<=9,'a timeout cuts sixteen readers to nine ('+active.size+')');
+ K.cancel();await task;
+}
 // Just after a check closes, only eight readers take new areas for 45 s, so fifty pages don't bring it straight back.
 async function calmAfterCheck(){
  const active=new Map();let now=Date.now();class Clock extends Date{static now(){return now;}}
@@ -119,4 +144,4 @@ async function calmAfterCheck(){
  assert(active.size>8,'after the calm period every reader works again ('+active.size+')');
  K.cancel();await task;
 }
-(async()=>{await lostPages();await calmAfterCheck();await run(false);await run(true);await cancelled();await pausedScan(true,false);await pausedScan(false,false);await pausedScan(true,true);await pausedScan(false,true);await officialCheck('walmart');await officialCheck('murphy');console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});
+(async()=>{netCap();await timeoutsShrinkPool();await lostPages();await calmAfterCheck();await run(false);await run(true);await cancelled();await pausedScan(true,false);await pausedScan(false,false);await pausedScan(true,true);await pausedScan(false,true);await officialCheck('walmart');await officialCheck('murphy');console.log('Uncapped 231-area refresh, ETA, four readers, cancellation, partial results, restrictions and cache passed');})().catch(e=>{console.error(e);process.exit(1);});
