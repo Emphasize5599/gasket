@@ -165,7 +165,8 @@ async function (reqId, args) {
       if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
       await readReply();
       if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
-      const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices)]);
+      // the feed growing counts too (an end marker or a spinner arriving is the page answering, not quiet)
+      const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices),feed&&feed.scrollHeight]);
       if(now!==last)lastGrowth=Date.now();
       stable=now===last ? stable+1 : 0;last=now;
       const indicator=feed&&feed.querySelector&&feed.querySelector('[role="progressbar"]');
@@ -174,20 +175,21 @@ async function (reqId, args) {
         if (/end of the list/i.test(feed.innerText)) {exhausted=true;stopReason='end';break;}
         if (!discovery&&scrolls>=3) {stopReason='scroll_limit';break;}
         if(discovery&&rows.size>=5000){stopReason='row_limit';break;}
+        // Stop a quiet bottom after 4 s (12 s if not at bottom), but report it as unconfirmed; an ordinary short list
+        // does not justify a second navigation. Checked before this round's scroll, so the page always gets to answer it.
+        const wasBottom=feed.scrollTop+feed.clientHeight>=feed.scrollHeight-4;
+        if(discovery&&Date.now()-lastGrowth>(wasBottom&&scrolls>=1?4000:12000)){stopReason=wasBottom?'quiet':'stalled';break;}   // Quiet is not proof of exhaustion; don't cache a possibly stalled page as complete.
         const before=feed.scrollTop;
         feed.scrollTop=feed.scrollHeight;
         // Maps may attach its pagination listener after the first scroll. Writing
         // the same bottom position again emits no scroll event; nudge only a
         // stalled, scrollable discovery feed so a late listener gets another chance.
         if(discovery&&Math.abs(feed.scrollTop-before)<1&&feed.scrollHeight>feed.clientHeight){
-          const bottom=feed.scrollTop;feed.scrollTop=Math.max(0,bottom-32);feed.scrollTop=bottom;
+          // up and back across a short wait: both in one go can coalesce into no scroll event at all (a CI run caught it)
+          const bottom=feed.scrollTop;feed.scrollTop=Math.max(0,bottom-32);await sleep(60);feed.scrollTop=bottom;
         }
         // Scrolling the same exhausted/non-scrollable feed three times adds seconds but no rows.
         if(Math.abs(feed.scrollTop-before)<1&&!discovery){stopReason='stalled';break;}
-        // Stop a quiet bottom after 4 s (12 s if not at bottom), but report it
-        // as unconfirmed; an ordinary short list does not justify a second navigation.
-        const atBottom=feed.scrollTop+feed.clientHeight>=feed.scrollHeight-4;
-        if(discovery&&Date.now()-lastGrowth>(atBottom&&scrolls>=1?4000:12000)){stopReason=atBottom?'quiet':'stalled';break;}   // Quiet is not proof of exhaustion; don't cache a possibly stalled page as complete.
         if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
         scrolls++;stable=0;
       }
