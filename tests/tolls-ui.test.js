@@ -60,11 +60,29 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('#tHz .hz-opt');await p.evaluate(()=>__trip.step(3));
  assert.equal(await p.evaluate(()=>__hereQ.length),1,'redrawing Route and Hazards asks nothing again');
  assert.equal(await p.evaluate(()=>__hereCalls),1,'the stand-in counted one HERE lookup');
+ // a trip saved before tolls were compared (0.0.189 and older): its routes are reused, get their toll-free ones, and
+ // HERE prices the option nobody had said anything about (the phone log: HERE never asked)
+ const stops=await p.evaluate(()=>JSON.parse(JSON.stringify(__trip.state().route.stops)));
+ await p.evaluate(()=>__trip.close());
+ await p.evaluate(stops=>{
+  const poly=Trip.encodePolyline(Array.from({length:16},(_,i)=>({lat:34.7+i*.01,lng:-92.29})));
+  const opt={description:'Turnpike',distanceMeters:Math.round(__tollMi*1609.344),duration:'1260s',polyline:{encodedPolyline:poly},legs:[{distanceMeters:Math.round(__tollMi*1609.344),duration:'1260s',steps:[]}]};
+  __app.KV.put('trips','trip|old',{route:{stops,avoid:{tolls:false,highways:false,ferries:false},legs:null},alts:[opt],altSel:0,trip:{avoid:{tolls:false,highways:false,ferries:false}},stations:{official:[],google:[],kind:'gas'},savedT:Date.now()-3600e3});
+  __app.KV.put('trips','index',[{id:'old',t:Date.now()-3600e3,title:'Old trip',mi:7,via:'Turnpike',n:2}]);
+  __hereQ.length=0;
+ },stops);
+ await p.click('#btnTrip');await p.waitForSelector('#tripPick.on');await p.click('.hist-row');
+ await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
+ assert(await p.evaluate(()=>!!__trip.state().route.histId),'the saved trip\'s routes were used');await p.evaluate(()=>__trip.step(3));
+ await p.waitForFunction(()=>__trip.tolls()[0].some(o=>o.tolls.src==='here'));
+ t=await p.evaluate(()=>__trip.tolls()[0]);
+ assert(t.some(o=>o.tolls.src==='avoid'),'the toll-free routes were fetched for the saved ones');assert.equal(t.find(o=>o.via==='Turnpike').tolls.cost,5.75);
+ assert.equal(await p.evaluate(()=>__hereQ.length),1,'HERE priced the saved option, not the toll-free one');
  // the counter pill: HERE alone sits where Google's does; with both keys the two counts share its height
  const pill=async()=>p.evaluate(()=>{__apiCount();const e=document.getElementById('apiCount'),r=e.getBoundingClientRect();return {text:e.innerText.replace(/\s+/g,' ').trim(),rows:[...e.querySelectorAll('.apic-r')].map(x=>x.getBoundingClientRect()).map(b=>({top:b.top,bottom:b.bottom})),top:r.top,bottom:r.bottom,left:r.left,shown:getComputedStyle(e).display!=='none'&&!e.classList.contains('hidden')};});
- let c=await pill();assert(c.shown);assert.equal(c.text,'HERE 1 / 2000');assert.equal(c.rows.length,1);
+ let c=await pill();assert(c.shown);assert.equal(c.text,'HERE 2 / 2000');assert.equal(c.rows.length,1);
  const alone=c;await p.evaluate(()=>{__app.S.apiKey='TEST';});c=await pill();
- assert.equal(c.rows.length,2);assert.match(c.text,/^G ?0 \/ 900 H ?1 \/ 2000$/);
+ assert.equal(c.rows.length,2);assert.match(c.text,/^G ?0 \/ 900 H ?2 \/ 2000$/);
  assert(c.rows[0].bottom<=c.rows[1].top+0.5&&c.rows[0].top>=c.top-0.5&&c.rows[1].bottom<=c.bottom+0.5,'G above H, both inside the pill');
  assert(Math.abs(c.left-alone.left)<1&&Math.abs((c.bottom-c.top)-(alone.bottom-alone.top))<1,'same place and height as one count');
  await p.evaluate(()=>{__app.S.hereKey='';});c=await pill();assert.equal(c.text,'0 / 900','Google alone looks as before');

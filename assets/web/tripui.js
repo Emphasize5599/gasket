@@ -1479,6 +1479,8 @@
           if (picked0 && alts.length > 1) { var m0 = matchRoute(alts, picked0); altSel = m0.index; altSure = m0.sure; }
           else altSel = r.routeIndex != null && r.routeIndex < alts.length ? r.routeIndex : Math.min(v.altSel || 0, alts.length - 1);
         }
+        // a trip saved before tolls were compared (or with the switch off): its options get their toll-free ones now
+        if (mt && tollPair()) { prog(0.7, 'Getting the toll-free routes'); await tollFreeForSaved(); }
         if (mt) {
           prog(0.9, 'Reading your saved trip');
           await paint();
@@ -1656,8 +1658,17 @@
     var t = (Garage.car() || {}).tires || {}, hooked = t.towMode ? (t.trailers || []).filter(function (x) { return x.hooked; }) : [];
     return { axles: 2, trailers: hooked.length, trailerAxles: hooked.reduce(function (n, x) { return n + Math.max(1, Math.min(3, +x.axles || 1)); }, 0) };
   }
-  function hereWanted(a) { var t = tollsOf(a); return t.has === true && t.cost == null && !a.hereTolls && !hereSeen.has(a); }
+  // tolls of no known amount, or an option nobody has said anything about (a route saved before tolls were checked:
+  // HERE answers $0 for a toll-free road, so that's still one request, kept like any other)
+  function hereWanted(a) { var t = tollsOf(a); return (t.has === true && t.cost == null || t.has === null) && !a.tollFree && !a.hereTolls && !hereSeen.has(a); }
+  var hereSkip = null;
   async function hereTolls() {
+    if (S.hereKey && window.Tolls && model && !tollPair()) {
+      var why = (S.trip.avoid || {}).tolls ? 'avoiding tolls' : 'Compare with and without tolls (Route → Other routes) is off';
+      if (hereSkip !== why) { hereSkip = why; LG.info('route', 'HERE toll prices not asked: ' + why); }
+      return;
+    }
+    hereSkip = null;
     if (hereBusy || !S.hereKey || !tollPair() || !window.Tolls || !model) return;
     var todo = []; choiceLists().forEach(function (l) { l.forEach(function (a) { if (hereWanted(a) && todo.indexOf(a) < 0) todo.push(a); }); });
     if (!todo.length) return;
@@ -1687,6 +1698,34 @@
     if ($('tTolls')) { var y = tpBody().scrollTop; renderInfo(); tpBody().scrollTop = y; }
     if (step === ST_HAZ) renderHz();
   }
+  /**
+   * Saved routes that were never compared with their toll-free ones (saved before 0.0.190, or with the switch off):
+   * fetched now, once, while tolls are compared. New options are only appended, so a pick made meanwhile stays.
+   */
+  async function tollFreeForSaved() {
+    var r = route; if (!r || !tollPair() || !window.Tolls) return false;
+    var multi = !!(r.legs && r.legs.length && multiLeg(r)), lists = multi ? r.legs.map(function (L) { return L.alts; }) : [alts];
+    if (tollFreeChecked([].concat.apply([], lists))) return false;
+    LG.info('route', 'Saved routes were never compared with toll-free ones: getting those', { legs: lists.length });
+    if (multi) {
+      for (var i = 0; i < r.legs.length && route === r; i++) {
+        var sub = { stops: [r.stops[i], r.stops[i + 1]], avoid: r.avoid };
+        r.legs[i].alts = await withTollFree(sub, r.legs[i].alts, S.apiKey ? plainBody(legBody(sub.stops[0], sub.stops[1])) : null);
+      }
+      if (route !== r) return false;
+      rebuildAlts(); rawRoute = alts[0];
+    } else {
+      var lb = plainBody(legBody(r.stops[0], r.stops[r.stops.length - 1]));
+      lb.intermediates = r.stops.slice(1, -1).map(wp); if (lb.intermediates.length) delete lb.computeAlternativeRoutes;
+      var got = await withTollFree(r, alts, S.apiKey ? lb : null);
+      if (route !== r) return false;
+      alts = got; rawRoute = alts[altSel];
+    }
+    return true;
+  }
+  /** Whether a list of options was compared with its toll-free routes (saved with the trip). */
+  function tollFreeChecked(list) { return (list || []).some(function (a) { return a.tollFreeAsked; }); }
+  function plainBody(b) { b = Object.assign({}, b); delete b.extraComputations; return b; }
   function tollPair() { return !!S.trip.tollCompare && !(S.trip.avoid || {}).tolls; }
   function tollsOf(a) { return window.Tolls ? Tolls.ofRoute(a, S.trip.tollAmounts) : { has: null, cost: null }; }
   async function withTollFree(r, list, body) {
@@ -1703,6 +1742,7 @@
       }
     } catch (e) { LG.warn('route', 'Toll-free routes not found', { error: e.message || String(e) }); return list; }
     var out = Tolls.addTollFree(list, free, function (a, b) { return overlap(a, b); });
+    out.forEach(function (a) { a.tollFreeAsked = true; });
     LG.info('route', 'Toll and toll-free routes', out.map(function (a) { var t = tollsOf(a); return { via: a.description, tolls: t.has, cost: t.cost, src: t.src }; }));
     return out;
   }
@@ -2003,7 +2043,14 @@
     var ij = k.split(':').map(Number), m = 0.01;
     var b = [ij[0] * XOM_CELL - m, (ij[0] + 1) * XOM_CELL + m, ij[1] * XOM_CELL - m, (ij[1] + 1) * XOM_CELL + m];
     return (xomPending[k] = xomBox(b, 0).then(function (list) { A.KV.put('xom', k, list); delete xomPending[k]; return list; },
-      function (e) { delete xomPending[k]; LG.warn('stations', 'ExxonMobil station finder', String(e)); return null; }));
+      function (e) { delete xomPending[k]; xomWarn(String(e)); return null; }));
+  }
+  // one line per failure kind a minute (a 403 on every square was 242 identical lines in a phone log)
+  var xomLast = { e: '', t: 0, n: 0 };
+  function xomWarn(e) {
+    if (e === xomLast.e && Date.now() - xomLast.t < 60e3) { xomLast.n++; return; }
+    LG.warn('stations', 'ExxonMobil station finder', xomLast.n ? { error: e, suppressedBefore: xomLast.n } : e);
+    xomLast = { e: e, t: Date.now(), n: 0 };
   }
   /** Mark each Exxon / Mobil station: wplus true (listed with Walmart+), false (listed without), or unknown. -> how many changed. */
   async function xomCheck(list) {
@@ -3822,6 +3869,11 @@
     loadingTrip = false; busy = false;
     LG.info('history', 'Opened saved trip', { id: id, saved: new Date(o.t).toISOString(), miles: Math.round(model.totalMi) });
     renderStep();   // Next goes on from the Garage; entering Stops plans it from the saved stations
+    var mine = route;
+    tollFreeForSaved().then(function (changed) {
+      if (!changed || route !== mine) return;
+      if (step === ST_ROUTE) keepScroll(function () { renderInfo(); }); else if (step === ST_HAZ) renderHz(); else hereTolls();
+    }).catch(function (e) { LG.warn('route', 'Toll-free routes not found', { error: e.message || String(e) }); });
     await restoreChoices();
     if (jumpTo) { var j = jumpTo; jumpTo = 0; advance(j); }
   }

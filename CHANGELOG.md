@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.193 - 2026-10-18 (keyless test branch only)
+- Saved trips get toll prices too: a trip saved before toll comparison existed (or with it off) now fetches its toll-free routes when you open it with "Compare with and without tolls" on, and HERE prices its routes (before, HERE was never asked for saved trips' routes).
+- The log says why HERE wasn't asked (the comparison switch is off, or you're avoiding tolls).
+- Bug fixes
+
 ## 0.0.192 - 2026-10-18 (keyless test branch only)
 - The lookup counter in the top corner also counts HERE toll lookups: with both keys, Google's and HERE's counts share the pill (G over H); with just one, that count sits where Google's always has.
 - The HERE, station finder and car picture keys are where they belong, in Settings → Connections & usage → Other optional keys (they had stayed in Trip defaults → EV & hydrogen).
