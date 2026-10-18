@@ -22,6 +22,8 @@ const VIN='1M8GDM9AXKP042788';   // the textbook check-digit example, not a real
  const g=await p.evaluate(()=>{const r=s=>document.querySelector(s).getBoundingClientRect(),box=r('#gVin'),scan=r('#gVinScan'),go=r('#gVinGo'),seg=r('#gEntryMode'),row=r('.vin-row');
   return {order:box.right<=scan.left&&scan.right<=go.left,square:Math.abs(scan.width-scan.height)<1,sameH:Math.abs(scan.height-go.height)<1,primary:document.getElementById('gVinScan').classList.contains('primary'),gap:seg.top-row.bottom,wide:document.documentElement.scrollWidth>innerWidth};});
  assert(g.order&&g.square&&g.sameH&&g.primary&&g.gap>=10&&!g.wide,'scan button placement '+JSON.stringify(g));
+ // the eye and the field's (?) share the box's right end without overlapping
+ assert(await p.evaluate(()=>{const r=e=>e.getBoundingClientRect(),eye=r(document.getElementById('gVinEye')),q=document.querySelector('.vin-box .qi');if(!q)return true;const qr=r(q);return eye.right<=qr.left+0.5||qr.right<=eye.left+0.5;}),'eye and (?) overlap');
  // one rounded identity tile down to the trim, in either mode (and for a custom car known by its VIN)
  const tile=()=>p.evaluate(()=>{const t=document.querySelector('details.epa.ymm');return t&&{title:t.querySelector('summary').childNodes[0].textContent,round:parseFloat(getComputedStyle(t).borderRadius)>=12,trim:!!t.querySelector('#gTrimSel,#gTrim'),open:t.open,count:document.querySelectorAll('#gTrimSel,#gTrim').length};});
  for(const mode of ['custom','epa']){await p.click('[data-entry="'+mode+'"]');await p.waitForSelector(mode==='custom'?'#gCustom':'#tEpa');const t=await tile();
