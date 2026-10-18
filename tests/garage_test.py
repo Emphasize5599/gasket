@@ -156,7 +156,7 @@ with sync_playwright() as p:
         # its tank size: asked of Brave Search's AI answer in the hidden window, filled in and marked as such
         pg.wait_for_function("window.Garage.car().tank === 19", timeout=5000); pg.wait_for_timeout(200)
         br = [x for x in pg.evaluate('window.__siteRead') if x['key'] == 'brave' and 'fuel%20tank' in x['url']]; print('  tank lookup:', br, '|', pg.evaluate('window.Garage.car().tankSrc'))
-        assert len(br) == 1 and br[0]['url'].startswith('https://search.brave.com/search?q=2008%20Dodge%20Charger%20SXT%20fuel%20tank%20capacity%20in%20gallons') and 'Brave' in pg.evaluate('window.Garage.car().tankSrc')
+        assert len(br) == 1 and br[0]['url'].startswith('https://search.brave.com/ask?q=2008%20Dodge%20Charger%20SXT%20fuel%20tank%20capacity%20in%20gallons') and 'Brave' in pg.evaluate('window.Garage.car().tankSrc')
         # a check on Brave's page: no tank, a ↻ and "Search Brave yourself" (the page, shown to you)
         pg.evaluate("window.__braveMode = 'blocked'"); pg.fill('#gTank', ''); pg.dispatch_event('#gTank', 'change'); pg.wait_for_timeout(200)
         pg.click('#gTankFind'); pg.wait_for_timeout(500)

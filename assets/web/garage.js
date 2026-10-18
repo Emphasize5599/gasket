@@ -281,7 +281,7 @@
   function trimUrl(c) {
     var w = trimKey(c).split(' '), q = function () { return 'What are all the trim levels of the ' + w.join(' ') + '? Answer with "Trims:" then each trim name, separated by commas.'; };
     while (w.length > 3 && (q().split(/\s+/).length > 50 || q().length > 400)) w.pop();   // Brave's query limits (see tires.js braveFit)
-    return 'https://search.brave.com/search?q=' + encodeURIComponent(q()) + '&summary=1';
+    return 'https://search.brave.com/ask?q=' + encodeURIComponent(q()) + '&source=llmSuggest';
   }
   /** What's known about this model's trims: {list, busy, failed}, from memory or the KV cache. */
   function trimState(c) {
@@ -350,7 +350,7 @@
     else if (c.power === 'phev' && !/hybrid|plug-?in|prime|phev|energi/i.test(m)) m += ' Plug-in Hybrid';
     return [c.year, c.make, m, c.trim || ''].join(' ').replace(/\s+/g, ' ').trim();
   }
-  function tankUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&summary=1'; }
+  function tankUrl(c) { return 'https://search.brave.com/ask?q=' + encodeURIComponent(tankKey(c) + ' fuel tank capacity in gallons?') + '&source=llmSuggest'; }
   function tankAuto(c) {
     // an earlier answer too small for the car (0.0.198 and before took a "4 gallons left" as a 2020 Sienna's tank)
     if (c && c.tankSrc === TANK_SRC && +c.tank > 0 && +c.tank < tankMin(c)) {

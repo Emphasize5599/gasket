@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),T=require('../assets/web/trims.js');
 const source=fs.readFileSync('assets/brave_worker.js','utf8');
-async function run({title='',text='',ai='',bg=true,kind='trims'}){let now=0,result;const ctx={document:{title,body:{innerText:text},querySelectorAll:()=>ai?[{innerText:ai}]:[]},TrimMath:T,GasketSite:{result:(_,s)=>result=JSON.parse(s)},Date:{now:()=>now},setTimeout:f=>{now+=500;f();},Promise};ctx.window=ctx;const fn=vm.runInNewContext('('+source+')',ctx);await fn(1,kind==='tank'?{year:2020,bg}:{kind:'trims',year:2024,make:'Toyota',model:'Corolla Hybrid',bg});return result;}
+async function run({title='',text='',ai='',bg=true,kind='trims',url=''}){let now=0,result;const ctx={document:{title,body:{innerText:text},querySelectorAll:()=>ai?[{innerText:ai}]:[]},TrimMath:T,GasketSite:{result:(_,s)=>result=JSON.parse(s)},Date:{now:()=>now},URLSearchParams,location:url?new URL(url):undefined,setTimeout:f=>{now+=500;f();},Promise};ctx.window=ctx;const fn=vm.runInNewContext('('+source+')',ctx);await fn(1,kind==='tank'?{year:2020,bg}:{kind:'trims',year:2024,make:'Toyota',model:'Corolla Hybrid',bg});return result;}
 (async()=>{
  assert.deepEqual(await run({title:'Captcha - Brave Search'}),{blocked:true},'real locally observed challenge title');
  const text='Answer with "Trims:" then each trim name, separated by commas. The 2024 Toyota Corolla Hybrid has three trim levels: LE, SE, XLE.';
@@ -12,5 +12,12 @@ async function run({title='',text='',ai='',bg=true,kind='trims'}){let now=0,resu
  let r=await run({kind:'tank',ai:'With about 4 gallons left, the low fuel warning light comes on in the 2020 Toyota Sienna LE, which has a fuel tank capacity of 20 gallons. AI-generated answer',text:'Search results'});
  assert.equal(r.gal,20,'the capacity, not the warning-light amount: '+JSON.stringify(r));assert.match(r.text,/20 gallons/);
  r=await run({kind:'tank',ai:'The 2020 Toyota Sienna LE has a 20-gallon fuel tank. AI-generated answer',text:'Search results'});assert.equal(r.gal,20);
- console.log('Actual Brave reader: CAPTCHA, natural AI summary, results-only/offset-zero list, echoed-query rejection, tank figure over a warning-light one.');
+ // Ask Brave (/ask): no "AI-generated answer" block; the chat text after the echoed question, once steady
+ const q='2020 Toyota Sienna LE fuel tank capacity in gallons?',url='https://search.brave.com/ask?q='+encodeURIComponent(q)+'&source=llmSuggest';
+ r=await run({kind:'tank',url,text:'Ask Brave New chat '+q+' The 2020 Toyota Sienna LE has a 20-gallon fuel tank. Sources Follow-up: How far can it go on a full tank?'});
+ assert.equal(r.gal,20,JSON.stringify(r));assert.equal(r.src,'ai');assert.equal(r.ask,true);
+ r=await run({kind:'tank',url,text:'Ask Brave '+q+' Thinking...'});assert(!r.gal,'the echoed question alone is no answer: '+JSON.stringify(r));
+ r=await run({url:'https://search.brave.com/ask?q='+encodeURIComponent('What are all the trim levels of the 2024 Toyota Corolla Hybrid? Answer with "Trims:" then each trim name, separated by commas.'),text:'What are all the trim levels of the 2024 Toyota Corolla Hybrid? Answer with "Trims:" then each trim name, separated by commas. Trims: LE, SE, XLE'});
+ assert.deepEqual(r,{text:'Trims: LE, SE, XLE',src:'ai'});
+ console.log('Actual Brave reader: CAPTCHA, natural AI summary, results-only/offset-zero list, echoed-query rejection, tank figure over a warning-light one, Ask Brave chat answers.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

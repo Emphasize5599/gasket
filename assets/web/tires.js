@@ -813,7 +813,7 @@
     while (w.length > 3 && (q().split(/\s+/).length > BRAVE_WORDS || q().length > BRAVE_CHARS)) w.pop();
     return q();
   }
-  function spareUrl(c) { return 'https://search.brave.com/search?q=' + encodeURIComponent(braveFit(spareKey(c) + powerWord(c), SPARE_ASK)) + '&summary=1'; }
+  function spareUrl(c) { return 'https://search.brave.com/ask?q=' + encodeURIComponent(braveFit(spareKey(c) + powerWord(c), SPARE_ASK)) + '&source=llmSuggest'; }
   /** An answer read by the old keyword rules (before 0.0.114): read it again with the model. If that differs and you had
    *  confirmed the old guess, you're asked again. Once per answer. */
   var rechecking = {};

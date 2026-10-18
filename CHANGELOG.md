@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.203 - 2026-10-18 (keyless test branch only)
+- Tank size, spare tire and trim lookups ask Ask Brave (Brave's AI chat, which always answers) first, and only read the Brave search page when the chat gives no answer.
+
 ## 0.0.202 - 2026-10-18 (keyless test branch only)
 - VIN scanner focuses like GrapheneOS Camera's QR mode: focus, exposure and white balance metered on the scan square every 2 seconds, a larger square, and light-on-dark codes read too. The log now says what the phone's camera lets the app do (focus, zoom, light).
 

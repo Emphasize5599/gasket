@@ -40,6 +40,10 @@ async function (reqId, args) {
   const best = (list) => list.reduce((a, x) => (!a || x.rank > a.rank ? x : a), null);
   // the AI answer's own text, or '' (not there yet)
   const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), words = spare || trims;   // text answers, not a number
+  const loc = typeof location !== 'undefined' ? location : { pathname: '', search: '' };
+  const ask = loc.pathname.indexOf('/ask') === 0;
+  const q = flat(new URLSearchParams(loc.search).get('q') || ''), qHead = q.slice(0, 40);
+  const STEADY = ask ? 5 : 3;   // a chat answer can pause between sentences
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {
@@ -47,7 +51,14 @@ async function (reqId, args) {
       if (!AI_END.test(t) || !(spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /gal/i).test(t)) return;
       if (!best || t.length < best.length) best = t;
     });
-    return best ? flat(best) : '';
+    if (best) return flat(best);
+    // Ask Brave (/ask, the chat page: it always answers): the text after our echoed question, cut at the disclaimer
+    if (!ask) return '';
+    const t = text(), at = qHead ? t.indexOf(qHead) : -1;
+    let a = at >= 0 ? t.slice(at + q.length) : t;
+    const end = a.search(AI_END);
+    if (end >= 0) a = a.slice(0, end);
+    return (spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /\d\s*(?:-|\s)?\s*gal/i).test(a) ? flat(a) : '';
   };
   // no AI answer: the search results, ones about this model year first, then the value most of them give
   const fromResults = (t) => {
@@ -73,13 +84,13 @@ async function (reqId, args) {
       const ai = aiText();
       if(trims&&window.TrimMath){
         const names=TrimMath.parse(ai||'',args), fallback=AI_FAILED.test(t)||Date.now()-t0>AI_WAIT;
-        if(names.length){same=ai===last?same+1:0;last=ai;if(same>=3){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
+        if(names.length){same=ai===last?same+1:0;last=ai;if(same>=STEADY){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
         else if(fallback){const list=TrimMath.parse(t,args);if(list.length){send({text:'Trims: '+list.join(', '),src:'results'});return;}}
         await sleep(400);continue;
       }
       if (words) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
-        if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= 3) { send({ text: ai.slice(0, 1500), src: 'ai' }); return; } }
+        if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= STEADY) { send({ text: ai.slice(0, 1500), src: 'ai', ask: ask }); return; } }
         else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
           const at = t.search(trims ? /\btrim(s| levels?)\b/i : /spare tire/i);
           if (at >= 0) { send({ text: t.slice(at, at + 1500), src: 'results' }); return; }
@@ -90,7 +101,7 @@ async function (reqId, args) {
       if (f) {
         // the answer streams in: take it once it has stopped changing for a moment
         same = ai === last ? same + 1 : 0; last = ai;
-        if (same >= 3) { send({ gal: f.gal, text: f.text, src: 'ai' }); return; }
+        if (same >= STEADY) { send({ gal: f.gal, text: f.text, src: 'ai', ask: ask }); return; }
       } else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
         const r = fromResults(t);
         if (r) { send(r); return; }

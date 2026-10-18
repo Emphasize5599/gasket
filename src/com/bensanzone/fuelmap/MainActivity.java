@@ -1984,7 +1984,7 @@ public class MainActivity extends Activity {
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
                             || ("walmart".equals(key) && url.equals("https://www.walmart.com/store-finder"))
                             || ("murphy".equals(key) && url.equals("https://service.murphydriverewards.com/mapmodule/"))
-                            || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"))
+                            || ("brave".equals(key) && (url.startsWith("https://search.brave.com/search?") || url.startsWith("https://search.brave.com/ask?")))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
@@ -2052,7 +2052,7 @@ public class MainActivity extends Activity {
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only NHTSA's recall page and Brave Search may be opened this way
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
-                            || ("brave".equals(key) && url.startsWith("https://search.brave.com/search?"));
+                            || ("brave".equals(key) && (url.startsWith("https://search.brave.com/search?") || url.startsWith("https://search.brave.com/ask?")));
                     if (w == null || script.length() == 0 || !ok) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
                         return;

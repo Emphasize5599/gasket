@@ -2,10 +2,17 @@
  * cookie-sharing WebView, never bypassed or replaced with manual research. */
 (function(root){'use strict';
  var A=root.__app,LG=root.FLog||{info:function(){},warn:function(){}};
+ function searchUrl(u){var m=/^https:\/\/search\.brave\.com\/ask\?q=([^&]*)/.exec(u||'');return m?'https://search.brave.com/search?q='+m[1]+'&summary=1':'';}
  async function read(args,options){
   var o=options||{},call=o.call||root.__trip.call,valid=o.valid||function(r){return !!(r&&r.text&&!r.error&&!r.blocked);},current=o.current||function(){return !root.__erasing;};
   async function ask(shown){if(!current())return {closed:true};try{return await call(shown?'siteShow':'siteRead','brave',JSON.stringify(Object.assign({},args,{bg:!shown})));}catch(e){return {error:String(e&&e.message||e),code:'bridge'};}}
   var r=await ask(!!o.shown);
+  // Ask Brave (/ask) always answers; if it didn't this time, the search page's AI summary / results once (hidden only)
+  if(!o.shown&&!valid(r)&&current()&&!(r&&(r.blocked||r.closed||r.cancelled||r.code==='cancelled'||r.code==='bridge'))&&searchUrl(args.url)){
+   LG.info('car','Brave Ask gave no usable answer; trying the search page',{kind:args.kind||'tank',error:r&&r.error?String(r.error).slice(0,120):'unusable answer'});
+   args=Object.assign({},args,{url:searchUrl(args.url)});r=await ask(false);
+  }
+  if(valid(r))LG.info('car','Brave answer',{kind:args.kind||'tank',page:/\/ask\?/.test(args.url)?'ask':'search',src:r.src});
   if(valid(r)||!current()||o.shown||r&&(r.closed||r.cancelled||r.code==='cancelled'||r.code==='bridge'))return r;
   if(!root.Native||!A.N.siteShow||r&&r.error==='No Native bridge')return r; // browser-only preview has no interactive website surface
   // Background completion must not replace an active erase/discard/download
@@ -19,5 +26,5 @@
   if(current()&&!valid(r)&&!(r&&r.closed))A.toast('Brave still has no usable answer. You can retry the lookup.');
   return r;
  }
- root.BraveLookup={read:read};
+ root.BraveLookup={read:read,searchUrl:searchUrl};
 })(window);
