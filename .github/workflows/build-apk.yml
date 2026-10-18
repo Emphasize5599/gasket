@@ -18,6 +18,7 @@ on:
       - tests/tires.test.js
       - tests/keylessgas.test.js
       - tests/keyless-parallel.test.js
+      - tests/slow-link.test.js
       - tests/pricehistory.test.js
       - tests/station-reconcile.test.js
       - tests/map-scan-merge.test.js

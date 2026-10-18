@@ -185,23 +185,28 @@
     return state.target;
   }
   /**
-   * Readers the connection can carry, learned from the pages themselves (memory is only half of it): a page that times
-   * out or fails to load cuts the cap to 60% (at most every 8 s, never below 4), four loaded pages in a row add two back
-   * (15 s after the last cut). A phone log: 50 readers on cellular timed out 187 of 287 pages, while 8 readers then read
-   * all 187 again in less time. state.cap starts at max; ok = whether the page loaded.
+   * Readers the connection can carry, learned from the pages themselves (memory is only half of it). Pages slow down
+   * long before they fail: a phone log on cellular had pages take 10-17 s with 8 readers and 25-56 s once 50 ran,
+   * with most of those 50 timing out. So the cap starts at 8 and follows each page's time against the fastest recent
+   * one (base, drifting up 1% a page so one quick outlier fades): a page within 1.3x base (and 16 s) adds a reader,
+   * one past 1.8x (or 22 s) takes 20% away (every 4 s at most) and a page that times out or fails to load cuts to 60%
+   * (every 8 s at most), never below 4. tests/slow-link.test.js simulates links from 6 to 200 Mbps and picked these:
+   * within ~15% of the best fixed reader count at each. ok = the page loaded, ms = its time.
    */
-  function netStep(state,ok,now,max){
-    var floor=Math.min(4,max);if(state.cap==null)state.cap=max;
-    if(!ok){state.wins=0;if(!(now-(state.cut==null?-1e9:state.cut)<8000)&&state.cap>floor){state.cap=Math.max(floor,Math.floor(state.cap*0.6));state.cut=now;return 'cut';}return null;}
-    state.wins=(state.wins||0)+1;
-    if(state.wins>=4&&state.cap<max&&now-(state.cut==null?-1e9:state.cut)>=15000){state.wins=0;state.cap=Math.min(max,state.cap+2);return 'grow';}
+  function netStep(state,ok,now,max,ms){
+    var floor=Math.min(4,max),since=now-(state.cut==null?-1e9:state.cut);if(state.cap==null)state.cap=Math.min(max,8);
+    if(!ok){if(since>=8000&&state.cap>floor){state.cap=Math.max(floor,Math.floor(state.cap*0.6));state.cut=now;return 'cut';}return null;}
+    if(!(ms>0))return null;
+    state.base=state.base==null?ms:Math.min(ms,state.base*1.01);
+    if(ms>Math.min(state.base*1.8,22000)){if(since>=4000&&state.cap>floor){state.cap=Math.max(floor,Math.floor(state.cap*0.8));state.cut=now;return 'slow';}return null;}
+    if(ms<=Math.min(state.base*1.3,16000)&&state.cap<max){state.cap++;return state.cap%4?'':'grow';}
     return null;
   }
   function readerPool(A,lanes,control,audit,more){
-    var state={aggressive:!!(A.S&&A.S.keylessAggressive)},net={cap:lanes.length},sampleAt=0,sample=null,paused=new Set();
+    var state={aggressive:!!(A.S&&A.S.keylessAggressive)},net={},sampleAt=0,sample=null,paused=new Set();
     function target(){var now=Date.now();if(!sampleAt||now-sampleAt>=2000){sampleAt=now;sample=memNow(A);}return Math.min(poolTarget(state,sample,now,lanes.length,state.aggressive),net.cap);}
-    control.pool=state;state.net=net;target();
-    return {target:target,outcome:function(ok){var step=netStep(net,ok,Date.now(),lanes.length);if(step&&root.FLog)root.FLog.info('keyless',step==='cut'?'Fewer readers: pages are timing out':'More readers: pages are loading',{cap:net.cap,of:lanes.length});},permit:async function(key){
+    control.pool=state;state.net=net;netStep(net,true,Date.now(),lanes.length);target();
+    return {target:target,outcome:function(ok,ms){var step=netStep(net,ok,Date.now(),lanes.length,ms);if(step&&root.FLog)root.FLog.info('keyless',step==='cut'?'Fewer readers: pages are timing out':step==='slow'?'Fewer readers: pages are slowing down':'More readers: pages are loading',{cap:net.cap,of:lanes.length,ms:ms||null,baseMs:net.base==null?null:Math.round(net.base)});},permit:async function(key){
       var index=lanes.indexOf(key);
       while(more()&&!control.cancelled&&!control.blocked){
         if(index<target()){if(paused.delete(key)&&root.FLog)root.FLog.info('keyless','Website reader resumes',{lane:index,target:state.target});return true;}
@@ -370,7 +375,7 @@
           var at=Date.now();(r.stores||[]).forEach(function(s){Object.keys(s.prices||{}).forEach(function(g){s.prices[g].observedAt=at;});});
           if(!r.blocked&&!r.error&&r.detail&&r.detail.exhausted)A.KV.put('gasweb',cacheKey,r);
         }
-        if(!cache&&!r.blocked)pool.outcome(!retryable(r));
+        if(!cache&&!r.blocked)pool.outcome(!retryable(r),Date.now()-t0);
         if(!cache&&retryable(r)&&(tries[idx]||0)<RETRIES){tries[idx]=(tries[idx]||0)+1;again.push(idx);recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,d:r.detail||null,found:0,added:0,err:r.error||null,retry:true});continue;}
         if(r.blocked){blocked=true;control.blocked=true;control.blockedSite=control.blockedSite||'gasweb';errors.push(r.error||'Website restricted discovery');}
         if(r.error&&!r.blocked)errors.push(r.error);
@@ -475,8 +480,8 @@
       if(control.cancelled||blocked)return {cancelled:true};
       var suppliedAt=Date.now(),complete=updateKnown(x.g.stations,official,P,suppliedAt,grade);
       if(official.length&&complete.updated===x.g.stations.length)return {stores:official};
-      var gr=await read(key,{url:webUrl(area(x.g.lat,x.g.lng,8)),grade:grade,targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId,brand:s.brand,lat:s.lat,lng:s.lng,address:s.address};})});
-      if(gr&&!gr.cancelled&&!gr.blocked)pool.outcome(!retryable(gr));
+      var g0=Date.now(),gr=await read(key,{url:webUrl(area(x.g.lat,x.g.lng,8)),grade:grade,targets:x.g.stations.map(function(s){return {id:s.id,featureId:s.featureId,brand:s.brand,lat:s.lat,lng:s.lng,address:s.address};})});
+      if(gr&&!gr.cancelled&&!gr.blocked)pool.outcome(!retryable(gr),Date.now()-g0);
       // Keep trusted official records separate; do not transfer a regular label to another grade.
       var supplied=new Set(complete.stations.filter(function(s){return s.prices&&s.prices[grade]&&s.prices[grade].observedAt===suppliedAt;}).map(knownKey));
       var google=(gr.stores||[]).filter(function(w){return !x.g.stations.some(function(s){return s.brand===(P.detectBrand(w.name,w.website)||w.brand)&&supplied.has(knownKey(s))&&P.haversineMi(s.lat,s.lng,w.lat,w.lng)<0.1;});});

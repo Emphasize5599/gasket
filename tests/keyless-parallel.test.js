@@ -105,28 +105,35 @@ async function lostPages(){
  assert.equal(K.retryable({stores:[{}],error:'Search response timed out',code:'reader'}),false,'a page that found stations keeps them');
  assert.equal(K.retryable({stores:[],code:'no_prices',error:'Google provided no matching prices'}),false);
 }
-// The connection decides too: timeouts cut the readers to 60% (every 8 s at most, never below 4), loaded pages add two back.
+// The connection decides too: the cap starts at eight, a page within 1.3x the fastest recent one adds a reader, one past
+// 1.8x (or 22 s) takes 20% away, a timeout cuts to 60% (every 8 s at most), never below four.
 function netCap(){
  const K=require('../assets/web/keylessgas.js'),st={};let t=0;
- assert.equal(K.netStep(st,false,t,50),'cut');assert.equal(st.cap,30);
- assert.equal(K.netStep(st,false,t+1000,50),null,'one cut per 8 s');assert.equal(st.cap,30);
- K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);K.netStep(st,false,t+=9000,50);assert.equal(st.cap,4,'never below four');
- for(let i=0;i<4;i++)K.netStep(st,true,t+1000,50);assert.equal(st.cap,4,'no growth right after a cut');
- for(let i=0;i<4;i++)K.netStep(st,true,t+16000,50);assert.equal(st.cap,6,'four loaded pages add two');
- K.netStep(st,true,t+17000,50);K.netStep(st,false,t+17500,50);assert.equal(st.wins,0,'a failure resets the run');
+ assert.equal(K.netStep(st,true,t,50,10000),'');assert.equal(st.cap,9,'starts at eight, a quick page adds one');
+ for(let i=0;i<3;i++)K.netStep(st,true,t+=1000,50,11000);assert.equal(st.cap,12);
+ assert.equal(K.netStep(st,true,t+=1000,50,15000),null,'a page 1.5x slower adds none');assert.equal(st.cap,12);
+ assert.equal(K.netStep(st,true,t+=1000,50,19000),'slow');assert.equal(st.cap,9,'a page 1.9x slower takes 20% away');
+ assert.equal(K.netStep(st,true,t+=1000,50,19000),null,'one slow step per 4 s');
+ assert.equal(K.netStep(st,false,t+=8000,50),'cut');assert.equal(st.cap,5);
+ assert.equal(K.netStep(st,false,t+1000,50),null,'one cut per 8 s');
+ K.netStep(st,false,t+=9000,50);assert.equal(st.cap,4,'never below four');
+ const few={};K.netStep(few,true,0,3,1000);assert.equal(few.cap,3,'never above the readers you set');
+ const drift={};K.netStep(drift,true,0,50,4000);for(let i=0;i<80;i++)K.netStep(drift,true,i*1000,50,9000);assert(drift.base>8000,'one quick outlier fades from the base ('+Math.round(drift.base)+')');
 }
 async function timeoutsShrinkPool(){
- const active=new Map();
+ const active=new Map();let now=Date.now();class Clock extends Date{static now(){return now;}}
  const window={document:{},__app:{P,S:{keylessWorkers:16},siteOn:()=>false,showSiteCheck:()=>{},KV:{get:()=>null,put:()=>{}},N:{}},__trip:{call:(fn,key,json)=>new Promise(resolve=>active.set(key,{resolve,args:JSON.parse(json)}))}};
- vm.runInNewContext(source,{window,Date,setTimeout,clearTimeout,setInterval,clearInterval});
+ vm.runInNewContext(source,{window,Date:Clock,setTimeout,clearTimeout,setInterval,clearInterval});
  const K=window.KeylessGas,task=K.discover(Array.from({length:80},(_,i)=>({lat:30+i*.2,lng:-92,radius:8})),null,'regular',true),flush=()=>new Promise(r=>setImmediate(r));
- await flush();assert.equal(active.size,16);
- for(const [key,x] of [...active].slice(0,3)){active.delete(key);x.resolve({stores:[],error:'Search response timed out',code:'reader'});}
- await flush();await new Promise(r=>setTimeout(r,30));
- // pages already loading finish; then only nine readers take new areas
- const loading=[...active];
- for(const [key,x] of loading){active.delete(key);x.resolve({stores:[],detail:{exhausted:true,stopReason:'end'}});}
- for(let i=0;i<6;i++){await flush();await new Promise(r=>setTimeout(r,30));}
+ const settle=async()=>{for(let i=0;i<4;i++){await flush();await new Promise(r=>setTimeout(r,160));}};
+ await flush();assert.equal(active.size,8,'eight readers until pages show how the connection does');
+ now+=10000;for(const [key,x] of [...active]){active.delete(key);x.resolve({stores:[],detail:{exhausted:true,stopReason:'end'}});}
+ await settle();assert.equal(active.size,16,'eight pages in 10 s: all sixteen readers');
+ now+=20000;for(const [key,x] of [...active].slice(0,3)){active.delete(key);x.resolve({stores:[],error:'Search response timed out',code:'reader'});}
+ await settle();
+ // pages already loading finish (slowly); then only nine readers take new areas
+ now+=20000;for(const [key,x] of [...active]){active.delete(key);x.resolve({stores:[],detail:{exhausted:true,stopReason:'end'}});}
+ await settle();
  assert(active.size<=9,'a timeout cuts sixteen readers to nine ('+active.size+')');
  K.cancel();await task;
 }
@@ -136,7 +143,8 @@ async function calmAfterCheck(){
  const window={document:{},__app:{P,S:{keylessWorkers:16},siteOn:()=>false,showSiteCheck:()=>{},KV:{get:()=>null,put:()=>{}},N:{cancelSiteRead:k=>{const x=active.get(k);if(x){active.delete(k);x.resolve({cancelled:true});}}}},__trip:{call:(fn,key,json)=>new Promise(resolve=>active.set(key,{resolve,args:JSON.parse(json)}))}};
  vm.runInNewContext(source,{window,Date:Clock,setTimeout,clearTimeout,setInterval,clearInterval});
  const K=window.KeylessGas,task=K.discover(Array.from({length:60},(_,i)=>({lat:30+i*.3,lng:-92,radius:8})),null,'regular',true),flush=()=>new Promise(r=>setImmediate(r));
- await flush();assert.equal(active.size,16);
+ await flush();now+=10000;for(const [k,y] of [...active]){active.delete(k);y.resolve({stores:[],detail:{exhausted:true,stopReason:'end'}});}
+ for(let i=0;i<4;i++){await flush();await new Promise(r=>setTimeout(r,160));}assert.equal(active.size,16);
  const key=[...active.keys()][0],x=active.get(key);active.delete(key);x.resolve({blocked:true,error:'Unusual traffic'});await flush();
  assert.equal(K.isPaused(),true);assert.equal(K.onVerified(key),true);await flush();await new Promise(r=>setTimeout(r,50));
  assert(active.size<=8,'right after the check only eight readers ('+active.size+')');
