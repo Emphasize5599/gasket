@@ -26,7 +26,9 @@
    * Code 39 labels often start with an extra "I" (never a VIN letter); labels with more fields separate them. Never 17
    * characters out of a longer field: about one window in 11 passes the check digit by chance. -> {vin, checked} | null */
   function pick(text) {
-    var words = String(text || '').toUpperCase().replace(/[^A-Z0-9]/g, ' ').split(' ').map(function (w) { return w.length === 18 && w[0] === 'I' ? w.slice(1) : w; })
+    // QR codes often hold more than the VIN: a link (%-escaped), "VIN" written against it, several fields
+    var s = String(text || ''); try { s = decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) { }
+    var words = s.toUpperCase().replace(/[^A-Z0-9]/g, ' ').split(' ').map(function (w) { return w.length === 20 && w.slice(0, 3) === 'VIN' ? w.slice(3) : w.length === 18 && w[0] === 'I' ? w.slice(1) : w; })
       .filter(function (w) { return /^[A-HJ-NPR-Z0-9]{17}$/.test(w); });
     var ok = words.filter(check)[0];
     return ok ? { vin: ok, checked: true } : words[0] ? { vin: words[0], checked: false } : null;
