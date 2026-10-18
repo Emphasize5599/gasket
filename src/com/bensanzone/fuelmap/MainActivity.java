@@ -69,7 +69,8 @@ public class MainActivity extends Activity {
     private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|[1-4][0-9]|50)?"); }
     private volatile int gasReaderRecycles = 0, gasRendererLosses = 0;
 
-    private static final int REQ_LOC = 42;
+    private static final int REQ_LOC = 42, REQ_CAM = 43;
+    private android.webkit.PermissionRequest camReq;   // the scanner's camera request, waiting for Android's prompt
     private static final String PREFS = "gasket";
     private static final String PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
     private static final String FIELD_MASK =
@@ -138,7 +139,26 @@ public class MainActivity extends Activity {
         s.setTextZoom(100);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
         web.addJavascriptInterface(new Bridge(), "Native");
-        web.setWebChromeClient(new WebChromeClient());
+        s.setMediaPlaybackRequiresUserGesture(false);   // the VIN scanner's camera preview starts after the permission prompt
+        web.setWebChromeClient(new WebChromeClient() {
+            // The VIN barcode scanner: video capture for the app's own page only (never a site, never the microphone),
+            // after Android's camera permission
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest r) {
+                main.post(new Runnable() { public void run() {
+                    boolean video = false;
+                    for (String x : r.getResources()) if (android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(x)) video = true;
+                    Uri o = r.getOrigin();
+                    if (!video || o == null || !"file".equals(o.getScheme())) { r.deny(); return; }
+                    if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) { r.grant(new String[]{android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE}); return; }
+                    if (camReq != null) camReq.deny();
+                    camReq = r;
+                    requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAM);
+                } });
+            }
+            @Override
+            public void onPermissionRequestCanceled(android.webkit.PermissionRequest r) { if (camReq == r) camReq = null; }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
@@ -805,6 +825,13 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code == REQ_CAM) {
+            android.webkit.PermissionRequest r = camReq; camReq = null;
+            if (r == null) return;
+            if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) r.grant(new String[]{android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+            else r.deny();   // the page says to allow it in settings or type the VIN
+            return;
+        }
         if (code != REQ_LOC) return;
         if (hasLocPerm()) startLocation();
         else js("window.onLocationError&&onLocationError(" + q("Location permission denied. You can still pan the map and tap 'Search this area'.") + ")");

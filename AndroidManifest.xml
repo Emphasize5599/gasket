@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.bensanzone.fuelmap.keyless"
-    android:versionCode="195"
-    android:versionName="0.0.195">
+    android:versionCode="196"
+    android:versionName="0.0.196">
     <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- the VIN barcode scanner only; asked the first time you tap it -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <application
         android:label="@string/app_name"

@@ -535,7 +535,7 @@
     var recVin = !c.vin;
     h += '<div class="vin-row' + (recVin ? ' rec' : '') + '"><label class="nf"><span>VIN' + (recVin ? '<span class="rec-tag">Recommended</span>' : '') + '<small>NHTSA decodes available vehicle details free, checks open recalls and helps find factory tire sizes. EPA mileage may need an engine / transmission choice. 17 characters — on your insurance card, registration, or the driver-side dashboard (through the windshield)</small></span>' +
         '<span class="vin-box"><input type="text" id="gVin" class="' + (vinShown ? '' : 'masked') + '" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" value="' + esc(c.vin || '') + '">' +
-        '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button></span></label>' +
+        '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button>' + (window.VinScan ? '<button type="button" class="vin-scan-btn" id="gVinScan" aria-label="Scan the VIN barcode">' + VinScan.icon + '</button>' : '') + '</span></label>' +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>';
     h += '<div class="seg2" id="gEntryMode" aria-label="Vehicle data source"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">EPA vehicle</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">Non-EPA / custom</button></div>';
     if(!custom)h+='<div class="epa-tip"><span>Can\'t find your car? It might be exempt from the EPA.</span><button type="button" class="btn tonal sm" id="gNhtsaTip">NHTSA lookup</button></div>';
@@ -888,6 +888,8 @@
           this.innerHTML = vinShown ? EYE_OFF : EYE; this.setAttribute('aria-label', (vinShown ? 'Hide' : 'Show') + ' the VIN'); this.setAttribute('aria-pressed', String(vinShown));
         };
         $('gVin').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); lookupVin(c, this.value); } };
+        // the barcode on the door jamb / windshield label: read it, put it in the box and look it up
+        if ($('gVinScan')) $('gVinScan').onclick = function () { VinScan.open().then(function (vin) { if (!vin || !$('gVin')) return; $('gVin').value = vin; lookupVin(c, vin); }); };
       }
       if ($('gName')) $('gName').onchange = function () { var v = this.value.trim(); c.nick = v; if (!(c.year && c.model)) c.name = v; if (!v) delete c.nick; draw(); changed(); };
       if($('gCatalog'))$('gCatalog').onclick=function(){openCatalog(c);};

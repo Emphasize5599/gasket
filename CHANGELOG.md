@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.196 - 2026-10-18 (keyless test branch only)
+- Scan your VIN: the barcode button in the car editor's VIN box opens the camera and reads the VIN label on the driver's door jamb or windshield (Code 39, Data Matrix or QR), then looks it up. It works without Google Play services; the camera picture stays on the phone. The app asks for camera permission the first time.
+
 ## 0.0.195 - 2026-10-18 (keyless test branch only)
 - Whole-trip comparison works on long trips: the other routes' speed limits are read one at a time and retried by themselves (they were all read at once and given up on after 15 seconds, so every trip was skipped). Try again only shows if they fail three times.
 - Routes a saved trip never searched aren't compared on guesses anymore: the comparison names them and offers to search just those routes. A saved trip missing some approved routes also searches only those, not the whole trip again.

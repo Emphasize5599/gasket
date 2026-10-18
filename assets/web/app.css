@@ -1476,6 +1476,20 @@ details.tz-why > summary { color: var(--accent); font-weight: 600; font-size: 14
 .vin-box #gVin { padding-right: 76px !important; }
 .vin-eye { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--ink-2); display: grid; place-items: center; z-index: 2; }
 .vin-eye svg { width: 22px; height: 22px; fill: currentColor; }
+.vin-scan-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--ink-2); display: grid; place-items: center; z-index: 2; }
+.vin-scan-btn svg { width: 22px; height: 22px; fill: currentColor; }
+/* the VIN barcode scanner: the camera full screen, a guide band, Close (and the light when the camera has one) */
+.vin-scan { position: fixed; inset: 0; z-index: 12000; background: #000; color: #fff; }
+.vin-scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.vin-scan .vs-frame { position: absolute; left: 5%; right: 5%; top: 25%; bottom: 25%; border: 3px solid rgba(255,255,255,.9); border-radius: 14px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); pointer-events: none; }
+.vin-scan .vs-top { position: absolute; top: calc(var(--st) + 8px); left: 12px; right: 12px; display: flex; justify-content: space-between; }
+.vin-scan .vs-top button { width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; padding: 0; }
+.vin-scan .vs-top button svg { width: 26px; height: 26px; fill: currentColor; }
+.vin-scan .vs-torch.on { background: #fff; color: #000; }
+.vin-scan .vs-hint, .vin-scan .vs-msg { position: absolute; left: 16px; right: 16px; margin: 0; text-align: center; font-size: 15px; line-height: 1.4; text-shadow: 0 1px 3px #000; overflow-wrap: anywhere; }
+.vin-scan .vs-hint { bottom: calc(var(--sb, 0px) + 96px); }
+.vin-scan .vs-msg { bottom: calc(var(--sb, 0px) + 40px); font-weight: 600; }
+.vin-scan .vs-msg.err { color: #ffb4ab; }
 /* a submenu: its own page with a Back bar */
 .page.sub-page { z-index: 1010; padding-top: calc(var(--st) + 4px); }
 .sub-bar { position: sticky; top: var(--st); z-index: 4; display: flex; align-items: center; gap: 6px; background: var(--bg); padding: 6px 0 8px; margin: 0 -2px; }

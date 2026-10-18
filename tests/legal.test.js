@@ -10,6 +10,7 @@ const lib = fs.readdirSync(path.join(__dirname, '..', 'assets', 'web', 'lib'));
 for (const f of lib) {
   const head = fs.readFileSync(path.join(__dirname, '..', 'assets', 'web', 'lib', f), 'utf8').slice(0, 400);
   if (/Leaflet/.test(head) || /^leaflet\./.test(f)) assert.ok(/Leaflet 1\.9\.4/.test(L.notices) && /BSD 2-Clause License/.test(L.notices) && /Volodymyr Agafonkin/.test(L.notices), f + ': Leaflet notice');
+  else if (/^zxing\./.test(f)) assert.ok(/ZXing for JavaScript 0\.23\.0/.test(L.notices) && /TERMS AND CONDITIONS FOR USE, REPRODUCTION/.test(L.notices) && /ts-custom-error 3\.3\.1/.test(L.notices) && /Adrien Gibrat/.test(L.notices), f + ': ZXing (Apache-2.0) and ts-custom-error (MIT) notices');
   else assert.fail(f + ' is bundled but has no entry in THIRD_PARTY_NOTICES.md');
 }
 assert.ok(/us-atlas/.test(L.notices) && /Michael Bostock/.test(L.notices), 'state outlines (us-atlas, ISC)');
