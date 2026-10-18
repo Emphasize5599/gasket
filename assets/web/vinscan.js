@@ -77,13 +77,20 @@
       // QR mode: focus refreshed on the square every 2 s, a tap focuses there for a while, pinch or the slider zooms
       function camControls(track, caps) {
         var set = function (c) { return track.applyConstraints({ advanced: [c] }).catch(function () { }); };
-        var modes = caps.focusMode || [], at = null, atUntil = 0;
+        // GrapheneOS Camera (QRAnalyzer / MainActivity): every 2 s, CameraX startFocusAndMetering on the scan square
+        // (focus, exposure and white balance, no auto-cancel). A page has no metering size, only a point: Chrome
+        // meters around it; each mode is asked only where the camera lists it.
+        var modes = caps.focusMode || [], at = null, atUntil = 0, mode = function (list) { list = list || []; return list.indexOf('single-shot') >= 0 ? 'single-shot' : list.indexOf('continuous') >= 0 ? 'continuous' : null; };
+        var fm = mode(modes), em = mode(caps.exposureMode), wm = mode(caps.whiteBalanceMode);
         var focus = function () {
-          var poi = at && Date.now() < atUntil ? at : { x: 0.5, y: 0.5 };
-          if (modes.indexOf('single-shot') >= 0) set({ focusMode: 'single-shot', pointsOfInterest: [poi] });
-          else if (modes.indexOf('continuous') >= 0) set({ focusMode: 'continuous', pointsOfInterest: [poi] });
+          var poi = at && Date.now() < atUntil ? at : { x: 0.5, y: 0.5 }, c = { pointsOfInterest: [poi] };
+          if (fm) c.focusMode = fm; if (em) c.exposureMode = em; if (wm) c.whiteBalanceMode = wm;
+          if (fm || em) set(c);
         };
-        if (modes.length) { focus(); focusT = setInterval(focus, 2000); }
+        if (fm || em) { focus(); focusT = setInterval(focus, 2000); }
+        // what this phone's camera offers the app (the WebView may not pass focus or zoom on): for the log
+        var st = track.getSettings ? track.getSettings() : {};
+        LG.info('car', 'VIN scanner camera', { focus: modes, exposure: caps.exposureMode || [], whiteBalance: caps.whiteBalanceMode || [], zoom: caps.zoom ? [caps.zoom.min, caps.zoom.max] : null, torch: !!caps.torch, size: [st.width, st.height] });
         video.addEventListener('click', function (e) {
           var r = video.getBoundingClientRect(); at = { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; atUntil = Date.now() + 5000; focus();
         });
@@ -108,7 +115,7 @@
         if (w && h && reader) {
           var pass = n++ % 3, src = canvas, use = reader, g = canvas.getContext('2d');
           if (pass === 2) {
-            var side = Math.round(Math.min(w, h) * 0.5), up = side < 700 ? 2 : 1;
+            var side = Math.round(Math.min(w, h) * 0.6), up = side < 700 ? 2 : 1;   // GrapheneOS Camera's square: 0.6
             canvas.width = canvas.height = side * up; g.imageSmoothingEnabled = false;
             g.drawImage(video, Math.round((w - side) / 2), Math.round((h - side) / 2), side, side, 0, 0, side * up, side * up); use = square;
           } else {
@@ -118,7 +125,10 @@
             if (pass === 1) { turn.width = canvas.height; turn.height = canvas.width; var t = turn.getContext('2d'); t.save(); t.translate(canvas.height, 0); t.rotate(Math.PI / 2); t.drawImage(canvas, 0, 0); t.restore(); src = turn; }
           }
           try {
-            var res = use.decode(new ZX.BinaryBitmap(new ZX.HybridBinarizer(new ZX.HTMLCanvasElementLuminanceSource(src))));
+            var lum = new ZX.HTMLCanvasElementLuminanceSource(src), res;
+            // the square is also tried inverted (light-on-dark codes), as GrapheneOS Camera does
+            try { res = use.decode(new ZX.BinaryBitmap(new ZX.HybridBinarizer(lum))); }
+            catch (e1) { if (pass !== 2) throw e1; use.reset(); res = use.decode(new ZX.BinaryBitmap(new ZX.HybridBinarizer(lum.invert()))); }
             var p = pick(res.getText());
             if (p && (p.checked || last === p.vin)) {
               LG.info('car', 'VIN barcode read', { format: ZX.BarcodeFormat[res.getBarcodeFormat()], checkDigit: p.checked });
@@ -143,10 +153,10 @@
         square = new ZX.MultiFormatReader(); square.setHints(sq);
         // plain black (only Close) until the picture is there: then the guide and the hint
         video.addEventListener('playing', function () { el.classList.add('live'); placeSquare(); }, { once: true });
-        // the square drawn where the QR pass reads: half the frame's shorter side, scaled the way the preview is
+        // the square drawn where the QR pass reads: 0.6 of the frame's shorter side, scaled the way the preview is
         // (object-fit: cover crops the frame to fill the screen)
         var placeSquare = function () { var vw = video.videoWidth, vh = video.videoHeight, r = video.getBoundingClientRect(); if (!vw || !vh || !r.width) return;
-          var side = Math.min(vw, vh) * 0.5 * Math.max(r.width / vw, r.height / vh), q = el.querySelector('.vs-square'); q.style.width = q.style.height = Math.round(side) + 'px'; };
+          var side = Math.min(vw, vh) * 0.6 * Math.max(r.width / vw, r.height / vh), q = el.querySelector('.vs-square'); q.style.width = q.style.height = Math.round(side) + 'px'; };
         video.addEventListener('resize', placeSquare); addEventListener('resize', placeSquare);
         video.srcObject = stream; var pl = video.play(); if (pl && pl.catch) pl.catch(function () { });
         var track = stream.getVideoTracks()[0], caps = track && track.getCapabilities ? track.getCapabilities() : {};
