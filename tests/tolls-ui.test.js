@@ -60,6 +60,19 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('#tHz .hz-opt');await p.evaluate(()=>__trip.step(3));
  assert.equal(await p.evaluate(()=>__hereQ.length),1,'redrawing Route and Hazards asks nothing again');
  assert.equal(await p.evaluate(()=>__hereCalls),1,'the stand-in counted one HERE lookup');
+ // the counter pill: HERE alone sits where Google's does; with both keys the two counts share its height
+ const pill=async()=>p.evaluate(()=>{__apiCount();const e=document.getElementById('apiCount'),r=e.getBoundingClientRect();return {text:e.innerText.replace(/\s+/g,' ').trim(),rows:[...e.querySelectorAll('.apic-r')].map(x=>x.getBoundingClientRect()).map(b=>({top:b.top,bottom:b.bottom})),top:r.top,bottom:r.bottom,left:r.left,shown:getComputedStyle(e).display!=='none'&&!e.classList.contains('hidden')};});
+ let c=await pill();assert(c.shown);assert.equal(c.text,'HERE 1 / 2000');assert.equal(c.rows.length,1);
+ const alone=c;await p.evaluate(()=>{__app.S.apiKey='TEST';});c=await pill();
+ assert.equal(c.rows.length,2);assert.match(c.text,/^G ?0 \/ 900 H ?1 \/ 2000$/);
+ assert(c.rows[0].bottom<=c.rows[1].top+0.5&&c.rows[0].top>=c.top-0.5&&c.rows[1].bottom<=c.bottom+0.5,'G above H, both inside the pill');
+ assert(Math.abs(c.left-alone.left)<1&&Math.abs((c.bottom-c.top)-(alone.bottom-alone.top))<1,'same place and height as one count');
+ await p.evaluate(()=>{__app.S.hereKey='';});c=await pill();assert.equal(c.text,'0 / 900','Google alone looks as before');
+ await p.evaluate(()=>{__app.S.apiKey='';});c=await pill();assert.equal(c.shown,false,'no keys, no counter');
+ await p.evaluate(()=>{__app.S.apiKey='';__app.S.hereKey='TEST_HERE_KEY_123';});
+ // the key boxes live in Connections & usage → Other optional keys (they used to stay behind in EV & hydrogen)
+ await p.evaluate(()=>{__trip.close&&__trip.close();});await p.evaluate(()=>document.getElementById('btnSettings').click());await p.waitForSelector('[data-settings-group="connections"]');
+ assert.deepEqual(await p.evaluate(()=>['hereKey','hereMonthlyCap','nrelKey','fuelKey'].map(id=>{const e=document.getElementById(id),v=e&&e.closest('[data-settings-view]'),h=e&&e.closest('.card').querySelector('h3');return v&&v.dataset.settingsView+'/'+h.textContent;})),Array(4).fill('connections/Other optional keys'));
  assert.equal(await p.evaluate(()=>__paid),0);assert.equal(errors.length,0,errors.join('\n'));
  await p.close();
  }

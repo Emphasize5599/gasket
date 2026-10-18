@@ -1673,6 +1673,7 @@
         if (o) { a.hereTolls = o.v; cached++; continue; }
         asked++;
         var res = await call('fetchHere', S.hereKey, Tolls.hereQuery(pts, veh), S.hereMonthlyCap == null ? 2000 : Math.max(0, parseInt(S.hereMonthlyCap, 10) || 0));
+        if (window.__apiCount) window.__apiCount();
         if (res.code === 'here_cap') { LG.warn('route', res.error); toastMsg(res.error); break; }
         var j = null; try { j = res.body ? JSON.parse(res.body) : null; } catch (e) { }
         if (res.error || !j) { a.hereTolls = { ok: false, why: res.error || 'unreadable', at: Date.now() }; LG.warn('route', 'HERE toll price failed', { via: a.description, error: res.error || 'unreadable', detail: j && (j.title || j.cause) }); continue; }

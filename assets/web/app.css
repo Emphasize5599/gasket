@@ -768,7 +768,13 @@ details.set-more[open] > summary { margin-bottom: 8px; }
 /* lookups this month, always in view */
 .apic { flex: none; pointer-events: auto; height: 30px; padding: 0 10px; border-radius: 999px; display: flex; align-items: center;
   background: var(--surface); box-shadow: var(--shadow); font-size: 12px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.apic.hi { color: var(--warn); }
+.apic.hi, .apic .apic-r.hi { color: var(--warn); }
+/* one count, or Google's and HERE's sharing the pill's height (G over H) */
+.apic { flex-direction: column; justify-content: center; line-height: 1; }
+.apic .apic-r { display: flex; align-items: baseline; gap: 3px; white-space: nowrap; }
+.apic .apic-r b { font-weight: 700; font-size: 9px; opacity: .7; }
+.apic.two { padding: 0 9px; align-items: flex-start; gap: 1px; }
+.apic.two .apic-r { font-size: 10px; line-height: 13px; }
 body.trip-on .top .bar { justify-content: space-between; }
 
 /* Garage and Route: the whole screen (the lookup counter and settings stay on top) */

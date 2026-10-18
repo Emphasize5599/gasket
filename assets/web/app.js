@@ -280,13 +280,21 @@
     status(msg);
   }
   setInterval(refreshStatus, 30000);
-  /** Google lookups used this month, always in the top-left corner. */
+  /** Paid lookups used this month, in the top-left corner: Google's with its key, HERE's toll lookups with that key.
+   *  Both keys = one pill with the two counts sharing its height (G over H); one key = just that count, in the same place. */
   function apiCount() {
     var el = $('apiCount'); if (!el) return;
-    var n = N.callsThisMonth(), cap = Number(S.monthlyCap) || 0;
-    el.textContent = n + ' / ' + (cap || '∞');
-    el.classList.toggle('hi', cap > 0 && n >= cap * 0.85);
-    el.classList.toggle('hidden', !S.apiKey); document.body.classList.toggle('api-meter', !!S.apiKey);   // no key, no Google lookups to count (the status bar then starts at the edge)
+    var g = !!S.apiKey, h = !!S.hereKey, rows = [];
+    var gn = N.callsThisMonth(), gc = Number(S.monthlyCap) || 0, hn = N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0, hc = S.hereMonthlyCap == null ? 2000 : Math.max(0, parseInt(S.hereMonthlyCap, 10) || 0);
+    var row = function (tag, n, cap, title) { return '<span class="apic-r' + (cap > 0 && n >= cap * 0.85 ? ' hi' : '') + '" title="' + title + '">' + (tag ? '<b>' + tag + '</b>' : '') + n + ' / ' + (cap || '∞') + '</span>'; };
+    if (g) rows.push(row(h ? 'G' : '', gn, gc, 'Google lookups this month'));
+    if (h) rows.push(row(g ? 'H' : 'HERE', hn, hc, 'HERE toll lookups this month'));
+    var html = rows.join('');
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.classList.toggle('two', g && h);
+    el.title = g && h ? 'Google lookups / HERE toll lookups this month' : h ? 'HERE toll lookups this month' : 'Google lookups this month';
+    el.classList.remove('hi');
+    el.classList.toggle('hidden', !g && !h); document.body.classList.toggle('api-meter', g || h);   // no key, no lookups to count (the status bar then starts at the edge)
     if(window.Tasks)Tasks.layout();
   }
   window.__apiCount = apiCount;
@@ -1331,7 +1339,7 @@
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
     S.logLevel = parseInt($('logLevel').value, 10) || 5;
     S.nrelKey = $('nrelKey').value.trim();
-    if ($('hereKey')) S.hereKey = $('hereKey').value.trim();
+    if ($('hereKey')) { S.hereKey = $('hereKey').value.trim(); apiCount(); }
     if ($('hereMonthlyCap')) S.hereMonthlyCap = Math.max(0, parseInt($('hereMonthlyCap').value, 10) || 0);
     if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
     S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);
