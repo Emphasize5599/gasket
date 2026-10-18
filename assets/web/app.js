@@ -183,7 +183,8 @@
     $('btnArea').classList.toggle('hidden', !far);
   });
   map.on('click', function () { closeDetail(); setListOpen(false); });
-  map.on('zoomend moveend resize', function () { render(); });
+  // one redraw per gesture: a zoom fires zoomend and moveend together
+  var renderT = 0; map.on('zoomend moveend resize', function () { clearTimeout(renderT); renderT = setTimeout(render, 0); });
 
   // ---------- grade selector ----------
   // ---------- fuel mode: gas & diesel, electric or hydrogen (the pill left of the top bar's selector) ----------
@@ -459,7 +460,7 @@
     stations.forEach(add);
     // This is local app storage, not a network lookup. It covers stations from earlier map searches and saved trips.
     if(!demo&&window.__app&&window.PriceHistory&&PriceHistory.near)PriceHistory.near(box).forEach(add);
-    return P.reconcileStations(out);
+    return P.mergeSites(P.reconcileStations(out));
   }
   function enriched() {
     var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null);
@@ -473,6 +474,7 @@
   function shortAddr(a) { return String(a).split(',').slice(0, 2).join(','); }
 
   function shown(x) { return x.c || !S.hideUnpriced || x.s.id === selectedId; }
+  var LIST_MAX = 200;   // rows in the list sheet: past that the page itself slows down
   function render() {
     syncMain();
     // Trip pans/zooms have their own route/station layers. Do not rebuild the
@@ -488,7 +490,9 @@
     priced.forEach(function (x) { if (x.c.final <= bestVal + 0.0005 && !x.c.stale) bestIds[x.s.id] = 1; });
     var rank = {}; priced.forEach(function (x, i) { rank[x.s.id] = i; });
 
-    drawStations(list, bestIds, rank);
+    // zoomed out: only the cheapest few percent get a dot and a bubble (P.mapTier), all of them once a few towns across
+    var tier = P.mapTier(list.map(function (x) { return { id: x.s.id, price: x.c ? x.c.final : null, keep: x.s.id === selectedId }; }), map.getZoom());
+    drawStations(tier.all ? list : list.filter(function (x) { return tier.ids.has(x.s.id); }), bestIds, rank);
 
     // list sheet
     var gl = P.GRADES[S.grade].label.toLowerCase();
@@ -503,12 +507,14 @@
       if (sortBy === 'dist') return (a.dist || 0) - (b.dist || 0);
       if (!a.c) return 1; if (!b.c) return -1; return a.c.final - b.c.final;
     });
-    $('rows').innerHTML = rows.length ? rows.map(function (x) {
+    var more = rows.length - LIST_MAX; if (more > 0) rows = rows.slice(0, LIST_MAX);
+    var tierNote = tier.all ? '' : '<div class="empty tier-note">The map shows the cheapest ' + tier.shown + ' of ' + tier.total + ' stations here. Zoom in for more.</div>';
+    $('rows').innerHTML = rows.length ? tierNote + rows.map(function (x) {
       return '<button class="row" data-id="' + esc(x.s.id) + '">' + badgeHtml(x.s.brand) +
         '<span class="mid"><div class="nm">' + esc(P.displayName(x.s)) + '</div><div class="sub">' + (x.dist != null ? x.dist.toFixed(1) + ' mi · ' : '') + esc(shortAddr(x.s.address)) +
         (x.c && x.c.stale ? ' · <span style="color:var(--warn)">stale</span>' : '') + '</div></span>' +
         '<span class="pr">' + (x.c ? '<div class="f' + (bestIds[x.s.id] ? ' best' : '') + '">' + priceHtml(x.c.final) + '</div><div class="o">' + priceHtml(x.c.base) + '</div>' : '<div class="o" style="text-decoration:none">no price</div>') + '</span></button>';
-    }).join('') + (rows.some(function (x) { return x.s.google; }) ? gAttr() : '') + (rows.some(function(x){return x.s.osm;}) ? '<div class="gattr"><a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors · ODbL</a></div>' : '') : '<div class="empty">Stations will appear here.</div>';
+    }).join('') + (more > 0 ? '<div class="empty">' + more + ' more here. Zoom in to see them.</div>' : '') + (rows.some(function (x) { return x.s.google; }) ? gAttr() : '') + (rows.some(function(x){return x.s.osm;}) ? '<div class="gattr"><a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors · ODbL</a></div>' : '') : '<div class="empty">Stations will appear here.</div>';
     syncMapGAttr();
     refreshStatus();
     sizeSheet();

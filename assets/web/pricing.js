@@ -202,6 +202,72 @@
     return out;
   }
 
+  /**
+   * Google Maps lists one gas station several times: the fuel brand ("Sunoco"), the store ("Trimble Food Mart"), an
+   * old brand, each its own place at the same spot. A 2,880-mile trip's 2,760 stations held 332 such repeats. Maps
+   * listings within 0.02 mi of each other, sharing an address within 0.1 mi or a street number within 0.04 mi are one
+   * site when their posted prices agree grade by grade; the listing with the most prices stays (taking the one fuel
+   * brand named, when it is a store's name) and the others become its aliases. Different prices mean different
+   * stations (two can share a corner); official Walmart / Murphy stores and groups of more than 4 are left alone.
+   */
+  function addrKey(a) { return String(a || '').split(',')[0].toLowerCase().replace(/\b(street|road|avenue|boulevard|drive|highway)\b/g, function (w) { return { street: 'st', road: 'rd', avenue: 'ave', boulevard: 'blvd', drive: 'dr', highway: 'hwy' }[w]; }).replace(/[^a-z0-9]/g, ''); }
+  function sameSite(a, b) {
+    var d = haversineMi(a.lat, a.lng, b.lat, b.lng), ka = addrKey(a.address), na = /^\s*(\d+)\s/.exec(a.address || ''), nb = /^\s*(\d+)\s/.exec(b.address || '');
+    return d < 0.02 || ka && ka === addrKey(b.address) && d < 0.1 || na && nb && na[1] === nb[1] && d < 0.04;
+  }
+  function mergeSites(rows) {
+    var maps = function (s) { return s && Number.isFinite(s.lat) && Number.isFinite(s.lng) && s.wmStoreId == null && s.murphyStore == null && !s._official && !/walmart\.com|murphyusa\.com/.test(s.source || '') && !!(s.featureId || s.placeId || s.google || s.source === 'Google Maps web'); };
+    var up = rows.map(function (_, i) { return i; }), bins = new Map();
+    function root(i) { while (up[i] !== i) { up[i] = up[up[i]]; i = up[i]; } return i; }
+    rows.forEach(function (s, i) {
+      if (!maps(s)) return;
+      var x = Math.floor(s.lat * 100), y = Math.floor(s.lng * 100);
+      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) (bins.get((x + dx) + '|' + (y + dy)) || []).forEach(function (j) { if (sameSite(rows[j], s)) up[root(i)] = root(j); });
+      var k = x + '|' + y; if (!bins.has(k)) bins.set(k, []); bins.get(k).push(i);
+    });
+    var groups = new Map();
+    rows.forEach(function (s, i) { var r = root(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(s); });
+    var out = [];
+    rows.forEach(function (s, i) {
+      var g = groups.get(root(i));
+      if (g.length === 1 || g.length > 4) { out.push(s); return; }
+      if (g[0] !== s) return;
+      var agree = Object.keys(GRADES).every(function (gr) { return new Set(g.filter(function (t) { return t.prices && t.prices[gr] && Number.isFinite(t.prices[gr].price); }).map(function (t) { return t.prices[gr].price.toFixed(3); })).size <= 1; });
+      if (!agree) { out.push.apply(out, g); return; }
+      var count = function (t) { return Object.keys(t.prices || {}).length; };
+      var keep = g.slice().sort(function (a, b) { return count(b) - count(a) || (b.brand !== 'other') - (a.brand !== 'other') || !!b.address - !!a.address; })[0];
+      var m = Object.assign({}, keep, { prices: Object.assign({}, keep.prices) }), named = Array.from(new Set(g.map(function (t) { return t.brand; }).filter(function (b) { return b && b !== 'other'; })));
+      if (m.brand === 'other' && named.length === 1) m.brand = named[0];
+      g.forEach(function (t) {
+        if (t === keep) return;
+        Object.keys(t.prices || {}).forEach(function (gr) { var o = m.prices[gr], f = t.prices[gr]; if (!o || (f.observedAt || 0) > (o.observedAt || 0)) m.prices[gr] = f; });
+        if (!m.address && t.address) m.address = t.address;
+        m.stationAliases = Array.from(new Set((m.stationAliases || [stationKey(keep)]).concat(stationKey(t), t.stationAliases || [])));
+      });
+      m.siteListings = g.length;
+      out.push(m);
+    });
+    return out;
+  }
+
+  /**
+   * Which stations a map shows at a zoom. Zoomed out over a long trip there are thousands (a phone lagged drawing all
+   * of them), so only the cheapest few: 1% at zoom 7 and out (a few states across), 2% at 8, 5% at 9, 10% at 10, 25%
+   * at 11, at least 12 and at most 300; from zoom 12 (a couple of towns across) every one. Unpriced stations wait for
+   * zoom 12 too. items: [{id, price (null = none), keep}]; keep (the selected station, your stops) always shows.
+   */
+  var TIERS = [[7, 0.01], [8, 0.02], [9, 0.05], [10, 0.10], [11, 0.25]], TIER_MIN = 12, TIER_MAX = 300, TIER_ALL = 12;
+  function mapTier(items, zoom) {
+    var z = Math.floor(Number(zoom)), all = !(z < TIER_ALL), ids = new Set();
+    if (all) { items.forEach(function (x) { ids.add(x.id); }); return { ids: ids, all: true, shown: ids.size, total: items.length }; }
+    var frac = TIERS[0][1]; TIERS.forEach(function (t) { if (z >= t[0]) frac = t[1]; });
+    var priced = items.filter(function (x) { return Number.isFinite(x.price); }).sort(function (a, b) { return a.price - b.price; });
+    var n = Math.min(TIER_MAX, Math.max(TIER_MIN, Math.ceil(priced.length * frac)));
+    priced.slice(0, n).forEach(function (x) { ids.add(x.id); });
+    items.forEach(function (x) { if (x.keep) ids.add(x.id); });
+    return { ids: ids, all: ids.size >= items.length, shown: ids.size, total: items.length };
+  }
+
   /** Put each chain's official prices onto the matching Google station (same brand, very close by),
    *  or add the official station if Google didn't return it. Never mutates its inputs. */
   function mergeOfficial(googleStations, official) {
@@ -383,7 +449,7 @@
   /** A gas brand, a charger / hydrogen station, or a plain gray stand-in — never undefined. */
   function brand(b) { return BRANDS[b] || ALT[b] || { name: '', short: '?', color: '#777' }; }
 
-  var api = { stationKey: stationKey, reconcileStations: reconcileStations, BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
+  var api = { stationKey: stationKey, reconcileStations: reconcileStations, mergeSites: mergeSites, mapTier: mapTier, BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
     compute: compute, tripPrice: tripPrice, citgoRedeemed: citgoRedeemed, setCitgoRedeemed: setCitgoRedeemed, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
   api.workerSource='('+initPricing.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;

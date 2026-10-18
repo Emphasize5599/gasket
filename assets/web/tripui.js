@@ -1954,7 +1954,7 @@
         // a route it didn't check then: every station it found, with Google's exact detours dropped (they were for another route)
         var all = []; (replay.google || []).forEach(function (g) { g.list.forEach(function (st) { var c = Object.assign({}, st); delete c.detourExact; delete c.detourMi; all.push(c); }); });
         return all;
-      });
+      }).map(function (list) { return P.mergeSites(P.reconcileStations(list)); });   // trips saved before 0.0.188 listed shared stations twice
       while (perModel.length < models.length) perModel.push([]);
     }
     var maxAge = force===true || force==='discover' || S.alwaysRefresh ? 0 : (Number(S.staleHours) || 24) * 3600e3, oldest = 0, saved = 0;
@@ -2903,7 +2903,8 @@
         var searched=await gatherAll(extraModels,function(f,l){prog(.47+f*.43,'Approved alternatives · '+l);},restDebug,discovering?'discover-cache':false,null,okKs.slice(1),coverage&&coverage.alternatives);
         var baseStations=(first.raw.official||[]).concat.apply(first.raw.official||[],first.raw.google||[]);
         var drop=function(s){var c=Object.assign({},s);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;};
-        var projected={localOnly:true,official:searched.raw.official||[],google:okKs.slice(1).map(function(k,i){var a=alts[k],shift=a._leg>0?(okModels[i+1].legEnds||[])[a._leg-1]||0:0;return {k:k,sig:altSig(a),list:baseStations.map(drop).concat((searched.raw.google[i]||[]).map(function(s){var c=Object.assign({},s);if(c.detourRange)c.detourRange=c.detourRange.map(function(d){return d+shift;});return c;}))};})};
+        // the primary's stations plus the alternatives' own: one copy each (they overlap, and were listed twice)
+        var projected={localOnly:true,official:searched.raw.official||[],google:okKs.slice(1).map(function(k,i){var a=alts[k],shift=a._leg>0?(okModels[i+1].legEnds||[])[a._leg-1]||0:0;return {k:k,sig:altSig(a),list:P.mergeSites(P.reconcileStations(baseStations.map(drop).concat((searched.raw.google[i]||[]).map(function(s){var c=Object.assign({},s);if(c.detourRange)c.detourRange=c.detourRange.map(function(d){return d+shift;});return c;}))))};})};
         rest=await gatherAll(okModels.slice(1),function(){},{},false,projected,okKs.slice(1));
         rest.per.forEach(function(g,i){g.notes=g.notes.concat(searched.per[i].notes||[]);});
       }
@@ -3737,7 +3738,13 @@
     if (!dots.length) return;
     var dz = dotSize(map.getZoom());
     dots.forEach(function (d) { d.setRadius(dz.r); d.setStyle({ weight: dz.w }); });
+    tierDots();
   });
+  /** The other stations' dots on the trip map: zoomed out only the cheapest few percent (P.mapTier), every one at zoom 12. */
+  function tierDots() {
+    var t = P.mapTier(dots.map(function (d) { return d._tier; }), map.getZoom());
+    dots.forEach(function (d) { var on = !dotsHidden && t.ids.has(d._tier.id); if (on && !layer.hasLayer(d)) layer.addLayer(d); else if (!on && layer.hasLayer(d)) layer.removeLayer(d); });
+  }
   var drawn = {}, stopTips = [], routeLL = null, selLL = null, pinT = 0, leaderLayer = L.layerGroup();
   /** Price bubbles placed like the route labels on the small maps: off the route (and the highlighted road), off each other, and out from under the panel and the top bar. */
   function placePins() {
@@ -3780,15 +3787,22 @@
       var ring = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#ffffff';
       var dz = dotSize(map.getZoom());
       dots = [];
+      // one dot per station (a round trip passes each twice: the cheaper of its two), the cheapest few when zoomed out (tierDots)
+      var seenSt = new Map(), stopSt = new Set();
+      result.cands.forEach(function (c) { if (chosen[c.id]) stopSt.add(c.station.id); });
       result.cands.forEach(function (c) {
-        if (chosen[c.id] || step === ST_DEPART) return;           // Departure: only your stops (the rest is noise by then)
+        if (chosen[c.id] || step === ST_DEPART || stopSt.has(c.station.id)) return;           // Departure: only your stops (the rest is noise by then)
+        var was = seenSt.get(c.station.id); if (was && !(Number.isFinite(c.price) && (was.price == null || c.price < was.price))) return;
+        if (was) { dots.splice(dots.indexOf(was.dot), 1); }
         var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.brand(c.station.brand).color, fillOpacity: 1 });
+        dot._tier = { id: c.station.id, price: Number.isFinite(c.price) ? c.price : null };
+        seenSt.set(c.station.id, { dot: dot, price: dot._tier.price });
         dots.push(dot);
         dot
           .bindPopup('<b>' + esc(P.displayName(c.station)) + '</b><br>' + priceText(c.price) + ' · mile ' + Math.round(c.d) +
             (c.detourMi >= 0.15 ? ' · ' + c.detourMi.toFixed(1) + ' mi detour' : ''));
-        if (!dotsHidden) dot.addTo(layer);
       });
+      tierDots();
       if (result.top) chosen[result.top.c.id] = 'T';
       // the chosen stops: a dot on the station and a price bubble beside it that moves out of the way of the roads
       stopTips = [];
@@ -3895,7 +3909,7 @@
     if(step===ST_HAZ&&routeReview){var b=$('tBack'),n=$('tNext');if(b)b.textContent='No';if(n){n.classList.remove('busy');n.textContent='Yes';}return;}
     var on = speedMode(), pg = $('trip');
     // adjusting speed by road: only the route, its stretches and your stops on the map (the other stations are noise there)
-    if (on !== dotsHidden) { dotsHidden = on; dots.forEach(function (d) { if (on) layer.removeLayer(d); else if (!layer.hasLayer(d)) layer.addLayer(d); }); }
+    if (on !== dotsHidden) { dotsHidden = on; tierDots(); }
     if (on && !modeSnap) modeSnap = snapSpeeds();
     if (!on && !inMode) modeSnap = null;
     if (pg) pg.classList.toggle('submode', on);

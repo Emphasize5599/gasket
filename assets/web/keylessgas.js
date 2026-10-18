@@ -378,7 +378,8 @@
         if(!cache&&!r.blocked)pool.outcome(!retryable(r),Date.now()-t0);
         if(!cache&&retryable(r)&&(tries[idx]||0)<RETRIES){tries[idx]=(tries[idx]||0)+1;again.push(idx);recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,d:r.detail||null,found:0,added:0,err:r.error||null,retry:true});continue;}
         if(r.blocked){blocked=true;control.blocked=true;control.blockedSite=control.blockedSite||'gasweb';errors.push(r.error||'Website restricted discovery');}
-        if(r.error&&!r.blocked)errors.push(r.error);
+        // a page that read its stations and then timed out on the slower full-page retry keeps them: not a failure
+        if(r.error&&!r.blocked&&!(r.stores||[]).length)errors.push(r.error);
         if(tries[idx])retried++;
         var found=dedupeDiscovery((r.stores||[]).filter(function(s){return contains(s,a,P);}),P);
         if(root.PriceHistory){var persistAt=Date.now();root.PriceHistory.observe(found);audit.persist(Date.now()-persistAt);}
@@ -396,10 +397,10 @@
         }
       })();
       var finished=await Promise.all([chainWork,webWork]);
-      var webRows=rows.length;rows=mergeOfficialDiscovery(rows,finished[0],P);recordObserved(rows);
+      var webRows=rows.length;rows=P.mergeSites(mergeOfficialDiscovery(rows,finished[0],P));recordObserved(rows);
       if(LG){
         var el=Date.now()-started,sum=discoveryReport(recs.filter(function(r){return !r.retry;}),{elapsedMs:el,areas:areas.length,lanes:lanes.length,stations:webRows,priced:rows.filter(function(s){return s.prices&&s.prices[grade];}).length,officialMs:officialMs,errors:Array.from(new Set(errors)).slice(0,5),mem:{start:mem0,end:memNow(A)}});
-        LG.info('keyless','Discovery finished',Object.assign({withOfficial:rows.length,cancelled:control.cancelled,blocked:blocked||!!control.blocked,retriedAreas:retried,retryRounds:round,stillFailed:recs.filter(function(r){return r.err&&!r.retry&&!r.cancelled;}).length},sum));
+        LG.info('keyless','Discovery finished',Object.assign({withOfficial:rows.length,cancelled:control.cancelled,blocked:blocked||!!control.blocked,retriedAreas:retried,retryRounds:round,stillFailed:recs.filter(function(r){return r.err&&!r.retry&&!r.cancelled&&!r.found;}).length,partialAreas:recs.filter(function(r){return r.err&&!r.retry&&!r.cancelled&&r.found;}).length},sum));
         // one row per area, in batches that fit a log entry: where each lane spent its time
         var cols='area, lane, start s, total ms, reader ms, list shown ms, last new row ms, stop, scrolls, rows, priced, in area, new, lean, full retry, retry ms, first stop, first rows, omitted graphics, omitted telemetry, feed height, feed scroll height';
         var line=function(r){var d=r.d||{};return [r.i,r.lane,Math.round(r.at/1000),r.ms,d.elapsedMs==null?null:d.elapsedMs,d.firstFeedMs==null?null:d.firstFeedMs,d.lastGrowthMs==null?null:d.lastGrowthMs,r.cancelled?'cancel':r.retry?'retry':r.err?'error':r.cache?'cache':d.stopReason||'?',d.scrolls||0,d.read||0,d.priced||0,r.found||0,r.added||0,d.leanResources==null?null:!!d.leanResources,!!d.fullResourceRetry,d.retryElapsedMs||0,d.firstAttemptStopReason||'',d.firstAttemptRows||0,d.omittedGraphics||0,d.omittedTelemetry||0,d.feedHeight||0,d.feedScrollHeight||0];};
