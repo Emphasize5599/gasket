@@ -693,6 +693,7 @@
         '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
         num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, kd === 'ev' ? 'e.g. home charging · blank = your fast-charging price' : 'blank = typical price on the route') + '</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
+      (kd==='ev'?'<div id="tChargerTypes">'+[['dc','DC fast (including compatible Superchargers)'],['l2','Level 2 · slower charging'],['l1','Level 1 · very slow charging']].map(function(x){return '<label class="nf chk"><span>'+x[1]+'</span><input type="checkbox" data-charge-type="'+x[0]+'"'+(AltFuel.tripTypes(t.evChargers)[x[0]]?' checked':'')+'></label>';}).join('')+'</div><p class="lead small keep">Only compatible plugs are included. Slower stops can take hours; verify access, adapters and availability before travel.</p>':'')+
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
       '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 0.5, 'extra driving per stop') + '</div>' +
@@ -805,6 +806,7 @@
       };
     };
     seg('tArrive', arriveHelp); seg('tMode');
+    if($('tChargerTypes'))$('tChargerTypes').querySelectorAll('input').forEach(function(el){el.onchange=function(){var all=Array.from($('tChargerTypes').querySelectorAll('input'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charger type selected.');return;}S.trip.evChargers={};all.forEach(function(x){S.trip.evChargers[x.dataset.chargeType]=x.checked;});result=null;choiceCandidates.clear();A.save();gateTabs();};});
     var ruleSave = function () {
       var previous=S.speed.rule||{},autoCap=previous.capAuto===true||previous.cap==null;if(this.id==='tRuleCap')autoCap=false;
       S.speed.rule = { on: $('tRule').checked, over: Math.max(-10, Math.min(15, parseInt($('tRuleOver').value, 10) || 0)), cap: Math.max(40, Math.min(90, parseInt($('tRuleCap').value, 10) || Garage.ruleCap())),capAuto:autoCap };
@@ -2113,31 +2115,29 @@
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function chargeMin(p) { return p.stops.reduce(function (a, s) { return a + (s.c.kw ? s.buyGal / s.c.kw * 60 : 0); }, 0); }
   async function gatherAlt(models, pg, dbgS,replay) {
-    var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? 2 : 8;
+    var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)) : 8;
     var price = kd === 'ev' ? (+S.evPrice || 0.48) : (+S.h2Price || 36), tv = 0;
     var notes = [], per = [], raw = [];
     dbgS.started = new Date().toISOString(); dbgS.kind = kd;
     for (var mi = 0; mi < models.length; mi++) {
       var list = [], m = models[mi];
-      try { list = replay&&replay.localOnly?(replay.google[mi]||{}).list||[]:await AltFuel.alongRoute(m, kd, plugs, corridor, function (f) { pg((mi + f) / models.length, kd === 'ev' ? 'Finding fast chargers' : 'Finding hydrogen stations'); }); }
-      catch (e) { if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
+      try { list = replay&&replay.localOnly?(replay.google[mi]||{}).list||[]:await AltFuel.alongRoute(m, kd, plugs, corridor, function (f) { pg((mi + f) / models.length, kd === 'ev' ? 'Finding compatible chargers' : 'Finding hydrogen stations'); },S.trip.evChargers); }
+      catch (e) { list=e.stations||[];if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
       raw.push(list);
       var cands = [];
       for (var si = 0; si < list.length; si++) {
-        var st = list[si], prs = T.projectLegs(m, { lat: st.lat, lng: st.lng }, corridor + 1);
+        var st = list[si],charging=kd==='ev'?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;if(kd==='ev'&&!charging)continue;
+        var prs = T.projectLegs(m, { lat: st.lat, lng: st.lng }, corridor);
         for (var pi = 0; pi < prs.length; pi++) {
-          var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = kd === 'ev' ? AltFuel.avgKw(st, c) : 0;
+          var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = charging?charging.kw:0;
           cands.push({ id: pr.leg ? st.id + '@' + pr.leg : st.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: det < 0.15 ? 0 : det / 25 * 60 + 1, detourExact: false,
-            price: price, kw: kw, timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
+            price: price, kw: kw, chargeLevel:charging&&charging.level,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
             calc: { base: price, final: price, est: false, stale: false, updated: null, notes: [],
               steps: [{ label: (kd === 'ev' ? 'Your fast-charging price' : 'Your hydrogen price') + ' (Settings → EV & hydrogen)', kind: 'base', amount: price }] } });
         }
       }
-      if (kd === 'ev') {      // chargers a few miles apart are near-twins: keep the fastest in each 3-mile stretch
-        var bins = {};
-        cands.forEach(function (x) { var b = (x.leg || 0) + ':' + Math.floor(x.d / 3); if (!bins[b] || x.kw > bins[b].kw || (x.kw === bins[b].kw && x.detourMi < bins[b].detourMi)) bins[b] = x; });
-        cands = Object.keys(bins).map(function (b) { return bins[b]; });
-      }
+      // A faster charger nearby may exceed the detour limit or be just out of reach.
+      // Keep compatible alternatives instead of discarding slower, reachable stops in 3-mile bins.
       per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [] });
     }
     if (kd === 'ev') notes.push('Prices are your estimate (Settings → EV & hydrogen); most chargers don\'t publish theirs to the station finder.');
@@ -3302,7 +3302,15 @@
     var p = r.plan, h = '', ah = refreshCard()+tipBox();
     // warnings first: what could go wrong on this trip
     var w = [];
-    if (!p.ok) w.push({ err: 1, t: ('No plan keeps you above a '+r.bufMi+'-mile buffer. ') + (p.reachMi > 0 ? 'Past mile ' + Math.round(p.reachMi) + ' there\'s no priced station close enough.' : 'There\'s no priced station within your range.') + ' Try a smaller buffer or check the miles left.' });
+    if (!p.ok) {
+      var gap='No plan keeps you above a '+r.bufMi+'-mile buffer. '+(p.reachMi>0?'The current station list cannot bridge the gap past mile '+Math.round(p.reachMi)+'.':'No usable stop is reachable within your current range and detour limit.');
+      if(KIND()==='ev'){
+        var reachable=(r.cands||[]).filter(function(c){return r.opts.model.galTo(c.d)+(c.detourMi||0)*r.opts.model.cityGpm/2<=r.startGal;}).sort(function(a,b){return a.detourMin-b.detourMin;});
+        if(!p.reachMi&&reachable.length&&reachable[0].detourMin>r.opts.maxDetourMin)gap+=' A reachable charger needs about '+Math.ceil(reachable[0].detourMin)+' min of extra driving; your limit is '+r.opts.maxDetourMin+' min.';
+        gap+=' Check the selected charger types in Parameters → Charging stops, the detour limit and starting charge. Discovery errors below mean coverage is incomplete—not that chargers do not exist.';
+      }else gap+=' Try a smaller buffer or check the miles left.';
+      w.push({err:1,t:gap});
+    }
     if (p.ok && p.firstDip && p.stops.length) w.push({ t: 'You\'ll reach stop 1 below '+('your '+r.bufMi+'-mile buffer')+' (~' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' mi left).' });
     if (r.estUsed) w.push({ t: r.estUsed + ' stop' + (r.estUsed === 1 ? ' is at a station' : 's are at stations') + ' with no posted price — nothing priced is in reach there. Its price is an estimate (marked est.).' });
     if (r.stale) w.push({ t: r.stale + ' price' + (r.stale === 1 ? ' is' : 's are') + ' over ' + S.staleHours + ' hours old (marked).' });
@@ -3824,7 +3832,7 @@
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
-      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave },
+      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,evChargers:S.trip.evChargers,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave },
       routeChoicesByVehicle:choices,
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
@@ -3906,7 +3914,7 @@
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
-    resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
+    S.trip.evChargers=v.trip.evChargers||null;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
     routeReview=null;choiceComplete=false;choicePool=null;
     if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();

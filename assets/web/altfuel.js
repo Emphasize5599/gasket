@@ -19,26 +19,30 @@
   function evOn() { return S.fuelMode === 'ev'; }
   function h2On() { return S.fuelMode === 'h2'; }
   var LEVEL = { dc: 'dc_fast', l2: '2', all: 'all' };
+  var routePending=new Map(),cooldown=new Map();
+  function tripTypes(value){return Object.assign({dc:true,l2:true,l1:false},value||{});}
+  function routePlugs(plugs){return Array.from(new Set((plugs||['J1772COMBO','TESLA','CHADEMO']).concat((plugs||[]).some(function(p){return p==='J1772COMBO'||p==='CHADEMO';})?['J1772']:[])));}
 
   function key() { return String(S.nrelKey || '').trim() || 'DEMO_KEY'; }
   function call() { return window.__trip.call.apply(null, arguments); }
   function unitOf(kind) { return kind === 'ev' ? 'kWh' : kind === 'h2' ? 'kg' : 'gal'; }
 
   /** One request to the station finder -> parsed JSON (throws a readable message). The key never reaches the log. */
-  async function get(path, params) {
+  async function get(path, params, post) {
+    var credential=key();if((cooldown.get(credential)||0)>Date.now())throw new Error('Station discovery is paused after the provider limit. Cached chargers remain available; add your own free station-finder key in Settings → Connections.');
     var q = Object.keys(params).filter(function (k) { return params[k] !== '' && params[k] != null; })
       .map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
     var url = BASE + path + '?api_key=' + encodeURIComponent(key()) + '&' + q;
     LG.debug('altfuel', 'Station finder ' + path, params.fuel_type || '');
-    var r = await call('fetchJson', url);
+    var r = post&&N.fetchStationRoute?await call('fetchStationRoute',credential,q):await call('fetchJson', url);
     if (r.error) {
       var m = String(r.error);
-      if (/429/.test(m)) throw new Error(key() === 'DEMO_KEY' ? 'The shared DEMO_KEY is out of lookups for now (about 30 an hour). Add your own free key in Settings → Alternative fuels.' : 'Your station-finder key is out of lookups for now. Try again in an hour.');
+      if (/429/.test(m)){cooldown.set(credential,Date.now()+3600e3);throw new Error(credential === 'DEMO_KEY' ? 'The shared station-finder key hit its limit. Cached chargers are retained, but discovery is incomplete. Add a free personal key in Settings → Connections.' : 'Your station-finder key hit its limit. Cached chargers are retained; try again later.');}
       if (/40[13]/.test(m)) throw new Error('The station finder didn\'t accept the key. Check it in Settings → Alternative fuels.');
       if (/not allowed/i.test(m)) throw new Error('This version of the app can\'t reach the station finder yet.');
       throw new Error('Couldn\'t reach the station finder (' + m + ').');
     }
-    try { return JSON.parse(r.body); } catch (e) { throw new Error('The station finder sent something unreadable.'); }
+      try { var parsed=JSON.parse(r.body);if(!Array.isArray(parsed.fuel_stations)||parsed.errors&&(!Array.isArray(parsed.errors)||parsed.errors.length))throw new Error('Station finder rejected the request');return parsed; } catch (e) { throw new Error('The station finder sent an unreadable or unsuccessful answer.'); }
   }
 
   // Charging speed: the finder lists ports, not always power. Where it gives power per connector we use the most;
@@ -69,6 +73,7 @@
       network: ev ? (NETS[f.ev_network] != null ? NETS[f.ev_network] : String(f.ev_network || '')) : '',
       address: [f.street_address, f.city, [f.state, f.zip].filter(Boolean).join(' ')].filter(Boolean).join(', '), state: f.state || '',
       lat: +f.latitude, lng: +f.longitude, dc: +f.ev_dc_fast_num || 0, l2: +f.ev_level2_evse_num || 0, plugs: f.ev_connector_types || [],
+      l1:+f.ev_level1_evse_num||0,units:f.ev_charging_units||[],
       kw: pw ? pw.kw : 0, kwEst: pw ? pw.est : false, pricing: String(f.ev_pricing || '').trim(),
       hours: String(f.access_days_time || '').trim(), status: f.status_code || 'E', phone: f.station_phone || '',
       hyPress: f.hy_pressures || [], hyLink: f.hy_status_link || '', retail: f.hy_is_retail, confirmed: f.date_last_confirmed || '',
@@ -102,39 +107,47 @@
     return normalizedRows(raw);
   }
   /**
-   * Stations within corridorMi of a route, for a trip: the route goes to the finder as a simplified line (a few hundred
-   * miles per lookup), each piece kept a week. kind 'ev' | 'h2'. -> stations (deduped)
+   * Full-route station discovery: bounded native POST avoids GET URL limits and repeated 400-mile queries.
+   * Answers are cached for a week by geometry, corridor, connectors and selected levels.
    */
-  async function alongRoute(model, kind, plugs, corridorMi, onProg) {
-    var L = model.totalMi, PIECE = 400, out = {}, n = Math.max(1, Math.ceil(L / PIECE));
-    for (var k = 0; k < n; k++) {
-      var a = k * L / n, b = (k + 1) * L / n, pts = [];
-      var step = Math.max(1, (b - a) / 80);
-      for (var d = a; d < b + step / 2; d += step) pts.push(model.pointAt(Math.min(b, d)));
-      pts = pts.filter(Boolean);
-      if (pts.length < 2) continue;
-      var line = 'LINESTRING(' + pts.map(function (p) { return p.lng.toFixed(4) + ' ' + p.lat.toFixed(4); }).join(', ') + ')';
-      var params = { route: line, distance: corridorMi, fuel_type: kind === 'ev' ? 'ELEC' : 'HY', status: 'E', access: 'public', limit: 'all' };
-      if (kind === 'ev') { params.ev_charging_level = 'dc_fast'; params.ev_connector_type = plugParam(plugs); }
-      var ck = kind + '|' + corridorMi + '|' + (params.ev_connector_type || '') + '|' + line;
-      var o = KV.get('afdc', ck, WEEK), raw;
-      if (o) raw = o.v;
-      else { var j = await get('/nearby-route.json', params); raw = j.fuel_stations || []; KV.put('afdc', ck, raw); }
-      raw.forEach(function (f) { var s = norm(f); if (s) out[s.id] = s; });
-      if (onProg) onProg((k + 1) / n);
+  // Douglas–Peucker in miles: retain bends rather than sampling across highway curves.
+  function routePoints(points){
+    if(points.length<3)return points;
+    var keep=new Set([0,points.length-1]),stack=[[0,points.length-1]];
+    while(stack.length){var pair=stack.pop(),a=points[pair[0]],b=points[pair[1]],scale=Math.cos((a.lat+b.lat)*Math.PI/360),dx=(b.lng-a.lng)*scale,dy=b.lat-a.lat,den=dx*dx+dy*dy,best=0,at=-1;
+      for(var i=pair[0]+1;i<pair[1];i++){var p=points[i],x=(p.lng-a.lng)*scale,y=p.lat-a.lat,t=den?Math.max(0,Math.min(1,(x*dx+y*dy)/den)):0,d=Math.hypot(x-t*dx,y-t*dy)*69;if(d>best){best=d;at=i;}}
+      if(best>0.1){keep.add(at);stack.push([pair[0],at],[at,pair[1]]);}
     }
-    var list = Object.keys(out).map(function (id) { return out[id]; });
-    if(window.PriceHistory)PriceHistory.observe(list);
-    LG.info('altfuel', list.length + ' ' + (kind === 'ev' ? 'fast chargers' : 'hydrogen stations') + ' along the route');
-    return list;
+    return points.filter(function(_,i){return keep.has(i);});
   }
-
-  /** For an EV stop: average charging power (kW) between ~10% and 80% — the peak tapers, so about 70% of the
-   *  lower of the car's and the charger's maximum. */
-  function avgKw(st, car) {
-    var carKw = +(car && car.dcKw) || 150, stKw = st.kw || 50;
-    return Math.max(10, 0.7 * Math.min(carKw, stKw));
+  var discoveredPool=new Map();
+  async function alongRoute(model, kind, plugs, corridorMi, onProg, types) {
+    types=tripTypes(types);var wanted=routePlugs(plugs),levels=[types.dc?'dc_fast':'',types.l2?'2':'',types.l1?'1':''].filter(Boolean);
+    if(kind==='ev'&&!levels.length)throw new Error('Select at least one charger type in Parameters → Charging stops.');
+    var pts=routePoints(model.pts||[]);if(pts.length<2)pts=[model.pointAt(0),model.pointAt(model.totalMi)].filter(Boolean);
+    var coords=pts.map(function(p){return p.lng.toFixed(5)+' '+p.lat.toFixed(5);}),line='LINESTRING('+coords.join(',')+')',reverse='LINESTRING('+coords.slice().reverse().join(',')+')';
+    var params={route:line,distance:corridorMi+0.15,fuel_type:kind==='ev'?'ELEC':'HY',status:'E',access:'public',limit:'all'};
+    if(kind==='ev'){params.ev_charging_level=levels.length===1?levels[0]:'all';params.ev_connector_type=plugParam(wanted);}
+    var ck='route-v2|'+kind+'|'+corridorMi+'|'+levels.join(',')+'|'+wanted.join(',')+'|'+(line<reverse?line:reverse),o=KV.get('afdc',ck,WEEK),raw;
+    try{
+      if(o)raw=o.v;else{
+        var promise=routePending.get(ck);if(!promise){promise=get('/nearby-route.json',params,true).then(function(j){var rows=j.fuel_stations||[];KV.put('afdc',ck,rows);return rows;}).finally(function(){routePending.delete(ck);});routePending.set(ck,promise);}
+        raw=await promise;
+      }
+      var list=normalizedRows(raw);list.forEach(function(s){discoveredPool.set(s.id,s);});
+      if(onProg)onProg(1);LG.info('altfuel','Route station discovery',{kind:kind,stations:list.length,points:pts.length,cached:!!o,levels:levels});return list;
+    }catch(e){e.stations=Array.from(discoveredPool.values()).filter(function(s){return s.brand===kind;});throw e;}
   }
+  // Match speed and connector on the same unit when provider unit detail is available.
+  function charging(st, car, types, plugs){
+    types=tripTypes(types);plugs=routePlugs(plugs);var candidates=[];
+    var counts={dc_fast:st.dc,'2':st.l2,'1':st.l1},enabled={dc_fast:types.dc,'2':types.l2,'1':types.l1};
+    function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2);candidates.push({level:level,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,kw|| (dc?st.kw:level==='1'?1.4:7.2))),estimated:!kw||!!st.kwEst});}
+    if(st.units&&st.units.length)st.units.forEach(function(u){var level=u.charging_level;if(!enabled[level])return;Object.keys(u.connectors||{}).forEach(function(p){var port=u.connectors[p];if(plugs.indexOf(p)>=0&&port&&+port.port_count>0)add(level,+port.power_kw||0);});});
+    else Object.keys(counts).forEach(function(level){if(enabled[level]&&counts[level]>0&&(st.plugs||[]).some(function(p){return plugs.indexOf(p)>=0&&(level!=='dc_fast'?p==='TESLA'||p==='J1772'||/^NEMA/.test(p):p!=='J1772'&&!/^NEMA/.test(p));}))add(level,level==='dc_fast'&&!st.kwEst?st.kw:0);});
+    return candidates.sort(function(a,b){return b.kw-a.kw;})[0]||null;
+  }
+  function avgKw(st, car) {var c=charging(st,car||{},null,st.plugs);return c?c.kw:0;}
 
   // ---------- main map: markers, coverage, the panel ----------
   var cov = null, h2Layer = null, evLayer = null, h2List = [], evList = [], h2T = 0, renderer = null;
@@ -369,5 +382,5 @@
   setTimeout(function () { var G = window.Garage, c = G && G.car(); if (c) { var k = G.kind(c); lastKind = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas'; } if (A.altMode()) { showEv(); showH2(); A.rebuild(); } }, 0);
 
   window.AltFuel = { hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
-    open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD };
+    open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD,tripTypes:tripTypes,charging:charging,routePoints:routePoints };
 })();

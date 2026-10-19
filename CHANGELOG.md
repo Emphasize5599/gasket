@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.205 - 2026-10-19 (keyless test branch only)
+- Choose DC fast, Level 2 and Level 1 chargers under Charging stops; use realistic slow-charging estimates.
+- Reduce route-discovery requests, retain cached chargers after provider limits, and check connector/charging-level compatibility together.
+- Explain detour-limit failures and keep slower nearby chargers available to the planner.
+
 ## 0.0.204 - 2026-10-18 (keyless test branch only)
 - The spare tire lookup waits for Ask Brave's real answer instead of reading our own question back (it lists every kind of spare); a wrong answer saved that way is asked again.
 - Tank size from Brave shows just the figure and the buttons.

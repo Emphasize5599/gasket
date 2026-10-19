@@ -46,6 +46,8 @@ on:
       - tests/brave-verification.test.js
       - tests/gemma-cache.test.js
       - tests/reader-resources.test.js
+      - tests/ev-discovery.test.js
+      - tests/ev-discovery-ui.test.js
       - tools/reader-resource-policy.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js
