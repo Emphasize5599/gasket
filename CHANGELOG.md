@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.213 - 2026-10-19 (keyless test branch only)
+- The offline charger download's progress only moves forward, and its status row goes away when the download finishes.
+- Offline charger data now works on long trips (it said "Charger area too large").
+- ChargePoint prices: stops trying after a few station pages that don't load, instead of spending minutes on them.
+
 ## 0.0.212 - 2026-10-19 (keyless test branch only)
 - EV trips: choose the charging networks you use (Parameters → Charging stops). Networks Gasket reads prices from come first; the others, including car dealerships and Tesla Destination chargers at hotels (often listed as free but usually for customers or guests), are dimmed but can still be chosen.
 - Getting charger prices from the networks shows the time left and moves steadily, and Tesla prices load about twice as fast.

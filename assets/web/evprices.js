@@ -94,19 +94,20 @@
   }
   /** ChargePoint device IDs to try for a DOE station: its posts minus the port digit ("27029811" → "2702981"), then the posts. */
   function chargePointIds(st) { var posts = (st.netIds && st.netIds.posts || []).filter(function (p) { return /^\d{5,12}$/.test(p); }), out = []; posts.forEach(function (p) { var d = p.slice(0, -1); if (out.indexOf(d) < 0) out.push(d); }); posts.forEach(function (p) { if (out.indexOf(p) < 0) out.push(p); }); return out.slice(0, 4); }
+  var CP_GIVE_UP = 6;
   async function chargePointPrice(st) {
-    var ids = chargePointIds(st), key = 'cp-v1|' + ids.join(','), c = cached(key, DAY); if (!ids.length) return null; if (c) return c.none ? null : c;
+    var ids = chargePointIds(st), key = 'cp-v1|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 6 * HOUR); if (!ids.length) return null; if (c && (!c.missing || miss)) return c.none ? null : c;
     var nDevice = ids.filter(function (d) { return (st.netIds.posts || []).indexOf(d) < 0; }).length;
     for (var i = 0; i < ids.length; i++) {
       var t0 = Date.now(), r = await call('siteRead', 'chargepoint', JSON.stringify({ url: 'https://driver.chargepoint.com/stations/' + ids[i] }));
-      LG.info('stations', 'ChargePoint station page', { idForm: i < nDevice ? 'device' : 'post', outcome: r && r.blocked ? 'blocked' : r && r.missing ? 'missing' : r && r.text ? (parseChargePoint(r.text) ? 'priced' : 'no price on page') : 'error', ms: Date.now() - t0, error: r && r.error ? String(r.error).slice(0, 160) : undefined, sample: r && r.text && !parseChargePoint(r.text) ? String(r.text).slice(0, 160) : undefined });
+      LG.info('stations', 'ChargePoint station page', { idForm: i < nDevice ? 'device' : 'post', outcome: r && r.blocked ? 'blocked' : r && r.missing ? 'missing' : r && r.text ? (parseChargePoint(r.text) ? 'priced' : 'no price on page') : 'error', ms: Date.now() - t0, error: r && r.error ? String(r.error).slice(0, 160) : undefined, sample: r && (r.text && !parseChargePoint(r.text) ? r.text : r.missing && r.sample) ? String(r.text || r.sample).slice(0, 160) : undefined, station: st.name });
       if (r && r.error === 'No Native bridge') return null;
       if (r && r.blocked) { var e = new Error('ChargePoint\'s station page asked for a check, so its prices are estimates this time.'); e.blocked = true; throw e; }
       if (r && r.missing) continue;
       var p = r && r.text ? parseChargePoint(r.text) : null;
       if (r && r.text) { keep(key, p || { none: true }); return p; }
     }
-    keep(key, { none: true }); return null;
+    keep(key, { none: true, missing: true }); return null;
   }
 
   /** Give each station (that a network publishes a price for) `netPrice`. items: [{st, dc, kw}]. Returns {priced, notes}. */
@@ -133,7 +134,10 @@
     } catch (e) { notes.push('Blink\'s charger map didn\'t load: ' + e.message); }
     if (by.tesla.length) try { var tp = await teslaPrices(by.tesla.map(function (x) { return x.st; }), isTesla, function (n) { step('tesla', n); }); by.tesla.forEach(function (x) { var p = tp[x.st.id]; if (p) set(x, { rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0, congestion: p.congestion, tou: p.tou }, 'tesla', 'Tesla\'s published ' + (isTesla ? 'Tesla-owner' : 'non-Tesla') + ' rate' + (p.tou && p.low < p.peak ? ' (peak; off-peak $' + p.low.toFixed(2) + ')' : '')); }); }
       catch (e) { notes.push(e.message); if (e.partial) by.tesla.forEach(function (x) { var p = e.partial[x.st.id]; if (p) set(x, { rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0 }, 'tesla', 'Tesla\'s published rate'); }); }
-    for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; try { var cpP = await chargePointPrice(cx.st); if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
+    // pages that never load (the station's data refused or unknown) cost ~4 s each: stop after CP_GIVE_UP in a row with none priced
+    var cpMiss = 0, cpGot = 0;
+    for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; if (cpMiss >= CP_GIVE_UP && !cpGot) { notes.push('ChargePoint\'s station pages didn\'t load, so its prices are estimates this time.'); LG.info('stations', 'ChargePoint reads stopped', { pagesMissing: cpMiss }); break; }
+      try { var cpP = await chargePointPrice(cx.st); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
     LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, priced: priced, ms: Date.now() - t });
     return { priced: priced, notes: notes };
   }

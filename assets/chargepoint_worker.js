@@ -7,11 +7,18 @@ async function (reqId, args) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const flat = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const t0 = Date.now(), LIMIT = 25000;
+  let failedAt = 0;
   while (Date.now() - t0 < LIMIT) {
     const t = flat(document.body && document.body.innerText), title = document.title || '';
     // DataDome / any challenge: its iframe or page words
     if (document.querySelector('iframe[src*="captcha-delivery"], iframe[src*="datadome"]') || /captcha|verify you are (a )?human|are you a robot|access denied|blocked/i.test(title + ' ' + t.slice(0, 400))) { send({ blocked: true }); return; }
-    if (/Failed to load station details|station (?:was )?not found/i.test(t)) { send({ missing: true }); return; }
+    // "Failed to load" can be a passing refusal of the page's own data request: it must still say so 3 s later
+    if (/Failed to load station details|station (?:was )?not found/i.test(t)) {
+      if (!failedAt) failedAt = Date.now();
+      else if (Date.now() - failedAt >= 3000) { send({ missing: true, sample: t.slice(0, 200) }); return; }
+      await sleep(500); continue;
+    }
+    failedAt = 0;
     const at = t.search(/\bPrices? Set by\b|\bEnergy Rate\b|\bPrice\b[^|]{0,40}\bFree\b/i);
     if (at >= 0 && !/Loading station details/i.test(t)) {
       await sleep(600);   // the rest of the price block (fees) draws a moment later

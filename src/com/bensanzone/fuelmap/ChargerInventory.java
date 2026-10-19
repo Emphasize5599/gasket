@@ -37,7 +37,11 @@ final class ChargerInventory {
         return db;
     }
     JSONObject status() throws Exception {
-        JSONObject result = new JSONObject().put("busy", downloading.get()).put("received", received).put("expected", expected).put("count", 0).put("updated", 0).put("status", httpStatus).put("remaining", remaining).put("limit", limit);
+        boolean busy = downloading.get();
+        JSONObject result = new JSONObject().put("busy", busy).put("received", received).put("expected", expected).put("count", 0).put("updated", 0).put("status", httpStatus).put("remaining", remaining).put("limit", limit);
+        // While a download writes, answer from memory: opening the database then can wait on the writer for seconds,
+        // and a late answer (an older count) made the progress bar jump back.
+        if (busy) return result;
         try (SQLiteDatabase db = open(); Cursor c = db.rawQuery("SELECT k,v FROM metadata", null)) {
             while (c.moveToNext()) result.put(c.getString(0), Long.parseLong(c.getString(1)));
         }

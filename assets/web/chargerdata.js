@@ -22,7 +22,15 @@
  }
  function quotaText(){var key=String(S.nrelKey||'').trim()||'DEMO_KEY',u=usage('doe',key),now=Date.now(),day=(u.attempts||[]).filter(function(t){return now-t<DAY;}),hour=day.filter(function(t){return now-t<HOUR;});return 'DOE requests on this phone: '+hour.length+' in the last hour · '+day.length+' in 24 hours.'+(u.remaining!=null?' Provider last reported '+u.remaining+' remaining.':'')+' Other devices on your network may also use the demo allowance.';}
  async function inventory(boxes){if(!N.chargerInventory)return null;var r=await call('chargerInventory','query',JSON.stringify(boxes));if(r.error)throw new Error(r.error);return r.count>0?r:null;}
- function boxes(points,mi){var result=[];for(var start=0;start<points.length-1;start+=16){var group=points.slice(start,start+17),lat=group.map(function(p){return p.lat;}),lng=group.map(function(p){return p.lng;}),south=Math.min.apply(null,lat),north=Math.max.apply(null,lat),west=Math.min.apply(null,lng),east=Math.max.apply(null,lng),pad=mi/69,dx=pad/Math.max(.05,Math.cos(Math.max(Math.abs(south),Math.abs(north))*Math.PI/180));if(east-west>180)throw new Error('Offline charger lookup across the date line is not supported yet.');result.push([south-pad,north+pad,west-dx,east+dx]);}return result;}
+ // One small box per stretch of the route (≤ STEP mi each, padded by the corridor). 17-point groups of a simplified line
+ // could span hundreds of miles on a straight interstate: those boxes held 20,000+ chargers ("Charger area too large").
+ function boxes(points,mi){var result=[],pad=mi/69,len=0,i;for(i=1;i<points.length;i++)len+=Math.hypot(points[i].lat-points[i-1].lat,(points[i].lng-points[i-1].lng)*Math.cos(points[i].lat*Math.PI/180))*69;
+  var step=Math.max(8,len/2500);if(points.length===1)points=[points[0],points[0]];
+  for(i=1;i<points.length;i++){var a=points[i-1],b=points[i];if(Math.abs(b.lng-a.lng)>180)throw new Error('Offline charger lookup across the date line is not supported yet.');
+   var d=Math.hypot(b.lat-a.lat,(b.lng-a.lng)*Math.cos(b.lat*Math.PI/180))*69,n=Math.max(1,Math.ceil(d/step));
+   for(var k=0;k<n;k++){var p=a.lat+(b.lat-a.lat)*k/n,q=a.lng+(b.lng-a.lng)*k/n,p2=a.lat+(b.lat-a.lat)*(k+1)/n,q2=a.lng+(b.lng-a.lng)*(k+1)/n,south=Math.min(p,p2),north=Math.max(p,p2),dx=pad/Math.max(.05,Math.cos(Math.max(Math.abs(south),Math.abs(north))*Math.PI/180));
+    result.push([south-pad,north+pad,Math.min(q,q2)-dx,Math.max(q,q2)+dx]);}}
+  return result;}
  async function localRoute(model,mi){return inventory(boxes(root.AltFuel.routePoints(model.pts||[]),mi+.2));}
  async function localNear(lat,lng,mi){var pad=mi/69,dx=pad/Math.max(.05,Math.cos(lat*Math.PI/180));return inventory([[lat-pad,lat+pad,lng-dx,lng+dx]]);}
  function encode(points){var prev=[0,0],s='';points.forEach(function(p){[p.lat,p.lng].forEach(function(v,i){var n=Math.round(v*1e5),d=n-prev[i];prev[i]=n;d=d<0?~(d<<1):d<<1;while(d>=32){s+=String.fromCharCode((32|(d&31))+63);d>>=5;}s+=String.fromCharCode(d+63);});});return s;}
@@ -83,17 +91,20 @@
   '<label><input type="checkbox" id="evUseDOE"'+(S.evUseDOE!==false?' checked':'')+'> Use DOE for route updates</label><label><input type="checkbox" id="evNetPrices"'+(S.evNetPrices!==false?' checked':'')+'> Read charging networks\' own published prices (Tesla, IONNA, Blink)</label><label><input type="checkbox" id="evUseOCM"'+(S.evUseOCM?' checked':'')+'> Use Open Charge Map for additional coverage</label><label><input type="checkbox" id="evRefreshPrices"'+(S.evRefreshPrices!==false?' checked':'')+'> Update route pricing information online</label>'+
   '<details class="settings-help"><summary>Offline charger data</summary><p>Download all public, operating DOE chargers in the U.S. and Canada. This can be a large download; Wi-Fi is recommended. Discovery then works locally, without repeated API searches. Update the inventory periodically for new or closed sites.</p><p>Online updates only cover your route. Neither source guarantees current prices or available stalls. Unknown costs use your charging-price estimate.</p></details>'+
   '<div class="btns"><button type="button" class="btn tonal sm" id="evDownload">Download U.S. + Canada chargers</button><button type="button" class="btn tonal sm hidden" id="evCancelDownload">Cancel</button></div><div id="evInventoryStatus" role="status"></div><small id="evQuotaStatus">'+esc(quotaText())+'</small></div>';}
- async function download(key){if(downloadPromise)return downloadPromise;before('doe',key);var timer;
+ async function download(key){if(downloadPromise)return downloadPromise;before('doe',key);var timer,done=false;
   downloadPromise=(async function(){try{if(root.Tasks)Tasks.upsert('charger-inventory',{text:'Downloading U.S. + Canada chargers',frac:null,cancel:function(){call('chargerInventory','cancel','');}});
-   timer=setInterval(async function(){var r=await call('chargerInventory','status','');if(root.Tasks&&r.busy)Tasks.upsert('charger-inventory',{text:'Downloading chargers · '+r.received+(r.expected?' / '+r.expected:' received'),frac:r.expected?Math.min(.99,r.received/r.expected):null});},1500);
+   // one status read at a time; a slow reply never moves the bar back, and none lands after the download ends
+   var asking=false,most=0;timer=setInterval(async function(){if(asking||done)return;asking=true;var r;try{r=await call('chargerInventory','status','');}finally{asking=false;}
+    if(done||!root.Tasks||!r||!r.busy)return;most=Math.max(most,+r.received||0);var all=+r.expected||0,saving=all&&most>=all;
+    Tasks.upsert('charger-inventory',{text:saving?'Saving '+most.toLocaleString()+' chargers':'Downloading chargers · '+most.toLocaleString()+(all?' / '+all.toLocaleString():' received'),frac:all?Math.min(.99,most/all):null});},1500);
    var r=await call('chargerInventory','download',key);after('doe',key,r);if(r.error)throw new Error(r.error);return r;
-  }finally{clearInterval(timer);if(root.Tasks)Tasks.remove('charger-inventory');downloadPromise=null;}})();return downloadPromise;
+  }finally{done=true;clearInterval(timer);if(root.Tasks)Tasks.remove('charger-inventory');downloadPromise=null;}})();return downloadPromise;
  }
  function attach(pg){var button=pg.querySelector('#evDownload'),cancel=pg.querySelector('#evCancelDownload'),info=pg.querySelector('#evInventoryStatus');if(!button)return;
   function show(r){info.textContent=r.error?r.error:r.count?Number(r.count).toLocaleString()+' chargers saved · '+new Date(r.updated).toLocaleDateString():'No offline charger inventory downloaded yet.';var q=pg.querySelector('#evQuotaStatus');if(q)q.textContent=quotaText();}
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,boxes:boxes,encode:encode};
+ root.ChargerData={routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();
 })(window);
