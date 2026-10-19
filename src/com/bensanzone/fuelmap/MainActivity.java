@@ -220,6 +220,8 @@ public class MainActivity extends Activity {
         workers.put("brave", new SiteWorker("brave", "https://search.brave.com/", "https://search.brave.com/"));
         // Tesla's charger map: Supercharger prices it publishes signed out (read in the background, a few sites at a time)
         workers.put("tesla", new SiteWorker("tesla", "https://www.tesla.com/findus", "https://www.tesla.com/"));
+        // ChargePoint's public station page: the price each station's host set (one station per read)
+        workers.put("chargepoint", new SiteWorker("chargepoint", "https://driver.chargepoint.com/", "https://driver.chargepoint.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -2056,6 +2058,7 @@ public class MainActivity extends Activity {
                             || ("brave".equals(key) && (url.startsWith("https://search.brave.com/search?") || url.startsWith("https://search.brave.com/ask?")))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
                             || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
+                            || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");

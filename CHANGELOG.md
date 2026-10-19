@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.211 - 2026-10-19 (keyless test branch only)
+- EV trips also read ChargePoint stations' prices from their public station pages (each host's rate, fees, or free), up to 20 stations a trip, fast chargers first.
+
 ## 0.0.210 - 2026-10-19 (keyless test branch only)
 - EV trips read charging networks' own published prices: Tesla Superchargers (the Tesla-owner or non-Tesla rate, peak time of day), IONNA, and Blink (each charger's host-set rate and session fee). Other chargers use the government's price notes or the route's typical rate as before. Settings → Connections can switch it off.
 

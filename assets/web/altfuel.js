@@ -77,7 +77,7 @@
       address: [f.street_address, f.city, [f.state, f.zip].filter(Boolean).join(' ')].filter(Boolean).join(', '), state: f.state || '',
       lat: +f.latitude, lng: +f.longitude, dc: +f.ev_dc_fast_num || 0, l2: +f.ev_level2_evse_num || 0, plugs: f.ev_connector_types || [],
       l1:+f.ev_level1_evse_num||0,units:f.ev_charging_units||[],
-      kw: pw ? pw.kw : 0, kwEst: pw ? pw.est : false, pricing: String(f.ev_pricing || '').trim(),
+      kw: pw ? pw.kw : 0, kwEst: pw ? pw.est : false, pricing: String(f.ev_pricing || '').trim(), netIds: f.ev_network_ids && typeof f.ev_network_ids === 'object' ? { station: [].concat(f.ev_network_ids.station || []).map(String).slice(0, 4), posts: [].concat(f.ev_network_ids.posts || []).map(String).slice(0, 8) } : null,
       source:'DOE AFDC',sourceUrl:'https://afdc.energy.gov/stations/#/station/'+f.id,dataUpdated:f.updated_at||'',country:f.country||'',
       hours: String(f.access_days_time || '').trim(), status: f.status_code || 'E', phone: f.station_phone || '',
       hyPress: f.hy_pressures || [], hyLink: f.hy_status_link || '', retail: f.hy_is_retail, confirmed: f.date_last_confirmed || '',

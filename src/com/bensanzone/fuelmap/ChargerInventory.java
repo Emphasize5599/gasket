@@ -110,7 +110,7 @@ final class ChargerInventory {
     }
     private static JSONObject compact(JSONObject row) throws Exception {
         JSONObject out = new JSONObject();
-        for (String k : new String[]{"id","fuel_type_code","station_name","street_address","city","state","zip","country","latitude","longitude","ev_network","ev_network_web","ev_dc_fast_num","ev_level2_evse_num","ev_level1_evse_num","ev_connector_types","ev_charging_units","ev_pricing","access_days_time","status_code","station_phone","date_last_confirmed","updated_at"})
+        for (String k : new String[]{"id","fuel_type_code","station_name","street_address","city","state","zip","country","latitude","longitude","ev_network","ev_network_web","ev_network_ids","ev_dc_fast_num","ev_level2_evse_num","ev_level1_evse_num","ev_connector_types","ev_charging_units","ev_pricing","access_days_time","status_code","station_phone","date_last_confirmed","updated_at"})
             if (row.has(k)) out.put(k, row.get(k));
         return out;
     }

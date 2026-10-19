@@ -53,5 +53,21 @@ const flexi=(cost,fee)=>({serviceFee:fee,days:['sunday','monday'].map(day=>({day
  w=await worker({sites:[{id:'t1',lat:34.70,lng:-92.30}],tesla:true},routes);assert.equal(w.sites.t1.peak,.42);assert.equal(w.sites.t1.low,.31);assert.equal(w.sites.t1.tou,true);
  assert.deepEqual(await worker({sites:[{id:'t1',lat:34.7,lng:-92.3}]},routes,'Access Denied'),{blocked:true});
  assert.equal((await worker({sites:[{id:'t1',lat:34.7,lng:-92.3}]},{'get-locations':{status:403}})).blocked,true,'a 403 from Tesla is a check, not an empty answer');
- console.log('Network charger prices: IONNA page, Blink host-set rates and fees, Tesla owner / non-Tesla / time-of-day rates, per-minute conversion, daily cache, off switch, Tesla checks stop only Tesla.');
+ // ChargePoint: the host's price as its station page writes it; the station's IDs come with DOE's record
+ assert.deepEqual({...E.parseChargePoint('Price · Prices Set by NEXCOM · Energy Rate $0.44 / kWh · Ports')},{rate:.44,peak:.44,low:.44,uom:'kwh',fee:0});
+ assert.equal(E.parseChargePoint('Prices Set by Testville City · Energy Rate $2.00 / hr · Session Fee $1.00').uom,'hour');assert.equal(E.parseChargePoint('Prices Set by Testville City · Energy Rate $2.00 / hr · Session Fee $1.00').fee,1);
+ assert.equal(E.parseChargePoint('Price · Free · Ports').free,true);assert.equal(E.parseChargePoint('Price · Energy Rate $0.30 / kWh 9am-5pm · Energy Rate $0.18 / kWh').low,.18);assert.equal(E.parseChargePoint('Price · Contact host'),null);
+ assert.deepEqual([...E.chargePointIds({netIds:{posts:['27029811','27029821']}})],['2702981','2702982','27029811','27029821']);
+ const cpPages={'2702981':{text:'Prices Set by NEXCOM · Energy Rate $0.44 / kWh'},'5551':{missing:true},'55512':{text:'Price · Free'}};
+ const cp=setup((fn,a,b)=>fn==='siteRead'&&a==='chargepoint'?(cpPages[JSON.parse(b).url.split('/').pop()]||{missing:true}):answer(fn,a,b));
+ it=[{st:{id:'c1',network:'ChargePoint',netIds:{posts:['27029811']},lat:34.7,lng:-92.3},dc:false,kw:7},{st:{id:'c2',network:'ChargePoint',netIds:{posts:['55512']},lat:34.7,lng:-92.3},dc:false,kw:7},{st:{id:'c3',network:'ChargePoint',lat:34.7,lng:-92.3},dc:false,kw:7}];
+ r=await cp.E.annotate(it,{make:'Toyota'});assert.equal(it[0].st.netPrice.rate,.44);assert.equal(it[1].st.netPrice.free,true,'a missing device form falls back to the post ID');assert.equal(it[2].st.netPrice,undefined,'no IDs, no page read');
+ assert.equal(cp.calls.filter(c=>c[1]==='chargepoint').length,3);assert.equal(C.tariff({country:'US',...it[1].st},.48,7).price,0);assert.equal(C.tariff({country:'US',...it[1].st},.48,7).estimated,false,'a host who says Free is free');
+ const cpBlocked=setup((fn,a,b)=>fn==='siteRead'&&a==='chargepoint'?{blocked:true}:answer(fn,a,b));r=await cpBlocked.E.annotate(it.map(x=>({...x,st:{...x.st,netPrice:undefined}})),{make:'Toyota'});assert.match(r.notes.join(' '),/ChargePoint.*check/);assert.equal(cpBlocked.calls.filter(c=>c[1]==='chargepoint').length,1,'a check stops further ChargePoint reads');
+ // the page reader on a fake station page
+ const cpSrc=fs.readFileSync('assets/chargepoint_worker.js','utf8');
+ async function cpWorker(text,title='ChargePoint - Station Map',iframe=false){let out;const ctx={document:{title,body:{innerText:text},querySelector:()=>iframe?{}:null},GasketSite:{result:(_,s)=>out=JSON.parse(s)},setTimeout:f=>f(),Date,Promise};ctx.window=ctx;await vm.runInNewContext('('+cpSrc+')',ctx)(1,{});return out;}
+ assert.match((await cpWorker('Map | Testville Library | Price | Prices Set by Testville | Energy Rate $0.44 / kWh | Ports')).text,/Energy Rate \$0\.44/);
+ assert.equal((await cpWorker('Back | Failed to load station details. Please try again later.')).missing,true);assert.equal((await cpWorker('x','x',true)).blocked,true,'DataDome\'s challenge frame = blocked');
+ console.log('Network charger prices: IONNA page, Blink host-set rates and fees, Tesla owner / non-Tesla / time-of-day rates, per-minute conversion, daily cache, off switch, Tesla checks stop only Tesla, ChargePoint host rates by DOE station IDs.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
