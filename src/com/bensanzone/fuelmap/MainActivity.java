@@ -1597,8 +1597,8 @@ public class MainActivity extends Activity {
                     if(key==null||!key.matches("[A-Za-z0-9_-]{1,128}")||params==null||params.length()>1000000||params.contains("api_key="))throw new Exception("Invalid station query");
                     c=(HttpURLConnection)new URL("https://developer.nlr.gov/api/alt-fuel-stations/v1/nearby-route.json").openConnection();
                     c.setInstanceFollowRedirects(false);c.setConnectTimeout(10000);c.setReadTimeout(30000);c.setRequestMethod("POST");c.setDoOutput(true);
-                    c.setRequestProperty("Content-Type","application/x-www-form-urlencoded");c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent",userAgent());
-                    byte[] body=("api_key="+java.net.URLEncoder.encode(key,"UTF-8")+"&"+params).getBytes("UTF-8");
+                    c.setRequestProperty("Content-Type","application/x-www-form-urlencoded");c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent",userAgent());c.setRequestProperty("X-Api-Key",key);
+                    byte[] body=params.getBytes("UTF-8");
                     try(java.io.OutputStream os=c.getOutputStream()){os.write(body);}
                     int status=c.getResponseCode();if(status!=200)throw new Exception("HTTP "+status);
                     try(InputStream in=c.getInputStream();java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream()){
