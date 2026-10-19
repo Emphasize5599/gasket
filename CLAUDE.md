@@ -2,6 +2,8 @@
 
 ## This branch: keyless experiment
 
+205 CI follow-up: Linux Chrome passed vinscan-ui (local Edge failed untouched204 too). CI instead caught saved-prices fixture counting all native siteRead calls while visiting Garage, including an unrelated Brave vehicle prefetch. Scope its fake bot-check/read counter to gasweb/Walmart/Murphy; preserve the strict no-station-reads-while-paused assertion. No production pause logic changed.
+
 205 POST authentication correction: api.data.gov gateway does not accept the API key solely in the form body. Native now uses documented X-Api-Key header; params remain form-encoded in body, no key in URL/logs. Initial body-key-only probe403 was authentication, not proof of a hosting restriction. Correct-header POST and original GET both returned429 from the exhausted DEMO_KEY quota; successful live station payload still needs phone/personal-key validation. ev-discovery source contract asserts header auth. Official reference: https://api.data.gov/docs/developer-manual/ . Supersedes the initial205 live403 interpretation below.
 
 205 pre-release compatibility follow-up: compatiblePlugs distinguishes native CCS/CHAdeMO AC support from NACS cars carrying only a DC CCS adapter. NACS J1772 AC requires explicit per-car acAdapter=true via the new Charging stops checkbox; a DC adapter never implies an AC adapter. Used by route query, unit matching and the map's car-plug filter. Existing Garage.plugs DC semantics unchanged. Tests assert both absence and explicit enabling; current EV synthetic route uses a directly compatible TESLA AC port by default. This supersedes the initial205 note's implicit-J1772 adapter inference below.

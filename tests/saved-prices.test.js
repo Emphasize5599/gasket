@@ -90,7 +90,8 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
     __trip.step(1);__app.KV.clear('gasweb');window.__checks={reads:0,verified:false,pending:new Map(),done:false};
     __app.N.cancelSiteRead=key=>{const id=__checks.pending.get(key);if(id){__checks.pending.delete(key);onNativeResult(id,{cancelled:true});}};
     __app.N.siteVerify=key=>{__checks.opened=key;};
-    __app.N.siteRead=(id,key,json)=>{__checks.reads++;__checks.pending.set(key,id);if(!__checks.verified){setTimeout(()=>{if(__checks.pending.get(key)===id){__checks.pending.delete(key);onNativeResult(id,{blocked:true,error:'Unusual traffic'});}},5);}else setTimeout(()=>{__checks.pending.delete(key);onNativeResult(id,{stores:[],detail:{exhausted:true}});},5);};
+    // Garage can also launch Brave vehicle lookups; this fixture measures station readers only.
+    __app.N.siteRead=(id,key,json)=>{if(!/^(gasweb\d*|walmart|murphy)$/.test(key))return;__checks.reads++;__checks.pending.set(key,id);if(!__checks.verified){setTimeout(()=>{if(__checks.pending.get(key)===id){__checks.pending.delete(key);onNativeResult(id,{blocked:true,error:'Unusual traffic'});}},5);}else setTimeout(()=>{__checks.pending.delete(key);onNativeResult(id,{stores:[],detail:{exhausted:true}});},5);};
     window.__resumeTest=KeylessGas.refreshKnown(__originalStations,(frac,text)=>Tasks.upsert('check-fixture',{text,frac,cancel:()=>KeylessGas.cancel()})).then(r=>{__checks.result=r;__checks.done=true;Tasks.remove('check-fixture');});
   });
   await p.waitForFunction(()=>KeylessGas.isPaused());await p.waitForSelector('#wmCheck:not(.hidden)');assert(await p.evaluate(()=>document.body.classList.contains('trip-full')));
