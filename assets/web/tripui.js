@@ -25,7 +25,7 @@
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (fn === 'aiGenerate') timeout = 125000;
-      if(fn==='siteRead'&&args[0]==='brave')timeout=40000;
+      if(fn==='siteRead'&&args[0]==='brave')timeout=40000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if (fn === 'aiCommand') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
@@ -2181,6 +2181,9 @@
     }
     // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
     var kinds=raw.map(function(list){return list.map(function(st){return kd==='ev'?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});
+    // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it
+    if(kd==='ev'&&window.EVPrices){var seenNet={},items=[];raw.forEach(function(list,i){list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
+      try{var np=await EVPrices.annotate(items,c,function(f){pg(Math.min(.99,f),'Getting charger prices from the networks');});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];

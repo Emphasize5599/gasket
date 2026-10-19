@@ -12,7 +12,7 @@ release.push('tire-estimate-ui','planner-worker');
 release.push('tasks','gemma','gemma-ui');
 release.push('gemma-cache');
 release.push('reader-resources');
-release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui');
+release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices');
 release.push('chargerdata','chargerdata-ui');
 release.push('api-meter-ui');
 release.push('trims');

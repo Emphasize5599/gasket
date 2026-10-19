@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.210 - 2026-10-19 (keyless test branch only)
+- EV trips read charging networks' own published prices: Tesla Superchargers (the Tesla-owner or non-Tesla rate, peak time of day), IONNA, and Blink (each charger's host-set rate and session fee). Other chargers use the government's price notes or the route's typical rate as before. Settings → Connections can switch it off.
+
 ## 0.0.209 - 2026-10-19 (keyless test branch only)
 - EV charging prices: more of the chargers' published prices are read (time-of-day and membership prices, ranges, hourly rates), and chargers with no published price use the typical rate of the chargers on your route instead of one fixed guess.
 - The charge already in your battery is valued at that same typical rate, unless you type your own. A gas price you entered is no longer used for a battery or hydrogen tank.

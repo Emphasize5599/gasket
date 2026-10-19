@@ -218,6 +218,8 @@ public class MainActivity extends Activity {
         workers.put("tirerack", new SiteWorker("tirerack", "https://www.tirerack.com/tires/brands", "https://www.tirerack.com/"));
         // Brave Search's AI answer: a car's fuel tank size (in the background, or shown to the user to finish it themselves)
         workers.put("brave", new SiteWorker("brave", "https://search.brave.com/", "https://search.brave.com/"));
+        // Tesla's charger map: Supercharger prices it publishes signed out (read in the background, a few sites at a time)
+        workers.put("tesla", new SiteWorker("tesla", "https://www.tesla.com/findus", "https://www.tesla.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -1006,7 +1008,9 @@ public class MainActivity extends Activity {
     // hydrogen), NHTSA (VIN decoding, recalls), and the weather and air along a route (Open-Meteo, the National Weather Service)
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "overpass-api.de", "geo.dot.gov", "www.exxon.com",
             "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org", "en.wikipedia.org",
-            "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov"};
+            "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov",
+            // EV networks' own published prices: IONNA's site list page, Blink's map service
+            "www.ionna.com", "chargermap.blinknetwork.com", "apigw.blinknetwork.com"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
     private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "thumb.wikimedia.org", "i.fuelapi.com"};
@@ -2051,6 +2055,7 @@ public class MainActivity extends Activity {
                             || ("murphy".equals(key) && url.equals("https://service.murphydriverewards.com/mapmodule/"))
                             || ("brave".equals(key) && (url.startsWith("https://search.brave.com/search?") || url.startsWith("https://search.brave.com/ask?")))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
+                            || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
