@@ -21,7 +21,8 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.evaluate(()=>document.querySelectorAll('.sub-page *').forEach(e=>{const n=parseFloat(getComputedStyle(e).fontSize);if(n)e.style.fontSize=n*1.3+'px';}));
     const first=p.locator('[data-tr-axle="0"]');await first.evaluate(e=>e.scrollIntoView({block:'center'}));await frame(p);
     assert.equal(await first.evaluate(e=>e.tagName),'BUTTON');assert.ok((await first.boundingBox()).height>=44);
-    assert.equal(await first.evaluate(e=>getComputedStyle(e).touchAction),'pan-y');
+    // An asynchronous lookup can replace the axle between locator resolution and style inspection.
+    await p.waitForFunction(()=>{const e=document.querySelector('[data-tr-axle="0"]');return e&&getComputedStyle(e).touchAction==='pan-y';});
     const edges=await first.evaluate(e=>{const r=e.getBoundingClientRect(),w=Array.from(e.querySelectorAll('[data-wheel]')).map(w=>w.getBoundingClientRect());return {left:r.left,right:r.right,wheelLeft:Math.min(...w.map(r=>r.left)),wheelRight:Math.max(...w.map(r=>r.right))};});assert.ok(Math.abs(edges.left-edges.wheelLeft)<1&&Math.abs(edges.right-edges.wheelRight)<1,'axle capture ends at the tires, not the screen edges');
     assert.equal(await p.locator('[data-tr-axle] .tz-drag-arrows').count(),3);
     const keys=await p.locator('[data-tr-tire]').evaluateAll(es=>es.map(e=>e.dataset.trTire));

@@ -2,6 +2,8 @@
 
 ## This branch: keyless experiment
 
+205 final compatibility/test follow-up: AC match additionally checks connector vs native inlet/acAdapter for BOTH directions; CCS-car NACS DC adapter cannot authorize TESLA AC, just as NACS-car CCS DC adapter cannot authorize J1772 AC. Charging stops exposes an AC adapter checkbox for either inlet, with the correct label. A second CI-only failure had trailer-editor reading empty computedStyle during an async axle redraw; the same pan-y requirement now polls the current axle atomically, rather than a possibly detached locator element. EV/trailer/pause targeted checks pass locally.
+
 205 CI follow-up: Linux Chrome passed vinscan-ui (local Edge failed untouched204 too). CI instead caught saved-prices fixture counting all native siteRead calls while visiting Garage, including an unrelated Brave vehicle prefetch. Scope its fake bot-check/read counter to gasweb/Walmart/Murphy; preserve the strict no-station-reads-while-paused assertion. No production pause logic changed.
 
 205 POST authentication correction: api.data.gov gateway does not accept the API key solely in the form body. Native now uses documented X-Api-Key header; params remain form-encoded in body, no key in URL/logs. Initial body-key-only probe403 was authentication, not proof of a hosting restriction. Correct-header POST and original GET both returned429 from the exhausted DEMO_KEY quota; successful live station payload still needs phone/personal-key validation. ev-discovery source contract asserts header auth. Official reference: https://api.data.gov/docs/developer-manual/ . Supersedes the initial205 live403 interpretation below.

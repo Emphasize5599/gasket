@@ -22,7 +22,7 @@
   var routePending=new Map(),cooldown=new Map();
   function tripTypes(value){return Object.assign({dc:true,l2:true,l1:false},value||{});}
   function routePlugs(plugs){return Array.from(new Set(plugs||['J1772COMBO','TESLA','CHADEMO','J1772']));}
-  function compatiblePlugs(car,fast){return routePlugs((fast||[]).concat((car.plug||'CCS')!=='NACS'||car.acAdapter===true?['J1772']:[]));}
+  function compatiblePlugs(car,fast){var nacs=(car.plug||'CCS')==='NACS';return routePlugs((fast||[]).concat(!nacs||car.acAdapter===true?['J1772']:[],!nacs&&car.acAdapter===true?['TESLA']:[]));}
 
   function key() { return String(S.nrelKey || '').trim() || 'DEMO_KEY'; }
   function call() { return window.__trip.call.apply(null, arguments); }
@@ -143,9 +143,10 @@
   function charging(st, car, types, plugs){
     types=tripTypes(types);plugs=compatiblePlugs(car,plugs);var candidates=[];
     var counts={dc_fast:st.dc,'2':st.l2,'1':st.l1},enabled={dc_fast:types.dc,'2':types.l2,'1':types.l1};
+    function accepts(p,level){if(plugs.indexOf(p)<0)return false;if(level==='dc_fast')return p!=='J1772'&&!/^NEMA/.test(p);if(p==='TESLA')return car.plug==='NACS'||car.acAdapter===true;if(p==='J1772')return (car.plug||'CCS')!=='NACS'||car.acAdapter===true;return false;}
     function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2);candidates.push({level:level,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,kw|| (dc?st.kw:level==='1'?1.4:7.2))),estimated:!kw||!!st.kwEst});}
-    if(st.units&&st.units.length)st.units.forEach(function(u){var level=u.charging_level;if(!enabled[level])return;Object.keys(u.connectors||{}).forEach(function(p){var port=u.connectors[p];if(plugs.indexOf(p)>=0&&port&&+port.port_count>0)add(level,+port.power_kw||0);});});
-    else Object.keys(counts).forEach(function(level){if(enabled[level]&&counts[level]>0&&(st.plugs||[]).some(function(p){return plugs.indexOf(p)>=0&&(level!=='dc_fast'?p==='TESLA'||p==='J1772'||/^NEMA/.test(p):p!=='J1772'&&!/^NEMA/.test(p));}))add(level,level==='dc_fast'&&!st.kwEst?st.kw:0);});
+    if(st.units&&st.units.length)st.units.forEach(function(u){var level=u.charging_level;if(!enabled[level])return;Object.keys(u.connectors||{}).forEach(function(p){var port=u.connectors[p];if(accepts(p,level)&&port&&+port.port_count>0)add(level,+port.power_kw||0);});});
+    else Object.keys(counts).forEach(function(level){if(enabled[level]&&counts[level]>0&&(st.plugs||[]).some(function(p){return accepts(p,level);}))add(level,level==='dc_fast'&&!st.kwEst?st.kw:0);});
     return candidates.sort(function(a,b){return b.kw-a.kw;})[0]||null;
   }
   function avgKw(st, car) {var c=charging(st,car||{},null,st.plugs);return c?c.kw:0;}
