@@ -781,6 +781,8 @@ details.set-more[open] > summary { margin-bottom: 8px; }
 .apic .apic-r b { font-weight: 700; font-size: 9px; opacity: .7; }
 .apic.two { padding: 0 9px; align-items: flex-start; gap: 1px; }
 .apic.two .apic-r { font-size: 10px; line-height: 13px; }
+.apic.multi { height:auto; min-height:30px; padding:4px 9px; align-items:flex-start; gap:1px; border-radius:14px; }
+.apic.multi .apic-r { font-size:10px; line-height:13px; }
 body.trip-on .top .bar { justify-content: space-between; }
 
 /* Garage and Route: the whole screen (the lookup counter and settings stay on top) */
@@ -1921,7 +1923,7 @@ body.trip-full .top { top:0; }
 #settings .settings-bar { padding-top:calc(var(--st) + 8px + var(--task-space)); }
 .page.sub-page { padding-top:calc(var(--st) + 4px + var(--task-space)); }
 .page.tpanel:not(.full) { padding-top:0; }
-.page.tpanel.full { padding-top:calc(var(--st) + max(56px,var(--task-space))); }
+.page.tpanel.full { padding-top:calc(var(--st) + max(var(--api-space,56px),var(--task-space))); }
 /* no lookup counter (no key): full-screen menus only drop down for a status bar that has something to show */
 body:not(.api-meter) .page.tpanel.full { padding-top:calc(var(--st) + 8px + var(--task-space)); }
 .cfm-bg { padding-top:calc(16px + var(--st) + var(--task-space)); }

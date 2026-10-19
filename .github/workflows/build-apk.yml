@@ -50,6 +50,7 @@ on:
       - tests/ev-discovery-ui.test.js
       - tests/chargerdata.test.js
       - tests/chargerdata-ui.test.js
+      - tests/api-meter-ui.test.js
       - tools/reader-resource-policy.js
       - tests/wet-tire-route.test.js
       - tests/hazard-warning-matrix.test.js

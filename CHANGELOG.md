@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.207 - 2026-10-19 (keyless test branch only)
+- Merge DOE and Open Charge Map usage into the existing Google/HERE counter pill.
+- Keep quota periods distinct and move full-screen menus below taller combined counters.
+
 ## 0.0.206 - 2026-10-19 (keyless test branch only)
 - Download an offline U.S./Canada charger inventory; keep saved data if an update fails or is cancelled.
 - Add optional Open Charge Map coverage, personal-key setup guides and persistent charger-request tracking.

@@ -14,6 +14,7 @@ function setup(shared=new Map()){
  x.fail();await assert.rejects(x.A.alongRoute({...m,pts:[{lat:34,lng:-92},{lat:35,lng:-91}]},'ev',['J1772'],2),e=>e.stations.length===1&&/hourly or daily/.test(e.message));
  const y=setup(x.shared);await assert.rejects(y.A.alongRoute({...m,pts:[{lat:34,lng:-93},{lat:35,lng:-91}]},'ev',['J1772'],2),e=>e.stations.length===1);assert.equal(y.calls.filter(c=>c.fn==='fetchStationRoute').length,0,'quota cooldown survives restart');
  const q=setup();for(let i=0;i<29;i++)q.C.before('doe','DEMO_KEY');assert.throws(()=>q.C.before('doe','DEMO_KEY'),/limit/);q.C.before('doe','PERSONAL');assert(!JSON.stringify([...q.shared.keys()]).includes('PERSONAL'),'no credential in quota keys');
+ const meter=setup();meter.S.nrelKey='PERSONAL';meter.C.before('doe','PERSONAL');meter.C.after('doe','PERSONAL',{limit:'5000',remaining:'0',status:200});assert.equal(meter.C.meterRows()[0].text,'1 / 5000 h');assert.equal(meter.C.meterRows()[0].high,true,'provider-reported exhaustion warns even if this phone has few calls');
  const day=setup();for(let i=0;i<49;i++){// Spread previous calls outside the hour but within the day.
    day.C.before('doe','DEMO_KEY');for(const [k,o] of day.shared)if(k.startsWith('chargerusage'))o.v.attempts=o.v.attempts.map(()=>Date.now()-7200000);
  }assert.throws(()=>day.C.before('doe','DEMO_KEY'),/limit/);

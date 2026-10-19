@@ -200,7 +200,7 @@
   function setMode(m) {
     m = m === 'ev' || m === 'h2' ? m : 'gas';
     if ((S.fuelMode || 'gas') === m) return;
-    S.fuelMode = m; save(); if (window.FLog) FLog.info('app', 'Fuel mode: ' + m);
+    S.fuelMode = m; save(); apiCount(); if (window.FLog) FLog.info('app', 'Fuel mode: ' + m);
     closeDetail(); syncPill(); buildGrades(); render();
     if (window.AltFuel) AltFuel.modeChanged();
   }
@@ -280,21 +280,22 @@
     status(msg);
   }
   setInterval(refreshStatus, 30000);
-  /** Paid lookups used this month, in the top-left corner: Google's with its key, HERE's toll lookups with that key.
-   *  Both keys = one pill with the two counts sharing its height (G over H); one key = just that count, in the same place. */
+  /** One shared meter for enabled providers. Each row retains its real quota period. */
   function apiCount() {
     var el = $('apiCount'); if (!el) return;
-    var g = !!S.apiKey, h = !!S.hereKey, rows = [];
+    var g = !!S.apiKey, h = !!S.hereKey, rows = [], extra=window.ChargerData?ChargerData.meterRows():[],multiple=Number(g)+Number(h)+extra.length>1;
     var gn = N.callsThisMonth(), gc = Number(S.monthlyCap) || 0, hn = N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0, hc = S.hereMonthlyCap == null ? 2000 : Math.max(0, parseInt(S.hereMonthlyCap, 10) || 0);
-    var row = function (tag, n, cap, title) { return '<span class="apic-r' + (cap > 0 && n >= cap * 0.85 ? ' hi' : '') + '" title="' + title + '">' + (tag ? '<b>' + tag + '</b>' : '') + n + ' / ' + (cap || '∞') + '</span>'; };
-    if (g) rows.push(row(h ? 'G' : '', gn, gc, 'Google lookups this month'));
-    if (h) rows.push(row(g ? 'H' : 'HERE', hn, hc, 'HERE toll lookups this month'));
+    var row = function (tag, text, title, high,provider) { return '<span class="apic-r' + (high ? ' hi' : '') + '" data-provider="'+provider+'" title="' + esc(title) + '" aria-label="'+esc((tag?tag+' ':'')+text+'. '+title)+'">' + (tag ? '<b>' + tag + '</b>' : '') + esc(text) + '</span>'; };
+    if (g) rows.push(row(multiple ? 'G' : '', gn+' / '+(gc||'∞'), 'Google lookups this month', gc>0&&gn>=gc*.85,'google'));
+    if (h) rows.push(row(multiple ? 'H' : 'HERE', hn+' / '+(hc||'∞'), 'HERE toll lookups this month', hc>0&&hn>=hc*.85,'here'));
+    extra.forEach(function(r){rows.push(row(r.tag,r.text,r.title,r.high,r.provider));});
     var html = rows.join('');
     if (el.innerHTML !== html) el.innerHTML = html;
-    el.classList.toggle('two', g && h);
-    el.title = g && h ? 'Google lookups / HERE toll lookups this month' : h ? 'HERE toll lookups this month' : 'Google lookups this month';
+    el.classList.toggle('two', rows.length===2);el.classList.toggle('multi',rows.length>2);
+    el.title = 'API usage · Google/HERE: month · DOE: rolling hour/day · OCM: rolling 24 hours';
     el.classList.remove('hi');
-    el.classList.toggle('hidden', !g && !h); document.body.classList.toggle('api-meter', g || h);   // no key, no lookups to count (the status bar then starts at the edge)
+    el.classList.toggle('hidden', !rows.length); document.body.classList.toggle('api-meter', !!rows.length);
+    document.body.style.setProperty('--api-space',rows.length?Math.max(56,Math.ceil(el.getBoundingClientRect().height)+27)+'px':'0px');
     if(window.Tasks)Tasks.layout();
   }
   window.__apiCount = apiCount;

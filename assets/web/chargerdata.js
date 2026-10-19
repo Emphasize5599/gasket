@@ -8,12 +8,17 @@
  function before(provider,key){var u=usage(provider,key),now=Date.now();u.attempts=(u.attempts||[]).filter(function(t){return now-t<DAY;});
   var demo=provider==='doe'&&key==='DEMO_KEY',hour=u.attempts.filter(function(t){return now-t<HOUR;});
   if(u.until>now||(demo&&(u.attempts.length>=49||hour.length>=29)))throw new Error(provider==='ocm'?'Open Charge Map provider limit: using saved data while requests are paused.':'Charger provider limit: using saved data. DEMO_KEY allows 30/hour and 50/day per public IP; a free personal key raises the allowance.');
-  u.attempts.push(now);KV.put('chargerusage',identity(provider,key),u);
+  u.attempts.push(now);KV.put('chargerusage',identity(provider,key),u);if(root.__apiCount)root.__apiCount();
  }
- function after(provider,key,r){var u=usage(provider,key);u.remaining=r.remaining==null?u.remaining:r.remaining;u.limit=r.limit==null?u.limit:r.limit;u.checked=Date.now();
+ function after(provider,key,r){var u=usage(provider,key);u.remaining=r.remaining==null?u.remaining:r.remaining;u.limit=r.limit==null?u.limit:r.limit;u.checked=Date.now();if(r.remaining!=null)u.reportedAt=u.checked;
   // A 429 does not identify which demo allowance was exhausted. Do not claim an exact reset time.
   if(r.status===429||/\b429\b/.test(r.error||''))u.until=Date.now()+(key==='DEMO_KEY'?DAY:HOUR);
-  KV.put('chargerusage',identity(provider,key),u);
+  KV.put('chargerusage',identity(provider,key),u);if(root.__apiCount)root.__apiCount();
+ }
+ function meterRows(){var now=Date.now(),key=String(S.nrelKey||'').trim()||'DEMO_KEY',demo=key==='DEMO_KEY',u=usage('doe',key),day=(u.attempts||[]).filter(function(t){return now-t<DAY;}),hour=day.filter(function(t){return now-t<HOUR;}),rows=[],doe=(S.evUseDOE!==false&&(key!=='DEMO_KEY'||day.length||S.fuelMode==='ev'))||S.fuelMode==='h2';
+  if(doe){var cap=demo?30:(+u.limit>0&&+u.limit<1e7?+u.limit:1000),near=now-(u.reportedAt||0)<HOUR&&u.remaining!=null&&+u.remaining<=cap*.15;rows.push({provider:'doe',tag:'DOE',text:hour.length+' / '+cap+' h',title:'DOE requests on this phone in the last rolling hour; '+(demo?'demo allowance is per public IP, shared with other devices':u.limit?'provider-reported personal-key allowance':'default personal-key allowance')+'.'+(u.remaining!=null?' Provider last reported '+u.remaining+' remaining.':''),high:hour.length>=cap*.85||u.until>now||near});if(demo)rows.push({provider:'doe',tag:'DOE',text:day.length+' / 50 d',title:'DOE demo requests on this phone in the last rolling 24 hours; 50/day per public IP. Other devices may also use this allowance.',high:day.length>=50*.85||u.until>now});}
+  if(S.evUseOCM&&String(S.ocmKey||'').trim()){var o=usage('ocm',String(S.ocmKey).trim()),n=(o.attempts||[]).filter(function(t){return now-t<DAY;}).length;rows.push({provider:'ocm',tag:'OCM',text:n+' · 24h',title:'Open Charge Map requests on this phone in the last rolling 24 hours. No fixed public allowance is advertised; fair-use restrictions apply.'+(o.remaining!=null?' Provider last reported '+o.remaining+' remaining.':''),high:o.until>now});}
+  return rows;
  }
  function quotaText(){var key=String(S.nrelKey||'').trim()||'DEMO_KEY',u=usage('doe',key),now=Date.now(),day=(u.attempts||[]).filter(function(t){return now-t<DAY;}),hour=day.filter(function(t){return now-t<HOUR;});return 'DOE requests on this phone: '+hour.length+' in the last hour · '+day.length+' in 24 hours.'+(u.remaining!=null?' Provider last reported '+u.remaining+' remaining.':'')+' Other devices on your network may also use the demo allowance.';}
  async function inventory(boxes){if(!N.chargerInventory)return null;var r=await call('chargerInventory','query',JSON.stringify(boxes));if(r.error)throw new Error(r.error);return r.count>0?r:null;}
@@ -70,5 +75,6 @@
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={before:before,after:after,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,boxes:boxes,encode:encode};
+ root.ChargerData={before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,boxes:boxes,encode:encode};
+ if(root.__apiCount)root.__apiCount();
 })(window);

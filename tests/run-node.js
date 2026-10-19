@@ -14,6 +14,7 @@ release.push('gemma-cache');
 release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui');
 release.push('chargerdata','chargerdata-ui');
+release.push('api-meter-ui');
 release.push('trims');
 release.push('fresh-car-lookups','ai-defaults','debug-log');
 release.push('erase-logging','brave-reader','brave-verification');
