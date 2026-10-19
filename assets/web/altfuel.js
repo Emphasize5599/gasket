@@ -21,7 +21,8 @@
   var LEVEL = { dc: 'dc_fast', l2: '2', all: 'all' };
   var routePending=new Map(),cooldown=new Map();
   function tripTypes(value){return Object.assign({dc:true,l2:true,l1:false},value||{});}
-  function routePlugs(plugs){return Array.from(new Set((plugs||['J1772COMBO','TESLA','CHADEMO']).concat((plugs||[]).some(function(p){return p==='J1772COMBO'||p==='CHADEMO';})?['J1772']:[])));}
+  function routePlugs(plugs){return Array.from(new Set(plugs||['J1772COMBO','TESLA','CHADEMO','J1772']));}
+  function compatiblePlugs(car,fast){return routePlugs((fast||[]).concat((car.plug||'CCS')!=='NACS'||car.acAdapter===true?['J1772']:[]));}
 
   function key() { return String(S.nrelKey || '').trim() || 'DEMO_KEY'; }
   function call() { return window.__trip.call.apply(null, arguments); }
@@ -101,7 +102,7 @@
     var o = KV.get('afdc', k, WEEK);
     if (o) return normalizedRows(o.v);
     var j = await get('/nearest.json', { latitude: lat.toFixed(5), longitude: lng.toFixed(5), radius: Math.min(500, Math.round(radiusMi)), fuel_type: 'ELEC',
-      ev_charging_level: lvl, ev_connector_type: lvl === 'dc_fast' ? plugParam(plugs) : (plugs && plugs.length ? plugParam(plugs.concat(['J1772'])) : ''), status: 'E', access: 'public', limit: 200 });
+      ev_charging_level: lvl, ev_connector_type: plugParam(plugs), status: 'E', access: 'public', limit: 200 });
     var raw = j.fuel_stations || [];
     KV.put('afdc', k, raw);
     return normalizedRows(raw);
@@ -140,7 +141,7 @@
   }
   // Match speed and connector on the same unit when provider unit detail is available.
   function charging(st, car, types, plugs){
-    types=tripTypes(types);plugs=routePlugs(plugs);var candidates=[];
+    types=tripTypes(types);plugs=compatiblePlugs(car,plugs);var candidates=[];
     var counts={dc_fast:st.dc,'2':st.l2,'1':st.l1},enabled={dc_fast:types.dc,'2':types.l2,'1':types.l1};
     function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2);candidates.push({level:level,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,kw|| (dc?st.kw:level==='1'?1.4:7.2))),estimated:!kw||!!st.kwEst});}
     if(st.units&&st.units.length)st.units.forEach(function(u){var level=u.charging_level;if(!enabled[level])return;Object.keys(u.connectors||{}).forEach(function(p){var port=u.connectors[p];if(plugs.indexOf(p)>=0&&port&&+port.port_count>0)add(level,+port.power_kw||0);});});
@@ -247,7 +248,7 @@
     if (!evLayer) evLayer = L.layerGroup().addTo(map);
     if (evOn()) drawDots(evList, evLayer, P.ALT.ev.color); else evLayer.clearLayers();
   }
-  function carPlugs() { var G = window.Garage, c = G && G.car(); return c && G.kind(c) === 'ev' ? G.plugs(c) : null; }
+  function carPlugs() { var G = window.Garage, c = G && G.car(); return c && G.kind(c) === 'ev' ? compatiblePlugs(c,G.plugs(c)) : null; }
 
   function openPanel() {
     var old = $('afPick'); if (old) old.remove();
@@ -382,5 +383,5 @@
   setTimeout(function () { var G = window.Garage, c = G && G.car(); if (c) { var k = G.kind(c); lastKind = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas'; } if (A.altMode()) { showEv(); showH2(); A.rebuild(); } }, 0);
 
   window.AltFuel = { hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
-    open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD,tripTypes:tripTypes,charging:charging,routePoints:routePoints };
+    open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD,tripTypes:tripTypes,compatiblePlugs:compatiblePlugs,charging:charging,routePoints:routePoints };
 })();
