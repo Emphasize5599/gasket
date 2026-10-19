@@ -20,7 +20,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   A.KV.put('trips','trip|vehicle-fit',saved);A.KV.put('trips','index',[{id:'vehicle-fit',title:'Vehicle-fit test',t:saved.savedT,mi:318,n:0}]);window.__weatherReads=0;window.__incomplete=false;
   RouteWx.forRoute=async m=>{__weatherReads++;return {hazards:[{kind:m.totalMi>320?'wind':'heat',level:2,fromMi:0,toMi:20,from:Date.now(),to:Date.now()+3600000,peak:{gust:55,tF:105},events:[]}],stats:{points:2,weather:2,air:2,errors:__incomplete?1:0},alerts:[],dense:[],forecast:[]};};
  });
- await p.evaluate(()=>__trip.close());await p.click('#btnTrip');await p.click('[data-hist="vehicle-fit"]');await p.waitForSelector('#tripPick',{state:'detached'});await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(5));
+ await p.evaluate(()=>__trip.close());await p.click('#btnTrip');await p.click('[data-hist="vehicle-fit"]');await p.waitForSelector('#tripPick',{state:'detached'});await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.departNow=true;__trip.step(5);});   // openSaved clears departure: pick Now as the real flow does, so a minute boundary keeps the cache
  await p.waitForFunction(()=>document.querySelector('[data-hzk="1"] .hz-fit strong').textContent==='Vehicle fit 1 of 2');assert.equal(await p.getAttribute('.hz-opt.on','data-hzk'),'0','ranking never switches the selection');
  assert.match(await p.innerText('[data-hzk="0"] .hz-fit'),/Heat without working A\/C/);assert.match(await p.innerText('#tWx'),/No working A\/C/);
  if(process.env.UI_SHOTS)await p.screenshot({path:path.join(process.env.UI_SHOTS,'vehicle-fit-ranked-'+width+'.png')});
