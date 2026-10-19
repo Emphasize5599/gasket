@@ -128,7 +128,7 @@
   function logSetup() {
     if (P.setCents) P.setCents(S.roundCents);
     if (!window.FLog) return;
-    FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.fuelKey, S.hereKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
+    FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.ocmKey, S.fuelKey, S.hereKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
   }
   logSetup();
   if (window.FLog) FLog.info('app', 'Started Gasket ' + (N.appVersion ? N.appVersion() : ''));
@@ -960,8 +960,9 @@
     });
   }
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
-  function eraseAll() {
+  async function eraseAll() {
     window.__erasing=true;
+    if(N.chargerInventory&&window.__trip){var erased=await window.__trip.call('chargerInventory','clear','');if(erased.error){window.__erasing=false;toast('Could not erase the charger inventory. Please try again.');return;}}
     CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
     if(window.PriceHistory)PriceHistory.reset();
     try { N.saveCache(''); } catch (e) { }
@@ -976,7 +977,7 @@
   function exportData(kind) {
     var d = { gasketData: 1, kind: kind, app: N.appVersion ? N.appVersion() : '', exported: new Date().toISOString(), blacklist: BL.list() };
     if (kind === 'all') {
-      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.nrelKey; delete st.fuelKey; delete st.hereKey; delete st.blacklist;   // API keys are never exported
+      var st = JSON.parse(JSON.stringify(S)); delete st.apiKey; delete st.nrelKey; delete st.ocmKey; delete st.fuelKey; delete st.hereKey; delete st.blacklist;   // API keys are never exported
       d.settings = st;
       var idx = (KV.get('trips', 'index') || {}).v || [];
       d.trips = idx.map(function (x) { var o = KV.get('trips', 'trip|' + x.id); return o ? { entry: x, t: o.t, trip: o.v } : null; }).filter(Boolean);
@@ -1058,7 +1059,7 @@
     Object.keys(st.dieselRisk || {}).forEach(function (k) { if (!S.dieselRisk[k]) { S.dieselRisk[k] = true; r.settings++; } });
     // other settings: only ones you've never set
     Object.keys(st).forEach(function (k) {
-      if (k === 'apiKey' || k === 'nrelKey' || k === 'fuelKey' || k === 'hereKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
+      if (k === 'apiKey' || k === 'nrelKey' || k === 'ocmKey' || k === 'fuelKey' || k === 'hereKey' || k === 'cars' || k === 'blacklist' || k === 'dieselRisk' || k === 'carId') return;
       if (S[k] === undefined) { S[k] = st[k]; r.settings++; }
     });
     // saved trips you don't have
@@ -1194,7 +1195,7 @@
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
-      '<div class="field col"><div class="lbl">Station finder key (optional)<small>EV chargers and hydrogen stations come from the U.S. Department of Energy\'s free station finder. Blank uses the shared DEMO_KEY (about 30 lookups an hour). A free key of your own: <a href="#" data-url="https://developer.nlr.gov/signup/">sign up</a>. Never logged or exported.</small></div><input type="password" id="nrelKey" placeholder="DEMO_KEY" autocomplete="off" spellcheck="false" value="' + esc(S.nrelKey || '') + '"></div>' +
+      (window.ChargerData?ChargerData.settingsHtml():'') +
       '<div class="field col"><div class="lbl">Toll prices key (optional)<small>HERE: when Route compares toll and toll-free roads, fills in each toll road\'s price (priced for your trailer when you tow). Free for 2,500 toll lookups a month; only roads that have tolls of an unknown amount are asked, and each answer is kept 30 days. Get one: <a href="#" data-url="https://platform.here.com/">platform.here.com</a> → Access Manager → Apps → Register new app → Credentials → API Keys. Never logged or exported.</small></div><input type="password" id="hereKey" autocomplete="off" spellcheck="false" value="' + esc(S.hereKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">HERE toll lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); HERE\'s free tier is 2,500.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
       '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
@@ -1279,6 +1280,7 @@
       closeSettings(false);if(window.Garage)Garage.installDemo();
     };
     if(window.SettingsNav)SettingsNav.attach(window.__app,pg);
+    if(window.ChargerData)ChargerData.attach(pg);
   }
   function logHeader() {
     return 'Gasket ' + (N.appVersion ? N.appVersion() : '') + ' debug log · ' + new Date().toString() + ' · level ' + S.logLevel + '\n';
@@ -1339,6 +1341,8 @@
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
     S.logLevel = parseInt($('logLevel').value, 10) || 5;
     S.nrelKey = $('nrelKey').value.trim();
+    S.ocmKey = $('ocmKey').value.trim();
+    S.evUseDOE = $('evUseDOE').checked; S.evUseOCM = $('evUseOCM').checked; S.evRefreshPrices = $('evRefreshPrices').checked;
     if ($('hereKey')) { S.hereKey = $('hereKey').value.trim(); apiCount(); }
     if ($('hereMonthlyCap')) S.hereMonthlyCap = Math.max(0, parseInt($('hereMonthlyCap').value, 10) || 0);
     if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
@@ -1347,6 +1351,7 @@
     if($('prefBuffer')){var tripPrefs=S.trip||(S.trip={});[['prefBuffer','bufferMi'],['prefMinSave','minSave'],['prefDetour','maxDetourMin'],['prefAltSave','altMinSave']].forEach(function(x){var v=parseFloat($(x[0]).value);if(Number.isFinite(v))tripPrefs[x[1]]=Math.max(0,v);});}
     pg.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
       var k = cb.dataset.k;
+      if(!k)return;
       if (k.indexOf('brand:') === 0) S.brands[k.slice(6)] = cb.checked; else S[k] = cb.checked;
     });
     save();

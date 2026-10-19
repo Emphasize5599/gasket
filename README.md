@@ -26,6 +26,14 @@ This branch builds **Gasket Keyless Test**, a separate installation. A Google AP
 
 In 0.0.105, saved trips have **Refresh saved prices — no API calls** in Stops. This updates matched regular prices at the existing stations while keeping discovery and geometry intact. New station discovery remains API-based. Routes has its own monthly safety cap, default 9,500; the Places cap remains 900.
 
+## Offline EV charger data (keyless test)
+
+Settings → Connections & usage → Other optional keys contains expandable personal-key instructions for DOE and Open Charge Map. **Download U.S. + Canada chargers** saves the DOE inventory in app storage, not cache or the APK; use Wi-Fi. Failed/cancelled downloads retain the previous complete inventory. Local discovery uses an indexed database; route-only online updates can be disabled independently. Update the inventory periodically for newly opened/closed sites. Downloadable inventory is not personal backup data and can be downloaded again after restoring on another phone.
+
+DOE is enabled by default. Optional Open Charge Map adds route coverage using a personal key, cached queries, and paginated open-data results; it is not a nationwide OCM snapshot download. Neither source guarantees live prices or stall availability. The planner uses only unambiguous USD per-kWh rates or explicit free charging; complex/missing tariffs use the user's labeled estimate. Canadian dollar prices are not silently treated as U.S. dollars.
+
+Demo DOE limits: 30/hour and 50/day per public IP; personal keys normally allow 1,000/hour. The app persists this phone's request attempts, provider-reported remaining allowance when supplied, and conservative cooldowns. Other devices/services may also consume quota; this is not an authoritative account-wide meter.
+
 ## Download
 
 Open [GitHub Releases](https://github.com/Emphasize5599/gasket/releases) and choose `Gasket-0.0.<version>.apk` under Assets. This is the installable signed APK, not a ZIP. Source code archives and Actions artifacts are separate downloads.

@@ -295,7 +295,7 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "tolls"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "tolls", "chargerusage"));
 
     /** Pictures are user data, including imported images. Upgrade the old cache without
      * overwriting a newer stored image or deleting the only copy if a move fails. */
@@ -1600,10 +1600,55 @@ public class MainActivity extends Activity {
                     c.setRequestProperty("Content-Type","application/x-www-form-urlencoded");c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent",userAgent());c.setRequestProperty("X-Api-Key",key);
                     byte[] body=params.getBytes("UTF-8");
                     try(java.io.OutputStream os=c.getOutputStream()){os.write(body);}
-                    int status=c.getResponseCode();if(status!=200)throw new Exception("HTTP "+status);
+                    int status=c.getResponseCode();out.put("status",status);out.put("remaining",c.getHeaderField("X-RateLimit-Remaining"));out.put("limit",c.getHeaderField("X-RateLimit-Limit"));if(status!=200)throw new Exception("HTTP "+status);
                     try(InputStream in=c.getInputStream();java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream()){
                         byte[] buf=new byte[16384];int n;while((n=in.read(buf))!=-1){if(bytes.size()+n>12000000)throw new Exception("Station response too large");bytes.write(buf,0,n);}out.put("body",bytes.toString("UTF-8"));
                     }
+                }catch(Exception e){try{out.put("error",e.getMessage());}catch(Exception ignored){}}finally{if(c!=null)c.disconnect();}
+                reply(reqId,out);
+            }).start();
+        }
+
+        private ChargerInventory inventory;
+        private synchronized ChargerInventory inventory() {
+            if(inventory==null)inventory=new ChargerInventory(getFilesDir());
+            return inventory;
+        }
+
+        /** Fixed provider URLs and header-only credentials: never expose keys in URLs, logs or exports. */
+        @JavascriptInterface
+        public void chargerInventory(final int reqId, final String action, final String value) {
+            final ChargerInventory selected=inventory();final long ticket=selected.generation();
+            if("clear".equals(action)||"cancel".equals(action))selected.cancel();
+            new Thread(() -> {
+                JSONObject out;
+                try {
+                    ChargerInventory inv=selected;
+                    if("download".equals(action))out=inv.download(value,userAgent(), count -> js("window.onNativeProgress&&onNativeProgress("+reqId+","+count+",0)"),ticket);
+                    else if("query".equals(action))out=inv.query(value);
+                    else if("cancel".equals(action))out=inv.status();
+                    else if("clear".equals(action)){inv.clear();out=inv.status();}
+                    else if("status".equals(action))out=inv.status();
+                    else throw new Exception("Unknown inventory action");
+                }catch(Exception e){out=new JSONObject();try{out=inventory().status();}catch(Exception ignored){}try{out.put("error",e.getMessage());}catch(Exception ignored){}}
+                reply(reqId,out);
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void fetchChargerApi(final int reqId, final String provider, final String key, final String params) {
+            new Thread(() -> {
+                JSONObject out=new JSONObject();HttpURLConnection c=null;
+                try{
+                    if(key==null||!key.matches("[A-Za-z0-9_-]{1,128}")||params==null||params.length()>60000||params.matches("(?is).*(?:^|&)(?:key|api_key)=.*"))throw new Exception("Invalid charger query");
+                    String base;
+                    if("ocm".equals(provider))base="https://api.openchargemap.io/v3/poi/?";
+                    else throw new Exception("Unknown charger provider");
+                    c=(HttpURLConnection)new URL(base+params).openConnection();c.setInstanceFollowRedirects(false);c.setConnectTimeout(10000);c.setReadTimeout(30000);
+                    c.setRequestProperty("X-API-Key",key);c.setRequestProperty("User-Agent",userAgent());c.setRequestProperty("Accept","application/json");
+                    int status=c.getResponseCode();out.put("status",status);out.put("remaining",c.getHeaderField("X-RateLimit-Remaining"));out.put("limit",c.getHeaderField("X-RateLimit-Limit"));
+                    if(status!=200)throw new Exception("HTTP "+status);
+                    try(InputStream in=ChargerInventory.bounded(c.getInputStream(),12000000)){out.put("body",readAll(in));}
                 }catch(Exception e){try{out.put("error",e.getMessage());}catch(Exception ignored){}}finally{if(c!=null)c.disconnect();}
                 reply(reqId,out);
             }).start();

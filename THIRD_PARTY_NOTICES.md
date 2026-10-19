@@ -8,6 +8,12 @@ The keyless test branch queries fuel-station locations from OpenStreetMap via Ov
 
 Vela (https://github.com/PimpinPumpkin/Vela), GPL-3.0, was researched for feasibility. No Vela code, libraries, calibration files or request templates are incorporated; see KEYLESS_EXPERIMENT.md for the independent implementation and direct-reuse licensing gate.
 
+## Charger inventories
+
+DOE Alternative Fuels Data Center (AFDC), served by the NLR Developer Network: https://afdc.energy.gov/stations/ . Optional downloads retain a local inventory of public operating U.S./Canadian chargers, including source dates and published pricing descriptions. Data is downloaded directly by the user, not bundled or redistributed as a Gasket-hosted snapshot. Inventory and pricing are not a guarantee of current availability or tariffs.
+
+Open Charge Map: https://openchargemap.org/ . Optional route queries request `opendata=true`; records retain the original data-provider attribution, applicable license, and OCM record link. OCM-contributor data is licensed under Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/); imported records can carry other licenses, shown with the record. Gasket does not copy OCM application code or treat its fair-use API as unlimited. See https://openchargemap.org/develop and https://github.com/openchargemap/ocm-export for source-specific terms and export guidance.
+
 ## Leaflet 1.9.4
 
 Bundled as `assets/web/lib/leaflet.js` and `assets/web/lib/leaflet.css`. https://leafletjs.com

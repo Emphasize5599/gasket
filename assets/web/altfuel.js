@@ -1,6 +1,6 @@
 /* Alternative fuels: EV fast chargers and hydrogen stations from the U.S. Department of Energy's free station finder
- * (Alternative Fuels Data Center, developer.nlr.gov). A shared DEMO_KEY works for light use (about 30 lookups an hour
- * per phone); Settings → Alternative fuels takes your own free key. Never logged or exported.
+ * (Alternative Fuels Data Center, developer.nlr.gov). DEMO_KEY is 30/hour and 50/day per public IP.
+ * Settings → Connections takes a personal key and an optional offline inventory. Never logged or ordinarily exported.
  *
  * - Main map: a ⚡ button opens the alt-fuel panel: fetch every hydrogen station, show them, and shade where a
  *   fuel-cell car can't make it (yellow: no station within half its range, so no way back; gray: none within its
@@ -31,15 +31,17 @@
   /** One request to the station finder -> parsed JSON (throws a readable message). The key never reaches the log. */
   async function get(path, params, post) {
     var credential=key();if((cooldown.get(credential)||0)>Date.now())throw new Error('Station discovery is paused after the provider limit. Cached chargers remain available; add your own free station-finder key in Settings → Connections.');
+    if(window.ChargerData)ChargerData.before('doe',credential);
     var q = Object.keys(params).filter(function (k) { return params[k] !== '' && params[k] != null; })
       .map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
     var url = BASE + path + '?api_key=' + encodeURIComponent(key()) + '&' + q;
     LG.debug('altfuel', 'Station finder ' + path, params.fuel_type || '');
     var r = post&&N.fetchStationRoute?await call('fetchStationRoute',credential,q):await call('fetchJson', url);
+    if(window.ChargerData)ChargerData.after('doe',credential,r);
     if (r.error) {
       var m = String(r.error);
-      if (/429/.test(m)){cooldown.set(credential,Date.now()+3600e3);throw new Error(credential === 'DEMO_KEY' ? 'The shared station-finder key hit its limit. Cached chargers are retained, but discovery is incomplete. Add a free personal key in Settings → Connections.' : 'Your station-finder key hit its limit. Cached chargers are retained; try again later.');}
-      if (/40[13]/.test(m)) throw new Error('The station finder didn\'t accept the key. Check it in Settings → Alternative fuels.');
+      if (/429/.test(m)){cooldown.set(credential,Date.now()+3600e3);throw new Error(credential === 'DEMO_KEY' ? 'The demo station-finder allowance for this public IP hit its hourly or daily limit. Cached chargers are retained. Add a free personal key in Settings → Connections.' : 'Your station-finder key hit its limit. Cached chargers are retained; try again later.');}
+      if (/40[13]/.test(m)) throw new Error('The station finder didn\'t accept the key. Check it in Settings → Connections.');
       if (/not allowed/i.test(m)) throw new Error('This version of the app can\'t reach the station finder yet.');
       throw new Error('Couldn\'t reach the station finder (' + m + ').');
     }
@@ -76,6 +78,7 @@
       lat: +f.latitude, lng: +f.longitude, dc: +f.ev_dc_fast_num || 0, l2: +f.ev_level2_evse_num || 0, plugs: f.ev_connector_types || [],
       l1:+f.ev_level1_evse_num||0,units:f.ev_charging_units||[],
       kw: pw ? pw.kw : 0, kwEst: pw ? pw.est : false, pricing: String(f.ev_pricing || '').trim(),
+      source:'DOE AFDC',sourceUrl:'https://afdc.energy.gov/stations/#/station/'+f.id,dataUpdated:f.updated_at||'',country:f.country||'',
       hours: String(f.access_days_time || '').trim(), status: f.status_code || 'E', phone: f.station_phone || '',
       hyPress: f.hy_pressures || [], hyLink: f.hy_status_link || '', retail: f.hy_is_retail, confirmed: f.date_last_confirmed || '',
       off: f.distance != null ? +f.distance : null, prices: {}
@@ -97,6 +100,10 @@
   function plugParam(plugs) { return plugs && plugs.length ? plugs.join(',') : 'J1772COMBO,TESLA,CHADEMO'; }
   /** DC fast chargers within radius miles of a point that take one of these plugs, kept a week. */
   async function evNear(lat, lng, radiusMi, plugs, speed) {
+    if(window.ChargerData){
+      var saved=await ChargerData.localNear(lat,lng,radiusMi);
+      if(saved)return normalizedRows(saved.fuel_stations).filter(function(s){return P.haversineMi(lat,lng,s.lat,s.lng)<=radiusMi&&s.plugs.some(function(p){return !plugs||plugs.indexOf(p)>=0;})&&(speed==='all'||(speed==='l2'?s.l2>0:s.dc>0));});
+    }
     var lvl = LEVEL[speed] || 'dc_fast';
     var k = 'ev|' + lat.toFixed(2) + ',' + lng.toFixed(2) + '|' + Math.round(radiusMi) + '|' + plugParam(plugs) + (lvl === 'dc_fast' ? '' : '|' + lvl);
     var o = KV.get('afdc', k, WEEK);
@@ -122,14 +129,14 @@
     return points.filter(function(_,i){return keep.has(i);});
   }
   var discoveredPool=new Map();
-  async function alongRoute(model, kind, plugs, corridorMi, onProg, types) {
+  async function onlineRoute(model, kind, plugs, corridorMi, onProg, types) {
     types=tripTypes(types);var wanted=routePlugs(plugs),levels=[types.dc?'dc_fast':'',types.l2?'2':'',types.l1?'1':''].filter(Boolean);
     if(kind==='ev'&&!levels.length)throw new Error('Select at least one charger type in Parameters → Charging stops.');
     var pts=routePoints(model.pts||[]);if(pts.length<2)pts=[model.pointAt(0),model.pointAt(model.totalMi)].filter(Boolean);
     var coords=pts.map(function(p){return p.lng.toFixed(5)+' '+p.lat.toFixed(5);}),line='LINESTRING('+coords.join(',')+')',reverse='LINESTRING('+coords.slice().reverse().join(',')+')';
-    var params={route:line,distance:corridorMi+0.15,fuel_type:kind==='ev'?'ELEC':'HY',status:'E',access:'public',limit:'all'};
+    var params={route:line,distance:corridorMi+0.15,fuel_type:kind==='ev'?'ELEC':'HY',status:kind==='ev'?'E,T':'E',access:'public',limit:'all'};
     if(kind==='ev'){params.ev_charging_level=levels.length===1?levels[0]:'all';params.ev_connector_type=plugParam(wanted);}
-    var ck='route-v2|'+kind+'|'+corridorMi+'|'+levels.join(',')+'|'+wanted.join(',')+'|'+(line<reverse?line:reverse),o=KV.get('afdc',ck,WEEK),raw;
+    var ck='route-v2|'+kind+'|'+corridorMi+'|'+levels.join(',')+'|'+wanted.join(',')+'|'+(line<reverse?line:reverse),o=KV.get('afdc',ck,kind==='ev'&&window.ChargerData?3600e3:WEEK),raw;
     try{
       if(o)raw=o.v;else{
         var promise=routePending.get(ck);if(!promise){promise=get('/nearby-route.json',params,true).then(function(j){var rows=j.fuel_stations||[];KV.put('afdc',ck,rows);return rows;}).finally(function(){routePending.delete(ck);});routePending.set(ck,promise);}
@@ -139,12 +146,25 @@
       if(onProg)onProg(1);LG.info('altfuel','Route station discovery',{kind:kind,stations:list.length,points:pts.length,cached:!!o,levels:levels});return list;
     }catch(e){e.stations=Array.from(discoveredPool.values()).filter(function(s){return s.brand===kind;});throw e;}
   }
+  async function alongRoute(model,kind,plugs,corridorMi,onProg,types){
+    if(kind!=='ev'||!window.ChargerData)return onlineRoute(model,kind,plugs,corridorMi,onProg,types);
+    var list=[],notes=[],hasInventory=false;
+    try{var local=await ChargerData.localRoute(model,corridorMi);if(local){hasInventory=true;list=normalizedRows(local.fuel_stations);if(Date.now()-local.updated>30*24*3600e3)notes.push('Offline chargers were downloaded over 30 days ago. Update the inventory for new and closed sites.');}}
+    catch(e){notes.push('Offline charger lookup failed: '+e.message);}
+    if(S.evUseDOE!==false&&(!hasInventory||S.evRefreshPrices!==false))try{list=ChargerData.merge(list,await onlineRoute(model,kind,plugs,corridorMi,onProg,types));}catch(e){list=ChargerData.merge(list,e.stations||[]);notes.push(e.message);}
+    if(S.evUseOCM)try{list=ChargerData.merge(list,await ChargerData.ocmRoute(model,corridorMi));}catch(e){list=ChargerData.merge(list,e.stations||[]);notes.push(e.message);}
+    if(!hasInventory&&S.evUseDOE===false&&!S.evUseOCM)notes.push('Download the offline charger inventory or enable a charger provider in Settings → Connections.');
+    if(onProg)onProg(1);
+    list=list.filter(function(s){return s.status==='E';});
+    if(notes.length){var error=new Error(notes.join(' '));error.stations=list;throw error;}
+    return list;
+  }
   // Match speed and connector on the same unit when provider unit detail is available.
   function charging(st, car, types, plugs){
     types=tripTypes(types);plugs=compatiblePlugs(car,plugs);var candidates=[];
     var counts={dc_fast:st.dc,'2':st.l2,'1':st.l1},enabled={dc_fast:types.dc,'2':types.l2,'1':types.l1};
     function accepts(p,level){if(plugs.indexOf(p)<0)return false;if(level==='dc_fast')return p!=='J1772'&&!/^NEMA/.test(p);if(p==='TESLA')return car.plug==='NACS'||car.acAdapter===true;if(p==='J1772')return (car.plug||'CCS')!=='NACS'||car.acAdapter===true;return false;}
-    function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2);candidates.push({level:level,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,kw|| (dc?st.kw:level==='1'?1.4:7.2))),estimated:!kw||!!st.kwEst});}
+    function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2);candidates.push({level:level,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,kw|| (dc?(st.kw||50):level==='1'?1.4:7.2))),estimated:!kw||!!st.kwEst});}
     if(st.units&&st.units.length)st.units.forEach(function(u){var level=u.charging_level;if(!enabled[level])return;Object.keys(u.connectors||{}).forEach(function(p){var port=u.connectors[p];if(accepts(p,level)&&port&&+port.port_count>0)add(level,+port.power_kw||0);});});
     else Object.keys(counts).forEach(function(level){if(enabled[level]&&counts[level]>0&&(st.plugs||[]).some(function(p){return accepts(p,level);}))add(level,level==='dc_fast'&&!st.kwEst?st.kw:0);});
     return candidates.sort(function(a,b){return b.kw-a.kw;})[0]||null;
@@ -166,6 +186,8 @@
       '<div>' + esc(s.plugs.map(plugName).join(', ')) + '</div>';
     else h += '<div>' + (s.hyPress.length ? esc(s.hyPress.join(', ')) + ' bar' : 'Hydrogen') + '</div>';
     if (s.pricing) h += '<div class="af-sm">' + esc(s.pricing) + '</div>';
+    if(s.source)h+='<div class="af-sm">'+esc(s.source)+(s.provider&&s.provider!==s.source?' · '+esc(s.provider):'')+(s.license?' · '+esc(s.license):'')+'</div>';
+    if(s.alternateSources&&s.alternateSources.length)h+='<details><summary>Additional sources</summary>'+s.alternateSources.map(function(p){return '<div class="af-sm">'+esc([p.source,p.provider,p.license].filter(Boolean).join(' · '))+'</div>';}).join('')+'</details>';
     if (s.hours) h += '<div class="af-sm">' + esc(s.hours) + '</div>';
     h += '<div class="af-act"><button data-afnav="' + esc(s.id) + '">Navigate</button>' + (s.hyLink ? '<button data-afurl="' + esc(s.hyLink) + '">Live status</button>' : '') + '</div></div>';
     return h;

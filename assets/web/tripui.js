@@ -2129,20 +2129,21 @@
       var cands = [];
       for (var si = 0; si < list.length; si++) {
         var st = list[si],charging=kd==='ev'?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;if(kd==='ev'&&!charging)continue;
+        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,price):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
         var prs = T.projectLegs(m, { lat: st.lat, lng: st.lng }, corridor);
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = charging?charging.kw:0;
           cands.push({ id: pr.leg ? st.id + '@' + pr.leg : st.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: det < 0.15 ? 0 : det / 25 * 60 + 1, detourExact: false,
-            price: price, kw: kw, chargeLevel:charging&&charging.level,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
-            calc: { base: price, final: price, est: false, stale: false, updated: null, notes: [],
-              steps: [{ label: (kd === 'ev' ? 'Your fast-charging price' : 'Your hydrogen price') + ' (Settings → EV & hydrogen)', kind: 'base', amount: price }] } });
+            price: tariff.price, freeCharging:kd==='ev'&&!tariff.estimated&&tariff.price===0,kw: kw, chargeLevel:charging&&charging.level,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
+            calc: { base: tariff.price, final: tariff.price, est: tariff.estimated, stale: false, updated: tariff.updated?Date.parse(tariff.updated)||null:null, notes: [],
+              steps: [{ label: tariff.label, kind: 'base', amount: tariff.price }] } });
         }
       }
       // A faster charger nearby may exceed the detour limit or be just out of reach.
       // Keep compatible alternatives instead of discarding slower, reachable stops in 3-mile bins.
       per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [] });
     }
-    if (kd === 'ev') notes.push('Prices are your estimate (Settings → EV & hydrogen); most chargers don\'t publish theirs to the station finder.');
+    if (kd === 'ev') notes.push('Published simple per-kWh rates are used where available; missing or complex rates use your charging-price estimate (Settings → Trip defaults). Confirm current rates and available stalls with the charging network.');
     dbgS.stations = raw.map(function (l) { return l.length; });
     pg(1, 'Choosing stops');
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
@@ -3987,7 +3988,7 @@
     h += '<div class="why hidden" id="why' + i + '">' + c.calc.steps.map(function (x) {
       return '<div class="ln"><span>' + esc(x.label) + '</span><span>' + (x.kind === 'base' ? priceText(x.amount) : x.kind === 'none' ? 'not counted' : x.amount === 0 ? 'included' : '−$' + P.fmt3(-x.amount)) + '</span></div>'; }).join('') +
       '<div class="ln tot"><span>You pay per ' + { gal: 'gallon', kWh: 'kWh', kg: 'kg' }[UN()] + '</span><span>' + priceText(c.price) + '</span></div>' +
-      (st.network || st.dc || st.pricing || st.hours ? '<div class="af-info">' + [st.network, st.dc ? st.dc + ' fast port' + (st.dc === 1 ? '' : 's') + ' · ' + (st.kwEst ? '~' : '') + st.kw + ' kW' + (st.kwEst ? ' (typical for the network)' : '') : '', st.plugs && st.plugs.length && window.AltFuel ? st.plugs.map(AltFuel.plugName).join(', ') : '', st.pricing ? 'Posted price: ' + st.pricing : '', st.hours].filter(Boolean).map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>' : '') + '</div>';
+      (st.network || st.dc || st.pricing || st.hours || st.source ? '<div class="af-info">' + [st.network, st.dc ? st.dc + ' fast port' + (st.dc === 1 ? '' : 's') + ' · ' + (st.kwEst ? '~' : '') + st.kw + ' kW' + (st.kwEst ? ' (typical for the network)' : '') : '', st.plugs && st.plugs.length && window.AltFuel ? st.plugs.map(AltFuel.plugName).join(', ') : '', st.pricing ? 'Published price information: ' + st.pricing : '', st.hours, [st.source,st.provider,st.license].filter(Boolean).join(' · '), (st.alternateSources||[]).map(function(p){return [p.source,p.provider,p.license].filter(Boolean).join(' · ');}).join('; ')].filter(Boolean).map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>' : '') + '</div>';
     h += '<div class="s-act"><button data-why="' + i + '">Price breakdown</button><button data-nav="' + i + '">Navigate</button></div>';
     if(c.citgo&&P.citgoBonus(S,new Date())!=='none')h+='<div class="s-act"><button data-citgo-fill="'+i+'">Record actual CITGO fill-up…</button></div>';
     if (A.bl) h += A.bl.buttons(st, 'ts' + i, result.grade);

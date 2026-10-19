@@ -629,7 +629,7 @@
     if(o.rewardPriceAt&&!o.rewardPass&&o.cands.some(function(c){return c.citgo;}))return calendarPlan(o);
     var tooFar = 0, farList = [];
     var cands = o.cands.filter(function (c) {
-      if (!(c.price > 0 && c.d >= 0 && c.d <= o.model.totalMi)) return false;
+      if (!((c.price > 0 || c.price === 0 && c.freeCharging === true) && c.d >= 0 && c.d <= o.model.totalMi)) return false;
       var policy=legPolicy(o,c.d);
       if (policy.maxDetourMin != null && (c.detourMin || 0) > policy.maxDetourMin) { tooFar++; farList.push(c); return false; }
       return true;
@@ -981,7 +981,7 @@
     var G = function (d) { return m.galTo(d) + (rates ? extraBetween(rates, 0, d) : 0); };
     var det = function (c) { return (c.detourMi || 0) * m.cityGpm / 2; };
     var cs = o.cands.filter(function (c) {
-      var policy=legPolicy(o,c.d);return c.price > 0 && c.d >= 0 && c.d <= end && !(policy.maxDetourMin != null && (c.detourMin || 0) > policy.maxDetourMin);
+      var policy=legPolicy(o,c.d);return (c.price > 0 || c.price === 0 && c.freeCharging === true) && c.d >= 0 && c.d <= end && !(policy.maxDetourMin != null && (c.detourMin || 0) > policy.maxDetourMin);
     }).sort(function (a, b) { return a.d - b.d; });
     var pos = 0, gas = o.startGal, back = 0, first = true;
     for (var hops = 0; hops <= cs.length + 1; hops++) {
