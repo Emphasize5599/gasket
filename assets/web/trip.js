@@ -418,6 +418,15 @@
    * cost overrides for the baseline: priceFn(c), stopCostFn(c)
    */
   function legPolicy(o,d){return (o.legPolicies||[]).find(function(p){return d>=p.from-1e-7&&d<=p.to+1e-7;})||o;}
+  // Destination AC charging: nameplate/onboard limit, losses, and a clearly generic near-full tail.
+  // Not an assertion that AC has the same 80% slowdown as DC fast charging.
+  function destinationCharge(e,arrival,cap){
+    arrival=Math.max(0,Math.min(cap,arrival));var efficiency=.9,kw=Math.max(.1,+e.kw||1.4)*efficiency,limit=Math.max(arrival,Math.min(cap,e.limit==null?cap:+e.limit)),target=Math.max(arrival,Math.min(limit,e.target==null?cap:+e.target)),energy=arrival,minutes=0,left=e.mode==='time'?Math.max(0,+e.minutes||0):Infinity;
+    var bands=[{end:cap*.9,factor:1},{end:cap*.98,factor:.5},{end:cap,factor:.25}];
+    bands.forEach(function(b){var to=Math.min(e.mode==='time'?limit:target,b.end);if(to<=energy||left<=0)return;var rate=kw*b.factor,buy=Math.min(to-energy,left*rate/60),time=buy/rate*60;energy+=buy;minutes+=time;left-=time;});
+    var added=Math.max(0,energy-arrival);return {arriveGal:arrival,departGal:energy,buyGal:added,gridKWh:added/efficiency,cost:added/efficiency*Math.max(0,+e.price||0),minutes:e.mode==='time'?Math.max(0,+e.minutes||0):minutes,estimated:true};
+  }
+  function purchases(p){return (p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price,destination:false};}).concat((p.destinationCharges||[]).map(function(c){return {d:c.d,arriveGal:c.arriveGal,buyGal:c.buyGal,price:c.buyGal>0?c.cost/c.buyGal:0,destination:true};})).sort(function(a,b){return a.d-b.d||Number(a.destination)-Number(b.destination);});}
   // Check reserves at leg boundaries even when there is no fuel stop there.
   function reserveBetween(o,from,to,base,detourEnd,galTo){
     var need=base,gal=galTo||function(d){return o.model.galTo(d);};
@@ -441,8 +450,8 @@
     var STEP = o.step || 0.1, model = o.model;
     var LV = Math.max(1, Math.round(o.capGal / STEP)), FL = o.fillCap ? Math.max(1, Math.min(LV, Math.round(o.fillCap / STEP))) : LV;
     var cands = o.cands.slice().sort(function (a, b) { return a.d - b.d; });
-    var nodes = [{ kind: 'origin', d: 0 }].concat(cands.map(function (c) { return { kind: 'stop', d: c.d, c: c }; }))
-      .concat([{ kind: 'dest', d: model.totalMi }]);
+    var events=(o.destinationCharges||[]).filter(function(e){return e.d>0&&e.d<=model.totalMi;});
+    var nodes = [{ kind: 'origin', d: 0 }].concat(cands.map(function (c) { return { kind: 'stop', d: c.d, c: c }; })).concat(events.map(function(e){return {kind:'charge',d:e.d,event:e};})).sort(function(a,b){return a.d-b.d||(a.kind==='charge'?1:0)-(b.kind==='charge'?1:0);}).concat([{ kind: 'dest', d: model.totalMi }]);
     var N = nodes.length, INF = 1e18;
     var lv = function (g) { return Math.round(g / STEP); };
     var start = Math.min(LV, Math.floor(o.startGal / STEP + 1e-9));
@@ -484,6 +493,8 @@
             if (runF >= 0) { best[g] = runBest + g * STEP * p; from[g] = runF; }
           }
         }
+      } else if(nodes[i].kind==='charge'){
+        for(var f=0;f<=LV;f++)if(row[f]<INF){var charged=destinationCharge(nodes[i].event,f*STEP,o.capGal),depart=Math.max(f,Math.min(LV,Math.floor(charged.departGal/STEP+1e-9))),cost=(depart-f)*STEP/.9*Math.max(0,+nodes[i].event.price||0);if(row[f]+cost<best[depart]){best[depart]=row[f]+cost;from[depart]=f;}}
       } else { for (g = 0; g <= LV; g++) { best[g] = row[g]; from[g] = g; } }
       bestFrom.push(from);
       for (g = 0; g <= LV; g++) if (best[g] < INF) { any = true; break; }
@@ -491,6 +502,7 @@
       reachMi = Math.max(reachMi, nodes[i].d);
 
       for (var j = i + 1; j < N; j++) {
+        if(j>i+1&&nodes[j-1].kind==='charge')break; // A leg boundary with charging is mandatory; never teleport past it.
         if (o.lastFull && nodes[j].kind === 'dest' && N > 2 && nodes[i].kind !== 'stop') continue;   // must stop to fill
         var burnG = routeGal[j] - routeGal[i] + detGal(nodes[i]) / 2 + detGal(nodes[j]) / 2;
         var burn = Math.ceil(burnG / STEP - 1e-9);
@@ -519,15 +531,16 @@
     if (bestF < 0) return { ok: false, reachMi: reachMi, nodes: nodes };
 
     // walk back
-    var stops = [], cur = last, curF = bestF;
+    var stops = [], charges=[], cur = last, curF = bestF;
     while (cur > 0) {
       var code = par[cur][curF];
       var pi = Math.floor(code / (LV + 1)), pg = code % (LV + 1);
       var pf = bestFrom[pi][pg];
       if (nodes[pi].kind === 'stop') stops.unshift({ c: nodes[pi].c, arriveGal: pf * STEP, departGal: pg * STEP, buyGal: (pg - pf) * STEP });
+      if(nodes[pi].kind==='charge'){var e=nodes[pi].event,ch=destinationCharge(e,pf*STEP,o.capGal);ch.departGal=pg*STEP;ch.buyGal=(pg-pf)*STEP;ch.gridKWh=ch.buyGal/.9;ch.cost=ch.gridKWh*Math.max(0,+e.price||0);charges.unshift(Object.assign(ch,{d:e.d,index:e.index,label:e.label,level:e.level,kw:e.kw,price:e.price}));}
       cur = pi; curF = pf;
     }
-    return { ok: true, stops: stops, arriveGal: bestF * STEP, objective: bestV };
+    return { ok: true, stops: stops,destinationCharges:charges, arriveGal: bestF * STEP, objective: bestV };
   }
 
   // A purchase's effective average price, including the 30-gallon Club cap. Never mutate a
@@ -617,6 +630,7 @@
       var quote=purchaseQuote(s.c,s.buyGal,!!s.citgoRedemption);s.c=quote.c;
       s.cost = quote.cost; buy += s.buyGal; cost += s.cost; det += s.c.detourMi || 0; detMin += s.c.detourMin || 0;
     });
+    (res.destinationCharges||[]).forEach(function(c){buy+=c.buyGal;cost+=c.cost;});
     var credit = res.arriveGal * (o.refPrice || 0);
     return { gallons: buy, cost: cost, detourMi: det, detourMin: detMin, leftoverGal: res.arriveGal, leftoverValue: credit,
       net: cost - credit, stops: res.stops.length };
@@ -642,11 +656,12 @@
     }
     var oo = Object.assign({}, o, { cands: cands });
     var noStopGal = o.startGal - o.model.galTo(o.model.totalMi);
+    if((o.destinationCharges||[]).length){var at=0,g=o.startGal,valid=true;o.destinationCharges.forEach(function(e){g-=o.model.galTo(e.d)-o.model.galTo(at);if(g<0)valid=false;if(valid)g=destinationCharge(e,g,o.capGal).departGal;at=e.d;});noStopGal=valid?g-(o.model.galTo(o.model.totalMi)-o.model.galTo(at)):-1;}
     var best = optimize(oo);
     if (!best.ok) { oo.firstDip = true; best = optimize(oo); }
     if (!best.ok) return { ok: false, reachMi: best.reachMi, noStopGal: noStopGal, refPrice: o.refPrice, tooFar: tooFar };
     var bestEval = evaluate(oo, best);
-    if (o.lite) return { ok: true, lite: true, tooFar: tooFar, cands: cands, stops: best.stops, arriveGal: best.arriveGal, totals: bestEval, refPrice: o.refPrice, noStopGal: noStopGal,
+    if (o.lite) return { ok: true, lite: true, tooFar: tooFar, cands: cands, stops: best.stops,destinationCharges:best.destinationCharges||[], arriveGal: best.arriveGal, totals: bestEval, refPrice: o.refPrice, noStopGal: noStopGal,
       firstDip: !!oo.firstDip, arriveMi: best.arriveGal / o.model.combGpm };
     // baseline: what you'd do without the app -- fewest stops, closest to the road, fill up each time
     var easy = optimize(Object.assign({}, oo, { fillUp: true, refPrice: oo.refPrice * 1e-4 }),
@@ -659,10 +674,10 @@
       s.mile = s.c.d;
       s.etaSec = o.model.timeTo(s.c.d);
       s.arriveMi = s.arriveGal / o.model.combGpm;
-      s.alts = best.rewards?[]:alternatives(oo, s, cands);
+      s.alts = best.rewards||(best.destinationCharges||[]).length?[]:alternatives(oo, s, cands);
     });
-    best.stops.forEach(function (s, k) { s.why = best.rewards?null:whyNotCheaper(oo, best.stops, k, cands, farList); });
-    return { ok: true, tooFar: tooFar, cands: cands, stops: best.stops, arriveGal: best.arriveGal, totals: bestEval, easy: easy.ok ? { stops: easy.stops, totals: easyEval } : null,
+    best.stops.forEach(function (s, k) { s.why = best.rewards||(best.destinationCharges||[]).length?null:whyNotCheaper(oo, best.stops, k, cands, farList); });
+    return { ok: true, tooFar: tooFar, cands: cands, stops: best.stops,destinationCharges:best.destinationCharges||[], arriveGal: best.arriveGal, totals: bestEval, easy: easy.ok ? { stops: easy.stops,destinationCharges:easy.destinationCharges||[], totals: easyEval } : null,
       minStops: minStops, refPrice: o.refPrice, noStopGal: noStopGal, firstDip: !!oo.firstDip,
       arriveMi: best.arriveGal / o.model.combGpm, savings: easyEval ? easyEval.net - bestEval.net : null };
   }
@@ -952,7 +967,7 @@
   function fuelCheck(plan, rates, totalMi) {
     if (!plan || !plan.ok) return { ok: false, worst: null, bad: [] };
     var pts = [0], arr = [];
-    (plan.stops || []).forEach(function (st) { pts.push(st.c.d); arr.push(st.arriveGal); });
+    purchases(plan).forEach(function (st) { pts.push(st.d); arr.push(st.arriveGal); });
     pts.push(totalMi); arr.push(plan.arriveGal);
     var worst = null, bad = [];
     for (var i = 0; i < arr.length; i++) {
@@ -977,6 +992,7 @@
    * fill up, repeat; done when the end is in reach with arriveGal left. o: plan options on the plain (limit-speed) model.
    */
   function reachable(o, rates) {
+    if((o.destinationCharges||[]).length)return plan(Object.assign({},o,{model:rates?withSpeeds(o.model,rates):o.model,lite:true})).ok;
     var m = o.model, end = m.totalMi;
     var G = function (d) { return m.galTo(d) + (rates ? extraBetween(rates, 0, d) : 0); };
     var det = function (c) { return (c.detourMi || 0) * m.cityGpm / 2; };
@@ -1003,7 +1019,7 @@
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
-  api.restoreModel=makeModel;
+  api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;
   api.workerSource='('+initTrip.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
 })(this);

@@ -1992,3 +1992,10 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .af-legend { top: calc(var(--st) + 168px + var(--task-space)); }
 .hz-leg { top: calc(var(--st) + 17px + var(--task-space)); }
 .ed-details > summary span small { display: block; font-weight: 500; color: var(--ink-2); text-transform: none; letter-spacing: 0; }
+.ev-arrival-selector { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.ev-arrival-selector > button:first-child { grid-column:1 / -1; white-space:normal; }
+.ev-arrival-selector button { white-space:normal; }
+.ev-destination { min-width:0; border-top:1px solid var(--line); margin-top:14px; padding-top:10px; }
+.ev-destination .nf { min-width:0; margin-bottom:10px; }
+.ev-destination .nf > span { white-space:normal; overflow-wrap:anywhere; }
+.ev-destination input,.ev-destination select { min-width:0; max-width:100%; }

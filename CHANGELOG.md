@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.208 - 2026-10-19 (keyless test branch only)
+- EV trips: when your route has no workable charging plan, Stops offers the other routes that do; with none, Next says Adjust parameters and takes you back there.
+- EV trips: "At least one of my destinations will have a charger" under When you get there. Per destination: full charge, a percentage, miles of range, or time plugged in on Level 1 / Level 2 (with an estimated ending charge), an optional charge limit (like 80%) and the electricity price.
+- A Tesla Superchargers only option, and (?) explanations for charger types, J1772 / NACS / CCS and charging speeds.
+- A failed plan's Adjustments screen shows just the errors and the station search.
+
 ## 0.0.207 - 2026-10-19 (keyless test branch only)
 - Merge DOE and Open Charge Map usage into the existing Google/HERE counter pill.
 - Keep quota periods distinct and move full-screen menus below taller combined counters.

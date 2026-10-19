@@ -162,6 +162,8 @@
   // Match speed and connector on the same unit when provider unit detail is available.
   function charging(st, car, types, plugs){
     types=tripTypes(types);plugs=compatiblePlugs(car,plugs);var candidates=[];
+    if(types.superchargers&&(!(st.dc>0)||!/^(?:tesla|tesla supercharger)$/i.test(String(st.network||'').trim())))return null;
+    if(types.superchargers)types=Object.assign({},types,{dc:true,l2:false,l1:false});
     var counts={dc_fast:st.dc,'2':st.l2,'1':st.l1},enabled={dc_fast:types.dc,'2':types.l2,'1':types.l1};
     function accepts(p,level){if(plugs.indexOf(p)<0)return false;if(level==='dc_fast')return p!=='J1772'&&!/^NEMA/.test(p);if(p==='TESLA')return car.plug==='NACS'||car.acAdapter===true;if(p==='J1772')return (car.plug||'CCS')!=='NACS'||car.acAdapter===true;return false;}
     function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2);candidates.push({level:level,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,kw|| (dc?(st.kw||50):level==='1'?1.4:7.2))),estimated:!kw||!!st.kwEst});}
