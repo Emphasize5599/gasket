@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.212 - 2026-10-19 (keyless test branch only)
+- EV trips: choose the charging networks you use (Parameters → Charging stops). Networks Gasket reads prices from come first; the others, including car dealerships and Tesla Destination chargers at hotels (often listed as free but usually for customers or guests), are dimmed but can still be chosen.
+- Getting charger prices from the networks shows the time left and moves steadily, and Tesla prices load about twice as fast.
+- Departure's summary tiles keep their text centered.
+
 ## 0.0.211 - 2026-10-19 (keyless test branch only)
 - EV trips also read ChargePoint stations' prices from their public station pages (each host's rate, fees, or free), up to 20 stations a trip, fast chargers first.
 

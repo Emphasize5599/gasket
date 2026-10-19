@@ -407,6 +407,32 @@
   // at start: the mode the app was left in (its stations, the selector)
   setTimeout(function () { var G = window.Garage, c = G && G.car(); if (c) { var k = G.kind(c); lastKind = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas'; } if (A.altMode()) { showEv(); showH2(); A.rebuild(); } }, 0);
 
-  window.AltFuel = { hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
+  // ---------- charging networks you can choose in Parameters (S.trip.evNetworksOff = {key: true} for unticked ones) ----------
+  // Networks whose own published prices Gasket reads come first, then the rest (dimmed, still choosable); each A–Z.
+  var NET_PRICED = [['blink', 'Blink'], ['chargepoint', 'ChargePoint'], ['ionna', 'IONNA'], ['tesla', 'Tesla Supercharger']];
+  var NET_OTHER = [['dealer', 'Car dealerships'], ['ea', 'Electrify America'], ['evconnect', 'EV Connect'], ['evgo', 'EVgo'], ['flo', 'FLO'], ['nonnet', 'Non-networked (no app)'], ['other', 'Other networks'], ['rivian', 'Rivian Adventure'], ['shell', 'Shell Recharge'], ['teslaDest', 'Tesla Destination (hotels)'], ['walmart', 'Walmart']];
+  // a dealership's chargers (usually customers only, often listed as free): by the site's name
+  var DEALER = /\b(?:nissan|chevrolet|chevy|ford|lincoln|toyota|honda|hyundai|kia|bmw|audi|volkswagen|vw|subaru|mazda|buick|gmc|cadillac|jeep|dodge|chrysler|mitsubishi|volvo|porsche|mercedes(?:-benz)?|lexus|acura|infiniti|genesis|jaguar|land rover|polestar)\b|\bmotor (?:company|co\.?)\b|\bmotors\b|\bauto (?:mall|group|plaza)\b|\bdealership\b/i;
+  function netGroup(st) {
+    var n = String(st && st.network || '').trim(), name = String(st && st.name || '');
+    if (/^tesla(?: supercharger)?$/i.test(n)) return 'tesla';
+    if (/^tesla destination/i.test(n)) return 'teslaDest';
+    if (/ionna/i.test(n)) return 'ionna';
+    if (/^electrify america/i.test(n)) return 'ea';
+    if (/^evgo/i.test(n)) return 'evgo';
+    if (DEALER.test(name)) return 'dealer';
+    if (/^chargepoint/i.test(n)) return 'chargepoint';
+    if (/^blink/i.test(n)) return 'blink';
+    if (/^ev ?connect/i.test(n)) return 'evconnect';
+    if (/^flo$/i.test(n)) return 'flo';
+    if (/rivian/i.test(n)) return 'rivian';
+    if (/shell/i.test(n)) return 'shell';
+    if (/walmart/i.test(n)) return 'walmart';
+    if (!n || /^non-?networked$/i.test(n)) return 'nonnet';
+    return 'other';
+  }
+  function netAllowed(st, off) { off = off || (S.trip && S.trip.evNetworksOff) || {}; return !off[netGroup(st)]; }
+
+  window.AltFuel = { netGroup: netGroup, netAllowed: netAllowed, NET_PRICED: NET_PRICED, NET_OTHER: NET_OTHER, hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
     open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD,tripTypes:tripTypes,compatiblePlugs:compatiblePlugs,charging:charging,routePoints:routePoints };
 })();

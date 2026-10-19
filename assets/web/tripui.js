@@ -723,7 +723,7 @@
         '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
         num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t[tankPriceKey()]||'', 0.01, kd === 'ev' ? 'e.g. home charging · blank = the typical rate of this route\'s chargers' : 'blank = typical price on the route') + '</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
-      (kd==='ev'?'<div id="tChargerTypes">'+[['dc','DC fast (including compatible Superchargers)'],['l2','Level 2 · slower charging'],['l1','Level 1 · very slow charging']].map(function(x){return '<label class="nf chk"><span>'+x[1]+'</span><input type="checkbox" data-charge-type="'+x[0]+'"'+(AltFuel.tripTypes(t.evChargers)[x[0]]?' checked':'')+'></label>';}).join('')+'</div><label class="nf chk"><span>'+((Garage.car().plug||'CCS')==='NACS'?'Use J1772 chargers with my AC adapter':'Use Tesla AC chargers with my AC adapter')+'</span><input type="checkbox" id="tACAdapter"'+(Garage.car().acAdapter===true?' checked':'')+'></label><p class="lead small keep">Only compatible plugs are included. Slower stops can take hours; verify access, adapters and availability before travel.</p>':'')+
+      (kd==='ev'?'<div id="tChargerTypes">'+[['dc','DC fast (including compatible Superchargers)'],['l2','Level 2 · slower charging'],['l1','Level 1 · very slow charging']].map(function(x){return '<label class="nf chk"><span>'+x[1]+'</span><input type="checkbox" data-charge-type="'+x[0]+'"'+(AltFuel.tripTypes(t.evChargers)[x[0]]?' checked':'')+'></label>';}).join('')+'</div><label class="nf chk"><span>'+((Garage.car().plug||'CCS')==='NACS'?'Use J1772 chargers with my AC adapter':'Use Tesla AC chargers with my AC adapter')+'</span><input type="checkbox" id="tACAdapter"'+(Garage.car().acAdapter===true?' checked':'')+'></label><p class="lead small keep">Only compatible plugs are included. Slower stops can take hours; verify access, adapters and availability before travel.</p>'+netListHtml():'')+
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
       '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 0.5, 'extra driving per stop') + '</div>' +
@@ -840,6 +840,7 @@
     };
     seg('tArrive', function(){S.trip.arriveSet=true;arriveHelp();}); seg('tMode');
     if($('tChargerTypes'))$('tChargerTypes').querySelectorAll('input').forEach(function(el){el.onchange=function(){var all=Array.from($('tChargerTypes').querySelectorAll('input'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charger type selected.');return;}S.trip.evChargers={};all.forEach(function(x){S.trip.evChargers[x.dataset.chargeType]=x.checked;});result=null;choiceCandidates.clear();A.save();gateTabs();};});
+    if($('tNetworks'))$('tNetworks').querySelectorAll('[data-net]').forEach(function(el){el.onchange=function(){var all=Array.from($('tNetworks').querySelectorAll('[data-net]'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charging network selected.');return;}var o={};all.forEach(function(x){if(!x.checked)o[x.dataset.net]=true;});S.trip.evNetworksOff=o;result=null;choiceCandidates.clear();A.save();gateTabs();};});
     if($('tACAdapter'))$('tACAdapter').onchange=function(){Garage.car().acAdapter=this.checked;result=null;choiceCandidates.clear();A.save();gateTabs();};
     if($('tChargerTypes')){
       var help={dc:'DC fast chargers send power directly to the battery. They are usually fastest for road trips; Tesla Superchargers are one DC fast-charging network, not the only one. Compatibility and actual charging speed depend on the car and charger.',l2:'Level 2 uses 208–240 V AC, usually at homes, hotels or public parking. It is faster than an ordinary outlet but can still take hours. Power is limited by the car’s onboard charger.',l1:'Level 1 usually means an ordinary 120 V outlet: only a few miles of range per hour. A compatible portable charging cable is required. It is not a substitute for a fast charger on a short stop.'};
@@ -2160,6 +2161,9 @@
 
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function chargeMin(p) { return p.stops.reduce(function (a, s) { return a + (s.c.kw ? s.buyGal / s.c.kw * 60 : 0); }, 0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0); }
+  /** Charging networks to use (S.trip.evNetworksOff): the ones Gasket reads prices from first, the rest dimmed but choosable; each A–Z. */
+  function netListHtml(){var off=S.trip.evNetworksOff||{},row=function(x){return '<label class="nf chk"><span>'+esc(x[1])+'</span><input type="checkbox" data-net="'+x[0]+'"'+(off[x[0]]?'':' checked')+'></label>';};
+    return '<div class="sub-h">Charging networks '+A.qBtn('Untick a network you can\'t or don\'t want to use (no membership, wrong app, customers only). The first networks publish prices Gasket reads; for the dimmed ones it uses the government\'s price note or the typical published rate of the chargers on your route. Car dealerships and Tesla Destination chargers at hotels are often listed as free but are usually for customers or guests only.')+'</div><div id="tNetworks">'+AltFuel.NET_PRICED.map(row).join('')+'<div class="net-unpriced"><div class="lead small keep">Prices not read from these networks yet</div>'+AltFuel.NET_OTHER.map(row).join('')+'</div></div>';}
   /** When you get there: an EV starts on "a destination has a charger" until you pick (arriveSet); gas never has that choice. */
   function arriveNow(){var t=S.trip,a=t.arrive;if(KIND()==='ev'&&!t.arriveSet){t.arrive='destination';return 'destination';}return a==='full'||a==='destination'&&KIND()==='ev'?a:'buffer';}
   /** What's already in the tank / battery cost, typed per fuel kind (a gas price is never a $/kWh). */
@@ -2180,10 +2184,10 @@
       raw.push(list);
     }
     // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
-    var kinds=raw.map(function(list){return list.map(function(st){return kd==='ev'?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});
+    var kinds=raw.map(function(list){return list.map(function(st){return kd==='ev'&&AltFuel.netAllowed(st)?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});   // unticked networks: never a stop
     // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it
     if(kd==='ev'&&window.EVPrices){var seenNet={},items=[];raw.forEach(function(list,i){list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
-      try{var np=await EVPrices.annotate(items,c,function(f){pg(Math.min(.99,f),'Getting charger prices from the networks');});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
+      try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];
@@ -3907,7 +3911,7 @@
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
-      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,evChargers:S.trip.evChargers,evDestinations:S.trip.evDestinations,arrive:S.trip.arrive,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave },
+      trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,evChargers:S.trip.evChargers,evNetworksOff:S.trip.evNetworksOff,evDestinations:S.trip.evDestinations,arrive:S.trip.arrive,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave },
       routeChoicesByVehicle:choices,
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
@@ -3989,7 +3993,7 @@
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
-    S.trip.evChargers=v.trip.evChargers||null;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
+    S.trip.evChargers=v.trip.evChargers||null;if(v.trip.evNetworksOff)S.trip.evNetworksOff=v.trip.evNetworksOff;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
     routeReview=null;choiceComplete=false;choicePool=null;
     if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();
