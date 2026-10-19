@@ -120,7 +120,7 @@
   async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
   var recommendationMissing={speed:0,stations:0,routes:[]},recommendationTollGaps=0, recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
-  function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,parseFloat(S.trip.tankPrice)||p.refPrice,[{stops:T.purchases(p),arriveGal:p.arriveGal}]).legs[0].cost;}
+  function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,startRate(p),[{stops:T.purchases(p),arriveGal:p.arriveGal}]).legs[0].cost;}
   function recommendationRaw(sel){if(!legsMode())return alts[sel[0]];return Object.assign(T.joinRoutes(route.legs.map(function(l,i){return l.alts[sel[i]];})),{_sel:sel.slice(),description:sel.map(function(k,i){return route.legs[i].alts[k].description||'Leg '+(i+1);}).join(' / ')});}
   function clearRecommendationMaps(){if(recommendationObserver)recommendationObserver.disconnect();recommendationObserver=null;recommendationMaps.forEach(function(m){m.remove();});recommendationMaps=[];}
   function stopRecommendations(){recommendationEpoch++;choicePlanning=false;if(recommendationState==='running')recommendationState='cancelled';if(window.Tasks)Tasks.remove('route-comparison');}
@@ -721,14 +721,14 @@
       var kd = KIND();
       return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div><div id="tEmpty"></div>' +
         '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
-        num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t.tankPrice, 0.01, kd === 'ev' ? 'e.g. home charging · blank = your fast-charging price' : 'blank = typical price on the route') + '</div></div>' +
+        num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t[tankPriceKey()]||'', 0.01, kd === 'ev' ? 'e.g. home charging · blank = the typical rate of this route\'s chargers' : 'blank = typical price on the route') + '</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
       (kd==='ev'?'<div id="tChargerTypes">'+[['dc','DC fast (including compatible Superchargers)'],['l2','Level 2 · slower charging'],['l1','Level 1 · very slow charging']].map(function(x){return '<label class="nf chk"><span>'+x[1]+'</span><input type="checkbox" data-charge-type="'+x[0]+'"'+(AltFuel.tripTypes(t.evChargers)[x[0]]?' checked':'')+'></label>';}).join('')+'</div><label class="nf chk"><span>'+((Garage.car().plug||'CCS')==='NACS'?'Use J1772 chargers with my AC adapter':'Use Tesla AC chargers with my AC adapter')+'</span><input type="checkbox" id="tACAdapter"'+(Garage.car().acAdapter===true?' checked':'')+'></label><p class="lead small keep">Only compatible plugs are included. Slower stops can take hours; verify access, adapters and availability before travel.</p>':'')+
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
       '<div class="sub-h">Is a stop or detour worth it?</div>' +
       '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (min)', t.maxDetourMin, 0.5, 'extra driving per stop') + '</div>' +
       '<div class="sub-h">When you get there <button type="button" class="qi" id="tArriveQ" aria-label="More info">?</button></div>' +
-      '<div class="seg2'+(kd==='ev'?' ev-arrival-selector':'')+'" id="tArrive">'+(kd==='ev'?'<button data-a="destination" class="'+(t.arrive==='destination'?'on':'')+'">At least one of my destinations will have a charger</button>':'')+'<button data-a="buffer" class="' + (t.arrive !== 'full'&&t.arrive!=='destination' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (t.arrive === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
+      '<div class="seg2 arrive-seg'+(kd==='ev'?' ev-arrival-selector':'')+'" id="tArrive">'+(kd==='ev'?'<button data-a="destination" class="'+(arriveNow()==='destination'?'on':'')+'">At least one of my destinations will have a charger</button>':'')+'<button data-a="buffer" class="' + (arriveNow() === 'buffer' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (arriveNow() === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
       (kd==='ev'&&window.EVCharging?EVCharging.html(t,route&&route.stops||[],Garage.car(),S.evPrice,esc):'')+
 
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up within (mi)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
@@ -824,9 +824,10 @@
   function bindSettings() {
     var again = function () { collectSafe(); result = null;adjustError=''; };
     var arriveHelp = function () {
-      var full = $('tArrive').querySelector('.on').dataset.a === 'full';
-      $('tArriveQ').dataset.q = encodeURIComponent(full ? 'Your last stop fills the tank, late in the trip and as cheaply as possible (the “must save” amount drops to $0.25 so a late cheap fill-up isn\'t skipped). You can add a top-up close to the destination afterward.'
-        : 'Arrive with at least your buffer; gas left over is counted at the typical price.');
+      var full = $('tArrive').querySelector('.on').dataset.a === 'full', ev = KIND() === 'ev';
+      $('tArriveQ').dataset.q = encodeURIComponent((ev ? 'A destination has a charger: tell Gasket where you can charge (and how much) when you get there, so the next leg starts with that charge. ' : '') +
+        'Just keep my buffer: arrive with at least your buffer; what\'s left over is counted at the typical price. ' +
+        'Arrive with the most ' + (ev ? 'charge' : 'gas') + ': your last stop ' + (ev ? 'charges up' : 'fills the tank') + ', late in the trip and as cheaply as possible (the “must save” amount drops to $0.25 so a late cheap stop isn\'t skipped); you can add a top-up close to the destination afterward.');
       show($('tTopBox'), full);
       if($('evDestinations'))show($('evDestinations'),$('tArrive').querySelector('.on').dataset.a==='destination');
     };
@@ -837,7 +838,7 @@
         if (after) after(); collectSafe(); again();
       };
     };
-    seg('tArrive', arriveHelp); seg('tMode');
+    seg('tArrive', function(){S.trip.arriveSet=true;arriveHelp();}); seg('tMode');
     if($('tChargerTypes'))$('tChargerTypes').querySelectorAll('input').forEach(function(el){el.onchange=function(){var all=Array.from($('tChargerTypes').querySelectorAll('input'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charger type selected.');return;}S.trip.evChargers={};all.forEach(function(x){S.trip.evChargers[x.dataset.chargeType]=x.checked;});result=null;choiceCandidates.clear();A.save();gateTabs();};});
     if($('tACAdapter'))$('tACAdapter').onchange=function(){Garage.car().acAdapter=this.checked;result=null;choiceCandidates.clear();A.save();gateTabs();};
     if($('tChargerTypes')){
@@ -873,7 +874,8 @@
     setTimeout(function () { try { emptyPlan(); } catch (e) { } }, 300);   // ready before the needle gets to E
   }
   /** How much is in the tank: S.trip.fuel ({mode: gauge / pct / miles, …}, see fuelgauge.js), filled in for this car. */
-  function fuel() {var c=Garage.car();if(c.demoFuel&&S.trip.demoFuelCar!==c.id){S.trip.fuel=Object.assign({},c.demoFuel);S.trip.milesLeft='';S.trip.demoFuelCar=c.id;}else if(!c.demoFuel)delete S.trip.demoFuelCar;return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
+  function fuel() {var c=Garage.car();if(c.demoFuel&&c.power==='ev'&&!(c.demoFuelV>=2)){c.demoFuelV=2;if(c.demoFuel.mode==='pct'&&String(c.demoFuel.pct)==='100'){c.demoFuel.pct='80';if(S.trip.demoFuelCar===c.id)delete S.trip.demoFuelCar;}}   // 0.0.209: demo EVs start at 80%
+    if(c.demoFuel&&S.trip.demoFuelCar!==c.id){S.trip.fuel=Object.assign({},c.demoFuel);S.trip.milesLeft='';S.trip.demoFuelCar=c.id;}else if(!c.demoFuel)delete S.trip.demoFuelCar;return (S.trip.fuel = FuelGauge.math.norm(S.trip.fuel, KIND(), S.trip.milesLeft)); }
   function fuelMiles() { return FuelGauge.math.miles(fuel(), Garage.tank(), Garage.carModel().comb); }
   function hasFuel() { var m = fuelMiles(); return m != null && m > 0; }   // an empty tank isn't an answer (see emptyHelp)
   /** Roads wind: a straight line times this is a fair guess at the miles to a station off the route. */
@@ -990,7 +992,7 @@
     if (v('tDepart') != null) t.depart = v('tDepart') || '';
     if (on('tTollCmp') != null) t.tollCompare = on('tTollCmp');
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
-    if (v('tTankPrice') != null) t.tankPrice = v('tTankPrice').trim();
+    if (v('tTankPrice') != null) t[tankPriceKey()] = v('tTankPrice').trim();
     if (v('tBuffer') != null) t.bufferMi = Math.max(0, parseFloat(v('tBuffer')) || 0);
     if (v('tMinSave') != null) { t.minSave = Math.max(0, parseFloat(v('tMinSave')) || 0); var mm = parseFloat(v('tMaxMin')); t.maxDetourMin = mm >= 0 ? mm : 10; }
     A.save();
@@ -2158,6 +2160,13 @@
 
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function chargeMin(p) { return p.stops.reduce(function (a, s) { return a + (s.c.kw ? s.buyGal / s.c.kw * 60 : 0); }, 0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0); }
+  /** When you get there: an EV starts on "a destination has a charger" until you pick (arriveSet); gas never has that choice. */
+  function arriveNow(){var t=S.trip,a=t.arrive;if(KIND()==='ev'&&!t.arriveSet){t.arrive='destination';return 'destination';}return a==='full'||a==='destination'&&KIND()==='ev'?a:'buffer';}
+  /** What's already in the tank / battery cost, typed per fuel kind (a gas price is never a $/kWh). */
+  function tankPriceKey(){var k=KIND();return k==='gas'?'tankPrice':k+'TankPrice';}
+  function startRate(p){var tp=parseFloat(S.trip[tankPriceKey()]);return tp>0?tp:KIND()==='ev'&&evRates&&evRates.all?evRates.all:p.refPrice;}
+  var evRates=null;   // this route's published charger rates (ChargerData.routeRates), for unpriced chargers and the battery's energy
+  function evGuess(dc,fallback){var r=evRates;if(r&&(dc?r.dc:r.ac))return {price:dc?r.dc:r.ac,label:'Typical published '+(dc?'fast-charging':'Level 2')+' rate on this route ('+(dc?r.nDc:r.nAc)+' chargers; estimate)'};if(r&&r.all)return {price:r.all,label:'Typical published charging rate on this route ('+(r.nDc+r.nAc)+' chargers; estimate)'};return {price:fallback,label:'Your charging-price estimate'};}
   async function gatherAlt(models, pg, dbgS,replay) {
     var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)) : 8;
     if(kd==='ev')plugs=AltFuel.compatiblePlugs(c,plugs);
@@ -2169,10 +2178,18 @@
       try { list = replay&&replay.localOnly?(replay.google[mi]||{}).list||[]:await AltFuel.alongRoute(m, kd, plugs, corridor, function (f) { pg((mi + f) / models.length, kd === 'ev' ? 'Finding compatible chargers' : 'Finding hydrogen stations'); },S.trip.evChargers); }
       catch (e) { list=e.stations||[];if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
       raw.push(list);
+    }
+    // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
+    var kinds=raw.map(function(list){return list.map(function(st){return kd==='ev'?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});
+    evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
+    for (mi = 0; mi < models.length; mi++) {
+      var list = raw[mi], m = models[mi];
       var cands = [];
       for (var si = 0; si < list.length; si++) {
-        var st = list[si],charging=kd==='ev'?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;if(kd==='ev'&&!charging)continue;
-        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,price):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
+        var st = list[si],charging=kinds[mi][si];if(kd==='ev'&&!charging)continue;
+        var guess=kd==='ev'?evGuess(charging.level==='dc_fast',price):{price:price,label:'Your hydrogen-price estimate'};
+        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,guess.price,charging.kw):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
+        if(tariff.estimated&&tariff.price===guess.price&&tariff.label==='Your charging-price estimate')tariff.label=guess.label;
         var prs = T.projectLegs(m, { lat: st.lat, lng: st.lng }, corridor);
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = charging?charging.kw:0;
@@ -2186,7 +2203,7 @@
       // Keep compatible alternatives instead of discarding slower, reachable stops in 3-mile bins.
       per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [] });
     }
-    if (kd === 'ev') notes.push('Published simple per-kWh rates are used where available; missing or complex rates use your charging-price estimate (Settings → Trip defaults). Confirm current rates and available stalls with the charging network.');
+    if (kd === 'ev') notes.push('Chargers\' published rates are used where they have one (not live). The rest use '+(evRates&&evRates.all?'the typical published rate of this route\'s chargers':'your charging-price estimate (Settings → Trip defaults); too few chargers here publish a rate')+'. Confirm current rates and available stalls with the charging network.');
     dbgS.stations = raw.map(function (l) { return l.length; });
     pg(1, 'Choosing stops');
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
@@ -3306,8 +3323,7 @@
     var outLeg = { stops: T.purchases(p), arriveGal: p.arriveGal };
     if (top) { outLeg.stops.push({ arriveGal: top.arriveGal, buyGal: top.buyGal, price: top.c.price }); outLeg.arriveGal = top.endGal; }
     var legs = [outLeg];
-    var tp = parseFloat(S.trip.tankPrice);
-    r.startPrice = tp > 0 ? tp : p.refPrice;
+    r.startPrice = startRate(p);
     r.acc = T.account(r.startGal, r.startPrice, legs);
   }
   function dedupe(list) { var seen = {}; return list.filter(function (s) { if (seen[s.id]) return false; seen[s.id] = 1; return true; }); }
@@ -3425,6 +3441,7 @@
   }
   var MAPS_ICON = '<svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>';
   var SHARE_ICON = '<svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.2 3.2 0 0 0 0-1.39l7.05-4.11A2.99 2.99 0 1 0 15 5c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z"/></svg>';
+  function glue(t) { return String(t).replace(/(\d) (?=[a-z])/g, '$1\u00a0'); }   // "5 h 0 min" wraps as "5 h" / "0 min", never "5 h 0" / "min"
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
     if(priceRefreshActive)return skelStops('Refreshing saved prices');
@@ -3432,13 +3449,13 @@
     var h = '<div class="card dep-route">' + numList(route.stops)+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' +
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
-      '<div><b>' + fmtDur(model.durationSec) + '</b><span>driving</span></div>' +
+      '<div><b>' + glue(fmtDur(model.durationSec)) + '</b><span>driving</span></div>' +
       (p.ok ? '<div><b>' + p.totals.stops + '</b><span>' + (KIND() === 'ev' ? 'charging' : 'fuel') + ' stop' + (p.totals.stops === 1 ? '' : 's') + '</span></div>' : '') +
-      (p.ok && KIND() === 'ev' ? '<div><b>' + fmtDur(chargeMin(p) * 60) + '</b><span>charging</span></div>' : '') + '</div>';
+      (p.ok && KIND() === 'ev' ? '<div><b>' + glue(fmtDur(chargeMin(p) * 60)) + '</b><span>charging</span></div>' : '') + '</div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
     var t = p.totals, out = r.acc.legs[0];
     var costQ = 'The ' + out.burnGal.toFixed(1) + ' ' + UN() + ' this drive uses: what\'s already in your ' + (KIND() === 'ev' ? 'battery' : 'tank') + ' at ' + priceText(r.startPrice) + '/' + UN() +
-      (S.trip.tankPrice ? ' (what you said it cost)' : ' (typical on this route; set yours in Parameters)') + ', plus what you buy at what you pay.';
+      (parseFloat(S.trip[tankPriceKey()]) > 0 ? ' (what you said it cost)' : KIND() === 'ev' && evRates && evRates.all ? ' (the typical published rate of this route\'s chargers; set yours in Parameters)' : ' (typical on this route; set yours in Parameters)') + ', plus what you buy at what you pay.';
     var saveQ = 'Compared with filling up at the typical price on this route.' +
       (p.easy && p.savings > 0.005 ? ' The easiest plan (fewest stops, closest to the road) would be ' + money(p.easy.totals.net) + ' net vs. ' + money(t.net) + ' for this one' + (t.detourMin - p.easy.totals.detourMin > 0.5 ? ', which adds ' + Math.round(t.detourMin - p.easy.totals.detourMin) + ' min of detours' : '') + '.' : '') +
       (p.minStops != null && t.stops > p.minStops ? ' You only need ' + p.minStops + ' stop' + (p.minStops === 1 ? '' : 's') + '; the extra one pays for itself with cheaper gas.' : '');
@@ -3969,7 +3986,7 @@
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
     S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
-    S.trip.evChargers=v.trip.evChargers||null;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
+    S.trip.evChargers=v.trip.evChargers||null;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
     routeReview=null;choiceComplete=false;choicePool=null;
     if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();

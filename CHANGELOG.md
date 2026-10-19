@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.209 - 2026-10-19 (keyless test branch only)
+- EV charging prices: more of the chargers' published prices are read (time-of-day and membership prices, ranges, hourly rates), and chargers with no published price use the typical rate of the chargers on your route instead of one fixed guess.
+- The charge already in your battery is valued at that same typical rate, unless you type your own. A gas price you entered is no longer used for a battery or hydrogen tank.
+- When you get there: its choices sit side by side with wrapping text, "At least one of my destinations will have a charger" is chosen by default for EVs, and its (?) explains all three.
+- Departure's trip summary tiles stay on one row. The demo Tesla starts at 80%.
+
 ## 0.0.208 - 2026-10-19 (keyless test branch only)
 - EV trips: when your route has no workable charging plan, Stops offers the other routes that do; with none, Next says Adjust parameters and takes you back there.
 - EV trips: "At least one of my destinations will have a charger" under When you get there. Per destination: full charge, a percentage, miles of range, or time plugged in on Level 1 / Level 2 (with an estimated ending charge), an optional charge limit (like 80%) and the electricity price.

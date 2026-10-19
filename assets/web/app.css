@@ -1100,8 +1100,10 @@ details.g-obs[open] { padding-bottom: 12px; }
 .page.tpanel.submode .tp-nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .page.tpanel.submode .tp-nav .btn { font-size: 15px; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
 @media (max-width: 380px) { .page.tpanel.submode .tp-nav .btn { white-space: normal; font-size: 14px; line-height: 1.15; } }
-.kpis.dep-facts { margin: 10px 0 0; }
-.kpis.dep-facts b { font-size: 17px; white-space: nowrap; }
+.kpis.dep-facts { margin: 10px 0 0; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }   /* the trip at a glance: one row, however many tiles */
+.kpis.dep-facts > div { padding: 8px 4px; }
+.kpis.dep-facts b { font-size: 17px; white-space: normal; overflow-wrap: break-word; line-height: 1.2; }
+.kpis.dep-facts span { overflow-wrap: anywhere; }
 
 /* ---------- 3.25: delete confirmations, garage, recalls, EV & hydrogen ---------- */
 :root { --danger: #c62828; --danger-bg: #fdecea; }
@@ -1992,9 +1994,9 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .af-legend { top: calc(var(--st) + 168px + var(--task-space)); }
 .hz-leg { top: calc(var(--st) + 17px + var(--task-space)); }
 .ed-details > summary span small { display: block; font-weight: 500; color: var(--ink-2); text-transform: none; letter-spacing: 0; }
-.ev-arrival-selector { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
-.ev-arrival-selector > button:first-child { grid-column:1 / -1; white-space:normal; }
-.ev-arrival-selector button { white-space:normal; }
+/* When you get there: the choices side by side, words wrapping; stacked only when a choice would be narrower than ~6 words' width */
+.seg2.arrive-seg { display:grid; grid-auto-flow:row; grid-template-columns:repeat(auto-fit,minmax(min(100%,4.6em),1fr)); gap:4px; }
+.seg2.arrive-seg button { white-space:normal; overflow-wrap:break-word; hyphens:auto; line-height:1.25; min-height:44px; padding:8px 4px; font-size:12.5px; }
 .ev-destination { min-width:0; border-top:1px solid var(--line); margin-top:14px; padding-top:10px; }
 .ev-destination .nf { min-width:0; margin-bottom:10px; }
 .ev-destination .nf > span { white-space:normal; overflow-wrap:anywhere; }

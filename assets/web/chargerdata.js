@@ -47,7 +47,23 @@
    else{out.push(s);byId.set(s.id,s);var k=cell(s);if(!cells.has(k))cells.set(k,[]);cells.get(k).push(s);}
   });return out;
  }
- function tariff(st,fallback){var text=String(st.pricing||'').trim(),m=st.country==='US'&&/^(?:US)?\$\s*(\d+(?:\.\d+)?)\s*(?:\/|per)\s*kwh[.;]?$/i.exec(text),free=(st.pricingSource||st.source)==='DOE AFDC'?/^free(?: charging)?[.;]?$/i.test(text):/^free charging[.;]?$/i.test(text);return m||free?{price:free?0:+m[1],estimated:false,label:'Published charger rate (not live)',updated:st.pricingUpdated||st.dataUpdated||null}:{price:fallback,estimated:true,label:'Your charging-price estimate',updated:null};}
+ // A charger's price from its published text (DOE / OCM notes, not live): every "$ per kWh" figure (the highest of
+ // time-of-day / membership / range prices), else a per-hour or per-minute charging rate turned into $/kWh at the
+ // charger's speed (an estimate), else "Free". Parking / idle fees aren't charging prices; USD (US records) only.
+ function tariff(st,fallback,kw){var text=String(st.pricing||'').replace(/\s+/g,' ').trim(),us=st.country==='US',afdc=(st.pricingSource||st.source)==='DOE AFDC';
+  var parts=text.split(/[;,]|\s\+\s|\bplus\b/i).map(function(x){return x.trim();}).filter(Boolean),charge=parts.filter(function(x){return !/park|lot\b|garage|idle|idling|overstay|after\s+\d+\s*(?:min|hour|hr)/i.test(x);});
+  var nums=function(re){var out=[];charge.forEach(function(x){var m;re.lastIndex=0;while((m=re.exec(x)))out.push(+(m[2]||m[1]));});return out.filter(function(v){return v>=0&&v<5;});};
+  var kwh=us?nums(/\$\s*(\d*\.?\d+)(?:\s*-\s*\$?\s*(\d*\.?\d+))?\s*(?:\/|per|a)\s*kwh?\b/gi):[],fee=/(?:session|activation|connection|service|plug-?in|start)\s*fee|per session/i.test(charge.join(' ')),one=function(v,label,est){return {price:Math.round(v*1000)/1000,estimated:!!est,label:label,updated:st.pricingUpdated||st.dataUpdated||null};};
+  if(kwh.length){var hi=Math.max.apply(null,kwh),many=kwh.some(function(v){return v!==hi;});return one(hi,(many?'Highest published rate':'Published charger rate')+(fee?' + a session fee not included':'')+' (not live)',fee);}
+  var power=+kw||+st.kw||0,hr=us?nums(/\$\s*(\d*\.?\d+)(?:\s*-\s*\$?\s*(\d*\.?\d+))?\s*(?:\/|per|an?)\s*(?:hour|hr)\b/gi):[],mn=us?nums(/\$\s*(\d*\.?\d+)(?:\s*-\s*\$?\s*(\d*\.?\d+))?\s*(?:\/|per|a)\s*min(?:ute)?\b/gi):[];
+  if(power>0&&(hr.length||mn.length)){var perH=Math.max.apply(null,hr.concat(mn.map(function(v){return v*60;})));return one(perH/(power*0.8),'Published '+(hr.length?'hourly':'per-minute')+' rate at ~'+Math.round(power*0.8)+' kW (estimate, not live)',true);}
+  var free=afdc?/^free\b(?!\s*park)/i.test(text)&&!/\$\s*\d/.test(charge.join(' ')):/^free charging[.;]?$/i.test(text);
+  if(free)return one(0,'Published as free (not live)',false);
+  return {price:fallback,estimated:true,label:'Your charging-price estimate',updated:null};}
+ // What chargers along a route publish: the median paid $/kWh for fast (DC) and slower (AC) chargers, n of each
+ function routeRates(list){var dc=[],ac=[];list.forEach(function(x){var t=tariff(x.st,null,x.kw);if(t.price>0&&t.label.indexOf('rate')>=0)(x.dc?dc:ac).push(t.price);});
+  var med=function(a){if(a.length<3)return null;a=a.slice().sort(function(p,q){return p-q;});var k=a.length>>1;return a.length%2?a[k]:(a[k-1]+a[k])/2;};
+  return {dc:med(dc),ac:med(ac),all:med(dc.concat(ac)),nDc:dc.length,nAc:ac.length};}
  async function ocmRoute(model,mi){var key=String(S.ocmKey||'').trim();if(!key)throw new Error('Open Charge Map is enabled but needs its free personal key in Settings → Connections.');
   var line=encode(root.AltFuel.routePoints(model.pts||[])),ck='ocm-route-v1|'+mi+'|'+line,cached=KV.get('afdc',ck,DAY);if(cached)return cached.v;
   if(pending.has(ck))return pending.get(ck);
@@ -75,6 +91,6 @@
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,boxes:boxes,encode:encode};
+ root.ChargerData={routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();
 })(window);

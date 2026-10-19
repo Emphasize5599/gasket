@@ -13,7 +13,7 @@
        info:{engine:'Hydrogen fuel-cell electric motor',trans:'single',drive:'rwd',features:['Regenerative braking']},demoFeatures:'Hydrogen locations, kg units, spare-location choices; tires: a generalized estimate, never rotated, 10-year-old tires and an aging compact spare.',tires:{size:'235/55R19',type:'Touring All-Season',tread:{mode:'miles',miles:38000,rotated:'no',dot:'0716'},spare:{kind:'compact',location:'inside',dot:'0820'}}}
     ];
     cars.forEach(function(c,i){c.name=[c.year,c.make,c.model,c.trim].join(' ').trim();c.demoMileage=true;c.demoSet=2;c.picMode='';c.paint={hex:['#457ea2','#aa3939','#d8dce3','#417c62'][i]};c.tankSrc='illustrative demo capacity';c.obs=c.obs||{};c.entries=i===0?[{id:'demo-log',date:'2026-10-01',loggedAt:Date.UTC(2026,9,1,18,30),mpg:50.8,kind:'hwy',speed:60}]:[];c.tires.sizeSrc='user';
-      c.demoFuel=c.power==='ev'?{mode:'pct',pct:'100'}:{mode:'gauge',n16:1};
+      c.demoFuel=c.power==='ev'?{mode:'pct',pct:'80'}:{mode:'gauge',n16:1};c.demoFuelV=2;
       var caps=i===1?{auto:false,fanMax:5,rear:true,seatHeat:true,noFilter:true}:{auto:true,dual:true,rearDefrost:true,seatHeat:true,wheelHeat:i===0,seatCool:i===3,sunroof:i===2};
       c.climate={caps:caps,presets:[]};if(root.ClimateMath){['winter','spring','summer','fall'].forEach(function(s){c.climate.presets.push(root.ClimateMath.starter('season',s,caps));root.ClimateMath.situations(s).forEach(function(w){var p=root.ClimateMath.starter('weather',w[0],caps);p.season=s;c.climate.presets.push(p);});});var p=root.ClimateMath.starter('custom','',caps);p.name='Demo road-trip comfort';c.climate.presets.push(p);}
       c.climate.presets.forEach(function(p,j){p.id=c.id+'-preset-'+j;});c.paint.rgb=c.paint.hex;delete c.paint.hex;
