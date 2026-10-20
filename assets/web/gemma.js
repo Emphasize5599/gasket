@@ -6,6 +6,7 @@
   var scanDeferred=false,releasedForScan=false;
   var failures=new Map(),MAX_ATTEMPTS=3;
   var LG=window.FLog||{info:function(){},warn:function(){}};
+  var lastStartupDiagnostics='',lastNativeSequence=0;
   function call(fn,arg){return window.__trip.call(fn,arg);}
   function current(){return window.Garage&&Garage.car();}
   function input(c){
@@ -48,6 +49,8 @@
   function status(value){
     var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
+    if(value.startupDiagnostics){var startupKey=JSON.stringify(value.startupDiagnostics);if(startupKey!==lastStartupDiagnostics){lastStartupDiagnostics=startupKey;LG.info('ai','Android process exit and previous AI task diagnostics',value.startupDiagnostics);}}
+    if(value.nativeDiagnostics&&value.nativeDiagnostics.sequence!==lastNativeSequence){lastNativeSequence=value.nativeDiagnostics.sequence;(value.nativeDiagnostics.failure?LG.warn:LG.info)('ai','Native AI stage diagnostics',value.nativeDiagnostics);}
     if(value.renderDiagnostics)LG.info('ai','Rendering during local AI',value.renderDiagnostics);
     if(state.supported&&lastIssue==='Larger AI is unavailable on this app build.')lastIssue='';
     if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,cpuOnly:!!state.cpuOnly,gpuLowPriorityRequested:!!state.gpuLowPriorityRequested,gpuPatchVersion:state.gpuPatchVersion||0,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
@@ -87,7 +90,7 @@
     clearTimeout(scheduled);scheduled=setTimeout(prefetch,2000);return true;
   }
   function prefetch(){
-    if(!state.enabled||!state.ready||!state.supported){if(!running)Tasks.remove('gemma-advice');return;}
+    if(!state.enabled||!state.ready||!state.supported||state.recoveryRequired){if(!running)Tasks.remove('gemma-advice');return;}
     var c=current(),cars=(A.S.cars||[]).slice();cars.sort(function(a,b){return (b===c?1:0)-(a===c?1:0);});desired=[];
     var seen=new Set();cars.forEach(function(car){try{var next=input(car);if(seen.has(next.key))return;seen.add(next.key);if(next.pack.setup.tires.some(function(t){return t.depth!=null;})&&!remembered(next)&&!attempted.has(next.key))desired.push(next);}catch(e){if(car===c)lastIssue=e.message;}});
     if(running){if(!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}return;}
@@ -106,7 +109,7 @@
     try{
       var result=await call('aiGenerate',prompt);
       if(!state.enabled||item.cancelled||!liveItem(item)||window.__erasing)return;
-      if(result.error){if(!/cancelled|canceled/i.test(result.error))failed(item,'generation error');else issues.set(item.key,'AI explanation cancelled.');return;}
+      if(result.error){if(result.recoveryRequired){state.recoveryRequired=true;issues.set(item.key,'AI paused after a native failure. Use Try AI explanation to retry.');}else if(!/cancelled|canceled/i.test(result.error))failed(item,'generation error');else issues.set(item.key,'AI explanation cancelled.');return;}
       var checked=TirePolicy.check(result.text,item.pack),accepted=checked.ok;
       if(!accepted){failed(item,checked.reason||'output validation');return;}
       failures.delete(item.key);issues.delete(item.key);
@@ -132,20 +135,21 @@
         '<p class="lead small keep">AI summary—not a tire inspection.</p></div>';
     }
     var eligible=false;try{eligible=input(c).pack.setup.tires.some(function(t){return t.depth!=null;});}catch(e){}
-    var label=state.ready?(running?'Local AI is preparing an explanation.':eligible?'Checked tire notices are available below.':'Add tire mileage and type, or measured tread, before requesting an explanation.'):'Download Gemma in Settings to enable local explanations.';
+    var label=state.recoveryRequired?'AI paused after an unexpected exit. Use Try AI explanation to retry.':state.ready?(running?'Local AI is preparing an explanation.':eligible?'Checked tire notices are available below.':'Add tire mileage and type, or measured tread, before requesting an explanation.'):'Download Gemma in Settings to enable local explanations.';
     var issue;try{issue=issues.get(input(c).key);}catch(e){}
     return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup</h3><p class="lead small keep">'+esc(issue||(!state.supported?lastIssue:'')||label)+'</p>'+(state.ready&&eligible&&!running?'<button class="btn tonal sm" id="gemmaRetry">Try AI explanation</button>':'')+'</div>';
   }
   function settingsHtml(){return '<div class="card" id="gemmaSettings"><h3>Local AI explanations · optional</h3><p class="lead small keep">Gemma 4 E4B explains complex tire setups on your phone, one task at a time. The lightweight ratings model stays in use. No API key or cloud inference.</p><div id="gemmaState" class="lead small keep"></div><p class="lead small keep">Separate 3.66 GB download. Wi-Fi recommended; allow extra storage for runtime work. Leaving the app may pause the download. Existing tire notices work without it.</p><div class="gemma-controls"><button class="btn tonal" id="gemmaEnable"></button><button class="btn primary" id="gemmaDownload">Download 3.66 GB</button><button class="btn tonal" id="gemmaCancel">Cancel task</button><button class="btn tonal" id="gemmaRemove">Remove model</button></div><div class="sub-h">AI processor</div><div class="seg2" id="gemmaProcessor" aria-label="AI processor"><button type="button" data-ai-processor="auto">Automatic (GPU)</button><button type="button" data-ai-processor="cpu">CPU only</button></div><p class="lead small keep">Screen flickers during AI? Turn AI off, select CPU only, then turn it back on. CPU is slower (up to 10 min per explanation). No model download needed. This helps test whether the GPU is involved; it is not a confirmed fix.</p><button type="button" class="btn tonal sm" id="gemmaRecheck">Recheck current car</button></div>';}
   function paintSettings(){
     var el=document.getElementById('gemmaState');if(!el)return;
-    el.textContent=lastIssue||state.error||(!state.supported?'Larger-model runtime is unavailable on this device.':state.busy?'Working · '+state.phase:state.ready?'Model verified and ready'+(state.enabled?' · enabled':' · disabled'):state.bytes?'Partial download saved. Resume when ready.':'Not downloaded.');
+    var processor=document.getElementById('gemmaProcessor');if(processor&&state.gpuSafetyHold&&processor.nextElementSibling)processor.nextElementSibling.textContent='GPU mode is temporarily paused after stability problems. This build uses the stock runtime on CPU. Your model download and saved explanations are kept.';
+    el.textContent=lastIssue||state.error||(state.recoveryRequired?'AI paused after an unexpected exit. Use Recheck current car to retry.':!state.supported?'Larger-model runtime is unavailable on this device.':state.busy?'Working · '+state.phase:state.ready?'Model verified and ready'+(state.enabled?' · enabled':' · disabled'):state.bytes?'Partial download saved. Resume when ready.':'Not downloaded.');
     var enable=document.getElementById('gemmaEnable');enable.textContent=state.enabled?'Turn AI off':'Turn AI on';enable.disabled=!state.supported;
     var download=document.getElementById('gemmaDownload');download.disabled=!state.enabled||state.ready||state.busy;download.textContent=state.bytes?'Resume':'Get model';download.setAttribute('aria-label',state.bytes?'Resume 3.66 GB model download':'Download 3.66 GB model');
     download.classList.toggle('hidden',!!state.busy);
     document.getElementById('gemmaCancel').classList.toggle('hidden',!state.busy);
     document.getElementById('gemmaRemove').disabled=state.busy||!state.ready&&!state.bytes;document.getElementById('gemmaRemove').textContent='Delete model';
-    document.querySelectorAll('[data-ai-processor]').forEach(function(b){var on=(b.dataset.aiProcessor==='cpu')===!!state.cpuOnly;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));b.disabled=!state.supported||!!state.busy;});
+    document.querySelectorAll('[data-ai-processor]').forEach(function(b){var on=(b.dataset.aiProcessor==='cpu')===!!state.cpuOnly;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));b.disabled=!state.supported||!!state.busy||!!state.gpuSafetyHold&&b.dataset.aiProcessor==='auto';});
     var recheck=document.getElementById('gemmaRecheck');if(recheck)recheck.disabled=!state.enabled||!state.ready||!!state.busy||!current();
   }
   function bindSettings(){
@@ -160,7 +164,7 @@
     document.getElementById('gemmaCancel').onclick=function(){command('cancel');};
     document.getElementById('gemmaRemove').onclick=async function(){if(await A.confirmDel({always:true,title:'Remove the local model?',body:'Deletes the model and its partial download, not your cars or tire details. Download it again to use larger AI.',action:'Remove'})){A.S.largerAIChoice=false;A.save();command('remove');}};
   }
-  function retry(){var c=current();if(c)try{var item=input(c);invalidate(item);attempted.delete(item.key);failures.delete(item.key);issues.delete(item.key);}catch(e){}lastIssue='';schedule();}
+  async function retry(){if(state.recoveryRequired){var resumed=await command('acknowledgeRecovery');if(resumed.error)return;}var c=current();if(c)try{var item=input(c);invalidate(item);attempted.delete(item.key);failures.delete(item.key);issues.delete(item.key);}catch(e){}lastIssue='';schedule();}
   var slot=document.getElementById('gemmaSlot');if(slot){slot.outerHTML=settingsHtml();bindSettings();}   // Settings opened before this file loaded (first-time setup)
   window.Gemma={status:function(){return state;},prefetch:schedule,answer:answer,card:card,settingsHtml:settingsHtml,bindSettings:bindSettings,retry:retry,setEnabled:function(on){return command(on?'enable':'disable');}};
   window.addEventListener('garagechange',function(){if(running&&!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}schedule();});

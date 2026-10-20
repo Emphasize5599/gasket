@@ -131,6 +131,10 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
     private boolean rendererRecoveryPending = false;
+    private void noteRendererExit(String scope, android.webkit.RenderProcessGoneDetail detail) {
+        AiDiagnostics.rendererExit(getApplicationContext(), scope, detail.didCrash(), detail.rendererPriorityAtExit());
+        synchronized (this) { if (gemma != null) gemma.rendererLost(); }
+    }
     private void recoverRendererUi() {
         if (rendererRecoveryPending) return;
         rendererRecoveryPending = true;
@@ -223,6 +227,7 @@ public class MainActivity extends Activity {
             @Override
             public boolean onRenderProcessGone(WebView gone, android.webkit.RenderProcessGoneDetail detail) {
                 pageReady = false;
+                noteRendererExit("app", detail);
                 root.removeView(gone); gone.destroy();
                 if (web == gone) web = null;
                 recoverRendererUi();
@@ -639,6 +644,7 @@ public class MainActivity extends Activity {
                 }
                 @Override
                 public boolean onRenderProcessGone(WebView gone, android.webkit.RenderProcessGoneDetail detail) {
+                    noteRendererExit(key, detail);
                     if (isGasWorker(key)) gasRendererLosses++;
                     root.removeView(gone); gone.destroy();
                     if (view == gone) view = null;
