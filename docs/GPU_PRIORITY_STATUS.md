@@ -3,6 +3,13 @@
 0.0.216 integration is committed at adb0aa5. Signed APK publication is pending:
 https://github.com/Emphasize5599/gasket/actions/runs/39463467798
 
+Latest correction: that APK attempt was stopped before Gradle because the JNI
+ELF used 4 KB alignment. f1addbc explicitly links for 16 KB pages. Source run
+39464106212 PASSED full verification: all 46 JNI exports preserved, 16 KB LOAD
+alignment for JNI and provider, only reviewed Android system/provider dependencies.
+Aligned JNI SHA256: 305e61718079a032bad89e462cdb96b6e881bece4e60b95d2f140b1ad166a924.
+Use that run for APK bootstrap; the old 39458036225 candidate must NOT be packaged.
+
 Do not redo integration from the old checklist below. Current implementation:
 `GemmaGpuSupport` checks native identity before GPU use; unknown/missing patches
 use CPU. Runtime logs include `gpuPatchVersion` and `gpuLowPriorityRequested`.

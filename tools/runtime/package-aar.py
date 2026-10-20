@@ -6,7 +6,7 @@ import sys
 import zipfile
 
 STOCK_SHA = '706cbb8a87739b2818111bf3a19a78b8f7781586d10f80adf3415581fab7595f'
-NATIVE_SHA = '939c2070a6134aecac893e48c7a4a1a98ae7ac878a86df7cb82cf10fac343cce'
+NATIVE_SHA = '305e61718079a032bad89e462cdb96b6e881bece4e60b95d2f140b1ad166a924'
 ENTRY = 'jni/arm64-v8a/liblitertlm_jni.so'
 PROVIDER = 'libGemmaModelConstraintProvider.so'
 PROVIDER_SHA = 'f2aa38cecc5c728050652ffdbaed4c6f2d444e098e1ca3ecf8b85be46baae5b9'
