@@ -92,12 +92,13 @@ jobs:
         working-directory: build/upstream-litert
         run: |
           "$RUNNER_TEMP/gasket-bazel" build --config=android_arm64 -c opt \
+            --linkopt=-Wl,-z,max-page-size=16384 \
             --jobs=2 --local_resources=memory=4096 \
             --repo_env=CC=/usr/bin/clang-18 --repo_env=CXX=/usr/bin/clang++-18 \
             --repository_cache="$HOME/.cache/gasket-native-repo" \
             --disk_cache="$HOME/.cache/gasket-native-disk" \
             //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni
-          candidate=$("$RUNNER_TEMP/gasket-bazel" cquery --config=android_arm64 -c opt --repo_env=CC=/usr/bin/clang-18 --repo_env=CXX=/usr/bin/clang++-18 --output=files //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni | tail -1)
+          candidate=$("$RUNNER_TEMP/gasket-bazel" cquery --config=android_arm64 -c opt --linkopt=-Wl,-z,max-page-size=16384 --repo_env=CC=/usr/bin/clang-18 --repo_env=CXX=/usr/bin/clang++-18 --output=files //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni | tail -1)
           test -f "$candidate"
           mkdir -p ../gpu-runtime/arm64-v8a
           cp "$candidate" ../gpu-runtime/arm64-v8a/liblitertlm_jni.so
