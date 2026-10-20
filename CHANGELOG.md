@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.215 - 2026-10-20 (keyless test branch only)
+- Optional CPU-only AI mode and rendering diagnostics to investigate screen flicker during local AI work.
+- Bug fixes.
+
 ## 0.0.214 - 2026-10-20 (keyless test branch only)
 - ChargePoint prices use the correct station IDs, include service-fee information, and pause for detected website checks.
 - Bug fixes, including screen jumps between queued AI explanations and invalid prices being treated as free.

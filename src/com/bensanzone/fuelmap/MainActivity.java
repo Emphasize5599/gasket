@@ -78,16 +78,55 @@ public class MainActivity extends Activity {
             + "places.addressComponents,places.types,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
 
     private WebView web;
+    // Aggregate only while AI is active. Frame timing is a diagnostic, not proof of visual corruption.
+    private Window.OnFrameMetricsAvailableListener aiFrames;
+    private long aiFrameCount, aiFrameSlow, aiFrameMax, aiFrameLost, aiFrameStarted;
+    private String aiFrameBackend = "loading";
+    private void aiStatusWithFrames(final JSONObject value) {
+        main.post(() -> {
+            if (isDestroyed()) return;
+            String phase = value.optString("phase"), task = value.optString("task");
+            boolean active = "advice".equals(task) && ("load".equals(phase) || "generate".equals(phase) || "cancelling".equals(phase));
+            if (active && aiFrames == null) {
+                aiFrameCount = aiFrameSlow = aiFrameMax = aiFrameLost = 0;
+                aiFrameStarted = android.os.SystemClock.elapsedRealtime(); aiFrameBackend = "loading";
+                aiFrames = (window, metrics, lost) -> {
+                    if (metrics.getMetric(android.view.FrameMetrics.FIRST_DRAW_FRAME) == 1) return;
+                    long ns = metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION);
+                    long deadline = metrics.getMetric(android.view.FrameMetrics.DEADLINE);
+                    if (ns >= 0) { aiFrameCount++; aiFrameMax = Math.max(aiFrameMax, ns); if (deadline > 0 && ns > deadline) aiFrameSlow++; }
+                    aiFrameLost += lost;
+                };
+                getWindow().addOnFrameMetricsAvailableListener(aiFrames, main);
+            }
+            if (active && value.has("backend")) aiFrameBackend = value.optString("backend");
+            if (!active && aiFrames != null) {
+                getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null;
+                try {
+                    JSONObject stats = new JSONObject(); stats.put("backend", aiFrameBackend);
+                    stats.put("cpuOnly", value.optBoolean("cpuOnly")); stats.put("frames", aiFrameCount); stats.put("overDeadline", aiFrameSlow);
+                    stats.put("maxFrameMs", Math.round(aiFrameMax / 10000.0) / 100.0); stats.put("droppedMetricReports", aiFrameLost);
+                    stats.put("elapsedMs", android.os.SystemClock.elapsedRealtime() - aiFrameStarted);
+                    stats.put("hardwareAccelerated", web != null && web.isHardwareAccelerated());
+                    stats.put("device", android.os.Build.MODEL); stats.put("sdk", android.os.Build.VERSION.SDK_INT);
+                    PackageInfo provider = WebView.getCurrentWebViewPackage(); if (provider != null) stats.put("webView", provider.versionName);
+                    value.put("renderDiagnostics", stats);
+                } catch (Exception ignored) { }
+            }
+            js("window.onGemmaStatus&&window.onGemmaStatus(" + value.toString() + ");");
+        });
+    }
     private GemmaService gemma;
     private synchronized GemmaService gemma() {
         if (gemma == null) gemma = new GemmaService(getApplicationContext(), new GemmaService.Listener() {
-            public void status(JSONObject value) { js("window.onGemmaStatus&&window.onGemmaStatus(" + value.toString() + ");"); }
+            public void status(JSONObject value) { aiStatusWithFrames(value); }
             public void result(int id, JSONObject value) { reply(id, value); }
         });
         return gemma;
     }
 
     @Override protected void onDestroy() {
+        if (aiFrames != null) { getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null; }
         synchronized (this) { if (gemma != null) { gemma.close(); gemma = null; } }
         super.onDestroy();
     }

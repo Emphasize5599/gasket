@@ -48,8 +48,9 @@
   function status(value){
     var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
+    if(value.renderDiagnostics)LG.info('ai','Rendering during local AI',value.renderDiagnostics);
     if(state.supported&&lastIssue==='Larger AI is unavailable on this app build.')lastIssue='';
-    if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
+    if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,cpuOnly:!!state.cpuOnly,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if((state.error&&state.error!==priorIssue)||(state.reason&&state.reason!==priorReason))LG.warn('ai','Local model task update',{phase:state.phase,task:state.task||priorTask||'',bytes:state.bytes||0,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if(state.error&&state.error!==priorIssue&&priorTask==='download')A.toast('Model download stopped · '+(state.bytes?'partial file kept.':'not complete.')+' Resume in Settings.');
     if(state.phase!=='download')rateS=[];
@@ -135,7 +136,7 @@
     var issue;try{issue=issues.get(input(c).key);}catch(e){}
     return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup</h3><p class="lead small keep">'+esc(issue||(!state.supported?lastIssue:'')||label)+'</p>'+(state.ready&&eligible&&!running?'<button class="btn tonal sm" id="gemmaRetry">Try AI explanation</button>':'')+'</div>';
   }
-  function settingsHtml(){return '<div class="card" id="gemmaSettings"><h3>Local AI explanations · optional</h3><p class="lead small keep">Gemma 4 E4B explains complex tire setups on your phone, one task at a time. The lightweight ratings model stays in use. No API key or cloud inference.</p><div id="gemmaState" class="lead small keep"></div><p class="lead small keep">Separate 3.66 GB download. Wi-Fi recommended; allow extra storage for runtime work. Leaving the app may pause the download. Existing tire notices work without it.</p><div class="gemma-controls"><button class="btn tonal" id="gemmaEnable"></button><button class="btn primary" id="gemmaDownload">Download 3.66 GB</button><button class="btn tonal" id="gemmaCancel">Cancel task</button><button class="btn tonal" id="gemmaRemove">Remove model</button></div></div>';}
+  function settingsHtml(){return '<div class="card" id="gemmaSettings"><h3>Local AI explanations · optional</h3><p class="lead small keep">Gemma 4 E4B explains complex tire setups on your phone, one task at a time. The lightweight ratings model stays in use. No API key or cloud inference.</p><div id="gemmaState" class="lead small keep"></div><p class="lead small keep">Separate 3.66 GB download. Wi-Fi recommended; allow extra storage for runtime work. Leaving the app may pause the download. Existing tire notices work without it.</p><div class="gemma-controls"><button class="btn tonal" id="gemmaEnable"></button><button class="btn primary" id="gemmaDownload">Download 3.66 GB</button><button class="btn tonal" id="gemmaCancel">Cancel task</button><button class="btn tonal" id="gemmaRemove">Remove model</button></div><div class="sub-h">AI processor</div><div class="seg2" id="gemmaProcessor" aria-label="AI processor"><button type="button" data-ai-processor="auto">Automatic (GPU)</button><button type="button" data-ai-processor="cpu">CPU only</button></div><p class="lead small keep">Screen flickers during AI? Turn AI off, select CPU only, then turn it back on. CPU is slower (up to 10 min per explanation). No model download needed. This helps test whether the GPU is involved; it is not a confirmed fix.</p><button type="button" class="btn tonal sm" id="gemmaRecheck">Recheck current car</button></div>';}
   function paintSettings(){
     var el=document.getElementById('gemmaState');if(!el)return;
     el.textContent=lastIssue||state.error||(!state.supported?'Larger-model runtime is unavailable on this device.':state.busy?'Working · '+state.phase:state.ready?'Model verified and ready'+(state.enabled?' · enabled':' · disabled'):state.bytes?'Partial download saved. Resume when ready.':'Not downloaded.');
@@ -144,10 +145,14 @@
     download.classList.toggle('hidden',!!state.busy);
     document.getElementById('gemmaCancel').classList.toggle('hidden',!state.busy);
     document.getElementById('gemmaRemove').disabled=state.busy||!state.ready&&!state.bytes;document.getElementById('gemmaRemove').textContent='Delete model';
+    document.querySelectorAll('[data-ai-processor]').forEach(function(b){var on=(b.dataset.aiProcessor==='cpu')===!!state.cpuOnly;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));b.disabled=!state.supported||!!state.busy;});
+    var recheck=document.getElementById('gemmaRecheck');if(recheck)recheck.disabled=!state.enabled||!state.ready||!!state.busy||!current();
   }
   function bindSettings(){
     if(!document.getElementById('gemmaSettings'))return;paintSettings();
     document.getElementById('gemmaEnable').onclick=function(){A.S.largerAIChoice=!state.enabled;A.save();command(state.enabled?'disable':'enable');};
+    document.querySelectorAll('[data-ai-processor]').forEach(function(b){b.onclick=function(){command(b.dataset.aiProcessor==='cpu'?'processorCpu':'processorAuto');};});
+    var recheck=document.getElementById('gemmaRecheck');if(recheck)recheck.onclick=retry;
     document.getElementById('gemmaDownload').onclick=async function(){
       var ok=await A.confirmDel({always:true,title:'Download Gemma 4 E4B?',body:'This downloads about 3.66 GB over your current network. Wi-Fi is recommended. You can cancel and resume from Settings.',action:'Download',goClass:'primary'});
       if(ok)command('download');

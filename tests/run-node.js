@@ -11,6 +11,7 @@ release.push('adaptive-readers');
 release.push('tire-estimate-ui','planner-worker');
 release.push('tasks','gemma','gemma-ui');
 release.push('gemma-cache');
+release.push('gemma-processor','gemma-processor-ui');
 release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices','charger-download');
 release.push('evprices-recovery','evprices-ui');

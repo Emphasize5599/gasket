@@ -7,14 +7,16 @@ import java.util.Collections;
 final class GemmaRuntime {
     private Engine engine;
     private int contextTokens;
+    private boolean loadedCpuOnly;
     private Conversation conversation;
     private final Object conversationLock = new Object();
     String backend = "GPU";
 
-    void load(String path, String cache, int inputBytes) throws Exception {
+    void load(String path, String cache, int inputBytes, boolean cpuOnly) throws Exception {
         int required = Math.min(32768, Math.max(8192, ((inputBytes + 4096 + 4095) / 4096) * 4096));
-        if (engine != null && contextTokens >= required) return;
-        close(); contextTokens = required;
+        if (engine != null && contextTokens >= required && loadedCpuOnly == cpuOnly) return;
+        close(); contextTokens = required; loadedCpuOnly = cpuOnly;
+        if (cpuOnly) { backend = "CPU"; initialize(path, cache, new Backend.CPU(4, null)); return; }
         try { initialize(path, cache, new Backend.GPU()); backend = "GPU"; }
         catch (Exception | LinkageError gpuFailure) {
             backend = "CPU";

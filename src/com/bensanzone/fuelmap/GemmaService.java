@@ -47,12 +47,14 @@ final class GemmaService {
     }
     private boolean supported() { return Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a") || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64"); }
     private boolean enabled() { return prefs.getBoolean("enabled", true); }
+    private boolean cpuOnly() { return prefs.getBoolean("cpuOnly", false); }
     JSONObject status() {
         JSONObject value = new JSONObject();
         try {
             value.put("enabled", enabled()); value.put("ready", ready); value.put("supported", supported());
             value.put("phase", phase); value.put("error", error); value.put("bytes", downloaded); value.put("total", BYTES);
             value.put("task", task);
+            value.put("cpuOnly", cpuOnly());
             value.put("reason", reason); value.put("attempt", attempt);
             value.put("revision", REV); value.put("busy", busy.get());
             if (runtime != null) value.put("backend", runtime.backend);
@@ -67,6 +69,12 @@ final class GemmaService {
     }
     synchronized void command(int id, String command) {
         if (closed) return;
+        if ("processorCpu".equals(command) || "processorAuto".equals(command)) {
+            if (busy.get()) { result(id, null, "Turn AI off or wait for the current task before changing its processor."); return; }
+            prefs.edit().putBoolean("cpuOnly", "processorCpu".equals(command)).apply();
+            // load() recreates the engine on the serial worker when the preference changes.
+            listener.result(id, status()); notifyStatus(); return;
+        }
         if ("releaseIdle".equals(command)) {
             // Never interrupt generation/download, change the enabled preference, or delete files.
             if (!busy.get()) worker.execute(() -> {
@@ -135,10 +143,11 @@ final class GemmaService {
         final long ticket = epoch.incrementAndGet(); error = ""; reason="";task = "advice"; phase = "load"; notifyStatus();
         activeTicket = ticket;
         final long started = System.nanoTime();
+        final boolean useCpu = cpuOnly();
         ScheduledFuture<?> deadline = timer.scheduleAtFixedRate(() -> {
             synchronized (GemmaService.this) {
                 if (activeTicket != ticket || !busy.get()) return;
-                if (ticket != epoch.get() || closed || !enabled() || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(120)) {
+                if (ticket != epoch.get() || closed || !enabled() || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(useCpu ? 600 : 120)) {
                     if (ticket == epoch.get()) epoch.incrementAndGet();
                     if (!"cancelling".equals(phase)) { phase = "cancelling"; notifyStatus(); }
                     GemmaRuntime active = runtime; if (active != null) active.cancel();
@@ -149,7 +158,7 @@ final class GemmaService {
             try {
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 if (runtime == null) runtime = new GemmaRuntime();
-                runtime.load(model.getAbsolutePath(), cache.getAbsolutePath(), prompt.getBytes(StandardCharsets.UTF_8).length);
+                runtime.load(model.getAbsolutePath(), cache.getAbsolutePath(), prompt.getBytes(StandardCharsets.UTF_8).length, useCpu);
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 phase = "generate"; notifyStatus();
                 String response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed);
