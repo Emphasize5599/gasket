@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.225 - 2026-10-20
+Debug diagnostics build.
+
+- Removed experimental AI rendering; added a brief, dismissible flicker-workaround tip when larger GPU AI work starts.
+- Visual glitch marker is now an optional debug setting, off by default.
+- Bug fixes.
+
 ## 0.0.224 - 2026-10-20
 Debug diagnostics build.
 

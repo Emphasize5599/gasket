@@ -4,6 +4,9 @@
   var A=window.__app, state={enabled:false,ready:false,supported:false,phase:'idle'}, running=null, desired=[];
   var cache=new Map(), attempted=new Set(), issues=new Map(), scheduled=0, revision='', lastIssue='';
   var scanDeferred=false,releasedForScan=false,queueReleased=false;
+  var flickerBatch=false;
+  function endFlickerTip(){flickerBatch=false;if(window.Tasks&&Tasks.dismissNotice)Tasks.dismissNotice('ai-flicker');}
+  function startFlickerTip(){if(flickerBatch||state.cpuOnly)return;flickerBatch=true;if(window.Tasks&&Tasks.notice)Tasks.notice('ai-flicker','Screen flickering? Try turning on “Disable HW overlays” in your device’s Developer options.');}
   var failures=new Map(),MAX_ATTEMPTS=3;
   var LG=window.FLog||{info:function(){},warn:function(){}};
   var lastStartupDiagnostics='',lastNativeSequence=0;
@@ -32,7 +35,7 @@
     issues.set(item.key,lastIssue);if(retry)attempted.delete(item.key);
     LG.warn('ai','Local explanation attempt failed',{carId:item.car.id,attempt:count,maxAttempts:MAX_ATTEMPTS,reason:reason,retry:retry,answerCacheCleared:true});
   }
-  function cancelGeneration(){if(running){running.cancelled=true;attempted.add(running.key);}desired=[];command('cancelAdvice');}
+  function cancelGeneration(){endFlickerTip();if(running){running.cancelled=true;attempted.add(running.key);}desired=[];command('cancelAdvice');}
   function liveItem(item){return (A.S.cars||[]).some(function(c){try{return input(c).key===item.key;}catch(e){return false;}});}
   function changed(){window.dispatchEvent(new Event('gemmachange'));}
   // time left: the speed over the last 30 s of progress (a stall or a resume starts it over)
@@ -53,6 +56,7 @@
     if(window.VisualDiagnostics)VisualDiagnostics.ai(value);
     var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
+    if((state.cpuOnly||state.backend==='CPU'||!state.enabled||state.recoveryRequired)&&window.Tasks&&Tasks.dismissNotice)Tasks.dismissNotice('ai-flicker');
     if(value.startupDiagnostics){var startupKey=JSON.stringify(value.startupDiagnostics);if(startupKey!==lastStartupDiagnostics){lastStartupDiagnostics=startupKey;LG.info('ai','Android process exit and previous AI task diagnostics',value.startupDiagnostics);}}
     if(value.nativeDiagnostics&&value.nativeDiagnostics.sequence!==lastNativeSequence){lastNativeSequence=value.nativeDiagnostics.sequence;(value.nativeDiagnostics.failure?LG.warn:LG.info)('ai','Native AI stage diagnostics',value.nativeDiagnostics);}
     if(value.renderDiagnostics)LG.info('ai','Rendering during local AI',value.renderDiagnostics);
@@ -72,8 +76,6 @@
     paintSettings();changed();if(!state.busy)schedule();
   }
   window.onGemmaStatus=status;
-  // Rendering lifecycle reports update this Settings detail only, never the AI queue/phase.
-  window.onAiGraphicsStatus=function(value){state.graphicsExperiment=value;paintSettings();};
   async function command(action){
     if(typeof A.N.aiCommand!=='function'){lastIssue='Larger AI is unavailable on this app build.';paintSettings();return {error:lastIssue};}
     LG.info('ai','Local model command',{command:action,phase:state.phase,task:state.task||'',bytes:state.bytes||0});
@@ -96,11 +98,11 @@
     clearTimeout(scheduled);scheduled=setTimeout(prefetch,2000);return true;
   }
   function prefetch(){
-    if(!state.enabled||!state.ready||!state.supported||state.recoveryRequired){if(!running)Tasks.remove('gemma-advice');return;}
+    if(!state.enabled||!state.ready||!state.supported||state.recoveryRequired){if(!running){Tasks.remove('gemma-advice');endFlickerTip();}return;}
     var c=current(),cars=(A.S.cars||[]).slice();cars.sort(function(a,b){return (b===c?1:0)-(a===c?1:0);});desired=[];
     var seen=new Set();cars.forEach(function(car){try{var next=input(car);if(seen.has(next.key))return;seen.add(next.key);if(next.pack.setup.tires.some(function(t){return t.depth!=null;})&&!remembered(next)&&!attempted.has(next.key))desired.push(next);}catch(e){if(car===c)lastIssue=e.message;}});
     if(running){if(!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}return;}
-    if(!desired.length){Tasks.remove('gemma-advice');if(!state.busy&&!queueReleased){queueReleased=true;command('releaseIdle');}}
+    if(!desired.length){Tasks.remove('gemma-advice');endFlickerTip();if(!state.busy&&!queueReleased){queueReleased=true;command('releaseIdle');}}
     else if(!deferForScan()&&!state.busy){queueReleased=false;run();}
     else Tasks.upsert('gemma-advice',{text:'Tire explanations queued…',state:'pending',frac:null,cancel:cancelGeneration});
   }
@@ -113,6 +115,7 @@
     var previous=failures.get(item.key),attempt=previous?previous.count+1:1;
     var prompt=item.prompt+(previous?'\n\nCORRECTION FOR THIS FRESH ATTEMPT: The previous answer was rejected: '+previous.reason+'. Rewrite from the checked findings only. Avoid the words safe, safely, guarantee and guaranteed, including phrases like safe wet stopping. Do not give instructions or add numbers. Return only the requested JSON.':'');
     Tasks.upsert('gemma-advice',{state:'running',text:attempt>1?'Retrying local tire advice ('+attempt+'/'+MAX_ATTEMPTS+')…':'Preparing local tire advice…',frac:null,cancel:cancelGeneration});changed();
+    startFlickerTip();
     try{
       var result=await call('aiGenerate',prompt);
       if(!state.enabled||item.cancelled||!liveItem(item)||window.__erasing)return;
@@ -147,12 +150,9 @@
     var issue;try{issue=issues.get(input(c).key);}catch(e){}
     return '<div class="card adv-card" id="gemmaAdvice"><h3>Your tire setup</h3><p class="lead small keep">'+esc(issue||(!state.supported?lastIssue:'')||label)+'</p>'+(state.ready&&eligible&&!running?'<button class="btn tonal sm" id="gemmaRetry">Try AI explanation</button>':'')+'</div>';
   }
-  function settingsHtml(){return '<div class="card" id="gemmaSettings"><h3>Local AI explanations · optional</h3><p class="lead small keep">Gemma 4 E4B explains complex tire setups on your phone, one task at a time. The lightweight ratings model stays in use. No API key or cloud inference.</p><div id="gemmaState" class="lead small keep"></div><p class="lead small keep">Separate 3.66 GB download. Wi-Fi recommended; allow extra storage for runtime work. Leaving the app may pause the download. Existing tire notices work without it.</p><div class="gemma-controls"><button class="btn tonal" id="gemmaEnable"></button><button class="btn primary" id="gemmaDownload">Download 3.66 GB</button><button class="btn tonal" id="gemmaCancel">Cancel task</button><button class="btn tonal" id="gemmaRemove">Remove model</button></div><div class="sub-h">AI processor</div><div class="seg2" id="gemmaProcessor" aria-label="AI processor"><button type="button" data-ai-processor="auto">Automatic (GPU)</button><button type="button" data-ai-processor="cpu">CPU only</button></div><p class="lead small keep" id="gemmaProcNote">Automatic runs the model on the GPU, which is much faster and leaves the processor free for the rest of the app. The CPU is only a fallback when the GPU won\'t start. CPU only is for troubleshooting: up to 10 min per explanation, and it slows other on-phone ratings.</p><button type="button" class="btn tonal sm" id="gemmaRecheck">Recheck current car</button>'+graphicsSettingsHtml()+'</div>';}
-  function graphicsSettingsHtml(){return '<div class="field"><div class="lbl"><label for="gemmaGraphics">AI graphics compatibility · experimental</label><small>Uses a GPU texture layer during larger AI work. Does not disable Android hardware overlays or change other apps. Extra graphics memory; not a confirmed flicker fix.</small></div><label class="switch"><input type="checkbox" id="gemmaGraphics" aria-label="AI graphics compatibility"><span></span></label></div><p class="lead small keep" id="gemmaGraphicsState" role="status"></p>';}
+  function settingsHtml(){return '<div class="card" id="gemmaSettings"><h3>Local AI explanations · optional</h3><p class="lead small keep">Gemma 4 E4B explains complex tire setups on your phone, one task at a time. The lightweight ratings model stays in use. No API key or cloud inference.</p><div id="gemmaState" class="lead small keep"></div><p class="lead small keep">Separate 3.66 GB download. Wi-Fi recommended; allow extra storage for runtime work. Leaving the app may pause the download. Existing tire notices work without it.</p><div class="gemma-controls"><button class="btn tonal" id="gemmaEnable"></button><button class="btn primary" id="gemmaDownload">Download 3.66 GB</button><button class="btn tonal" id="gemmaCancel">Cancel task</button><button class="btn tonal" id="gemmaRemove">Remove model</button></div><div class="sub-h">AI processor</div><div class="seg2" id="gemmaProcessor" aria-label="AI processor"><button type="button" data-ai-processor="auto">Automatic (GPU)</button><button type="button" data-ai-processor="cpu">CPU only</button></div><p class="lead small keep" id="gemmaProcNote">Automatic runs the model on the GPU, which is much faster and leaves the processor free for the rest of the app. The CPU is only a fallback when the GPU won\'t start. CPU only is for troubleshooting: up to 10 min per explanation, and it slows other on-phone ratings.</p><button type="button" class="btn tonal sm" id="gemmaRecheck">Recheck current car</button></div>';}
   function paintSettings(){
     var el=document.getElementById('gemmaState');if(!el)return;
-    var graphics=document.getElementById('gemmaGraphics');if(graphics){graphics.checked=state.graphicsCompatibility!==false;graphics.disabled=typeof A.N.aiCommand!=='function';}
-    var graphicsState=document.getElementById('gemmaGraphicsState');if(graphicsState){var g=state.graphicsExperiment;graphicsState.textContent=g&&g.error?'Rendering experiment could not '+(g.error.indexOf('restore_')===0?'restore the previous layer. Restart the app.':'start. Normal rendering remains in use.') :g&&g.active?'GPU texture layer active during local AI.':g&&g.memoryHold?'Texture layer released to reduce memory use.':'Normal rendering when local AI is idle or the app is in the background.';}
     var note=document.getElementById('gemmaProcNote');if(note&&state.gpuFallback&&!state.cpuOnly)note.textContent='The GPU wouldn\'t start last time, so the CPU stood in (slower). It tries the GPU first again each time.';
     el.textContent=lastIssue||state.error||(state.recoveryRequired?'AI paused after an unexpected exit. Use Recheck current car to retry.':!state.supported?'Larger-model runtime is unavailable on this device.':state.busy?'Working · '+state.phase:state.ready?'Model verified and ready'+(state.enabled?' · enabled':' · disabled'):state.bytes?'Partial download saved. Resume when ready.':'Not downloaded.');
     var enable=document.getElementById('gemmaEnable');enable.textContent=state.enabled?'Turn AI off':'Turn AI on';enable.disabled=!state.supported;
@@ -167,7 +167,6 @@
     if(!document.getElementById('gemmaSettings'))return;paintSettings();
     document.getElementById('gemmaEnable').onclick=function(){A.S.largerAIChoice=!state.enabled;A.save();command(state.enabled?'disable':'enable');};
     document.querySelectorAll('[data-ai-processor]').forEach(function(b){b.onclick=function(){command(b.dataset.aiProcessor==='cpu'?'processorCpu':'processorAuto');};});
-    var graphics=document.getElementById('gemmaGraphics');if(graphics)graphics.onchange=function(){command(this.checked?'graphicsOn':'graphicsOff');};
     var recheck=document.getElementById('gemmaRecheck');if(recheck)recheck.onclick=retry;
     document.getElementById('gemmaDownload').onclick=async function(){
       var ok=await A.confirmDel({always:true,title:'Download Gemma 4 E4B?',body:'This downloads about 3.66 GB over your current network. Wi-Fi is recommended. You can cancel and resume from Settings.',action:'Download',goClass:'primary'});

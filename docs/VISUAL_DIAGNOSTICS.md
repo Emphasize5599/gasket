@@ -1,6 +1,23 @@
 # Visual distortion diagnostics
 
-## 0.0.224 app-local graphics experiment
+## Current behavior: 0.0.225
+
+The 224 GPU texture-layer experiment failed on the owner's phone while the layer was active. It is removed, including its switch/controller/commands. Native rendering is back to223; bounded AI engine reuse and automatic diagnostic samples remain. Earlier sections are historical, not current settings instructions.
+
+A brief notice below the task status bar says: “Screen flickering? Try turning on ‘Disable HW overlays’ in your device’s Developer options.” It starts only when larger AI work is actually requested (automatic GPU attempt), once per continuous batch, and disappears on ×, after10s, on cancellation/CPU fallback, or when the batch finishes. It does not show for app launch, enabling AI alone, model downloads, CPU-only work or station jobs. This is a qualified workaround, not a universal promise. The app never changes the device's Developer options.
+
+**Settings → Help & troubleshooting → Show visual glitch button** defaults off. Turn it on to reveal the task-dock marker during diagnostic watching; Debug logging must also be at Steps or higher. No duplicate marker button in Help. Toggle persists immediately; disabling it hides the button without stopping automatic samples or deleting existing markers. The expanded markers remain private app storage and are cleared with the log.
+
+## Further phone diagnosis
+
+1. Leave Gasket's Debug logging at Everything. Optionally enable its visual glitch button. Do not use screen video recording: the owner reports it hides the problem. An external camera can document the visible artifact if needed.
+2. Open **Android Settings → System → Developer options → System Tracing**, then enable its Quick Settings tile. Use the normal bounded rolling-buffer mode; no long/unbounded capture is needed. Where offered, graphics/view/window-manager and CPU scheduling/frequency categories are useful. Availability varies by OS/build. [Android system-trace instructions](https://developer.android.com/topic/performance/tracing/on-device).
+3. For a failing run, turn **Disable HW overlays OFF**, start the System Tracing tile, and request an explanation. If distortion occurs, mark it if enabled, note the approximate time, then stop the system trace promptly (default rolling buffers retain about10–30s). Save the `.perfetto-trace`. Tracing itself can affect timing; report if it prevents reproduction.
+4. AFTER stopping the trace, use **Developer options → Take bug report** and save that report plus the Gasket log. This captures broader system logs/state, not just this app. Bug-report collection must not pollute the performance trace. [Android bug-report instructions](https://developer.android.com/studio/debug/bug-report).
+5. A second short run with **Disable HW overlays ON**, same AI setup, is the useful control. This changes composition, not AI model/backend. Restore your preferred workaround after testing; it may increase rendering work/battery use. Do not change many graphics settings at once. Flashing redraw indicators, overdraw visualization and Force4×MSAA are not recommended for this comparison.
+6. Review reports before sharing: they may include personal data, app/device identifiers and unrelated system activity. Share privately, not on a public issue. Basic system tracing/bug reports do not require rooting the phone. Full [Winscope compositor tracing](https://source.android.com/docs/core/graphics/winscope/capture/adb) has privileged/debug-build requirements; do not root or unlock the bootloader just to obtain it. No custom app method profiling/privileged HWC access is promised by this signed release.
+
+## Retired: 0.0.224 app-local graphics experiment
 
 The owner confirmed Android's **Disable HW overlays** removes the distortion. This resembles the reports in [GrapheneOS issue6757](https://github.com/GrapheneOS/os-issue-tracker/issues/6757), including recording hiding the problem; it does not establish the exact driver fault. 223's log confirms successful serial GPU work and actual engine reuse, without low-memory or thermal flags. Reuse is retained for performance, not claimed as a graphics fix.
 
@@ -28,7 +45,7 @@ The pinned stock [LiteRT-LM Kotlin GPU configuration](https://github.com/google-
 
 ## Phone procedure
 
-1. Keep Debug logging on at Everything (the default). During local AI work, tap **Mark visual glitch** below the status bar as soon as distortion appears. It is also under Settings → Help & troubleshooting.
+1. Keep Debug logging on at Everything (the default). Optionally enable **Show visual glitch button** in Help & troubleshooting, then tap **Mark visual glitch** below the status bar as soon as distortion appears.
 2. Let the current explanation finish if possible, then share the debug log from Help & troubleshooting. Repeated vehicle explanations work normally; no screen recording is required.
 3. If corruption extends into the notification shade, an Android bug report or an external-camera video may still be needed. Frame timing cannot prove that rendered pixels are correct. The app does not collect system-wide logcat, GPU driver dumps or screen captures.
 

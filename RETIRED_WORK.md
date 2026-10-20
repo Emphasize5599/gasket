@@ -8,6 +8,8 @@ These items are not part of the active backlog. Keep their original identifiers 
 
 ## Conditional follow-up
 
+The 0.0.224 **app-local GPU texture-layer compatibility experiment** is retired in0.0.225 at the owner's request: distortion reproduced while its hardware layer was active. This is not equivalent to Android's Disable HW overlays workaround. Engine reuse and automatic diagnostics remain; the manual glitch marker becomes opt-in. Implementation/release history remains in Git and the changelog.
+
 10. **Alternative keyless photo sourcing.** Not active. Reconsider only if actual use shows Commons coverage is too sparse, as requested by the owner. Optional Fuel API support remains.
 
 ## Impractical

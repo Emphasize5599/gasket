@@ -1221,9 +1221,9 @@
       '<div class="field"><div class="lbl">How much detail</div><select id="logLevel">' +
       [[1, 'Errors only'], [2, 'Errors + warnings'], [3, 'Steps'], [4, 'Details'], [5, 'Everything']].map(function (o) {
         return '<option value="' + o[0] + '"' + (S.logLevel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><div class="lbl">Show visual glitch button<small>Optional troubleshooting control during AI work. Requires Debug logging at Steps or higher. Off by default.</small></div>' + sw('visualGlitchButton',!!S.visualGlitchButton) + '</div>' +
       '<div class="field"><div class="lbl">Log<small class="keep" id="logCount">' + (window.FLog ? FLog.entries().length : 0) + ' entries</small></div>' +
       '<div class="btns"><button class="btn tonal sm" id="sLogView">View</button><button class="btn tonal sm" id="sLogShare">Share</button><button class="btn tonal sm" id="sLogClear">Clear</button></div></div></div>';
-    h += '<div class="card"><h3>Visual diagnostics</h3><p class="lead small keep">Timing, redraw and resource metadata only—not screen contents. Mark a glitch as soon as you see it, then share the log.</p><button type="button" class="btn tonal" id="sVisualMark">Mark visual glitch</button></div>';
     h += '<div class="card"><h3>About</h3><div class="field"><div class="lbl">Gasket ' + esc(N.appVersion ? N.appVersion() : '') + '<small>The code this app includes and the data it uses, with their licenses.</small></div>' +
       '<button class="btn tonal sm" id="licOpen">Licenses & credits</button></div></div>';
     h += '<button class="btn primary" id="sDone">' + (onboarding ? 'Save & find gas' : 'Done') + '</button>';
@@ -1234,7 +1234,6 @@
     if (window.Gemma) Gemma.bindSettings();
     WorkerSettings.bind({S:S,N:N});
     $('sLogView').onclick = function () { showLog(); };
-    $('sVisualMark').onclick=function(){if(window.VisualDiagnostics)VisualDiagnostics.mark();};
     $('blOpen').onclick = openBlPage;
     $('licOpen').onclick = openLicPage;
     $('exAll').onclick = function () { exportData('all'); };
@@ -1244,6 +1243,7 @@
     $('bkSave').onclick = function () { fullBackup(this); };
     $('bkRestore').onclick = function () { fullRestore(this); };
     $('sLogShare').onclick = function () { shareLog(); };
+    pg.querySelector('[data-k="visualGlitchButton"]').onchange=function(){S.visualGlitchButton=this.checked;save();if(window.Tasks)Tasks.draw();};
     $('histClear').onclick = function () {
       var o = KV.get('trips', 'index'), n = o && o.v ? o.v.length : 0;
       if (!n) { toast('No saved trips.'); return; }

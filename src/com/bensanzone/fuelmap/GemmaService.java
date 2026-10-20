@@ -79,8 +79,6 @@ final class GemmaService {
             value.put("phase", phase); value.put("error", error); value.put("bytes", downloaded); value.put("total", BYTES);
             value.put("task", task);
             value.put("cpuOnly", cpuOnly());
-            value.put("graphicsCompatibility", prefs.getBoolean("graphicsCompatibility", true));
-            value.put("engineResident", slotHeld && runtime != null && !releaseFailed);
             value.put("recoveryRequired", recoveryRequired); value.put("gpuFallback", gpuFallback);
             value.put("startupDiagnostics", diagnostics.startup); value.put("nativeDiagnostics", diagnostics.latest());
             value.put("nativeTimeline", diagnostics.timeline()); value.put("generationId", activeTicket);
@@ -116,10 +114,6 @@ final class GemmaService {
     }
     synchronized void command(int id, String command) {
         if (closed) return;
-        if ("graphicsOn".equals(command) || "graphicsOff".equals(command)) {
-            prefs.edit().putBoolean("graphicsCompatibility", "graphicsOn".equals(command)).apply();
-            listener.result(id, status()); notifyStatus(); return;
-        }
         if ("acknowledgeRecovery".equals(command)) {
             recoveryRequired = false; prefs.edit().putBoolean("recoveryRequired", false).apply(); error = "";
             listener.result(id, status()); notifyStatus(); return;

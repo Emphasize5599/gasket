@@ -3,6 +3,9 @@
   'use strict';
   var tasks = new Map(), expanded = false, messageExpanded=false, primaryId='', frame = 0, completion = null, completionTimer = 0;
   var doc = root.document;
+  var notice = null, noticeTimer = 0;
+  function dismissNotice(id){if(!notice||id&&notice.id!==id)return;notice=null;clearTimeout(noticeTimer);queue();}
+  function showNotice(id,text){if(notice&&notice.id===id)return;clearTimeout(noticeTimer);var current=notice={id:id,text:String(text)};noticeTimer=setTimeout(function(){if(notice===current)dismissNotice(id);},10000);queue();}
   function fullMenu(){return doc.body.classList.contains('trip-full')||!!doc.querySelector('#settings:not(.hidden),.sub-page:not(.hidden)');}
   function messageButton(){return '<button type="button" class="jb-expand hidden" aria-label="Show full status message" aria-controls="jobMessage" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button>';}
   function layout(){
@@ -12,7 +15,7 @@
       hub.classList.toggle('compact',full);hub.classList.toggle('full-message',full&&messageExpanded);
       if(button){button.classList.toggle('hidden',!full);button.setAttribute('aria-expanded',String(messageExpanded));button.setAttribute('aria-label',messageExpanded?'Collapse status message':'Show full status message');button.querySelector('.chev').classList.toggle('up',messageExpanded);}
       var label=bar.querySelector('.jb-t'),text=bar.dataset.fullText||'';if(label)label.textContent=full&&!messageExpanded&&root.__app&&root.__app.jobShort?root.__app.jobShort(text):text;
-      var marker=doc.getElementById('visualMarkerRow');var space=hub.classList.contains('hidden')?0:Math.ceil(hub.querySelector('.task-top').getBoundingClientRect().height)+(marker&&!marker.classList.contains('hidden')?Math.ceil(marker.getBoundingClientRect().height):0)+10;
+      var hint=doc.getElementById('taskNotice'),marker=doc.getElementById('visualMarkerRow');var space=hub.classList.contains('hidden')?0:Math.ceil(hub.querySelector('.task-top').getBoundingClientRect().height)+(hint&&!hint.classList.contains('hidden')?Math.ceil(hint.getBoundingClientRect().height)+4:0)+(marker&&!marker.classList.contains('hidden')?Math.ceil(marker.getBoundingClientRect().height):0)+10;
       if(doc.body.style.getPropertyValue('--task-space')!==space+'px')doc.body.style.setProperty('--task-space',space+'px');
     }
   }
@@ -83,7 +86,9 @@
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
     var all=visible(), multiple=all.length>1;
-    var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
+    var hint=doc.getElementById('taskNotice');if(!hint){hint=doc.createElement('div');hint.id='taskNotice';hint.className='task-notice hidden';hint.setAttribute('role','status');hint.setAttribute('aria-live','polite');hint.innerHTML='<span></span><button type="button" aria-label="Dismiss screen flicker tip">✕</button>';hub.insertBefore(hint,doc.getElementById('taskList'));hint.querySelector('button').onclick=function(){dismissNotice(hint.dataset.noticeId);};if(root.ResizeObserver)new ResizeObserver(layout).observe(hint);}
+    hint.classList.toggle('hidden',!notice);if(notice){hint.dataset.noticeId=notice.id;var noticeText=hint.querySelector('span');if(noticeText.textContent!==notice.text)noticeText.textContent=notice.text;}
+    var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};if(root.ResizeObserver)new ResizeObserver(layout).observe(marker);}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
     var primary=all[0], bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
     var nextId=primary?primary.id:completion?'completion':'';if(nextId!==primaryId){messageExpanded=false;primaryId=nextId;}
     // One dock stays visible on every screen, even when a tile also offers inline progress.
@@ -113,5 +118,5 @@
     }
     layout();root.dispatchEvent(new Event('tasklayout'));
   }
-  root.Tasks={begin:begin,upsert:upsert,remove:remove,draw:draw,layout:layout,list:sorted,cancel:cancel,back:function(){if(messageExpanded){messageExpanded=false;layout();return true;}if(!expanded)return false;expanded=false;draw();return true;}};
+  root.Tasks={begin:begin,upsert:upsert,remove:remove,draw:draw,layout:layout,list:sorted,cancel:cancel,notice:showNotice,dismissNotice:dismissNotice,back:function(){if(messageExpanded){messageExpanded=false;layout();return true;}if(!expanded)return false;expanded=false;draw();return true;}};
 })(typeof window!=='undefined'?window:globalThis);

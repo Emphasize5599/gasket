@@ -2004,6 +2004,10 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .ev-destination .nf { min-width:0; margin-bottom:10px; }
 .ev-destination .nf > span { white-space:normal; overflow-wrap:anywhere; }
 .ev-destination input,.ev-destination select { min-width:0; max-width:100%; }
+.task-notice {margin-top:4px;display:flex;align-items:flex-start;gap:8px;padding:8px 8px 8px 12px;background:var(--surface);color:var(--warn);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);}
+.task-notice.hidden {display:none;}
+.task-notice > span {flex:1;min-width:0;font-size:13px;line-height:1.4;overflow-wrap:anywhere;}
+.task-notice > button {flex:none;width:44px;height:44px;border-radius:12px;color:var(--ink-2);}
 #visualMarkerRow {padding-top:4px;display:flex;justify-content:flex-end;}
 #visualMarkerRow.hidden {display:none;}
 #visualMarkerRow button {white-space:normal;max-width:100%;min-height:32px;}
