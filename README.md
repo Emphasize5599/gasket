@@ -20,13 +20,15 @@ Before you leave, it checks the car too: open safety recalls on your VIN, tire t
 
 <sub>Screenshots use demo prices and example cars.</sub>
 
-## Keyless test branch
+## No Google key needed
 
-This branch builds **Gasket Keyless Test**, a separate installation. A Google API key is recommended, not required: without one, website searches discover nearby and along-route stations, and website route points support approximate trip planning. These paths are slower and less consistent than the API. With a key, API discovery/routing remain available; saved-price refresh has its own no-API action. See [scope, licensing and test plan](KEYLESS_EXPERIMENT.md). Regular Gasket 0.0.103 remains on main.
+A Google API key is recommended, not required: without one, website searches discover nearby and along-route stations, and website route points support approximate trip planning. These paths are slower and less consistent than the API. With a key, API discovery/routing remain available; saved-price refresh has its own no-API action. This started as the separate **Gasket Keyless Test** app and became Gasket itself in 0.0.218; see [its history and licensing notes](KEYLESS_EXPERIMENT.md).
+
+**Moving from Gasket Keyless Test:** in the test app, Settings → Data & privacy → Save full backup; install Gasket 0.0.218 or later, then restore that file. Your cars, trips, prices and settings come across. The offline charger inventory and the optional local AI model aren't in backups: download them again in Gasket. If your Google key is restricted to Android apps, it already allows `com.bensanzone.fuelmap`; the test app's package can be removed from it.
 
 In 0.0.105, saved trips have **Refresh saved prices — no API calls** in Stops. This updates matched regular prices at the existing stations while keeping discovery and geometry intact. New station discovery remains API-based. Routes has its own monthly safety cap, default 9,500; the Places cap remains 900.
 
-## Offline EV charger data (keyless test)
+## Offline EV charger data
 
 Settings → Connections & usage → Other optional keys contains expandable personal-key instructions for DOE and Open Charge Map. **Download U.S. + Canada chargers** saves the DOE inventory in app storage, not cache or the APK; use Wi-Fi. Failed/cancelled downloads retain the previous complete inventory. Local discovery uses an indexed database; route-only online updates can be disabled independently. Update the inventory periodically for newly opened/closed sites. Downloadable inventory is not personal backup data and can be downloaded again after restoring on another phone.
 
@@ -84,13 +86,13 @@ Both have the same package, version code and signing identity. Switching between
 
 For Obtainium, enable **Attempt to filter APKs by CPU architecture if possible**. Filenames deliberately contain the canonical `arm64-v8a` token only on that APK; the universal filename does not contain it. [Upstream's filename filter](https://github.com/ImranR98/Obtainium/blob/af286fa8d31d7406d6db167e2314d376d74f7696/lib/services/apk_filter_service.dart) selects the matching ARM64 asset when available. This cannot override a user's own filters or guarantee the behavior of every Obtainium version. Without a matching ABI token, that algorithm can leave multiple choices rather than automatically choosing universal.
 
-To force the smaller keyless-test APK, set **Filter APKs by Regular Expression** to:
+To force the smaller ARM64 APK, set **Filter APKs by Regular Expression** to:
 
 ```text
-^Gasket-\d+\.\d+\.\d+-keyless-test-arm64-v8a\.apk$
+^Gasket-\d+\.\d+\.\d+-arm64-v8a\.apk$
 ```
 
-To force universal instead, replace `arm64-v8a` with `universal`. Keep prereleases enabled and the existing keyless-test release filter if tracking the test app. For regular/main releases, remove `-keyless-test` from the APK regex. The regular and test apps remain separate package identities. See [Obtainium's source/filter documentation](https://wiki.obtainium.imranr.dev/sources/).
+To force universal instead, replace `arm64-v8a` with `universal`. Keep prereleases enabled: Gasket is in alpha and every release is marked pre-release. If you tracked the old keyless-test releases, point Obtainium at the regular releases instead (remove any `keyless-test` release filter). See [Obtainium's source/filter documentation](https://wiki.obtainium.imranr.dev/sources/).
 
 ## How it's built
 

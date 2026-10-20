@@ -1,6 +1,8 @@
 # Keyless regular-gas experiment
 
-Branch: `test/keyless-regular-gas`. Regular release: 0.0.103 on main.
+**Promoted to main in 0.0.218 (2026-10-20):** the keyless work is now Gasket itself (`com.bensanzone.fuelmap`), and the `test/keyless-regular-gas` branch was retired. The rest of this file is the experiment's history; the separate-install notes below describe the old test app. To move data from the test app, restore its full backup in Gasket.
+
+Former branch: `test/keyless-regular-gas`. Regular release before promotion: 0.0.103 on main.
 
 ## 0.0.111: Walmart website prices and fast tests
 

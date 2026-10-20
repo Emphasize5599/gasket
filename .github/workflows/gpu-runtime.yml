@@ -1,13 +1,7 @@
 name: Build low-priority GPU runtime
 on:
+  # Run by hand only: the low-priority GPU runtime was rolled back in 0.0.217 (stock LiteRT-LM on CPU).
   workflow_dispatch:
-  push:
-    branches: [test/keyless-regular-gas]
-    paths:
-      - .github/workflows/gpu-runtime.yml
-      - tools/runtime/**
-      - tests/runtime-priority.test.js
-      - tests/runtime-candidate.py
 permissions:
   contents: read
 defaults:

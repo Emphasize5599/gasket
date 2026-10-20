@@ -1,5 +1,4 @@
 package com.bensanzone.fuelmap;
-import com.bensanzone.fuelmap.keyless.R;
 
 import android.Manifest;
 import android.app.Activity;

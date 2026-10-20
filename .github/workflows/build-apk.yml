@@ -3,7 +3,7 @@ name: Build signed APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, test/keyless-regular-gas]
+    branches: [main]
     paths:
       - .github/workflows/build-apk.yml
       - AndroidManifest.xml
@@ -120,7 +120,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/keyless-regular-gas'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -264,38 +264,6 @@ jobs:
               gh release upload "$tag" "$asset"
             fi
           done
-
-      - name: Publish separate experimental APK download
-        if: steps.signing.outputs.ready == 'true' && github.ref == 'refs/heads/test/keyless-regular-gas'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="keyless-test-v${{ steps.version.outputs.name }}"
-          for abi in arm64-v8a universal; do
-            cp "Gasket-$abi.apk" "Gasket-${{ steps.version.outputs.name }}-keyless-test-$abi.apk"
-          done
-          if gh release view "$tag" >/dev/null 2>&1; then
-            if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = 'true' ]; then
-              # GitHub may not create a draft release's tag until publication.
-              release_sha=$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)
-            else
-              release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
-            fi
-            test "$release_sha" = "$GITHUB_SHA"
-          else
-            ver="${{ steps.version.outputs.name }}"
-            awk -v v="$ver" 'index($0, "## " v " ") == 1 || $0 == "## " v { p = 1; next } p && /^## / { exit } p' CHANGELOG.md > notes.md
-            test -s notes.md
-            gh release create "$tag" --target "$GITHUB_SHA" --title "Gasket keyless test $ver" --notes-file notes.md --prerelease --draft
-          fi
-          for abi in arm64-v8a universal; do
-            asset="Gasket-${{ steps.version.outputs.name }}-keyless-test-$abi.apk"
-            if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx "$asset" >/dev/null; then
-              gh release upload "$tag" "$asset"
-            fi
-          done
-          # Obtainium must not see a half-uploaded architecture set.
-          gh release edit "$tag" --draft=false
 
       - name: Upload signed APK for download
         if: steps.signing.outputs.ready == 'true'

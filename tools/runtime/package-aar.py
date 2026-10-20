@@ -19,7 +19,7 @@ def package(stock, native, out):
     assert hashlib.sha256(provider.read_bytes()).hexdigest() == PROVIDER_SHA, 'Provider mismatch'
     notice = ('Modified by Gasket: ARM64 LiteRT-LM JNI requests low-priority GPU execution.\n'
               'Upstream: google-ai-edge/LiteRT-LM b2f686e2ed4718fb84ec398a61dd59ca0f0aff27\n'
-              'Source and patch: https://github.com/Emphasize5599/gasket/tree/test/keyless-regular-gas/tools/runtime\n'
+              'Source and patch: https://github.com/Emphasize5599/gasket/tree/main/tools/runtime\n'
               'Identity: gasket_gpu_low_priority_v1. CPU and x86_64 JNI remain stock.\n')
     notice += 'Source builds bundle upstream libGemmaModelConstraintProvider.so separately (same Apache-2.0 upstream project).\n'
     out.parent.mkdir(parents=True, exist_ok=True)

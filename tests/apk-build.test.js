@@ -5,11 +5,11 @@ assert.match(gradle,/splits\s*\{\s*abi\s*\{\s*enable true\s*reset\(\)\s*include 
 assert(!/versionCodeOverride|abiCodes/.test(gradle),'sideloaded architecture choices use the same version code');
 assert.match(script,/for ABI in arm64-v8a universal/);assert.match(script,/Gasket-\$ABI-release-unsigned\.apk/);assert.equal((script.match(/assembleRelease/g)||[]).length,1,'compile/dex once for both published APKs');
 assert.match(workflow,/GASKET_APK_VERIFY=1 node tests\/apk-build\.test\.js/);
-assert.match(workflow,/Gasket-\$\{\{ steps\.version\.outputs\.name \}\}-keyless-test-\$abi\.apk/);
-assert.match(workflow,/gh release create[^\n]+--prerelease --draft/);assert(workflow.indexOf('gh release edit "$tag" --draft=false')>workflow.indexOf('asset="Gasket-${{ steps.version.outputs.name }}-keyless-test-$abi.apk"'),'publish only after both architecture assets are uploaded');
-const pixelFilter=/^Gasket-\d+\.\d+\.\d+-keyless-test-arm64-v8a\.apk$/;
+assert.match(workflow,/asset="Gasket-\$\{\{ steps\.version\.outputs\.name \}\}-\$abi\.apk"/);assert(!/keyless-test/.test(workflow),'main builds Gasket only; the keyless test app was promoted in 0.0.218');
+assert.match(manifest,/package="com\.bensanzone\.fuelmap"/);
+const pixelFilter=/^Gasket-\d+\.\d+\.\d+-arm64-v8a\.apk$/;
 assert(readme.includes(pixelFilter.source),'documented force-ARM64 filter must stay in sync');
-const samples=['Gasket-0.0.160-keyless-test-arm64-v8a.apk','Gasket-0.0.160-keyless-test-universal.apk','Gasket-0.0.160-arm64-v8a.apk','Gasket-0.0.159-keyless-test.apk'];
+const samples=['Gasket-0.0.218-arm64-v8a.apk','Gasket-0.0.218-universal.apk','Gasket-0.0.160-keyless-test-arm64-v8a.apk','Gasket-0.0.159.apk'];
 assert.deepEqual(samples.filter(name=>pixelFilter.test(name)),[samples[0]]);
 // Mirrors the pinned upstream filename algorithm (not an Obtainium device/integration test).
 function byArch(names,abis){if(names.length>1)for(const abi of abis){const aliases={'arm64-v8a':['aarch64','arm64'],'armeabi-v7a':['armv7','armeabi'],'x86_64':['x64']};const re=new RegExp('.*(?:'+[abi,...(aliases[abi]||[])].join('|')+').*','i'),filtered=names.filter(n=>re.test(n));if(filtered.length&&filtered.length<names.length){names=filtered;break;}}return names;}
