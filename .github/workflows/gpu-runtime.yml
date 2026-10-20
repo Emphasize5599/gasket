@@ -1,0 +1,91 @@
+name: Build low-priority GPU runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: [test/keyless-regular-gas]
+    paths:
+      - .github/workflows/gpu-runtime.yml
+      - tools/runtime/**
+permissions:
+  contents: read
+concurrency:
+  group: gpu-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      LRT_REV: b2f686e2ed4718fb84ec398a61dd59ca0f0aff27
+      USE_BAZEL_VERSION: 7.6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out exact upstream runtime
+        uses: actions/checkout@v4
+        with:
+          repository: google-ai-edge/LiteRT-LM
+          ref: b2f686e2ed4718fb84ec398a61dd59ca0f0aff27
+          path: build/upstream-litert
+          persist-credentials: false
+      - name: Apply narrow source patch
+        run: |
+          test "$(git -C build/upstream-litert rev-parse HEAD)" = "$LRT_REV"
+          node tools/runtime/patch-litert-gpu.js build/upstream-litert
+          git -C build/upstream-litert diff --check
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Cache source-build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gasket-native-repo
+            ~/.cache/gasket-native-disk
+          key: lrt018-ui1-arm64-${{ hashFiles('tools/runtime/patch-litert-gpu.js') }}
+          restore-keys: lrt018-ui1-arm64-
+      - name: Prepare pinned compiler and Android NDK
+        run: |
+          curl --fail --location --retry 2 https://github.com/bazelbuild/bazel/releases/download/7.6.1/bazel-7.6.1-linux-x86_64 -o "$RUNNER_TEMP/gasket-bazel"
+          echo "ac6249d1192aea9feaf49dfee2ab50c38cee2454b00cf29bbec985a11795c025  $RUNNER_TEMP/gasket-bazel" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/gasket-bazel"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/19.0/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            curl --fail --location --retry 2 https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -o "$RUNNER_TEMP/gasket-sdk-tools.zip"
+            echo "5fdcc763663eefb86a5b8879697aa6088b041e70  $RUNNER_TEMP/gasket-sdk-tools.zip" | sha1sum -c -
+            unzip -q "$RUNNER_TEMP/gasket-sdk-tools.zip" -d "$RUNNER_TEMP/gasket-sdk-tools"
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            mv "$RUNNER_TEMP/gasket-sdk-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/19.0"
+          fi
+          (yes || true) | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" 'ndk;28.2.13676358' 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - name: Compile ARM64 JNI only
+        working-directory: build/upstream-litert
+        run: |
+          "$RUNNER_TEMP/gasket-bazel" build --config=android_arm64 -c opt \
+            --jobs=2 --local_ram_resources=4096 \
+            --repository_cache="$HOME/.cache/gasket-native-repo" \
+            --disk_cache="$HOME/.cache/gasket-native-disk" \
+            //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni
+          candidate=$("$RUNNER_TEMP/gasket-bazel" cquery --config=android_arm64 -c opt --output=files //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni | tail -1)
+          test -f "$candidate"
+          mkdir -p ../gpu-runtime/arm64-v8a
+          cp "$candidate" ../gpu-runtime/arm64-v8a/liblitertlm_jni.so
+      - name: Verify output and record provenance
+        run: |
+          mkdir -p build/gpu-runtime/arm64-v8a
+          SO=build/gpu-runtime/arm64-v8a/liblitertlm_jni.so
+          readelf -h "$SO" | grep 'AArch64'
+          readelf -Ws "$SO" | grep 'Java_com_bensanzone_fuelmap_GemmaGpuSupport_nativePatchVersion'
+          strings "$SO" | grep -F 'gasket_gpu_low_priority_v1'
+          sha256sum "$SO" > build/gpu-runtime/SHA256SUMS
+          printf '%s\n' "$LRT_REV" > build/gpu-runtime/UPSTREAM_COMMIT
+          cp tools/runtime/patch-litert-gpu.js build/gpu-runtime/
+          cp build/upstream-litert/LICENSE build/gpu-runtime/UPSTREAM_LICENSE
+      - name: Upload candidate (not an app release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: litert018-ui1-arm64-candidate
+          path: build/gpu-runtime/
+          retention-days: 14
