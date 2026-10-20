@@ -1,6 +1,28 @@
 # GPU priority experiment — 2026-10-20
 
-0.0.216 integration is committed at adb0aa5. Signed APK publication is pending:
+## Released: 0.0.216
+
+The signed ARM64 and universal APKs are published, with the same existing key:
+https://github.com/Emphasize5599/gasket/releases/tag/keyless-test-v0.0.216
+
+Final app build 39464960912 SUCCEEDED at ed491e5: full release regressions,
+actual Java/native fixtures, binary pins/ABI/alignment, Gradle compilation,
+both APK signatures/identity/alignment/code/patch marker/notices, and publication.
+ARM64 APK: 79,046,668 bytes. Universal APK: 105,412,695 bytes.
+The permanent native archive is published on that release too. No application
+integration work remains; do not reimplement this from historical notes below.
+
+Still NOT device-verified: whether low-priority execution stops the Pixel's
+display corruption. Phone check: Automatic mode + Recheck explanation, without
+screen recording; change menus and open the notification shade. Exported logs
+should show backend GPU, gpuPatchVersion 1 and gpuLowPriorityRequested true.
+CPU-only remains the control/fallback. Model download and cached answers survive;
+no need to erase data, remove the model, or redownload it. The recurring build
+monitor remains enabled for future workflows as requested.
+
+## Historical investigation and recovery notes
+
+The initial APK build below failed; it is superseded by successful 39464960912:
 https://github.com/Emphasize5599/gasket/actions/runs/39463467798
 
 Latest correction: that APK attempt was stopped before Gradle because the JNI
