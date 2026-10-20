@@ -420,10 +420,10 @@
   };
   var checkKey = null;
   function showSiteCheck(key,label){
-    var paused=(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())||(window.EVPrices&&EVPrices.isPaused());checkKey=key;
+    var evPaused=window.EVPrices&&EVPrices.isPaused(),paused=(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())||evPaused;checkKey=key;
     $('wmCheckTitle').textContent=label+' wants a check';
-    $('wmCheck').querySelector('span').textContent=paused?'Scan paused. Open the check, complete it, then tap Done to retry unfinished areas. × cancels the scan and keeps completed results.':'Complete the site’s “are you human?” step to continue.';
-    $('wmCheckX').setAttribute('aria-label',paused?'Cancel scan':'Dismiss');$('wmCheck').classList.remove('hidden');
+    $('wmCheck').querySelector('span').textContent=evPaused?'Price reads paused. Open the check, complete it, then tap Done to retry this station. × skips this network and keeps prices already found.':paused?'Scan paused. Open the check, complete it, then tap Done to retry unfinished areas. × cancels the scan and keeps completed results.':'Complete the site’s “are you human?” step to continue.';
+    $('wmCheckX').setAttribute('aria-label',evPaused?'Skip this network':paused?'Cancel scan':'Dismiss');$('wmCheck').classList.remove('hidden');
   }
   function siteNeedsCheck(key) {
     errs.push(SITES[key].label + ' wants a quick “are you human?” check before showing prices.');
