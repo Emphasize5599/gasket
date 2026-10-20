@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/gpu-runtime.yml
       - tools/runtime/**
+      - tests/runtime-priority.test.js
 permissions:
   contents: read
 concurrency:

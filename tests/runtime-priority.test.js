@@ -14,12 +14,12 @@ enum class Backend {GPU, CPU};
 namespace litert::lm {struct AdvancedSettings {std::optional<bool> gpu_context_low_priority;int hint_kernel_batch_size=9;bool unrelated=true;};}
 struct Executor {std::optional<litert::lm::AdvancedSettings> advanced;const auto& GetAdvancedSettings(){return advanced;}void SetAdvancedSettings(litert::lm::AdvancedSettings v){advanced=v;}};
 struct Settings {Executor e;Executor& GetMainExecutorSettings(){return e;}Executor& GetMutableMainExecutorSettings(){return e;}};
-void apply(std::optional<Settings>& settings,std::optional<Backend> backend_enum){${block}}
+void requestPriority(std::optional<Settings>& settings,std::optional<Backend> backend_enum){${block}}
 int main(){
- std::optional<Settings> s=Settings{};apply(s,Backend::GPU);assert(s->e.advanced->gpu_context_low_priority.value());assert(s->e.advanced->hint_kernel_batch_size==9&&s->e.advanced->unrelated);
- s->e.advanced->gpu_context_low_priority=false;apply(s,Backend::CPU);assert(!s->e.advanced->gpu_context_low_priority.value());
- s->e.advanced->hint_kernel_batch_size=4;s->e.advanced->unrelated=false;apply(s,Backend::GPU);assert(s->e.advanced->gpu_context_low_priority.value());assert(s->e.advanced->hint_kernel_batch_size==4&&!s->e.advanced->unrelated);
- s=Settings{};apply(s,Backend::CPU);assert(!s->e.advanced.has_value());
+ std::optional<Settings> s=Settings{};requestPriority(s,Backend::GPU);assert(s->e.advanced->gpu_context_low_priority.value());assert(s->e.advanced->hint_kernel_batch_size==9&&s->e.advanced->unrelated);
+ s->e.advanced->gpu_context_low_priority=false;requestPriority(s,Backend::CPU);assert(!s->e.advanced->gpu_context_low_priority.value());
+ s->e.advanced->hint_kernel_batch_size=4;s->e.advanced->unrelated=false;requestPriority(s,Backend::GPU);assert(s->e.advanced->gpu_context_low_priority.value());assert(s->e.advanced->hint_kernel_batch_size==4&&!s->e.advanced->unrelated);
+ s=Settings{};requestPriority(s,Backend::CPU);assert(!s->e.advanced.has_value());
 }
 `;
 fs.writeFileSync(path.join(dir,'priority.cc'),cpp);
