@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawnSync}=require('node:child_process');
 const file='src/com/bensanzone/fuelmap/GemmaGpuSupport.java',runtime=fs.readFileSync('src/com/bensanzone/fuelmap/GemmaRuntime.java','utf8');
-assert(!runtime.includes('new Backend.GPU()'),'stability build never initializes a GPU engine');
-assert(runtime.includes('if (!cpuOnly) throw'),'reject GPU requests while safety hold is active');
+assert(runtime.indexOf('new Backend.GPU()')<runtime.indexOf('gpuFailure = gpu'),'GPU first, CPU as the fallback');
+assert(!runtime.includes('if (!cpuOnly) throw'),'0.0.218: no CPU-only hold');
 if(spawnSync('javac',['-version']).error){if(process.env.GASKET_NATIVE_TESTS==='1')throw Error('JDK required');console.log('GPU identity contracts passed; actual missing-library fallback executed in CI');process.exit(0);}
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gasket-gpu-identity-')),pkg=path.join(dir,'com/bensanzone/fuelmap');fs.mkdirSync(pkg,{recursive:true});
 fs.copyFileSync(file,path.join(pkg,'GemmaGpuSupport.java'));

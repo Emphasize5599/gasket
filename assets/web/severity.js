@@ -57,14 +57,19 @@
     '  if (m.type === "init") {',
     '    var T = await import(m.lib); T.env.allowLocalModels = false; T.env.useBrowserCache = false;',
     '    if (T.env.backends && T.env.backends.onnx && T.env.backends.onnx.wasm) { T.env.backends.onnx.wasm.numThreads = 1; T.env.backends.onnx.wasm.proxy = false; }',
-    '    pipe = await T.pipeline("feature-extraction", m.model, { dtype: "q8", progress_callback: function (p) { if (p && p.status === "progress" && p.total) self.postMessage({ type: "progress", file: p.file, loaded: p.loaded, total: p.total }); } });',
-    '    self.postMessage({ type: "ready" });',
+    '    var prog = function (p) { if (p && p.status === "progress" && p.total) self.postMessage({ type: "progress", file: p.file, loaded: p.loaded, total: p.total }); };',
+    // GPU first (WebGPU, when this WebView offers it): fp16 if the adapter can, else fp32; the 8-bit model on the CPU otherwise
+    '    var device = "wasm", dtype = "q8", gpuWhy = "";',
+    '    try { var ad = self.navigator && navigator.gpu && await navigator.gpu.requestAdapter(); if (ad) { device = "webgpu"; dtype = ad.features && ad.features.has("shader-f16") ? "fp16" : "fp32"; } else gpuWhy = self.navigator && navigator.gpu ? "no GPU adapter" : "WebGPU not offered"; } catch (g) { gpuWhy = String(g && g.message || g).slice(0, 160); }',
+    '    if (device === "webgpu") { try { pipe = await T.pipeline("feature-extraction", m.model, { device: "webgpu", dtype: dtype, progress_callback: prog }); await pipe(["warm up"], { pooling: "mean", normalize: true }); } catch (g) { gpuWhy = String(g && g.message || g).slice(0, 160); pipe = null; device = "wasm"; dtype = "q8"; } }',
+    '    if (!pipe) pipe = await T.pipeline("feature-extraction", m.model, { dtype: "q8", progress_callback: prog });',
+    '    self.postMessage({ type: "ready", device: device, dtype: dtype, gpuWhy: gpuWhy });',
     '  } else if (m.type === "embed") {',
     '    var o = await pipe(m.texts, { pooling: "mean", normalize: true });',
     '    self.postMessage({ type: "emb", id: m.id, data: Array.from(o.data), n: m.texts.length });',
     '  }',
     '} catch (err) { self.postMessage({ type: "error", id: m.id, msg: String(err && err.message || err) }); } };'].join('\n');
-  var mode = '';      // 'worker' | 'page'
+  var mode = '', device = '', dtype = '';      // 'worker' | 'page'; 'webgpu' | 'wasm'; the model's number format
   /** The model in a background worker -> embedMany(texts) -> [vector per text]. Rejects if the phone won't run one. */
   function startWorker() {
     return new Promise(function (ok, no) {
@@ -79,7 +84,7 @@
       w.onmessage = function (e) {
         var m = e.data || {}; if(dead)return;if(!ready)watch();
         if (m.type === 'progress') onFile(m);
-        else if (m.type === 'ready') { ready = true; clearTimeout(dog); ok(function (texts) {
+        else if (m.type === 'ready') { ready = true; clearTimeout(dog); device = m.device || 'wasm'; dtype = m.dtype || 'q8'; if (root.FLog) root.FLog[device === 'webgpu' ? 'info' : 'warn']('car', 'Recall rating model on ' + (device === 'webgpu' ? 'the GPU (WebGPU, ' + dtype + ')' : 'the CPU' + (m.gpuWhy ? ': ' + m.gpuWhy : '')), {}); ok(function (texts) {
           return new Promise(function (r, j) { if(dead)return j(new Error('Rating worker stopped'));var id = ++seq; pend[id] = { ok: r, no: j, texts:texts, timer:setTimeout(function(){fail('Rating queue timed out');},60000) }; queue.push(id);pump(); });
         }); }
         else if (m.type === 'emb') {
@@ -103,7 +108,7 @@
       embed = await startWorker(); mode = 'worker';
       setProg(0.7, 'Setting up the rating model');
       // the examples' vectors are worked out once and kept (they only change with VERSION)
-      var kv = KV(), ak = 'anchors|' + VERSION + '|' + MODEL, kept = kv && kv.get('ai', ak);
+      var kv = KV(), ak = 'anchors|' + VERSION + '|' + MODEL + (dtype && dtype !== 'q8' ? '|' + dtype : ''), kept = kv && kv.get('ai', ak);
       if (kept && kept.v && kept.v[3] && kept.v[3].length === EXAMPLES[3].length && kept.v[1].length === EXAMPLES[1].length && kept.v[2].length === EXAMPLES[2].length) anchors = kept.v;
       else {
         var a = {};
@@ -115,7 +120,7 @@
         anchors = a; if (kv) kv.put('ai', ak, a);
       }
       state = 'ready'; setProg(0.95, 'Rating');
-      if (root.FLog) root.FLog.info('car', 'Recall rating model ready (' + (mode === 'worker' ? 'background worker' : 'in the page') + ')');
+      if (root.FLog) root.FLog.info('car', 'Recall rating model ready (' + (mode === 'worker' ? 'background worker' : 'in the page') + (device ? ', ' + (device === 'webgpu' ? 'GPU' : 'CPU') : '') + ')');
       return embed;
     })().catch(function (e) { state = 'failed'; failedAt=Date.now();loading = null;groupVectors.clear(); taskStatus(); throw e; });
     return loading;
@@ -142,13 +147,17 @@
   /** Rate the recalls not rated yet (loading the model the first time); calls done() after each group that's in.
    *  One run at a time: recalls asked for while it runs join the queue (a redraw asking again adds nothing). In the
    *  background worker, a few at once without foreground-only delays; the page fallback yields between texts. */
-  var queue = [], queued = {}, dones = [], running = false;
+  var queue = [], queued = {}, dones = [], running = false, retryTimer = 0;
   var watching = function () { return true; };    // Advisory says whether it's on screen (focus)
   function rate(list, done) {
     var todo = (list || []).filter(function (x) { return !get(x) && !queued[key(x)]; });
     todo.forEach(function (x) { queued[key(x)] = 1; queue.push(x); });
     if (done && (todo.length || running) && dones.indexOf(done) < 0) dones.push(done);
     if (running || !queue.length) return;
+    // After a failure the model rests a minute. Failing each ask at once made the screen redraw, which asked again
+    // (2,848 "cooling down" warnings in two minutes in the 0.0.217 log): wait once for the rest to end instead.
+    var coolLeft = failedAt && !(root.__mocks && root.__mocks.severity) ? 60000 - (Date.now() - failedAt) : 0;
+    if (coolLeft > 0) { if (!retryTimer) retryTimer = setTimeout(function () { retryTimer = 0; rate([], null); }, coolLeft + 50); return; }
     running = true;
     taskStatus();
     var mock = root.__mocks && root.__mocks.severity;        // the desktop tests stand in for the model
@@ -188,5 +197,5 @@
       return out;
     }).catch(function () { return null; }).finally(function () { comparing--; taskStatus(); });
   }
-  root.Severity = { get: get, rate: rate, busy: busy, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
+  root.Severity = { get: get, rate: rate, busy: busy, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, device: function () { return device; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

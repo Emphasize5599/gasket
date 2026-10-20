@@ -90,7 +90,7 @@ final class AiDiagnostics {
         try {
             value.put("sequence", ++sequence); value.put("stage", stage); value.put("timestamp", now);
             value.put("elapsedMs", started == 0 ? 0 : monotonic - started); value.put("pid", Process.myPid());
-            value.put("inFlight", inFlight); value.put("backend", backend); value.put("runtime", "stock-0.18.0-cpu-safety");
+            value.put("inFlight", inFlight); value.put("backend", backend); value.put("runtime", "stock-0.18.0");
             value.put("contextTokens", contextTokens); value.put("inputBytes", inputBytes);
             value.put("modelRevision", GemmaService.REV);
             value.put("nativeHeapBytes", Debug.getNativeHeapAllocatedSize()); value.put("pssKb", Debug.getPss());

@@ -24,7 +24,7 @@
       // A native WebView can fail before its page reader starts. Bound Tire Rack calls here too, and remove the waiter.
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
-      if (fn === 'aiGenerate') timeout = window.Gemma&&Gemma.status().cpuOnly ? 610000 : 125000;
+      if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
       if(fn==='siteRead'&&args[0]==='brave')timeout=40000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if (fn === 'aiCommand') timeout = 15000;

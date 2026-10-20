@@ -13,17 +13,22 @@ final class GemmaRuntime {
     volatile String backend = "unknown";
     volatile boolean gpuLowPriorityRequested;
     volatile int gpuPatchVersion;
+    /** Why the GPU engine could not start this time (null = it did, or CPU only was chosen): the CPU is an emergency fallback. */
+    volatile Throwable gpuFailure;
 
     static int contextFor(int inputBytes) {
         // UTF-8 bytes upper-bound input tokens; reserve 2048 output + 1024 system/template tokens.
         return Math.min(32768, Math.max(8192, ((inputBytes + 3072 + 4095) / 4096) * 4096));
     }
     void load(String path, String cache, int inputBytes, boolean cpuOnly) throws Exception {
-        if (!cpuOnly) throw new IllegalStateException("GPU temporarily disabled for stability.");
         int required = contextFor(inputBytes);
         if (engine != null && contextTokens >= required && loadedCpuOnly == cpuOnly) return;
-        close(); contextTokens = required; loadedCpuOnly = cpuOnly;
-        backend = "CPU"; initialize(path, cache, new Backend.CPU(2, null));
+        close(); contextTokens = required; loadedCpuOnly = cpuOnly; gpuFailure = null;
+        if (cpuOnly) { backend = "CPU"; initialize(path, cache, new Backend.CPU(2, null)); return; }
+        // GPU always first (stock LiteRT-LM: several times faster, and it leaves the CPU to the app);
+        // the CPU only when the GPU engine won't start, and the reason is kept for the log
+        try { initialize(path, cache, new Backend.GPU()); backend = "GPU"; }
+        catch (Exception | LinkageError gpu) { gpuFailure = gpu; backend = "CPU"; initialize(path, cache, new Backend.CPU(2, null)); }
     }
     private void initialize(String path, String cache, Backend backend) throws Exception {
         Engine candidate = new Engine(new EngineConfig(path, backend, null, null, contextTokens, null, cache));

@@ -25,8 +25,8 @@ final class GemmaService {
     private final AiCancellation cancellation = new AiCancellation();
     private static final Semaphore MODEL_SLOT = new Semaphore(1);
     private volatile boolean recoveryRequired;
-    // Temporary safety hold: preserve user preference, but do not load the failing GPU path.
-    private static final boolean GPU_SAFETY_HOLD = true;
+    /** The last GPU start failure while the CPU stood in (scrubbed), cleared by the next GPU start; shown and logged. */
+    private volatile String gpuFallback = "";
     private final File directory, model, partial, cache;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
@@ -46,6 +46,8 @@ final class GemmaService {
         prefs = context.getSharedPreferences("gasket_ai", Context.MODE_PRIVATE);
         diagnostics = new AiDiagnostics(context, prefs);
         recoveryRequired = diagnostics.interrupted || prefs.getBoolean("recoveryRequired", false);
+        // 0.0.218: the GPU is the default again; a CPU-only choice made while testing 0.0.215–0.0.217's flicker is reset once
+        if (!prefs.getBoolean("gpuDefault218", false)) prefs.edit().putBoolean("cpuOnly", false).putBoolean("gpuDefault218", true).apply();
         if (recoveryRequired) prefs.edit().putBoolean("recoveryRequired", true).apply();
         directory = new File(context.getNoBackupFilesDir(), "gemma-4-e4b"); directory.mkdirs();
         model = new File(directory, "model.litertlm"); partial = new File(directory, "model.part");
@@ -56,7 +58,9 @@ final class GemmaService {
     }
     private boolean supported() { return Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a") || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64"); }
     private boolean enabled() { return prefs.getBoolean("enabled", true); }
-    private boolean cpuOnly() { return GPU_SAFETY_HOLD || prefs.getBoolean("cpuOnly", false); }
+    /** The CPU deadline (600 s) applies when CPU only was chosen or the GPU failed to start (emergency fallback). */
+    private boolean onCpu(boolean chosen) { GemmaRuntime active = runtime; return chosen || active != null && "CPU".equals(active.backend); }
+    private boolean cpuOnly() { return prefs.getBoolean("cpuOnly", false); }
     JSONObject status() {
         JSONObject value = new JSONObject();
         try {
@@ -64,7 +68,7 @@ final class GemmaService {
             value.put("phase", phase); value.put("error", error); value.put("bytes", downloaded); value.put("total", BYTES);
             value.put("task", task);
             value.put("cpuOnly", cpuOnly());
-            value.put("gpuSafetyHold", GPU_SAFETY_HOLD); value.put("recoveryRequired", recoveryRequired);
+            value.put("recoveryRequired", recoveryRequired); value.put("gpuFallback", gpuFallback);
             value.put("startupDiagnostics", diagnostics.startup); value.put("nativeDiagnostics", diagnostics.latest());
             value.put("reason", reason); value.put("attempt", attempt);
             value.put("revision", REV); value.put("busy", busy.get());
@@ -102,7 +106,6 @@ final class GemmaService {
         }
         if ("processorCpu".equals(command) || "processorAuto".equals(command)) {
             if (busy.get()) { result(id, null, "Turn AI off or wait for the current task before changing its processor."); return; }
-            if (GPU_SAFETY_HOLD && "processorAuto".equals(command)) { result(id, null, "GPU mode is temporarily paused while its stability issue is investigated."); return; }
             prefs.edit().putBoolean("cpuOnly", "processorCpu".equals(command)).apply();
             // load() recreates the engine on the serial worker when the preference changes.
             listener.result(id, status()); notifyStatus(); return;
@@ -180,7 +183,7 @@ final class GemmaService {
         ScheduledFuture<?> deadline = timer.scheduleAtFixedRate(() -> {
             synchronized (GemmaService.this) {
                 if (activeTicket != ticket || !busy.get()) return;
-                if (ticket != epoch.get() || closed || !enabled() || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(useCpu ? 600 : 120)) {
+                if (ticket != epoch.get() || closed || !enabled() || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(onCpu(useCpu) ? 600 : 120)) {
                     if (ticket == epoch.get()) epoch.incrementAndGet();
                     if (!"cancelling".equals(phase)) { phase = "cancelling"; notifyStatus(); }
                     GemmaRuntime active = runtime; if (active != null) cancellation.request(active.cancellation());
@@ -196,9 +199,11 @@ final class GemmaService {
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 if (!MODEL_SLOT.tryAcquire()) throw new IllegalStateException("Previous local model is still stopping.");
                 ownsSlot = true;
-                diagnostics.record("load", true, "CPU", plannedTokens, inputBytes, null); notifyStatus();
+                diagnostics.record("load", true, useCpu ? "CPU" : "GPU", plannedTokens, inputBytes, null); notifyStatus();
                 if (runtime == null) runtime = new GemmaRuntime();
                 runtime.load(model.getAbsolutePath(), cache.getAbsolutePath(), prompt.getBytes(StandardCharsets.UTF_8).length, useCpu);
+                if (runtime.gpuFailure != null) { gpuFallback = AiDiagnostics.failure(runtime.gpuFailure); diagnostics.record("gpu_failed_cpu_fallback", true, "CPU", runtime.contextTokens, inputBytes, runtime.gpuFailure); }
+                else if ("GPU".equals(runtime.backend)) gpuFallback = "";
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 phase = "generate"; diagnostics.record("generate", true, runtime.backend, runtime.contextTokens, inputBytes, null); notifyStatus();
                 String response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed);
@@ -214,15 +219,15 @@ final class GemmaService {
                 // Release native memory before another service/activity can acquire the model slot.
                 if (ownsSlot) {
                     diagnostics.record("releasing", true, runtime == null ? "unknown" : runtime.backend, plannedTokens, inputBytes, null);
-                    boolean released = true;
+                    boolean released = true; String used = runtime == null ? "unknown" : runtime.backend;
                     try { if (runtime != null) runtime.close(); }
                     catch (Exception | LinkageError failure) {
                         released = false; recoveryRequired = true; prefs.edit().putBoolean("recoveryRequired", true).apply();
                         error = "Local AI could not release its resources. Restart the app before retrying.";
-                        diagnostics.record("release_failed", true, "CPU", plannedTokens, inputBytes, failure);
+                        diagnostics.record("release_failed", true, used, plannedTokens, inputBytes, failure);
                     } finally {
                         runtime = null;
-                        if (released) { diagnostics.record("released", false, "CPU", plannedTokens, inputBytes, null); MODEL_SLOT.release(); }
+                        if (released) { diagnostics.record("released", false, used, plannedTokens, inputBytes, null); MODEL_SLOT.release(); }
                     }
                 }
                 synchronized (GemmaService.this) {

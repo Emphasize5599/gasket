@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.219 - 2026-10-20
+- Local AI runs on the GPU again; the CPU is only an emergency fallback when the GPU won't start, and the app says when that happened.
+- Recall ratings try the GPU too (WebGPU, when the phone's WebView offers it) and no longer fight the larger model for the processor.
+- Bug fixes.
+
 ## 0.0.218 - 2026-10-20
 - Gasket no longer needs a Google key: everything from the keyless test app (website station and price discovery, approximate routes without a key, EV and hydrogen trips with network prices, hazards along the route, tolls, the garage's tires and climate, local AI tire explanations) is now Gasket itself, on main.
 - Coming from Gasket Keyless Test: save a full backup there (Settings → Data & privacy) and restore it here. Download the offline charger data and the optional AI model again; they aren't in backups.
