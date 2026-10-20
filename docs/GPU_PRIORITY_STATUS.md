@@ -1,6 +1,38 @@
 # GPU priority experiment — 2026-10-20
 
-No replacement runtime or APK has shipped from this experiment. Current app: 0.0.215.
+0.0.216 integration is committed at adb0aa5. Signed APK publication is pending:
+https://github.com/Emphasize5599/gasket/actions/runs/39463467798
+
+Do not redo integration from the old checklist below. Current implementation:
+`GemmaGpuSupport` checks native identity before GPU use; unknown/missing patches
+use CPU. Runtime logs include `gpuPatchVersion` and `gpuLowPriorityRequested`.
+The original AAR's classes, x86_64 JNI, resources and native/Java notices remain
+unchanged. ARM64 JNI is replaced and the separately linked upstream constraint
+provider is added. Both binaries are checksum-pinned in `package-aar.py`.
+`build.sh` verifies native ABI/dependencies/16 KB alignment on every build before
+constructing the AAR. Focused AI/browser/cache/config tests, nine ABI-check
+fixtures, and three AAR packaging fixtures passed locally. Java/native execution
+and real signed-APK contents are enforced in CI, not tested on the phone yet.
+
+The first green source run hid an ABI-check failure through `tee`: default symbol
+version suffixes (`@@VERS_1.0`) caused a false name mismatch. Shell pipefail and
+symbol normalization were fixed in 5f74511. Its rerun correctly caught the real
+separate provider dependency. adb0aa5 pins/adds that provider and verifies its
+architecture, alignment and dependencies. Do not treat the first empty ABI report
+as a pass. Native rerun with these corrections:
+https://github.com/Emphasize5599/gasket/actions/runs/39463467783
+
+First app publication bootstraps the compiled JNI from run 39458036225, then
+independently validates it with the corrected checks and downloads the exact
+upstream provider (Git LFS SHA f2aa38ce...baae5b9). The release additionally
+publishes Gasket-LiteRT-0.18.0-gpu-ui1-arm64.zip alongside the APKs; subsequent
+builds use that permanent archive instead of depending on expiring artifacts.
+Never overwrite released APKs. Pending phone check: Automatic + Recheck
+explanation, without screen recording, change menus and open notification shade;
+look for backend GPU, patch version 1 and priority request true in exported log.
+CPU-only remains the control/fallback; no model re-download/cache erasure needed.
+
+Historical investigation and previous checklist (superseded by the integration above):
 
 User evidence: GPU-only display corruption also affects Android's notification
 shade, while CPU-only mode appears unaffected. FrameMetrics can be normal during
