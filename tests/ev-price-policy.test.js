@@ -1,0 +1,38 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),T=require('../assets/web/trip.js');
+let now=Date.now();class Clock extends Date{static now(){return now;}}
+const S={trip:{}},cache=new Map(),calls=[],ctx={Date:Clock,Map,Set,Promise,Math,Number,JSON,URLSearchParams,setTimeout:f=>f(),setInterval(){},clearInterval(){}};ctx.window=ctx;ctx.addEventListener=()=>{};ctx.L={GridLayer:{extend:()=>function(){}}};
+ctx.__app={S,N:{},P:{},map:{},altMode:()=>false,esc:String,KV:{get:(n,k,age)=>{let o=cache.get(n+'|'+k);return o&&now-o.t<=age?o:null;},put:(n,k,v)=>cache.set(n+'|'+k,{v:JSON.parse(JSON.stringify(v)),t:now})}};
+for(const name of ['altfuel','chargerdata','evprices'])vm.runInNewContext(fs.readFileSync('assets/web/'+name+'.js','utf8'),ctx);
+const A=ctx.AltFuel,C=ctx.ChargerData,E=ctx.EVPrices;
+assert(A.netEnabled('flo',{}));assert(!A.netEnabled('ea',{}));assert(!A.netEnabled('dealer',{}));assert(A.netEnabled('ea',{ea:false}),'explicit opt-in survives save/restore');assert(!A.netEnabled('blink',{blink:true}));
+assert.equal(A.netGroup({network:'ChargePoint',name:'Testville Hotel',dc:0}),'hotel');assert.equal(A.netGroup({network:'Tesla',name:'Testville Hotel',dc:8}),'tesla','a fast network at a hotel is not assumed complimentary');
+assert.equal(C.tariff({country:'US',source:'DOE AFDC',pricing:'',dataUpdated:new Date(now).toISOString()},.48,100).known,false);
+assert.equal(C.tariff({country:'US',source:'DOE AFDC',pricing:'$0.40/kWh',dataUpdated:new Date(now).toISOString()},.48,100).updated,null,'inventory status update is not a price check');
+assert.equal(C.tariff({country:'US',source:'DOE AFDC',pricing:'Free parking'},.48,100).known,false);
+assert.equal(C.tariff({country:'US',source:'DOE AFDC',pricing:'Free'},.48,100).known,true);
+const detail={name:'Testville Library',networkId:6,geoCoordinates:{latitude:35,longitude:-91},address:{country:'USA'},stations:[{id:'fixture',status:'Available',level:'L2',tariff:{description:{en:'6 am to 9 pm : $2.50/hr \n 9 pm to 6 am : $1/hr\nReview parking signage.'}},connectors:[{type:'IEC_62196_T1',power:6240}],freeOfCharge:false}]};
+let p=E.parseFlo(detail,false,['J1772']);assert.equal(p.price.rate,2.5);assert.equal(p.price.uom,'hour');assert.equal(p.units[0].connectors.J1772.power_kw,6.24);
+assert.equal(E.parseFlo(detail,true,['J1772']).price,null);assert.equal(E.parseFlo({...detail,address:{country:'CANADA'}},false,['J1772']).price,null);assert.equal(E.parseFlo({...detail,name:'NYC GOV ONLY'},false,['J1772']).price,null);
+const withText=(text,free=false)=>({...detail,stations:[{...detail.stations[0],freeOfCharge:free,tariff:{description:{en:text}}}]});
+assert.equal(E.parseFlo(withText('$0.42 (USD) per kWh'),false,['J1772']).price.rate,.42);
+assert.equal(E.parseFlo(withText('$0.42 (CAD) per kWh'),false,['J1772']).price,null);
+assert.equal(E.parseFlo(withText('$0/hr'),false,['J1772']).price,null,'zero placeholder is not free');
+assert.equal(E.parseFlo(withText('Free charging',true),false,['J1772']).price.free,true);
+assert.equal(E.parseFlo(withText('$0.40/kWh first 30 minutes; $0.80/kWh after 30 minutes'),false,['J1772']).price,null,'do not invent a flat rate from a tiered tariff');
+const raw={distanceMeters:160934.4,duration:'5600s',polyline:{encodedPolyline:T.encodePolyline([{lat:35,lng:-92},{lat:35,lng:-90}])},legs:[]},model=T.buildRoute(raw,{city:100,hwy:100,comb:100}),candidate={id:'fresh',d:45,price:.5,priceKnown:true,detourMi:0,calc:{updated:now}},opts={model,capGal:1,startGal:.6,bufferGal:.1,arriveGal:.1,refPrice:.48,priceAgeHours:24,priceNow:now,requireKnownPrice:true,cands:[candidate,{...candidate,id:'stale',price:.1,calc:{updated:now-25*3600e3}}]};
+let plan=T.plan(opts);assert(plan.ok);assert(plan.stops.every(s=>s.c.id==='fresh'),'recent tariff preferred to cheap stale tariff');
+plan=T.plan({...opts,cands:[{...candidate,calc:{updated:now-25*3600e3}}]});assert(plan.ok);assert(plan.priceFreshFallback,'older published price remains a reachable fallback');
+assert(!T.plan({...opts,cands:[{...candidate,priceKnown:false}]}).ok,'unknown tariff excluded');assert(T.plan({...opts,requireKnownPrice:false,cands:[{...candidate,priceKnown:false}]}).ok,'explicit opt-in permits estimate');
+assert(T.plan({...opts,cands:[{...candidate,price:0,freeCharging:true}]}).ok,'confirmed free charging is not unknown');
+assert(T.plan({...opts,cands:[{...candidate,calc:{updated:now+1000}}]}).priceFreshFallback,'future timestamps cannot be fresh');
+assert(!T.plan({...opts,cands:[{...candidate,detourMin:20}],maxDetourMin:10}).ok,'freshness never bypasses detour limit');
+(async()=>{
+ let blocked=false;ctx.__trip={call:async(fn,action,args)=>{calls.push([fn,action,args]);if(blocked)return {blocked:true,status:429,error:'HTTP 429'};return {body:JSON.stringify(action==='near'?{parks:[{...detail,stations:[{id:'fixture',level:'L2',connectors:['IEC_62196_T1']}]}]}:detail)};}};
+ const item=()=>({st:{id:'flo1',country:'US',name:'Testville Library',lat:35,lng:-91,network:'FLO',plugs:['J1772']},dc:false,kw:6});
+ let x=item();await E.annotate([x],{plug:'CCS'});assert.equal(x.st.netPrice.rate,2.5);assert.equal(x.st.netPrice.t,now);const checked=now;
+ now+=3600e3;x=item();await E.annotate([x],{plug:'CCS'});assert.equal(calls.length,2,'same-day cache avoids new reads');assert.equal(x.st.netPrice.t,checked,'cache hits never redate observations');
+ S.evPriceAgeHours=1;x=item();await E.annotate([x],{plug:'CCS'});assert.equal(calls.length,2,'inclusive freshness boundary');now+=1;x=item();await E.annotate([x],{plug:'CCS'});assert.equal(calls.length,4,'shorter global preference expires the cache sooner');
+ cache.clear();blocked=true;let r=await E.annotate([item(),{...item(),st:{...item().st,id:'flo2'}}],{plug:'CCS'});assert.match(r.notes.join(' '),/restricted/);assert.equal(calls.length,5,'a bot check stops further FLO requests and is not cached as a price');
+ const java=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8').split('public void fetchFlo')[1].split('public void fetchJson')[0];assert.match(java,/setInstanceFollowRedirects\(false\)/);assert.match(java,/bounded\(c.getInputStream\(\),512000\)/);assert.match(java,/Math.abs\(lat\)>90/);
+ console.log('EV price policy, three network groups, FLO tariff/connector parsing, cache timestamps and rate-limit stop passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

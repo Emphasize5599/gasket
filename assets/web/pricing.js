@@ -39,6 +39,8 @@
     confirmDeletes: true,        // ask before deleting anything (Settings → General)
     nrelKey: '',                 // your own free key for the DOE station finder (blank = the shared DEMO_KEY); never logged or exported
     evPrice: 0.48,               // $/kWh you expect at DC fast chargers (the station finder rarely has prices)
+    evPriceAgeHours: 24,         // preference, not a guarantee: some networks change rates in real time
+    evAllowUnknownPrices: false, // unknown tariffs require explicit opt-in; never silently assume free
     h2Price: 36,                 // $/kg you expect for hydrogen
     walmartPlus: true,
     samsMode: 'member',          // 'member' = Google's Sam's price is already member price; 'minus10' = take 10¢ more

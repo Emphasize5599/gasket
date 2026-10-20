@@ -18,6 +18,7 @@ release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices','charger-download');
 release.push('evprices-recovery','evprices-ui');
 release.push('chargerdata','chargerdata-ui');
+release.push('ev-price-policy');
 release.push('api-meter-ui');
 release.push('trims');
 release.push('fresh-car-lookups','ai-defaults','debug-log');

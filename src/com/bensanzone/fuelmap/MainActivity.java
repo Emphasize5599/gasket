@@ -1721,6 +1721,34 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void fetchFlo(final int reqId, final String action, final String args) {
+            new Thread(() -> {
+                JSONObject out=new JSONObject(); HttpURLConnection c=null;
+                try {
+                    String url="https://emobility.flo.ca/v3.0/parks/",body=null;
+                    if("near".equals(action)) {
+                        JSONObject p=new JSONObject(args); double lat=p.getDouble("lat"),lng=p.getDouble("lng");
+                        if(!Double.isFinite(lat)||!Double.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)throw new Exception("Invalid charger coordinates");
+                        url+="nearest";
+                        body=new JSONObject().put("geoCoordinates",new JSONObject().put("latitude",lat).put("longitude",lng))
+                            .put("filter",new JSONObject().put("networkIds",new JSONArray("[1,6]")).put("connectors",JSONObject.NULL)
+                                .put("levels",new JSONArray()).put("rates",new JSONArray()).put("statuses",new JSONArray())
+                                .put("minChargingSpeed",JSONObject.NULL).put("maxChargingSpeed",JSONObject.NULL)).toString();
+                    } else if("station".equals(action)&&args!=null&&args.matches("[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}"))url+="station/"+args;
+                    else throw new Exception("Invalid FLO query");
+                    c=(HttpURLConnection)new URL(url).openConnection();c.setInstanceFollowRedirects(false);c.setConnectTimeout(8000);c.setReadTimeout(12000);
+                    c.setRequestProperty("User-Agent",userAgent());c.setRequestProperty("Accept","application/json");
+                    if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json; charset=utf-8");
+                        try(java.io.OutputStream os=c.getOutputStream()){os.write(body.getBytes("UTF-8"));}}
+                    int status=c.getResponseCode();out.put("status",status);if(status==403||status==429)out.put("blocked",true);
+                    if(status!=200)throw new Exception("HTTP "+status);
+                    try(InputStream in=ChargerInventory.bounded(c.getInputStream(),512000)){out.put("body",readAll(in));}
+                } catch(Exception e){try{out.put("error",e.getMessage());}catch(Exception ignored){}}finally{if(c!=null)c.disconnect();}
+                reply(reqId,out);
+            }).start();
+        }
+
+        @JavascriptInterface
         public void fetchJson(final int reqId, final String url) {
             new Thread(new Runnable() {
                 public void run() {

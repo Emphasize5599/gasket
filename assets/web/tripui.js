@@ -840,7 +840,7 @@
     };
     seg('tArrive', function(){S.trip.arriveSet=true;arriveHelp();}); seg('tMode');
     if($('tChargerTypes'))$('tChargerTypes').querySelectorAll('input').forEach(function(el){el.onchange=function(){var all=Array.from($('tChargerTypes').querySelectorAll('input'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charger type selected.');return;}S.trip.evChargers={};all.forEach(function(x){S.trip.evChargers[x.dataset.chargeType]=x.checked;});result=null;choiceCandidates.clear();A.save();gateTabs();};});
-    if($('tNetworks'))$('tNetworks').querySelectorAll('[data-net]').forEach(function(el){el.onchange=function(){var all=Array.from($('tNetworks').querySelectorAll('[data-net]'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charging network selected.');return;}var o={};all.forEach(function(x){if(!x.checked)o[x.dataset.net]=true;});S.trip.evNetworksOff=o;result=null;choiceCandidates.clear();A.save();gateTabs();};});
+    if($('tNetworks'))$('tNetworks').querySelectorAll('[data-net]').forEach(function(el){el.onchange=function(){var all=Array.from($('tNetworks').querySelectorAll('[data-net]'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charging network selected.');return;}var o={};all.forEach(function(x){o[x.dataset.net]=!x.checked;});S.trip.evNetworksOff=o;result=null;choiceCandidates.clear();A.save();gateTabs();};});
     if($('tACAdapter'))$('tACAdapter').onchange=function(){Garage.car().acAdapter=this.checked;result=null;choiceCandidates.clear();A.save();gateTabs();};
     if($('tChargerTypes')){
       var help={dc:'DC fast chargers send power directly to the battery. They are usually fastest for road trips; Tesla Superchargers are one DC fast-charging network, not the only one. Compatibility and actual charging speed depend on the car and charger.',l2:'Level 2 uses 208–240 V AC, usually at homes, hotels or public parking. It is faster than an ordinary outlet but can still take hours. Power is limited by the car’s onboard charger.',l1:'Level 1 usually means an ordinary 120 V outlet: only a few miles of range per hour. A compatible portable charging cable is required. It is not a substitute for a fast charger on a short stop.'};
@@ -2162,8 +2162,8 @@
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function chargeMin(p) { return p.stops.reduce(function (a, s) { return a + (s.c.kw ? s.buyGal / s.c.kw * 60 : 0); }, 0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0); }
   /** Charging networks to use (S.trip.evNetworksOff): the ones Gasket reads prices from first, the rest dimmed but choosable; each A–Z. */
-  function netListHtml(){var off=S.trip.evNetworksOff||{},row=function(x){return '<label class="nf chk"><span>'+esc(x[1])+'</span><input type="checkbox" data-net="'+x[0]+'"'+(off[x[0]]?'':' checked')+'></label>';};
-    return '<div class="sub-h">Charging networks '+A.qBtn('Untick a network you can\'t or don\'t want to use (no membership, wrong app, customers only). The first networks publish prices Gasket reads; for the dimmed ones it uses the government\'s price note or the typical published rate of the chargers on your route. Car dealerships and Tesla Destination chargers at hotels are often listed as free but are usually for customers or guests only.')+'</div><div id="tNetworks">'+AltFuel.NET_PRICED.map(row).join('')+'<div class="net-unpriced"><div class="lead small keep">Prices not read from these networks yet</div>'+AltFuel.NET_OTHER.map(row).join('')+'</div></div>';}
+  function netListHtml(){var off=S.trip.evNetworksOff||{},row=function(x){return '<label class="nf chk"><span>'+esc(x[1])+'</span><input type="checkbox" data-net="'+x[0]+'"'+(AltFuel.netEnabled(x[0],off)?' checked':'')+'></label>';};
+    return '<div class="sub-h">Charging networks '+A.qBtn('Readable networks are enabled by default. Others are opt-in: a published government price note may be available even when the network website has none. Unknown prices are excluded unless enabled in Settings → Connections. Hotel and dealership charging may be complimentary, paid, or restricted to guests/customers; verify access.')+'</div><div id="tNetworks"><div class="lead small keep">Public website prices</div>'+AltFuel.NET_PRICED.map(row).join('')+'<div class="net-unpriced"><div class="lead small keep">No reliable website price reader yet</div>'+AltFuel.NET_OTHER.map(row).join('')+'</div><div class="net-hosted"><div class="lead small keep">Potentially complimentary · verify access & price</div>'+AltFuel.NET_HOSTED.map(row).join('')+'</div></div>';}
   /** When you get there: an EV starts on "a destination has a charger" until you pick (arriveSet); gas never has that choice. */
   function arriveNow(){var t=S.trip,a=t.arrive;if(KIND()==='ev'&&!t.arriveSet){t.arrive='destination';return 'destination';}return a==='full'||a==='destination'&&KIND()==='ev'?a:'buffer';}
   /** What's already in the tank / battery cost, typed per fuel kind (a gas price is never a $/kWh). */
@@ -2175,7 +2175,7 @@
     var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)) : 8;
     if(kd==='ev')plugs=AltFuel.compatiblePlugs(c,plugs);
     var price = kd === 'ev' ? (+S.evPrice || 0.48) : (+S.h2Price || 36), tv = 0;
-    var notes = [], per = [], raw = [];
+    var notes = [], per = [], raw = [], skippedPrices=0;
     dbgS.started = new Date().toISOString(); dbgS.kind = kd;
     for (var mi = 0; mi < models.length; mi++) {
       var list = [], m = models[mi];
@@ -2188,21 +2188,23 @@
     // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it
     if(kd==='ev'&&window.EVPrices){var seenNet={},items=[];raw.forEach(function(list,i){list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
       try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
+    if(kd==='ev'&&window.EVPrices){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];
       var cands = [];
       for (var si = 0; si < list.length; si++) {
-        var st = list[si],charging=kinds[mi][si];if(kd==='ev'&&!charging)continue;
+        var st = list[si],charging=kinds[mi][si];if(kd==='ev'&&st.netPrice&&st.netPrice.src==='flo')charging=AltFuel.charging(st,c,S.trip.evChargers,plugs);if(kd==='ev'&&!charging)continue;
         var guess=kd==='ev'?evGuess(charging.level==='dc_fast',price):{price:price,label:'Your hydrogen-price estimate'};
         var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,guess.price,charging.kw):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
+        if(kd==='ev'&&!tariff.known&&S.evAllowUnknownPrices!==true){skippedPrices++;continue;}
         if(tariff.estimated&&tariff.price===guess.price&&tariff.label==='Your charging-price estimate')tariff.label=guess.label;
         var prs = T.projectLegs(m, { lat: st.lat, lng: st.lng }, corridor);
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = charging?charging.kw:0;
           cands.push({ id: pr.leg ? st.id + '@' + pr.leg : st.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: det < 0.15 ? 0 : det / 25 * 60 + 1, detourExact: false,
-            price: tariff.price, freeCharging:kd==='ev'&&!tariff.estimated&&tariff.price===0,kw: kw, chargeLevel:charging&&charging.level,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
-            calc: { base: tariff.price, final: tariff.price, est: tariff.estimated, stale: false, updated: tariff.updated?Date.parse(tariff.updated)||null:null, notes: [],
+            price: tariff.price, priceKnown:tariff.known===true, freeCharging:kd==='ev'&&tariff.known&&tariff.price===0,kw: kw, chargeLevel:charging&&charging.level,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
+            calc: { base: tariff.price, final: tariff.price, est: tariff.estimated, stale: kd==='ev'&&(!tariff.updated||Date.parse(tariff.updated)>Date.now()||Date.now()-Date.parse(tariff.updated)>(+S.evPriceAgeHours||24)*3600e3), updated: tariff.updated?Date.parse(tariff.updated)||null:null, notes: [],
               steps: [{ label: tariff.label, kind: 'base', amount: tariff.price }] } });
         }
       }
@@ -2210,7 +2212,7 @@
       // Keep compatible alternatives instead of discarding slower, reachable stops in 3-mile bins.
       per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [] });
     }
-    if (kd === 'ev') notes.push('Chargers\' published rates are used where they have one (not live). The rest use '+(evRates&&evRates.all?'the typical published rate of this route\'s chargers':'your charging-price estimate (Settings → Trip defaults); too few chargers here publish a rate')+'. Confirm current rates and available stalls with the charging network.');
+    if (kd === 'ev') {if(skippedPrices)notes.push('Chargers without published prices were excluded. To include estimated costs, enable them in Settings → Connections.');notes.push('Recent published prices are preferred; older or undated rates may be needed. Rates are not live: confirm prices, access and available stalls with the network.');var fd=!S.trip.departNow&&futureDepart();if(fd&&fd.getTime()>Date.now())notes.push('Leaving '+fd.toLocaleString()+' — prices may change by then.');}
     dbgS.stations = raw.map(function (l) { return l.length; });
     pg(1, 'Choosing stops');
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
@@ -3059,6 +3061,7 @@
   function makeBaseOpts(model, cands, startGal) {
     var kd = KIND(), cap = Garage.tank();
     return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * 0.8 : null,
+      priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
       destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,S.evPrice):[],
       arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,
@@ -3389,6 +3392,7 @@
     }
     if (p.ok && p.firstDip && p.stops.length) w.push({ t: 'You\'ll reach stop 1 below '+('your '+r.bufMi+'-mile buffer')+' (~' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' mi left).' });
     if(p.ok&&p.firstDip&&!p.stops.length&&(p.destinationCharges||[]).length)w.push({t:'The first destination is reached below your chosen buffer. Increase starting charge or adjust the route; destination charging cannot help before arrival.'});
+    if(KIND()==='ev'&&p.ok&&p.priceFreshFallback&&p.stops.length)w.push({t:'Recent charger prices could not cover this trip. Some prices may be older than your '+(+S.evPriceAgeHours||24)+'-hour preference or have no price-check date.'});
     if (r.estUsed) w.push({ t: r.estUsed + ' stop' + (r.estUsed === 1 ? ' is at a station' : 's are at stations') + ' with no posted price — nothing priced is in reach there. Its price is an estimate (marked est.).' });
     if (r.stale) w.push({ t: r.stale + ' price' + (r.stale === 1 ? ' is' : 's are') + ' over ' + S.staleHours + ' hours old (marked).' });
     (r.notes||[]).concat(evRecovery&&evRecovery.base===r?Array.from(new Set(evRecovery.errors)):[]).forEach(function (n) { w.push({ t: n }); });
@@ -3473,8 +3477,8 @@
       '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>' + costEst();
     // only what to watch out for, briefly
     var w = [];
-    var fd = futureDepart();
-    if (fd) w.push('Leaving ' + fd.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' — prices may change by then.');
+    var fd = !S.trip.departNow && futureDepart();
+    if (fd && fd.getTime()>Date.now()) w.push('Leaving ' + fd.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' — prices may change by then.');
     if (route.legs && route.legs.some(function (L) { return L.sel > 0; })) route.legs.forEach(function (L, i) { if (L.sel > 0) w.push('Leg ' + (i + 1) + ': Google Maps may pick other roads — choose via ' + (L.alts[L.sel].description || 'route ' + (L.sel + 1)) + ' there.'); });
     else if (!multiLeg(route) && altSel > 0 && alts[altSel]) w.push('In Google Maps, pick the route via ' + (alts[altSel].description || 'route ' + (altSel + 1)) + '.');
     var av = ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; });

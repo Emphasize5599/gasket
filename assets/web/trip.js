@@ -640,6 +640,17 @@
 
   /** Full plan: optimized + a "convenient" baseline (fewest stops, least detour, fill up) for comparison. */
   function plan(o) {
+    // EV reliability is a preference tier, not an invented dollar surcharge. Try a whole
+    // feasible trip with recently observed tariffs first; never strand the driver by
+    // treating stale/undated published tariffs as unavailable. Unknown tariffs require opt-in.
+    if(o.priceAgeHours && !o.pricePolicyApplied){
+      var now=o.priceNow||Date.now(),eligible=o.cands.filter(function(c){return !o.requireKnownPrice||c.priceKnown===true;}),
+        fresh=eligible.filter(function(c){var t=c.calc&&+c.calc.updated;return c.priceKnown===true&&t>0&&t<=now&&now-t<=o.priceAgeHours*3600e3;}),
+        policy=Object.assign({},o,{pricePolicyApplied:true});
+      if(fresh.length&&fresh.length<eligible.length){var recent=plan(Object.assign({},policy,{cands:fresh}));if(recent.ok){o.refPrice=recent.refPrice;return Object.assign(recent,{priceFreshFallback:false});}}
+      var fallback=plan(Object.assign({},policy,{cands:eligible}));o.refPrice=fallback.refPrice;
+      return Object.assign(fallback,{priceFreshFallback:fresh.length<eligible.length});
+    }
     if(o.rewardPriceAt&&!o.rewardPass&&o.cands.some(function(c){return c.citgo;}))return calendarPlan(o);
     var tooFar = 0, farList = [];
     var cands = o.cands.filter(function (c) {

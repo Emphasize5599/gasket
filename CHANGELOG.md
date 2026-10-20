@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.220 - 2026-10-20
+- EV planning prefers recently checked prices, with a global freshness setting. Unknown prices and unsupported networks are opt-in; hotel/dealership chargers have their own group.
+- Public FLO tariff and connector lookups.
+- Bug fixes.
+
 ## 0.0.219 - 2026-10-20
 - Local AI runs on the GPU again; the CPU is only an emergency fallback when the GPU won't start, and the app says when that happened.
 - Recall ratings try the GPU too (WebGPU, when the phone's WebView offers it) and no longer fight the larger model for the processor.
