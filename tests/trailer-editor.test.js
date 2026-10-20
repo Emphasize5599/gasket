@@ -10,9 +10,12 @@ const frame=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAn
     await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
     await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);
     await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));await p.click('#btnTrip');await p.click('#gEdit');
+    // Finish the initial trim redraw before installing a drag fixture. Otherwise that
+    // unrelated reply can replace the entire page between boundingBox() and touchStart.
+    await p.waitForFunction(()=>!Garage.trimBusy());
     await p.evaluate(()=>{
       setInsets(24,48,0,0);document.querySelector(':root').dataset.theme='dark';
-      const c=Garage.car();c.tires={size:'195/65R15',sizeSrc:'user',list:{size:'195/65R15',items:[{brand:'Example',model:'Touring',type:'Touring',warrantyMi:40000}]},towMode:true,corners:{},spare:{kind:'none'},
+      const c=Garage.car();c.tires={size:'195/65R15',sizeSrc:'user',list:{size:'195/65R15',catalogVersion:5,t:Date.now(),items:[{brand:'Example',model:'Touring',type:'Touring',warrantyMi:40000}]},towMode:true,corners:{},spare:{kind:'none'},
         trailers:[{id:'trExample',name:'Trailer',hooked:true,axles:3,per:4,split:true,axlePositions:[.4,.6,.8],warrantyMi:40000}]};
       Garage.redraw();
     });

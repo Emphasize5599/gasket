@@ -4,7 +4,9 @@
 
 Published as **Gasket 0.0.221 — Debug diagnostics**, a GitHub prerelease, signed with the existing release key. This does not enable Android's `debuggable` flag or change the package identity.
 
-## 0.0.222 controlled reuse experiment
+## 0.0.223 controlled reuse experiment
+
+222 passed the new service tests but its APK build was blocked by an unrelated trailer test fixture race; 223 corrects that fixture and ships the same reuse experiment. The 222 source tag is preserved.
 
 Individual forced Tesla explanation did not reproduce the owner's demo-batch distortion. The demo log showed serial, not overlapping, generations, repeated 10–15s reloads and GPU frame-time spikes near markers. Reuse is a hypothesis-driven experiment, not a confirmed graphics fix.
 
@@ -12,7 +14,7 @@ Only one engine may exist, including between requests; its global lease stays he
 
 New `engine_initialized`, `engine_reused`, `retained_idle` and `releasing_<reason>` milestones distinguish actual reuse from reloads. Compare erase→demo to a forced individual explanation without screen recording; mark any distortion and export the log. JVM fixtures exercise service sequencing and cleanup but cannot validate Pixel graphics or actual model memory behavior.
 
-The pinned stock [LiteRT-LM Kotlin GPU configuration](https://github.com/google-ai-edge/LiteRT-LM/blob/b2f686e2ed4718fb84ec398a61dd59ca0f0aff27/kotlin/java/com/google/ai/edge/litertlm/Config.kt) exposes no utilization/ramp or priority control. Java thread priority or a ten-second delay would not throttle GPU work. No patched runtime or claimed GPU throttle is included in 222.
+The pinned stock [LiteRT-LM Kotlin GPU configuration](https://github.com/google-ai-edge/LiteRT-LM/blob/b2f686e2ed4718fb84ec398a61dd59ca0f0aff27/kotlin/java/com/google/ai/edge/litertlm/Config.kt) exposes no utilization/ramp or priority control. Java thread priority or a ten-second delay would not throttle GPU work. No patched runtime or claimed GPU throttle is included in this experiment.
 
 ## Phone procedure
 
