@@ -11,8 +11,8 @@ const java=`class ProcessorTest {
  static class GemmaGpuSupport {static int patch=1;static int version(){return patch;}}
  static class Backend {static class GPU extends Backend{} static class CPU extends Backend{CPU(int n,Object ignored){if(n!=2)throw new AssertionError();}}}
  static class EngineConfig {Backend b;EngineConfig(String p,Backend b,Object a,Object z,int n,Object x,String cache){this.b=b;}}
- static class Engine {static int created,closed;static boolean failGpu;Backend b;Engine(EngineConfig c){b=c.b;created++;}void initialize()throws Exception{if(failGpu&&b instanceof Backend.GPU)throw new Exception("fixture GPU failure");}void close(){closed++;}}
- static class Runtime {Engine engine;int contextTokens;boolean loadedCpuOnly;String backend="unknown";boolean gpuLowPriorityRequested;int gpuPatchVersion;Throwable gpuFailure;
+ static class Engine {static int created,closed;static boolean failGpu,failClose;Backend b;Engine(EngineConfig c){b=c.b;created++;}void initialize()throws Exception{if(failGpu&&b instanceof Backend.GPU)throw new Exception("fixture GPU failure");}void close(){closed++;if(failClose)throw new IllegalStateException("fixture close failure");}}
+ static class Runtime {Engine engine;int contextTokens;boolean loadedCpuOnly,closeFailed;String backend="unknown";boolean gpuLowPriorityRequested;int gpuPatchVersion;Throwable gpuFailure;
  ${method('static int contextFor(')} ${method('void load(')} ${method('private void initialize(')} ${method('void close()')}
  }
  static void check(boolean b){if(!b)throw new AssertionError();}
@@ -25,6 +25,10 @@ const java=`class ProcessorTest {
  Engine.failGpu=true;r.close();r.load("model","cache",1000,false);check(r.backend.equals("CPU")&&r.engine.b instanceof Backend.CPU&&r.gpuFailure!=null&&r.gpuFailure.getMessage().contains("fixture"));
  Engine.failGpu=false;r.close();r.load("model","cache",1000,false);check(r.backend.equals("GPU")&&r.gpuFailure==null);
  r.close();
+ Runtime broken=new Runtime();broken.load("model","cache",1000,false);Engine.failClose=true;int beforeClose=Engine.closed;boolean failed=false;
+ try{broken.load("model","cache",6000,false);}catch(Exception expected){failed=true;}check(failed&&broken.closeFailed&&Engine.closed==beforeClose+1);
+ failed=false;try{broken.close();}catch(Exception expected){failed=true;}check(failed&&Engine.closed==beforeClose+1);
+ int beforeCreate=Engine.created;failed=false;try{broken.load("model","cache",1000,false);}catch(Exception expected){failed=true;}check(failed&&Engine.created==beforeCreate);
  System.out.println("Actual runtime: GPU first, CPU only on request or as the fallback with the reason kept, bounded complete context, reuse passed");
  }}
 `;

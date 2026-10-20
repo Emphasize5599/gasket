@@ -6,6 +6,7 @@ import java.util.Collections;
 /** Only the service's serial worker initializes, generates or closes. Cancellation may come from the bridge. */
 final class GemmaRuntime {
     private Engine engine;
+    private boolean closeFailed;
     volatile int contextTokens;
     private boolean loadedCpuOnly;
     private volatile Conversation conversation;
@@ -81,7 +82,9 @@ final class GemmaRuntime {
         } };
     }
     void close() {
-        if (engine != null) { try { engine.close(); } catch (Exception failure) { throw new IllegalStateException("Engine release failed", failure); } finally { engine = null; } }
+        // Do not retry a partially failed native close, or let load()/service cleanup bless it.
+        if (closeFailed) throw new IllegalStateException("Previous engine release failed");
+        if (engine != null) { try { engine.close(); } catch (Exception | LinkageError failure) { closeFailed = true; throw new IllegalStateException("Engine release failed", failure); } finally { engine = null; } }
         gpuLowPriorityRequested = false; gpuPatchVersion = 0;
     }
 }

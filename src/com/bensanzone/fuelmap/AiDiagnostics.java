@@ -91,7 +91,7 @@ final class AiDiagnostics {
         return result.toString();
     }
     synchronized void record(String stage, boolean inFlight, String backend, int contextTokens, int inputBytes, Throwable failure) {
-        if (("generating_sample".equals(stage)||"first_output".equals(stage)) && (!latest.optBoolean("inFlight")||"releasing".equals(latest.optString("stage")))) return;
+        if (("generating_sample".equals(stage)||"first_output".equals(stage)) && (!latest.optBoolean("inFlight")||latest.optString("stage").startsWith("releasing")||"release_failed".equals(latest.optString("stage")))) return;
         JSONObject value = new JSONObject();
         long now = System.currentTimeMillis(), monotonic = android.os.SystemClock.elapsedRealtime();
         if ("load".equals(stage)) started = monotonic;

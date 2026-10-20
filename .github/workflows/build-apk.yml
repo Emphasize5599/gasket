@@ -226,6 +226,7 @@ jobs:
           GASKET_NATIVE_TESTS=1 node tests/gemma-processor.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-gpu-support.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-stability.test.js
+          GASKET_NATIVE_TESTS=1 node tests/gemma-reuse.test.js
           python3 tests/runtime-candidate.py
           python3 tests/runtime-package.py
 

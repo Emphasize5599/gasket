@@ -14,6 +14,7 @@ release.push('gemma-cache');
 release.push('gemma-processor','gemma-processor-ui');
 release.push('gemma-gpu-support');
 release.push('gemma-stability');
+release.push('gemma-reuse');
 release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices','charger-download');
 release.push('evprices-recovery','evprices-ui');

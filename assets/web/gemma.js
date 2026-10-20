@@ -3,7 +3,7 @@
   'use strict';
   var A=window.__app, state={enabled:false,ready:false,supported:false,phase:'idle'}, running=null, desired=[];
   var cache=new Map(), attempted=new Set(), issues=new Map(), scheduled=0, revision='', lastIssue='';
-  var scanDeferred=false,releasedForScan=false;
+  var scanDeferred=false,releasedForScan=false,queueReleased=false;
   var failures=new Map(),MAX_ATTEMPTS=3;
   var LG=window.FLog||{info:function(){},warn:function(){}};
   var lastStartupDiagnostics='',lastNativeSequence=0;
@@ -98,8 +98,8 @@
     var c=current(),cars=(A.S.cars||[]).slice();cars.sort(function(a,b){return (b===c?1:0)-(a===c?1:0);});desired=[];
     var seen=new Set();cars.forEach(function(car){try{var next=input(car);if(seen.has(next.key))return;seen.add(next.key);if(next.pack.setup.tires.some(function(t){return t.depth!=null;})&&!remembered(next)&&!attempted.has(next.key))desired.push(next);}catch(e){if(car===c)lastIssue=e.message;}});
     if(running){if(!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}return;}
-    if(!desired.length)Tasks.remove('gemma-advice');
-    else if(!deferForScan()&&!state.busy)run();
+    if(!desired.length){Tasks.remove('gemma-advice');if(!state.busy&&!queueReleased){queueReleased=true;command('releaseIdle');}}
+    else if(!deferForScan()&&!state.busy){queueReleased=false;run();}
     else Tasks.upsert('gemma-advice',{text:'Tire explanations queued…',state:'pending',frac:null,cancel:cancelGeneration});
   }
   async function run(){

@@ -4,6 +4,16 @@
 
 Published as **Gasket 0.0.221 — Debug diagnostics**, a GitHub prerelease, signed with the existing release key. This does not enable Android's `debuggable` flag or change the package identity.
 
+## 0.0.222 controlled reuse experiment
+
+Individual forced Tesla explanation did not reproduce the owner's demo-batch distortion. The demo log showed serial, not overlapping, generations, repeated 10–15s reloads and GPU frame-time spikes near markers. Reuse is a hypothesis-driven experiment, not a confirmed graphics fix.
+
+Only one engine may exist, including between requests; its global lease stays held until native close succeeds. Each request still creates and closes a fresh conversation. The JS queue releases the warm engine when drained; native cleanup also runs after three idle seconds, on cancellation, processor change, renderer loss or service closure. Reuse is denied on GPU fallback, native failure, OS low-memory, <2GiB available RAM, >512MiB process-PSS growth since the engine's first completed request, or the eighth request. Missing memory data disables retention. The observed model footprint is still roughly 5GiB: reuse avoids repeated allocation/loading, not the model's own memory cost.
+
+New `engine_initialized`, `engine_reused`, `retained_idle` and `releasing_<reason>` milestones distinguish actual reuse from reloads. Compare erase→demo to a forced individual explanation without screen recording; mark any distortion and export the log. JVM fixtures exercise service sequencing and cleanup but cannot validate Pixel graphics or actual model memory behavior.
+
+The pinned stock [LiteRT-LM Kotlin GPU configuration](https://github.com/google-ai-edge/LiteRT-LM/blob/b2f686e2ed4718fb84ec398a61dd59ca0f0aff27/kotlin/java/com/google/ai/edge/litertlm/Config.kt) exposes no utilization/ramp or priority control. Java thread priority or a ten-second delay would not throttle GPU work. No patched runtime or claimed GPU throttle is included in 222.
+
 ## Phone procedure
 
 1. Keep Debug logging on at Everything (the default). During local AI work, tap **Mark visual glitch** below the status bar as soon as distortion appears. It is also under Settings → Help & troubleshooting.

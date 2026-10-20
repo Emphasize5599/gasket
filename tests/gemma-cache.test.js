@@ -16,6 +16,8 @@ async function retries(){
  await queued.complete();assert.equal(queued.total(),2);
  assert(!queued.taskEvents.some(e=>e[0]==='remove'&&e[1]==='gemma-advice'),'keep the same status dock through idle → next car');
  await queued.complete();await queued.complete();assert(queued.taskEvents.some(e=>e[0]==='remove'&&e[1]==='gemma-advice'),'remove dock when every car is finished');
+ assert.equal(queued.commands.filter(c=>c==='releaseIdle').length,1,'release the warm engine once the batch drains');
+ await queued.tick();assert.equal(queued.commands.filter(c=>c==='releaseIdle').length,1,'no idle-release status loop');
  store.clear();store.set('aiexplanations|other-car',{v:{raw:'unrelated'}});
  const x=boot();x.ctx.__app.S.cars=[cars[0]];await x.tick();await x.tick();
  const bad={text:JSON.stringify({summary:'Tread is below the level for safe wet stopping.',top:[{n:1,why:'Grip is reduced.'}]})};

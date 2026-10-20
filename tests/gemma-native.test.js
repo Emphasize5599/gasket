@@ -13,7 +13,8 @@ public class DownloadTest {
  static class Queue {Runnable pending;void execute(Runnable r){pending=r;}}
  static class Listener {int replies;void result(int id,Object value){replies++;}}
  static class Service {
-  java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();Queue worker=new Queue();Listener listener=new Listener();Engine runtime=new Engine();int notices;
+  java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();java.util.concurrent.atomic.AtomicLong epoch=new java.util.concurrent.atomic.AtomicLong();Queue worker=new Queue();Listener listener=new Listener();Engine runtime=new Engine();int notices;
+  boolean releaseRuntime(String why){runtime.close();runtime=null;return true;}
   Object status(){return null;}void notifyStatus(){notices++;}
   void command(int id,String command){${idleCommand}}
  }
@@ -21,6 +22,7 @@ public class DownloadTest {
   Service s=new Service();Engine original=s.runtime;s.command(1,"releaseIdle");check(!original.closed&&s.listener.replies==1,"idle release must queue without blocking");s.worker.pending.run();check(original.closed&&s.runtime==null&&s.notices==1,"idle engine retained");
   s=new Service();s.busy.set(true);s.command(1,"releaseIdle");check(s.worker.pending==null&&!s.runtime.closed&&s.listener.replies==1,"active generation/download interrupted");
   s=new Service();s.command(1,"releaseIdle");s.busy.set(true);s.worker.pending.run();check(s.runtime!=null&&!s.runtime.closed,"new task raced idle release");
+  s=new Service();s.command(1,"releaseIdle");s.epoch.incrementAndGet();s.worker.pending.run();check(s.runtime!=null&&!s.runtime.closed,"stale queue-drained request released a newer engine");
  }
  static byte[] data=new byte[1024*1024];static String hash;static File folder;static String base;static int requests,flaky;
  static void check(boolean ok,String message){if(!ok)throw new AssertionError(message);}
