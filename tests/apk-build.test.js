@@ -25,6 +25,7 @@ for(const [variant,expectedAbis] of [['arm64-v8a',['arm64-v8a']],['universal',['
  const apk='Gasket-'+variant+'.apk';assert(fs.statSync(apk).size>0);
  const entries=run('unzip',['-Z1',apk]).trim().split(/\r?\n/);
  const patched=run('unzip',['-p',apk,'lib/arm64-v8a/liblitertlm_jni.so'],true);
+ assert(entries.includes('lib/arm64-v8a/libGemmaModelConstraintProvider.so'),'real APK includes source runtime provider');
  assert(patched.includes(Buffer.from('Java_com_bensanzone_fuelmap_GemmaGpuSupport_nativePatchVersion')),'real APK must contain patched JNI identity');
  assert(patched.includes(Buffer.from('gasket_gpu_low_priority_v1')),'real APK must contain native priority request marker');
  const notices=run('unzip',['-p',apk,'assets/runtime-notices.txt']);assert(notices.includes('Modified by Gasket')&&notices.includes('THIRD_PARTY_NOTICE.txt'),'real APK must preserve full native and modification notices');
