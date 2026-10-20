@@ -77,6 +77,30 @@ public class MainActivity extends Activity {
             + "places.addressComponents,places.types,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
 
     private WebView web;
+    private AiGraphicsMode aiGraphics;
+    private boolean graphicsForeground, graphicsEnabled, graphicsJob, graphicsMemoryHold;
+    private String graphicsFingerprint = "";
+    private JSONObject graphicsSnapshot() {
+        JSONObject value = new JSONObject();
+        try {
+            value.put("enabled", graphicsEnabled); value.put("active", aiGraphics != null && aiGraphics.active());
+            value.put("foreground", graphicsForeground); value.put("job", graphicsJob); value.put("memoryHold", graphicsMemoryHold);
+            value.put("layerType", web == null ? -1 : web.getLayerType());
+            value.put("error", aiGraphics == null ? "" : aiGraphics.error()); value.put("skipped", aiGraphics == null ? "" : aiGraphics.skipped());
+            value.put("width", web == null ? 0 : web.getWidth()); value.put("height", web == null ? 0 : web.getHeight());
+        } catch (Exception ignored) { }
+        return value;
+    }
+    private void updateAiGraphics(String reason) {
+        if (aiGraphics == null) return;
+        aiGraphics.update(graphicsEnabled, graphicsJob && !graphicsMemoryHold, graphicsForeground);
+        JSONObject value = graphicsSnapshot(); String fingerprint = value.toString();
+        if (!fingerprint.equals(graphicsFingerprint)) {
+            graphicsFingerprint = fingerprint;
+            try { value.put("reason", reason); } catch (Exception ignored) { }
+            js("window.FLog&&FLog.info('visual','AI graphics experiment'," + value + ");window.VisualDiagnostics&&VisualDiagnostics.note('ai_graphics_mode'," + value + ");window.onAiGraphicsStatus&&onAiGraphicsStatus(" + value + ")");
+        }
+    }
     // Aggregate only while AI is active. Frame timing is a diagnostic, not proof of visual corruption.
     private Window.OnFrameMetricsAvailableListener aiFrames;
     private long aiFrameCount, aiFrameSlow, aiFrameMax, aiFrameLost, aiFrameStarted;
@@ -99,6 +123,7 @@ public class MainActivity extends Activity {
             stats.put("elapsedMs",now-bucketStarted);stats.put("frames",bucketFrames);stats.put("overDeadline",bucketSlow);stats.put("droppedMetricReports",bucketLost);stats.put("maxFrameMs",bucketMax/1e6);
             String[] names={"drawMaxMs","syncMaxMs","commandMaxMs","swapMaxMs","gpuMaxMs","layoutMaxMs","inputMaxMs"};for(int i=0;i<names.length;i++){stats.put(names[i],frameParts[i]/1e6);frameParts[i]=0;}stats.put("gpuTimingAvailable",gpuTimingAvailable);gpuTimingAvailable=false;
             stats.put("mainTimerLateMs",frameTickDue==0?0:Math.max(0,android.os.SystemClock.uptimeMillis()-frameTickDue));stats.put("windowFocus",hasWindowFocus());stats.put("hardwareAccelerated",web!=null&&web.isHardwareAccelerated());
+            stats.put("graphicsExperiment", graphicsSnapshot());
             android.view.Display display=getWindowManager().getDefaultDisplay();stats.put("refreshHz",display.getRefreshRate());stats.put("displayState",display.getState());
             bucketFrames=bucketMax=bucketLost=bucketSlow=0;bucketStarted=now;
         }catch(Exception ignored){}}
@@ -109,6 +134,12 @@ public class MainActivity extends Activity {
             if (isDestroyed()) return;
             if(value.optBoolean("diagnosticOnly")){js("window.onGemmaStatus&&onGemmaStatus("+value.toString()+")");return;}
             String phase = value.optString("phase"), task = value.optString("task");
+            graphicsEnabled = value.optBoolean("graphicsCompatibility");
+            graphicsJob = AiGraphicsMode.gpuJob(value.optBoolean("enabled"), value.optBoolean("cpuOnly"), value.optBoolean("recoveryRequired"),
+                value.optString("backend"), task, phase, value.optBoolean("engineResident"));
+            if (!graphicsJob) graphicsMemoryHold = false;
+            updateAiGraphics("ai_status");
+            try { value.put("graphicsExperiment", graphicsSnapshot()); } catch (Exception ignored) { }
             boolean active = visualLogging && "advice".equals(task) && ("load".equals(phase) || "generate".equals(phase) || "cancelling".equals(phase));
             if(aiFrames!=null&&(!phase.equals(framePhase)||value.optLong("generationId")!=frameGeneration))emitFrameBucket("phase_change");
             framePhase=phase;frameGeneration=value.optLong("generationId");
@@ -157,6 +188,7 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        graphicsForeground = false; updateAiGraphics("destroy");
         main.removeCallbacks(frameTick);if(frameThread!=null)frameThread.quitSafely();
         if (aiFrames != null) { getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null; }
         synchronized (this) { if (gemma != null) { gemma.close(); gemma = null; } }
@@ -164,6 +196,7 @@ public class MainActivity extends Activity {
     }
     private boolean rendererRecoveryPending = false;
     private void noteRendererExit(String scope, android.webkit.RenderProcessGoneDetail detail) {
+        if ("app".equals(scope)) { graphicsJob = false; updateAiGraphics("renderer_lost"); }
         AiDiagnostics.rendererExit(getApplicationContext(), scope, detail.didCrash(), detail.rendererPriorityAtExit());
         synchronized (this) { if (gemma != null) gemma.rendererLost("app".equals(scope)); }
     }
@@ -204,6 +237,14 @@ public class MainActivity extends Activity {
 
         migrateCarPictures();
         web = new WebView(this);
+        final WebView graphicsView = web;
+        aiGraphics = new AiGraphicsMode(new AiGraphicsMode.Target() {
+            public int layerType() { return graphicsView.getLayerType(); }
+            public void layerType(int type) { graphicsView.setLayerType(type, null); }
+            public boolean accelerated() { return graphicsView.isHardwareAccelerated(); }
+            public int width() { return graphicsView.getWidth(); }
+            public int height() { return graphicsView.getHeight(); }
+        });
         web.setBackgroundColor(isDark() ? Color.rgb(16, 18, 22) : Color.rgb(242, 243, 245));
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -858,10 +899,19 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        graphicsForeground = false; updateAiGraphics("pause");
         js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_pause')");
         stopLocation();
     }
-    @Override protected void onResume(){super.onResume();js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_resume')");}
+    @Override protected void onResume(){super.onResume();graphicsForeground = true;updateAiGraphics("resume");js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_resume')");}
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+                || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+                || level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            graphicsMemoryHold = true; updateAiGraphics("memory_trim");
+        }
+    }
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_focus_"+focus+"')");}
 
     // ---------------- location (OS LocationManager; GPS + network/fused if present) ----------------
@@ -1598,6 +1648,7 @@ public class MainActivity extends Activity {
                 value.put("timestamp",System.currentTimeMillis());value.put("windowFocus",hasWindowFocus());value.put("width",web==null?0:web.getWidth());value.put("height",web==null?0:web.getHeight());
                 android.view.Display d=getWindowManager().getDefaultDisplay();value.put("refreshHz",d.getRefreshRate());value.put("rotation",d.getRotation());value.put("displayState",d.getState());
                 value.put("hardwareAccelerated",web!=null&&web.isHardwareAccelerated());PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)value.put("webView",p.versionName);
+                value.put("graphicsExperiment", graphicsSnapshot());
                 value.put("osRelease",android.os.Build.VERSION.RELEASE);value.put("osIncremental",android.os.Build.VERSION.INCREMENTAL);value.put("securityPatch",android.os.Build.VERSION.SECURITY_PATCH);value.put("sdk",android.os.Build.VERSION.SDK_INT);
                 if(aiFrames!=null)emitFrameBucket("user_marker");
             }catch(Exception ignored){}

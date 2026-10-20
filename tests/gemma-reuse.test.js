@@ -67,7 +67,7 @@ public class ReuseTest {
  check(AiEngineRetention.allow(false,2*gb,pss,pss,1),"healthy warm budget");
  check(!AiEngineRetention.allow(true,4*gb,pss,pss,1),"OS low memory");check(!AiEngineRetention.allow(false,2*gb-1,pss,pss,1),"RAM reserve");
  check(!AiEngineRetention.allow(false,4*gb,pss+512L*1024+1,pss,2),"PSS growth");check(!AiEngineRetention.allow(false,4*gb,pss,pss,8),"batch ceiling");check(!AiEngineRetention.allow(false,4*gb,0,0,1),"unknown memory");
- GemmaService a=service();run(a);run(a);check(GemmaRuntime.loads==1&&GemmaRuntime.closes==0,"serial requests reloaded the engine");
+ GemmaService a=service();check(Boolean.TRUE.equals(a.status().get("graphicsCompatibility")),"graphics default");a.command(3,"graphicsOff");check(Boolean.FALSE.equals(a.status().get("graphicsCompatibility")),"explicit graphics opt-out");a.command(3,"graphicsOn");run(a);run(a);check(GemmaRuntime.loads==1&&GemmaRuntime.closes==0,"serial requests reloaded the engine");check(Boolean.TRUE.equals(a.status().get("engineResident")),"warm engine residency exposed");
  GemmaService other=service();run(other);check(GemmaRuntime.loads==1,"second service loaded while warm lease held");
  a.command(2,"releaseIdle");idleReleased(a);run(other);check(GemmaRuntime.loads==2,"slot not reusable after batch drain");other.close();idleReleased(other);a.close();
  a=service();run(a);GemmaService timed=a;idleReleased(timed);check(!flag(timed,"slotHeld"),"3s idle cleanup");a.close();

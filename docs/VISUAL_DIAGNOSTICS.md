@@ -1,5 +1,15 @@
 # Visual distortion diagnostics
 
+## 0.0.224 app-local graphics experiment
+
+The owner confirmed Android's **Disable HW overlays** removes the distortion. This resembles the reports in [GrapheneOS issue6757](https://github.com/GrapheneOS/os-issue-tracker/issues/6757), including recording hiding the problem; it does not establish the exact driver fault. 223's log confirms successful serial GPU work and actual engine reuse, without low-memory or thermal flags. Reuse is retained for performance, not claimed as a graphics fix.
+
+224 enables **Settings → Local AI → AI graphics compatibility · experimental** by default, per owner request; an explicit off choice persists. It temporarily renders Gasket's WebView into a [hardware texture layer](https://developer.android.com/topic/performance/views/hardware-accel-views#view-layers) during foreground GPU jobs and brief warm-engine gaps. Original rendering is restored when the batch drains, AI is disabled/cancelled and released, the CPU stands in, or the app is paused/destroyed/loses its renderer. Memory pressure releases it until the current batch ends. Nonaccelerated/software-layer windows, zero/oversized layout and native layer exceptions do not repeatedly attempt activation. One layer, <=8M pixels and <=8192 per dimension; actual driver allocation can exceed the raw ~32MB RGBA texture bound due to internal buffering/caches.
+
+This is NOT equivalent to Disable HW overlays: Android still chooses final display composition. No new permissions, privileged controls, screen recording, dummy windows, colors, blur or AI runtime changes. Other apps and notification shade are not controlled. It may have no effect on the distortion and remains an experiment, not a UI rewrite or guaranteed fix.
+
+**Phone comparison:** temporarily turn Android **Disable HW overlays OFF** so it doesn't hide the result. Keep app compatibility ON, repeat demo/forced explanations without recording, and mark any glitch. Compare with app compatibility OFF. Check background/resume and the status text after completion. If corruption remains, restore the known system workaround as needed and share the log. New `AI graphics experiment` / `ai_graphics_mode` records and marker/frame snapshots report enabled/active/layer type, job/foreground/memory hold, skip/error and reason. These contain no screen text or model content. Controller/JVM and browser tests verify lifecycle, ownership, defaults, no churn, exceptions, command isolation and narrow/enlarged layout, not Pixel graphics behavior.
+
 0.0.221 adds metadata for the owner's transient distortion after model reloads. This is instrumentation, **not a claimed flicker fix**. GPU inference, runtime choice and resource-release policy remain unchanged.
 
 Published as **Gasket 0.0.221 — Debug diagnostics**, a GitHub prerelease, signed with the existing release key. This does not enable Android's `debuggable` flag or change the package identity.
