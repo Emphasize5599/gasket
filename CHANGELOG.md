@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.214 - 2026-10-20 (keyless test branch only)
+- ChargePoint prices use the correct station IDs, include service-fee information, and pause for detected website checks.
+- Bug fixes, including screen jumps between queued AI explanations and invalid prices being treated as free.
+
 ## 0.0.213 - 2026-10-19 (keyless test branch only)
 - The offline charger download's progress only moves forward, and its status row goes away when the download finishes.
 - Offline charger data now works on long trips (it said "Charger area too large").

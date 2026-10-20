@@ -13,6 +13,7 @@ release.push('tasks','gemma','gemma-ui');
 release.push('gemma-cache');
 release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices','charger-download');
+release.push('evprices-recovery','evprices-ui');
 release.push('chargerdata','chargerdata-ui');
 release.push('api-meter-ui');
 release.push('trims');

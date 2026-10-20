@@ -410,6 +410,8 @@
     if (pending && sitePending[key]) { sitePending[key] = false; siteNeedsCheck(key); sourceDone(); }
   };
   window.onSiteVerified = function (key) {
+    if(window.EVPrices&&EVPrices.onVerified(key))return;
+    if(/^(tesla|chargepoint)$/.test(key))return;
     if(window.KeylessGas&&KeylessGas.onVerified&&KeylessGas.onVerified(key))return;
     if(/^(brave|nhtsa|tirerack)$/.test(key))return; // vehicle verification must never start station/API discovery
     if(/^gasweb\d*$/.test(key)){status('Google Maps check closed. Retry the website price refresh when ready.');return;}
@@ -418,7 +420,7 @@
   };
   var checkKey = null;
   function showSiteCheck(key,label){
-    var paused=window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused();checkKey=key;
+    var paused=(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())||(window.EVPrices&&EVPrices.isPaused());checkKey=key;
     $('wmCheckTitle').textContent=label+' wants a check';
     $('wmCheck').querySelector('span').textContent=paused?'Scan paused. Open the check, complete it, then tap Done to retry unfinished areas. × cancels the scan and keeps completed results.':'Complete the site’s “are you human?” step to continue.';
     $('wmCheckX').setAttribute('aria-label',paused?'Cancel scan':'Dismiss');$('wmCheck').classList.remove('hidden');
@@ -1368,7 +1370,7 @@
 
   // ---------- buttons ----------
   $('wmCheckGo').onclick = function () { $('wmCheck').classList.add('hidden'); if (checkKey && N.siteVerify) N.siteVerify(checkKey); };
-  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
+  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');if(window.EVPrices)EVPrices.dismissCheck();if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
   $('btnSettings').onclick = function () { openSettings(false); };
   $('btnLocate').onclick = function () {
     if (me) { movedByUser = false; map.setView([me.lat, me.lng], Math.max(map.getZoom(), zoomForRadius(S.radiusMi))); $('btnArea').classList.add('hidden'); }

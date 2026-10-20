@@ -57,8 +57,8 @@
     if(window.Tasks){
       if(downloading)Tasks.upsert('gemma-download',{text:state.phase==='cancelling'?'Pausing model download…':state.phase==='verify'?'Verifying Gemma model…':state.phase==='retry'?'Resuming model download · attempt '+(state.attempt||2)+' / 4':'Downloading Gemma · '+(Number(state.bytes||0)/1e9).toFixed(2)+' / 3.66 GB'+leftText(Number(state.bytes||0),Number(state.total||3659530240)),frac:/verify|cancelling/.test(state.phase)?null:Number(state.bytes||0)/Number(state.total||3659530240),cancel:function(){command('cancel');}});
       else Tasks.remove('gemma-download',priorTask==='download'&&!state.ready&&priorPhase!=='idle'?{text:'Model download paused · '+(state.bytes?'partial file kept':'not complete'),action:'Resume',onAction:function(){if(state.enabled&&state.supported)command('download');else A.openSettings(false);}}:null);
-      if(generating)Tasks.upsert('gemma-advice',{text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining '+(running&&(running.car.nick||running.car.name)||'tire setup')+'…',frac:null,cancel:function(){if(running){running.cancelled=true;attempted.add(running.key);}desired=[];command('cancelAdvice');}});
-      else Tasks.remove('gemma-advice');
+      if(generating)Tasks.upsert('gemma-advice',{state:'running',text:state.phase==='load'?'Loading local AI…':state.phase==='cancelling'?'Cancelling local AI…':'AI: explaining '+(running&&(running.car.nick||running.car.name)||'tire setup')+'…',frac:null,cancel:cancelGeneration});
+      else if(!running&&!desired.length)Tasks.remove('gemma-advice');
     }
     if(!state.enabled){desired=[];attempted.clear();} // opting out does not erase accepted explanations
     paintSettings();changed();if(!state.busy)schedule();
@@ -86,11 +86,13 @@
     clearTimeout(scheduled);scheduled=setTimeout(prefetch,2000);return true;
   }
   function prefetch(){
-    if(!state.enabled||!state.ready||!state.supported)return;
+    if(!state.enabled||!state.ready||!state.supported){if(!running)Tasks.remove('gemma-advice');return;}
     var c=current(),cars=(A.S.cars||[]).slice();cars.sort(function(a,b){return (b===c?1:0)-(a===c?1:0);});desired=[];
     var seen=new Set();cars.forEach(function(car){try{var next=input(car);if(seen.has(next.key))return;seen.add(next.key);if(next.pack.setup.tires.some(function(t){return t.depth!=null;})&&!remembered(next)&&!attempted.has(next.key))desired.push(next);}catch(e){if(car===c)lastIssue=e.message;}});
     if(running){if(!liveItem(running)&&!running.cancelled){running.cancelled=true;attempted.delete(running.key);command('cancelAdvice');}return;}
-    if(!deferForScan()&&!state.busy)run();
+    if(!desired.length)Tasks.remove('gemma-advice');
+    else if(!deferForScan()&&!state.busy)run();
+    else Tasks.upsert('gemma-advice',{text:'Tire explanations queued…',state:'pending',frac:null,cancel:cancelGeneration});
   }
   async function run(){
     if(running||!desired.length||state.busy||!state.enabled)return;
@@ -99,7 +101,7 @@
     // Start status immediately; native initialization happens off-thread and reports the precise phase.
     var previous=failures.get(item.key),attempt=previous?previous.count+1:1;
     var prompt=item.prompt+(previous?'\n\nCORRECTION FOR THIS FRESH ATTEMPT: The previous answer was rejected: '+previous.reason+'. Rewrite from the checked findings only. Avoid the words safe, safely, guarantee and guaranteed, including phrases like safe wet stopping. Do not give instructions or add numbers. Return only the requested JSON.':'');
-    Tasks.upsert('gemma-advice',{text:attempt>1?'Retrying local tire advice ('+attempt+'/'+MAX_ATTEMPTS+')…':'Preparing local tire advice…',frac:null,cancel:cancelGeneration});changed();
+    Tasks.upsert('gemma-advice',{state:'running',text:attempt>1?'Retrying local tire advice ('+attempt+'/'+MAX_ATTEMPTS+')…':'Preparing local tire advice…',frac:null,cancel:cancelGeneration});changed();
     try{
       var result=await call('aiGenerate',prompt);
       if(!state.enabled||item.cancelled||!liveItem(item)||window.__erasing)return;
@@ -112,7 +114,7 @@
       cache.set(item.key,{answer:accepted,pack:item.pack,t:saved.t});
       while(cache.size>12)cache.delete(cache.keys().next().value);
     }catch(e){if(state.enabled&&!item.cancelled&&liveItem(item)&&!window.__erasing)failed(item,'generation exception');}
-    finally{running=null;Tasks.remove('gemma-advice');changed();schedule();}
+    finally{running=null;changed();schedule();} // prefetch removes the dock only when the queue is actually empty
   }
   function answer(c){if(!state.enabled)return null;try{return remembered(input(c));}catch(e){return null;}}
   function clearCache(){cache.clear();attempted.clear();failures.clear();issues.clear();desired=[];if(running){running.cancelled=true;command('cancelAdvice');}schedule();changed();}

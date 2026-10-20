@@ -58,8 +58,8 @@
  // A charger's price from its published text (DOE / OCM notes, not live): every "$ per kWh" figure (the highest of
  // time-of-day / membership / range prices), else a per-hour or per-minute charging rate turned into $/kWh at the
  // charger's speed (an estimate), else "Free". Parking / idle fees aren't charging prices; USD (US records) only.
- function tariff(st,fallback,kw){var np=st.netPrice;if(np&&isFinite(np.rate)&&np.rate>=0){var at=+kw||+st.kw||0,upd=np.t?new Date(np.t).toISOString():null;   // the network's own published price (EVPrices) wins
-   if(np.uom==='kwh')return {price:Math.round(np.rate*1000)/1000,estimated:!!np.fee,label:np.label+' (not live)',updated:upd,network:np.src};
+ function tariff(st,fallback,kw){var np=st.netPrice;if(np&&typeof np.rate==='number'&&isFinite(np.rate)&&np.rate>=0&&(np.rate>0||np.free===true)){var at=+kw||+st.kw||0,upd=np.t?new Date(np.t).toISOString():null;   // the network's own published price (EVPrices) wins
+   if(np.uom==='kwh')return {price:Math.round(np.rate*1000)/1000,estimated:!!(np.fee||np.parking||np.extraFees),label:np.label+' (not live)',updated:upd,network:np.src};
    if(at>0)return {price:Math.round((np.uom==='min'?np.rate*60:np.rate)/(at*0.8)*1000)/1000,estimated:true,label:np.label+' per '+(np.uom==='min'?'minute':'hour')+' at ~'+Math.round(at*0.8)+' kW (estimate, not live)',updated:upd,network:np.src};}
   var text=String(st.pricing||'').replace(/\s+/g,' ').trim(),us=st.country==='US',afdc=(st.pricingSource||st.source)==='DOE AFDC';
   var parts=text.split(/[;,]|\s\+\s|\bplus\b/i).map(function(x){return x.trim();}).filter(Boolean),charge=parts.filter(function(x){return !/park|lot\b|garage|idle|idling|overstay|after\s+\d+\s*(?:min|hour|hr)/i.test(x);});

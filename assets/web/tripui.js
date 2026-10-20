@@ -3094,6 +3094,7 @@
   function cancelSearch() {
     if (!busy) return;
     jobCancel = true; priceCancelRequested = true; if (window.KeylessGas) KeylessGas.cancel();
+      if(window.EVPrices)EVPrices.cancel();
     clearScanPending();
     LG.info('stations', 'Search cancelled');
   }

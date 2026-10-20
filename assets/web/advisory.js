@@ -323,8 +323,8 @@
     host.querySelectorAll('[data-cchk="recirc"]').forEach(function (b) { b.onchange = function () { if (window.Climate) Climate.setAck(b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     host.querySelectorAll('[data-tchk="tires"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setTiresAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
-    if ($('advList')) $('advList').addEventListener('toggle', function () { listOpen = this.open; if (listOpen) rateAll(restList); });
-    host.querySelectorAll('details[data-open]').forEach(function (d) { d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
+    if ($('advList')&&!$('advList').__advisoryBound) { $('advList').__advisoryBound=true;$('advList').addEventListener('toggle', function () { listOpen = this.open; if (listOpen) rateAll(restList); }); }
+    host.querySelectorAll('details[data-open]').forEach(function (d) { if(d.__advisoryBound)return;d.__advisoryBound=true;d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
     host.querySelectorAll('[data-adv]').forEach(function (b) {
       b.onclick = function () {
         var a = adviceFor(c)[+b.dataset.adv]; if (!a) return;
@@ -340,7 +340,18 @@
     autoCheck(c); preRate(c); if (window.Gemma) Gemma.prefetch(); }
   function init(nativeCall) { call = nativeCall || call; prefetch(); }
   window.addEventListener('garagechange', function () { prefetch(); if (host && host.isConnected) draw(); });
-  window.addEventListener('gemmachange', function () { if (host && host.isConnected) draw(); });
+  window.addEventListener('gemmachange', function () {
+    if (!host || !host.isConnected) return;
+    if (host.closest('.hidden')) { stale = true; return; }
+    // Native phase/download updates must not tear down all recall and advice tiles.
+    var c=car(),old=host.querySelector('#gemmaAdvice'),html=window.Gemma&&c?Gemma.card(c):'',box=document.createElement('div');
+    box.innerHTML=html;var next=box.firstElementChild;
+    if(old&&next&&old.outerHTML===next.outerHTML)return;
+    if(old){if(next)old.replaceWith(next);else old.remove();}
+    else if(next){var before=host.querySelector('#advTires');host.insertBefore(next,before||null);}
+    var tires=host.querySelector('#advTires');if(tires){box.innerHTML=tireCard(c);var fresh=box.firstElementChild;if(fresh&&tires.outerHTML!==fresh.outerHTML)tires.replaceWith(fresh);}
+    bind(c);syncDot();
+  });
   function wake() { if (stale) draw(); }
 
   window.Advisory = { init: init, render: render, wake: wake, attention: attention, departureNote: departureNote, onRecord: onRecord, vinCheck: vinCheck, ADVICE: ADVICE, adviceFor: adviceFor,

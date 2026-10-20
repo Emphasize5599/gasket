@@ -9,9 +9,10 @@ async function (reqId, args) {
   const t0 = Date.now(), LIMIT = 25000;
   let failedAt = 0;
   while (Date.now() - t0 < LIMIT) {
-    const t = flat(document.body && document.body.innerText), title = document.title || '';
+    const panel = document.querySelector('#slideout_station_details');
+    const t = flat((panel || document.body) && (panel || document.body).innerText), title = document.title || '';
     // DataDome / any challenge: its iframe or page words
-    if (document.querySelector('iframe[src*="captcha-delivery"], iframe[src*="datadome"]') || /captcha|verify you are (a )?human|are you a robot|access denied|blocked/i.test(title + ' ' + t.slice(0, 400))) { send({ blocked: true }); return; }
+    if (document.querySelector('iframe[src*="captcha-delivery"], iframe[src*="datadome"]') || /captcha|verify you are (a )?human|are you a robot|access denied|blocked|unusual traffic|security check|confirm you are human/i.test(title + ' ' + flat(document.body && document.body.innerText).slice(0, 1600))) { send({ blocked: true }); return; }
     // "Failed to load" can be a passing refusal of the page's own data request: it must still say so 3 s later
     if (/Failed to load station details|station (?:was )?not found/i.test(t)) {
       if (!failedAt) failedAt = Date.now();
@@ -22,8 +23,8 @@ async function (reqId, args) {
     const at = t.search(/\bPrices? Set by\b|\bEnergy Rate\b|\bPrice\b[^|]{0,40}\bFree\b/i);
     if (at >= 0 && !/Loading station details/i.test(t)) {
       await sleep(600);   // the rest of the price block (fees) draws a moment later
-      const t2 = flat(document.body && document.body.innerText), at2 = Math.max(0, t2.search(/\bPrices?\b/i));
-      send({ text: t2.slice(at2, at2 + 900) });
+      const t2 = flat((panel || document.body).innerText), at2 = Math.max(0, t2.search(/\bPrices?\b/i));
+      send({ text: t2.slice(at2, at2 + 6000) });
       return;
     }
     await sleep(500);

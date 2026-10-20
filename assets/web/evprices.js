@@ -9,10 +9,34 @@
   var HOUR = 3600e3, DAY = 24 * HOUR, WEEK = 7 * DAY, NS = 'evprices';
   var IONNA_URL = 'https://www.ionna.com/rechargeries/find-a-rechargery/', BLINK_SITES = 'https://chargermap.blinknetwork.com/v1/stations',
     BLINK_API = 'https://apigw.blinknetwork.com/';
-  function call() { var t = root.__trip; return t && t.call ? t.call.apply(null, arguments) : Promise.resolve({ error: 'No Native bridge' }); }
+  var verification = null, cancelled = false;
+  function finishCheck(retry) { if (!verification) return false; var v = verification; verification = null; if(root.Tasks)root.Tasks.remove('ev-price-check'); v.resolve(retry); return true; }
+  function onVerified(key) { return verification && verification.key === key ? finishCheck(true) : false; }
+  function dismissCheck() { return finishCheck(false); }
+  function cancel() { cancelled = true; if(verification&&root.document){var banner=root.document.getElementById('wmCheck');if(banner)banner.classList.add('hidden');}dismissCheck(); }
+  async function call() {
+    var args = Array.prototype.slice.call(arguments), key = args[0] === 'siteRead' ? args[1] : /ionna/.test(args[1] || '') ? 'ionna' : 'blink';
+    for (var attempt = 0; ; attempt++) {
+      if(cancelled)return {cancelled:true,error:'Cancelled'};
+      if (verification && !await verification.promise) return { error: 'Website check dismissed', blocked: true };
+      var t = root.__trip, r = t && t.call ? await t.call.apply(null, args) : { error: 'No Native bridge' };
+      var blocked = r && (r.blocked || /\bHTTP (403|429)\b/i.test(r.error || '') || /<title>[^<]*(?:access denied|captcha|just a moment)|captcha-delivery\.com|geo\.captcha-delivery/i.test(r.body || ''));
+      if (!blocked) return r;
+      // Only the user can pass a check. No negative price cache and no further requests while paused.
+      if (attempt >= 2 || !A.showSiteCheck || !/^(tesla|chargepoint)$/.test(key)) return Object.assign({}, r, { blocked: true });
+      if (!verification) {
+        var resolve, promise = new Promise(function (ok) { resolve = ok; });
+        verification = { key: key, promise: promise, resolve: resolve };
+        if(root.Tasks)root.Tasks.upsert('ev-price-check',{text:'Charger prices paused · '+(key==='tesla'?'Tesla':'ChargePoint')+' needs a check',priority:100,frac:null,cancel:cancel});
+        LG.warn('stations', 'Charger prices paused for website check', { network: key });
+        A.showSiteCheck(key, key === 'tesla' ? 'Tesla' : 'ChargePoint');
+      }
+      if (!await verification.promise) return { blocked: true, error: 'Website check dismissed' };
+    }
+  }
   function meters(a, b) { var R = 6371000, p = Math.PI / 180, dLat = (b.lat - a.lat) * p, dLng = (b.lng - a.lng) * p, s = Math.pow(Math.sin(dLat / 2), 2) + Math.cos(a.lat * p) * Math.cos(b.lat * p) * Math.pow(Math.sin(dLng / 2), 2); return 2 * R * Math.asin(Math.sqrt(s)); }
   function nearest(st, list, maxM) { var best = null, bd = maxM; list.forEach(function (x) { if (Math.abs(x.lat - st.lat) > 0.01 || Math.abs(x.lng - st.lng) > 0.012) return; var d = meters(st, x); if (d < bd) { bd = d; best = x; } }); return best; }
-  async function json(url) { var r = await call('fetchJson', url); if (!r || r.error) throw new Error(r && r.error || 'no answer'); return r.body; }
+  async function json(url) { var r = await call('fetchJson', url); if (!r || r.error || r.blocked) { var e = new Error(r && r.blocked ? 'Website access restricted; prices remain estimates.' : r && r.error || 'no answer'); e.blocked = !!(r && r.blocked); throw e; } return r.body; }
   function cached(key, age) { try { var o = KV.get(NS, key, age); return o ? o.v : null; } catch (e) { return null; } }
   function keep(key, v) { try { KV.put(NS, key, v); } catch (e) { } }
   /** "$0.59/kWh", "$1.00/Hour", "$0.25/min" → {v, uom} */
@@ -87,16 +111,16 @@
   function parseChargePoint(text) {
     var t = String(text || '').replace(/\s+/g, ' '), rates = [], m, re = /\b(?:Energy|Charging|Time)\s*(?:Rate|Fee)?\s*:?\s*\$\s*(\d*\.?\d+)\s*\/\s*(kwh|hr|hour|min(?:ute)?)/gi;
     while ((m = re.exec(t))) rates.push({ v: +m[1], uom: /kwh/i.test(m[2]) ? 'kwh' : /min/i.test(m[2]) ? 'min' : 'hour' });
-    var feeM = /\b(?:Session|Flat|Connection|Plug-?in|Start)\s*(?:Rate|Fee)\s*:?\s*\$\s*(\d*\.?\d+)/i.exec(t), fee = feeM ? +feeM[1] : 0;
-    if (!rates.length) return /\bFree\b/i.test(t) && !/\$\s*\d/.test(t) ? { rate: 0, peak: 0, low: 0, uom: 'kwh', fee: 0, free: true } : null;
+    var feeM = /\b(?:Session|Flat|Connection|Plug-?in|Start|Service)\s*(?:Rate|Fee)\s*:?\s*\$\s*(\d*\.?\d+)/i.exec(t), fee = feeM ? +feeM[1] : 0;
+    if (!rates.length) return /\b(?:Price\s*[·|:]?\s*Free|Free charging)\b/i.test(t) && !/\$\s*\d/.test(t) ? { rate: 0, peak: 0, low: 0, uom: 'kwh', fee: 0, free: true } : null;
     var uom = rates[0].uom, v = rates.filter(function (r) { return r.uom === uom; }).map(function (r) { return r.v; });
-    return { rate: Math.max.apply(null, v), peak: Math.max.apply(null, v), low: Math.min.apply(null, v), uom: uom, fee: fee };
+    return { rate: Math.max.apply(null, v), peak: Math.max.apply(null, v), low: Math.min.apply(null, v), uom: uom, fee: fee, ...( /Taxes and Fees|Parking|Idle|Minimum Fee|Maximum Fee/i.test(t) ? { extraFees: true } : {}) };
   }
-  /** ChargePoint device IDs to try for a DOE station: its posts minus the port digit ("27029811" → "2702981"), then the posts. */
-  function chargePointIds(st) { var posts = (st.netIds && st.netIds.posts || []).filter(function (p) { return /^\d{5,12}$/.test(p); }), out = []; posts.forEach(function (p) { var d = p.slice(0, -1); if (out.indexOf(d) < 0) out.push(d); }); posts.forEach(function (p) { if (out.indexOf(p) < 0) out.push(p); }); return out.slice(0, 4); }
+  /** DOE's USCPIL station identifier is the public page's device ID. Ports are a fallback, never truncate them. */
+  function chargePointIds(st) { var ids = st.netIds || {}, out = []; (ids.station || []).forEach(function (s) { var m = /^(?:USCPIL)?(\d{4,12})$/.exec(String(s)); if (m && out.indexOf(m[1]) < 0) out.push(m[1]); }); (ids.posts || []).forEach(function (p) { p = String(p); if (/^\d{4,12}$/.test(p) && out.indexOf(p) < 0) out.push(p); }); return out.slice(0, 4); }
   var CP_GIVE_UP = 6;
   async function chargePointPrice(st) {
-    var ids = chargePointIds(st), key = 'cp-v1|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 6 * HOUR); if (!ids.length) return null; if (c && (!c.missing || miss)) return c.none ? null : c;
+    var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (c && (!c.missing || miss)) return c.none ? null : c;
     var nDevice = ids.filter(function (d) { return (st.netIds.posts || []).indexOf(d) < 0; }).length;
     for (var i = 0; i < ids.length; i++) {
       var t0 = Date.now(), r = await call('siteRead', 'chargepoint', JSON.stringify({ url: 'https://driver.chargepoint.com/stations/' + ids[i] }));
@@ -107,11 +131,13 @@
       var p = r && r.text ? parseChargePoint(r.text) : null;
       if (r && r.text) { keep(key, p || { none: true }); return p; }
     }
-    keep(key, { none: true, missing: true }); return null;
+    // Network/timeouts are not proof a station is missing. Cache only explicit missing-page answers.
+    if (r && r.missing) keep(key, { none: true, missing: true }); return null;
   }
 
   /** Give each station (that a network publishes a price for) `netPrice`. items: [{st, dc, kw}]. Returns {priced, notes}. */
   async function annotate(items, car, onProg) {
+    cancelled = false;
     var notes = [], priced = 0, t = Date.now(), isTesla = /tesla/i.test(car && car.make || '');
     if (S.evNetPrices === false || !items.length) return { priced: 0, notes: notes };
     var by = { tesla: [], ionna: [], blink: [], chargepoint: [] };
@@ -129,7 +155,7 @@
       catch (e) { notes.push('IONNA\'s price list didn\'t load: ' + e.message); }
     if (by.blink.length) try {
       var bs = await blinkSites(), queue = by.blink.map(function (x) { return { x: x, s: nearest(x.st, bs, 200) }; }).filter(function (q) { return q.s; }).slice(0, 80);
-      var lane = async function () { while (queue.length) { var q = queue.shift(); try { var p = await blinkPrice(q.s.id, q.x.dc); if (p) set(q.x, p, 'blink', 'The charger\'s host-set Blink rate' + (p.fee ? ' + $' + p.fee.toFixed(2) + ' session fee' : '')); } catch (e) { } step('blink'); await new Promise(function (ok) { setTimeout(ok, 250); }); } };
+      var lane = async function () { while (queue.length) { var q = queue.shift(); try { var p = await blinkPrice(q.s.id, q.x.dc); if (p) set(q.x, p, 'blink', 'The charger\'s host-set Blink rate' + (p.fee ? ' + $' + p.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { queue.length = 0; if (notes.indexOf(e.message) < 0) notes.push(e.message); } } step('blink'); await new Promise(function (ok) { setTimeout(ok, 250); }); } };
       await Promise.all([lane(), lane(), lane()]);
     } catch (e) { notes.push('Blink\'s charger map didn\'t load: ' + e.message); }
     if (by.tesla.length) try { var tp = await teslaPrices(by.tesla.map(function (x) { return x.st; }), isTesla, function (n) { step('tesla', n); }); by.tesla.forEach(function (x) { var p = tp[x.st.id]; if (p) set(x, { rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0, congestion: p.congestion, tou: p.tou }, 'tesla', 'Tesla\'s published ' + (isTesla ? 'Tesla-owner' : 'non-Tesla') + ' rate' + (p.tou && p.low < p.peak ? ' (peak; off-peak $' + p.low.toFixed(2) + ')' : '')); }); }
@@ -141,5 +167,5 @@
     LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, priced: priced, ms: Date.now() - t });
     return { priced: priced, notes: notes };
   }
-  root.EVPrices = { annotate: annotate, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
+  root.EVPrices = { annotate: annotate, cancel: cancel, onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
 })(window);

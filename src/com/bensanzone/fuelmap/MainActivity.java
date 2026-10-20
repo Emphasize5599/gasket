@@ -408,6 +408,11 @@ public class MainActivity extends Activity {
 
         void finishRead(int reqId, String json) {
             if (readReq != reqId) return;
+            if (("chargepoint".equals(key) || "tesla".equals(key)) && view != null) {
+                try { if (new JSONObject(json).optBoolean("blocked")) {
+                    String at = view.getUrl(); if (at != null && at.startsWith(origin)) verificationUrl = at;
+                } } catch (Exception ignored) { }
+            }
             if (isGasWorker(key)) {
                 try {
                     JSONObject answer = new JSONObject(json);
@@ -574,6 +579,17 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onReceivedHttpError(WebView v, WebResourceRequest request, WebResourceResponse response) {
+                    // ChargePoint may draw only "Failed to load station details" when its data server
+                    // returned a DataDome refusal. Do not mistake that for a missing device ID.
+                    String host = String.valueOf(request.getUrl().getHost()).toLowerCase(Locale.US);
+                    String path = String.valueOf(request.getUrl().getPath());
+                    int dataStatus = response.getStatusCode();
+                    if ("chargepoint".equals(key) && readReq >= 0 && (dataStatus == 403 || dataStatus == 429)
+                            && (host.equals("chargepoint.com") || host.endsWith(".chargepoint.com"))
+                            && path.matches(".*/v[23]/(?:station/.*|stations.*|map.*)")) {
+                        finishRead(readReq, "{\"blocked\":true,\"error\":\"ChargePoint data access restricted\",\"status\":" + dataStatus + "}");
+                        return;
+                    }
                     if (!request.isForMainFrame() || readReq < 0) return;
                     int status = response.getStatusCode();
                     if (status >= 400) {

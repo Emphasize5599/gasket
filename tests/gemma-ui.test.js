@@ -24,6 +24,9 @@ await p.evaluate(()=>resolveAI());await p.waitForFunction(()=>!!Gemma.answer(Gar
 // Mount the real Advice renderer: accepted results must actually appear, not just exist in memory.
 await p.evaluate(()=>{const host=document.createElement('div');host.id='adviceFixture';document.body.appendChild(host);Advisory.render(host);});
 assert.match(await p.locator('#adviceFixture #gemmaAdvice').innerText(),/AI-written/i);
+await p.evaluate(()=>{window.recallNode=document.querySelector('#adviceFixture').firstElementChild;window.aiCardNode=document.querySelector('#gemmaAdvice');Object.assign(modelState,{phase:'load',busy:true});onGemmaStatus({...modelState});Object.assign(modelState,{phase:'generate'});onGemmaStatus({...modelState});});
+assert(await p.evaluate(()=>recallNode===document.querySelector('#adviceFixture').firstElementChild&&aiCardNode===document.querySelector('#gemmaAdvice')),'phase updates preserve accepted explanation and recall DOM, not a full-screen redraw');
+await p.evaluate(()=>{Object.assign(modelState,{phase:'idle',busy:false});onGemmaStatus({...modelState});});
 assert.doesNotMatch(await p.locator('#adviceFixture #advTires').innerText(),/Tires: replace/i);assert.equal(await p.locator('#adviceFixture [data-tchk="tires"]').count(),1,'pressure acknowledgment stays available');
 await p.evaluate(()=>{Garage.car().tires.corners.lr.depth=2.5;dispatchEvent(new Event('garagechange'));});await p.waitForFunction(()=>aiPending.length===1);
 assert.match(await p.locator('#adviceFixture #advTires').innerText(),/Tires: replace/i,'checked warnings return while AI for the new setup is pending');

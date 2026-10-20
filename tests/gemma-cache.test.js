@@ -7,9 +7,15 @@ function boot(){const timers=new Map(),events={},pending=[],commands=[],prompts=
  vm.runInNewContext(source,ctx);
  async function tick(){for(const [id,f]of [...timers]){timers.delete(id);f();}await new Promise(setImmediate);}
  async function complete(result){const resolve=pending.shift();assert(resolve);active--;state.busy=false;resolve(result||{text:JSON.stringify({summary:'The checked tread needs attention.',top:[{n:1,why:'Tread affects grip.'}]})});ctx.onGemmaStatus({...state});await new Promise(setImmediate);await tick();}
- return {ctx,tick,complete,pending,commands,prompts,total:()=>total,max:()=>max};
+ const taskEvents=[];ctx.Tasks={upsert:(id,v)=>taskEvents.push(['upsert',id,v]),remove:id=>taskEvents.push(['remove',id])};
+ return {ctx,tick,complete,pending,commands,prompts,taskEvents,total:()=>total,max:()=>max};
 }
 async function retries(){
+ // Reproduce the empty-storage/demo queue transition: the dock must not vanish between cars.
+ store.clear();const queued=boot();await queued.tick();await queued.tick();queued.taskEvents.length=0;
+ await queued.complete();assert.equal(queued.total(),2);
+ assert(!queued.taskEvents.some(e=>e[0]==='remove'&&e[1]==='gemma-advice'),'keep the same status dock through idle → next car');
+ await queued.complete();await queued.complete();assert(queued.taskEvents.some(e=>e[0]==='remove'&&e[1]==='gemma-advice'),'remove dock when every car is finished');
  store.clear();store.set('aiexplanations|other-car',{v:{raw:'unrelated'}});
  const x=boot();x.ctx.__app.S.cars=[cars[0]];await x.tick();await x.tick();
  const bad={text:JSON.stringify({summary:'Tread is below the level for safe wet stopping.',top:[{n:1,why:'Grip is reduced.'}]})};
