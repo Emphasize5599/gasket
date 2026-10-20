@@ -21,7 +21,7 @@ support. Ubuntu 24.04 / Clang 18 replaces it. The injected C++ settings test pas
 on Linux (run 39449788674). Eight negative/positive ABI-verifier fixture tests pass
 locally; these are not real-binary or device tests.
 
-Current source build (started at f7884c1):
+Previous source build (started at f7884c1):
 https://github.com/Emphasize5599/gasket/actions/runs/39449788674
 
 The ABI verifier was added while that compilation was running, so that particular
@@ -29,6 +29,23 @@ run does NOT execute it. Before integration, run it against the candidate and th
 pinned official AAR (or rerun the updated workflow, using the compiled disk cache).
 It checks JNI export parity, dependencies, architecture, 16 KB ELF alignment,
 patch identity, and stock native notices. Never call this device validation.
+
+Follow-up: that run compiled the patched JNI but failed at linking because
+`prebuilt/android_arm64/libGemmaModelConstraintProvider.so` was an unfetched Git
+LFS pointer. Commit 8a73bf4 explicitly pulls only the ARM64 upstream LFS binaries
+and checks ELF headers before compilation. Cache restore/save are now separate;
+completed compilation work is preserved even if a later step fails. The previous
+failed run had no saved cache, so this retry is still a cold compilation.
+
+Replacement build (includes real ABI verification):
+https://github.com/Emphasize5599/gasket/actions/runs/39458036225
+
+User explicitly requested ongoing build monitoring and a new APK. A thread
+heartbeat named "Watch Gasket builds" checks every ten minutes, remains quiet
+when unchanged, fixes new in-scope failures, and continues these integration
+gates on native success. Keep it current; avoid duplicate monitors. Do not
+confuse a native candidate artifact with a signed app release. The app still
+uses the stock AAR until the remaining integration below is actually done.
 
 Remaining integration gates:
 
