@@ -60,7 +60,7 @@ public class ReaderTest {
  static class Main {int removed=0;void removeCallbacks(Runnable r){removed++;}void post(Runnable r){r.run();}}
  static class Root {void removeView(View v){}}
  class SiteWorker {
-  int readReq=1,completedReads=0;String readCall="reader",key="gasweb";boolean leanGasResources=true,retriedGasResources=false,ready=true;
+  int readReq=1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
   long gasReadStarted=System.nanoTime()/1000000L,gasRetryAt;String gasFirstStop="";int gasFirstRows;AtomicIntegerArray omittedGasResources=new AtomicIntegerArray(4);View view=new View();Runnable readDeadline=()->{};JSONArray partialGasStores=null;String gasRequestedGrade="regular",verificationUrl=null;
   ${finish}
  }
@@ -78,6 +78,7 @@ public class ReaderTest {
   }
   ReaderTest visible=new ReaderTest();SiteWorker lane=visible.new SiteWorker();visible.verifying=lane;lane.finishRead(1,"empty");check(lane.view.loads==0&&visible.replies==1,"visible verification retried");
   ReaderTest bot=new ReaderTest();lane=bot.new SiteWorker();lane.view.at="https://www.google.com/sorry/index";answer("bot","blocked",0,true,false);lane.finishRead(1,"bot");check("https://www.google.com/sorry/index".equals(lane.verificationUrl),"lost actual check URL before blanking reader");
+  ReaderTest charger=new ReaderTest();lane=charger.new SiteWorker();lane.key="chargepoint";lane.origin="https://driver.chargepoint.com/";lane.view.at=lane.origin+"stations/987654";answer("cpbot","blocked",0,true,false);lane.finishRead(1,"cpbot");check(lane.view.at.equals(lane.verificationUrl)&&charger.replies==1,"charger check must reopen the blocked station page");
   ReaderTest partial=new ReaderTest();lane=partial.new SiteWorker();answer("partial","unreadable",1,false,false);lane.finishRead(1,"partial");check(partial.replies==1&&lane.leanGasResources,"discarded partial results");
   ReaderTest recovery=new ReaderTest();lane=recovery.new SiteWorker();answer("early","pagination_stalled",2,false,false);lane.finishRead(1,"early");check(recovery.replies==0&&lane.partialGasStores.length()==2,"quiet page was incorrectly treated as complete");JSONObject later=answer("later","limited",1,false,false);JSONObject newest=later.optJSONArray("stores").optJSONObject(0);lane.finishRead(1,"later");check(later.optJSONArray("stores").length()==2&&later.optJSONArray("stores").optJSONObject(0)==newest,"lost partial identity or replaced newer record with old price");check(lane.partialGasStores==null&&recovery.replies==1,"partial storage leaked or duplicate reply");
   ReaderTest restricted=new ReaderTest();lane=restricted.new SiteWorker();answer("early2","pagination_stalled",2,false,false);lane.finishRead(1,"early2");JSONObject deny=answer("deny","blocked",0,true,false);lane.finishRead(1,"deny");check(deny.optBoolean("blocked")&&deny.optJSONArray("stores").length()==2&&restricted.replies==1,"restriction lost partial observations or retried");
