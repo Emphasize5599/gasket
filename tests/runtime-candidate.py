@@ -21,6 +21,10 @@ class CandidateTests(unittest.TestCase):
             z.writestr('jni/arm64-v8a/liblitertlm_jni.so', b'stock fixture')
             z.writestr('THIRD_PARTY_NOTICE.txt', 'notice fixture')
         self.so.write_bytes(b'gasket_gpu_low_priority_v1')
+        provider = root / candidate.PROVIDER
+        provider.write_bytes(b'provider fixture')
+        self.addCleanup(setattr, candidate, 'PROVIDER_SHA', candidate.PROVIDER_SHA)
+        candidate.PROVIDER_SHA = hashlib.sha256(provider.read_bytes()).hexdigest()
         self.original_sha = candidate.STOCK_SHA
         candidate.STOCK_SHA = hashlib.sha256(self.aar.read_bytes()).hexdigest()
         self.addCleanup(setattr, candidate, 'STOCK_SHA', self.original_sha)
@@ -77,6 +81,10 @@ class CandidateTests(unittest.TestCase):
     def test_marker(self):
         self.so.write_bytes(b'unpatched fixture')
         self.assertRaisesRegex(AssertionError, 'marker', self.verify)
+
+    def test_provider_pin(self):
+        candidate.PROVIDER_SHA = 'unreviewed provider'
+        self.assertRaisesRegex(AssertionError, 'Provider checksum', self.verify)
 
 
 if __name__ == '__main__':

@@ -50,7 +50,7 @@
     state=Object.assign({},state,value);revision=state.revision||revision;
     if(value.renderDiagnostics)LG.info('ai','Rendering during local AI',value.renderDiagnostics);
     if(state.supported&&lastIssue==='Larger AI is unavailable on this app build.')lastIssue='';
-    if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,cpuOnly:!!state.cpuOnly,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
+    if(state.phase!==priorPhase)LG.info('ai','Local model phase: '+state.phase,{backend:state.backend||null,cpuOnly:!!state.cpuOnly,gpuLowPriorityRequested:!!state.gpuLowPriorityRequested,gpuPatchVersion:state.gpuPatchVersion||0,bytes:state.bytes||0,ready:!!state.ready,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if((state.error&&state.error!==priorIssue)||(state.reason&&state.reason!==priorReason))LG.warn('ai','Local model task update',{phase:state.phase,task:state.task||priorTask||'',bytes:state.bytes||0,attempt:state.attempt||1,reason:state.reason||'',error:String(state.error||'').replace(/https?:\/\/\S+/g,'[download endpoint]').slice(0,220)});
     if(state.error&&state.error!==priorIssue&&priorTask==='download')A.toast('Model download stopped · '+(state.bytes?'partial file kept.':'not complete.')+' Resume in Settings.');
     if(state.phase!=='download')rateS=[];

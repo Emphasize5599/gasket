@@ -102,9 +102,16 @@ on:
       - tests/gemma-ui.test.js
       - tests/gemma-native.test.js
       - tests/apk-build.test.js
+      - tests/gemma-gpu-support.test.js
+      - tests/runtime-package.py
+      - tests/runtime-candidate.py
+      - tools/runtime/package-aar.py
+      - tools/runtime/prepare-runtime.sh
+      - tools/runtime/verify-candidate.py
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: signed-apk-${{ github.ref }}
@@ -215,6 +222,30 @@ jobs:
           GASKET_NATIVE_TESTS=1 node tests/gemma-native.test.js
           GASKET_NATIVE_TESTS=1 node tests/backup-io.test.js
           GASKET_NATIVE_TESTS=1 node tests/reader-resources.test.js
+          GASKET_NATIVE_TESTS=1 node tests/gemma-processor.test.js
+          GASKET_NATIVE_TESTS=1 node tests/gemma-gpu-support.test.js
+          python3 tests/runtime-candidate.py
+          python3 tests/runtime-package.py
+
+      - name: Try permanent verified runtime archive
+        if: steps.signing.outputs.ready == 'true'
+        id: runtime-release
+        shell: bash
+        run: |
+          mkdir -p build/runtime build/gpu-runtime/candidate
+          if curl --fail --silent --show-error --location --retry 2 https://github.com/Emphasize5599/gasket/releases/download/keyless-test-v0.0.216/Gasket-LiteRT-0.18.0-gpu-ui1-arm64.zip -o build/runtime/native.zip; then
+            unzip -q -o build/runtime/native.zip -d build/gpu-runtime/candidate
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bootstrap first runtime publication from compiled source artifact
+        if: steps.signing.outputs.ready == 'true' && steps.runtime-release.outputs.ready != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: litert018-ui1-arm64-candidate
+          run-id: 39458036225
+          github-token: ${{ github.token }}
+          path: build/gpu-runtime/candidate
 
       - name: Build with the existing release key and verify APK
         if: steps.signing.outputs.ready == 'true'
@@ -281,6 +312,12 @@ jobs:
               gh release upload "$tag" "$asset"
             fi
           done
+          if [ '${{ steps.version.outputs.name }}' = '0.0.216' ]; then
+            asset='Gasket-LiteRT-0.18.0-gpu-ui1-arm64.zip'
+            if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fx "$asset" >/dev/null; then
+              gh release upload "$tag" "build/runtime/$asset"
+            fi
+          fi
           # Obtainium must not see a half-uploaded architecture set.
           gh release edit "$tag" --draft=false
 

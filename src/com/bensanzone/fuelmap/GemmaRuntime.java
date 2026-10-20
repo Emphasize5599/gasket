@@ -10,14 +10,18 @@ final class GemmaRuntime {
     private boolean loadedCpuOnly;
     private Conversation conversation;
     private final Object conversationLock = new Object();
-    String backend = "GPU";
+    volatile String backend = "unknown";
+    volatile boolean gpuLowPriorityRequested;
+    volatile int gpuPatchVersion;
 
     void load(String path, String cache, int inputBytes, boolean cpuOnly) throws Exception {
         int required = Math.min(32768, Math.max(8192, ((inputBytes + 4096 + 4095) / 4096) * 4096));
         if (engine != null && contextTokens >= required && loadedCpuOnly == cpuOnly) return;
         close(); contextTokens = required; loadedCpuOnly = cpuOnly;
         if (cpuOnly) { backend = "CPU"; initialize(path, cache, new Backend.CPU(4, null)); return; }
-        try { initialize(path, cache, new Backend.GPU()); backend = "GPU"; }
+        gpuPatchVersion = GemmaGpuSupport.version();
+        if (gpuPatchVersion != 1) { backend = "CPU"; initialize(path, cache, new Backend.CPU(4, null)); return; }
+        try { initialize(path, cache, new Backend.GPU()); backend = "GPU"; gpuLowPriorityRequested = true; }
         catch (Exception | LinkageError gpuFailure) {
             backend = "CPU";
             initialize(path, cache, new Backend.CPU(4, null));
@@ -71,5 +75,6 @@ final class GemmaRuntime {
     }
     void close() {
         if (engine != null) { try { engine.close(); } catch (Exception ignored) { } engine = null; }
+        gpuLowPriorityRequested = false; gpuPatchVersion = 0;
     }
 }

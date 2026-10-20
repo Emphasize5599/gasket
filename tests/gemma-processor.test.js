@@ -6,21 +6,24 @@ if(spawnSync('javac',['-version']).error){if(process.env.GASKET_NATIVE_TESTS==='
 function method(needle){const at=runtime.indexOf(needle);assert(at>=0);let b=runtime.indexOf('{',at),depth=1,i=b+1;for(;depth;i++){if(runtime[i]==='{')depth++;if(runtime[i]==='}')depth--;}return runtime.slice(at,i);}
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gasket-ai-processor-'));
 const java=`class ProcessorTest {
+ static class GemmaGpuSupport {static int patch=1;static int version(){return patch;}}
  static class Backend {static class GPU extends Backend{} static class CPU extends Backend{CPU(int n,Object ignored){if(n!=4)throw new AssertionError();}}}
  static class EngineConfig {Backend b;EngineConfig(String p,Backend b,Object a,Object z,int n,Object x,String cache){this.b=b;}}
  static class Engine {static int created,closed;static boolean failGpu;Backend b;Engine(EngineConfig c){b=c.b;created++;}void initialize()throws Exception{if(failGpu&&b instanceof Backend.GPU)throw new Exception("fixture GPU failure");}void close(){closed++;}}
- static class Runtime {Engine engine;int contextTokens;boolean loadedCpuOnly;String backend="GPU";
+ static class Runtime {Engine engine;int contextTokens;boolean loadedCpuOnly;String backend="unknown";boolean gpuLowPriorityRequested;int gpuPatchVersion;
  ${method('void load(')} ${method('private void initialize(')} ${method('void close()')}
  }
  static void check(boolean b){if(!b)throw new AssertionError();}
  public static void main(String[] args)throws Exception{
- Runtime r=new Runtime();r.load("model","cache",1000,false);check(r.backend.equals("GPU"));int n=Engine.created;
+ Runtime r=new Runtime();r.load("model","cache",1000,false);check(r.backend.equals("GPU")&&r.gpuLowPriorityRequested&&r.gpuPatchVersion==1);int n=Engine.created;
  r.load("model","cache",1000,false);check(n==Engine.created);
- r.load("model","cache",1000,true);check(r.backend.equals("CPU")&&r.engine.b instanceof Backend.CPU&&Engine.closed==1);n=Engine.created;
+ r.load("model","cache",1000,true);check(r.backend.equals("CPU")&&!r.gpuLowPriorityRequested&&r.gpuPatchVersion==0&&r.engine.b instanceof Backend.CPU&&Engine.closed==1);n=Engine.created;
  r.load("model","cache",1000,true);check(n==Engine.created);
  r.load("model","cache",1000,false);check(r.backend.equals("GPU")&&Engine.closed==2);
- Engine.failGpu=true;r.close();r.load("model","cache",1000,false);check(r.backend.equals("CPU"));
+ Engine.failGpu=true;r.close();r.load("model","cache",1000,false);check(r.backend.equals("CPU")&&!r.gpuLowPriorityRequested);
  n=Engine.created;r.load("model","cache",1000,true);check(r.backend.equals("CPU")&&Engine.created==n+1);
+ Engine.failGpu=false;GemmaGpuSupport.patch=0;r.close();r.load("model","cache",1000,false);check(r.engine.b instanceof Backend.CPU&&!r.gpuLowPriorityRequested&&r.gpuPatchVersion==0);
+ GemmaGpuSupport.patch=2;r.close();r.load("model","cache",1000,false);check(r.engine.b instanceof Backend.CPU&&!r.gpuLowPriorityRequested);
  System.out.println("Actual GemmaRuntime load: GPU default, strict CPU selection, same-backend reuse, processor switch rebuild and GPU failure fallback passed");
  }}
 `;

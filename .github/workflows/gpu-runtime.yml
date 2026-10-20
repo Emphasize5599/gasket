@@ -101,6 +101,7 @@ jobs:
           test -f "$candidate"
           mkdir -p ../gpu-runtime/arm64-v8a
           cp "$candidate" ../gpu-runtime/arm64-v8a/liblitertlm_jni.so
+          cp prebuilt/android_arm64/libGemmaModelConstraintProvider.so ../gpu-runtime/arm64-v8a/
       - name: Verify output and record provenance
         run: |
           mkdir -p build/gpu-runtime/arm64-v8a

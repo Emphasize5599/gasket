@@ -49,19 +49,31 @@ android {
     }
 }
 tasks.named('preBuild').configure { dependsOn 'prepareGasketManifest' }
-dependencies { implementation 'com.google.ai.edge.litertlm:litertlm-android:0.18.0' }
+// Resolve official metadata for its unchanged JVM dependencies and license texts.
+// Only the JNI entry in the local, checksum-verified AAR differs from upstream.
+configurations { litertUpstream }
+dependencies {
+    litertUpstream 'com.google.ai.edge.litertlm:litertlm-android:0.18.0'
+    implementation files('build/runtime/litertlm-patched.aar')
+    implementation files(providers.provider {
+        configurations.litertUpstream.files.findAll { it.name.endsWith('.jar') }
+    })
+}
 
 // Preserve the AAR's full native third-party notices and every resolved Java dependency's license files.
 def noticesDirectory = layout.buildDirectory.dir('runtime-assets')
 tasks.register('prepareRuntimeNotices') {
     inputs.files(configurations.releaseRuntimeClasspath)
+    inputs.files(configurations.litertUpstream)
+    inputs.file('build/runtime/litertlm-patched.aar')
     outputs.dir(noticesDirectory)
     doLast {
         def output = new File(noticesDirectory.get().asFile, 'runtime-notices.txt')
         output.parentFile.mkdirs()
         output.withWriter('UTF-8') { writer ->
             writer.write('Gasket on-device AI runtime notices\n\n')
-            configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.sort { it.moduleVersion.id.toString() }.each { artifact ->
+            def artifacts = (configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts + configurations.litertUpstream.resolvedConfiguration.resolvedArtifacts).unique { it.moduleVersion.id.toString() }
+            artifacts.sort { it.moduleVersion.id.toString() }.each { artifact ->
                 writer.write('\n=== ' + artifact.moduleVersion.id + ' ===\n')
                 if (artifact.name == 'litertlm-android') {
                     def sha = java.security.MessageDigest.getInstance('SHA-256').digest(artifact.file.bytes).encodeHex().toString()
@@ -71,6 +83,8 @@ tasks.register('prepareRuntimeNotices') {
                 notices.files.sort().each { entry -> writer.write('\n' + entry.name + '\n' + entry.getText('UTF-8') + '\n') }
                 if (artifact.name == 'litertlm-android' && !notices.files.any { it.name == 'THIRD_PARTY_NOTICE.txt' }) throw new GradleException('Native license notices are missing')
             }
+            def modified = zipTree(file('build/runtime/litertlm-patched.aar')).matching { include 'GASKET_PATCH_NOTICE.txt' }.singleFile
+            writer.write('\n' + modified.getText('UTF-8') + '\n')
         }
     }
 }

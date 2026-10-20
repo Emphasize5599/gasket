@@ -34,6 +34,7 @@ if [ ! -x "$GRADLE_CACHE/gradle-8.13/bin/gradle" ]; then
   echo "$GRADLE_SHA  $GRADLE_CACHE/gradle-8.13-bin.zip" | sha256sum -c -
   unzip -q -o "$GRADLE_CACHE/gradle-8.13-bin.zip" -d "$GRADLE_CACHE"
 fi
+bash tools/runtime/prepare-runtime.sh
 ANDROID_HOME="$SDK" "$GRADLE_CACHE/gradle-8.13/bin/gradle" --console=plain --no-daemon assembleRelease
 SIGNER=${APKSIGNER:-$(find "$SDK/build-tools" -name apksigner -type f | sort -V | tail -1)}
 test -n "$SIGNER"

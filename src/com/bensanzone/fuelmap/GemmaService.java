@@ -57,7 +57,12 @@ final class GemmaService {
             value.put("cpuOnly", cpuOnly());
             value.put("reason", reason); value.put("attempt", attempt);
             value.put("revision", REV); value.put("busy", busy.get());
-            if (runtime != null) value.put("backend", runtime.backend);
+            GemmaRuntime active = runtime;
+            if (active != null) {
+                value.put("backend", active.backend);
+                value.put("gpuLowPriorityRequested", active.gpuLowPriorityRequested);
+                value.put("gpuPatchVersion", active.gpuPatchVersion);
+            }
         } catch (Exception ignored) { }
         return value;
     }
