@@ -7,6 +7,7 @@ on:
       - .github/workflows/gpu-runtime.yml
       - tools/runtime/**
       - tests/runtime-priority.test.js
+      - tests/runtime-candidate.py
 permissions:
   contents: read
 concurrency:
@@ -38,7 +39,9 @@ jobs:
       - name: Exercise injected settings block
         env:
           GASKET_NATIVE_TESTS: '1'
-        run: node tests/runtime-priority.test.js
+        run: |
+          node tests/runtime-priority.test.js
+          python3 tests/runtime-candidate.py
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -87,6 +90,8 @@ jobs:
           readelf -h "$SO" | grep 'AArch64'
           readelf -Ws "$SO" | grep 'Java_com_bensanzone_fuelmap_GemmaGpuSupport_nativePatchVersion'
           strings "$SO" | grep -F 'gasket_gpu_low_priority_v1'
+          curl --fail --location --retry 2 https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/0.18.0/litertlm-android-0.18.0.aar -o "$RUNNER_TEMP/stock-litert.aar"
+          python3 tools/runtime/verify-candidate.py "$RUNNER_TEMP/stock-litert.aar" "$SO" | tee build/gpu-runtime/ABI_REPORT.json
           sha256sum "$SO" > build/gpu-runtime/SHA256SUMS
           printf '%s\n' "$LRT_REV" > build/gpu-runtime/UPSTREAM_COMMIT
           cp tools/runtime/patch-litert-gpu.js build/gpu-runtime/
