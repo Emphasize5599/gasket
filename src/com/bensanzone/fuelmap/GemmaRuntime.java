@@ -6,26 +6,24 @@ import java.util.Collections;
 /** Only the service's serial worker initializes, generates or closes. Cancellation may come from the bridge. */
 final class GemmaRuntime {
     private Engine engine;
-    private int contextTokens;
+    volatile int contextTokens;
     private boolean loadedCpuOnly;
-    private Conversation conversation;
+    private volatile Conversation conversation;
     private final Object conversationLock = new Object();
     volatile String backend = "unknown";
     volatile boolean gpuLowPriorityRequested;
     volatile int gpuPatchVersion;
 
+    static int contextFor(int inputBytes) {
+        // UTF-8 bytes upper-bound input tokens; reserve 2048 output + 1024 system/template tokens.
+        return Math.min(32768, Math.max(8192, ((inputBytes + 3072 + 4095) / 4096) * 4096));
+    }
     void load(String path, String cache, int inputBytes, boolean cpuOnly) throws Exception {
-        int required = Math.min(32768, Math.max(8192, ((inputBytes + 4096 + 4095) / 4096) * 4096));
+        if (!cpuOnly) throw new IllegalStateException("GPU temporarily disabled for stability.");
+        int required = contextFor(inputBytes);
         if (engine != null && contextTokens >= required && loadedCpuOnly == cpuOnly) return;
         close(); contextTokens = required; loadedCpuOnly = cpuOnly;
-        if (cpuOnly) { backend = "CPU"; initialize(path, cache, new Backend.CPU(4, null)); return; }
-        gpuPatchVersion = GemmaGpuSupport.version();
-        if (gpuPatchVersion != 1) { backend = "CPU"; initialize(path, cache, new Backend.CPU(4, null)); return; }
-        try { initialize(path, cache, new Backend.GPU()); backend = "GPU"; gpuLowPriorityRequested = true; }
-        catch (Exception | LinkageError gpuFailure) {
-            backend = "CPU";
-            initialize(path, cache, new Backend.CPU(4, null));
-        }
+        backend = "CPU"; initialize(path, cache, new Backend.CPU(2, null));
     }
     private void initialize(String path, String cache, Backend backend) throws Exception {
         Engine candidate = new Engine(new EngineConfig(path, backend, null, null, contextTokens, null, cache));
@@ -68,13 +66,14 @@ final class GemmaRuntime {
             synchronized (conversationLock) { conversation = null; active.close(); }
         }
     }
-    void cancel() {
-        synchronized (conversationLock) {
-            if (conversation != null) try { conversation.cancelProcess(); } catch (Exception ignored) { }
-        }
+    Runnable cancellation() {
+        final Conversation target = conversation;
+        return () -> { synchronized (conversationLock) {
+            if (target != null && conversation == target) try { target.cancelProcess(); } catch (Exception ignored) { }
+        } };
     }
     void close() {
-        if (engine != null) { try { engine.close(); } catch (Exception ignored) { } engine = null; }
+        if (engine != null) { try { engine.close(); } catch (Exception failure) { throw new IllegalStateException("Engine release failed", failure); } finally { engine = null; } }
         gpuLowPriorityRequested = false; gpuPatchVersion = 0;
     }
 }

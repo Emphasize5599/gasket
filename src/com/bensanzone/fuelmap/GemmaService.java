@@ -21,6 +21,12 @@ final class GemmaService {
     interface Listener { void status(JSONObject value); void result(int id, JSONObject value); }
     private final Listener listener;
     private final SharedPreferences prefs;
+    private final AiDiagnostics diagnostics;
+    private final AiCancellation cancellation = new AiCancellation();
+    private static final Semaphore MODEL_SLOT = new Semaphore(1);
+    private volatile boolean recoveryRequired;
+    // Temporary safety hold: preserve user preference, but do not load the failing GPU path.
+    private static final boolean GPU_SAFETY_HOLD = true;
     private final File directory, model, partial, cache;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
@@ -38,16 +44,19 @@ final class GemmaService {
     GemmaService(Context context, Listener listener) {
         this.listener = listener;
         prefs = context.getSharedPreferences("gasket_ai", Context.MODE_PRIVATE);
+        diagnostics = new AiDiagnostics(context, prefs);
+        recoveryRequired = diagnostics.interrupted || prefs.getBoolean("recoveryRequired", false);
+        if (recoveryRequired) prefs.edit().putBoolean("recoveryRequired", true).apply();
         directory = new File(context.getNoBackupFilesDir(), "gemma-4-e4b"); directory.mkdirs();
         model = new File(directory, "model.litertlm"); partial = new File(directory, "model.part");
-        cache = new File(context.getCacheDir(), "gemma"); cache.mkdirs();
+        cache = new File(context.getCacheDir(), "gemma-stock-cpu-217"); cache.mkdirs();
         downloaded = partial.length();
         ready = model.isFile() && model.length() == BYTES && SHA.equals(prefs.getString("verifiedSha", ""))
             && model.lastModified() == prefs.getLong("verifiedMtime", -1);
     }
     private boolean supported() { return Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a") || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64"); }
     private boolean enabled() { return prefs.getBoolean("enabled", true); }
-    private boolean cpuOnly() { return prefs.getBoolean("cpuOnly", false); }
+    private boolean cpuOnly() { return GPU_SAFETY_HOLD || prefs.getBoolean("cpuOnly", false); }
     JSONObject status() {
         JSONObject value = new JSONObject();
         try {
@@ -55,6 +64,8 @@ final class GemmaService {
             value.put("phase", phase); value.put("error", error); value.put("bytes", downloaded); value.put("total", BYTES);
             value.put("task", task);
             value.put("cpuOnly", cpuOnly());
+            value.put("gpuSafetyHold", GPU_SAFETY_HOLD); value.put("recoveryRequired", recoveryRequired);
+            value.put("startupDiagnostics", diagnostics.startup); value.put("nativeDiagnostics", diagnostics.latest());
             value.put("reason", reason); value.put("attempt", attempt);
             value.put("revision", REV); value.put("busy", busy.get());
             GemmaRuntime active = runtime;
@@ -67,15 +78,31 @@ final class GemmaService {
         return value;
     }
     private void notifyStatus() { if (!closed) listener.status(status()); }
+    /** The app's own page dying mid-generation pauses AI until a retry; a hidden website reader dying only stops this explanation. */
+    synchronized void rendererLost(boolean appPage) {
+        if (!closed && busy.get() && "advice".equals(task)) {
+            if (appPage) { recoveryRequired = true; prefs.edit().putBoolean("recoveryRequired", true).apply(); }
+            epoch.incrementAndGet();
+            error = appPage ? "Local AI paused after the app's page stopped. Use Recheck current car to retry."
+                : "Local AI stopped this explanation while the phone was short on memory.";
+            phase = "cancelling"; GemmaRuntime active = runtime;
+            if (active != null) cancellation.request(active.cancellation()); notifyStatus();
+        }
+    }
     private void result(int id, String text, String failure) {
         JSONObject value = new JSONObject();
-        try { if (failure != null) value.put("error", failure); else value.put("text", text); } catch (Exception ignored) { }
+        try { if (failure != null) { value.put("error", failure); value.put("recoveryRequired", recoveryRequired); } else value.put("text", text); } catch (Exception ignored) { }
         if (!closed) listener.result(id, value);
     }
     synchronized void command(int id, String command) {
         if (closed) return;
+        if ("acknowledgeRecovery".equals(command)) {
+            recoveryRequired = false; prefs.edit().putBoolean("recoveryRequired", false).apply(); error = "";
+            listener.result(id, status()); notifyStatus(); return;
+        }
         if ("processorCpu".equals(command) || "processorAuto".equals(command)) {
             if (busy.get()) { result(id, null, "Turn AI off or wait for the current task before changing its processor."); return; }
+            if (GPU_SAFETY_HOLD && "processorAuto".equals(command)) { result(id, null, "GPU mode is temporarily paused while its stability issue is investigated."); return; }
             prefs.edit().putBoolean("cpuOnly", "processorCpu".equals(command)).apply();
             // load() recreates the engine on the serial worker when the preference changes.
             listener.result(id, status()); notifyStatus(); return;
@@ -93,7 +120,7 @@ final class GemmaService {
             reason="disable".equals(command)?"Larger AI disabled by user":"cancelAdvice".equals(command)?"Advice cancelled after setup change or timeout":"Task paused by user";
             if ("disable".equals(command)) prefs.edit().putBoolean("enabled", false).apply();
             epoch.incrementAndGet();
-            GemmaRuntime active = runtime; if (active != null) active.cancel();
+            GemmaRuntime active = runtime; if (active != null) cancellation.request(active.cancellation());
             if (busy.get()) phase = "cancelling";
             worker.execute(() -> { if (runtime != null) { runtime.close(); runtime = null; } notifyStatus(); });
         } else if ("enable".equals(command)) {
@@ -142,6 +169,7 @@ final class GemmaService {
     }
     synchronized void generate(int id, String prompt) {
         if (closed || !enabled() || !ready || !supported()) { result(id, null, "Larger model is not enabled and ready."); return; }
+        if (recoveryRequired) { result(id, null, "Local AI paused after an unexpected exit. Use Recheck current car to retry."); return; }
         // Conservative UTF-8 bound: leave room for instructions/output in the 32k token context. Never truncate rules.
         if (prompt == null || prompt.getBytes(StandardCharsets.UTF_8).length > 27000) { result(id, null, "Complete tire setup exceeds the model context budget."); return; }
         if (!busy.compareAndSet(false, true)) { result(id, null, "Larger model is already working."); return; }
@@ -155,25 +183,48 @@ final class GemmaService {
                 if (ticket != epoch.get() || closed || !enabled() || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(useCpu ? 600 : 120)) {
                     if (ticket == epoch.get()) epoch.incrementAndGet();
                     if (!"cancelling".equals(phase)) { phase = "cancelling"; notifyStatus(); }
-                    GemmaRuntime active = runtime; if (active != null) active.cancel();
+                    GemmaRuntime active = runtime; if (active != null) cancellation.request(active.cancellation());
                 }
             }
         }, 250, 250, TimeUnit.MILLISECONDS);
         worker.execute(() -> {
+            boolean ownsSlot = false;
+            int inputBytes = prompt.getBytes(StandardCharsets.UTF_8).length;
+            int plannedTokens = GemmaRuntime.contextFor(inputBytes);
             try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
+                if (!MODEL_SLOT.tryAcquire()) throw new IllegalStateException("Previous local model is still stopping.");
+                ownsSlot = true;
+                diagnostics.record("load", true, "CPU", plannedTokens, inputBytes, null); notifyStatus();
                 if (runtime == null) runtime = new GemmaRuntime();
                 runtime.load(model.getAbsolutePath(), cache.getAbsolutePath(), prompt.getBytes(StandardCharsets.UTF_8).length, useCpu);
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
-                phase = "generate"; notifyStatus();
+                phase = "generate"; diagnostics.record("generate", true, runtime.backend, runtime.contextTokens, inputBytes, null); notifyStatus();
                 String response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed);
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
+                diagnostics.record("completed", true, runtime.backend, runtime.contextTokens, inputBytes, null);
                 result(id, response, null);
             } catch (Exception | LinkageError failure) {
-                if (runtime != null) { runtime.close(); runtime = null; }
+                if (ownsSlot) diagnostics.record(ticket == epoch.get() ? "failed" : "cancelled", true, runtime == null ? "unknown" : runtime.backend, plannedTokens, inputBytes, failure);
+                if (ownsSlot && ticket == epoch.get() && !(failure instanceof CancellationException)) { recoveryRequired = true; prefs.edit().putBoolean("recoveryRequired", true).apply(); }
                 error = ticket == epoch.get() ? "Local AI could not finish. Checked tire notices are still available." : "Local AI cancelled or timed out.";
                 result(id, null, error);
             } finally {
+                // Release native memory before another service/activity can acquire the model slot.
+                if (ownsSlot) {
+                    diagnostics.record("releasing", true, runtime == null ? "unknown" : runtime.backend, plannedTokens, inputBytes, null);
+                    boolean released = true;
+                    try { if (runtime != null) runtime.close(); }
+                    catch (Exception | LinkageError failure) {
+                        released = false; recoveryRequired = true; prefs.edit().putBoolean("recoveryRequired", true).apply();
+                        error = "Local AI could not release its resources. Restart the app before retrying.";
+                        diagnostics.record("release_failed", true, "CPU", plannedTokens, inputBytes, failure);
+                    } finally {
+                        runtime = null;
+                        if (released) { diagnostics.record("released", false, "CPU", plannedTokens, inputBytes, null); MODEL_SLOT.release(); }
+                    }
+                }
                 synchronized (GemmaService.this) {
                     deadline.cancel(false); activeTicket = 0; busy.set(false); phase = "idle"; task = ""; notifyStatus();
                 }
@@ -189,8 +240,8 @@ final class GemmaService {
     synchronized void close() {
         if (closed) return;
         closed = true; epoch.incrementAndGet();
-        GemmaRuntime active = runtime; if (active != null) active.cancel();
+        GemmaRuntime active = runtime; if (active != null) cancellation.request(active.cancellation());
         worker.execute(() -> { if (runtime != null) { runtime.close(); runtime = null; } });
-        worker.shutdown(); timer.shutdownNow();
+        worker.shutdown(); timer.shutdownNow(); cancellation.close();
     }
 }
