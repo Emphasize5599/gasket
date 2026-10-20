@@ -129,6 +129,7 @@
     if (P.setCents) P.setCents(S.roundCents);
     if (!window.FLog) return;
     FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.ocmKey, S.fuelKey, S.hereKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
+    if(window.VisualDiagnostics)VisualDiagnostics.sync();
   }
   logSetup();
   if (window.FLog) FLog.info('app', 'Started Gasket ' + (N.appVersion ? N.appVersion() : ''));
@@ -1222,6 +1223,7 @@
         return '<option value="' + o[0] + '"' + (S.logLevel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><div class="lbl">Log<small class="keep" id="logCount">' + (window.FLog ? FLog.entries().length : 0) + ' entries</small></div>' +
       '<div class="btns"><button class="btn tonal sm" id="sLogView">View</button><button class="btn tonal sm" id="sLogShare">Share</button><button class="btn tonal sm" id="sLogClear">Clear</button></div></div></div>';
+    h += '<div class="card"><h3>Visual diagnostics</h3><p class="lead small keep">Timing, redraw and resource metadata only—not screen contents. Mark a glitch as soon as you see it, then share the log.</p><button type="button" class="btn tonal" id="sVisualMark">Mark visual glitch</button></div>';
     h += '<div class="card"><h3>About</h3><div class="field"><div class="lbl">Gasket ' + esc(N.appVersion ? N.appVersion() : '') + '<small>The code this app includes and the data it uses, with their licenses.</small></div>' +
       '<button class="btn tonal sm" id="licOpen">Licenses & credits</button></div></div>';
     h += '<button class="btn primary" id="sDone">' + (onboarding ? 'Save & find gas' : 'Done') + '</button>';
@@ -1232,6 +1234,7 @@
     if (window.Gemma) Gemma.bindSettings();
     WorkerSettings.bind({S:S,N:N});
     $('sLogView').onclick = function () { showLog(); };
+    $('sVisualMark').onclick=function(){if(window.VisualDiagnostics)VisualDiagnostics.mark();};
     $('blOpen').onclick = openBlPage;
     $('licOpen').onclick = openLicPage;
     $('exAll').onclick = function () { exportData('all'); };
@@ -1290,7 +1293,7 @@
   }
   function shareLog() {
     if (!window.FLog || !FLog.entries().length) { toast(S.debug ? 'The log is empty.' : 'Turn on Debug logging first.'); return; }
-    shareFile('gasket-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + FLog.text().slice(-300000), 'Gasket debug log');
+    shareFile('gasket-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt', 'text/plain', logHeader() + FLog.text().slice(-1200000)+(window.VisualDiagnostics?VisualDiagnostics.report():''), 'Gasket debug log');
   }
   /** Save a big text file and offer it to other apps as a file (in the background — the app never waits on it). */
   function shareFile(name, mime, text, subject, btn) {
@@ -1306,10 +1309,10 @@
   function showLog() {
     var pg = $('logPage');
     if (!pg) { pg = document.createElement('section'); pg.id = 'logPage'; pg.className = 'page'; document.body.appendChild(pg); }
-    var txt = window.FLog ? FLog.text() : '';
+    var txt = (window.FLog ? FLog.text() : '')+(window.VisualDiagnostics?VisualDiagnostics.report():'');
     pg.innerHTML = '<div class="t-head"><h1>Debug log</h1><button class="x" id="lgClose" aria-label="Close">✕</button></div>' +
-      '<p class="lead small">' + (S.debug ? 'Newest at the bottom.' : 'Debug logging is off — turn it on in Settings to record.') + '</p>' +
-      '<pre class="logtxt">' + esc(txt || '(empty)') + '</pre>' +
+      '<p class="lead small">' + (S.debug ? 'Newest at the bottom. Large logs show a preview; Share and Save include the full log.' : 'Debug logging is off — turn it on in Settings to record.') + '</p>' +
+      '<pre class="logtxt">' + esc(txt.slice(-150000) || '(empty)') + '</pre>' +
       '<div class="btn-row"><button class="btn tonal" id="lgShare">Share</button><button class="btn tonal" id="lgSave">Save to Downloads</button></div>';
     pg.classList.remove('hidden');
     var pre = pg.querySelector('.logtxt'); pre.scrollTop = pre.scrollHeight;

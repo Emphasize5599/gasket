@@ -47,6 +47,10 @@
     return ' · '+(sec<60?'under a minute':min<60?'~'+min+' min':'~'+Math.floor(min/60)+' h '+(min%60)+' min')+' left';
   }
   function status(value){
+    if(window.VisualDiagnostics)VisualDiagnostics.milestones(value.nativeTimeline);
+    // Telemetry may arrive after a newer real status. Never change state or redraw from it.
+    if(value.diagnosticOnly){if(value.nativeDiagnostics)LG.debug('visual','Native AI resource sample',value.nativeDiagnostics);return;}
+    if(window.VisualDiagnostics)VisualDiagnostics.ai(value);
     var priorPhase=state.phase,priorTask=state.task,priorIssue=state.error,priorReason=state.reason;
     state=Object.assign({},state,value);revision=state.revision||revision;
     if(value.startupDiagnostics){var startupKey=JSON.stringify(value.startupDiagnostics);if(startupKey!==lastStartupDiagnostics){lastStartupDiagnostics=startupKey;LG.info('ai','Android process exit and previous AI task diagnostics',value.startupDiagnostics);}}
@@ -102,6 +106,7 @@
     if(running||!desired.length||state.busy||!state.enabled)return;
     var item=desired.shift();running=item;attempted.add(item.key);issues.delete(item.key);lastIssue='';
     var started=Date.now();LG.info('ai','Local tire explanation started',{carId:item.car.id,positions:item.pack.setup.tires.length,facts:item.pack.facts.length,inputBytes:new TextEncoder().encode(item.prompt).length});
+    if(window.VisualDiagnostics)VisualDiagnostics.note('explanation_requested',{positions:item.pack.setup.tires.length,ordinal:(A.S.cars||[]).indexOf(item.car)+1});
     // Start status immediately; native initialization happens off-thread and reports the precise phase.
     var previous=failures.get(item.key),attempt=previous?previous.count+1:1;
     var prompt=item.prompt+(previous?'\n\nCORRECTION FOR THIS FRESH ATTEMPT: The previous answer was rejected: '+previous.reason+'. Rewrite from the checked findings only. Avoid the words safe, safely, guarantee and guaranteed, including phrases like safe wet stopping. Do not give instructions or add numbers. Return only the requested JSON.':'');
@@ -114,6 +119,7 @@
       if(!accepted){failed(item,checked.reason||'output validation');return;}
       failures.delete(item.key);issues.delete(item.key);
       LG.info('ai','Local tire explanation accepted',{carId:item.car.id,elapsedMs:Date.now()-started});
+      if(window.VisualDiagnostics)VisualDiagnostics.note('explanation_accepted',{elapsedMs:Date.now()-started});
       var saved={key:item.key,raw:result.text,t:Date.now()};if(A.KV)A.KV.put('aiexplanations',item.key,saved);
       cache.set(item.key,{answer:accepted,pack:item.pack,t:saved.t});
       while(cache.size>12)cache.delete(cache.keys().next().value);

@@ -1,10 +1,10 @@
 /* Debug log. Detailed by default; can be disabled in Settings.
  * Levels: 1 errors, 2 + warnings, 3 + steps, 4 + details (requests/answers, summarized), 5 + everything (raw answers, trimmed).
- * Kept in a private file on the phone (newest ~400 KB). Your Google API key and your VIN are never written to it. */
+ * Kept in a private file on the phone (newest ~1 MB). Your Google API key and your VIN are never written to it. */
 (function (root) {
   'use strict';
   var LEVELS = { 1: 'ERROR', 2: 'WARN', 3: 'INFO', 4: 'DEBUG', 5: 'TRACE' };
-  var level = 0, entries = [], store = null, saveT = null, MAX = 400 * 1024, held = 0;
+  var level = 0, entries = [], store = null, saveT = null, MAX = 1024 * 1024, held = 0;
   var secret = [];
 
   function scrub(text) {
@@ -51,7 +51,7 @@
     debug: function (a, m, d) { log(4, a, m, d); },
     trace: function (a, m, d) { log(5, a, m, d); },
     entries: function () { return entries.slice(); },
-    clear: function () { entries = []; held=0; if (store) store.save('[]'); },
+    clear: function () { entries = []; held=0; if(root.VisualDiagnostics)root.VisualDiagnostics.clear();if (store) store.save('[]'); },
     text: function () {
       return entries.map(function (e) { return e.t + ' ' + e.l + ' [' + e.a + '] ' + e.m + (e.d ? '\n    ' + e.d : ''); }).join('\n');
     }

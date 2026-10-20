@@ -12,7 +12,7 @@
       hub.classList.toggle('compact',full);hub.classList.toggle('full-message',full&&messageExpanded);
       if(button){button.classList.toggle('hidden',!full);button.setAttribute('aria-expanded',String(messageExpanded));button.setAttribute('aria-label',messageExpanded?'Collapse status message':'Show full status message');button.querySelector('.chev').classList.toggle('up',messageExpanded);}
       var label=bar.querySelector('.jb-t'),text=bar.dataset.fullText||'';if(label)label.textContent=full&&!messageExpanded&&root.__app&&root.__app.jobShort?root.__app.jobShort(text):text;
-      var space=hub.classList.contains('hidden')?0:Math.ceil(hub.querySelector('.task-top').getBoundingClientRect().height)+10;
+      var marker=doc.getElementById('visualMarkerRow');var space=hub.classList.contains('hidden')?0:Math.ceil(hub.querySelector('.task-top').getBoundingClientRect().height)+(marker&&!marker.classList.contains('hidden')?Math.ceil(marker.getBoundingClientRect().height):0)+10;
       if(doc.body.style.getPropertyValue('--task-space')!==space+'px')doc.body.style.setProperty('--task-space',space+'px');
     }
   }
@@ -22,6 +22,7 @@
   function upsert(id, value) {
     if (!tasks.has(id)) tasks.set(id, { id: id, started: Date.now() });
     Object.assign(tasks.get(id), value); completion = null; clearTimeout(completionTimer); queue();
+    if(root.VisualDiagnostics)VisualDiagnostics.redraw('task_status_update');
   }
   function remove(id, done) {
     tasks.delete(id);
@@ -68,6 +69,7 @@
     if(main)el.dataset.fullText=t.cancelling?'Cancelling…':t.text||'Working…';
   }
   function draw() {
+    if(root.VisualDiagnostics)VisualDiagnostics.redraw('task_draw');
     if (!doc) return;
     var hub = doc.getElementById('taskHub');
     if (!hub) {
@@ -81,6 +83,7 @@
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
     var all=visible(), multiple=all.length>1;
+    var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
     var primary=all[0], bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
     var nextId=primary?primary.id:completion?'completion':'';if(nextId!==primaryId){messageExpanded=false;primaryId=nextId;}
     // One dock stays visible on every screen, even when a tile also offers inline progress.

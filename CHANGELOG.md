@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.221 - 2026-10-20
+Debug diagnostics build.
+
+- Expanded visual and local AI diagnostics, with a “Mark visual glitch” button and richer shared logs.
+- Bug fixes.
+
 ## 0.0.220 - 2026-10-20
 - EV planning prefers recently checked prices, with a global freshness setting. Unknown prices and unsupported networks are opt-in; hotel/dealership chargers have their own group.
 - Public FLO tariff and connector lookups.

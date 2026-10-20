@@ -13,6 +13,10 @@ import org.json.JSONObject;
 final class AiDiagnostics {
     private final ActivityManager manager;
     private final SharedPreferences prefs;
+    private final android.os.PowerManager power;
+    private final long instanceId = android.os.SystemClock.elapsedRealtime();
+    private final java.util.ArrayDeque<JSONObject> timeline = new java.util.ArrayDeque<>();
+    private volatile long runId;
     final JSONObject startup = new JSONObject();
     final boolean interrupted;
     private volatile JSONObject latest = new JSONObject();
@@ -20,6 +24,7 @@ final class AiDiagnostics {
 
     AiDiagnostics(Context context, SharedPreferences prefs) {
         this.prefs = prefs;
+        power = (android.os.PowerManager) context.getSystemService(Context.POWER_SERVICE);
         manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
         JSONObject previous = new JSONObject();
         try { previous = new JSONObject(prefs.getString("lastNativeTask", "{}")); } catch (Exception ignored) { }
@@ -28,6 +33,8 @@ final class AiDiagnostics {
             startup.put("pid", Process.myPid()); startup.put("previousTask", previous);
             startup.put("device", android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
             startup.put("sdk", android.os.Build.VERSION.SDK_INT); startup.put("soc", android.os.Build.SOC_MODEL);
+            startup.put("osRelease", android.os.Build.VERSION.RELEASE); startup.put("osIncremental", android.os.Build.VERSION.INCREMENTAL);
+            startup.put("securityPatch", android.os.Build.VERSION.SECURITY_PATCH); startup.put("hardware", android.os.Build.HARDWARE);
             startup.put("abis", new JSONArray(java.util.Arrays.asList(android.os.Build.SUPPORTED_ABIS)));
             startup.put("rendererExits", new JSONArray(prefs.getString("rendererExits", "[]")));
             JSONArray exits = new JSONArray();
@@ -84,11 +91,13 @@ final class AiDiagnostics {
         return result.toString();
     }
     synchronized void record(String stage, boolean inFlight, String backend, int contextTokens, int inputBytes, Throwable failure) {
+        if (("generating_sample".equals(stage)||"first_output".equals(stage)) && (!latest.optBoolean("inFlight")||"releasing".equals(latest.optString("stage")))) return;
         JSONObject value = new JSONObject();
         long now = System.currentTimeMillis(), monotonic = android.os.SystemClock.elapsedRealtime();
         if ("load".equals(stage)) started = monotonic;
         try {
             value.put("sequence", ++sequence); value.put("stage", stage); value.put("timestamp", now);
+            value.put("instanceId", instanceId); value.put("generationId", runId); value.put("monotonicMs", monotonic);
             value.put("elapsedMs", started == 0 ? 0 : monotonic - started); value.put("pid", Process.myPid());
             value.put("inFlight", inFlight); value.put("backend", backend); value.put("runtime", "stock-0.18.0");
             value.put("contextTokens", contextTokens); value.put("inputBytes", inputBytes);
@@ -96,6 +105,7 @@ final class AiDiagnostics {
             value.put("nativeHeapBytes", Debug.getNativeHeapAllocatedSize()); value.put("pssKb", Debug.getPss());
             Runtime heap = Runtime.getRuntime(); value.put("javaUsedBytes", heap.totalMemory() - heap.freeMemory());
             value.put("javaMaxBytes", heap.maxMemory());
+            if (power != null) { value.put("thermalStatus", power.getCurrentThermalStatus()); value.put("powerSave", power.isPowerSaveMode()); value.put("interactive", power.isInteractive()); }
             if (manager != null) { ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo(); manager.getMemoryInfo(memory);
                 value.put("availableBytes", memory.availMem); value.put("totalBytes", memory.totalMem); value.put("lowMemory", memory.lowMemory); }
             if (failure != null) {
@@ -113,6 +123,12 @@ final class AiDiagnostics {
         try { if (!prefs.edit().putString("lastNativeTask", value.toString()).commit()) value.put("journalWriteFailed", true); }
         catch (Exception unavailable) { try { value.put("journalWriteFailed", true); } catch (Exception ignored) { } }
         latest = value;
+        // Small milestones survive intermediate status messages being coalesced. No model text.
+        try { JSONObject event=new JSONObject();for(String key:new String[]{"instanceId","generationId","sequence","stage","timestamp","monotonicMs","elapsedMs","backend","pssKb","availableBytes","thermalStatus"})if(value.has(key))event.put(key,value.get(key));
+            timeline.addLast(event);while(timeline.size()>32)timeline.removeFirst();
+        } catch(Exception ignored) { }
     }
+    void beginRun(long id) { runId=id; }
+    synchronized JSONArray timeline() { return new JSONArray(timeline); }
     JSONObject latest() { return latest; }
 }

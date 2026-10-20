@@ -205,6 +205,7 @@
 
   var drawing = false;
   function draw() {
+    if(window.VisualDiagnostics)VisualDiagnostics.redraw('garage');
     if (matching) { drawLater = true; return; }   // a VIN match is filling the pickers: redraw once it's done
     if (!host || drawing) return;
     drawing = true;

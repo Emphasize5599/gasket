@@ -81,25 +81,56 @@ public class MainActivity extends Activity {
     private Window.OnFrameMetricsAvailableListener aiFrames;
     private long aiFrameCount, aiFrameSlow, aiFrameMax, aiFrameLost, aiFrameStarted;
     private String aiFrameBackend = "loading";
+    private volatile boolean visualLogging = true;
+    private android.os.HandlerThread frameThread;
+    private final Object frameLock = new Object();
+    private final long[] frameParts = new long[7];
+    private boolean gpuTimingAvailable;
+    private static final int[] FRAME_PART_IDS={android.view.FrameMetrics.DRAW_DURATION,android.view.FrameMetrics.SYNC_DURATION,android.view.FrameMetrics.COMMAND_ISSUE_DURATION,android.view.FrameMetrics.SWAP_BUFFERS_DURATION,android.view.FrameMetrics.GPU_DURATION,android.view.FrameMetrics.LAYOUT_MEASURE_DURATION,android.view.FrameMetrics.INPUT_HANDLING_DURATION};
+    private long bucketFrames,bucketMax,bucketLost,bucketSlow,bucketStarted;
+    private String framePhase="idle";
+    private long frameGeneration;
+    private long frameTickDue;
+    private final Runnable frameTick = new Runnable(){public void run(){if(aiFrames==null||isDestroyed())return;emitFrameBucket("sample");frameTickDue=android.os.SystemClock.uptimeMillis()+5000;main.postDelayed(this,5000);}};
+    private void emitFrameBucket(String reason){
+        JSONObject stats=new JSONObject();
+        synchronized(frameLock){try{
+            long now=android.os.SystemClock.elapsedRealtime();stats.put("timestamp",System.currentTimeMillis());stats.put("monotonicMs",now);stats.put("phase",framePhase);stats.put("generationId",frameGeneration);stats.put("backend",aiFrameBackend);stats.put("reason",reason);
+            stats.put("elapsedMs",now-bucketStarted);stats.put("frames",bucketFrames);stats.put("overDeadline",bucketSlow);stats.put("droppedMetricReports",bucketLost);stats.put("maxFrameMs",bucketMax/1e6);
+            String[] names={"drawMaxMs","syncMaxMs","commandMaxMs","swapMaxMs","gpuMaxMs","layoutMaxMs","inputMaxMs"};for(int i=0;i<names.length;i++){stats.put(names[i],frameParts[i]/1e6);frameParts[i]=0;}stats.put("gpuTimingAvailable",gpuTimingAvailable);gpuTimingAvailable=false;
+            stats.put("mainTimerLateMs",frameTickDue==0?0:Math.max(0,android.os.SystemClock.uptimeMillis()-frameTickDue));stats.put("windowFocus",hasWindowFocus());stats.put("hardwareAccelerated",web!=null&&web.isHardwareAccelerated());
+            android.view.Display display=getWindowManager().getDefaultDisplay();stats.put("refreshHz",display.getRefreshRate());stats.put("displayState",display.getState());
+            bucketFrames=bucketMax=bucketLost=bucketSlow=0;bucketStarted=now;
+        }catch(Exception ignored){}}
+        if(visualLogging)js("window.VisualDiagnostics&&VisualDiagnostics.nativeFrame("+stats.toString()+")");
+    }
     private void aiStatusWithFrames(final JSONObject value) {
         main.post(() -> {
             if (isDestroyed()) return;
+            if(value.optBoolean("diagnosticOnly")){js("window.onGemmaStatus&&onGemmaStatus("+value.toString()+")");return;}
             String phase = value.optString("phase"), task = value.optString("task");
-            boolean active = "advice".equals(task) && ("load".equals(phase) || "generate".equals(phase) || "cancelling".equals(phase));
+            boolean active = visualLogging && "advice".equals(task) && ("load".equals(phase) || "generate".equals(phase) || "cancelling".equals(phase));
+            if(aiFrames!=null&&(!phase.equals(framePhase)||value.optLong("generationId")!=frameGeneration))emitFrameBucket("phase_change");
+            framePhase=phase;frameGeneration=value.optLong("generationId");
             if (active && aiFrames == null) {
                 aiFrameCount = aiFrameSlow = aiFrameMax = aiFrameLost = 0;
                 aiFrameStarted = android.os.SystemClock.elapsedRealtime(); aiFrameBackend = "loading";
+                synchronized(frameLock){bucketStarted=aiFrameStarted;bucketFrames=bucketMax=bucketLost=bucketSlow=0;java.util.Arrays.fill(frameParts,0);}
+                if(frameThread==null){frameThread=new android.os.HandlerThread("Gasket-frame-diagnostics",android.os.Process.THREAD_PRIORITY_BACKGROUND);frameThread.start();}
                 aiFrames = (window, metrics, lost) -> {
                     if (metrics.getMetric(android.view.FrameMetrics.FIRST_DRAW_FRAME) == 1) return;
                     long ns = metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION);
                     long deadline = metrics.getMetric(android.view.FrameMetrics.DEADLINE);
-                    if (ns >= 0) { aiFrameCount++; aiFrameMax = Math.max(aiFrameMax, ns); if (deadline > 0 && ns > deadline) aiFrameSlow++; }
-                    aiFrameLost += lost;
+                    synchronized(frameLock){if (ns >= 0) { aiFrameCount++; bucketFrames++;aiFrameMax = Math.max(aiFrameMax, ns);bucketMax=Math.max(bucketMax,ns);if (deadline > 0 && ns > deadline){aiFrameSlow++;bucketSlow++;} }
+                    aiFrameLost += lost;bucketLost+=lost;
+                    for(int i=0;i<FRAME_PART_IDS.length;i++)frameParts[i]=Math.max(frameParts[i],metrics.getMetric(FRAME_PART_IDS[i]));if(metrics.getMetric(android.view.FrameMetrics.GPU_DURATION)>=0)gpuTimingAvailable=true;}
                 };
-                getWindow().addOnFrameMetricsAvailableListener(aiFrames, main);
+                getWindow().addOnFrameMetricsAvailableListener(aiFrames, new Handler(frameThread.getLooper()));
+                frameTickDue=android.os.SystemClock.uptimeMillis()+5000;main.postDelayed(frameTick,5000);
             }
             if (active && value.has("backend")) aiFrameBackend = value.optString("backend");
             if (!active && aiFrames != null) {
+                emitFrameBucket("finished");main.removeCallbacks(frameTick);
                 getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null;
                 try {
                     JSONObject stats = new JSONObject(); stats.put("backend", aiFrameBackend);
@@ -121,10 +152,12 @@ public class MainActivity extends Activity {
             public void status(JSONObject value) { aiStatusWithFrames(value); }
             public void result(int id, JSONObject value) { reply(id, value); }
         });
+        gemma.setDiagnosticLogging(visualLogging);
         return gemma;
     }
 
     @Override protected void onDestroy() {
+        main.removeCallbacks(frameTick);if(frameThread!=null)frameThread.quitSafely();
         if (aiFrames != null) { getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null; }
         synchronized (this) { if (gemma != null) { gemma.close(); gemma = null; } }
         super.onDestroy();
@@ -825,8 +858,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_pause')");
         stopLocation();
     }
+    @Override protected void onResume(){super.onResume();js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_resume')");}
+    @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);js("window.VisualDiagnostics&&VisualDiagnostics.lifecycle('native_focus_"+focus+"')");}
 
     // ---------------- location (OS LocationManager; GPS + network/fused if present) ----------------
 
@@ -1554,6 +1590,20 @@ public class MainActivity extends Activity {
                 result.put("readerRecycles", gasReaderRecycles); result.put("rendererLosses", gasRendererLosses);
             } catch (Exception ignored) { }
             return result.toString();
+        }
+
+        @JavascriptInterface public void setVisualDiagnostics(final boolean enabled){main.post(()->{visualLogging=enabled;synchronized(MainActivity.this){if(gemma!=null)gemma.setDiagnosticLogging(enabled);}if(!enabled&&aiFrames!=null){getWindow().removeOnFrameMetricsAvailableListener(aiFrames);aiFrames=null;main.removeCallbacks(frameTick);}});}
+        @JavascriptInterface public void visualSnapshot(final int reqId){
+            main.post(()->{final JSONObject value=new JSONObject();try{
+                value.put("timestamp",System.currentTimeMillis());value.put("windowFocus",hasWindowFocus());value.put("width",web==null?0:web.getWidth());value.put("height",web==null?0:web.getHeight());
+                android.view.Display d=getWindowManager().getDefaultDisplay();value.put("refreshHz",d.getRefreshRate());value.put("rotation",d.getRotation());value.put("displayState",d.getState());
+                value.put("hardwareAccelerated",web!=null&&web.isHardwareAccelerated());PackageInfo p=WebView.getCurrentWebViewPackage();if(p!=null)value.put("webView",p.versionName);
+                value.put("osRelease",android.os.Build.VERSION.RELEASE);value.put("osIncremental",android.os.Build.VERSION.INCREMENTAL);value.put("securityPatch",android.os.Build.VERSION.SECURITY_PATCH);value.put("sdk",android.os.Build.VERSION.SDK_INT);
+                if(aiFrames!=null)emitFrameBucket("user_marker");
+            }catch(Exception ignored){}
+            new Thread(()->{try{value.put("pssKb",android.os.Debug.getPss());value.put("memory",new JSONObject(memoryInfo()));android.os.PowerManager p=(android.os.PowerManager)getSystemService(POWER_SERVICE);value.put("thermalStatus",p.getCurrentThermalStatus());value.put("powerSave",p.isPowerSaveMode());
+                synchronized(MainActivity.this){if(gemma!=null)value.put("ai",gemma.status());}
+            }catch(Exception ignored){}reply(reqId,value);},"Gasket-visual-marker").start();});
         }
 
         @JavascriptInterface

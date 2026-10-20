@@ -28,6 +28,7 @@
       if(fn==='siteRead'&&args[0]==='brave')timeout=40000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if (fn === 'aiCommand') timeout = 15000;
+      if (fn === 'visualSnapshot') timeout = 5000;
       if (timeout) timer = setTimeout(function () {
         if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancelAdvice'); } catch (e) { }
         window.onNativeResult(id, { error: (/^ai/.test(fn) ? 'Local AI' : args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
@@ -445,6 +446,7 @@
   /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
   function adviceDue() { return !!((window.Tires && Tires.airDue && Tires.airDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
+    if(window.VisualDiagnostics)VisualDiagnostics.redraw('trip_step');
     // Going back is a new review, not implicit consent to reuse this session's answers.
     if(step===ST_HAZ&&shown>ST_HAZ&&Garage.car().rememberRouteChoices!==true){
       S.trip.routeChoices={};choiceReviewedAt=0;routeReview=null;choiceComplete=false;result=null;

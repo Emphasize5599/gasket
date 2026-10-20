@@ -19,6 +19,7 @@ release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evp
 release.push('evprices-recovery','evprices-ui');
 release.push('chargerdata','chargerdata-ui');
 release.push('ev-price-policy');
+release.push('visual-diagnostics');
 release.push('api-meter-ui');
 release.push('trims');
 release.push('fresh-car-lookups','ai-defaults','debug-log');

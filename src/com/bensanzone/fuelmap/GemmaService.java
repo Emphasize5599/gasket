@@ -30,6 +30,8 @@ final class GemmaService {
     private final File directory, model, partial, cache;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
+    // Never put diagnostic disk/PSS work on the UI, GPU callback or cancellation timer.
+    private final ExecutorService telemetry = new ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<Runnable>(1),new ThreadPoolExecutor.DiscardPolicy());
     private final AtomicBoolean busy = new AtomicBoolean();
     private final AtomicLong epoch = new AtomicLong();
     private volatile GemmaRuntime runtime;
@@ -39,7 +41,10 @@ final class GemmaService {
     private volatile String reason = "";
     private volatile int attempt = 1;
     private volatile boolean ready;
-    private long activeTicket;
+    private volatile long activeTicket, firstOutputAt;
+    private volatile int diagnosticInputBytes;
+    private volatile boolean diagnosticLogging=true;
+    void setDiagnosticLogging(boolean enabled){diagnosticLogging=enabled;}
 
     GemmaService(Context context, Listener listener) {
         this.listener = listener;
@@ -70,6 +75,8 @@ final class GemmaService {
             value.put("cpuOnly", cpuOnly());
             value.put("recoveryRequired", recoveryRequired); value.put("gpuFallback", gpuFallback);
             value.put("startupDiagnostics", diagnostics.startup); value.put("nativeDiagnostics", diagnostics.latest());
+            value.put("nativeTimeline", diagnostics.timeline()); value.put("generationId", activeTicket);
+            value.put("firstOutputAt", firstOutputAt);
             value.put("reason", reason); value.put("attempt", attempt);
             value.put("revision", REV); value.put("busy", busy.get());
             GemmaRuntime active = runtime;
@@ -176,8 +183,11 @@ final class GemmaService {
         // Conservative UTF-8 bound: leave room for instructions/output in the 32k token context. Never truncate rules.
         if (prompt == null || prompt.getBytes(StandardCharsets.UTF_8).length > 27000) { result(id, null, "Complete tire setup exceeds the model context budget."); return; }
         if (!busy.compareAndSet(false, true)) { result(id, null, "Larger model is already working."); return; }
-        final long ticket = epoch.incrementAndGet(); error = ""; reason="";task = "advice"; phase = "load"; notifyStatus();
+        final long ticket = epoch.incrementAndGet(); error = ""; reason="";task = "advice"; phase = "load";
         activeTicket = ticket;
+        diagnostics.beginRun(ticket);
+        firstOutputAt=0;diagnosticInputBytes=prompt.getBytes(StandardCharsets.UTF_8).length;
+        notifyStatus();
         final long started = System.nanoTime();
         final boolean useCpu = cpuOnly();
         ScheduledFuture<?> deadline = timer.scheduleAtFixedRate(() -> {
@@ -190,6 +200,7 @@ final class GemmaService {
                 }
             }
         }, 250, 250, TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> samples = timer.scheduleAtFixedRate(() -> sample(ticket,"generating_sample"),5,5,TimeUnit.SECONDS);
         worker.execute(() -> {
             boolean ownsSlot = false;
             int inputBytes = prompt.getBytes(StandardCharsets.UTF_8).length;
@@ -206,7 +217,7 @@ final class GemmaService {
                 else if ("GPU".equals(runtime.backend)) gpuFallback = "";
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 phase = "generate"; diagnostics.record("generate", true, runtime.backend, runtime.contextTokens, inputBytes, null); notifyStatus();
-                String response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed);
+                String response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed, () -> { firstOutputAt=System.currentTimeMillis();sample(ticket,"first_output"); });
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 diagnostics.record("completed", true, runtime.backend, runtime.contextTokens, inputBytes, null);
                 result(id, response, null);
@@ -231,7 +242,7 @@ final class GemmaService {
                     }
                 }
                 synchronized (GemmaService.this) {
-                    deadline.cancel(false); activeTicket = 0; busy.set(false); phase = "idle"; task = ""; notifyStatus();
+                    deadline.cancel(false); samples.cancel(false); activeTicket = 0; busy.set(false); phase = "idle"; task = ""; notifyStatus();
                 }
                 long idleTicket = epoch.get();
                 try {
@@ -247,6 +258,14 @@ final class GemmaService {
         closed = true; epoch.incrementAndGet();
         GemmaRuntime active = runtime; if (active != null) cancellation.request(active.cancellation());
         worker.execute(() -> { if (runtime != null) { runtime.close(); runtime = null; } });
-        worker.shutdown(); timer.shutdownNow(); cancellation.close();
+        worker.shutdown(); timer.shutdownNow(); telemetry.shutdownNow(); cancellation.close();
+    }
+    private void sample(long ticket,String stage) {
+        if(closed||!diagnosticLogging)return;
+        try { telemetry.execute(() -> { GemmaRuntime active=runtime;
+            if(closed||!diagnosticLogging||activeTicket!=ticket||ticket!=epoch.get()||!busy.get()||active==null||!"generate".equals(phase))return;
+            diagnostics.record(stage,true,active.backend,active.contextTokens,diagnosticInputBytes,null);
+            JSONObject value=status();try{value.put("diagnosticOnly",true);}catch(Exception ignored){}if(!closed)listener.status(value);
+        }); } catch(RejectedExecutionException ignored) { }
     }
 }

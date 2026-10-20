@@ -2004,3 +2004,6 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .ev-destination .nf { min-width:0; margin-bottom:10px; }
 .ev-destination .nf > span { white-space:normal; overflow-wrap:anywhere; }
 .ev-destination input,.ev-destination select { min-width:0; max-width:100%; }
+#visualMarkerRow {padding-top:4px;display:flex;justify-content:flex-end;}
+#visualMarkerRow.hidden {display:none;}
+#visualMarkerRow button {white-space:normal;max-width:100%;min-height:32px;}

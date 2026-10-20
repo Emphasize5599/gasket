@@ -55,4 +55,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${{ steps.v.outputs.version }}"
-          gh release create "v$ver" --target "$GITHUB_SHA" --title "Gasket $ver" --notes-file notes.md --prerelease
+          title="Gasket $ver"
+          if grep -Fqx 'Debug diagnostics build.' notes.md; then title="$title — Debug diagnostics"; fi
+          gh release create "v$ver" --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --prerelease

@@ -172,6 +172,7 @@
   // Draw only on screen; background lookups and ratings continue and wake catches up.
   var stale = false;
   function draw() {
+    if(window.VisualDiagnostics)VisualDiagnostics.redraw('advice');
     if (!host) return;
     if (!host.isConnected || host.closest('.hidden')) { stale = true; return; }
     stale = false;

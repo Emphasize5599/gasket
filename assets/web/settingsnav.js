@@ -7,6 +7,7 @@
   var home=document.createElement('div');home.className='settings-home';home.innerHTML=groups.map(function(g){return '<button type="button" class="settings-link" data-settings-group="'+g[0]+'"><span><b>'+A.esc(g[1])+'</b><small>'+A.esc(g[2])+'</small></span><span aria-hidden="true">›</span></button>';}).join('');
   groups.forEach(function(g){var e=document.createElement('div');e.className='settings-group hidden';e.dataset.settingsView=g[0];views[g[0]]=e;});
   var buckets={'Station discovery':'map','Website readers':'map','Website workers':'map','Official price sources':'map','Prices':'map','Search':'map','Trip planner':'trip','EV & hydrogen':'trip','Discounts':'savings','Bad CITGO stations':'savings','Google API key · recommended':'connections','Routes API — separate budget':'connections','Local AI explanations · optional':'ai','General':'data','Your data':'data','Debugging':'help','About':'help'};
+  buckets['Visual diagnostics']='help';
   Array.from(body.children).forEach(function(e){if(e.id==='sDone')return;var title=e.querySelector('h3'),key=e.id==='gemmaSettings'?'ai':buckets[title&&title.textContent.trim()]||'help';views[key].appendChild(e);});
   // These are connections, not EV driving preferences. Found in the views: they aren't in the page yet, so A.$ found nothing and these keys sat in EV & hydrogen.
   var keys=document.createElement('div');keys.className='card';keys.innerHTML='<h3>Other optional keys</h3>';
