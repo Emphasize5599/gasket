@@ -32,6 +32,7 @@ put('android/app/ActivityManager.java',`package android.app;public class Activit
 put('android/os/Build.java','package android.os;public class Build {public static final String[] SUPPORTED_ABIS={"arm64-v8a"};}');
 put('android/os/Debug.java','package android.os;public class Debug {public static volatile long pss=5L*1024*1024;public static long getPss(){return pss;}}');
 put('android/os/Process.java','package android.os;public class Process {public static final int THREAD_PRIORITY_BACKGROUND=10;public static void setThreadPriority(int p){}}');
+put('android/os/Trace.java','package android.os;public class Trace {public static int depth;public static void beginSection(String n){depth++;}public static void endSection(){depth--;}}');
 put('com/bensanzone/fuelmap/AiDiagnostics.java',`package com.bensanzone.fuelmap;class AiDiagnostics {
  boolean interrupted;Object startup=new Object();AiDiagnostics(android.content.Context c,android.content.SharedPreferences p){}
  void beginRun(long id){}void record(String s,boolean f,String b,int t,int i,Throwable e){}Object latest(){return new Object();}Object timeline(){return new Object();}static String failure(Throwable t){return "fixture";}

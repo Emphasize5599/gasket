@@ -227,14 +227,20 @@ final class GemmaService {
                 boolean reused = runtime != null && runtime.contextTokens >= plannedTokens
                     && ("CPU".equals(runtime.backend) == useCpu) && runtime.gpuFailure == null;
                 if (runtime == null) runtime = new GemmaRuntime();
-                runtime.load(model.getAbsolutePath(), cache.getAbsolutePath(), prompt.getBytes(StandardCharsets.UTF_8).length, useCpu);
+                // Named sections in Android system traces (System Tracing / Perfetto), so a flicker can be lined up with the AI stage
+                android.os.Trace.beginSection("Gasket AI load");
+                try { runtime.load(model.getAbsolutePath(), cache.getAbsolutePath(), prompt.getBytes(StandardCharsets.UTF_8).length, useCpu); }
+                finally { android.os.Trace.endSection(); }
                 if (!reused) { warmRuns = 0; baselinePssKb = 0; }
                 diagnostics.record(reused ? "engine_reused" : "engine_initialized", true, runtime.backend, runtime.contextTokens, inputBytes, null);
                 if (runtime.gpuFailure != null) { gpuFallback = AiDiagnostics.failure(runtime.gpuFailure); diagnostics.record("gpu_failed_cpu_fallback", true, "CPU", runtime.contextTokens, inputBytes, runtime.gpuFailure); }
                 else if ("GPU".equals(runtime.backend)) gpuFallback = "";
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 phase = "generate"; diagnostics.record("generate", true, runtime.backend, runtime.contextTokens, inputBytes, null); notifyStatus();
-                String response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed, () -> { firstOutputAt=System.currentTimeMillis();sample(ticket,"first_output"); });
+                String response;
+                android.os.Trace.beginSection("Gasket AI generate " + runtime.backend);
+                try { response = runtime.generate(prompt, () -> ticket != epoch.get() || !enabled() || closed, () -> { firstOutputAt=System.currentTimeMillis();sample(ticket,"first_output"); }); }
+                finally { android.os.Trace.endSection(); }
                 if (ticket != epoch.get() || !enabled()) throw new CancellationException();
                 diagnostics.record("completed", true, runtime.backend, runtime.contextTokens, inputBytes, null);
                 completed = true;

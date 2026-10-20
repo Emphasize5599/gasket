@@ -10,6 +10,8 @@ A brief notice below the task status bar says: “Screen flickering? Try turning
 
 ## Further phone diagnosis
 
+0.0.225 also marks the larger AI's work in system traces: the sections **Gasket AI load** and **Gasket AI generate GPU** (or **CPU**) appear on Gasket's AI worker thread, and the app is `profileable` (shell) so the phone's own System Tracing can record it. In a trace, a bad frame can be lined up with whether the model was loading or generating at that moment.
+
 1. Leave Gasket's Debug logging at Everything. Optionally enable its visual glitch button. Do not use screen video recording: the owner reports it hides the problem. An external camera can document the visible artifact if needed.
 2. Open **Android Settings → System → Developer options → System Tracing**, then enable its Quick Settings tile. Use the normal bounded rolling-buffer mode; no long/unbounded capture is needed. Where offered, graphics/view/window-manager and CPU scheduling/frequency categories are useful. Availability varies by OS/build. [Android system-trace instructions](https://developer.android.com/topic/performance/tracing/on-device).
 3. For a failing run, turn **Disable HW overlays OFF**, start the System Tracing tile, and request an explanation. If distortion occurs, mark it if enabled, note the approximate time, then stop the system trace promptly (default rolling buffers retain about10–30s). Save the `.perfetto-trace`. Tracing itself can affect timing; report if it prevents reproduction.

@@ -17,6 +17,8 @@
         android:theme="@style/AppTheme"
         android:allowBackup="false"
         android:hardwareAccelerated="true">
+        <!-- lets the phone's own System Tracing / Perfetto record this app (for the AI flicker investigation); not debuggable -->
+        <profileable android:shell="true" />
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <activity

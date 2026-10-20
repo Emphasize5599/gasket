@@ -9,6 +9,7 @@ Debug diagnostics build.
 
 - Removed experimental AI rendering; added a brief, dismissible flicker-workaround tip when larger GPU AI work starts.
 - Visual glitch marker is now an optional debug setting, off by default.
+- System traces recorded on the phone (Developer options → System Tracing) now show when the larger AI loads and generates.
 - Bug fixes.
 
 ## 0.0.224 - 2026-10-20
