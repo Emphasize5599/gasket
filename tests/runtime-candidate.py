@@ -33,7 +33,7 @@ class CandidateTests(unittest.TestCase):
             if flag == '-h':
                 return self.headers
             if flag == '--dyn-syms':
-                return '\n'.join('1: 1 1 FUNC GLOBAL DEFAULT 1 ' + s for s in ({'Java_example_load'} if stock else self.exports))
+                return '\n'.join('1: 1 1 FUNC GLOBAL DEFAULT 1 ' + s for s in ({'Java_example_load@@VERS_1.0'} if stock else self.exports))
             if flag == '-d':
                 return '\n'.join('(NEEDED) Shared library: [' + s + ']' for s in ({'libc.so'} if stock else self.deps))
             if flag == '-lW':

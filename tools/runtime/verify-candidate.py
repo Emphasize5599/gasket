@@ -20,7 +20,8 @@ def readelf(file, flag):
 
 
 def symbols(file):
-    return {line.split()[-1] for line in readelf(file, '--dyn-syms').splitlines()
+    # JNI uses unversioned dlsym; @@ marks a default symbol version, not a name.
+    return {line.split()[-1].split('@@')[0] for line in readelf(file, '--dyn-syms').splitlines()
             if ' GLOBAL ' in line and ' UND ' not in line and 'Java_' in line}
 
 

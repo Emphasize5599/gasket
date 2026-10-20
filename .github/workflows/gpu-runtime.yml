@@ -10,6 +10,9 @@ on:
       - tests/runtime-candidate.py
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: gpu-runtime-${{ github.ref }}
   cancel-in-progress: true
