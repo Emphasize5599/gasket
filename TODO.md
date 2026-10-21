@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.184**, 2026-10-17, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 49 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 50 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 ## feat — product features
 
@@ -29,6 +29,8 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 12. [ ] **Richer optional doodles.** Consider more wheel detail, roof racks and two-tone paint. This is an existing enhancement idea, not a replacement for vehicle photos.
 
 ### Discounts and trip optimization
+
+49. [ ] **Compare vehicles for the same trip legs.** When the garage has more than one vehicle, offer a vehicle-comparison flow. Run steps 2–6 separately for each participating vehicle so the user can choose that vehicle's parameters and best/cheapest feasible routes for the same legs. Then provide a dedicated Compare menu before Depart to compare the vehicles' optimized trips and per-leg choices, including costs and time, and choose which vehicle/routes to use. Keep each vehicle's settings and route-consideration answers separate.
 
 14. [ ] **Cash-price offers and comparisons.** The current one-price-per-grade model does not preserve payment eligibility; Google fuel-price responses have no cash/card field. Add separate explicitly labeled offers, cash/card preferences, correct reward/cashback eligibility and history/cache support, then verify real source coverage. Never infer that an unlabeled price is cash. Findings and a proposed design are in [DATA_OPTIONS.md](docs/DATA_OPTIONS.md).
 
