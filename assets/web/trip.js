@@ -895,9 +895,9 @@
   function fullAddress(a) { return !!a && a.indexOf(',') > 0; }
   function stopParam(s) { return fullAddress(s.address) || s.lat == null ? (s.address || ll(s)) : ll(s); }
   function stationAddress(c) { var a = c.station && c.station.address; return a && /\d/.test(a) && a.indexOf(',') > 0 ? a : ll(c); }
-  function stationPlaceId(c) { return c.station && c.station.id && !/^(wm|mu|demo)-/.test(c.station.id) ? c.station.id : null; }
+  function stationPlaceId(c) { return c.station && c.station.id && !/^(?:(wm|mu|demo)-|(?:afdc|ocm)\d)/.test(c.station.id) ? c.station.id : null; }
   /** Directions link with the original stops plus the fuel stops in route order, using full addresses (and Google
-   *  place IDs when every stop has one, so Maps can't pick a same-named street elsewhere). Max 9 waypoints. */
+   *  place IDs when every stop has one, so Maps can't pick a same-named street elsewhere). Nine points per link. */
   function exportUrl(route, planStops, model) {
     var stops = route.stops, origin = stops[0], dest = stops[stops.length - 1];
     var wps = [];
@@ -915,7 +915,7 @@
       q += '&waypoints=' + wps.map(function (w) { return encodeURIComponent(w.v); }).join('%7C');
       if (wps.every(function (w) { return w.id; })) q += '&waypoint_place_ids=' + wps.map(function (w) { return encodeURIComponent(w.id); }).join('%7C');
     }
-    return { url: 'https://www.google.com/maps/dir/?' + q, waypoints: wps.length, tooMany: wps.length > 9 };
+    return { url: 'https://www.google.com/maps/dir/?' + q, waypoints: wps.length, tooMany: wps.length + 2 > 9 };
   }
 
   /**
@@ -937,19 +937,24 @@
     return joined;
   }
   /**
-   * One Google Maps link per leg of a multi-stop trip, each with the fuel stops on that leg (Google Maps links take up
-   * to 9 stops in between, and Maps only offers route options per leg). planStops need .c.d (mile along the trip).
+   * Balanced links of at most nine TOTAL points, grouped by trip leg. Adjacent
+   * parts share their handoff stop: no road segment is omitted. planStops need .c.d.
    */
   function exportLegs(route, planStops, model) {
     var stops = route.stops, out = [], ends = model.legEnds || [];
     for (var i = 0; i < stops.length - 1; i++) {
       var a = i ? ends[i - 1] || 0 : -1, b = i < stops.length - 2 ? ends[i] : Infinity;
       var mine = planStops.filter(function (p) { return p.c.d > a && p.c.d <= b; });
-      var sub = { stops: [stops[i], stops[i + 1]] };
-      var shifted = mine.map(function (p) { return { c: Object.assign({}, p.c, { d: p.c.d - Math.max(0, a) }) }; });
-      var ex = exportUrl(sub, shifted, { legEnds: [] });
-      out.push({ leg: i, from: stops[i], to: stops[i + 1], url: ex.url, waypoints: ex.waypoints, tooMany: ex.tooMany, fuelStops: mine.length,
-        fromMi: Math.max(0, a), toMi: b === Infinity ? model.totalMi : b });
+      mine=mine.slice().sort(function(x,y){return x.c.d-y.c.d;});
+      var points=[{stop:stops[i],d:Math.max(0,a)}].concat(mine.map(function(p){return {stop:{address:stationAddress(p.c),placeId:stationPlaceId(p.c),label:p.c.station&&p.c.station.name||'Charging / fuel stop'},d:p.c.d,fuel:p};}),[{stop:stops[i+1],d:b===Infinity?model.totalMi:b}]);
+      var edges=points.length-1,parts=Math.ceil(edges/8),at=0;
+      for(var part=0;part<parts;part++){
+        var end=at+Math.ceil((edges-at)/(parts-part)),slice=points.slice(at,end+1);
+        var ex=exportUrl({stops:[slice[0].stop,slice[slice.length-1].stop]},slice.slice(1,-1).map(function(p){return p.fuel;}),{legEnds:[]});
+        out.push({leg:i,part:part,parts:parts,from:slice[0].stop,to:slice[slice.length-1].stop,url:ex.url,waypoints:ex.waypoints,tooMany:ex.tooMany,
+          fuelStops:slice.slice(1).filter(function(p){return p.fuel;}).length,fromMi:slice[0].d,toMi:slice[slice.length-1].d});
+        at=end;
+      }
     }
     return out;
   }

@@ -294,3 +294,28 @@ assert.ok(p.ok); assert.ok(ms < 3000, 'planner took ' + ms + 'ms');
   assert.ok(Math.abs(legs[0].toMi - 230) < 1 && Math.abs(legs[1].toMi - legs[1].fromMi - 230) < 1, 'each leg its own miles');
 }
 console.log('trip tests passed (1,000-mile / 300-station plan in ' + ms + ' ms, ' + p.stops.length + ' stops, saves $' + p.savings.toFixed(2) + ')');
+
+// Navigation links count origin/destination, balance long legs, and never skip
+// the drive between parts. Check every size around several split boundaries.
+for(let count=2;count<=60;count++){
+  const route={stops:[{address:'Start, Testville',placeId:'P-start'},{address:'End, Testville',placeId:'P-end'}]};
+  const fuel=Array.from({length:count-2},(_,i)=>({c:{d:i+1,lat:35,lng:-92,station:{id:'P-'+i,address:(i+1)+' Main St, Testville'}}}));
+  const model={totalMi:count,legEnds:[count]},one=T.exportUrl(route,fuel,model),links=T.exportLegs(route,fuel,model);
+  assert.equal(one.tooMany,count>9);
+  const sequences=links.map(x=>{const q=new URL(x.url).searchParams;return [q.get('origin'),...(q.get('waypoints')||'').split('|').filter(Boolean),q.get('destination')];});
+  assert(sequences.every(s=>s.length<=9),'nine total points per link: '+count);
+  assert(Math.max(...sequences.map(s=>s.length))-Math.min(...sequences.map(s=>s.length))<=1,'balanced parts');
+  sequences.slice(1).forEach((s,i)=>assert.equal(s[0],sequences[i].at(-1),'shared handoff'));
+  assert.deepEqual(sequences.flatMap((s,i)=>i?s.slice(1):s),['Start, Testville',...fuel.map(p=>p.c.station.address),'End, Testville']);
+  assert.equal(links.reduce((n,x)=>n+x.fuelStops,0),fuel.length);
+  assert(links.every((x,i)=>x.leg===0&&x.part===i&&x.parts===links.length&&!x.tooMany));
+}
+console.log('Balanced nine-point navigation, continuity, identifiers and 2–60 point boundaries passed');
+{
+  const route={stops:[{address:'Start, Testville'},{address:'Middle, Testville'},{address:'End, Testville'}]},fuel=Array.from({length:16},(_,i)=>({c:{d:i+1,lat:35,lng:-92,station:{id:(i%2?'ocm':'afdc')+i,address:(i+1)+' Main St, Testville'}}}));
+  const links=T.exportLegs(route,fuel,{legEnds:[8,18],totalMi:18});
+  assert.deepEqual(links.map(x=>x.leg),[0,0,1,1]);
+  assert.equal(new URL(links[1].url).searchParams.get('destination'),'Middle, Testville');
+  assert.equal(new URL(links[2].url).searchParams.get('origin'),'Middle, Testville');
+  assert(links.every(x=>!x.url.includes('place_id')),'provider IDs are not Google place IDs');
+}

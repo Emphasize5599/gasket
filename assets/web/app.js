@@ -941,7 +941,7 @@
       var bg = document.createElement('div'); bg.className = 'cfm-bg'; bg.id = 'cfm';
       bg.innerHTML = '<div class="cfm" role="alertdialog" aria-modal="true" aria-labelledby="cfmT"><div class="cfm-t" id="cfmT">' + esc(o.title || 'Delete?') + '</div>' +
         (o.body ? '<div class="cfm-b">' + o.body + '</div>' : '') +
-        '<div class="cfm-btns"><button class="btn tonal" id="cfmNo">' + esc(o.no || 'Cancel') + '</button><button class="btn ' + (o.goClass || 'cfm-go') + '" id="cfmYes">' + esc(o.action || 'Delete') + '</button></div>' +
+        '<div class="cfm-btns">'+(o.singleAction?'':'<button class="btn tonal" id="cfmNo">' + esc(o.no || 'Cancel') + '</button>')+'<button class="btn ' + (o.goClass || 'cfm-go') + '" id="cfmYes">' + esc(o.action || 'Delete') + '</button></div>' +
         (o.always ? '' : '<div class="cfm-hint">Turn these off in Settings → General.</div>') + '</div>';
       document.body.appendChild(bg);
       requestAnimationFrame(function () { bg.classList.add('on'); });
@@ -949,7 +949,7 @@
       // three: a tap outside or Back is "neither" (null), apart from the No button (false)
       window.__cfmClose = function () { done(o.three ? null : false); };
       bg.onclick = function (e) { if (e.target === bg) done(o.three ? null : false); };
-      $('cfmNo').onclick = function () { done(false); };
+      if($('cfmNo'))$('cfmNo').onclick = function () { done(false); };
       $('cfmYes').onclick = function () { done(true); };
     });
   }

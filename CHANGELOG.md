@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.226 - 2026-10-21
+- Reuse completed charger searches when switching routes, and offer routes that meet your charging settings.
+- Split long Google Maps navigation into balanced, clearly labeled links.
+- Bug fixes.
+
 ## 0.0.225 - 2026-10-20
 Debug diagnostics build.
 

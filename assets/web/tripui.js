@@ -275,7 +275,7 @@
     if(!routeFlow()&&KIND()!=='ev')return;choiceLists().forEach(function(list,i){var k=legsMode()?raw._sel[i]:alts.indexOf(raw),a=list[k];if(!a)return;var from=i?(m.legEnds[i-1]||0):0,to=m.legEnds[i]||m.totalMi;
       var take=function(cs){return (cs||[]).filter(function(c){return (c.leg||0)===i;}).map(function(c){return Object.assign({},c,{d:c.d-from});});};
       var key=RouteChoices.key(i,a),had=choiceCandidates.get(key);if(g.guessed&&had&&!had.guessed)return;   // another route's guess never replaces this leg's searched stations
-      var cands=take(g.cands),unpriced=take(g.unpricedCands);choiceCandidates.set(key,{cands:cands,unpricedCands:unpriced,notes:g.notes.slice(),stale:cands.filter(function(c){return c.calc&&c.calc.stale;}).length,unpriced:unpriced.length,grade:g.grade,miles:to-from,guessed:!!g.guessed});
+      var cands=take(g.cands),unpriced=take(g.unpricedCands);choiceCandidates.set(key,{cands:cands,unpricedCands:unpriced,notes:g.notes.slice(),stale:cands.filter(function(c){return c.calc&&c.calc.stale;}).length,unpriced:unpriced.length,grade:g.grade,miles:to-from,guessed:!!g.guessed,incomplete:!!g.incomplete});
     });
   }
   function cachedChoiceCandidates(raw,m){
@@ -285,17 +285,30 @@
   }
   var layer = L.layerGroup();
   var evRecovery=null,adjustError='';
+  function evFailureNotice(){
+    var r=evRecovery;if(!r||r.base!==result||r.notified||r.options.length||!onPlan(step)||!document.body.classList.contains('trip-on')||['done','error'].indexOf(r.state)<0)return;
+    r.notified=true;
+    A.confirmDel({always:true,singleAction:true,title:'No checked route works',body:'No checked route can meet your current charging, range, buffer and detour settings.'+(r.errors.length?' Some route data could not be verified.':'')+' Return to Parameters to adjust them.',action:'Return to Parameters',goClass:'primary'}).then(function(){if(evRecovery!==r||result!==r.base||!onPlan(step))return;step=ST_PARAMS;renderStep();});
+  }
   function failedPlan(){return !busy&&(!!adjustError||!!(result&&result.plan&&!result.plan.ok));}
   function evDelays(p,m,opts,sel){return sel.map(function(_,i){var from=i?(m.legEnds[i-1]||0):0;return p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-from,min:(s.c.detourMin||0)+(opts.stopMinutes||0)+(s.c.kw?s.buyGal/s.c.kw*60:0)};}).concat((p.destinationCharges||[]).filter(function(c){return c.index===i;}).map(function(c){return {mi:c.d-from,min:c.minutes};}));});}
   async function startEVRecovery(){
-    if(KIND()!=='ev'||busy||!result||result.plan.ok||evRecovery&&evRecovery.base===result)return;
+    if(KIND()!=='ev'||busy||jobCancel||searchCancelled||!result||result.plan.ok||evRecovery&&evRecovery.base===result)return;
     var r=evRecovery={base:result,state:'running',options:[],errors:[],checked:0},owner=route,carId=S.carId,selected=choiceSelections(),lists=choiceLists(),all=[];choicePlanning=true;
     lists.forEach(function(list,i){list.forEach(function(a,k){all.push({leg:i,k:k,route:a,key:RouteChoices.key(i,a),primary:k===selected[i]});});});
     function valid(){return evRecovery===r&&result===r.base&&route===owner&&S.carId===carId&&r.state==='running'&&onPlan(step);}
     function progress(text,frac){if(window.Tasks)Tasks.upsert('ev-recovery',{text:text,frac:frac,cancel:function(){r.state='cancelled';choicePlanning=false;Tasks.remove('ev-recovery');renderResults();navRender();}});}
     try{
       progress('Checking other EV routes',0);
-      for(var i=0;i<all.length&&valid();i++){var item=all[i];if(choiceCandidates.has(item.key))continue;var m=hzModel(item.route),ga=await gatherAlt([m],function(f){progress('Finding chargers on other routes',(i+f)/all.length*.6);},{},null);if(!valid())return;var g=ga.per[0];choiceCandidates.set(item.key,{cands:g.cands.map(function(c){return Object.assign({},c,{leg:item.leg});}),unpricedCands:[],notes:g.notes,stale:g.stale,unpriced:g.unpriced,grade:g.grade,miles:m.totalMi});}
+      for(var i=0;i<all.length&&valid();i++){
+        var item=all[i],g=choiceCandidates.get(item.key);
+        if(!g){
+          var m=hzModel(item.route),ga=await gatherAlt([m],function(f){progress('Finding chargers on other routes',(i+f)/all.length*.6);},{},null,[item.route]);
+          if(!valid())return;g=ga.per[0];
+          choiceCandidates.set(item.key,{cands:g.cands.map(function(c){return Object.assign({},c,{leg:item.leg});}),unpricedCands:[],notes:g.notes,stale:g.stale,unpriced:g.unpriced,grade:g.grade,miles:m.totalMi,incomplete:!!g.incomplete});
+        }
+        if(g.incomplete&&r.errors.indexOf('Charger discovery was incomplete.')<0)r.errors.push('Charger discovery was incomplete.');
+      }
       if(!valid())return;
       await prepareRecommendationSpeeds(valid,function(i,n){progress('Checking other routes’ speed limits',.6+.15*i/Math.max(1,n));},all);if(!valid())return;
       var answers={};all.forEach(function(item){answers[item.key]={consider:true};});var iterator=RouteChoices.combinations(lists,selected,answers),total=iterator.total-1;
@@ -308,9 +321,9 @@
       }
       if(valid()){r.options.sort(function(a,b){return a.minutes-b.minutes;});r.state='done';LG.info('ev','Usable alternative routes checked',{checked:r.checked,usable:r.options.length});}
     }catch(e){if(valid()){r.errors.push(String(e.message||e));r.state='error';LG.warn('ev','Alternative route check failed',String(e.message||e));}}
-    finally{if(evRecovery===r){if(r.state==='running')r.state='cancelled';choicePlanning=false;if(window.Tasks)Tasks.remove('ev-recovery');if(onPlan(step)){renderResults();navRender();}}}
+    finally{if(evRecovery===r){if(r.state==='running')r.state='cancelled';choicePlanning=false;if(window.Tasks)Tasks.remove('ev-recovery');if(onPlan(step)){renderResults();navRender();evFailureNotice();}}}
   }
-  function evRecoveryHtml(){var r=evRecovery,h='<div class="card"><h3>Other routes with usable chargers</h3><p class="lead small keep">These routes meet your current charging, buffer and detour settings—not necessarily your savings target. Review hazards before changing.</p></div>';if(!r||!r.options.length)return h+'<div class="msg err">No checked route works yet. Adjust your parameters, or retry if discovery was incomplete.</div>';r.options.slice(r.page*5||0,(r.page*5||0)+5).forEach(function(p,i){var at=(r.page||0)*5+i;h+='<div class="card trip-proposal" data-ev-proposal="'+at+'"><div class="proposal-delta"><span>'+fmtDur(p.minutes*60)+'</span><b>'+p.stops+' charging stops</b></div><p>'+esc(p.description)+'</p><div class="proposal-map" data-ev-map="'+at+'" aria-label="Alternative route and hazards"></div><p class="lead small keep proposal-weather">Checking forecast timing…</p><div class="proposal-buttons"><button class="btn proposal-decline" data-ev-decline="'+at+'">Decline</button><button class="btn tonal" data-ev-replace="'+at+'">Replace trip</button></div></div>';});if(r.options.length>5)h+='<div class="proposal-buttons"><button class="btn tonal" id="evRecoveryPrev"'+(!r.page?' disabled':'')+'>Previous</button><button class="btn tonal" id="evRecoveryMore"'+(((r.page||0)+1)*5>=r.options.length?' disabled':'')+'>More routes</button></div>';return h;}
+  function evRecoveryHtml(){var r=evRecovery,h='<div class="card"><h3>Routes that would work</h3><p class="lead small keep">These trips meet your charging, buffer and detour settings. Review their hazards before accepting.</p></div>';if(!r||!r.options.length)return h+'<div class="msg err">No checked route works yet. Adjust your parameters, or retry if discovery was incomplete.</div>';r.options.slice(r.page*5||0,(r.page*5||0)+5).forEach(function(p,i){var at=(r.page||0)*5+i;h+='<div class="card trip-proposal" data-ev-proposal="'+at+'"><div class="proposal-delta"><span>'+fmtDur(p.minutes*60)+'</span><b>'+p.stops+' charging stops</b></div><p>'+esc(p.description)+'</p><div class="proposal-map" data-ev-map="'+at+'" aria-label="Alternative route and hazards"></div><p class="lead small keep proposal-weather">Checking forecast timing…</p><div class="proposal-buttons"><button class="btn proposal-decline" data-ev-decline="'+at+'">Decline</button><button class="btn tonal" data-ev-replace="'+at+'">Accept route</button></div></div>';});if(r.options.length>5)h+='<div class="proposal-buttons"><button class="btn tonal" id="evRecoveryPrev"'+(!r.page?' disabled':'')+'>Previous</button><button class="btn tonal" id="evRecoveryMore"'+(((r.page||0)+1)*5>=r.options.length?' disabled':'')+'>More routes</button></div>';return h;}
   function bindEVRecovery(){var r=evRecovery;if(!r)return;document.querySelectorAll('[data-ev-decline]').forEach(function(b){b.onclick=function(){r.options.splice(+b.dataset.evDecline,1);r.page=Math.min(r.page||0,Math.max(0,Math.ceil(r.options.length/5)-1));renderResults();navRender();};});if($('evRecoveryMore'))$('evRecoveryMore').onclick=function(){r.page=(r.page||0)+1;renderResults();};if($('evRecoveryPrev'))$('evRecoveryPrev').onclick=function(){r.page--;renderResults();};document.querySelectorAll('[data-ev-replace]').forEach(function(b){b.onclick=async function(){var p=r.options[+b.dataset.evReplace];b.disabled=true;var owner=route;for(var i=0;i<p.sel.length;i++)if(p.sel[i]!==hzSel(i)&&!await hzConfirmRisk(hzAlts(i)[p.sel[i]],i,function(){return route===owner&&evRecovery===r;})){b.disabled=false;return;}await replaceRecommendation(p);if(result&&result.plan.ok){evRecovery=null;hzLeg=0;step=ST_HAZ;renderStep();}else b.disabled=false;};});recommendationObserver=new IntersectionObserver(function(entries){entries.forEach(function(entry){if(!entry.isIntersecting)return;recommendationObserver.unobserve(entry.target);drawRecommendation(entry.target,0,r.options[+entry.target.dataset.evMap]);});},{root:tpBody(),rootMargin:'100px'});document.querySelectorAll('[data-ev-map]').forEach(function(el){recommendationObserver.observe(el);});}
   var busy = false;
   var priceRefreshActive=false;
@@ -618,7 +631,7 @@
       if ($('tRefreshRoutes')) $('tRefreshRoutes').onclick = refreshRoutes;
     }
     var n = $('tNext'); if (n){n.classList.toggle('dim', step === ST_ROUTE && !model);n.disabled=loadingTrip||busy&&onPlan(step)||routing&&step===ST_ROUTE;}
-    if(n&&onPlan(step)&&failedPlan()){var checking=step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.state==='running';n.textContent=checking?'Checking other routes…':step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.options.length?'See usable routes':'Adjust parameters';n.disabled=!!checking;}
+    if(n&&onPlan(step)&&failedPlan()){var checking=evRecovery&&evRecovery.base===result&&evRecovery.state==='running';n.textContent=checking?'Checking other routes…':step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.options.length?'Routes that would work':'Adjust parameters';n.disabled=!!checking;}
     if($('tOpen'))$('tOpen').disabled=busy||loadingTrip;
     gateTabs();
   }
@@ -1150,8 +1163,9 @@
       if (r.top) L.push('Top-up: ' + r.top.c.station.name + ' — ' + priceText(r.top.c.price) + ' — ' + r.top.buyGal.toFixed(1) + ' ' + UN());
       if (r.acc) L.push('Trip cost ' + money2(r.acc.legs[0].cost) + ' · at the pump ' + money2(r.acc.legs[0].spend) + (p.savings > 0.005 ? ' · saves ' + money2(p.savings) + ' vs. easiest stops' : ''));
       if (r.acc && r.acc.legs[1]) L.push('Round trip estimate ' + money2(r.acc.legs[0].cost + r.acc.legs[1].cost));
-      var ex = T.exportUrl(route, p.stops.concat(r.top ? [{ c: r.top.c }] : []), model);
-      L.push('', 'Open in Google Maps: ' + ex.url);
+      var ex = exports();
+      if(!ex.one.tooMany)L.push('', 'Open in Google Maps: ' + ex.one.url);
+      else ex.legs.forEach(function(x){L.push('', 'Leg '+(x.leg+1)+(x.parts>1?' · Part '+(x.part+1)+' of '+x.parts:'')+': '+stopLine(x.from)+' → '+stopLine(x.to),x.url);});
     }
     L.push('', 'To plan this trip in Gasket, paste this whole message into the trip link box:', tripBlock());
     N.shareText('Gasket trip', L.join('\n'));
@@ -2173,16 +2187,37 @@
   function startRate(p){var tp=parseFloat(S.trip[tankPriceKey()]);return tp>0?tp:KIND()==='ev'&&evRates&&evRates.all?evRates.all:p.refPrice;}
   var evRates=null;   // this route's published charger rates (ChargerData.routeRates), for unpriced chargers and the battery's energy
   function evGuess(dc,fallback){var r=evRates;if(r&&(dc?r.dc:r.ac))return {price:dc?r.dc:r.ac,label:'Typical published '+(dc?'fast-charging':'Level 2')+' rate on this route ('+(dc?r.nDc:r.nAc)+' chargers; estimate)'};if(r&&r.all)return {price:r.all,label:'Typical published charging rate on this route ('+(r.nDc+r.nAc)+' chargers; estimate)'};return {price:fallback,label:'Your charging-price estimate'};}
-  async function gatherAlt(models, pg, dbgS,replay) {
+  // Raw discovery, not planner candidates: changing charge/buffer/network settings
+  // must re-filter and re-project. Keep each leg so switching combinations reuses it.
+  var altSearches=new Map();
+  async function gatherAlt(models, pg, dbgS,replay,rawRoutes,force) {
     var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)) : 8;
     if(kd==='ev')plugs=AltFuel.compatiblePlugs(c,plugs);
     var price = kd === 'ev' ? (+S.evPrice || 0.48) : (+S.h2Price || 36), tv = 0;
-    var notes = [], per = [], raw = [], skippedPrices=0;
+    var notes = [], per = [], raw = [], skippedPrices=0,discoveryIncomplete=false;
     dbgS.started = new Date().toISOString(); dbgS.kind = kd;
     for (var mi = 0; mi < models.length; mi++) {
       var list = [], m = models[mi];
-      try { list = replay&&replay.localOnly?(replay.google[mi]||{}).list||[]:await AltFuel.alongRoute(m, kd, plugs, corridor, function (f) { pg((mi + f) / models.length, kd === 'ev' ? 'Finding compatible chargers' : 'Finding hydrogen stations'); },S.trip.evChargers); }
-      catch (e) { list=e.stations||[];if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
+      try {
+        if(replay&&replay.localOnly)list=(replay.google[mi]||{}).list||[];
+        else {
+          var rr=rawRoutes&&rawRoutes[mi],pieces=rr&&rr._sel&&legsMode()&&(m.legEnds||[]).length>1?rr._sel.map(function(k,i){return route.legs[i].alts[k];}):[rr];
+          for(var ai=0;ai<pieces.length;ai++){
+            var a=pieces[ai];if(a&&a._leg!=null&&legsMode())a=route.legs[a._leg].alts[a._sel[a._leg]];
+            var cm=pieces.length>1?hzModel(a):m;
+            var key=JSON.stringify([kd,a&&a.polyline&&a.polyline.encodedPolyline||cm.pts,plugs,S.trip.evChargers,S.evUseDOE,S.evUseOCM,S.evRefreshPrices,S.nrelKey,S.ocmKey]);
+            var hit=altSearches.get(key),reuse=force!==true&&force!=='discover'&&hit&&Date.now()-hit.at<3600e3&&hit.corridor>=corridor;
+            var rows=reuse?hit.rows:await AltFuel.alongRoute(cm,kd,plugs,corridor,function(f){pg((mi+(ai+f)/pieces.length)/models.length,kd==='ev'?'Finding compatible chargers':'Finding hydrogen stations');},S.trip.evChargers);
+            if(!reuse&&!jobCancel){altSearches.delete(key);altSearches.set(key,{at:Date.now(),corridor:corridor,rows:rows});while(altSearches.size>64)altSearches.delete(altSearches.keys().next().value);}
+            if(reuse)LG.info('stations','Reusing completed route discovery',{kind:kd,stations:rows.length,ageSec:Math.round((Date.now()-hit.at)/1000)});
+            // Website enrichment (including owner-specific Tesla tariffs and FLO
+            // connector details) belongs to this run, not the raw coverage cache.
+            list=list.concat(rows.map(function(st){return Object.assign({},st);}));
+          }
+          list=Array.from(new Map(list.map(function(st){return [st.id,st];})).values());
+        }
+      }
+      catch (e) { discoveryIncomplete=true;list=list.concat(e.stations||[]);if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
       raw.push(list);
     }
     // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
@@ -2212,7 +2247,7 @@
       }
       // A faster charger nearby may exceed the detour limit or be just out of reach.
       // Keep compatible alternatives instead of discarding slower, reachable stops in 3-mile bins.
-      per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [] });
+      per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [],incomplete:discoveryIncomplete });
     }
     if (kd === 'ev') {if(skippedPrices)notes.push('Chargers without published prices were excluded. To include estimated costs, enable them in Settings → Connections.');notes.push('Recent published prices are preferred; older or undated rates may be needed. Rates are not live: confirm prices, access and available stalls with the network.');var fd=!S.trip.departNow&&futureDepart();if(fd&&fd.getTime()>Date.now())notes.push('Leaving '+fd.toLocaleString()+' — prices may change by then.');}
     dbgS.stations = raw.map(function (l) { return l.length; });
@@ -2220,7 +2255,7 @@
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
   }
   async function gatherAll(models, pg, dbgS, force, replay, ks,areaPlan) {
-    if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay);
+    if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay,(ks||[]).map(function(k){return alts[k];}),force);
     if(!(replay&&replay.localOnly)&&S.xomCheck!==false)scanPending('discounts','Checking station discount eligibility',15);
     var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; }), guessed = [];
     var webDiscovery=force==='discover'||force==='discover-cache'||force!==true&&(!S.apiKey||S.keylessRegular);
@@ -3380,7 +3415,7 @@
       return;
     }
     var p = r.plan, h = '', ah = refreshCard()+tipBox();
-    if(!p.ok&&KIND()==='ev'){startEVRecovery();if(step===ST_STOPS&&evRecovery&&evRecovery.base===result){if(el)el.innerHTML=evRecoveryHtml();bindEVRecovery();routeGate();return;}}
+    if(!p.ok&&KIND()==='ev'){startEVRecovery();evFailureNotice();if(step===ST_STOPS&&evRecovery&&evRecovery.base===result){if(el)el.innerHTML=evRecoveryHtml();bindEVRecovery();routeGate();return;}}
     // warnings first: what could go wrong on this trip
     var w = [];
     if (!p.ok) {
@@ -3806,16 +3841,17 @@
     if (closeLegs()) return;
     var pg = $('trip'), box = document.createElement('div');
     box.className = 'legs-pop'; box.id = 'tLegs';
-    box.innerHTML = '<div class="lp-h">Over Google\'s limit of 9 stops. Use the individual links instead.</div>' + ex.legs.map(function (x, i) {
-      return '<button class="leg-link' + (opened[x.leg] ? ' done' : '') + '" data-legurl="' + x.leg + '" style="--i:' + (ex.legs.length - 1 - i) + '"><span class="leg-n">' + (x.leg + 1) + '</span><span class="ll-t"><b>' + arrowHtml(legName(route, x.leg)) + '</b><small>' +
-        Math.round(x.toMi - x.fromMi).toLocaleString() + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small></span>' +
+    box.innerHTML = '<div class="lp-h">Follow these links in order. Each has at most 9 points, including its start and end.</div>' + ex.legs.map(function (x, i) {
+      return (x.part===0?'<h3 class="lp-h">Leg '+(x.leg+1)+' · '+arrowHtml(legName(route,x.leg))+'</h3>':'')+'<button class="leg-link' + (opened[x.leg+':'+x.part] ? ' done' : '') + '" data-legurl="' + i + '" style="--i:' + (ex.legs.length - 1 - i) + '"><span class="leg-n">' + (x.part + 1) + '</span><span class="ll-t"><b>' + (x.parts>1?'Part '+(x.part+1)+' of '+x.parts+' · ':'')+arrowHtml(stopLine(x.from)+' → '+stopLine(x.to)) + '</b><small>' +
+        Math.round(x.toMi - x.fromMi).toLocaleString() + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel / charging stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small>' +
+        (x.part<x.parts-1?'<small>At this part’s last stop, open Part '+(x.part+2)+'.</small>':'')+'</span>'+
         '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>';
     }).join('');
     pg.appendChild(box); document.body.classList.add('legs-open');      // the "more below" arrow would sit on the links
     box.style.bottom = ($('tpNav').getBoundingClientRect().height + 6) + 'px';
     requestAnimationFrame(function () { box.classList.add('on'); });
     box.querySelectorAll('[data-legurl]').forEach(function (b) {
-      b.onclick = function () { var x = ex.legs[+b.dataset.legurl]; opened[x.leg] = true; b.classList.add('done'); N.openUrl(x.url); };
+      b.onclick = function () { var x = ex.legs[+b.dataset.legurl]; opened[x.leg+':'+x.part] = true; b.classList.add('done'); N.openUrl(x.url); };
     });
     setTimeout(function () { document.addEventListener('pointerdown', outside, true); }, 0);
   }
