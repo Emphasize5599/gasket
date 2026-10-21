@@ -252,7 +252,7 @@
     document.querySelectorAll('[data-replace],[data-decline]').forEach(function(b){b.disabled=true;});
     if(window.Tasks)Tasks.upsert('route-comparison',{text:'Updating selected trip…',frac:null});
     try{
-      var raw=recommendationRaw(proposal.sel),m=T.buildRoute(raw,carModel()),g=cachedChoiceCandidates(raw,m);
+      var raw=recommendationRaw(proposal.sel),m=T.buildRoute(raw,carModel()),g=proposal.candidates||cachedChoiceCandidates(raw,m);
       if(!g)throw Error('Missing saved station coverage');
       var opts=recommendationOpts(m,g,proposal.sel),p=await planAsync(opts);
       if(epoch!==recommendationEpoch||route!==owner||result!==base)return;
@@ -305,9 +305,24 @@
         if(!g){
           var m=hzModel(item.route),ga=await gatherAlt([m],function(f){progress('Finding chargers on other routes',(i+f)/all.length*.6);},{},null,[item.route]);
           if(!valid())return;g=ga.per[0];
+          // Recovery may discover a previously unapproved leg. Keep its raw sites
+          // for the other combinations and for saving an accepted replacement.
+          if(!choicePool)choicePool={official:[],google:[],kind:'ev'};
+          choicePool.google=(choicePool.google||[]).concat(ga.raw.google);
           choiceCandidates.set(item.key,{cands:g.cands.map(function(c){return Object.assign({},c,{leg:item.leg});}),unpricedCands:[],notes:g.notes,stale:g.stale,unpriced:g.unpriced,grade:g.grade,miles:m.totalMi,incomplete:!!g.incomplete});
         }
         if(g.incomplete&&r.errors.indexOf('Charger discovery was incomplete.')<0)r.errors.push('Charger discovery was incomplete.');
+      }
+      if(!valid())return;
+      // Earlier candidate snapshots predate prices learned on other legs. Rebuild
+      // each leg from the complete, freshly enriched union, without more web reads.
+      var known=new Map(),rows=(choicePool&&choicePool.official||[]).concat.apply(choicePool&&choicePool.official||[],choicePool&&choicePool.google||[]);
+      rows.forEach(function(st){var prior=known.get(st.id),copy=Object.assign({},prior||st,st);if(prior&&prior.netPrice&&(!st.netPrice||(+prior.netPrice.t||0)>(+st.netPrice.t||0))){copy.netPrice=prior.netPrice;if(prior.netPrice.src==='flo')copy.units=prior.units;}known.set(st.id,copy);});
+      var priceSnapshot={localOnly:true,skipNetworkPrices:true,google:[{list:Array.from(known.values())}]};
+      for(var ci=0;ci<all.length&&valid();ci++){
+        var entry=all[ci],legModel=hzModel(entry.route),fresh=await gatherAlt([legModel],function(){},{},priceSnapshot,[entry.route]);if(!valid())return;
+        var cg=fresh.per[0],old=choiceCandidates.get(entry.key);
+        choiceCandidates.set(entry.key,{cands:cg.cands.map(function(c){return Object.assign({},c,{leg:entry.leg});}),unpricedCands:[],notes:Array.from(new Set(cg.notes.concat(old&&old.notes||[]))),stale:cg.stale,unpriced:cg.unpriced,grade:cg.grade,miles:legModel.totalMi,incomplete:!!(old&&old.incomplete)});
       }
       if(!valid())return;
       await prepareRecommendationSpeeds(valid,function(i,n){progress('Checking other routes’ speed limits',.6+.15*i/Math.max(1,n));},all);if(!valid())return;
@@ -315,8 +330,12 @@
       for(var next=iterator.next();!next.done&&valid();next=iterator.next()){
         var sel=next.value;if(sel.every(function(k,i){return k===selected[i];}))continue;var raw=recommendationRaw(sel),m=T.buildRoute(raw,carModel()),g=cachedChoiceCandidates(raw,m);r.checked++;
         if(!g||sel.some(function(k,i){return !recommendationSpeeds.has(RouteChoices.key(i,lists[i][k]));})){r.errors.push('Some route data could not be checked.');continue;}
+        // Match manual selection exactly: a joined route's distance scale can
+        // differ slightly from separately cached legs. Reproject, never rescan.
+        var exact=await gatherAlt([m],function(){},{},priceSnapshot,[raw]);if(!valid())return;exact.per[0].notes=Array.from(new Set(exact.per[0].notes.concat(g.notes)));g=exact.per[0];
         var opts=recommendationOpts(m,g,sel),p=await planAsync(opts);if(!valid())return;
-        if(p.ok&&!p.firstDip)r.options.push({sel:sel.slice(),description:raw.description||'Alternative route',minutes:routeMin({model:m,res:{plan:p,opts:opts}}),stops:p.stops.length,delays:evDelays(p,m,opts,sel),saves:0,extraMin:0});
+        LG.info('ev','Feasible route evaluated',{selection:sel,candidates:g.cands.length,ok:!!p.ok,firstDip:!!p.firstDip,reachMi:p.reachMi,stops:p.ok?p.stops.length:0,bufferMi:r.base.bufMi,maxDetourMin:opts.maxDetourMin});
+        if(p.ok&&!p.firstDip)r.options.push({sel:sel.slice(),candidates:g,description:raw.description||'Alternative route',minutes:routeMin({model:m,res:{plan:p,opts:opts}}),stops:p.stops.length,delays:evDelays(p,m,opts,sel),saves:0,extraMin:0});
         progress('Checking usable EV trips '+r.checked+' / '+total,.75+.25*r.checked/Math.max(1,total));await breathe();
       }
       if(valid()){r.options.sort(function(a,b){return a.minutes-b.minutes;});r.state='done';LG.info('ev','Usable alternative routes checked',{checked:r.checked,usable:r.options.length});}
@@ -2223,9 +2242,9 @@
     // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
     var kinds=raw.map(function(list){return list.map(function(st){return kd==='ev'&&AltFuel.netAllowed(st)?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});   // unticked networks: never a stop
     // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it
-    if(kd==='ev'&&window.EVPrices){var seenNet={},items=[];raw.forEach(function(list,i){list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
+    if(kd==='ev'&&window.EVPrices&&!(replay&&replay.skipNetworkPrices)){var seenNet={},items=[];raw.forEach(function(list,i){list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
       try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
-    if(kd==='ev'&&window.EVPrices){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
+    if(kd==='ev'&&window.EVPrices&&!(replay&&replay.skipNetworkPrices)){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];

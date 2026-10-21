@@ -186,9 +186,12 @@
     if (S.evNetPrices === false || !items.length) return { priced: 0, notes: notes };
     var by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[] };
     items.forEach(function (x) { var n = String(x.st.network || ''); if (/^tesla(?! destination)/i.test(n) && x.dc) by.tesla.push(x); else if (/ionna/i.test(n)) by.ionna.push(x); else if (/^blink/i.test(n)) by.blink.push(x); else if (/^chargepoint/i.test(n) && chargePointIds(x.st).length) by.chargepoint.push(x);else if(/^flo$/i.test(n))by.flo.push(x); });
-    // ChargePoint reads one page per station: fast chargers first, at most 20 a trip (cached a day)
-    by.chargepoint = by.chargepoint.sort(function (a, b) { return (b.dc ? 1 : 0) - (a.dc ? 1 : 0); }).slice(0, 20);
     var set = function (x, p, src, label) { x.st.netPrice = Object.assign({ src: src, label: label, t: null }, p); priced++; };
+    // The website budget limits uncached sites, not the usable catalog. Apply
+    // EVERY cached rate first, including sites beyond the first 20 in provider order.
+    var cpCached=0;
+    by.chargepoint=by.chargepoint.filter(function(x){var ids=chargePointIds(x.st),p=cached('cp-v2|'+ids.join(','),DAY);if(!p||p.none||p.missing)return true;set(x,p,'chargepoint',p.free?'Free, set by the station\'s host on ChargePoint':'The station host\'s ChargePoint rate'+(p.fee?' + $'+p.fee.toFixed(2)+' session fee':''));cpCached++;return false;});
+    by.chargepoint = by.chargepoint.sort(function (a, b) { return (b.dc ? 1 : 0) - (a.dc ? 1 : 0); }).slice(0, 20);
     // progress by expected time (Tesla ~0.8 s a site, ChargePoint ~8 s a page, Blink ~0.5 s), with the time left once it's measurable
     var W = { tesla: 0.8, ionna: 0.05, blink: 0.5, chargepoint: 8,flo:1 }, total = 0, done = 0;
     Object.keys(by).forEach(function (k) { total += by[k].length * W[k]; });
@@ -210,7 +213,7 @@
     var cpMiss = 0, cpGot = 0;
     for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; if (cpMiss >= CP_GIVE_UP && !cpGot) { notes.push('ChargePoint\'s station pages didn\'t load, so its prices are estimates this time.'); LG.info('stations', 'ChargePoint reads stopped', { pagesMissing: cpMiss }); break; }
       try { var cpP = await chargePointPrice(cx.st); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
-    LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, flo:by.flo.length, priced: priced, ms: Date.now() - t });
+    LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached, flo:by.flo.length, priced: priced, ms: Date.now() - t });
     return { priced: priced, notes: notes };
   }
   root.EVPrices = { annotate: annotate, cancel: cancel, onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };

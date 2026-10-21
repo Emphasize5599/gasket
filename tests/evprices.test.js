@@ -75,5 +75,12 @@ const flexi=(cost,fee)=>({serviceFee:fee,days:['sunday','monday'].map(day=>({day
  {let n=0;const ctx={document:{title:'ChargePoint',get body(){return {innerText:n++<3?'Failed to load station details':'Price | Prices Set by Testville | Energy Rate $0.30 / kWh'};},querySelector:()=>null},GasketSite:{result:(_,s)=>ctx.out=JSON.parse(s)},setTimeout:(f,ms)=>{ctx.now+=ms||0;f();},Date:{now:()=>ctx.now},Promise,now:0};ctx.window=ctx;await vm.runInNewContext('('+cpSrc+')',ctx)(1,{});assert.match(ctx.out.text||'',/\$0\.30/,'a passing failure then the price');}
  const cpGone=setup((fn,a,b)=>fn==='siteRead'&&a==='chargepoint'?{missing:true}:answer(fn,a,b)),many=Array.from({length:12},(_,i)=>({st:{id:'m'+i,network:'ChargePoint',netIds:{posts:[String(7000001+i*10)]},lat:34.7,lng:-92.3},dc:true,kw:50}));
  r=await cpGone.E.annotate(many,{make:'Toyota'});assert.equal(cpGone.calls.filter(c=>c[1]==='chargepoint').length,6,'6 stations with actual IDs, never invent truncated port IDs');assert.match(r.notes.join(' '),/didn't load/);
- console.log('Network charger prices: IONNA page, Blink host-set rates and fees, Tesla owner / non-Tesla / time-of-day rates, per-minute conversion, daily cache, off switch, Tesla checks stop only Tesla, ChargePoint host rates by DOE station IDs.');
+  // A website read budget must never hide already known prices later in the
+  // station list (a different primary route used to change which 20 survived).
+  const cachedCP=setup(()=>{throw Error('Cached prices must not read a website');});
+  const cachedSites=Array.from({length:45},(_,i)=>({st:{id:'cached-'+i,network:'ChargePoint',netIds:{station:['USCPIL'+(800000+i)],posts:[]}},dc:true,kw:100}));
+  cachedSites.forEach((x,i)=>cachedCP.shared.set('evprices|cp-v2|'+(800000+i),{t:Date.now(),v:{rate:i===44?0:.4,uom:'kwh',fee:0,free:i===44}}));
+  const cachedResult=await cachedCP.E.annotate(cachedSites,{});
+  assert.equal(cachedResult.priced,45);assert.equal(cachedCP.calls.length,0);assert(cachedSites.every(x=>x.st.netPrice));assert.equal(cachedSites[44].st.netPrice.free,true,'confirmed free survives the cache prepass too');
+  console.log('Network charger prices and all cached ChargePoint prices beyond the website-read budget passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
