@@ -30,7 +30,7 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 
 ### Discounts and trip optimization
 
-49. [ ] **Compare vehicles for the same trip legs.** When the garage has more than one vehicle, offer a vehicle-comparison flow. Run steps 2–6 separately for each participating vehicle so the user can choose that vehicle's parameters and best/cheapest feasible routes for the same legs. Then provide a dedicated Compare menu before Depart to compare the vehicles' optimized trips and per-leg choices, including costs and time, and choose which vehicle/routes to use. Keep each vehicle's settings and route-consideration answers separate.
+49. [ ] **Compare vehicles for the same trip legs.** Always show the vehicle-comparison menu, even when the garage has only one vehicle, with an **Add vehicle** button below the **Compare** button so users can discover the feature. Run steps 2–6 separately for each participating vehicle so the user can choose that vehicle's parameters and best/cheapest feasible routes for the same legs. Provide the dedicated Compare menu before Depart to compare the vehicles' optimized trips and per-leg choices, including costs and time, and choose which vehicle/routes to use. Keep each vehicle's settings and route-consideration answers separate.
 
 14. [ ] **Cash-price offers and comparisons.** The current one-price-per-grade model does not preserve payment eligibility; Google fuel-price responses have no cash/card field. Add separate explicitly labeled offers, cash/card preferences, correct reward/cashback eligibility and history/cache support, then verify real source coverage. Never infer that an unlabeled price is cash. Findings and a proposed design are in [DATA_OPTIONS.md](docs/DATA_OPTIONS.md).
 
