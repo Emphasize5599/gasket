@@ -883,6 +883,31 @@
     return { legs: out, endGal: G, endValue: V };
   }
 
+  /** Per-leg summaries reconcile to account(): split each actual (rounded) burn
+   * interval by road/detour energy, carrying the tank's weighted value forward.
+   * Destination purchases/time belong to the leg arriving there. */
+  function legSummaries(model,p,startGal,startPrice,top){
+    var ends=(model.legEnds||[]).slice();if(!ends.length)ends=[model.totalMi];ends[ends.length-1]=model.totalMi;
+    var rows=ends.map(function(b,i){var a=i?ends[i-1]:0;return {from:a,to:b,miles:b-a,drivingSec:0,stops:0,chargingMin:0,burnGal:0,cost:0,bought:0,spend:0};});
+    var seconds=model.timeTo(model.totalMi)||1;rows.forEach(function(r){r.drivingSec=(model.timeTo(r.to)-model.timeTo(r.from))/seconds*model.durationSec;});
+    function leg(d){var i=ends.findIndex(function(b){return d<=b+1e-7;});return i<0?ends.length-1:i;}
+    var events=(p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price,det:s.c.detourMi||0,minutes:s.c.kw?s.buyGal/s.c.kw*60:0,stop:true};});
+    events=events.concat((p.destinationCharges||[]).map(function(c){return {d:c.d,arriveGal:c.arriveGal,buyGal:c.buyGal,price:c.buyGal>0?c.cost/c.buyGal:0,det:0,minutes:c.minutes,destination:true};}));
+    if(top)events.push({d:top.c.d,arriveGal:top.arriveGal,buyGal:top.buyGal,price:top.c.price,det:top.c.detourMi||0,minutes:top.c.kw?top.buyGal/top.c.kw*60:0,stop:true});
+    events.sort(function(a,b){return a.d-b.d||Number(!!a.destination)-Number(!!b.destination);});
+    events.push({d:model.totalMi,arriveGal:top?top.endGal:p.arriveGal,buyGal:0,price:0,det:0,minutes:0});
+    var gas=startGal,value=startGal*startPrice,at=0,lastDet=0;
+    events.forEach(function(e){
+      var burn=Math.max(0,gas-e.arriveGal),cost=burn*(gas>0?value/gas:startPrice),weights=rows.map(function(r){return e.d>at?Math.max(0,model.galTo(Math.min(e.d,r.to))-model.galTo(Math.max(at,r.from))):0;});
+      weights[leg(at)]+=lastDet*model.cityGpm/2;weights[leg(e.d)]+=e.det*model.cityGpm/2;
+      var total=weights.reduce(function(a,b){return a+b;},0),i=leg(e.d);if(!total){weights[i]=1;total=1;}
+      rows.forEach(function(r,k){r.burnGal+=burn*weights[k]/total;r.cost+=cost*weights[k]/total;});
+      value-=cost;gas=e.arriveGal;value+=e.buyGal*e.price;gas+=e.buyGal;
+      rows[i].bought+=e.buyGal;rows[i].spend+=e.buyGal*e.price;rows[i].chargingMin+=e.minutes||0;if(e.stop)rows[i].stops++;
+      at=e.d;lastDet=e.det;
+    });return rows;
+  }
+
   /** Candidates mirrored for the drive back on the same roads. */
   function mirror(cands, L) {
     return cands.map(function (c) { return Object.assign({}, c, { d: L - c.d }); });
@@ -1034,7 +1059,7 @@
 
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
-    optimize: optimize, plan: plan, topUps: topUps, account: account, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
+    optimize: optimize, plan: plan, topUps: topUps, account: account, legSummaries:legSummaries, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;
   api.workerSource='('+initTrip.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;

@@ -891,6 +891,7 @@ details.g-obs[open] { padding-bottom: 12px; }
 .okc { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--save); color: #fff; font-size: 12px; font-weight: 900; flex: none; }
 /* Departure */
 .dep-route { padding-top: 12px; padding-bottom: 12px; }
+.depart-scope { margin-top: 12px; }
 .dep-sum { font-size: 13px; color: var(--ink-2); margin: 4px 0 0 36px; }
 .kpis.four { grid-template-columns: repeat(3, minmax(0, 1fr)) 58px; }
 .kpis > div { position: relative; }

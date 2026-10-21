@@ -27,7 +27,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(await p.evaluate(()=>__trip.state().result.plan.ok),false,'the initial route cannot be planned');
   assert.equal(await p.evaluate(()=>__trip.state().evRecovery.usable),1,scenario+': the southern round trip must be suggested');
   assert.equal(await p.evaluate(()=>__websiteReads),0,'cached-only feasibility does not open pricing websites');
-  const reads=await p.evaluate(()=>__discoveryReads);
+  const reads=await p.evaluate(()=>__discoveryReads),passes=await p.evaluate(()=>__pricePasses);
   await p.click('#tNext');await p.waitForSelector('[data-ev-replace]');assert.match(await p.locator('#tsResults').innerText(),/Routes that would work/i);
   await p.click('[data-ev-replace]');await p.waitForFunction(()=>__trip.state().step===5);
   assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[1,1]);
@@ -35,6 +35,20 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert((await p.evaluate(()=>__trip.state().result.plan.stops.length))>0,'the accepted recommendation really uses priced chargers');
   assert.equal(await p.evaluate(()=>__discoveryReads),reads,'acceptance does not rediscover stations');
   assert.equal(await p.evaluate(()=>__websiteReads),0,'acceptance does not open pricing websites');
+  assert.equal(await p.evaluate(()=>__pricePasses),passes,'returning through Hazards reuses the completed price pass, not just positive prices');
+  await p.evaluate(()=>__trip.step(8));assert.equal(await p.locator('.est-note').count(),0,'EV departure has no Google key warning');assert(!/Google Maps may pick|In Google Maps, pick/.test(await p.locator('#tpS8').innerText()));
+  assert.equal(await p.locator('.dep-facts > div').first().locator('b').innerText(),'440');
+  await p.click('[data-depart-scope="leg"]');assert.equal(await p.locator('.dep-facts > div').first().locator('b').innerText(),'220');
+  await p.selectOption('#tDepartLeg','1');assert.match(await p.locator('.kpis.four').innerText(),/leg cost/);assert.equal(await p.locator('#tDepartLeg').inputValue(),'1');
+  await p.click('[data-depart-scope="trip"]');assert.equal(await p.locator('.dep-facts > div').first().locator('b').innerText(),'440');
+  await p.addStyleTag({content:'html{font-size:130%}'});await p.click('[data-depart-scope="leg"]');assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'per-leg summaries fit enlarged text too');
+  if(scenario==='late-prices'){
+   await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>!__trip.state().busy);
+   let before=await p.evaluate(()=>__pricePasses);await p.evaluate(()=>__trip.find(true));await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
+   assert((await p.evaluate(()=>__pricePasses))>before,'explicit refresh bypasses completed-price-pass reuse');
+   before=await p.evaluate(()=>__pricePasses);await p.evaluate(()=>{const now=Date.now;Date.now=()=>now()+11*60e3;__trip.find();});await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
+   assert((await p.evaluate(()=>__pricePasses))>before,'automatic price-pass reuse expires after ten minutes');
+  }
   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);await p.close();
  }
  console.log('Cached prices beyond 20 sites, late-learned primary-leg prices, full round-trip combinations, acceptance parity and no repeated discovery/web reads at 320/448px passed');

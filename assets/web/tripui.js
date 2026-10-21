@@ -2208,17 +2208,20 @@
   function evGuess(dc,fallback){var r=evRates;if(r&&(dc?r.dc:r.ac))return {price:dc?r.dc:r.ac,label:'Typical published '+(dc?'fast-charging':'Level 2')+' rate on this route ('+(dc?r.nDc:r.nAc)+' chargers; estimate)'};if(r&&r.all)return {price:r.all,label:'Typical published charging rate on this route ('+(r.nDc+r.nAc)+' chargers; estimate)'};return {price:fallback,label:'Your charging-price estimate'};}
   // Raw discovery, not planner candidates: changing charge/buffer/network settings
   // must re-filter and re-project. Keep each leg so switching combinations reuses it.
-  var altSearches=new Map();
+  var altSearches=new Map(),altPricePasses=new Map();
   async function gatherAlt(models, pg, dbgS,replay,rawRoutes,force) {
     var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)) : 8;
     if(kd==='ev')plugs=AltFuel.compatiblePlugs(c,plugs);
     var price = kd === 'ev' ? (+S.evPrice || 0.48) : (+S.h2Price || 36), tv = 0;
-    var notes = [], per = [], raw = [], skippedPrices=0,discoveryIncomplete=false;
+    var notes = [], per = [], raw = [], skippedPrices=0,discoveryIncomplete=false,priceKeys=[],priceReused=[];
     dbgS.started = new Date().toISOString(); dbgS.kind = kd;
     for (var mi = 0; mi < models.length; mi++) {
       var list = [], m = models[mi];
+      var priceKey=JSON.stringify([kd,T.encodePolyline(m.pts),c.id,c.make,c.plug,c.adapter,c.acAdapter,c.dcKw,c.acKw,plugs,S.trip.evChargers,S.trip.evNetworksOff,S.evUseDOE,S.evUseOCM,S.evRefreshPrices,S.nrelKey,S.ocmKey,S.evNetPrices,S.evPriceAgeHours]);
+      priceKeys.push(priceKey);var priced=altPricePasses.get(priceKey),reusePrices=!replay&&force!==true&&force!=='discover'&&priced&&Date.now()-priced.at<10*60e3&&priced.corridor>=corridor;
       try {
-        if(replay&&replay.localOnly)list=(replay.google[mi]||{}).list||[];
+        if(reusePrices){list=priced.rows.map(function(st){return Object.assign({},st);});notes=Array.from(new Set(notes.concat(priced.notes)));priceReused[mi]=true;LG.info('stations','Reusing completed charger price pass',{stations:list.length,ageSec:Math.round((Date.now()-priced.at)/1000)});}
+        else if(replay&&replay.localOnly)list=(replay.google[mi]||{}).list||[];
         else {
           var rr=rawRoutes&&rawRoutes[mi],pieces=rr&&rr._sel&&legsMode()&&(m.legEnds||[]).length>1?rr._sel.map(function(k,i){return route.legs[i].alts[k];}):[rr];
           for(var ai=0;ai<pieces.length;ai++){
@@ -2242,9 +2245,9 @@
     // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
     var kinds=raw.map(function(list){return list.map(function(st){return kd==='ev'&&AltFuel.netAllowed(st)?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});   // unticked networks: never a stop
     // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it
-    if(kd==='ev'&&window.EVPrices&&!(replay&&replay.skipNetworkPrices)){var seenNet={},items=[];raw.forEach(function(list,i){list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
+    if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var seenNet={},items=[];raw.forEach(function(list,i){if(priceReused[i])return;list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
       try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
-    if(kd==='ev'&&window.EVPrices&&!(replay&&replay.skipNetworkPrices)){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
+    if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];
@@ -2269,6 +2272,7 @@
       per.push({ cands: cands, notes: notes, unpriced: 0, stale: 0, grade: Garage.grade(), unpricedCands: [],incomplete:discoveryIncomplete });
     }
     if (kd === 'ev') {if(skippedPrices)notes.push('Chargers without published prices were excluded. To include estimated costs, enable them in Settings → Connections.');notes.push('Recent published prices are preferred; older or undated rates may be needed. Rates are not live: confirm prices, access and available stalls with the network.');var fd=!S.trip.departNow&&futureDepart();if(fd&&fd.getTime()>Date.now())notes.push('Leaving '+fd.toLocaleString()+' — prices may change by then.');}
+    if(kd==='ev'&&!discoveryIncomplete&&!jobCancel)raw.forEach(function(list,i){if(priceReused[i])return;altPricePasses.delete(priceKeys[i]);altPricePasses.set(priceKeys[i],{at:Date.now(),corridor:corridor,rows:list.map(function(st){return Object.assign({},st);}),notes:notes.slice()});while(altPricePasses.size>64)altPricePasses.delete(altPricePasses.keys().next().value);});
     dbgS.stations = raw.map(function (l) { return l.length; });
     pg(1, 'Choosing stops');
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
@@ -2664,7 +2668,7 @@
   function speedOff(m) { m = m || model; return !S.apiKey && !(m && m.segs && m.segs.some(function (s) { return s.instr; })); }
   var SPEED_OFF = '<div class="spd-off-note">⚠ Cruising speed is off for this route: without a Google API key it needs the turn-by-turn directions from the Google Maps website, and Maps didn\'t send them for this route. Try another route, or add a key in Settings.</div>';
   // ...and the costs are rougher without a key: say so wherever totals show (Stops, Departure)
-  function costEst() { return S.apiKey ? '' : '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate' + (speedOff() ? ', many stations don\'t post prices online, and speeds are planned at the limits.' : ' and many stations don\'t post prices online.') + '</div>'; }
+  function costEst() { return S.apiKey || KIND()==='ev' ? '' : '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate' + (speedOff() ? ', many stations don\'t post prices online, and speeds are planned at the limits.' : ' and many stations don\'t post prices online.') + '</div>'; }
   function grayOut(el) {
     el.classList.add('spd-off');
     var h3 = el.querySelector(':scope > h3');
@@ -3510,33 +3514,37 @@
   var MAPS_ICON = '<svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>';
   var SHARE_ICON = '<svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.2 3.2 0 0 0 0-1.39l7.05-4.11A2.99 2.99 0 1 0 15 5c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z"/></svg>';
   function glue(t) { return String(t).replace(/(\d) (?=[a-z])/g, '$1\u00a0'); }   // "5 h 0 min" wraps as "5 h" / "0 min", never "5 h 0" / "min"
+  var departScope='trip',departLeg=0,departOwner=null;
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
     if(priceRefreshActive)return skelStops('Refreshing saved prices');
     var p = r.plan;
-    var h = '<div class="card dep-route">' + numList(route.stops)+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' +
+    if(departOwner!==route){departOwner=route;departScope='trip';departLeg=0;}
+    var legCount=route.stops.length-1;departLeg=Math.max(0,Math.min(legCount-1,departLeg));
+    var byLeg=p.ok&&departScope==='leg'&&legCount>1,summary=byLeg?T.legSummaries(r.opts.model||model,p,r.startGal,r.startPrice,r.top)[departLeg]:null;
+    var chooser=legCount>1?'<div class="seg depart-scope" role="group" aria-label="Summary scope"><button type="button" data-depart-scope="trip" class="'+(departScope==='trip'?'on':'')+'">Whole trip</button><button type="button" data-depart-scope="leg" class="'+(departScope==='leg'?'on':'')+'">Per leg</button></div>'+(departScope==='leg'?'<label for="tDepartLeg">Summary for</label><select id="tDepartLeg">'+route.stops.slice(1).map(function(_,i){return '<option value="'+i+'"'+(i===departLeg?' selected':'')+'>Leg '+(i+1)+' · '+esc(legName(route,i))+'</option>';}).join('')+'</select>':''):'';
+    var stops=summary?summary.stops:p.ok?p.totals.stops+(r.top?1:0):0,charging=summary?summary.chargingMin:p.ok?chargeMin(p)+(r.top&&r.top.c.kw?r.top.buyGal/r.top.c.kw*60:0):0;
+    var h = '<div class="card dep-route">' + numList(route.stops)+chooser+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' +
       // the trip at a glance, as tiles between the places and the costs
-      '<div class="kpis dep-facts"><div><b>' + Math.round(model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
-      '<div><b>' + glue(fmtDur(model.durationSec)) + '</b><span>driving</span></div>' +
-      (p.ok ? '<div><b>' + p.totals.stops + '</b><span>' + (KIND() === 'ev' ? 'charging' : 'fuel') + ' stop' + (p.totals.stops === 1 ? '' : 's') + '</span></div>' : '') +
-      (p.ok && KIND() === 'ev' ? '<div><b>' + glue(fmtDur(chargeMin(p) * 60)) + '</b><span>charging</span></div>' : '') + '</div>';
+      '<div class="kpis dep-facts"><div><b>' + Math.round(summary?summary.miles:model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
+      '<div><b>' + glue(fmtDur(summary?summary.drivingSec:model.durationSec)) + '</b><span>driving</span></div>' +
+      (p.ok ? '<div><b>' + stops + '</b><span>' + (KIND() === 'ev' ? 'charging' : 'fuel') + ' stop' + (stops === 1 ? '' : 's') + '</span></div>' : '') +
+      (p.ok && KIND() === 'ev' ? '<div><b>' + glue(fmtDur(charging * 60)) + '</b><span>charging</span></div>' : '') + '</div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
-    var t = p.totals, out = r.acc.legs[0];
-    var costQ = 'The ' + out.burnGal.toFixed(1) + ' ' + UN() + ' this drive uses: what\'s already in your ' + (KIND() === 'ev' ? 'battery' : 'tank') + ' at ' + priceText(r.startPrice) + '/' + UN() +
+    var t = p.totals, out = summary||r.acc.legs[0];
+    var costQ = summary?'Fuel or energy used on this leg, valued at the running average cost in your tank or battery. Purchases at a destination belong to the leg arriving there.':'The ' + out.burnGal.toFixed(1) + ' ' + UN() + ' this drive uses: what\'s already in your ' + (KIND() === 'ev' ? 'battery' : 'tank') + ' at ' + priceText(r.startPrice) + '/' + UN() +
       (parseFloat(S.trip[tankPriceKey()]) > 0 ? ' (what you said it cost)' : KIND() === 'ev' && evRates && evRates.all ? ' (the typical published rate of this route\'s chargers; set yours in Parameters)' : ' (typical on this route; set yours in Parameters)') + ', plus what you buy at what you pay.';
     var saveQ = 'Compared with filling up at the typical price on this route.' +
       (p.easy && p.savings > 0.005 ? ' The easiest plan (fewest stops, closest to the road) would be ' + money(p.easy.totals.net) + ' net vs. ' + money(t.net) + ' for this one' + (t.detourMin - p.easy.totals.detourMin > 0.5 ? ', which adds ' + Math.round(t.detourMin - p.easy.totals.detourMin) + ' min of detours' : '') + '.' : '') +
       (p.minStops != null && t.stops > p.minStops ? ' You only need ' + p.minStops + ' stop' + (p.minStops === 1 ? '' : 's') + '; the extra one pays for itself with cheaper gas.' : '');
-    h += '<div class="kpis four"><div><b>' + money(out.cost) + '</b><span>trip cost ' + A.qBtn(costQ) + '</span></div>' +
+    h += '<div class="kpis four"><div><b>' + money(out.cost) + '</b><span>'+(summary?'leg':'trip')+' cost ' + A.qBtn(costQ) + '</span></div>' +
       '<div><b>' + money(out.spend) + '</b><span>' + (KIND() === 'ev' ? 'at chargers' : 'at the pump') + '</span></div>' +
-      '<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved ' + A.qBtn(saveQ) + '</span></div>' +
+      (summary?'<div><b>'+out.burnGal.toFixed(1)+' '+UN()+'</b><span>used</span></div>':'<div><b class="' + (p.savings > 0.005 ? 'good' : '') + '">' + (p.savings != null && p.savings > 0.005 ? money(p.savings) : '—') + '</b><span>saved ' + A.qBtn(saveQ) + '</span></div>') +
       '<button class="kpi-share" id="tShare" aria-label="Share trip">' + SHARE_ICON + '<span>Share</span></button></div>' + costEst();
     // only what to watch out for, briefly
     var w = [];
     var fd = !S.trip.departNow && futureDepart();
     if (fd && fd.getTime()>Date.now()) w.push('Leaving ' + fd.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' — prices may change by then.');
-    if (route.legs && route.legs.some(function (L) { return L.sel > 0; })) route.legs.forEach(function (L, i) { if (L.sel > 0) w.push('Leg ' + (i + 1) + ': Google Maps may pick other roads — choose via ' + (L.alts[L.sel].description || 'route ' + (L.sel + 1)) + ' there.'); });
-    else if (!multiLeg(route) && altSel > 0 && alts[altSel]) w.push('In Google Maps, pick the route via ' + (alts[altSel].description || 'route ' + (altSel + 1)) + '.');
     var av = ['tolls', 'highways', 'ferries'].filter(function (k) { return S.trip.avoid[k]; });
     if (av.length) w.push('Turn “avoid ' + av.join('” and “avoid ') + '” back on in Google Maps.');
     var rn = window.Advisory ? Advisory.departureNote() : '';
@@ -3846,6 +3854,8 @@
     hzPill();
   }
   function bindDeparture() {
+    document.querySelectorAll('[data-depart-scope]').forEach(function(b){b.onclick=function(){departScope=b.dataset.departScope;renderStep();};});
+    if($('tDepartLeg'))$('tDepartLeg').onchange=function(){departLeg=+$('tDepartLeg').value;renderStep();};
     if ($('tsReport')) $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(e); };
     if ($('tShare')) $('tShare').onclick = shareTrip;
     var b = $('tOpen'); if (b) b.disabled = !(result && result.plan.ok);
