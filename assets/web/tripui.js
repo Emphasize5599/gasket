@@ -2548,7 +2548,8 @@
   }
 
   // ---------- cruising speed per leg ----------
-  var limCache = {};          // one lookup per route shape, shared by every model built from it
+  var limCache = {},limFlight=new Map(); // shared routes also share in-flight source requests
+  function warmChoiceLimits(){if(!routeFlow()||!Garage.speedFn||!Garage.speedFn())return;choiceEntries().forEach(function(item){if(!item.primary)ensureLimits(hzModel(item.route));});}
   function ensureLimits(m) {
     if (m && m._lim && m._lim.stats && m._lim.stats.off && !speedOff(m)) m._lim = null;      // a key was added: look them up now
     if (m && !m._lim && speedOff(m)) {       // cruising speed is off: no lookups, just one stand-in stretch so the (grayed) controls still show
@@ -2571,7 +2572,8 @@
     var getJson = function (url) {      // posted limits rarely change: saved for 90 days
       var o = A.KV.get('limits', url, 90 * 24 * 3600e3);
       if (o) return Promise.resolve(o.v);
-      return call('fetchJson', url).then(function (res) { if (res.body && res.body.indexOf('"error"') < 0) A.KV.put('limits', url, res); return res; });
+      if(limFlight.has(url))return limFlight.get(url);
+      var pending=call('fetchJson', url).then(function (res) { if (res.body && res.body.indexOf('"error"') < 0) A.KV.put('limits', url, res); return res; }).finally(function(){limFlight.delete(url);});limFlight.set(url,pending);return pending;
     };
     Limits.along(m, getJson, { lookup: S.limitLookup !== false, onProg: function (d, t) { hit.frac = Math.max(hit.frac || 0, t ? d / t : 1); limBars(hit.frac, sig); } }).then(function (res) {
       hit.res = res; limBars(1, sig);
@@ -2745,11 +2747,11 @@
   function planLater(r, opts, label, done) {
     var my = ++planSeq, end0 = window.Tasks ? Tasks.begin('trip-replan', { text: label, priority: 1 }) : function () { };
     planning++; var end = function () { planning--; end0(); };
-    planAsync(opts).then(function (p) { end(); if (my === planSeq && result === r) done(p); },
+    planAsync(opts,function(){return my===planSeq&&result===r;},100).then(function (p) { end(); if (my === planSeq && result === r) done(p); },
       function (e) { end(); if (my !== planSeq) return; LG.warn('plan', 'Background plan failed', { error: e.message }); toastMsg(e.message); });
   }
   /** Plans for several option sets side by side across the planner pool; resolves in the same order. */
-  function planAll(list) { return Promise.all(list.map(function (o) { return planAsync(o); })); }
+  function planAll(list,valid) { return Promise.all(list.map(function (o) { return planAsync(o,valid,1); })); }
   /** The buffer the speeds allow, as warnings: "keeps this at N mi or less". */
   function bufLimits() {
     var r = result, cx = speedCx(), sw = r && r.sweep;
@@ -2791,7 +2793,7 @@
     var t0 = Date.now(), o = r.opts, opts = list.map(function (mi) { return Object.assign({}, o, { bufferGal: mi * o.model.combGpm, arriveGal: mi * o.model.combGpm, refPrice: o.refPrice, lite: true }); });
     setTimeout(function () {
       if (result !== r) { r.sweeping = false; return; }
-      planAll(opts).then(function (plans) {
+      planAll(opts,function(){return result===r&&r.opts===o;}).then(function (plans) {
       if (result !== r) { r.sweeping = false; return; }
       // the plan changed while the sweep ran (a speed, the detour limit): these rows are for the old one
       if (r.opts !== o) { r.sweeping = false; r.sweep = null; return startSweep(); }
@@ -3023,7 +3025,7 @@
     setTimeout(function () {
       if (result !== r) { r.dsweeping = false; return; }
       var o = r.opts;
-      planAll(list.map(function (m) { return Object.assign({}, o, { maxDetourMin: m, lite: true }); })).then(function (plans) {
+      planAll(list.map(function (m) { return Object.assign({}, o, { maxDetourMin: m, lite: true }); }),function(){return result===r&&r.opts===o;}).then(function (plans) {
         r.dsweeping = false; if (result !== r) return;
         if (r.opts !== o) { r.dsweep = null; return startDetSweep(); }
         r.dsweep = plans.map(function (p, k) { return { mi: list[k], ok: p.ok, net: p.ok ? p.totals.net + tv(p) : null, plan: p }; });
@@ -3135,9 +3137,9 @@
       lastFull: S.trip.arrive === 'full' };
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
-  function planAsync(opts){
+  function planAsync(opts,valid,priority){
     var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
-    return Planner.run(opts,{departAt:opts.rewardDepartAt,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now()});
+    return Planner.run(opts,{departAt:opts.rewardDepartAt,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority}).then(function(p){var tm=opts._plannerTiming;if(tm&&(tm.waitMs>1000||tm.runMs>3000))LG.debug('plan','Planner timing',{candidates:opts.cands.length,lite:!!opts.lite,waitMs:tm.waitMs,runMs:tm.runMs,pool:Planner.stats?Planner.stats():null});return p;});
   }
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
   function findStops(force) {
@@ -3217,6 +3219,7 @@
     LG.info('stations', 'Find the best stops pressed', { miles: Math.round(model.totalMi), points: model.pts.length, force: force === true });
     await new Promise(function (r) { setTimeout(r, 30); });
     var others = altCompareList();
+    warmChoiceLimits(); // overlap approved-route limits with station discovery, not slider work
     dbg.search = {};
     var models = [model];
     others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
@@ -3356,6 +3359,7 @@
     var t1 = Date.now();
     recompute();
     LG.debug('plan', 'Top-ups, trip cost and drive back in ' + (Date.now() - t1) + ' ms');
+    startSweep();startDetSweep(); // don't hold primary previews behind alternative-route plans
     // other routes Google suggested: same trip, same rules, gas valued at the same price so totals compare fairly
     if (others.length) {
       result.routes = [{ k: altSel, model: model, res: result }];
@@ -3586,7 +3590,7 @@
     if (i > 0 && i === hzLegs() - 1 && S.trip.returnTrip && !backAuto() && S.trip.backAt) { var b = new Date(S.trip.backAt).getTime(); if (b > t) t = b; }
     return t;
   }
-  function hzModel(a) { var m = hzModels.get(a); if (!m) { m = T.buildRoute(a, carModel()); hzModels.set(a, m); } return m; }
+  function hzModel(a) { var car=carModel(),key=JSON.stringify(car),hit=hzModels.get(a); if (!hit||hit.key!==key) { hit={key:key,model:T.buildRoute(a,car)}; hzModels.set(a,hit); } return hit.model; }
   function loadCounties() {
     if (window.US_COUNTIES) return Promise.resolve();
     if (!countiesP) countiesP = new Promise(function (ok) { var sc = document.createElement('script'); sc.src = 'counties.js'; sc.onload = ok; sc.onerror = function () { countiesP = null; ok(); }; document.head.appendChild(sc); });

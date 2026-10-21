@@ -444,7 +444,10 @@
     return function(from,to,base,detourEnd,galTo){var need=base;for(var i=0;i<boundaries.length;i++){var p=boundaries[i];if(p.d>from+1e-7&&p.d<to-1e-7)need=Math.max(need,p.gal-galTo-(detourEnd||0));}return Math.max(0,need);};
   }
   function optimize(o, priceFn, stopCostFn) {
-    if(o.cands.some(function(c){return !!c.citgo;}))return optimizeRewards(o,priceFn,stopCostFn);
+    // Ordinary Club discounts are linear when a tank cannot exceed the purchase
+    // cap. Only actual monthly eligibility or a reachable cap needs reward states.
+    var grain=o.step||.1,levels=Math.max(1,Math.round(o.capGal/grain)),maxBuy=(o.fillCap?Math.max(1,Math.min(levels,Math.round(o.fillCap/grain))):levels)*grain;
+    if(o.cands.some(function(c){return c.citgo&&(c.citgo.bit||c.citgo.cap<maxBuy-1e-9);}))return optimizeRewards(o,priceFn,stopCostFn);
     // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
     // (EVs: 80% — charging slows to a crawl above it), though you may start the trip above it.
     var STEP = o.step || 0.1, model = o.model;
@@ -497,7 +500,8 @@
         for(var f=0;f<=LV;f++)if(row[f]<INF){var charged=destinationCharge(nodes[i].event,f*STEP,o.capGal),depart=Math.max(f,Math.min(LV,Math.floor(charged.departGal/STEP+1e-9))),cost=(depart-f)*STEP/.9*Math.max(0,+nodes[i].event.price||0);if(row[f]+cost<best[depart]){best[depart]=row[f]+cost;from[depart]=f;}}
       } else { for (g = 0; g <= LV; g++) { best[g] = row[g]; from[g] = g; } }
       bestFrom.push(from);
-      for (g = 0; g <= LV; g++) if (best[g] < INF) { any = true; break; }
+      var firstFuel=LV+1,lastFuel=-1;
+      for (g = 0; g <= LV; g++) if (best[g] < INF) { any = true;firstFuel=Math.min(firstFuel,g);lastFuel=g; }
       if (!any) continue;
       reachMi = Math.max(reachMi, nodes[i].d);
 
@@ -515,9 +519,9 @@
         // "arrive with the most gas": you asked for the final fill-up, so it doesn't have to clear the per-stop threshold
         if (o.lastFull && nodes[j].kind === 'dest' && nodes[i].kind === 'stop') add -= (o.stopPenalty || 0);
         var dj = dp[j], pj = par[j];
-        var gLo = burn + minA;
+        var gLo = Math.max(burn + minA,firstFuel);
         if (o.lastFull && nodes[j].kind === 'dest' && nodes[i].kind === 'stop') gLo = FL;   // last stop fills the tank
-        for (g = gLo; g <= LV; g++) {
+        for (g = gLo; g <= lastFuel; g++) {
           if (best[g] >= INF) continue;
           var f2 = g - burn, val = best[g] + add - f2 * credit;
           if (val < dj[f2]) { dj[f2] = val; pj[f2] = i * (LV + 1) + g; }
@@ -594,7 +598,9 @@
         }
       }
       from[i]=src;
-      if(best.some(function(x){return x<inf;}))reach=Math.max(reach,nodes[i].d);
+      var lows=[w,w,w,w],highs=[-1,-1,-1,-1],active=false;
+      for(mask=0;mask<4;mask++)for(g=0;g<=lv;g++)if(best[mask*w+g]<inf){lows[mask]=Math.min(lows[mask],g);highs[mask]=g;active=true;}
+      if(!active)continue;reach=Math.max(reach,nodes[i].d);
       for(var j=i+1;j<n;j++){
         var dest=j===n-1;if(o.lastFull&&dest&&n>2&&!c)continue;
         if(rg[j]-rg[i]>o.capGal)break;
@@ -605,7 +611,7 @@
         if(o.lastFull&&dest&&c)pen-=o.stopPenalty||0;
         var lo=o.lastFull&&dest&&c?fl:burn+min;
         var resetPeriod=period(i)&&period(j)&&period(i)!==period(j);
-        for(mask=0;mask<4;mask++)for(g=lo;g<=lv;g++){
+        for(mask=0;mask<4;mask++)for(g=Math.max(lo,lows[mask]);g<=highs[mask];g++){
           var bi=mask*w+g;if(best[bi]>=inf)continue;
           var nextMask=resetPeriod?0:mask,f2=g-burn,ix=nextMask*w+f2,val=best[bi]+pen-(dest?f2*step*(o.refPrice||0):0);
           if(val<dp[j][ix]){dp[j][ix]=val;par[j][ix]=i*size+bi;}

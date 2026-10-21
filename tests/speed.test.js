@@ -1,6 +1,18 @@
 // Best-cruising-speed model: ORNL band drops, anchoring, calibration, marginal cost per hour saved.
 const assert = require('assert');
 const S = require('../assets/web/speed.js');
+// Alternative-route fuel models must follow vehicle changes, not only route identity.
+{
+ const fs=require('node:fs'),vm=require('node:vm'),src=fs.readFileSync('assets/web/tripui.js','utf8');
+ const body=src.match(/  function hzModel\(a\) \{[^\n]+/)[0];let car={city:3,hwy:3,comb:3,kind:'ev'},builds=0;
+ const ctx={hzModels:new WeakMap(),carModel:()=>({...car}),T:{buildRoute:(a,c)=>({route:a,car:c,n:++builds})}};
+ vm.runInNewContext(body,ctx);const route={},first=ctx.hzModel(route);
+ assert.strictEqual(ctx.hzModel(route),first,'unchanged profile reuses route work');
+ car={city:55,hwy:53,comb:54,kind:'gas'};const prius=ctx.hzModel(route);
+ assert.notStrictEqual(prius,first,'switching EV to Prius rebuilds the model');assert.equal(prius.car.comb,54);
+ car.comb=48;assert.notStrictEqual(ctx.hzModel(route),prius,'observed economy changes invalidate cached model');
+ assert.equal(builds,3);
+}
 const near = (a, b, tol, m) => assert.ok(Math.abs(a - b) <= tol, (m || '') + ' ' + a + ' vs ' + b);
 
 // car: anchored at EPA highway at 55; each 10-mph band loses ORNL's average, compounded evenly per mph

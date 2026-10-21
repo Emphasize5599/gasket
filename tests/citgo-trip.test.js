@@ -48,8 +48,9 @@ function brute(o){
  }return walk(0,Math.floor(o.startGal/o.step),0);
 }
 let seed=7;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/2**32;}
-for(let trial=0;trial<100;trial++){
- const cs=[0,20,40,60,80].map((d,i)=>candidate('r'+i,d,2.5+rand(),i<3?tue:trial%3===0?nov:fri,settings(),i===2?'exxon':'citgo'));
+for(let trial=0;trial<200;trial++){
+ const ordinary=trial>=100,wed=new Date(2026,9,7,12);
+ const cs=[0,20,40,60,80].map((d,i)=>candidate('r'+i,d,2.5+rand(),ordinary?wed:i<3?tue:trial%3===0?nov:fri,settings(),i===2?'exxon':'citgo'));
  // Exercise the cap's two linear segments using a smaller synthetic cap as well.
  cs.forEach(c=>{if(c.citgo)c.citgo.cap=trial%2?1:30;});
  const o={...opts(cs),model:{...model,totalMi:100},step:.5,startGal:3,capGal:4,bufferGal:.5,arriveGal:.5,fillUp:trial%2===0,refPrice:2.4,stopPenalty:.15};
@@ -67,4 +68,4 @@ let calls=0;const unstable={...calendar,rewardPriceAt:(c,m,stops)=>{const q=cale
 // Exercise a repeating (nonconvergent) eligibility answer independent of the chosen schedule.
 unstable.rewardPriceAt=(c)=>{const phase=Math.floor(calls++/4)%2,q={...c,citgo:{...c.citgo,bit:phase?0:1,extra:phase?0:.06}};return q;};
 p=T.plan(unstable);assert(p.ok);assert(p.rewardTimingUncertain);assert(p.stops.every(s=>!s.citgoRedemption));
-console.log('CITGO monthly ledger, capped pricing, independent plans/top-ups, calendar boundaries and 100 exhaustive optimizer comparisons passed');
+console.log('CITGO monthly ledger, capped pricing, independent plans/top-ups, calendar boundaries and 200 exhaustive optimizer comparisons passed');

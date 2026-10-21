@@ -9,6 +9,7 @@ release.push('station-reconcile','map-scan-merge');
 release.push('routechoices','routechoices-ui','vehicle-required');
 release.push('adaptive-readers');
 release.push('tire-estimate-ui','planner-worker');
+release.push('planner-queue');
 release.push('tasks','gemma','gemma-ui');
 release.push('gemma-cache');
 release.push('gemma-processor','gemma-processor-ui');

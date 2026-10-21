@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.230 - 2026-10-21
+- Faster fuel-stop planning and slider calculations; prioritize interactive adjustments.
+- Reuse overlapping speed-limit requests and begin alternative-route lookups earlier.
+- Fixed alternative-route fuel models retaining the previous vehicle's economy.
+
 ## 0.0.229 - 2026-10-21
 - Removed the remaining Google-key warning from EV cruising-speed settings.
 - Bug fixes.
