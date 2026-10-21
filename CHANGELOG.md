@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.229 - 2026-10-21
+- Removed the remaining Google-key warning from EV cruising-speed settings.
+- Bug fixes.
+
 ## 0.0.228 - 2026-10-21
 - Reuse completed EV price scans after accepting a feasible route.
 - Whole-trip and per-leg summaries on Depart.

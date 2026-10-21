@@ -22,7 +22,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    const alts=[Object.assign(Trip.joinRoutes([outbound[sel[0]],back[sel[1]]]),{_sel:sel})],t=Date.now(),saved={route,alts,altSel:0,altSure:true,trip:{fuel:S.trip.fuel,altCompare:false,arrive:'buffer',evChargers:S.trip.evChargers},stations:{kind:'ev',official:[],google:[]},savedT:t};
    __app.KV.put('trips','trip|feasibility',saved);__app.KV.put('trips','index',[{id:'feasibility',title:'Generic feasibility fixture',t,mi:600}]);
   },scenario);
-  await p.click('#btnTrip');await p.click('[data-hist="feasibility"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(6));
+  await p.click('#btnTrip');await p.click('[data-hist="feasibility"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(4));assert.equal(await p.locator('#tpS4 .spd-off-note').count(),0,'EV cruising speed does not warn about a missing Google key');await p.evaluate(()=>__trip.step(6));
   await p.waitForFunction(()=>__trip.state().evRecovery?.state==='done',null,{timeout:20000});
   assert.equal(await p.evaluate(()=>__trip.state().result.plan.ok),false,'the initial route cannot be planned');
   assert.equal(await p.evaluate(()=>__trip.state().evRecovery.usable),1,scenario+': the southern round trip must be suggested');

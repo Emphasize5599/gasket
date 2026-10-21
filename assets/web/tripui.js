@@ -2672,7 +2672,9 @@
   function grayOut(el) {
     el.classList.add('spd-off');
     var h3 = el.querySelector(':scope > h3');
-    if (!el.querySelector('.spd-off-note')) { if (h3) h3.insertAdjacentHTML('afterend', SPEED_OFF); else el.insertAdjacentHTML('afterbegin', SPEED_OFF); }
+    var offNote=el.querySelector('.spd-off-note');
+    if(KIND()==='ev'){if(offNote)offNote.remove();}
+    else if (!offNote) { if (h3) h3.insertAdjacentHTML('afterend', SPEED_OFF); else el.insertAdjacentHTML('afterbegin', SPEED_OFF); }
     el.querySelectorAll('input, button, select, textarea').forEach(function (x) { x.disabled = true; });
     el.querySelectorAll('a, [tabindex]').forEach(function (x) { x.setAttribute('aria-disabled', 'true'); x.tabIndex = -1; });
     if (!el._offObs) { el._offObs = new MutationObserver(function () { if (speedOff()) grayOut(el); else { el._offObs.disconnect(); el._offObs = null; } }); el._offObs.observe(el, { childList: true, subtree: true }); }   // parts drawn later, too
