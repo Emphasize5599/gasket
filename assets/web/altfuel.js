@@ -227,37 +227,55 @@
     return { mi: 350, src: 'a typical fuel-cell car' };
   }
   var Cov = L.GridLayer.extend({
-    createTile: function (c) {
-      var sz = this.getTileSize(), t = document.createElement('canvas'); t.width = sz.x; t.height = sz.y;
-      var ctx = t.getContext('2d'), B = 4, R = this.options.rangeMi, half = R / 2, st = this.options.st;
-      var nx = Math.ceil(sz.x / B), ny = Math.ceil(sz.y / B), lats = [], lngs = [], x0 = c.x * sz.x, y0 = c.y * sz.y;
-      for (var i = 0; i < nx; i++) lngs.push(map.unproject(L.point(x0 + i * B + B / 2, y0), c.z).lng);
-      for (var j = 0; j < ny; j++) lats.push(map.unproject(L.point(x0, y0 + j * B + B / 2), c.z).lat);
-      var GRAY = 'rgba(55, 60, 70, .46)', YEL = 'rgba(255, 196, 32, .40)';
-      for (j = 0; j < ny; j++) {
-        var la = lats[j], kx = Math.cos(la * Math.PI / 180) * 69.17, run = null, runX = 0;
-        for (i = 0; i <= nx; i++) {
-          var col = null;
-          if (i < nx) {
-            var lo = lngs[i], best = 1e9;
-            for (var k = 0; k < st.length; k++) {
-              var dy = (la - st[k].lat) * 69.0, dx = (lo - st[k].lng) * kx, d2 = dx * dx + dy * dy;
-              if (d2 < best) best = d2;
-            }
-            var d = Math.sqrt(best) * ROAD;
-            col = d > R ? GRAY : d > half ? YEL : null;
+    // Cache smooth geographic outlines, not a per-tile nearest-station pixel grid.
+    rings: function(z){
+      if(!this._rings)this._rings=new Map();if(this._rings.has(z))return this._rings.get(z);
+      var world=map.getPixelWorldBounds(z).getSize().x,rings=[],rad=Math.PI/180;
+      this.options.st.forEach(function(s){
+        [1,.5].forEach(function(part){
+          var mi=this.options.rangeMi*part/ROAD,delta=mi/3958.7613,lat=s.lat*rad,lng=s.lng*rad;
+          var pixels=mi*world/(24901.46*Math.max(.05,Math.cos(lat))),n=Math.max(96,Math.min(2048,Math.ceil(Math.PI*Math.sqrt(Math.max(1,pixels)/.25))));
+          var pts=new Float64Array((n+1)*2),bounds={minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity};
+          for(var i=0;i<=n;i++){
+            var angle=i/n*Math.PI*2,la=Math.asin(Math.sin(lat)*Math.cos(delta)+Math.cos(lat)*Math.sin(delta)*Math.cos(angle));
+            var lo=lng+Math.atan2(Math.sin(angle)*Math.sin(delta)*Math.cos(lat),Math.cos(delta)-Math.sin(lat)*Math.sin(la));
+            var p=map.project(L.latLng(Math.max(-85.05112878,Math.min(85.05112878,la/rad)),lo/rad),z);pts[i*2]=p.x;pts[i*2+1]=p.y;
+            bounds.minX=Math.min(bounds.minX,p.x);bounds.maxX=Math.max(bounds.maxX,p.x);bounds.minY=Math.min(bounds.minY,p.y);bounds.maxY=Math.max(bounds.maxY,p.y);
           }
-          if (col !== run) { if (run) { ctx.fillStyle = run; ctx.fillRect(runX * B, j * B, (i - runX) * B, B); } run = col; runX = i; }
-        }
+          rings.push({part:part,pts:pts,bounds:bounds});
+        },this);
+      },this);
+      var result={world:world,rings:rings};this._rings.set(z,result);if(this._rings.size>2)this._rings.delete(this._rings.keys().next().value);return result;
+    },
+    createTile: function (c) {
+      var sz=this.getTileSize(),ratio=Math.min(2,window.devicePixelRatio||1),t=document.createElement('canvas'),mask=document.createElement('canvas');
+      t.width=mask.width=Math.round(sz.x*ratio);t.height=mask.height=Math.round(sz.y*ratio);
+      var ctx=t.getContext('2d'),mc=mask.getContext('2d'),data=this.rings(c.z),x0=c.x*sz.x,y0=c.y*sz.y;
+      ctx.scale(ratio,ratio);mc.scale(ratio,ratio);
+      function paint(part){
+        data.rings.forEach(function(r){
+          if(r.part!==part||r.bounds.maxY<y0-1||r.bounds.minY>y0+sz.y+1)return;
+          var nearest=Math.round((x0+sz.x/2-(r.bounds.minX+r.bounds.maxX)/2)/data.world)*data.world;
+          for(var copy=-1;copy<=1;copy++){
+            var shift=nearest+copy*data.world;if(r.bounds.maxX+shift<x0-1||r.bounds.minX+shift>x0+sz.x+1)continue;
+            mc.beginPath();for(var i=0;i<r.pts.length;i+=2){var x=r.pts[i]+shift-x0,y=r.pts[i+1]-y0;if(!i)mc.moveTo(x,y);else mc.lineTo(x,y);}mc.closePath();mc.fill();
+          }
+        });
       }
-      return t;
+      ctx.fillStyle='rgba(55,60,70,.46)';ctx.fillRect(0,0,sz.x,sz.y);
+      mc.fillStyle='#fff';paint(1); // full-range union: replace gray with yellow
+      ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,sz.x,sz.y);
+      mc.globalCompositeOperation='source-in';mc.fillStyle='rgba(255,196,32,.40)';mc.fillRect(0,0,sz.x,sz.y);
+      ctx.globalCompositeOperation='source-over';ctx.drawImage(mask,0,0,sz.x,sz.y);
+      mc.globalCompositeOperation='source-over';mc.clearRect(0,0,sz.x,sz.y);mc.fillStyle='#fff';paint(.5);
+      ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,sz.x,sz.y);return t;
     }
   });
   function drawCoverage() {
     if (cov) { map.removeLayer(cov); cov = null; }
     if (!h2On() || !S.alt.h2Cov || !h2List.length) { legend(); return; }
     panes();
-    cov = new Cov({ pane: 'afcov', rangeMi: h2Range().mi, st: h2List.map(function (s) { return { lat: s.lat, lng: s.lng }; }), updateWhenZooming: false, keepBuffer: 1 });
+    cov = new Cov({ pane: 'afcov', rangeMi: h2Range().mi, st: h2List.map(function (s) { return { lat: s.lat, lng: s.lng }; }), updateWhenZooming: true, keepBuffer: 1 });
     cov.addTo(map);
     syncVisibility();
   }

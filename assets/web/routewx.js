@@ -186,8 +186,9 @@
     if (k === 'tornado') a.push('Don\'t drive into it. Wait it out in a sturdy building, or take another route.');
     if (k === 'flood') a.push('Turn around, don\'t drown: never drive into water over the road. Six inches can stall a car, a foot can float it.');
     if (k === 'tropical') a.push('Avoid it if you can: flooding, downed trees and strong gusts. If you must go, slow down and keep out of standing water.');
+    if(x.areaUncertain)a.push('This warning is in a nearby county, but its exact area could not be verified. It may not affect this road; check the NWS warning.');
     if (x.src === 'nws' && k !== 'alert') a.push('National Weather Service: ' + x.event + (x.area ? ' for ' + (x.area.length > 120 ? x.area.slice(0, 117) + '…' : x.area) : '') + '.');
-    if (k === 'alert') a.push('The National Weather Service has ' + (x.events.length > 1 ? 'these out' : 'this out') + ' where and when you\'ll be there. Check it before you go; it can change your route or your day.');
+    if (k === 'alert'&&!x.areaUncertain) a.push('The National Weather Service has ' + (x.events.length > 1 ? 'these out' : 'this out') + ' where and when you\'ll be there. Check it before you go; it can change your route or your day.');
     if (k === 'air') {
       a.push('Recirculate through it' + (x.peak.aqi ? ' (AQI up to ' + x.peak.aqi + (x.peak.cause ? ', mostly ' + x.peak.cause : '') + ')' : '') + ', then back to fresh air once you\'re past it.');
       if (long) a.push(ctx.acUnavailable?'No working A/C: recirculate cannot cool the cabin. Consider delaying travel; plan cooled rest stops away from the pollution.':'It lasts over an hour: keep the A/C on so the air doesn\'t get stuffy, and if you get drowsy take a break at a stop rather than opening up to outside air.');
@@ -220,9 +221,11 @@
     if (!p.event || NOT_DRIVING.test(p.event)) return null;
     var from = Date.parse(p.onset || p.effective || p.sent), to = Date.parse(p.ends || p.expires), d = digestKnown(p.event);
     var same = ((p.geocode && p.geocode.SAME) || []).map(function (c) { return String(c).slice(-5); });
+    var ugc=(p.geocode&&p.geocode.UGC)||[],zones=(p.affectedZones||[]).filter(function(u){return /^https:\/\/api\.weather\.gov\/zones\/(?:forecast|county|fire|marine)\/[A-Z]{3}\d{3}$/i.test(u);});
+    if(!zones.length)ugc.forEach(function(code){if(/^[A-Z]{2}Z\d{3}$/i.test(code))zones.push('https://api.weather.gov/zones/forecast/'+code.toUpperCase());});
     return { id: p.id || f.id, event: p.event, level: /extreme|severe/i.test(p.severity) || /warning/i.test(p.event) ? 2 : 1, from: isNaN(from) ? 0 : from, to: isNaN(to) ? Infinity : to,
       headline: p.headline || '', text: String(p.description || '').replace(/\s+/g, ' ').slice(0, 12000), area: p.areaDesc || '', counties: same, polys: polysOf(f && f.geometry),
-      kind: d ? d.kind : 'alert', label: d ? d.label : p.event, vague: !d };
+      kind: d ? d.kind : 'alert', label: d ? d.label : p.event, vague: !d,zones:zones,zoneBased:ugc.some(function(code){return /^[A-Z]{2}Z\d{3}$/i.test(code);})||zones.some(function(u){return !/\/county\//.test(u);}) };
   }
   /** What an alert is, from its name: {kind, label}, or null when the name doesn't say ("Special Weather Statement"). */
   var KNOWN = [[/tornado/i, 'tornado', 'Tornado'], [/hurricane|typhoon/i, 'tropical', 'Hurricane'], [/tropical storm|tropical depression/i, 'tropical', 'Tropical storm'],
@@ -310,7 +313,9 @@
   }
   /** The polygons an alert covers: its own outline, else its counties (countyOf(fips) -> polygons). */
   function alertArea(a, countyOf) {
+    if(a.zoneOutsideRoute)return [];
     if (a.polys && a.polys.length) return a.polys;
+    if (a.zonePolys && a.zonePolys.length) return a.zonePolys;
     var out = []; (a.counties || []).forEach(function (f) { var c = countyOf && countyOf(f); if (c) out = out.concat(c); });
     return out;
   }
@@ -322,11 +327,12 @@
     var out = [];
     alerts.forEach(function (a) {
       var area = alertArea(a, countyOf); if (!area.length) return;
+      var uncertain=!!a.zoneBased&&!(a.polys&&a.polys.length)&&!(a.zonePolys&&a.zonePolys.length);
       var cur = null, gap = 0;
       dense.forEach(function (p) {
         var hit = p.eta >= a.from - HOUR && p.eta <= a.to + HOUR && inPolys(area, p.lat, p.lng);
         if (hit) {
-          if (!cur) { cur = { kind: a.kind, level: a.level, fromMi: p.mi, toMi: p.mi, from: p.eta, to: p.eta, src: 'nws', event: a.event, label: a.label, headline: a.headline, area: a.area, id: a.id, by: a.by, aiPending: !!a.aiPending, events: [a.event], peak: {} }; out.push(cur); }
+          if (!cur) { cur = { kind: uncertain?'alert':a.kind, level: a.level, fromMi: p.mi, toMi: p.mi, from: p.eta, to: p.eta, src: 'nws', event: a.event, label: uncertain?'Nearby '+a.event+' · area unverified':a.label, headline: a.headline, area: a.area, id: a.id, by: a.by, aiPending: !!a.aiPending,areaUncertain:uncertain,areaSource:a.polys&&a.polys.length?'warning polygon':a.zonePolys&&a.zonePolys.length?'NWS zone':uncertain?'unverified county vicinity':'county', events: [a.event], peak: {} }; out.push(cur); }
           cur.toMi = p.mi; cur.to = p.eta; gap = 0;
         } else if (cur && ++gap > 2) { cur = null; gap = 0; }
       });
@@ -371,6 +377,31 @@
     if (tF != null && tF >= 100) f.heat = 2; else if (tF != null && tF >= 93) f.heat = 1;
     if (tF != null && tF <= 0) f.cold = 2; else if (tF != null && tF <= 20) f.cold = 1;
     return f;
+  }
+  // Zone-based alerts' SAME codes list intersecting counties, NOT the warning's
+  // exact footprint. Resolve affectedZones before falling back to a county.
+  var zonePending=new Map();
+  async function locateAlerts(alerts,getJson,stats,opts){
+    var todo=alerts.filter(function(a){return !(a.polys&&a.polys.length)&&(a.zoneBased||!a.counties.length)&&a.zones.length;}),urls=new Set(),resolved=new Map();
+    var routeBox=opts.dense&&opts.dense.length?boxOf([].concat.apply([],opts.dense.map(function(p){return [p.lng,p.lat];}))):null;
+    todo=todo.filter(function(a){
+      if(routeBox&&a.counties.length&&opts.countyOf){
+        var known=true,overlap=false;
+        a.counties.forEach(function(f){var polys=opts.countyOf(f);if(!polys||!polys.length){known=false;return;}polys.forEach(function(poly){var b=poly._b||(poly._b=boxOf(poly[0]));if(b[0]<=routeBox[2]&&b[2]>=routeBox[0]&&b[1]<=routeBox[3]&&b[3]>=routeBox[1])overlap=true;});});
+        if(known&&!overlap){a.zoneOutsideRoute=true;return false;}
+      }
+      a.zones.forEach(function(u){urls.add(u);});return true;
+    });
+    stats.alertZones=urls.size;stats.alertZoneErrors=0;
+    await pool(Array.from(urls),4,async function(url){
+      try{
+        var job=zonePending.get(url);
+        if(!job){job=(async function(){var r=await getJson(url);if(!r||!r.body)throw new Error('Warning zone unavailable');var area=polysOf(JSON.parse(r.body).geometry);if(!area||!area.length)throw new Error('Warning zone has no geometry');return area;})().finally(function(){zonePending.delete(url);});zonePending.set(url,job);}
+        resolved.set(url,await job);
+      }catch(e){stats.alertZoneErrors++;stats.errors++;}
+    });
+    todo.forEach(function(a){if(a.zones.every(function(u){return resolved.has(u);}))a.zonePolys=[].concat.apply([],a.zones.map(function(u){return resolved.get(u);}));});
+    stats.alertAreaUncertain=alerts.filter(function(a){return a.zoneBased&&!a.zoneOutsideRoute&&!(a.polys&&a.polys.length)&&!(a.zonePolys&&a.zonePolys.length);}).length;
   }
   /**
    * Fill each point with its forecast hour (wx), air (aq), alerts and flags. getJson(url) -> Promise<{body}|{error}>;
@@ -457,6 +488,7 @@
       });
       stats.alerts = alerts.length;
       if (alerts.some(function (x) { return !(x.polys && x.polys.length); }) && opts.counties) await opts.counties();   // load the county outlines only when needed
+      await locateAlerts(alerts,getJson,stats,opts);
       total += alerts.length; tell();
       for (var q = 0; q < alerts.length; q++) { await digest(alerts[q], opts.compare, opts.digestMs); done++; tell(); }
     }

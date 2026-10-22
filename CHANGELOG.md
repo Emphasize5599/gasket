@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.234 - 2026-10-21
+- Smooth hydrogen coverage boundaries.
+- Fixed gas price labels appearing in EV and hydrogen modes.
+- Use precise NWS warning zones instead of spreading mountain warnings across whole counties.
+
 ## 0.0.233 - 2026-10-21
 - Smooth zoom sizing for station dots, routes and selected-road highlights.
 - Fixed main-map hydrogen/EV stations and hydrogen coverage leaking into trips.

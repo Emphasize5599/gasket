@@ -595,7 +595,7 @@
   function mainOn() { return !document.body.classList.contains('trip-on'); }
   /** Main-map stations show only when the trip planner isn't open (it draws its own). */
   function syncMain() {
-    var on = mainOn();
+    var on = mainOn() && !altMode();
     [dotLayer, bubLayer].forEach(function (g) { if (on && !map.hasLayer(g)) g.addTo(map); if (!on && map.hasLayer(g)) map.removeLayer(g); });
     if (on) placeBubsSoon();
   }
@@ -636,7 +636,7 @@
   }
   function placeBubsSoon() { clearTimeout(bubT); bubT = setTimeout(placeBubs, 40); }
   function placeBubs() {
-    if (!mainOn() || !window.Labels) return;
+    if (!mainOn() || altMode() || !window.Labels) return;
     var tips = bubOrder.filter(function (id) { return bubs[id]; }).map(function (id) { var b = bubs[id]; return { cands: [b.tip.getLatLng()], tip: b.tip, color: '#8a94a6' }; });
     if (!bubLayer.hasLayer(leadLayer)) bubLayer.addLayer(leadLayer);
     var sheet = $('detail').classList.contains('hidden') ? $('listSheet') : $('detail');

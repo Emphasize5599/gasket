@@ -3565,11 +3565,11 @@
   // Every option for the leg is drawn; each hazard is a colored stretch where and when you'd be in it (RouteWx.forRoute),
   // labeled on the chosen route only. Departure shows the chosen routes' stretches, without labels.
   var wxFlight=new Map();
-  function wxGet(url) {       // forecasts are kept 45 min, warnings 10 min, which NWS grid square a point is in 30 days
-    var o = A.KV.get('wx', url, /weather\.gov\/points\//.test(url) ? 30 * 864e5 : /weather\.gov\/alerts/.test(url) ? 10 * 60e3 : 45 * 60e3);
+  function wxGet(url) {       // forecasts 45 min, warnings 10 min, NWS grid/zone geography 30 days
+    var o = A.KV.get('wx', url, /weather\.gov\/(?:points|zones)\//.test(url) ? 30 * 864e5 : /weather\.gov\/alerts/.test(url) ? 10 * 60e3 : 45 * 60e3);
     if (o) return Promise.resolve(o.v);
     if(wxFlight.has(url))return wxFlight.get(url);
-    var pending=call('fetchJson', url).then(function (r) { if (r && r.body) A.KV.put('wx', url, r); return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
+    var pending=call('fetchJson', url).then(function (r) { if (r && r.body) {var valid=true;if(/weather\.gov\/zones\//.test(url))try{var g=JSON.parse(r.body).geometry;valid=!!(g&&/^(?:Multi)?Polygon$/.test(g.type)&&g.coordinates&&g.coordinates.length);}catch(e){valid=false;}if(valid)A.KV.put('wx', url, r);} return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
   }
   function wxWhen(a, b) {
     var day = function (t) { return new Date(t).toDateString(); }, multi = day(a) !== day(Date.now()) || day(b) !== day(a);
@@ -3613,10 +3613,12 @@
         countyOf: function (f) { return window.US_COUNTIES && US_COUNTIES[f]; }, compare: window.Severity && Severity.state && Severity.state() === 'ready' ? Severity.compare : null,   // never waits for the model to load
         digestMs: e.aiTry ? 60000 : null });    // the re-read once the model is ready: it may be queued behind recalls, so it gets a minute
       e.st = 'done'; e.hz = r.hazards; e.stats = r.stats; e.reading = r;
+      var warningIds=new Set(r.hazards.filter(function(x){return x.src==='nws';}).map(function(x){return x.id;}));
+      if(warningIds.size)LG.debug('wx','Warning locations',(r.alerts||[]).filter(function(x){return warningIds.has(x.id);}).map(function(x){return {event:x.event,area:x.area,zones:x.zones,headline:x.headline,text:x.text.slice(0,1000),location:x.polys&&x.polys.length?'warning polygon':x.zonePolys&&x.zonePolys.length?'NWS zone':x.zoneBased?'unverified county vicinity':'county'};}));
       // no model coming, or it already had its one re-read: the wording is the answer (never read again and again)
       if (!aiCan() || e.aiTry) { if (e.stats.aiPending) LG.info('wx', 'Warnings kept as read from their wording', { pending: e.stats.aiPending }); e.stats.aiPending = 0; e.hz.forEach(function (x) { x.aiPending = false; }); }
       if (e.stats.aiPending) hzAiWatch(a, i);
-      LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || ''].filter(function (v) { return v !== ''; }); }) });
+      LG.info('wx', 'Hazards on ' + (a.description ? 'via ' + a.description : 'a route') + ' in ' + (Date.now() - t0) + ' ms', { stats: r.stats, hazards: r.hazards.map(function (x) { return [x.kind, x.level, Math.round(x.fromMi), Math.round(x.toMi), x.event || '', x.by || '',x.areaSource||''].filter(function (v) { return v !== ''; }); }) });
     } catch (err) { e.st = 'error'; e.err = String(err && err.message || err); LG.warn('wx', 'Hazards along a route failed', e.err); }
     return e;
     })();

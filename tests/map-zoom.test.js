@@ -25,9 +25,26 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  assert(Math.abs(result.restored.line-result.near.line)<1e-8,'re-add preserves original geometry sizing');assert(Math.abs(result.selected-result.expected)<1e-8,'selection styles remain zoom-aware');
  assert(result.samples.some(s=>s.z>5.2&&s.z<7.8&&s.r>result.samples.at(-1).r),'automatic zoom resizes before zoomend: '+JSON.stringify(result.samples));
  assert(Math.max(...result.samples.map(s=>s.error))<4,'dots stay anchored during animated zoom; worst error '+Math.max(...result.samples.map(s=>s.error)));
+ // Gas bubbles must disappear in BOTH alternative-fuel modes, including late layout/zoom callbacks.
+ await p.evaluate(()=>{ChargerData.localNear=async()=>({fuel_stations:[]});window.__mocks={afdc:()=>({fuel_stations:[]})};__app.S.brands={exxon:true};PriceHistory.observe([{id:'gas-label',brand:'exxon',name:'Synthetic gas',lat:35,lng:-119,address:'Test station',prices:{regular:{price:3.2,observedAt:Date.now(),source:'test'}}}]);__app.map.setView([35,-119],12,{animate:false});__app.setMode('gas');__app.rebuild();});
+ await p.waitForSelector('.mbub');
+ for(const mode of ['ev','h2']){
+  await p.evaluate(mode=>{__app.setMode(mode);__app.map.setZoom(11,{animate:false});__app.rebuild();},mode);await p.waitForSelector('.mbub',{state:'detached',timeout:3000});
+  await p.waitForFunction(()=>!document.getElementById('btnRefresh').classList.contains('spin'));
+  assert.equal(await p.locator('.mbub').count(),0,'no gas labels in '+mode);
+ }
+ await p.evaluate(()=>__app.setMode('gas'));await p.waitForSelector('.mbub');
  // Reproduce the screenshot: main-map H2 dots/coverage must not overlay a trip.
  await p.evaluate(async()=>{__app.S.fuelMode='h2';__app.KV.put('afdc','hy-all',[{id:901,fuel_type_code:'HY',station_name:'Synthetic H2',latitude:35,longitude:-119,hy_pressures:['700'],status_code:'E',access_code:'public'}]);await AltFuel.refresh();});
  await p.waitForFunction(()=>AltFuel.h2().length===1&&__app.map.hasLayer(AltFuel.coverage()));
+ const coverage=await p.evaluate(()=>{
+  const cov=AltFuel.coverage(),z=6,data=cov.rings(z),ring=data.rings.find(r=>r.part===.5),point={x:ring.bounds.maxX,y:(ring.bounds.minY+ring.bounds.maxY)/2},tile=cov.createTile({x:Math.floor(point.x/256),y:Math.floor(point.y/256),z}),pixels=tile.getContext('2d').getImageData(0,0,tile.width,tile.height).data,alphas=new Set();
+  for(let i=3;i<pixels.length;i+=4)alphas.add(pixels[i]);
+  function sample(f){const outer=data.rings.find(r=>r.part===1),at=Math.floor((outer.pts.length/2-1)/4)*2,center=__app.map.project([35,-119],z),x=center.x+(outer.pts[at]-center.x)*f,y=center.y+(outer.pts[at+1]-center.y)*f,c={x:Math.floor(x/256),y:Math.floor(y/256),z},tile=cov.createTile(c),ratio=tile.width/256;return [...tile.getContext('2d').getImageData(Math.floor((x-c.x*256)*ratio),Math.floor((y-c.y*256)*ratio),1,1).data];}
+  return {alphas:[...alphas],sameCache:data===cov.rings(z),vertices:ring.pts.length/2,width:tile.width,inside:sample(0),yellow:sample(.75),outside:sample(1.25)};
+ });
+ assert(coverage.alphas.filter(a=>a>0&&a<100).length>3,'smooth antialiased boundary, not solid 4px blocks');assert(coverage.sameCache,'outlines reused across tiles');assert(coverage.vertices>=96);assert(coverage.width>=256&&coverage.width<=512);
+ assert.equal(coverage.inside[3],0,'nearby stations leave the map clear');assert(coverage.yellow[0]>240&&coverage.yellow[3]>90&&coverage.yellow[3]<110,'middle range remains yellow');assert(coverage.outside[0]<80&&coverage.outside[3]>110,'out-of-range remains gray');
  const afCount=()=>p.evaluate(()=>{let n=0;__app.map.eachLayer(l=>{if(l instanceof L.CircleMarker&&l.options.renderer&&l.options.renderer.options.pane==='afdots')n++;});return n;});
  assert.equal(await afCount(),1);await p.evaluate(()=>document.body.classList.add('trip-on'));
  await p.waitForFunction(()=>!__app.map.hasLayer(AltFuel.coverage()));assert.equal(await afCount(),0);assert.equal(await p.locator('#afLegend').count(),0);
