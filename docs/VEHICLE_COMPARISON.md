@@ -1,6 +1,6 @@
 # Vehicle comparison
 
-Implemented in 0.0.235. Compare is step 8, between Stops and Depart (now 9),
+Implemented in 0.0.236 (0.0.235 was source-only after a release-test failure). Compare is step 8, between Stops and Depart (now 9),
 including with only one garage vehicle. Compare another vehicle opens the garage
 picker; Add vehicle below it opens the existing editor. A new participant starts
 at Advice and follows Route, Parameters, Hazards and Adjustments independently.

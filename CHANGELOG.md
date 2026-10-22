@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.236 - 2026-10-22
+- Compare vehicles for the same trip: independent setup/routes, whole-trip or per-leg costs and estimated time.
+- Edit vehicles and return to Compare; select completed plans without rescanning.
+- Corrected the release checks for the new Compare step. No APK was published for 0.0.235.
+
 ## 0.0.235 - 2026-10-22
 - Compare vehicles for the same trip, with independent setup, routes and whole-trip/per-leg summaries.
 - Compare energy used, known tolls and estimated travel/refueling time; select a completed plan without rescanning.

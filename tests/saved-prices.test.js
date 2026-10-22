@@ -64,7 +64,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   await p.click('#taResults [data-trip-refresh="web"]');await p.waitForFunction(()=>!__trip.state().busy);
   assert.equal(await p.evaluate(()=>__api.web),2,'cached area answers avoid duplicate website loads');
   assert.equal(await p.evaluate(()=>__api.places),0);
-  for(const step of [7,8]){
+  for(const step of [7,8,9]){
     await p.evaluate(step=>__trip.step(step),step);
     await p.waitForSelector('#tpS'+step);
     assert.equal(await p.locator('#tpS'+step+' .price-refresh-card').count(),0);

@@ -42,8 +42,12 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     assert.equal(await p.locator('#taResults .prog-load').count(),0,'no duplicate progress inside the menu');assert.equal(await p.locator('#jobBar [data-cancel="stations"]').count(),1,'cancellation stays available in the dock');assert.equal(await p.isDisabled('#tNext'),true);assert.equal(await p.innerText('#tNext'),'Next');
     assert.equal(await p.locator('#taResults .card.skel .prog-load').count(),0,'buffer/detour skeletons do not repeat station discovery progress');
     assert.equal(await p.locator('#taResults .price-refresh-card .prog-load').count(),0,'refresh tile only shows CSS placeholders');assert.equal(await p.locator('#taResults .scan-pending').count(),1);
-    assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, true, false, true, true, true],
+    assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8, 9].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, true, false, true, true, false, true],
       'Garage, Route, Hazards (they would change it) and Stops, Departure (it is about to change them) closed while it runs');
+    await p.click('#tpSteps [data-step="8"]');await p.waitForSelector('#tCompare');
+    assert.equal(await p.locator('#vcCompare').isDisabled(),true);assert.equal(await p.locator('#vcAdd').isDisabled(),true);
+    assert.equal(await p.locator('[data-vc-edit]:enabled,[data-vc-plan]:enabled,[data-vc-use]:enabled').count(),0,'Compare is read-only while discovery runs');
+    await p.click('#tpSteps [data-step="6"]');await p.waitForFunction(()=>__trip.state().step===6);
     // Advice and Parameters still open, and Advice's tab row goes on to Parameters
     await p.click('#tpSteps [data-step="2"]'); await p.waitForFunction(() => __trip.state().step === 2);
     await p.click('#tpSteps [data-step="4"]'); await p.waitForFunction(() => __trip.state().step === 4);
