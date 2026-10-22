@@ -175,6 +175,13 @@
 
   // ---------- main map: markers, coverage, the panel ----------
   var cov = null, h2Layer = null, evLayer = null, h2List = [], evList = [], h2T = 0, renderer = null;
+  function mainMap(){return typeof document==='undefined'||!document.body||!document.body.classList.contains('trip-on');}
+  function syncVisibility(){
+    [[h2Layer,mainMap()&&h2On()],[evLayer,mainMap()&&evOn()],[cov,mainMap()&&h2On()&&S.alt.h2Cov]].forEach(function(x){if(!x[0])return;if(x[1]&&!map.hasLayer(x[0]))x[0].addTo(map);else if(!x[1]&&map.hasLayer(x[0]))map.removeLayer(x[0]);});
+    legend();
+  }
+  var lastMain=mainMap();
+  if(typeof MutationObserver!=='undefined'&&document.body)new MutationObserver(function(){var on=mainMap();if(on!==lastMain){lastMain=on;syncVisibility();}}).observe(document.body,{attributes:true,attributeFilter:['class']});
   function panes() {
     if (!map.getPane('afcov')) { map.createPane('afcov'); map.getPane('afcov').style.zIndex = 350; map.getPane('afcov').style.pointerEvents = 'none'; }
     if (!map.getPane('afdots')) { map.createPane('afdots'); map.getPane('afdots').style.zIndex = 620; }
@@ -199,7 +206,7 @@
   function drawDots(list, layer, color) {
     layer.clearLayers();
     list.forEach(function (s) {
-      var m = marks[s.id] = L.circleMarker([s.lat, s.lng], { renderer: renderer, radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 });
+      var m = marks[s.id] = L.circleMarker([s.lat, s.lng], { renderer: renderer, radius: 6, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 });
       m.bindPopup(stationHtml(s), { className: 'af-popup', maxWidth: 260 });
       m.on('popupopen', function (e) {
         var el = e.popup.getElement(); if (!el) return;
@@ -252,11 +259,11 @@
     panes();
     cov = new Cov({ pane: 'afcov', rangeMi: h2Range().mi, st: h2List.map(function (s) { return { lat: s.lat, lng: s.lng }; }), updateWhenZooming: false, keepBuffer: 1 });
     cov.addTo(map);
-    legend();
+    syncVisibility();
   }
   function legend() {
     var el = $('afLegend');
-    var on = h2On() && S.alt.h2Cov && h2List.length;
+    var on = mainMap() && h2On() && S.alt.h2Cov && h2List.length;
     if (!on) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('div'); el.id = 'afLegend'; el.className = 'af-legend'; document.body.appendChild(el); }
     var r = h2Range();
@@ -267,11 +274,13 @@
     if (!h2Layer) h2Layer = L.layerGroup().addTo(map);
     if (h2On()) drawDots(h2Shown(), h2Layer, P.ALT.h2.color); else h2Layer.clearLayers();
     drawCoverage();
+    syncVisibility();
   }
   function showEv() {
     panes();
     if (!evLayer) evLayer = L.layerGroup().addTo(map);
     if (evOn()) drawDots(evList, evLayer, P.ALT.ev.color); else evLayer.clearLayers();
+    syncVisibility();
   }
   function carPlugs() { var G = window.Garage, c = G && G.car(); return c && G.kind(c) === 'ev' ? compatiblePlugs(c,G.plugs(c)) : null; }
 

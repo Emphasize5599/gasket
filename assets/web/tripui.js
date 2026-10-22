@@ -2054,7 +2054,7 @@
       sel = k2;
       Object.keys(segs).forEach(function (k) {
         var on = +k === sel, sg = segs[k];
-        sg.halo.setStyle({ weight: on ? 9 : 7 }); sg.line.setStyle({ color: on ? '#1a73e8' : ROUTE_GRAY, weight: on ? 6 : 5 });
+        MapVisuals.style(sg.halo,{ weight: on ? 9 : 7 }); MapVisuals.style(sg.line,{ color: on ? '#1a73e8' : ROUTE_GRAY, weight: on ? 6 : 5 });
       });
       if (segs[sel]) { segs[sel].halo.bringToFront(); segs[sel].line.bringToFront(); }
       Object.keys(segs).forEach(function (k) { segs[k].hit.bringToFront(); });
@@ -4152,21 +4152,8 @@
 
 
   var dotsRenderer = null, dots = [];
-  /**
-   * Station dots: a fixed pixel size looks bigger and bigger against the map as you zoom out (a 1,300-mile trip at
-   * zoom 5 turns into a solid bead chain). So they shrink gently as you zoom out — about a tenth of the map's own
-   * scaling — from 6 px at street level to ~2.5 px at country level, never below a tappable-looking dot.
-   */
-  function dotSize(z) {
-    var r = Math.max(2.4, Math.min(6, 6 - (13 - z) * 0.45));
-    return { r: r, w: r > 4 ? 2 : r > 3 ? 1.5 : 1 };
-  }
-  map.on('zoomend', function () {
-    if (!dots.length) return;
-    var dz = dotSize(map.getZoom());
-    dots.forEach(function (d) { d.setRadius(dz.r); d.setStyle({ weight: dz.w }); });
-    tierDots();
-  });
+  // MapVisuals sizes all fuel dots and route strokes throughout zoom gestures/animations.
+  map.on('zoomend', tierDots);
   /** The other stations' dots on the trip map: zoomed out only the cheapest few percent (P.mapTier), every one at zoom 12. */
   function tierDots() {
     var t = P.mapTier(dots.map(function (d) { return d._tier; }), map.getZoom());
@@ -4212,7 +4199,6 @@
       if (!map.getPane('tdots')) { var pn = map.createPane('tdots'); pn.style.zIndex = 590; }
       var cv = A.dotsRenderer;
       var ring = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#ffffff';
-      var dz = dotSize(map.getZoom());
       dots = [];
       // one dot per station (a round trip passes each twice: the cheaper of its two), the cheapest few when zoomed out (tierDots)
       var seenSt = new Map(), stopSt = new Set();
@@ -4221,7 +4207,7 @@
         if (chosen[c.id] || step === ST_DEPART || stopSt.has(c.station.id)) return;           // Departure: only your stops (the rest is noise by then)
         var was = seenSt.get(c.station.id); if (was && !(Number.isFinite(c.price) && (was.price == null || c.price < was.price))) return;
         if (was) { dots.splice(dots.indexOf(was.dot), 1); }
-        var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: dz.r, color: ring, weight: dz.w, fillColor: P.brand(c.station.brand).color, fillOpacity: 1 });
+        var dot = L.circleMarker([c.lat, c.lng], { renderer: cv, pane: 'tdots', radius: 6, color: ring, weight: 2, fillColor: P.brand(c.station.brand).color, fillOpacity: 1 });
         dot._tier = { id: c.station.id, price: Number.isFinite(c.price) ? c.price : null };
         seenSt.set(c.station.id, { dot: dot, price: dot._tier.price });
         dots.push(dot);
