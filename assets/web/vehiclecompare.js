@@ -32,7 +32,7 @@
     }
     var ts=s.tolls||[],selected=i==null?rows.map(function(_,j){return toll(ts[j]);}):[toll(ts[i])],tolls=selected.every(function(v){return v!=null;})?selected.reduce(function(a,b){return a+b;},0):null;
     var missing=chosen.some(function(x){return !Number.isFinite(x.c.price)||x.c.price<0||x.c.price===0&&!x.c.freeCharging;})||!Number.isFinite(r.startPrice);
-    var estimated=!!s.startEstimated||chosen.some(function(x){return !!(x.c.est||x.c.calc&&x.c.calc.est);});
+    var estimated=!!p.propulsion||!!s.startEstimated||chosen.some(function(x){return !!(x.c.est||x.c.calc&&x.c.calc.est);});
     var quote={energy:missing?null:energy,spend:missing?null:spend,tolls:tolls,fees:0,estimated:estimated};
     if(adapters&&adapters.price)quote=adapters.price(s,i,clone(quote))||quote;
     var cost=Number.isFinite(quote.energy)&&Number.isFinite(quote.tolls)&&Number.isFinite(quote.fees)?quote.energy+quote.tolls+quote.fees:null;

@@ -585,6 +585,10 @@
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
       return '<option value="' + t + '"' + ((c.type || 'car') === t ? ' selected' : '') + '>' + SP.TYPES[t].label + '</option>'; }).join('') + '</select></label></div>';
     // engine, transmission, drive, fuel and features: changed here (the Garage page's About this car only shows them)
+    if(k==='ev'){
+      var ep=c.propulsion||{};
+      h+='<details class="card ed-details"><summary>Energy & charging estimates</summary><label class="nf"><span>Vehicle profile</span><select id="gEnergyProfile">'+opts({'estimate':'EPA/observed baseline · estimated speed and charging curve','tum-m3-lfp':'I confirm: 2020 Model 3 SR+ · CATL LFP, ~55.4 kWh'},ep.profile||'estimate')+'</select></label><p class="lead small">The measured profile covers one car, not every Model 3. Other cars retain their EPA/observed consumption with estimated weather and charging adjustments.</p><label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label><label class="nf"><span>Starting battery temperature (°C)<small>blank: estimate from ambient weather</small></span><input id="gPackTemp" type="number" min="-40" max="65" step="1" value="'+esc(Number.isFinite(ep.initialTempC)?ep.initialTempC:'')+'"></label></details>';
+    }
     var dOld = $('gDetails'); if (dOld) detOpen = dOld.open;   // its toggle event comes a task later: a redraw before it would close it
     h +=tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
     return h;
@@ -939,6 +943,7 @@
       if ($('gTankSee')) $('gTankSee').onclick = function () { tankFind(c, true); };
       if ($('gType')) $('gType').onchange = function () { c.type = this.value; changed(); draw(); };
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
+      ['gEnergyProfile','gHeatPump','gPrecondition','gPackTemp'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=function(){var p=c.propulsion=c.propulsion||{};if(id==='gEnergyProfile')p.profile=this.value;else if(id==='gPackTemp'){if(this.value==='')delete p.initialTempC;else{var t=Number(this.value);if(!Number.isFinite(t)||t< -40||t>65){this.value=Number.isFinite(p.initialTempC)?p.initialTempC:'';return;}p.initialTempC=t;}}else p[id==='gHeatPump'?'heatPump':'precondition']=this.checked;changed();};});
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
       if($('tEpa'))$('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });

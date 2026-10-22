@@ -29,9 +29,9 @@
   function size(){var n=Number(root.navigator&&root.navigator.hardwareConcurrency)||4;return Math.max(1,Math.min(6,n-1));}
   var url=null;
   function spawn(){
-    if(!url)url=URL.createObjectURL(new Blob([root.Trip.workerSource,root.Pricing.workerSource,'('+boot.toString()+')();'],{type:'text/javascript'}));
+    if(!url)url=URL.createObjectURL(new Blob([root.Propulsion?root.Propulsion.workerSource:'',root.Trip.workerSource,root.Pricing.workerSource,'('+boot.toString()+')();'],{type:'text/javascript'}));
     var w={worker:new Worker(url),busy:0,ids:new Set()};
-    w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);if(d.error)p.reject(new Error(d.error));else{p.opts.refPrice=d.refPrice;p.resolve(d.plan);}requestDrain();};
+    w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);if(d.error)p.reject(new Error(d.error));else{p.opts.refPrice=d.refPrice;if(d.plan.propulsionModel){if(!p.opts.propulsionBase){p.opts.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){p.opts.propulsionBase[k]=p.opts.model[k];});}p.opts.model=root.Trip.restoreModel(Object.assign({},p.opts.model,d.plan.propulsionModel));}p.resolve(d.plan);}requestDrain();};
     w.worker.onerror=function(){
       w.worker.terminate();workers.splice(workers.indexOf(w),1);if(!workers.length)disabled=true;
       w.ids.forEach(function(id){var p=pending.get(id);if(p){pending.delete(id);p.reject(new Error('Background planner unavailable. Please reopen this trip.'));}});

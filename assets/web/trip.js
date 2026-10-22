@@ -14,6 +14,7 @@
  */
 (function initTrip(root) {
   'use strict';
+  var EP=typeof module!=='undefined'&&module.exports?require('./propulsion.js'):root.Propulsion;
   var M_PER_MI = 1609.344;
 
   // ---------------- Google Maps links ----------------
@@ -426,7 +427,8 @@
     bands.forEach(function(b){var to=Math.min(e.mode==='time'?limit:target,b.end);if(to<=energy||left<=0)return;var rate=kw*b.factor,buy=Math.min(to-energy,left*rate/60),time=buy/rate*60;energy+=buy;minutes+=time;left-=time;});
     var added=Math.max(0,energy-arrival);return {arriveGal:arrival,departGal:energy,buyGal:added,gridKWh:added/efficiency,cost:added/efficiency*Math.max(0,+e.price||0),minutes:e.mode==='time'?Math.max(0,+e.minutes||0):minutes,estimated:true};
   }
-  function purchases(p){return (p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price,destination:false};}).concat((p.destinationCharges||[]).map(function(c){return {d:c.d,arriveGal:c.arriveGal,buyGal:c.buyGal,price:c.buyGal>0?c.cost/c.buyGal:0,destination:true};})).sort(function(a,b){return a.d-b.d||Number(a.destination)-Number(b.destination);});}
+  function purchasePrice(s){return s.propulsion&&s.propulsion.ok&&s.buyGal>0?s.propulsion.cost/s.buyGal:s.c.price;}
+  function purchases(p){return (p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:purchasePrice(s),destination:false};}).concat((p.destinationCharges||[]).map(function(c){return {d:c.d,arriveGal:c.arriveGal,buyGal:c.buyGal,price:c.buyGal>0?c.cost/c.buyGal:0,destination:true};})).sort(function(a,b){return a.d-b.d||Number(a.destination)-Number(b.destination);});}
   // Check reserves at leg boundaries even when there is no fuel stop there.
   function reserveBetween(o,from,to,base,detourEnd,galTo){
     var need=base,gal=galTo||function(d){return o.model.galTo(d);};
@@ -451,7 +453,7 @@
     // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
     // (EVs: 80% — charging slows to a crawl above it), though you may start the trip above it.
     var STEP = o.step || 0.1, model = o.model;
-    var LV = Math.max(1, Math.round(o.capGal / STEP)), FL = o.fillCap ? Math.max(1, Math.min(LV, Math.round(o.fillCap / STEP))) : LV;
+    var LV = Math.max(1, Math.round(o.capGal / STEP)), FL = o.fillCap ? Math.max(1, Math.min(LV, Math.floor(o.fillCap / STEP+1e-9))) : LV;
     var cands = o.cands.slice().sort(function (a, b) { return a.d - b.d; });
     var events=(o.destinationCharges||[]).filter(function(e){return e.d>0&&e.d<=model.totalMi;});
     var nodes = [{ kind: 'origin', d: 0 }].concat(cands.map(function (c) { return { kind: 'stop', d: c.d, c: c }; })).concat(events.map(function(e){return {kind:'charge',d:e.d,event:e};})).sort(function(a,b){return a.d-b.d||(a.kind==='charge'?1:0)-(b.kind==='charge'?1:0);}).concat([{ kind: 'dest', d: model.totalMi }]);
@@ -634,7 +636,7 @@
     var buy = 0, cost = 0, det = 0, detMin = 0;
     res.stops.forEach(function (s) {
       var quote=purchaseQuote(s.c,s.buyGal,!!s.citgoRedemption);s.c=quote.c;
-      s.cost = quote.cost; buy += s.buyGal; cost += s.cost; det += s.c.detourMi || 0; detMin += s.c.detourMin || 0;
+      s.cost = s.propulsion&&s.propulsion.ok?s.propulsion.cost:quote.cost; buy += s.buyGal; cost += s.cost; det += s.c.detourMi || 0; detMin += s.c.detourMin || 0;
     });
     (res.destinationCharges||[]).forEach(function(c){buy+=c.buyGal;cost+=c.cost;});
     var credit = res.arriveGal * (o.refPrice || 0);
@@ -646,6 +648,7 @@
 
   /** Full plan: optimized + a "convenient" baseline (fewest stops, least detour, fill up) for comparison. */
   function plan(o) {
+    if(EP&&o.propulsion&&!o.propulsionPass)return propulsionPlan(o);
     // EV reliability is a preference tier, not an invented dollar surcharge. Try a whole
     // feasible trip with recently observed tariffs first; never strand the driver by
     // treating stale/undated published tariffs as unavailable. Unknown tariffs require opt-in.
@@ -699,6 +702,27 @@
     return { ok: true, tooFar: tooFar, cands: cands, stops: best.stops,destinationCharges:best.destinationCharges||[], arriveGal: best.arriveGal, totals: bestEval, easy: easy.ok ? { stops: easy.stops,destinationCharges:easy.destinationCharges||[], totals: easyEval } : null,
       minStops: minStops, refPrice: o.refPrice, noStopGal: noStopGal, firstDip: !!oo.firstDip,
       arriveMi: best.arriveGal / o.model.combGpm, savings: easyEval ? easyEval.net - bestEval.net : null };
+  }
+
+  // Reuse the existing cost optimizer. Coupled thermal/ETA validation happens in the
+  // same worker, with a bounded replan if weather or a previous charge changes burn.
+  // This is not a global speed/temperature/price optimum.
+  function propulsionPlan(o){
+    if(!o.propulsionBase){o.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){o.propulsionBase[k]=o.model[k];});}
+    var base=makeModel(Object.assign({},o.model,o.propulsionBase)),ctx=Object.assign({},o.propulsionContext,{startGal:o.startGal,fillCap:o.fillCap||o.capGal,reserve:o.bufferGal,stopMinutes:o.stopMinutes,destinations:o.destinationCharges||[]}),projection=EP.project(base,o.propulsion,ctx,null),m=makeModel(projection.model),p,applied;
+    for(var pass=0;pass<3;pass++){
+      var oo=Object.assign({},o,{model:m,propulsionPass:true});p=plan(oo);o.refPrice=oo.refPrice;if(!p.ok)return p;
+      applied=EP.project(base,o.propulsion,ctx,p);
+      if(applied.ok&&applied.mismatch<=Math.max(.01,2*(o.step||.1))&&Math.abs(applied.arriveGal-p.arriveGal)<=Math.max(.01,2*(o.step||.1))&&applied.arriveGal>=o.arriveGal-1e-7)break;
+      m=makeModel(applied.model);
+    }
+    if(!applied.ok||applied.mismatch>Math.max(.01,2*(o.step||.1))||Math.abs(applied.arriveGal-p.arriveGal)>Math.max(.01,2*(o.step||.1))||applied.arriveGal<o.arriveGal-1e-7)return Object.assign(p,{ok:false,propulsionReason:applied.reason||'Weather-aware energy estimate did not settle. Review range, buffer and charging settings.',propulsionFlags:applied.flags});
+    m=makeModel(applied.model);o.model=m;
+    p.arriveGal=applied.arriveGal;p.arriveMi=p.arriveGal/m.combGpm;p.stops=p.stops.filter(function(s){return s.buyGal>1e-8;});
+    p.propulsion={flags:applied.flags,profile:o.propulsion.profile||'estimate',temperature:applied.temperature,iterations:pass+1,estimated:true};
+    p.propulsionModel={segs:m.segs,durationSec:m.durationSec,cityGpm:m.cityGpm,hwyGpm:m.hwyGpm,combGpm:m.combGpm};
+    p.totals=evaluate(Object.assign({},o,{model:m}),p);p.savings=null;p.easy=null;
+    return p;
   }
 
   // Recheck calendar eligibility after stop delays and speed/return-date changes. Usually one pass;
@@ -861,8 +885,13 @@
       var quote=purchaseQuote(c,buy,monthly);c=quote.c;
       var burnOut = model.galTo(L) - model.galTo(c.d) + (c.detourMi || 0) / 2 * model.cityGpm;
       var extraPerGal = last ? c.price - last.c.price : 0;
-      out.push({ c: c, toDestMi: toDest, arriveGal: arrive, buyGal: buy, cost: quote.cost, extraPerGal: extraPerGal,citgoRedemption:monthly&&buy>0?{kind:reward.kind,month:reward.period}:null,
-        endGal: top - burnOut, endMi: (top - burnOut) / model.combGpm });
+      var entry={ c: c, toDestMi: toDest, arriveGal: arrive, buyGal: buy, cost: quote.cost, extraPerGal: extraPerGal,citgoRedemption:monthly&&buy>0?{kind:reward.kind,month:reward.period}:null,endGal:top-burnOut,endMi:(top-burnOut)/model.combGpm };
+      if(o.propulsion&&o.fuelKind==='ev'){
+        var cx=o.propulsionContext||{},at=(cx.departAt||Date.now())+(model.timeTo(c.d)+p.stops.reduce(function(n,s){return n+stopDelay(o,s)*60;},0))*1000;
+        var cr=EP.charge({profile:o.propulsion,soc:arrive/o.capGal,target:top/o.capGal,cap:top/o.capGal,temperature:p.propulsion.temperature,kw:c.stationKw||c.kw||50,level:c.chargeLevel,basis:c.billingBasis,share:c.powerShare,ambient:function(dt,f){return EP.weather(cx.weather,c.d,at+dt*1000,f);}});
+        if(!cr.ok)return;cr.flags.push('optional_topup_temperature_estimated');cr.cost=cr.billedKWh*c.price;entry.propulsion=cr;entry.cost=cr.cost;
+      }
+      out.push(entry);
     });
     out.sort(function (a, b) { return a.toDestMi - b.toDestMi || a.cost - b.cost; });
     return out;
@@ -896,6 +925,7 @@
    * Destination purchases/time belong to the leg arriving there. */
   // Retail fueling estimates, not station throughput/queue measurements. EVs keep their average-kW model.
   function serviceMinutes(s,kind){
+    if(s.propulsion&&s.propulsion.ok!==false&&Number.isFinite(s.propulsion.minutes))return s.propulsion.minutes;
     var amount=Math.max(0,Number(s.buyGal)||0);if(!Number.isFinite(amount))return 0;
     if(kind==='ev'||!kind&&s.c.kw)return s.c.kw>0?amount/s.c.kw*60:0;
     return kind?amount/(kind==='h2'?1:8):0;
@@ -906,9 +936,9 @@
     var rows=ends.map(function(b,i){var a=i?ends[i-1]:0;return {from:a,to:b,miles:b-a,drivingSec:0,stops:0,chargingMin:0,refuelingMin:0,burnGal:0,cost:0,bought:0,spend:0};});
     var seconds=model.timeTo(model.totalMi)||1;rows.forEach(function(r){r.drivingSec=(model.timeTo(r.to)-model.timeTo(r.from))/seconds*model.durationSec;});
     function leg(d){var i=ends.findIndex(function(b){return d<=b+1e-7;});return i<0?ends.length-1:i;}
-    var events=(p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price,det:s.c.detourMi||0,minutes:serviceMinutes(s,fuelKind),refuel:!!fuelKind&&fuelKind!=='ev',stop:true};});
+    var events=(p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:purchasePrice(s),det:s.c.detourMi||0,minutes:serviceMinutes(s,fuelKind),refuel:!!fuelKind&&fuelKind!=='ev',stop:true};});
     events=events.concat((p.destinationCharges||[]).map(function(c){return {d:c.d,arriveGal:c.arriveGal,buyGal:c.buyGal,price:c.buyGal>0?c.cost/c.buyGal:0,det:0,minutes:c.minutes,destination:true};}));
-    if(top)events.push({d:top.c.d,arriveGal:top.arriveGal,buyGal:top.buyGal,price:top.c.price,det:top.c.detourMi||0,minutes:serviceMinutes(top,fuelKind),refuel:!!fuelKind&&fuelKind!=='ev',stop:true});
+    if(top)events.push({d:top.c.d,arriveGal:top.arriveGal,buyGal:top.buyGal,price:purchasePrice(top),det:top.c.detourMi||0,minutes:serviceMinutes(top,fuelKind),refuel:!!fuelKind&&fuelKind!=='ev',stop:true});
     events.sort(function(a,b){return a.d-b.d||Number(!!a.destination)-Number(!!b.destination);});
     events.push({d:model.totalMi,arriveGal:top?top.endGal:p.arriveGal,buyGal:0,price:0,det:0,minutes:0});
     var gas=startGal,value=startGal*startPrice,at=0,lastDet=0;
@@ -1075,7 +1105,7 @@
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, legSummaries:legSummaries, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
-  api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;api.serviceMinutes=serviceMinutes;api.stopDelay=stopDelay;
+  api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;api.purchasePrice=purchasePrice;api.serviceMinutes=serviceMinutes;api.stopDelay=stopDelay;
   api.workerSource='('+initTrip.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
 })(this);

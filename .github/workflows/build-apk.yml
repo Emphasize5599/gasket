@@ -67,6 +67,9 @@ on:
       - tests/climate.test.js
       - tests/walmart-keyless.test.js
       - tests/run-node.js
+      - tests/propulsion.test.js
+      - tests/propulsion-ui.test.js
+      - research/charge-fill-v3/**
       - tests/picture-storage.test.js
       - tests/saved-prices.test.js
       - tests/routes-budget.test.js
@@ -148,6 +151,17 @@ jobs:
 
       - name: Run release regressions in parallel
         run: NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules" TEST_JOBS=3 node tests/run-node.js --release
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: research/charge-fill-v3/requirements.txt
+
+      - name: Check corrected propulsion reference
+        run: |
+          python -m pip install -r research/charge-fill-v3/requirements.txt
+          python -I research/charge-fill-v3/tests/run_tests.py build/propulsion-reference.json
 
       - name: Check release signing configuration
         id: signing

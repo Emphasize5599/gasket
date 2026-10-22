@@ -427,6 +427,7 @@
       var hourly = await nwsHourly(p, getJson, stats); done++; tell(); if (!hourly) return;
       var per = hourly.filter(function (x) { return Date.parse(x.startTime) <= p.eta && p.eta < Date.parse(x.endTime); })[0];
       if (!per) return;
+      p.temperatureHours=hourly.map(function(x){return [Date.parse(x.startTime),x.temperatureUnit==='C'?x.temperature:(x.temperature-32)*5/9];}).filter(function(x){return Number.isFinite(x[0])&&Number.isFinite(x[1]);});
       p.wx = { src: 'nws', text: per.shortForecast || '', pop: per.probabilityOfPrecipitation ? per.probabilityOfPrecipitation.value : null,
         tF: per.temperatureUnit === 'C' ? per.temperature * 9 / 5 + 32 : per.temperature, wind: windMph(per.windSpeed) };
       stats.weather++; stats.nws++;
@@ -444,6 +445,7 @@
             var i = hourIdx(h.time, p.eta);
             if (i < 0 || (h.weather_code[i] == null && h.precipitation[i] == null)) { left.push(p); return; }
             // Open-Meteo's snowfall is in inches of snow (not water) when precipitation_unit=inch
+            p.temperatureHours=h.time.map(function(t,j){return [Date.parse(/Z$|[+-]\d\d:\d\d$/.test(t)?t:t+'Z'),h.temperature_2m[j]==null?NaN:(h.temperature_2m[j]-32)*5/9];}).filter(function(x){return Number.isFinite(x[0])&&Number.isFinite(x[1]);});
             p.wx = { src: model ? 'nbm' : 'om', code: h.weather_code[i], tF: h.temperature_2m[i], precip: h.precipitation[i], snow: h.snowfall ? h.snowfall[i] : null, visM: h.visibility ? h.visibility[i] : null, gust: h.wind_gusts_10m ? h.wind_gusts_10m[i] : null };
             stats.weather++;
           });
@@ -511,7 +513,7 @@
     var hz = wx.concat(al).sort(function (a, b) { return a.fromMi - b.fromMi || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind); });
     res.stats.hazards = hz.length;
     res.stats.aiPending = al.filter(function (x) { return x.aiPending; }).length;   // warnings on this road the model hasn't read yet
-    return { hazards: hz, stats: res.stats, alerts: res.alerts || [], dense:dense, forecast:wx };
+    return { hazards: hz, stats: res.stats, alerts: res.alerts || [], dense:dense, forecast:wx,temperatures:res.pts.map(function(p){return {mi:p.mi,hours:p.temperatureHours||[]};}) };
   }
   /** Rate only retained warning text, with no forecast, air or alert requests. */
   async function rerate(reading,compare,countyOf,ms){

@@ -816,8 +816,15 @@ body.trip-full #btnSettings { display: none !important; }   /* under the lookup 
 .tp-steps button.on { border-color: var(--accent); color: var(--ink); box-shadow: none; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .tp-steps button.dim { opacity: .38; }
 .tp-steps .ls { display: none; }
-@media (max-width: 520px) { .tp-steps .lf { display: none; } .tp-steps .ls { display: inline; } }
-@media (max-width: 370px) { .tp-steps button:not(.on) span { display: none !important; } .tp-steps button.on { flex: 2 1 auto; } }
+/* Use the compact-phone navigation everywhere: numbers for other steps, the
+   selected step's complete title. Never abbreviate or ellipsize that title. */
+.tp-steps { overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
+.tp-steps::-webkit-scrollbar { display: none; }
+.tp-steps button { flex: 1 0 28px; }
+.tp-steps button:not(.on) span { display: none !important; }
+.tp-steps button.on { flex: 2 0 max-content; padding-inline: 10px; }
+.tp-steps button.on .lf { display: inline; overflow: visible; text-overflow: clip; max-width: none; }
+.tp-steps button.on .ls { display: none; }
 .tp-head { align-items: center; }
 /* one-column grids: the column is the screen's width, never the width of its longest line */
 .actions, .pick, .alts-pick { grid-template-columns: minmax(0, 1fr); }

@@ -1,6 +1,6 @@
 # EV charging and hydrogen fill time: research (TODO 50)
 
-Research date 2026-10-22, for TODO 50, which comes before the vehicle comparison (49). Nothing here is implemented yet.
+Historical research, 2026-10-22. Its proposed formulas and old description below are **not the current implementation**. The corrected v3 reference and production integration are described in [PROPULSION_MODELS.md](PROPULSION_MODELS.md). Vehicle comparison already exists. Do not use the old proposal tables below as a description of shipped behavior or as validated model-specific curves.
 
 **What the app does today** (`Trip.serviceMinutes`, `AltFuel.charging`, [REFUEL_TIME.md](REFUEL_TIME.md)):
 - **EV DC:** kWh ÷ (0.7 × min(car DC kW, default 150; station kW)).

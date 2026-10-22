@@ -515,8 +515,9 @@
     $('tpSteps').innerHTML = STEPS.map(function (n, i) {
       var k = i + 1, sh = { Advisory: 'Advice', Hazards: 'Hazards', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
       var attn = k === ST_ADVISORY && window.Advisory && Advisory.attention() > 0;   // something worth a look
-      return '<button data-step="' + k + '" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > reach() ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
+      return '<button data-step="' + k + '" aria-label="Step '+k+': '+n+'" title="'+n+'" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > reach() ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
+    requestAnimationFrame(function(){var rail=$('tpSteps'),active=rail&&rail.querySelector('.on');if(active)rail.scrollLeft+=active.getBoundingClientRect().left-rail.getBoundingClientRect().left-(rail.clientWidth-active.offsetWidth)/2;});
     navRender();
     var b = tpBody();
     if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
@@ -2276,7 +2277,7 @@
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = charging?charging.kw:0;
           cands.push({ id: pr.leg ? st.id + '@' + pr.leg : st.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: det < 0.15 ? 0 : det / 25 * 60 + 1, detourExact: false,
-            price: tariff.price, priceKnown:tariff.known===true, freeCharging:kd==='ev'&&tariff.known&&tariff.price===0,kw: kw, chargeLevel:charging&&charging.level,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
+            price: tariff.price, priceKnown:tariff.known===true, freeCharging:kd==='ev'&&tariff.known&&tariff.price===0,kw: kw, stationKw:charging&&charging.stationKw,chargeLevel:charging&&charging.level,powerShare:st.powerShare,billingBasis:st.billingBasis,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
             calc: { base: tariff.price, final: tariff.price, est: tariff.estimated, stale: kd==='ev'&&(!tariff.updated||Date.parse(tariff.updated)>Date.now()||Date.now()-Date.parse(tariff.updated)>(+S.evPriceAgeHours||24)*3600e3), updated: tariff.updated?Date.parse(tariff.updated)||null:null, notes: [],
               steps: [{ label: tariff.label, kind: 'base', amount: tariff.price }] } });
         }
@@ -2510,7 +2511,7 @@
     var p = e.res.plan; if (!p.ok) return null;
     return choiceCost(e.res);
   }
-  function routeMin(e) { var p = e.res.plan; return e.model.durationSec / 60 + (p.ok ? p.stops.reduce(function(n,s){return n+T.stopDelay(e.res.opts,s);},0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0)+(e.res.top?T.stopDelay(e.res.opts,e.res.top):0) : 0); }
+  function routeMin(e) { var p = e.res.plan; return (e.res.opts&&e.res.opts.model||e.model).durationSec / 60 + (p.ok ? p.stops.reduce(function(n,s){return n+T.stopDelay(e.res.opts,s);},0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0)+(e.res.top?T.stopDelay(e.res.opts,e.res.top):0) : 0); }
   /** How each other checked route compares to the one you're on (same gas price for leftover gas, same rules). */
   function compareRoutes() {
     var list = result.routes || [], cur = list.filter(function (e) { return e.k === altSel; })[0];
@@ -2636,6 +2637,7 @@
     var el = speedTile(); if (!el || !result || !result.plan.ok) return;
     tpBody().querySelectorAll('[data-trip-speed]').forEach(function(e){e.removeAttribute('id');});el.id='tsSpeed';
     ensureLimits(model);
+    if(KIND()!=='gas'){renderPropulsionSpeed(el);return;}
     var legs = speedLegs(), lim = model._lim, st = result.speedState = result.speedState || {};
     var priceAt = function (d) { var L = legs.filter(function (x) { return d >= x.a && d < x.b; })[0] || legs[legs.length - 1]; return L ? L.price : result.startPrice; };
     var roads = lim && lim.roads ? lim.roads.map(function (r) {
@@ -2666,6 +2668,23 @@
 
 
   // ---------- buffer <-> cruising speed ----------
+  function renderPropulsionSpeed(el){
+    var r=result,rows=r.propulsionSpeeds,limits=flatSecs(model),loading=r.propulsionSpeedBusy;
+    el.innerHTML='<h3>Speed & energy estimates</h3><p class="lead small">'+(KIND()==='h2'?'Hydrogen speed estimates are unvalidated; temperature effects are unknown.':'Weather-aware estimates; unknown vehicles use their EPA/observed baseline and a generic charging curve.')+' These compare a few legal speed caps—not a proven global optimum.</p>'+(rows?rows.map(function(x,i){return '<div class="field">'+(x.offset===0?'Posted limits':'Up to '+Math.abs(x.offset)+' mph below limits')+' · '+(x.ok?money(x.cost)+' · '+Math.round(x.minutes)+' min total <button class="btn tonal sm" data-energy-speed="'+i+'">Use</button>':'not feasible with these parameters')+'</div>';}).join(''):'')+'<button class="btn tonal" data-energy-check'+(!limits.length||loading?' disabled':'')+'>'+(loading?'Comparing…':'Compare speed caps')+'</button>'+(!limits.length?'<small>Waiting for posted speed limits.</small>':'');
+    el.querySelector('[data-energy-check]').onclick=async function(){
+      if(r!==result||r.propulsionSpeedBusy)return;r.propulsionSpeedBusy=true;renderPropulsionSpeed(el);
+      var end=window.Tasks?Tasks.begin('energy-speeds',{text:'Comparing legal speed caps using saved stations',priority:1}):function(){};
+      try{
+        var rows=[];for(var offset of [0,-5,-10,-15,-20]){
+          if(result!==r)return;var o=makeOpts(model,r.cands,r.startGal,rawRoute);o.propulsionContext.offset=offset;o.propulsionContext.limits=limits;o.lite=true;
+          var p=await planAsync(o,function(){return result===r;},1);if(p.cancelled)return;
+          var cost=p.ok?T.account(r.startGal,r.startPrice,[{stops:T.purchases(p),arriveGal:p.arriveGal}]).legs[0].cost:null;
+          rows.push({offset:offset,ok:p.ok,cost:cost,minutes:p.ok?o.model.durationSec/60+p.stops.reduce(function(n,s){return n+T.stopDelay(o,s);},0)+(p.destinationCharges||[]).reduce(function(n,s){return n+s.minutes;},0):null});
+        }r.propulsionSpeeds=rows;
+      }catch(e){A.toast('Speed comparison failed. '+e.message);}finally{r.propulsionSpeedBusy=false;end();if(result===r&&el.isConnected)renderPropulsionSpeed(el);}
+    };
+    el.querySelectorAll('[data-energy-speed]').forEach(function(b){b.onclick=function(){if(result!==r)return;S.trip.propulsionOffset=rows[+b.dataset.energySpeed].offset;result.opts.propulsionContext=propulsionContext(model,rawRoute);replan();};});
+  }
   // Stops are planned at the speeds you choose (extra gas for driving faster counted on every stretch), so you always
   // arrive at a station — and at the end — with at least your buffer. Faster speeds or a bigger buffer both need the
   // stations closer together. Each slider stops at its infeasible gray range; neither changes the other.
@@ -3134,13 +3153,23 @@
     planAll(jobs.map(function(r){return r.opts;})).then(function(plans){end();if(result!==top)return;jobs.forEach(function(r,k){r.plan=plans[k];r.sweep=null;r.dsweep=null;r.topSel=-1;});recompute();keepScroll(showResult);},function(e){end();toastMsg(e.message);});
   }
   function makeOpts(model,cands,startGal,raw){
-    return makeBaseOpts(model,cands,startGal);
+    return makeBaseOpts(model,cands,startGal,raw);
   }
-  function makeBaseOpts(model, cands, startGal) {
+  function propulsionContext(m,raw){
+    var temps=[],same=raw===rawRoute||!raw&&m.pts===model.pts;
+    if(same||raw&&raw._sel)for(var i=0;i<hzLegs();i++){
+      var a=hzAlts(i)[raw&&raw._sel?raw._sel[i]:hzSel(i)],e=a&&hzCache.get(a),offset=i?(m.legEnds||[])[i-1]||0:0;
+      ((e&&e.reading&&e.reading.temperatures)||[]).forEach(function(p){temps.push({mi:offset+p.mi,hours:p.hours});});
+    }
+    var ends=m.legEnds||[];
+    return {weather:temps,departAt:departAt().getTime(),limits:flatSecs(m),offset:S.trip.propulsionOffset==null?null:+S.trip.propulsionOffset,waitAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null};
+  }
+  function makeBaseOpts(model, cands, startGal,raw) {
     var kd = KIND(), cap = Garage.tank();
     return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * 0.8 : null,
       priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
+      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2}),propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
       destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,S.evPrice):[],
       arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
@@ -3413,7 +3442,7 @@
     r.top = top;
     if (!p.ok) { r.acc = null; return; }
     var outLeg = { stops: T.purchases(p), arriveGal: p.arriveGal };
-    if (top) { outLeg.stops.push({ arriveGal: top.arriveGal, buyGal: top.buyGal, price: top.c.price }); outLeg.arriveGal = top.endGal; }
+    if (top) { outLeg.stops.push({ arriveGal: top.arriveGal, buyGal: top.buyGal, price: T.purchasePrice(top) }); outLeg.arriveGal = top.endGal; }
     var legs = [outLeg];
     r.startPrice = startRate(p);
     r.acc = T.account(r.startGal, r.startPrice, legs);
@@ -3462,6 +3491,7 @@
     if(!p.ok&&KIND()==='ev'){startEVRecovery();evFailureNotice();if(step===ST_STOPS&&evRecovery&&evRecovery.base===result){if(el)el.innerHTML=evRecoveryHtml();bindEVRecovery();routeGate();return;}}
     // warnings first: what could go wrong on this trip
     var w = [];
+    if(p.propulsion){var ef=p.propulsion.flags||[];w.push({t:KIND()==='h2'?'Hydrogen speed estimates are unvalidated; weather effects on consumption are unknown.':'EV energy, charging time and losses are estimates. '+(ef.some(function(x){return /^weather_/.test(x);})?'Hourly temperatures are missing for part of this trip; those sections use 20°C. ':'' )+'Confirm charging access and rates before travel.'});}
     if (!p.ok) {
       var gap='No plan keeps you above a '+r.bufMi+'-mile buffer. '+(p.reachMi>0?'The current station list cannot bridge the gap past mile '+Math.round(p.reachMi)+'.':'No usable stop is reachable within your current range and detour limit.');
       if(KIND()==='ev'){
@@ -3469,7 +3499,8 @@
         if(!p.reachMi&&reachable.length&&reachable[0].detourMin>r.opts.maxDetourMin)gap+=' A reachable charger needs about '+Math.ceil(reachable[0].detourMin)+' min of extra driving; your limit is '+r.opts.maxDetourMin+' min.';
         gap+=' Check the selected charger types in Parameters → Charging stops, the detour limit and starting charge. Discovery errors below mean coverage is incomplete—not that chargers do not exist.';
       }else gap+=' Try a smaller buffer or check the miles left.';
-      w.push({err:1,t:gap});
+      var energyErrors={charge_timeout:'Charging would exceed the estimate’s time limit. Try faster chargers or another route.',charger_power_insufficient:'The selected charger cannot supply the estimated charging and cabin/cooling load. Try another charger type.',weather_reserve_violated:'Weather-adjusted energy use would breach your buffer. Review starting charge, buffer and available chargers.',energy_exhausted:'The weather-adjusted estimate runs out of energy before the next stop. Review range and chargers.'};
+      w.push({err:1,t:energyErrors[p.propulsionReason]||p.propulsionReason||gap});
     }
     if (p.ok && p.firstDip && p.stops.length) w.push({ t: 'You\'ll reach stop 1 below '+('your '+r.bufMi+'-mile buffer')+' (~' + Math.round(p.stops[0].arriveGal / model.combGpm) + ' mi left).' });
     if(p.ok&&p.firstDip&&!p.stops.length&&(p.destinationCharges||[]).length)w.push({t:'The first destination is reached below your chosen buffer. Increase starting charge or adjust the route; destination charging cannot help before arrival.'});
@@ -3548,7 +3579,7 @@
     var h = '<div class="card dep-route">' + numList(route.stops)+chooser+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' +
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(summary?summary.miles:model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
-      '<div><b>' + glue(fmtDur(summary?summary.drivingSec:model.durationSec)) + '</b><span>driving</span></div>' +
+      '<div><b>' + glue(fmtDur(summary?summary.drivingSec:(r.opts.model||model).durationSec)) + '</b><span>driving</span></div>' +
       (p.ok ? '<div><b>' + stops + '</b><span>' + (KIND() === 'ev' ? 'charging' : 'fuel') + ' stop' + (stops === 1 ? '' : 's') + '</span></div>' : '') +
       (p.ok ? '<div><b>~' + glue(fmtDur(charging * 60)) + '</b><span>'+(KIND()==='ev'?'charging':'refueling')+' '+A.qBtn(KIND()==='ev'?'Estimated charging time, excluding queues.':'Estimated pumping time at 8 gal/min for liquid fuel or 1 kg/min for hydrogen. Trip comparisons also allow 3 minutes per stop for payment and nozzle setup, plus detours. Queues, breaks and slow equipment are not included.')+'</span></div>' : '') + '</div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
@@ -4152,7 +4183,7 @@
       '<span class="mid"><span class="nm">' + esc(P.displayName(st)) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · ' + (KIND() === 'ev' ? 'add ' : 'buy ') + s.buyGal.toFixed(1) + ' ' + UN() + ' · ~' + Math.max(1, Math.round(T.serviceMinutes(s,result.opts.fuelKind))) + ' min '+(KIND()==='ev'?'charging':'refueling') + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
       '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + (c.est ? '<span class="o est-tag">est.</span>' : '') + '</span><span class="chev"></span></button>';
     if (!open) return h + '</div>';
-    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' ' + UN() + (KIND() === 'ev' ? (s.departGal >= Garage.tank() * 0.8 - 0.3 ? ' (to 80%)' : '') : S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') +
+    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' ' + UN() + (s.propulsion&&s.propulsion.billedKWh!=null?' stored · ~'+s.propulsion.billedKWh.toFixed(1)+' kWh billed':'') + (KIND() === 'ev' ? (s.departGal >= Garage.tank() * 0.8 - 0.3 ? ' (to 80%)' : '') : S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') +
       ' · <b>~' + Math.max(1, Math.round(T.serviceMinutes(s,result.opts.fuelKind))) + ' min '+(KIND()==='ev'?'charging':'refueling')+'</b>'+(c.kw?' at ~'+Math.round(c.kw)+' kW average':'') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
       ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';

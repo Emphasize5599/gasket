@@ -159,6 +159,8 @@ assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geoco
   }, { depart: far });
   assert.ok(res2.stats.nws > 0 && res2.stats.nws < res2.stats.points, 'the first part from the NWS forecast, the rest past it: ' + JSON.stringify(res2.stats));
   assert.ok(u2.some((u) => /models=ncep_nbm_conus/.test(u)));
+  assert(res2.temperatures.some(p=>p.hours.length===156&&Math.abs(p.hours[0][1]-(66-32)*5/9)<1e-8),'retain the NWS hourly series in Celsius for energy models');
+  assert(res2.temperatures.some(p=>p.hours.some(h=>Math.abs(h[1]-(70-32)*5/9)<1e-8)),'retain Open-Meteo hourly temperature series, not just the arrival hour');
   const r2 = res2.hazards.find((x) => x.kind === 'rain');
   assert.ok(r2 && r2.level === 2 && r2.peak.text === 'Heavy Rain' && r2.peak.pop === 90, JSON.stringify(r2));
   assert.match(W.advice(r2, {}).join(' '), /National Weather Service forecast: Heavy Rain \(90% chance\)/);

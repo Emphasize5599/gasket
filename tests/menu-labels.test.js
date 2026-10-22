@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448,1024]){
+ const p=await b.newPage({viewport:{width,height:900}});await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));await p.click('#btnTrip');
+ for(const step of [1,2]){await p.evaluate(k=>__trip.step(k),step);await p.waitForFunction(()=>{let e=document.querySelector('#tpSteps .on .lf'),r=e.getBoundingClientRect(),rail=document.querySelector('#tpSteps').getBoundingClientRect();return r.left>=rail.left-1&&r.right<=rail.right+1;});
+  assert(await p.locator('#tpSteps .on .lf').isVisible());assert(!await p.locator('#tpSteps .on .ls').isVisible());assert.equal(await p.locator('#tpSteps button:not(.on) .lf:visible').count(),0);assert.equal(await p.locator('#tpSteps .on .lf').evaluate(e=>e.scrollWidth>e.clientWidth),false);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ }await p.close();
+}console.log('Selected full menu labels and compact numbers fit 320/448/1024px');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

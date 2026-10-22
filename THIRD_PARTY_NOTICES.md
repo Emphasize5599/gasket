@@ -363,7 +363,23 @@ Gemma 4 E4B instruction-tuned, Google, is downloaded only with consent; it is no
 
 LiteRT-LM Android 0.18.0 (Google AI Edge, Apache License 2.0) is bundled unmodified for native inference: https://github.com/google-ai-edge/LiteRT-LM . Java dependencies include Gson 2.14.0 (Google), Kotlin 2.4.0 and Kotlin coroutines 1.11.0 (JetBrains), under Apache License 2.0. The build verifies the official AAR checksum and preserves the resolved dependency license files and LiteRT-LM's complete native THIRD_PARTY_NOTICE.txt, including its differently licensed components. These are available using **Full AI runtime license notices** in Licenses & credits. The runtime's Apache license also accompanies these notices.
 
-## Map data and online services
+## Propulsion research data and estimates
+
+The optional one-car Model 3 SR+ CATL LFP profile and `research/charge-fill-v3/baseline_v2/derived` contain modified/cleaned/fitted data from Rosenberger et al., Technical University of Munich, driving/charging and dyno datasets: https://doi.org/10.14459/2024mp1735494 and https://doi.org/10.14459/2024mp1735471 . Creative Commons Attribution 4.0: https://creativecommons.org/licenses/by/4.0/ . Imported through the owner's v3 research bundle; Gasket adds numerical corrections and a JavaScript implementation. No endorsement is implied. The raw data and full fitting environment are not bundled. See `docs/PROPULSION_MODELS.md` for assumptions, extrapolations and validation limits.
+
+The generic charging-taper and AC/DC conversion estimates draw on the DESL EPFL Level-3 EV charging dataset: https://github.com/DESL-EPFL/Level-3-EV-charging-dataset . They are not measured per-vehicle curves. Its MIT notice follows:
+
+MIT License
+
+Copyright (c) 2025 Distributed Electrical Systems Laboratory (DESL), École Polytechnique Fédérale De Lausanne (EPFL)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Runtime map data and online services
 
 None of this data is bundled in the repository. The app fetches it while it runs, and each source's own terms apply.
 
