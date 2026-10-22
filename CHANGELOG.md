@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.239 - 2026-10-22
+- Check EV alternatives with the same hourly weather and speed limits used after acceptance; retain the validated plan during hazard review.
+- Avoid repeated web-price passes during cached route projection and keep large station-processing loops responsive.
+- Support EV/hydrogen speed lookups without turn instructions; show a failed recalculation instead of outdated successful stops.
+
 ## 0.0.238 - 2026-10-22
 - Graph EV/hydrogen speed against energy cost and driving/stop time; honor default speed rules and caps.
 - Let ChargePoint recover from automatic checks/loading before requesting verification; improve station-page opening and scheduled-rate parsing.
