@@ -89,13 +89,14 @@
     var records=Object.assign({},previous||{}),c=Garage.car();
     if(c.rememberRouteChoices===true&&choiceReviewedAt&&Object.keys(choiceAnswers()).length)
       records[c.id]={answers:JSON.parse(JSON.stringify(choiceAnswers())),reviewedAt:choiceReviewedAt};
-    else delete records[c.id];
+    else if(c.rememberRouteChoices!==true)delete records[c.id];
     return records;
   }
-  function saveChoices(){
+  function saveChoices(clear){
     if(!choiceSavedId)return;
     var o=A.KV.get('trips','trip|'+choiceSavedId);if(!o||!o.v)return;
     o.v.routeChoicesByVehicle=rememberedChoices(o.v.routeChoicesByVehicle);
+    if(clear===true)delete o.v.routeChoicesByVehicle[S.carId];
     if(o.v.trip)delete o.v.trip.routeChoices;
     A.KV.put('trips','trip|'+choiceSavedId,o.v);
   }
@@ -107,7 +108,7 @@
     var ok=await A.confirmDel({always:true,title:'Remembered alternative routes',body:'Your alternative-route selections were remembered for this saved trip and this vehicle only.<br><br>'+(old?'<strong>These selections are over an hour old. Review them: forecasts have likely changed.</strong>':'Review these selections if it has been more than an hour; forecasts have likely changed.')+'<br><br>Fresh hazard checks still run. Remembered choices are not a safety approval.',action:'Use remembered',no:'Review again',goClass:'primary'});
     if(epoch!==choiceEpoch||c.id!==S.carId)return;
     if(ok){S.trip.routeChoices=JSON.parse(JSON.stringify(record.answers));choiceReviewedAt=record.reviewedAt;}
-    else {S.trip.routeChoices={};choiceReviewedAt=0;saveChoices();}
+    else {S.trip.routeChoices={};choiceReviewedAt=0;saveChoices(true);}
     gateTabs();
   }
   function choiceLists(){return Array.from({length:hzLegs()},function(_,i){return hzAlts(i);});}
