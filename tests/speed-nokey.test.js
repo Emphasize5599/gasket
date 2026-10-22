@@ -32,12 +32,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  // the totals say they're rough: Stops and Departure
  await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tsResults .est-note');
  assert.match(await p.innerText('#tsResults .est-note'),/rough estimates/);
- await p.evaluate(()=>__trip.step(8));await p.waitForSelector('.kpis.four + .est-note');
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));await p.waitForSelector('.kpis.four + .est-note');
  if(shots)await p.screenshot({path:shots+'/nokey-depart.png'});
  // with a key: everything works again
  await p.evaluate(()=>{__app.S.apiKey='TEST';});await p.evaluate(()=>__trip.step(6));await p.waitForSelector('#tsSpeed');
  assert.equal(await p.locator('#tsSpeed.spd-off, #tsSpeed .spd-off-note').count(),0,'a key turns it back on');
- await p.evaluate(()=>__trip.step(8));assert.equal(await p.locator('.est-note').count(),0,'no rough-cost note with a key');
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.equal(await p.locator('.est-note').count(),0,'no rough-cost note with a key');
  // Advice's tick boxes hold every later step until they're ticked
  await p.evaluate(()=>{__app.S.recircAck=0;__trip.step(7);});await p.waitForFunction(()=>__trip.state().step===2);
  await p.evaluate(()=>{__app.S.recircAck=Date.now();__trip.step(7);});await p.waitForFunction(()=>__trip.state().step===7);
@@ -46,7 +46,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy&&__trip.state().model.segs.some(s=>s.instr));
  await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);await p.waitForSelector('#tsSpeed');
  assert.equal(await p.locator('#tsSpeed.spd-off, #tsSpeed .spd-off-note').count(),0,'steps from the website: cruising speed on without a key');
- await p.evaluate(()=>__trip.step(8));assert.match(await p.innerText('.est-note'),/rough estimates/);assert.doesNotMatch(await p.innerText('.est-note'),/planned at the limits/);
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.match(await p.innerText('.est-note'),/rough estimates/);assert.doesNotMatch(await p.innerText('.est-note'),/planned at the limits/);
  assert.equal(errors.length,0,errors.join('\n'));
  console.log('no API key: cruising speed shown grayed out with a warning, planned at the limits; back on with a key');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

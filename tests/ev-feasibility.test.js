@@ -36,7 +36,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(await p.evaluate(()=>__discoveryReads),reads,'acceptance does not rediscover stations');
   assert.equal(await p.evaluate(()=>__websiteReads),0,'acceptance does not open pricing websites');
   assert.equal(await p.evaluate(()=>__pricePasses),passes,'returning through Hazards reuses the completed price pass, not just positive prices');
-  await p.evaluate(()=>__trip.step(8));assert.equal(await p.locator('.est-note').count(),0,'EV departure has no Google key warning');assert(!/Google Maps may pick|In Google Maps, pick/.test(await p.locator('#tpS8').innerText()));
+  await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.equal(await p.locator('.est-note').count(),0,'EV departure has no Google key warning');assert(!/Google Maps may pick|In Google Maps, pick/.test(await p.locator('#tpS9').innerText()));
   assert.equal(await p.locator('.dep-facts > div').first().locator('b').innerText(),'440');
   await p.click('[data-depart-scope="leg"]');assert.equal(await p.locator('.dep-facts > div').first().locator('b').innerText(),'220');
   await p.selectOption('#tDepartLeg','1');assert.match(await p.locator('.kpis.four').innerText(),/leg cost/);assert.equal(await p.locator('#tDepartLeg').inputValue(),'1');

@@ -207,7 +207,7 @@
   function draw() {
     if(window.VisualDiagnostics)VisualDiagnostics.redraw('garage');
     if (matching) { drawLater = true; return; }   // a VIN match is filling the pickers: redraw once it's done
-    if (!host || drawing) return;
+    if (!host || !host.isConnected || drawing) return;
     drawing = true;
     // Moving a live EPA grid out and back in restarts CSS animations unless the transient
     // class is removed first. Keep its persistent error outline, never replay its blink.
@@ -867,16 +867,19 @@
     settle(ed.body);
     var sc = ed.body.scrollTop;
     ed.body.innerHTML = editPanel(c);
+    if(externalEditDone&&$('gRemove'))$('gRemove').remove();
     ed.body.scrollTop = sc;
     $('gSave').disabled = !editorOk(c);
     if (A.qify) A.qify(ed.body);
   }
+  var externalEditDone=null;
+  function finishExternalEdit(saved){var cb=externalEditDone;externalEditDone=null;if(cb)cb(saved);}
   function saveEdit(c) {
     if (!editorOk(c)) { var n = !identityOk(c)?$('gName'):!trimOk(c)?$('gTrim'):$('gTank'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
-    vinStates.delete(c);editSnap = null; editing = false; LG.info('car', 'Saved ' + shortName(c)); draw(); changed();
+    vinStates.delete(c);editSnap = null; editing = false; LG.info('car', 'Saved ' + shortName(c)); draw(); changed();finishExternalEdit(true);
   }
   function discardEdit(c) {
-    A.confirmDiscard().then(function(ok){if(!ok||!editSnap||editSnap.id!==c.id)return;var snap=editSnap;if(snap.isNew){S.cars=S.cars.filter(function(x){return x.id!==c.id;});S.carId=S.cars.some(function(x){return x.id===snap.previous;})?snap.previous:S.cars.length?S.cars[0].id:'';}else{Object.keys(c).forEach(function(k){delete c[k];});Object.assign(c,JSON.parse(snap.before));}vinStates.delete(c);editSnap=null;editing=false;draw();changed();});
+    A.confirmDiscard().then(function(ok){if(!ok||!editSnap||editSnap.id!==c.id)return;var snap=editSnap;if(snap.isNew){S.cars=S.cars.filter(function(x){return x.id!==c.id;});S.carId=S.cars.some(function(x){return x.id===snap.previous;})?snap.previous:S.cars.length?S.cars[0].id:'';}else{Object.keys(c).forEach(function(k){delete c[k];});Object.assign(c,JSON.parse(snap.before));}vinStates.delete(c);editSnap=null;editing=false;draw();changed();finishExternalEdit(false);});
   }
   function bind(c) {
     syncVinUi(c);
@@ -1789,6 +1792,8 @@
   }
 
   window.Garage = { installDemo:installDemo, addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
+    editVehicle:function(done){externalEditDone=done;var c=car();editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};editing=true;draw();},
+    addVehicle:function(done){externalEditDone=done;addCar();},
     trimBusy: function () { return Object.keys(trimMem).some(function (k) { return trimMem[k].busy; }); },   // tests wait for the trim lookup's redraws
     need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

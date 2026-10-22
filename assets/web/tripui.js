@@ -436,8 +436,10 @@
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
-  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Departure'], step = 1;
-  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_DEPART = 8;
+  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Compare', 'Departure'], step = 1;
+  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_COMPARE = 8, ST_DEPART = 9;
+  var compareEntries=new Map(),compareOwner=null,compareReviewed=0,compareReviewKey=null,compareEditing=false,compareSwitching=false,compareCalculating=null;
+  var compareView={sort:'cost',scope:'trip',leg:0,open:{}},compareJourney=null;
   /** Adjustments and Stops both show the plan (and the map). */
   function onPlan(k) { return k === ST_ADJ || k === ST_STOPS; }
   function tpBody() { return $('tpBody'); }
@@ -458,6 +460,7 @@
     $('tpSteps').onclick = function (e) {
       var b = e.target.closest('[data-step]'); if (!b) return;
       var k = +b.dataset.step; if (k === step || jobLocked(k)) return;
+      if(k===ST_COMPARE){collectSafe();compareCapture();step=k;renderStep();return;}
       if (k < step) { collectSafe(); step = k; renderStep(); } else advance(k);
     };
     panelDrag(pg);
@@ -478,21 +481,24 @@
   /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
   function adviceDue() { return !!((window.Tires && Tires.airDue && Tires.airDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
+    if(step===ST_GARAGE&&shown>ST_GARAGE)compareCapture();
+    if(step===ST_COMPARE)compareCapture();else if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     if(window.VisualDiagnostics)VisualDiagnostics.redraw('trip_step');
     // Going back is a new review, not implicit consent to reuse this session's answers.
     if(step===ST_HAZ&&shown>ST_HAZ&&Garage.car().rememberRouteChoices!==true){
+      compareReviewed=0;compareReviewKey=null;
       S.trip.routeChoices={};choiceReviewedAt=0;routeReview=null;choiceComplete=false;result=null;
     }
     if(!recommendationActive()){stopRecommendations();clearRecommendationMaps();}
     freshModel();
     setTimeout(function () { if (A.jobDraw && A.job && A.job()) A.jobDraw(); }, 0);   // its status bar shows unless this step shows the search itself
-    var held = step > ST_ADVISORY && !loadingTrip && adviceDue();
+    var held = step > ST_ADVISORY && step!==ST_COMPARE && !loadingTrip && adviceDue();
     if (held) { LG.info('trip', 'Held at Advice: ' + STEPS[step - 1] + ' waits for its tick boxes'); step = ST_ADVISORY; setTimeout(function () { ready(ST_ADVISORY); }, 350); }
     if (window.__apiCount) window.__apiCount();
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);
     show(pg, true);
-    var full = step < ST_HAZ || recommendationActive();   // nothing to see on the map: Garage, Advisory, Route and Parameters take the whole screen
+    var full = step < ST_HAZ || step===ST_COMPARE || recommendationActive();
     // coming down to the map: Hazards keeps the map big (the panel at 25%); the plan's list starts at 75% (drag it
     // anywhere from there) — straight away, not as a slide a busy screen could freeze halfway
     if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzFitKey = null; hzLeg = shown > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
@@ -514,7 +520,7 @@
     var b = tpBody();
     if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
     var e = stepEl(step), c = built[step];
-    var fresh = !c || step === ST_DEPART || step === ST_HAZ || step === ST_STOPS || step===ST_PARAMS&&KIND()==='ev' || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));   // EV destination controls follow the current trip and fresh plan estimates.
+    var fresh = !c || step === ST_COMPARE || step === ST_DEPART || step === ST_HAZ || step === ST_STOPS || step===ST_PARAMS&&KIND()==='ev' || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));
     e.classList.remove('hidden'); shown = step;
     if(step===ST_PARAMS&&$('tRuleCap')&&(!S.speed.rule||S.speed.rule.capAuto||S.speed.rule.cap==null))$('tRuleCap').value=Garage.ruleCap();
     if (fresh) {
@@ -533,7 +539,7 @@
     requestAnimationFrame(function () { setTimeout(function () {
       if (step !== k0) return;
       if($('trip').classList.contains('hidden'))return;
-      if (model && step >= ST_ADJ) { if(!recommendationActive())drawRoute();else{layer.clearLayers();drawn={};} if (!userMoved) fitRoute(false); }
+      if (model && step >= ST_ADJ && step!==ST_COMPARE) { if(!recommendationActive())drawRoute();else{layer.clearLayers();drawn={};} if (!userMoved) fitRoute(false); }
       hzSync();
       fitBtn(); sheetSize();
       if (step === ST_DEPART) fitDepart();
@@ -627,7 +633,10 @@
       var owner=route;
       for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)];if(!await hzConfirmRisk(a,i,function(){return route===owner&&step===ST_HAZ&&hzAlts(i)[hzSel(i)]===a;}))return false;}
       if(choicePending().length){reviewStart();return false;}
+      compareReviewed=Date.now();
+      compareReviewKey=compareSafetyKey();
     }
+    if(k===ST_COMPARE){compareCapture();var selected=compareEntries.get(S.carId);if(!compareUsable(selected)){A.toast('Review this vehicle’s setup and hazards before departure.');return false;}return true;}
     if (onPlan(k)) {
       if (!result) { await findStops(); if (!result) return false; }
       if (!result.plan.ok) { flag($('tsBufBox') || $('tsResults'), 'pick', 'No plan works with this buffer — try a smaller one.'); return false; }
@@ -775,6 +784,7 @@
     if (k === ST_HAZ) return '<div id="tHz"></div>';
     if (k === ST_ADJ) return '<div id="taResults"></div>';
     if (k === ST_STOPS) return '<div id="tsResults"></div>';
+    if (k === ST_COMPARE) return '<div id="tCompare"></div>';
     return departureHtml();
   }
   // another car: the route's fuel use is worked out again a moment later (a long trip takes a while), or right away
@@ -788,6 +798,8 @@
     if (k === ST_ADVISORY) { Advisory.render($('tAdvisory'), call); return; }
     if (k === ST_GARAGE) {
       Garage.render($('tGarage'), null, function () {
+        if(compareGarageChanged())return;
+        compareReviewed=0;
         if (model) { modelStale = true; clearTimeout(staleT); staleT = setTimeout(freshModel, 400); }   // after the Garage has redrawn
         result = null; gateTabs();
         var e3 = $('tpS' + ST_PARAMS); if (e3 && step !== ST_PARAMS) { e3.remove(); delete built[ST_PARAMS]; }   // its labels follow the car (gal / kWh / kg)
@@ -797,6 +809,7 @@
     if (k === ST_ROUTE) { bindRoute(); return; }
     if (k === ST_HAZ) { renderHz(); hzPreload(); return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
+    if (k === ST_COMPARE) { compareRender(); return; }
     if (onPlan(k)) {
       renderResults();
       built[k].result = result;
@@ -3203,6 +3216,7 @@
     if (!onPlan(step) || !result) mapLoaded();
     if (window.__apiCount) window.__apiCount();
     if (onPlan(step) && !result) renderResults();
+    if(step===ST_COMPARE){compareCapture();compareRender();}
   }
   async function findStops0(force, noReplay) {
     scanPending('plan','Choosing stops',100);scanPending('draw','Preparing the map and trip costs',110);
@@ -3985,6 +3999,7 @@
     var id = histId(route), now = Date.now();
     choiceOwnerSync();var prior=choiceSavedId===id&&A.KV.get('trips','trip|'+id);
     var choices=rememberedChoices(prior&&prior.v&&prior.v.routeChoicesByVehicle);choiceSavedId=id;
+    var previousComparison=A.KV.get('trips','trip|'+id);
     var google = (raw.google || []).map(function (list, i) { return { k: ks[i], sig: alts[ks[i]] ? altSig(alts[ks[i]]) : '', list: list }; });
     var keepStop = function (st) { var o = Object.assign({}, st); delete o.choices; return o; };
     A.KV.put('trips', 'trip|' + id, {
@@ -3993,6 +4008,7 @@
       alts: alts, altSel: altSel, altSure: altSure,
       trip: { link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,evChargers:S.trip.evChargers,evNetworksOff:S.trip.evNetworksOff,evDestinations:S.trip.evDestinations,arrive:S.trip.arrive,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave },
       routeChoicesByVehicle:choices,
+      comparison:previousComparison&&previousComparison.v&&previousComparison.v.comparison,
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     });
     if(routeFlow()||(replay&&replay.id===id))replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
@@ -4053,9 +4069,10 @@
   function closePicker() { var bg = $('tripPick'); if (!bg) return false; bg.remove(); return true; }
   /** A fresh trip: keep the car and your settings, forget the route. */
   /** Another trip (new, saved or shared from Maps) while a search runs would pull its route away from under it. */
-  function jobBlocks() { if (!busy || loadingTrip) return false; A.toast('Finish or cancel the station search first (the bar at the top).'); return true; }
+  function jobBlocks() { if(compareCalculating){A.toast('Wait for the vehicle recalculation to finish.');return true;}if (!busy || loadingTrip) return false; A.toast('Finish or cancel the station search first (the bar at the top).'); return true; }
   function newTrip(link) {
     if (jobBlocks()) return;
+    compareReset();
     resetChoices();adjustError='';evRecovery=null;
     resetAdjust();
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
@@ -4071,6 +4088,13 @@
     resetAdjust();
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { toastMsg('That saved trip couldn\'t be read.'); return; }
+    compareReset();
+    (v.comparison||[]).forEach(function(s){if(S.cars.some(function(c){return c.id===s.id;})){s.needsReview=true;s.reviewedAt=0;s.result=null;s.model=null;s.trip.routeChoices={};s.trip.depart='';s.trip.departNow=false;s.trip.backAt='';compareEntries.set(s.id,s);}});
+    var draft=compareEntries.get(S.carId);
+    if(draft){
+      S.trip=Object.assign({},S.trip,VehicleCompare.clone(draft.trip));Object.defineProperty(S.trip,'routeChoices',{value:{},writable:true,configurable:true,enumerable:false});S.speed=VehicleCompare.clone(draft.speed);
+      v=Object.assign({},v,{route:draft.route,alts:draft.alts,altSel:draft.altSel,altSure:draft.altSure,trip:draft.trip,stations:draft.replay&&draft.replay.stations||{official:[],google:[],kind:draft.kind},savedT:draft.replay&&draft.replay.t||v.savedT});
+    }else if(compareEntries.size){S.trip.fuel=null;S.trip.milesLeft='';v=Object.assign({},v,{trip:Object.assign({},v.trip,{fuel:null,milesLeft:'',evDestinations:null})});}
     S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
     S.trip.evChargers=v.trip.evChargers||null;if(v.trip.evNetworksOff)S.trip.evNetworksOff=v.trip.evNetworksOff;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
@@ -4463,6 +4487,7 @@
     var pg = $('trip'); if (pg) pg.classList.remove('submode', 'tall');
   }
   function closeTrip() {
+    collectSafe();compareCapture();if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     hzRiskAcks=new WeakMap();
     closePage();mapLoaded();
     resetAdjust();
@@ -4497,7 +4522,84 @@
 
   // the car's recalls and VIN check run in the background soon after the app starts (NHTSA, never Google), so Advisory is ready
   setTimeout(function () { if (window.Advisory) Advisory.init(call); }, 4000);
-  window.__trip = { call: call, open: openTrip, relogo: function () {
+  // Vehicle plans own all mutable planner state. Only raw provider caches are shared.
+  function compareReset(){compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
+  function compareSafetyKey(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip),choiceLists().map(function(l,i){return altSig(l[hzSel(i)]);})]);}
+  function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices'].map(function(k){return S[k];}));}
+  function compareLocked(){return !!(busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
+  function comparePersist(){
+    if(!route||!route.histId)return;var o=A.KV.get('trips','trip|'+route.histId);if(!o||!o.v)return;
+    o.v.comparison=Array.from(compareEntries.values()).map(function(s){return VehicleCompare.portable(s);});A.KV.put('trips','trip|'+route.histId,o.v);
+  }
+  function compareCapture(){
+    if(compareEditing||compareSwitching||!route||!model)return;
+    if(compareOwner&&compareOwner!==S.carId)return;
+    var car=Garage.car(),old=compareEntries.get(car.id),journey=VehicleCompare.journey(route,S.trip),places=VehicleCompare.key(route.stops.map(function(s){return [s.lat,s.lng,s.label||s.address];}));
+    if(compareJourney&&compareJourney.places!==places){compareEntries.clear();old=null;compareReviewed=0;A.toast('Destinations changed. Vehicle comparison restarted for this trip.');}
+    else if(compareJourney&&compareJourney.key!==journey){compareEntries.forEach(function(s){if(s.id!==car.id){['depart','departNow','returnTrip','backAuto','backAt'].forEach(function(k){s.trip[k]=S.trip[k];});s.result=null;s.reviewedAt=0;s.needsReview=true;s.hzCache=null;}});compareReviewed=0;}
+    compareJourney={places:places,key:journey};compareOwner=car.id;
+    var profile=VehicleCompare.profile(car),settingsKey=compareSettingsKey(),changed=old&&(old.profile!==profile||old.settingsKey&&old.settingsKey!==settingsKey);
+    if(changed){compareReviewed=0;result=null;model=T.buildRoute(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();}
+    if(compareReviewKey!==compareSafetyKey())compareReviewed=0;
+    var hazards=[];for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)],e=a&&hzCache.get(a),offset=i&&model.legEnds?model.legEnds[i-1]:0;(e&&e.hz||[]).forEach(function(x){hazards.push(Object.assign({},x,{fromMi:x.fromMi+offset,toMi:x.toMi+offset}));});}
+    var s={id:car.id,profile:profile,kind:KIND(),trip:VehicleCompare.clone(S.trip),speed:VehicleCompare.clone(S.speed),route:route,alts:alts,altSel:altSel,altSure:altSure,rawRoute:rawRoute,model:model,result:result,replay:replay,evRates:evRates,hzCache:hzCache,hzModels:hzModels,hzRiskAcks:hzRiskAcks,hzLeg:hzLeg,choiceSavedId:choiceSavedId,choiceChecked:choiceChecked,choiceReviewedAt:choiceReviewedAt,choiceComplete:choiceComplete,choicePool:choicePool,choiceCandidates:choiceCandidates,routeReview:routeReview,reviewedAt:compareReviewed,needsReview:!compareReviewed,hazards:hazards,tolls:choiceLists().map(function(l,i){return tollsOf(l[hzSel(i)]);}),startEstimated:!(+S.trip[tankPriceKey()]>0),resumeStep:step===ST_COMPARE?old&&old.resumeStep||ST_ADVISORY:Math.min(step,ST_STOPS)};
+    Object.defineProperty(s.trip,'routeChoices',{value:VehicleCompare.clone(S.trip.routeChoices||{}),writable:true,configurable:true,enumerable:false});
+    s.speedTiming=KIND()==='gas'&&!speedOff()?flatSecs(model).map(function(sc,i){var offsets=result&&result.speedState&&result.speedState.offsets||{};return Object.assign({},sc,{offset:offsets[i]==null?Garage.ruleOff(sc.limit):offsets[i],lo:25,hi:Math.max(80,+S.speed.max||84)});}):[];
+    s.reviewKey=compareReviewKey;s.settingsKey=settingsKey;compareEntries.set(car.id,s);comparePersist();
+  }
+  function compareUsable(s){return !!(s&&s.result&&s.result.plan.ok&&s.reviewedAt&&Date.now()-s.reviewedAt<3600000&&s.settingsKey===compareSettingsKey()&&s.profile===VehicleCompare.profile(S.cars.find(function(c){return c.id===s.id;}))&&!s.needsReview);}
+  function compareSwitch(id,restoreOnly){
+    if(compareLocked())return false;if(!restoreOnly){collectSafe();compareCapture();}var s=compareEntries.get(id),car=S.cars.find(function(c){return c.id===id;});if(!car)return false;
+    var seed=compareEntries.get(compareOwner);
+    if(!s){if(!seed){A.toast('Plan a route first.');return false;}s=VehicleCompare.portable(seed);s.id=id;s.profile=VehicleCompare.profile(car);s.kind=null;s.trip.fuel=null;s.trip.milesLeft='';s.trip.evDestinations=null;['tankPrice','evTankPrice','h2TankPrice'].forEach(function(k){s.trip[k]='';});s.replay=null;s.reviewedAt=0;s.resumeStep=ST_ADVISORY;compareEntries.set(id,s);}
+    if(seed&&seed.id!==id)['depart','departNow','returnTrip','backAuto','backAt'].forEach(function(k){s.trip[k]=seed.trip[k];});
+    compareSwitching=true;stopRecommendations();clearRecommendationMaps();clearSel();resetAdjust();clearTimeout(staleT);modelStale=false;resetSteps();choiceEpoch++;
+    S.carId=id;S.trip=VehicleCompare.clone(s.trip);S.speed=VehicleCompare.clone(s.speed);Object.defineProperty(S.trip,'routeChoices',{value:VehicleCompare.clone(s.trip.routeChoices||{}),writable:true,configurable:true,enumerable:false});
+    route=s.route;alts=s.alts;altSel=s.altSel||0;altSure=!!s.altSure;rawRoute=s.rawRoute||alts[altSel];
+    // Gas inventories contain raw prices for all available grades. Refilter/reproject for
+    // this car; never share adjusted prices, fuel readings, EV connector results or plans.
+    if(!s.kind&&seed&&seed.kind==='gas'&&KIND()==='gas')s.replay=VehicleCompare.clone(seed.replay);
+    var changed=s.profile!==VehicleCompare.profile(car)||s.settingsKey&&s.settingsKey!==compareSettingsKey();model=!changed&&s.model||T.buildRoute(rawRoute,carModel());result=!changed?s.result||null:null;replay=s.replay||null;evRates=s.evRates||null;
+    hzCache=!changed&&s.hzCache||new WeakMap();hzModels=!changed&&s.hzModels||new WeakMap();hzRiskAcks=!changed&&s.hzRiskAcks||new WeakMap();hzLeg=s.hzLeg||0;hzFitKey=null;
+    choiceOwner=id;choiceSavedId=s.choiceSavedId||route.histId||null;choiceChecked=!!s.choiceChecked;choiceReviewedAt=s.choiceReviewedAt||0;choiceComplete=!!s.choiceComplete;choicePool=s.choicePool||null;choiceCandidates=s.choiceCandidates||new Map();routeReview=s.routeReview||null;
+    compareOwner=id;compareReviewed=changed?0:s.reviewedAt||0;compareReviewKey=s.reviewKey||null;if(compareReviewed&&Date.now()-compareReviewed>=3600000){compareReviewed=0;hzCache=new WeakMap();hzRiskAcks=new WeakMap();}
+    evRecovery=null;adjustError='';opened={};routeBounds=null;userMoved=false;layer.clearLayers();drawn={};compareSwitching=false;A.save();window.dispatchEvent(new Event('garagechange'));return true;
+  }
+  function compareGarageChanged(){
+    if(compareEditing||compareSwitching)return true;
+    if(!compareOwner||compareOwner===S.carId)return false;
+    var next=S.carId;S.carId=compareOwner;compareCapture();S.carId=compareOwner;
+    if(compareSwitch(next)){step=ST_GARAGE;setTimeout(renderStep,0);}return true;
+  }
+  function compareRows(){return Array.from(compareEntries.values()).filter(function(s){return S.cars.some(function(c){return c.id===s.id;});}).map(function(s,i){var usable=compareUsable(s),metrics=VehicleCompare.metrics(s,compareView.scope==='leg'?compareView.leg:null);metrics.ready=usable;return {id:s.id,car:S.cars.find(function(c){return c.id===s.id;}),kind:s.kind,session:s,order:i,metrics:metrics,reviewed:usable,canUse:usable,status:usable?'Ready':s.result&&s.result.plan.ok?'Review needed':'Setup needed',message:usable?(metrics.cost==null?'Some prices or tolls are unknown.':metrics.estimated?'Includes estimated energy prices.':''):'Review this vehicle’s setup and hazards before departure.',hazardsText:s.hazards&&s.hazards.length?s.hazards.length+' hazard areas. Review the Hazards step for details.':'Open Hazards for current conditions; no safety guarantee.'};});}
+  function compareRender(){
+    var e=$('tCompare');if(!e)return;
+    VehicleCompareUI.render(e,{view:compareView,rows:compareRows,selected:function(){return S.carId;},legs:function(){return route?route.stops.slice(1).map(function(s,i){return (i+1)+': '+stopName(route.stops[i])+' → '+stopName(s);}):[];},locked:compareLocked,redraw:compareRender,edit:compareEdit,plan:function(id){if(compareSwitch(id)){step=compareUsable(compareEntries.get(id))?ST_PARAMS:ST_ADVISORY;renderStep();}},use:function(id){if(!compareUsable(compareEntries.get(id)))return;if(compareSwitch(id)){step=ST_DEPART;renderStep();}},pick:comparePick,add:compareAdd,start:function(){step=model?ST_ADVISORY:ST_GARAGE;renderStep();}});A.qify(e);
+    if($('tNext'))$('tNext').disabled=compareLocked()||!compareUsable(compareEntries.get(S.carId));
+  }
+  function comparePick(){
+    if(compareLocked())return;if(!model){step=ST_GARAGE;renderStep();return;}var cars=S.cars.filter(function(c){return !compareEntries.has(c.id);});
+    if(!cars.length){A.toast('All garage vehicles are listed. Use Review setup to plan one, or Add vehicle.');return;}
+    var close=A.subPage('Compare another vehicle',cars.map(function(c){return '<button class="btn tonal vc-pick" data-compare-car="'+esc(c.id)+'">'+esc(Garage.shortName(c))+'</button>';}).join(''),function(b){b.querySelectorAll('[data-compare-car]').forEach(function(el){el.onclick=function(){close();if(compareSwitch(el.dataset.compareCar)){step=ST_ADVISORY;renderStep();}};});});
+  }
+  function compareEdit(id){
+    if(!compareSwitch(id))return;step=ST_COMPARE;renderStep();var before=VehicleCompare.profile(Garage.car()),previous=result,kind=KIND(),grade=gradeOf();compareEditing=true;
+    Garage.render($('vcEditorHost'),null,function(){},call);Garage.editVehicle(function(saved){compareEditing=false;var changed=saved&&before!==VehicleCompare.profile(Garage.car());if(changed){compareReviewed=0;result=null;model=T.buildRoute(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();S.trip.routeChoices={};routeReview=null;choiceComplete=false;choicePool=null;choiceCandidates=new Map();choiceReviewedAt=0;compareEntries.delete(id);}step=ST_COMPARE;renderStep();if(changed){if(previous&&kind==='gas'&&KIND()===kind&&grade===gradeOf())compareRecalculate(previous);else A.toast('Vehicle updated. Review setup to recalculate its trip.');}});
+  }
+  function compareRecalculate(previous){
+    // Same fuel/grade and geometry: reuse priced candidates, but recalculate consumption,
+    // capacity, tire/vehicle effects and speed rates. Other connector/grade changes need discovery.
+    var id=S.carId,r=Object.assign({},previous,{plan:{ok:false,stops:[]},routes:null,sweep:null,dsweep:null,top:null,topSel:-1,speedState:VehicleCompare.clone(previous.speedState)});
+    r.startGal=startFuel(model);r.bufMi=tripBuf();r.opts=makeOpts(model,r.cands,r.startGal);result=r;
+    var cx=speedCx();if(cx)r.opts.model=T.withSpeeds(model,ratesOf(cx,cx.offs));r.planOffs=cx?cx.offs.join(','):null;
+    compareCalculating=id;var end=window.Tasks?Tasks.begin('vehicle-comparison',{text:'Recalculating this vehicle’s trip',priority:1}):function(){};compareCapture();compareRender();
+    planAsync(r.opts,function(){return S.carId===id&&result===r;},100).then(function(p){if(S.carId!==id||result!==r)return;r.plan=p;recompute();LG.info('compare','Recalculated edited vehicle',{kind:KIND(),ok:p.ok,candidates:r.cands.length});},function(e){LG.warn('compare','Edited vehicle needs replanning',String(e));}).finally(function(){end();compareCalculating=null;compareCapture();if(step===ST_COMPARE)compareRender();});
+  }
+  function compareAdd(){
+    if(compareLocked())return;compareCapture();var previous=S.carId;compareEditing=true;
+    Garage.render($('vcEditorHost'),null,function(){},call);Garage.addVehicle(function(saved){compareEditing=false;var id=S.carId;if(!compareEntries.size){S.carId=saved?id:previous;compareOwner=null;step=saved?ST_ADVISORY:ST_COMPARE;A.save();renderStep();return;}S.carId=previous;if(compareSwitch(saved?id:previous,true)){step=saved?ST_ADVISORY:ST_COMPARE;renderStep();}});
+  }
+  window.__trip = { call: call, open: openTrip, steps:{COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:S.carId,rows:compareRows(),view:compareView};}, relogo: function () {
       drawn = {};
       if (result && onPlan(step)) keepScroll(renderResults);
       if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();

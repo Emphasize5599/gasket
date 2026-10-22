@@ -2013,3 +2013,29 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 #visualMarkerRow {padding-top:4px;display:flex;justify-content:flex-end;}
 #visualMarkerRow.hidden {display:none;}
 #visualMarkerRow button {white-space:normal;max-width:100%;min-height:32px;}
+/* Vehicle comparison: progressively disclosed cards, including on narrow phones. */
+.vc-controls label {display:flex;flex-direction:column;gap:6px;margin-top:12px;color:var(--ink-2);}
+.vc-controls select {width:100%;min-width:0;}
+.vc-controls .seg {display:flex;gap:6px;}
+.vc-controls .seg button {flex:1;min-width:0;padding:10px;border-radius:12px;background:var(--surface-2);white-space:normal;}
+.vc-controls .seg .on {background:var(--accent);color:var(--accent-ink);}
+.vc-card {min-width:0;overflow-wrap:anywhere;}
+.vc-card.selected {box-shadow:inset 0 0 0 2px var(--accent);}
+.vc-title {display:flex;gap:12px;align-items:center;margin-bottom:12px;}
+.vc-title>div {min-width:0;flex:1;}
+.vc-title h3 {margin:0 0 5px;}
+.vc-photo {width:80px;height:55px;object-fit:contain;border-radius:12px;flex:none;}
+.vc-state,.vc-main span,.vc-facts,.vc-breakdown {font-size:13px;color:var(--ink-2);}
+.vc-main {display:flex;gap:12px;justify-content:space-between;margin:12px 0;}
+.vc-main>div {min-width:0;display:flex;flex-direction:column;gap:4px;}
+.vc-main b {font-size:22px;}
+.vc-facts {display:flex;gap:12px;flex-wrap:wrap;margin:10px 0;}
+.vc-badge {display:inline-block;background:var(--save-bg);color:var(--save);border-radius:8px;padding:5px 8px;font-size:12px;margin:3px;}
+.vc-card details {border-top:1px solid var(--line);margin-top:12px;padding-top:12px;}
+.vc-card summary {cursor:pointer;color:var(--accent);min-height:44px;}
+.vc-map {height:220px;border-radius:16px;overflow:hidden;margin:10px 0;}
+.vc-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+.vc-actions .btn {flex:1 1 100px;min-width:0;white-space:normal;line-height:1.3;padding:12px 8px;}
+.vc-add {display:flex;flex-direction:column;gap:12px;}
+.vc-add .btn,.vc-pick {width:100%;white-space:normal;}
+.vc-pick {margin-bottom:10px;}

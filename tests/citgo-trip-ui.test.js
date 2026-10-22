@@ -23,7 +23,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{const es=[...document.querySelectorAll('#stop0 *')],sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>e.style.fontSize=sizes[i]*1.3+'px');});
  assert.equal(await p.locator('#stop0').evaluate(e=>e.scrollWidth>e.clientWidth),false,'no enlarged-text horizontal overflow');
  if(process.env.UI_SHOT&&width===320)await p.screenshot({path:process.env.UI_SHOT});
- await p.evaluate(()=>__trip.step(8));assert.match(await p.locator('.dep-facts').innerText(),/refueling/,'Depart includes a refueling total');
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.match(await p.locator('.dep-facts').innerText(),/refueling/,'Depart includes a refueling total');
  assert.equal(await p.locator('.dep-facts').evaluate(e=>e.scrollWidth>e.clientWidth),false,'summary fits narrow viewport');
  await p.evaluate(()=>__trip.step(7));await p.waitForSelector('[data-citgo-fill="0"]');
  await p.click('[data-citgo-fill="0"]');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','cancel does not redeem');

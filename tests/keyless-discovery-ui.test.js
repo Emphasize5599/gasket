@@ -31,8 +31,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'open dropdown fits');
  await p.click('#taResults h3, #taResults .card-title, #taResults',{position:{x:5,y:5}}).catch(()=>{});
  const stations=await p.evaluate(()=>PriceHistory.stations());assert(stations.some(s=>s.name==='Local Fuel'));
- await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tpS8');
- assert.equal(await p.locator('#tpS8 .price-refresh-card').count(),0);
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));await p.waitForSelector('#tpS9');
+ assert.equal(await p.locator('#tpS9 .price-refresh-card').count(),0);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert.equal(errors.length,0,errors.join('\n'));
  const fresh=await b.newPage({viewport:{width:320,height:900}});await fresh.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);

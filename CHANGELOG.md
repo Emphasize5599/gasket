@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.235 - 2026-10-22
+- Compare vehicles for the same trip, with independent setup, routes and whole-trip/per-leg summaries.
+- Compare energy used, known tolls and estimated travel/refueling time; select a completed plan without rescanning.
+- Edit or add vehicles from Compare; compatible edits recalculate from cached prices and require setup/hazard review.
+
 ## 0.0.234 - 2026-10-21
 - Smooth hydrogen coverage boundaries.
 - Fixed gas price labels appearing in EV and hydrogen modes.
