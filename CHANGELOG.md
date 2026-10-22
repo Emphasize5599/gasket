@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.241 - 2026-10-22
+- Driving-time savings versus charging/refueling time, with per-road speed controls and trip cost changes.
+- Stabilize the existing AI-notice regression check. No APK was published for 0.0.240.
+
 ## 0.0.240 - 2026-10-22
 - Compare driving minutes saved against extra charging/refueling minutes per speed increase, with trip energy-cost changes.
 - Adjust individual roads or all roads; retain route-specific choices and reuse cached graphs without station lookups.
