@@ -687,9 +687,11 @@
     var easyEval = easy.ok ? evaluate(oo, easy) : null;
     var minStops = easy.ok ? easy.stops.length : null;
 
+    var stopElapsed=0;
     best.stops.forEach(function (s) {
       s.mile = s.c.d;
-      s.etaSec = o.model.timeTo(s.c.d);
+      s.etaSec = o.model.timeTo(s.c.d)+stopElapsed*60;
+      stopElapsed+=stopDelay(o,s);
       s.arriveMi = s.arriveGal / o.model.combGpm;
       s.alts = best.rewards||(best.destinationCharges||[]).length?[]:alternatives(oo, s, cands);
     });
@@ -712,7 +714,7 @@
     }
     if(!stable){cs=cs.map(function(c){return c.citgo?Object.assign({},c,{citgo:Object.assign({},c.citgo,{bit:0,extra:0,kind:'none'})}):c;});p=plan(Object.assign({},o,{cands:cs,rewardPass:true}));p.rewardTimingUncertain=true;}
     if(!p.ok)return p;
-    p.stops.forEach(function(s){var dated=o.rewardPriceAt(s.c,o.model,p.stops);s.c.arrivalAt=dated.arrivalAt;if(o.rewardDepartAt)s.etaSec=(dated.arrivalAt-o.rewardDepartAt)/1000;});
+    p.stops.forEach(function(s){var dated=o.rewardPriceAt(s.c,o.model,p.stops);s.c.arrivalAt=dated.arrivalAt;if(o.rewardDepartAt&&Number.isFinite(dated.arrivalAt))s.etaSec=(dated.arrivalAt-o.rewardDepartAt)/1000;});
     if(p.easy){var used=new Set(),stops=p.easy.stops;
       stops.forEach(function(s){var c=o.rewardPriceAt(s.c,o.model,stops),r=c.citgo,key=r&&r.period+'|'+r.kind,monthly=!!(r&&r.bit&&!used.has(key)&&s.buyGal>0);if(monthly)used.add(key);s.c=c;s.citgoRedemption=monthly?{kind:r.kind,month:r.period}:null;});
       p.easy.totals=evaluate(o,{stops:stops,arriveGal:p.easy.totals.leftoverGal});p.savings=p.easy.totals.net-p.totals.net;
@@ -892,14 +894,21 @@
   /** Per-leg summaries reconcile to account(): split each actual (rounded) burn
    * interval by road/detour energy, carrying the tank's weighted value forward.
    * Destination purchases/time belong to the leg arriving there. */
-  function legSummaries(model,p,startGal,startPrice,top){
+  // Retail fueling estimates, not station throughput/queue measurements. EVs keep their average-kW model.
+  function serviceMinutes(s,kind){
+    var amount=Math.max(0,Number(s.buyGal)||0);if(!Number.isFinite(amount))return 0;
+    if(kind==='ev'||!kind&&s.c.kw)return s.c.kw>0?amount/s.c.kw*60:0;
+    return kind?amount/(kind==='h2'?1:8):0;
+  }
+  function stopDelay(o,s){return (s.c.detourMin||0)+(o.stopMinutes==null?8:o.stopMinutes)+serviceMinutes(s,o.fuelKind);}
+  function legSummaries(model,p,startGal,startPrice,top,fuelKind){
     var ends=(model.legEnds||[]).slice();if(!ends.length)ends=[model.totalMi];ends[ends.length-1]=model.totalMi;
-    var rows=ends.map(function(b,i){var a=i?ends[i-1]:0;return {from:a,to:b,miles:b-a,drivingSec:0,stops:0,chargingMin:0,burnGal:0,cost:0,bought:0,spend:0};});
+    var rows=ends.map(function(b,i){var a=i?ends[i-1]:0;return {from:a,to:b,miles:b-a,drivingSec:0,stops:0,chargingMin:0,refuelingMin:0,burnGal:0,cost:0,bought:0,spend:0};});
     var seconds=model.timeTo(model.totalMi)||1;rows.forEach(function(r){r.drivingSec=(model.timeTo(r.to)-model.timeTo(r.from))/seconds*model.durationSec;});
     function leg(d){var i=ends.findIndex(function(b){return d<=b+1e-7;});return i<0?ends.length-1:i;}
-    var events=(p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price,det:s.c.detourMi||0,minutes:s.c.kw?s.buyGal/s.c.kw*60:0,stop:true};});
+    var events=(p.stops||[]).map(function(s){return {d:s.c.d,arriveGal:s.arriveGal,buyGal:s.buyGal,price:s.c.price,det:s.c.detourMi||0,minutes:serviceMinutes(s,fuelKind),refuel:!!fuelKind&&fuelKind!=='ev',stop:true};});
     events=events.concat((p.destinationCharges||[]).map(function(c){return {d:c.d,arriveGal:c.arriveGal,buyGal:c.buyGal,price:c.buyGal>0?c.cost/c.buyGal:0,det:0,minutes:c.minutes,destination:true};}));
-    if(top)events.push({d:top.c.d,arriveGal:top.arriveGal,buyGal:top.buyGal,price:top.c.price,det:top.c.detourMi||0,minutes:top.c.kw?top.buyGal/top.c.kw*60:0,stop:true});
+    if(top)events.push({d:top.c.d,arriveGal:top.arriveGal,buyGal:top.buyGal,price:top.c.price,det:top.c.detourMi||0,minutes:serviceMinutes(top,fuelKind),refuel:!!fuelKind&&fuelKind!=='ev',stop:true});
     events.sort(function(a,b){return a.d-b.d||Number(!!a.destination)-Number(!!b.destination);});
     events.push({d:model.totalMi,arriveGal:top?top.endGal:p.arriveGal,buyGal:0,price:0,det:0,minutes:0});
     var gas=startGal,value=startGal*startPrice,at=0,lastDet=0;
@@ -909,7 +918,7 @@
       var total=weights.reduce(function(a,b){return a+b;},0),i=leg(e.d);if(!total){weights[i]=1;total=1;}
       rows.forEach(function(r,k){r.burnGal+=burn*weights[k]/total;r.cost+=cost*weights[k]/total;});
       value-=cost;gas=e.arriveGal;value+=e.buyGal*e.price;gas+=e.buyGal;
-      rows[i].bought+=e.buyGal;rows[i].spend+=e.buyGal*e.price;rows[i].chargingMin+=e.minutes||0;if(e.stop)rows[i].stops++;
+      rows[i].bought+=e.buyGal;rows[i].spend+=e.buyGal*e.price;rows[i][e.refuel?'refuelingMin':'chargingMin']+=e.minutes||0;if(e.stop)rows[i].stops++;
       at=e.d;lastDet=e.det;
     });return rows;
   }
@@ -1066,7 +1075,7 @@
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, legSummaries:legSummaries, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
-  api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;
+  api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;api.serviceMinutes=serviceMinutes;api.stopDelay=stopDelay;
   api.workerSource='('+initTrip.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
 })(this);

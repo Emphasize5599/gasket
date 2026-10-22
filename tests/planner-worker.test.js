@@ -13,10 +13,15 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   const station={id:'reward',brand:'citgo',prices:{regular:{price:3,updated:date.toISOString()}}},context={departAt:+date,now:+date,discounts:{citgoTier:'club',citgoUsed:{},citgoHistory:{}},grade:'regular'};
   const dated={...opts,cands:opts.cands.map(c=>({...c,station})),rewardDepartAt:+date};dated.rewardPriceAt=(c,m,stops)=>{const arrival=new Date(+date+(m.timeTo(c.d)+(stops||[]).filter(s=>s.c.d<c.d).reduce((n,s)=>n+(s.c.detourMin||0)+8,0)*60)*1000);return {...c,...Pricing.tripPrice(station,'regular',context.discounts,date,arrival)};};
   const calendar=await Planner.run({...dated},context),calendarDirect=Trip.plan({...dated});
+  let fueledSame=true;
+  for(const kind of ['gas','h2']){
+   const fo={...dated,fuelKind:kind,stopMinutes:3};fo.rewardPriceAt=(c,m,stops)=>{const arrival=new Date(+date+(m.timeTo(c.d)+(stops||[]).filter(s=>s.c.d<c.d).reduce((n,s)=>n+Trip.stopDelay(fo,s),0)*60)*1000);return {...c,...Pricing.tripPrice(station,'regular',context.discounts,date,arrival)};};
+   const fp=await Planner.run({...fo},context),direct=Trip.plan({...fo});fueledSame=fueledSame&&JSON.stringify(fp)===JSON.stringify(direct)&&fp.stops.every(s=>Number.isFinite(s.etaSec));
+  }
   // several plans at once go to several workers (the buffer sweep, other routes), each the same as on the page
   const buffers=[1,2,3,4],t2=performance.now(),many=await Promise.all(buffers.map(g=>Planner.run({...opts,bufferGal:g,arriveGal:g}))),parallelMs=performance.now()-t2;
   const manySame=many.every((x,i)=>JSON.stringify(x)===JSON.stringify(Trip.plan({...opts,bufferGal:buffers[i],arriveGal:buffers[i]})));
-  return {pool:Planner.workers(),size:Planner.size(),parallelMs,manySame,maxError,workerCreations,ticks,workerMs,mainMs,same:JSON.stringify(background)===JSON.stringify(direct),calendarSame:JSON.stringify(calendar)===JSON.stringify(calendarDirect)};
+  return {pool:Planner.workers(),size:Planner.size(),parallelMs,manySame,maxError,workerCreations,ticks,workerMs,mainMs,same:JSON.stringify(background)===JSON.stringify(direct),calendarSame:JSON.stringify(calendar)===JSON.stringify(calendarDirect),fueledSame};
  });
- assert(result.maxError<1e-8);assert(result.workerCreations>=1&&result.workerCreations<=result.size,'actual workers, at most the pool size');assert(result.manySame,'parallel plans match the page');assert(result.size<2||result.pool>1,'plans run side by side in several workers');assert(result.ticks>1,'UI timer keeps running during planner work');assert(result.same);assert(result.calendarSame);console.log('Worker parity, CITGO calendar, speed overrides, binary fuel integration and UI responsiveness:',JSON.stringify(result));
+ assert(result.maxError<1e-8);assert(result.workerCreations>=1&&result.workerCreations<=result.size,'actual workers, at most the pool size');assert(result.manySame,'parallel plans match the page');assert(result.size<2||result.pool>1,'plans run side by side in several workers');assert(result.ticks>1,'UI timer keeps running during planner work');assert(result.same);assert(result.calendarSame);assert(result.fueledSame,'amount-based gas/hydrogen timing matches in worker and main-page planner');console.log('Worker parity, CITGO calendar, speed overrides, binary fuel integration and UI responsiveness:',JSON.stringify(result));
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

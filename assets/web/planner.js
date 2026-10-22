@@ -15,7 +15,7 @@
         o.model=Trip.restoreModel(o.model);if(d.rates)o.model=Trip.withSpeeds(o.model,d.rates);
         if(c){
           function arrival(m,at,stops){
-            var before=function(x){return (stops||[]).filter(function(s){return s.c.d<x;}).reduce(function(n,s){return n+(s.c.detourMin||0)+8;},0)*60;};
+            var before=function(x){return (stops||[]).filter(function(s){return s.c.d<x;}).reduce(function(n,s){return n+Trip.stopDelay(o,s);},0)*60;};
             var seconds=m.timeTo(at)+before(at),ends=m.legEnds||[];
             if(c.returnAt&&ends.length>1){var turn=ends[ends.length-2];if(at>=turn)seconds+=Math.max(0,(c.returnAt-c.departAt)/1000-m.timeTo(turn)-before(turn));}
             return new Date(c.departAt+seconds*1000);

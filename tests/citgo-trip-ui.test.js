@@ -19,9 +19,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.deepEqual(await p.evaluate(()=>{const t=__app.S.trip,old={returnTrip:t.returnTrip,backAuto:t.backAuto,backAt:t.backAt};try{t.returnTrip=true;t.backAuto=false;t.backAt=new Date(2026,10,3,12).toISOString();const r=__trip.state().result,q=r.opts.rewardPriceAt(r.cands[0],{legEnds:[60,140],timeTo:d=>d*60},[{c:{d:20,detourMin:2}}]);const later=r.opts.rewardPriceAt({...r.cands[0],d:100},{legEnds:[60,140],timeTo:d=>d*60},[{c:{d:20,detourMin:2}}]);return [q.rewardMonth,later.rewardMonth,later.citgo.kind,new Date(later.arrivalAt).getHours(),new Date(later.arrivalAt).getMinutes()];}finally{Object.assign(t,old);}}),['2026-10','2026-11','tuesday',12,40],'explicit return wait absorbs outbound stop time and uses the return month');
  await p.waitForFunction(()=>[...document.querySelectorAll('.stopbub .pv')].some(e=>e.textContent.includes('2.81')));
  await p.click('[data-open="0"]');await p.waitForSelector('[data-citgo-fill="0"]');
+ assert.match(await p.locator('#stop0').innerText(),/~\d+ min refueling/,'fuel stop shows estimated dispensing time');
  await p.evaluate(()=>{const es=[...document.querySelectorAll('#stop0 *')],sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>e.style.fontSize=sizes[i]*1.3+'px');});
  assert.equal(await p.locator('#stop0').evaluate(e=>e.scrollWidth>e.clientWidth),false,'no enlarged-text horizontal overflow');
  if(process.env.UI_SHOT&&width===320)await p.screenshot({path:process.env.UI_SHOT});
+ await p.evaluate(()=>__trip.step(8));assert.match(await p.locator('.dep-facts').innerText(),/refueling/,'Depart includes a refueling total');
+ assert.equal(await p.locator('.dep-facts').evaluate(e=>e.scrollWidth>e.clientWidth),false,'summary fits narrow viewport');
+ await p.evaluate(()=>__trip.step(7));await p.waitForSelector('[data-citgo-fill="0"]');
  await p.click('[data-citgo-fill="0"]');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.evaluate(()=>Pricing.citgoBonus(__app.S,new Date())),'tuesday','cancel does not redeem');
  await p.click('[data-citgo-fill="0"]');await p.click('#cfmYes');await p.waitForFunction(()=>Pricing.citgoBonus(__app.S,new Date())==='none');await p.waitForFunction(()=>!__trip.state().busy);
  assert.equal(await p.evaluate(()=>__trip.state().result.plan.stops.filter(s=>s.citgoRedemption).length),0,'confirm reprices existing choices without network');assert.equal(await p.evaluate(()=>__paid),0);
