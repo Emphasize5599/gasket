@@ -719,7 +719,7 @@
     if(!applied.ok||applied.mismatch>Math.max(.01,2*(o.step||.1))||Math.abs(applied.arriveGal-p.arriveGal)>Math.max(.01,2*(o.step||.1))||applied.arriveGal<o.arriveGal-1e-7)return Object.assign(p,{ok:false,propulsionReason:applied.reason||'Weather-aware energy estimate did not settle. Review range, buffer and charging settings.',propulsionFlags:applied.flags});
     m=makeModel(applied.model);o.model=m;
     p.arriveGal=applied.arriveGal;p.arriveMi=p.arriveGal/m.combGpm;p.stops=p.stops.filter(function(s){return s.buyGal>1e-8;});
-    p.propulsion={flags:applied.flags,profile:o.propulsion.profile||'estimate',temperature:applied.temperature,iterations:pass+1,estimated:true};
+    p.propulsion={flags:applied.flags,profile:o.propulsion.profile||'estimate',temperature:applied.temperature,iterations:pass+1,estimated:true,stopMinutes:applied.stopMinutes,chargingMinutes:applied.chargingMinutes};
     p.propulsionModel={segs:m.segs,durationSec:m.durationSec,cityGpm:m.cityGpm,hwyGpm:m.hwyGpm,combGpm:m.combGpm};
     p.totals=evaluate(Object.assign({},o,{model:m}),p);p.savings=null;p.easy=null;
     return p;

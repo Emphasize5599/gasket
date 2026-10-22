@@ -7,7 +7,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    const S=__app.S,car=DemoCars.create().find(c=>c.power==='ev');car.demoFuel={mode:'pct',pct:'80'};S.cars=[car];S.carId=car.id;S.setupDone=true;S.limitLookup=false;Garage.speedFn=()=>null;
    Object.assign(S.trip,{fuel:car.demoFuel,demoFuelCar:car.id,bufferMi:50,maxDetourMin:20,altCompare:false,tollCompare:false,departNow:true});
    window.__limitReads=0;Limits.along=async m=>{__limitReads++;return {roads:[{name:'Geometry fixture',cls:'highway',from:0,to:m.totalMi,sections:[{from:0,to:m.totalMi,limit:60}]}],stats:{geometry:true}};};
-   const weather=RouteWx.forRoute;RouteWx.forRoute=async(...args)=>Object.assign(await weather(...args),{temperatures:[{mi:0,hours:[[Date.now()-3600000,20],[Date.now()+7*86400000,20]]}]});
+   const weather=RouteWx.forRoute,hour=Math.floor(Date.now()/3600000)*3600000;RouteWx.forRoute=async(...args)=>Object.assign(await weather(...args),{temperatures:[{mi:0,hours:[[hour-3600000,20],[hour+7*86400000,20]]}]});
    const run=Planner.run;window.__energyContexts=[];Planner.run=function(o,c){if(o.propulsion)__energyContexts.push({limits:o.propulsionContext.limits.length,weather:o.propulsionContext.weather.length});return run.call(this,o,c);};
    const raw=(pts,mi,name)=>({description:name,distanceMeters:mi*1609.344,duration:Math.round(mi/60*3600)+'s',polyline:{encodedPolyline:Trip.encodePolyline(pts)},legs:[{distanceMeters:mi*1609.344,duration:Math.round(mi/60*3600)+'s'}]});
    const start={lat:35,lng:-92},end={lat:35,lng:-88},north=[start,{lat:36,lng:-90},end],south=[start,{lat:34,lng:-90},end];

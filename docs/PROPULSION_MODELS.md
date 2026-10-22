@@ -1,6 +1,14 @@
 # EV and hydrogen models — integrated in 0.0.237
 
-## 0.0.238 speed graph
+## 0.0.240 speed graph
+
+The EV/H2 tile compares **driving minutes saved** with **extra active charging/refueling minutes**, on one shared scale normalized to each +5 mph increase. Values are finite differences between adjacent feasible, explicitly tested scenarios; steps do not interpolate across failed plans or claim a smooth/global optimum. Each point also reports whole-trip energy cost and its difference from the selected road's at-limit scenario (other roads unchanged). The first feasible sample is the cost reference if at-limit is infeasible. Requested offsets are relative to posted limits, not average trip speed. Caps may flatten the curves.
+
+Green means a tested increase reduces total simulated elapsed trip time, including detours, stop setup, destination stays and scheduled waits. It does **not** mean cheapest, legal or safest. Charging can overlap a planned stay, and stop changes can cause jumps: merely comparing the two lines is not sufficient to establish an optimum. The projection exposes active charging time separately from total non-driving time for this purpose. Hydrogen remains explicitly unvalidated.
+
+Choose All roads or one specific road occurrence (identified by its name and route-mile bounds). Per-road overrides retain other roads' defaults/choices and are scoped to the route geometry/instructions, persisted with the trip and cleared for new trips or explicit default-rule edits. Known sections honor truck limits, the over-limit opt-in and the speed cap. Unknown sections retain route speeds. Forecast/geometry/settings changes invalidate samples; switching between unchanged road graphs reuses them. Trials share one departure/forecast snapshot and use saved stations only, in cancellable background jobs. A forecast refresh retains the previous hourly temperature series while loading, without retaining completed hazard approval; out-of-range temperatures remain flagged.
+
+## Previous 0.0.238 speed graph (superseded)
 
 The tile now graphs energy-cost change (left dollar axis) and driving-plus-stop-time change (right minute axis) against modeled average driving speed. Independent axes mean an intersection has **no optimization meaning**. Green marks sampled at/below-limit choices that cost less without adding total time versus the at-limit scenario; it is not a fitted optimum. Infeasible samples remain gaps and cannot be applied. The slider and keyboard/tap targets select discrete evaluated scenarios, not interpolated feasibility.
 

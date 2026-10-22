@@ -467,9 +467,11 @@ b.good, .leg-sub.good { color: var(--save); }
 .energy-chart { width:100%; height:auto; display:block; overflow:visible; }
 .energy-axis-caption { text-align:center; color:var(--ink-2); font-size:12px; margin:0 0 8px; }
 .energy-chart text { fill:var(--ink-2); font-size:14px; }
-.energy-chart .energy-cost { color:var(--accent); stroke:var(--accent); fill:var(--accent); }
-.energy-chart .energy-time { color:var(--warn); stroke:var(--warn); fill:var(--warn); }
-.energy-chart text.energy-cost,.energy-chart text.energy-time { stroke:none; }
+.energy-chart .energy-drive { color:var(--accent); stroke:var(--accent); fill:var(--accent); }
+.energy-chart .energy-charge { color:var(--warn); stroke:var(--warn); fill:var(--warn); }
+.energy-chart text.energy-drive,.energy-chart text.energy-charge { stroke:none; }
+.energy-zero { stroke:var(--ink-2); opacity:.6; }
+.energy-base { fill:var(--ink-2); }
 .energy-chart .energy-line { fill:none; stroke-width:2.5; }
 .energy-grid { stroke:var(--line); stroke-width:1; }
 .energy-good { fill:#23b868; opacity:.15; }

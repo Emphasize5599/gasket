@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.240 - 2026-10-22
+- Compare driving minutes saved against extra charging/refueling minutes per speed increase, with trip energy-cost changes.
+- Adjust individual roads or all roads; retain route-specific choices and reuse cached graphs without station lookups.
+- Account for stop overhead and scheduled waits when highlighting faster trips; retain hourly energy inputs during forecast refreshes.
+
 ## 0.0.239 - 2026-10-22
 - Check EV alternatives with the same hourly weather and speed limits used after acceptance; retain the validated plan during hazard review.
 - Avoid repeated web-price passes during cached route projection and keep large station-processing loops responsive.
