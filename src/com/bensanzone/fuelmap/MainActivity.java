@@ -633,7 +633,9 @@ public class MainActivity extends Activity {
                         if (ready) js("window.toast&&toast(" + q("Check passed. Tap Done.") + ")");
                         return;
                     }
-                    if (readReq >= 0 && !blocked && url.startsWith(SiteWorker.this.origin)) { runRead(); return; }
+                    // ChargePoint's same-origin interstitial can clear itself after loading.
+                    // Its reader waits for a persistent visible challenge instead of prompting here.
+                    if (readReq >= 0 && (!blocked || "chargepoint".equals(key)) && url.startsWith(SiteWorker.this.origin)) { runRead(); return; }
                     if (blocked) {
                         if (readReq >= 0) {
                             // a background read hit a check (a CAPTCHA page, Access Denied): never get past it, just say so
@@ -663,11 +665,18 @@ public class MainActivity extends Activity {
                     if ("chargepoint".equals(key) && readReq >= 0 && (dataStatus == 403 || dataStatus == 429)
                             && (host.equals("chargepoint.com") || host.endsWith(".chargepoint.com"))
                             && path.matches(".*/v[23]/(?:station/.*|stations.*|map.*)")) {
-                        finishRead(readReq, "{\"blocked\":true,\"error\":\"ChargePoint data access restricted\",\"status\":" + dataStatus + "}");
+                        // A data request can be retried by the SPA while it shows a spinner.
+                        // Let the DOM reader distinguish recovery, a real visible challenge,
+                        // and a persistent HTTP failure instead of opening verification early.
+                        v.evaluateJavascript("window.__gasketChargePointHttpStatus=" + dataStatus + ";", null);
                         return;
                     }
                     if (!request.isForMainFrame() || readReq < 0) return;
                     int status = response.getStatusCode();
+                    if ("chargepoint".equals(key) && (status == 403 || status == 429)) {
+                        v.evaluateJavascript("window.__gasketChargePointHttpStatus=" + status + ";", null);
+                        return;
+                    }
                     if (status >= 400) {
                         finishRead(readReq, "{\"error\":\"HTTP " + status + "\",\"code\":\"http\",\"status\":" + status
                                 + ",\"blocked\":" + (status == 403 || status == 429) + "}");

@@ -1,8 +1,14 @@
 # EV and hydrogen models — integrated in 0.0.237
 
+## 0.0.238 speed graph
+
+The tile now graphs energy-cost change (left dollar axis) and driving-plus-stop-time change (right minute axis) against modeled average driving speed. Independent axes mean an intersection has **no optimization meaning**. Green marks sampled at/below-limit choices that cost less without adding total time versus the at-limit scenario; it is not a fitted optimum. Infeasible samples remain gaps and cannot be applied. The slider and keyboard/tap targets select discrete evaluated scenarios, not interpolated feasibility.
+
+Default offset and the “no faster than” cap follow the trip's normal speed rule, including leaving roads already at/above that cap at their limit. Above-limit scenarios appear only when the user has enabled the over-limit rule; they are not automatically endorsed or shaded green. The time adjustment adds the same per-mile `1/(limit + offset) - 1/limit` term used by the fossil-fuel controls to the route's baseline time. This is an estimate, not a traffic simulation. Changed timing feeds back into weather, energy use and charging. Graph work uses cached stations/forecast series in background workers, with no price/discovery requests. Signs, minimum speeds, traffic and conditions override any app setting.
+
 ## What changed
 
-`Propulsion` is a pure, offline module serialized into planner workers. It reuses selected-route hourly temperatures retained by `RouteWx`, including weather changes during charging. Missing/out-of-range temperatures use **20°C with a visible warning**, never a newly invented forecast. Speed trials reuse existing candidates/weather and make no discovery calls. They compare five non-positive offsets against known posted limits; unknown-limit stretches keep the route's original speed. Google average segment speeds are not a traffic simulator. These are estimated tradeoffs, **not a proven optimal speed or globally optimal stop plan**.
+`Propulsion` is a pure, offline module serialized into planner workers. It reuses selected-route hourly temperatures retained by `RouteWx`, including weather changes during charging. Missing/out-of-range temperatures use **20°C with a visible warning**, never a newly invented forecast. Speed trials reuse existing candidates/weather and make no discovery calls. They compare at/below-limit offsets, plus user-enabled over-limit scenarios, against known posted limits; unknown-limit stretches keep the route's original speed. Google average segment speeds are not a traffic simulator. These are estimated tradeoffs, **not a proven optimal speed or globally optimal stop plan**.
 
 The existing cost optimizer proposes stops. Up to three energy/stop-clock passes update consumption and simulate actual charging, then check arrival energy, reserves and numerical agreement. Failure is explicit, not a feasible result. The original, unadjusted route is retained so repeated replanning does not compound weather adjustments. Cost optimization still uses posted per-energy prices, not a joint nonlinear charging/stop/speed search; taper and auxiliary consumption can change the best real-world plan.
 

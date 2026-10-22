@@ -98,5 +98,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.match(await p.innerText('#taskList'),/Choosing stops/);assert.match(await p.innerText('#taskList'),/Searching approved alternative routes/);
  await p.evaluate(()=>__continueScan());await p.waitForFunction(()=>!__trip.state().busy);
  assert.equal(await p.evaluate(()=>Tasks.list().filter(t=>t.id.startsWith('trip-pending:')||t.id.startsWith('station-source:')).length),0,'completed pipeline leaves no pending or provider tasks');
+ // A previously approved replacement does not lose this vehicle's current review.
+ await p.evaluate(()=>{__app.S.cars=[Garage.car()];__trip.step(7);});if(!await p.locator('#tsIdeal:visible').count())await p.click('#tNext');await p.waitForSelector('#tsIdeal',{state:'visible'});await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);assert(await p.locator('[data-vc-use]').isEnabled(),'single-vehicle approved replacement remains reviewed');await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===9);
  await p.evaluate(()=>__trip.close());assert.deepEqual(errors,[]);await p.close();
 }console.log('320/448px global settings, optional whole-trip recommendations, decline, skip and cached replacement passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -113,6 +113,10 @@
   function parseChargePoint(text) {
     var t = String(text || '').replace(/\s+/g, ' '), rates = [], m, re = /\b(?:Energy|Charging|Time)\s*(?:Rate|Fee)?\s*:?\s*\$\s*(\d*\.?\d+)\s*\/\s*(kwh|hr|hour|min(?:ute)?)/gi;
     while ((m = re.exec(t))) rates.push({ v: +m[1], uom: /kwh/i.test(m[2]) ? 'kwh' : /min/i.test(m[2]) ? 'min' : 'hour' });
+    // Schedules insert day/time text between "Energy Rate" and each amount.
+    // Read energy only from that block; idle/overstay rates are not charging prices.
+    var energy=/\bEnergy Rate\b(.*?)(?=Station Time Rate|Taxes and Fees|Need help|Last Used|$)/i.exec(t);
+    if(energy){var er=[],em,rx=/\$\s*(\d*\.?\d+)\s*\/\s*kwh/gi;while((em=rx.exec(energy[1])))er.push({v:+em[1],uom:'kwh'});if(er.length)rates=er;}
     var feeM = /\b(?:Session|Flat|Connection|Plug-?in|Start|Service)\s*(?:Rate|Fee)\s*:?\s*\$\s*(\d*\.?\d+)/i.exec(t), fee = feeM ? +feeM[1] : 0;
     if (!rates.length) return /\b(?:Price\s*[·|:]?\s*Free|Free charging)\b/i.test(t) && !/\$\s*\d/.test(t) ? { rate: 0, peak: 0, low: 0, uom: 'kwh', fee: 0, free: true } : null;
     var uom = rates[0].uom, v = rates.filter(function (r) { return r.uom === uom; }).map(function (r) { return r.v; });
@@ -122,10 +126,11 @@
   function chargePointIds(st) { var ids = st.netIds || {}, out = []; (ids.station || []).forEach(function (s) { var m = /^(?:USCPIL)?(\d{4,12})$/.exec(String(s)); if (m && out.indexOf(m[1]) < 0) out.push(m[1]); }); (ids.posts || []).forEach(function (p) { p = String(p); if (/^\d{4,12}$/.test(p) && out.indexOf(p) < 0) out.push(p); }); return out.slice(0, 4); }
   var CP_GIVE_UP = 6;
   async function chargePointPrice(st) {
-    var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (c && (!c.missing || miss)) return c.none ? null : c;
+    var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (c && (!c.none || miss)) return c.none ? null : c;
     var nDevice = ids.filter(function (d) { return (st.netIds.posts || []).indexOf(d) < 0; }).length;
     for (var i = 0; i < ids.length; i++) {
-      var t0 = Date.now(), r = await call('siteRead', 'chargepoint', JSON.stringify({ url: 'https://driver.chargepoint.com/stations/' + ids[i] }));
+      var t0 = Date.now(), r = await call('siteRead', 'chargepoint', JSON.stringify({ url: 'https://driver.chargepoint.com/stations/' + ids[i],name:st.name }));
+      if(r&&r.diagnostics)LG.info('stations','ChargePoint reader state',r.diagnostics);
       LG.info('stations', 'ChargePoint station page', { idForm: i < nDevice ? 'device' : 'post', outcome: r && r.blocked ? 'blocked' : r && r.missing ? 'missing' : r && r.text ? (parseChargePoint(r.text) ? 'priced' : 'no price on page') : 'error', ms: Date.now() - t0, error: r && r.error ? String(r.error).slice(0, 160) : undefined, sample: r && (r.text && !parseChargePoint(r.text) ? r.text : r.missing && r.sample) ? String(r.text || r.sample).slice(0, 160) : undefined, station: st.name });
       if (r && r.error === 'No Native bridge') return null;
       if (r && r.blocked) { var e = new Error('ChargePoint\'s station page asked for a check, so its prices are estimates this time.'); e.blocked = true; throw e; }

@@ -113,7 +113,7 @@
       while(x<seg.to-1e-8){while(ei<events.length&&events[ei].d<=x+1e-8)event(events[ei++]);
         var end=Math.min(seg.to,x+1,ei<events.length?Math.max(x+1e-7,events[ei].d):Infinity),mph=Math.max(1,baseMph),lim=limits.filter(function(l){return x>=l.from-1e-7&&x<l.to-1e-7;})[0];
         if(ctx.offset!=null)limits.forEach(function(l){if(l.from>x+1e-7&&l.from<end)end=l.from;});
-        if(ctx.offset!=null){if(lim&&lim.limit>0){mph=Math.min(mph,Math.max(Math.min(25,lim.limit),lim.limit+Math.min(0,ctx.offset)));end=Math.min(end,lim.to);}else mark(flags,'speed_limits_missing');}
+        if(ctx.offset!=null){if(lim&&lim.limit>0){var off=ctx.allowAbove?clamp(ctx.offset,-20,15):Math.min(0,ctx.offset);if(off>=0&&ctx.speedCap>0)off=lim.limit>=ctx.speedCap?0:Math.min(off,ctx.speedCap-lim.limit);var cap=Math.max(Math.min(25,lim.limit),lim.limit+off),atLimit=Math.min(mph,lim.limit);mph=Math.min(cap,1/(1/atLimit+1/cap-1/lim.limit));end=Math.min(end,lim.to);}else mark(flags,'speed_limits_missing');}
         var dt=(end-x)/mph*3600,ta=weather(ctx.weather,(x+end)/2,initialTime+(seconds+stopSeconds)*1000,flags),v=drivePower(p,mph,ta,seg.gpm,baseMph,flags,seg.grade||0),pre=0;
         var next=events.slice(ei).filter(function(e){return e.stop;})[0];if(p.precondition&&next&&(next.d-x)/mph*60<=30&&temperature<40&&p.kind==='ev'){pre=3;mark(flags,'preconditioning_estimated');}
         // Negative power is bounded by regen hardware and remaining capacity; the current

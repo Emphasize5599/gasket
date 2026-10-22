@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.238 - 2026-10-22
+- Graph EV/hydrogen speed against energy cost and driving/stop time; honor default speed rules and caps.
+- Let ChargePoint recover from automatic checks/loading before requesting verification; improve station-page opening and scheduled-rate parsing.
+- Fix completed speed-limit loading bars and retain current vehicle review when switching to an approved alternative.
+
 ## 0.0.237 - 2026-10-22
 - Weather-aware EV energy and charging estimates, with separate stored/billed electricity and optional measured Model 3 LFP profile.
 - Compare slower speed caps using saved stations; hydrogen speed estimates remain explicitly unvalidated.

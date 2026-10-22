@@ -464,6 +464,19 @@ details.spd-card > summary .h3 { font-size: 13px; text-transform: uppercase; let
 b.cost, .leg-sub.cost { color: var(--warn); }
 b.good, .leg-sub.good { color: var(--save); }
 .spdbox { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 12px 0; }
+.energy-chart { width:100%; height:auto; display:block; overflow:visible; }
+.energy-axis-caption { text-align:center; color:var(--ink-2); font-size:12px; margin:0 0 8px; }
+.energy-chart text { fill:var(--ink-2); font-size:14px; }
+.energy-chart .energy-cost { color:var(--accent); stroke:var(--accent); fill:var(--accent); }
+.energy-chart .energy-time { color:var(--warn); stroke:var(--warn); fill:var(--warn); }
+.energy-chart text.energy-cost,.energy-chart text.energy-time { stroke:none; }
+.energy-chart .energy-line { fill:none; stroke-width:2.5; }
+.energy-grid { stroke:var(--line); stroke-width:1; }
+.energy-good { fill:#23b868; opacity:.15; }
+.energy-cursor { stroke:var(--ink); stroke-dasharray:4 4; opacity:.5; }
+.energy-hit { fill:transparent; stroke:none; pointer-events:all; }
+.energy-chart [role=button] { cursor:pointer; }
+.energy-chart [role=button]:focus circle { stroke:var(--ink); stroke-width:3; }
 .leg { border-top: 1px solid var(--line); padding: 10px 0 6px; }
 .leg.on .leg-h span { color: var(--accent); }
 .leg-h { display: flex; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 600; }

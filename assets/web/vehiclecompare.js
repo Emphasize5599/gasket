@@ -7,7 +7,7 @@
   function profile(c){
     var o=clone(c||{});Object.keys(o).forEach(function(k){if(/^(?:name|nick|pic.*|photo.*|image.*|entries|recalls?|ai.*|.*Lookup|rememberRouteChoices)$/i.test(k))delete o[k];});
     // Reader caches, timestamps and lazily installed empty editor defaults are not configuration.
-    if(o.tires){delete o.tires.tr;if(o.tires.spare)delete o.tires.spare.lookup;if(o.tires.corners&&!o.tires.corners.split)delete o.tires.corners;if(o.tires.tread&&!o.tires.tread.miles&&!o.tires.tread.depth&&o.tires.tread.mode==='miles')delete o.tires.tread.mode;}
+    if(o.tires){delete o.tires.tr;delete o.tires.aired;delete o.tires.airedAt;if(o.tires.spare){delete o.tires.spare.lookup;delete o.tires.spare.airedAt;}if(o.tires.corners&&!o.tires.corners.split)delete o.tires.corners;if(o.tires.tread&&!o.tires.tread.miles&&!o.tires.tread.depth&&o.tires.tread.mode==='miles')delete o.tires.tread.mode;}
     function clean(v){if(Array.isArray(v))return v.map(clean);if(v&&typeof v==='object'){var out={};Object.keys(v).forEach(function(k){var x=clean(v[k]);if(x!=null&&x!==''&&!(typeof x==='object'&&!Object.keys(x).length))out[k]=x;});return out;}return v;}
     return key(clean(o));
   }

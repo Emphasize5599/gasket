@@ -441,6 +441,7 @@
   var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_COMPARE = 8, ST_DEPART = 9;
   var compareEntries=new Map(),compareOwner=null,compareReviewed=0,compareReviewKey=null,compareEditing=false,compareSwitching=false,compareCalculating=null;
   var compareView={sort:'cost',scope:'trip',leg:0,open:{}},compareJourney=null;
+  var compareReviewProof=null;
   /** Adjustments and Stops both show the plan (and the map). */
   function onPlan(k) { return k === ST_ADJ || k === ST_STOPS; }
   function tpBody() { return $('tpBody'); }
@@ -488,6 +489,7 @@
     // Going back is a new review, not implicit consent to reuse this session's answers.
     if(step===ST_HAZ&&shown>ST_HAZ&&Garage.car().rememberRouteChoices!==true){
       compareReviewed=0;compareReviewKey=null;
+      compareReviewProof=null;
       S.trip.routeChoices={};choiceReviewedAt=0;routeReview=null;choiceComplete=false;result=null;
     }
     if(!recommendationActive()){stopRecommendations();clearRecommendationMaps();}
@@ -637,6 +639,7 @@
       if(choicePending().length){reviewStart();return false;}
       compareReviewed=Date.now();
       compareReviewKey=compareSafetyKey();
+      compareReviewProof={context:compareReviewContext(),routes:choiceLists().map(function(list,i){return list.filter(function(a,k){return k===hzSel(i)||(choiceAnswers()[RouteChoices.key(i,a)]||{}).consider===true;}).map(function(a){return RouteChoices.key(i,a);});})};
     }
     if(k===ST_COMPARE){compareCapture();var selected=compareEntries.get(S.carId);if(!compareUsable(selected)){A.toast('Review this vehicle’s setup and hazards before departure.');return false;}return true;}
     if (onPlan(k)) {
@@ -904,6 +907,7 @@
     var ruleSave = function () {
       var previous=S.speed.rule||{},autoCap=previous.capAuto===true||previous.cap==null;if(this.id==='tRuleCap')autoCap=false;
       S.speed.rule = { on: $('tRule').checked, over: Math.max(-10, Math.min(15, parseInt($('tRuleOver').value, 10) || 0)), cap: Math.max(40, Math.min(90, parseInt($('tRuleCap').value, 10) || Garage.ruleCap())),capAuto:autoCap };
+      delete S.trip.propulsionOffset;
       $('tRuleBox').classList.toggle('hidden', !S.speed.rule.on); A.save();
       if (result) result.speedState = null;
       again();
@@ -2576,13 +2580,15 @@
     var sig = m.pts.length + ':' + m.totalMi.toFixed(3) + ':' + m.pts[0].lat.toFixed(5);
     var hit = limCache[sig];
     if (hit) {
-      if (hit.res) { m._lim = hit.res; return; }
+      if (hit.res) { m._lim = hit.res;if(m===model&&result&&$('tsBufBox'))refreshBufBox(); return; }
       m._lim = 'loading';
       if (!hit.waiting.includes(m)) hit.waiting.push(m);
+      if(m===model&&result&&$('tsBufBox'))refreshBufBox();
       return;
     }
     hit = limCache[sig] = { res: null, waiting: [m] };
     m._lim = 'loading';
+    if(m===model&&result&&$('tsBufBox'))refreshBufBox();
     var t0 = Date.now();
     var getJson = function (url) {      // posted limits rarely change: saved for 90 days
       var o = A.KV.get('limits', url, 90 * 24 * 3600e3);
@@ -2591,12 +2597,14 @@
       var pending=call('fetchJson', url).then(function (res) { if (res.body && res.body.indexOf('"error"') < 0) A.KV.put('limits', url, res); return res; }).finally(function(){limFlight.delete(url);});limFlight.set(url,pending);return pending;
     };
     Limits.along(m, getJson, { lookup: S.limitLookup !== false, onProg: function (d, t) { hit.frac = Math.max(hit.frac || 0, t ? d / t : 1); limBars(hit.frac, sig); } }).then(function (res) {
-      hit.res = res; limBars(1, sig);
+      hit.res = res;
       hit.waiting.forEach(function (w) { w._lim = res; });
+      limBars(1, sig);
+      if(hit.waiting.indexOf(model)>=0&&$('tsBufBox'))refreshBufBox();
       if (hit.waiting.indexOf(model) >= 0 && $('tsSpeed')) renderTripSpeed();
       LG.info('speed', 'Speed limits along the route in ' + (Date.now() - t0) + ' ms', res.stats);
       LG.debug('speed', 'Roads', res.roads.map(function (r) { return [r.name, Math.round(r.from), Math.round(r.to), r.pieces.map(function (p) { return p.st + ':' + p.limit + (p.src === 'hpms' ? '' : '(' + p.src + ')'); }).join(' ')]; }));
-    }).catch(function (e) { delete limCache[sig]; hit.waiting.forEach(function (w) { w._lim = { roads: [], stats: {}, error: String(e) }; }); LG.error('speed', 'Speed limit lookup failed', String(e)); });
+    }).catch(function (e) { delete limCache[sig]; hit.waiting.forEach(function (w) { w._lim = { roads: [], stats: {}, error: String(e) }; });if(hit.waiting.indexOf(model)>=0){refreshBufBox();if($('tsSpeed'))renderTripSpeed();} LG.error('speed', 'Speed limit lookup failed', String(e)); });
   }
   /** Every "Looking up speed limits" bar on screen. */
   /** The "speed limits" bars for one route (other routes being looked up in the background don't move them). */
@@ -2637,7 +2645,11 @@
     var el = speedTile(); if (!el || !result || !result.plan.ok) return;
     tpBody().querySelectorAll('[data-trip-speed]').forEach(function(e){e.removeAttribute('id');});el.id='tsSpeed';
     ensureLimits(model);
-    if(KIND()!=='gas'){renderPropulsionSpeed(el);return;}
+    if(KIND()!=='gas'){
+      var ec=propulsionContext(model,rawRoute),ek=VehicleCompare.key([ec.limits,ec.offset,ec.allowAbove,ec.speedCap]);
+      if(ec.limits.length&&!speedOff()&&result.energyLimitsKey!==ek&&!planning){result.energyLimitsKey=ek;result.opts.propulsionContext=ec;replan();}
+      renderPropulsionSpeed(el);return;
+    }
     var legs = speedLegs(), lim = model._lim, st = result.speedState = result.speedState || {};
     var priceAt = function (d) { var L = legs.filter(function (x) { return d >= x.a && d < x.b; })[0] || legs[legs.length - 1]; return L ? L.price : result.startPrice; };
     var roads = lim && lim.roads ? lim.roads.map(function (r) {
@@ -2669,21 +2681,32 @@
 
   // ---------- buffer <-> cruising speed ----------
   function renderPropulsionSpeed(el){
-    var r=result,rows=r.propulsionSpeeds,limits=flatSecs(model),loading=r.propulsionSpeedBusy;
-    el.innerHTML='<h3>Speed & energy estimates</h3><p class="lead small">'+(KIND()==='h2'?'Hydrogen speed estimates are unvalidated; temperature effects are unknown.':'Weather-aware estimates; unknown vehicles use their EPA/observed baseline and a generic charging curve.')+' These compare a few legal speed caps—not a proven global optimum.</p>'+(rows?rows.map(function(x,i){return '<div class="field">'+(x.offset===0?'Posted limits':'Up to '+Math.abs(x.offset)+' mph below limits')+' · '+(x.ok?money(x.cost)+' · '+Math.round(x.minutes)+' min total <button class="btn tonal sm" data-energy-speed="'+i+'">Use</button>':'not feasible with these parameters')+'</div>';}).join(''):'')+'<button class="btn tonal" data-energy-check'+(!limits.length||loading?' disabled':'')+'>'+(loading?'Comparing…':'Compare speed caps')+'</button>'+(!limits.length?'<small>Waiting for posted speed limits.</small>':'');
-    el.querySelector('[data-energy-check]').onclick=async function(){
-      if(r!==result||r.propulsionSpeedBusy)return;r.propulsionSpeedBusy=true;renderPropulsionSpeed(el);
-      var end=window.Tasks?Tasks.begin('energy-speeds',{text:'Comparing legal speed caps using saved stations',priority:1}):function(){};
+    var r=result,limits=flatSecs(model),rule=S.speed.rule||{},key=VehicleCompare.key([r.bufMi,r.opts.maxDetourMin,r.startGal,r.opts.propulsion,rule,S.speed.capOn,limits]),rows=r.propulsionSpeedKey===key?r.propulsionSpeeds:null;
+    var loading=r.propulsionSpeedBusy,ready=limits.length&&!speedOff(),pick=r.propulsionSpeedPick;
+    if(rows&&pick==null){var off=S.trip.propulsionOffset==null?(rule.on?+rule.over||0:0):+S.trip.propulsionOffset;pick=rows.findIndex(function(x){return x.offset===off;});if(pick<0)pick=rows.findIndex(function(x){return x.offset===0;});r.propulsionSpeedPick=pick;}
+    var baseline=rows&&(rows.find(function(x){return x.offset===0&&x.ok;})||rows.find(function(x){return x.ok;})),chosen=rows&&rows[pick];
+    el.innerHTML='<h3>Speed & energy estimates</h3><p class="lead small">'+(KIND()==='h2'?'Unvalidated hydrogen estimates.':'Estimated energy cost and driving + stop time.')+' '+A.qBtn('Blue: energy cost change in dollars (left axis). Yellow: time change in minutes (right axis), including charging or refueling. Speed is the trip’s average while driving, not a suggested speed for every road. Green marks sampled speeds that are cheaper with no added total time; line intersections have no special meaning. Gaps are infeasible plans. These are estimates, not a proven optimum. Follow posted signs, minimum speeds and conditions.')+'</p>'+
+      (rows&&baseline?EnergyGraph.chart(rows,baseline,pick)+'<div class="energy-axis-caption">Average driving speed (mph)</div><small>Compared with '+(baseline.offset===0?'the at-limit scenario':'the first feasible scenario')+'. Green = cheaper with no extra time.</small><label class="nf"><span>Choose a speed scenario</span><input type="range" data-energy-pick min="0" max="'+(rows.length-1)+'" step="1" value="'+pick+'"></label><p data-energy-summary>'+(chosen&&chosen.ok?chosen.mph.toFixed(1)+' mph average · '+money(chosen.cost)+' · '+Math.round(chosen.minutes)+' min · '+(chosen.offset>0?'+':'')+chosen.offset+' mph versus posted limits':'No plan at this setting')+'</p><button class="btn primary" data-energy-use'+(!chosen||!chosen.ok?' disabled':'')+'>Use this speed setting</button>':loading?A.ldBar('Building cost and time graph'):rows?'<p>No feasible speed scenarios with these parameters.</p>':ready?'':model._lim&&model._lim!=='loading'?'<p>Speed estimates are unavailable for this route.</p>':A.ldBar('Waiting for speed limits'))+
+      '<button class="btn tonal sm" data-energy-check'+(!ready||loading?' disabled':'')+'>'+(loading?'Calculating…':rows?'Refresh graph':'Build graph')+'</button>';
+    var check=async function(){
+      if(r!==result||r.propulsionSpeedBusy||!ready)return;r.propulsionSpeedBusy=true;renderPropulsionSpeed(el);
+      var original=r.opts,end=window.Tasks?Tasks.begin('energy-speeds',{text:'Graphing speed, cost and stop time using saved stations',priority:1}):function(){};
       try{
-        var rows=[];for(var offset of [0,-5,-10,-15,-20]){
-          if(result!==r)return;var o=makeOpts(model,r.cands,r.startGal,rawRoute);o.propulsionContext.offset=offset;o.propulsionContext.limits=limits;o.lite=true;
-          var p=await planAsync(o,function(){return result===r;},1);if(p.cancelled)return;
-          var cost=p.ok?T.account(r.startGal,r.startPrice,[{stops:T.purchases(p),arriveGal:p.arriveGal}]).legs[0].cost:null;
-          rows.push({offset:offset,ok:p.ok,cost:cost,minutes:p.ok?o.model.durationSec/60+p.stops.reduce(function(n,s){return n+T.stopDelay(o,s);},0)+(p.destinationCharges||[]).reduce(function(n,s){return n+s.minutes;},0):null});
-        }r.propulsionSpeeds=rows;
-      }catch(e){A.toast('Speed comparison failed. '+e.message);}finally{r.propulsionSpeedBusy=false;end();if(result===r&&el.isConnected)renderPropulsionSpeed(el);}
+        var offsets=[-20,-15,-10,-5,0];if(rule.on)offsets=offsets.concat([5,10,15]);var def=rule.on?Math.max(-10,Math.min(15,+rule.over||0)):0;if(offsets.indexOf(def)<0)offsets.push(def);offsets.sort(function(a,b){return a-b;});
+        var out=[];for(var offset of offsets){
+          if(result!==r||r.opts!==original)return;var o=makeOpts(model,r.cands,r.startGal,rawRoute);o.propulsionContext.offset=offset;o.propulsionContext.limits=limits;o.lite=true;
+          var p=await planAsync(o,function(){return result===r&&r.opts===original;},1);if(p.cancelled)return;
+          var met=p.ok?VehicleCompare.metrics({kind:KIND(),trip:S.trip,result:{opts:o,plan:p,startGal:r.startGal,startPrice:r.startPrice},tolls:[]}):null;
+          out.push({offset:offset,ok:p.ok&&Number.isFinite(met.energy)&&Number.isFinite(met.minutes),cost:met&&met.energy,minutes:met&&met.minutes,mph:p.ok?o.model.totalMi/o.model.durationSec*3600:NaN});
+        }r.propulsionSpeeds=out;r.propulsionSpeedKey=key;r.propulsionSpeedPick=null;
+      }catch(e){r.propulsionSpeedFailed=key;A.toast('Speed comparison failed. '+e.message);}finally{r.propulsionSpeedBusy=false;end();var active=speedTile();if(result===r&&active)renderPropulsionSpeed(active);}
     };
-    el.querySelectorAll('[data-energy-speed]').forEach(function(b){b.onclick=function(){if(result!==r)return;S.trip.propulsionOffset=rows[+b.dataset.energySpeed].offset;result.opts.propulsionContext=propulsionContext(model,rawRoute);replan();};});
+    el.querySelector('[data-energy-check]').onclick=check;
+    var select=function(i){r.propulsionSpeedPick=+i;renderPropulsionSpeed(el);};
+    var frame=0,slider=el.querySelector('[data-energy-pick]');if(slider){slider.oninput=function(){r.propulsionSpeedPick=+this.value;var s=rows[+this.value];el.querySelector('[data-energy-summary]').textContent=s.ok?s.mph.toFixed(1)+' mph average · '+money(s.cost)+' · '+Math.round(s.minutes)+' min · '+(s.offset>0?'+':'')+s.offset+' mph versus posted limits':'No plan at this setting';el.querySelector('[data-energy-use]').disabled=!s.ok;if(!frame)frame=requestAnimationFrame(function(){frame=0;var svg=el.querySelector('.energy-chart');if(svg&&result===r)svg.outerHTML=EnergyGraph.chart(rows,baseline,r.propulsionSpeedPick);});};slider.onchange=function(){select(this.value);};}
+    el.onclick=function(e){var b=e.target.closest('[data-energy-speed]');if(b)select(b.dataset.energySpeed);};el.onkeydown=function(e){var b=e.target.closest('[data-energy-speed]');if(b&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select(b.dataset.energySpeed);}};
+    var use=el.querySelector('[data-energy-use]');if(use)use.onclick=function(){var s=rows[r.propulsionSpeedPick];if(result!==r||!s||!s.ok)return;S.trip.propulsionOffset=s.offset;r.opts.propulsionContext=propulsionContext(model,rawRoute);A.save();replan();};
+    if(ready&&!rows&&!loading&&r.propulsionSpeedFailed!==key){setTimeout(function(){if(el.isConnected&&result===r)check();},0);}
   }
   // Stops are planned at the speeds you choose (extra gas for driving faster counted on every stretch), so you always
   // arrive at a station — and at the end — with at least your buffer. Faster speeds or a bigger buffer both need the
@@ -3162,7 +3185,8 @@
       ((e&&e.reading&&e.reading.temperatures)||[]).forEach(function(p){temps.push({mi:offset+p.mi,hours:p.hours});});
     }
     var ends=m.legEnds||[];
-    return {weather:temps,departAt:departAt().getTime(),limits:flatSecs(m),offset:S.trip.propulsionOffset==null?null:+S.trip.propulsionOffset,waitAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null};
+    var rule=S.speed.rule||{},off=S.trip.propulsionOffset==null?(rule.on?+rule.over||0:0):+S.trip.propulsionOffset,capOn=S.speed.capOn!=null?!!S.speed.capOn:!!rule.on;
+    return {weather:temps,departAt:departAt().getTime(),limits:flatSecs(m),offset:rule.on?off:Math.min(0,off),allowAbove:!!rule.on,speedCap:capOn?Garage.ruleCap():null,waitAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null};
   }
   function makeBaseOpts(model, cands, startGal,raw) {
     var kd = KIND(), cap = Garage.tank();
@@ -4555,7 +4579,8 @@
   // the car's recalls and VIN check run in the background soon after the app starts (NHTSA, never Google), so Advisory is ready
   setTimeout(function () { if (window.Advisory) Advisory.init(call); }, 4000);
   // Vehicle plans own all mutable planner state. Only raw provider caches are shared.
-  function compareReset(){compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
+  function compareReset(){compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareReviewProof=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
+  function compareReviewContext(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip)]);}
   function compareSafetyKey(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip),choiceLists().map(function(l,i){return altSig(l[hzSel(i)]);})]);}
   function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices'].map(function(k){return S[k];}));}
   function compareLocked(){return !!(busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
@@ -4572,12 +4597,15 @@
     compareJourney={places:places,key:journey};compareOwner=car.id;
     var profile=VehicleCompare.profile(car),settingsKey=compareSettingsKey(),changed=old&&(old.profile!==profile||old.settingsKey&&old.settingsKey!==settingsKey);
     if(changed){compareReviewed=0;result=null;model=T.buildRoute(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();}
-    if(compareReviewKey!==compareSafetyKey())compareReviewed=0;
+    if(compareReviewKey!==compareSafetyKey()){
+      var proof=compareReviewProof,approved=compareReviewed&&proof&&proof.context===compareReviewContext()&&choiceLists().every(function(list,i){return (proof.routes[i]||[]).indexOf(RouteChoices.key(i,list[hzSel(i)]))>=0;});
+      if(approved)compareReviewKey=compareSafetyKey();else{LG.info('compare','Review invalidated',{hasReview:!!compareReviewed,contextMatches:!!proof&&proof.context===compareReviewContext(),approved:!!approved});compareReviewed=0;}
+    }
     var hazards=[];for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)],e=a&&hzCache.get(a),offset=i&&model.legEnds?model.legEnds[i-1]:0;(e&&e.hz||[]).forEach(function(x){hazards.push(Object.assign({},x,{fromMi:x.fromMi+offset,toMi:x.toMi+offset}));});}
     var s={id:car.id,profile:profile,kind:KIND(),trip:VehicleCompare.clone(S.trip),speed:VehicleCompare.clone(S.speed),route:route,alts:alts,altSel:altSel,altSure:altSure,rawRoute:rawRoute,model:model,result:result,replay:replay,evRates:evRates,hzCache:hzCache,hzModels:hzModels,hzRiskAcks:hzRiskAcks,hzLeg:hzLeg,choiceSavedId:choiceSavedId,choiceChecked:choiceChecked,choiceReviewedAt:choiceReviewedAt,choiceComplete:choiceComplete,choicePool:choicePool,choiceCandidates:choiceCandidates,routeReview:routeReview,reviewedAt:compareReviewed,needsReview:!compareReviewed,hazards:hazards,tolls:choiceLists().map(function(l,i){return tollsOf(l[hzSel(i)]);}),startEstimated:!(+S.trip[tankPriceKey()]>0),resumeStep:step===ST_COMPARE?old&&old.resumeStep||ST_ADVISORY:Math.min(step,ST_STOPS)};
     Object.defineProperty(s.trip,'routeChoices',{value:VehicleCompare.clone(S.trip.routeChoices||{}),writable:true,configurable:true,enumerable:false});
     s.speedTiming=KIND()==='gas'&&!speedOff()?flatSecs(model).map(function(sc,i){var offsets=result&&result.speedState&&result.speedState.offsets||{};return Object.assign({},sc,{offset:offsets[i]==null?Garage.ruleOff(sc.limit):offsets[i],lo:25,hi:Math.max(80,+S.speed.max||84)});}):[];
-    s.reviewKey=compareReviewKey;s.settingsKey=settingsKey;compareEntries.set(car.id,s);comparePersist();
+    s.reviewKey=compareReviewKey;s.reviewProof=compareReviewProof;s.settingsKey=settingsKey;compareEntries.set(car.id,s);comparePersist();
   }
   function compareUsable(s){return !!(s&&s.result&&s.result.plan.ok&&s.reviewedAt&&Date.now()-s.reviewedAt<3600000&&s.settingsKey===compareSettingsKey()&&s.profile===VehicleCompare.profile(S.cars.find(function(c){return c.id===s.id;}))&&!s.needsReview);}
   function compareSwitch(id,restoreOnly){
@@ -4594,7 +4622,7 @@
     var changed=s.profile!==VehicleCompare.profile(car)||s.settingsKey&&s.settingsKey!==compareSettingsKey();model=!changed&&s.model||T.buildRoute(rawRoute,carModel());result=!changed?s.result||null:null;replay=s.replay||null;evRates=s.evRates||null;
     hzCache=!changed&&s.hzCache||new WeakMap();hzModels=!changed&&s.hzModels||new WeakMap();hzRiskAcks=!changed&&s.hzRiskAcks||new WeakMap();hzLeg=s.hzLeg||0;hzFitKey=null;
     choiceOwner=id;choiceSavedId=s.choiceSavedId||route.histId||null;choiceChecked=!!s.choiceChecked;choiceReviewedAt=s.choiceReviewedAt||0;choiceComplete=!!s.choiceComplete;choicePool=s.choicePool||null;choiceCandidates=s.choiceCandidates||new Map();routeReview=s.routeReview||null;
-    compareOwner=id;compareReviewed=changed?0:s.reviewedAt||0;compareReviewKey=s.reviewKey||null;if(compareReviewed&&Date.now()-compareReviewed>=3600000){compareReviewed=0;hzCache=new WeakMap();hzRiskAcks=new WeakMap();}
+    compareOwner=id;compareReviewed=changed?0:s.reviewedAt||0;compareReviewKey=s.reviewKey||null;compareReviewProof=changed?null:s.reviewProof||null;if(compareReviewed&&Date.now()-compareReviewed>=3600000){compareReviewed=0;compareReviewProof=null;hzCache=new WeakMap();hzRiskAcks=new WeakMap();}
     evRecovery=null;adjustError='';opened={};routeBounds=null;userMoved=false;layer.clearLayers();drawn={};compareSwitching=false;A.save();window.dispatchEvent(new Event('garagechange'));return true;
   }
   function compareGarageChanged(){

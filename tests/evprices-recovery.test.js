@@ -22,6 +22,6 @@ const wait=()=>new Promise(setImmediate);
  assert.equal(x.C.tariff({country:'US',netPrice:{rate:0,free:true,uom:'kwh'}},.5,50).price,0);
  assert.equal(x.C.tariff({country:'US',source:'DOE AFDC',pricing:'Free'},.5,50).price,0,'explicit government Free note remains supported');
  assert.equal(x.E.parseChargePoint('Price Contact host Free mobile app'),null,'unrelated Free marketing is not free charging');
- const java=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(java,/ChargePoint data access restricted/);assert.match(java,/verificationUrl = at/);
+ const java=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(java,/__gasketChargePointHttpStatus/);assert.match(java,/verificationUrl = at/);
  console.log('Correct ChargePoint station identity, stale miss-cache replacement, visible check pause/retry/dismiss/cancel, fees and unknown-versus-free prices.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

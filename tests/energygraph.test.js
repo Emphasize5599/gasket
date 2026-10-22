@@ -1,0 +1,4 @@
+const assert=require('node:assert/strict'),G=require('../assets/web/energygraph.js');
+const rows=[{ok:true,mph:50,cost:15,minutes:115,offset:-10},{ok:false,mph:55,offset:-5},{ok:true,mph:60,cost:20,minutes:120,offset:0},{ok:true,mph:65,cost:22,minutes:110,offset:5}];
+let svg=G.chart(rows,rows[2],0);assert.match(svg,/Δ cost \(\$\)/);assert.match(svg,/Δ time \(min\)/);assert.match(svg,/Average driving speed/);assert.equal((svg.match(/class="energy-good"/g)||[]).length,1,'only cheaper with no extra time is green, not an axis intersection');assert.equal((svg.match(/data-energy-speed=/g)||[]).length,3);assert.match(svg,/Line intersections have no special meaning/);assert(!/NaN|Infinity/.test(svg));assert.match(G.chart([{ok:false}],rows[2],0),/No feasible/);assert(!/NaN|Infinity/.test(G.chart([rows[2]],rows[2],0)));
+console.log('Independent cost/time axes, objective green condition, infeasible gaps and degenerate scales passed');

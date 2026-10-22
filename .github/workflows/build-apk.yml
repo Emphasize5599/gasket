@@ -69,6 +69,8 @@ on:
       - tests/run-node.js
       - tests/propulsion.test.js
       - tests/propulsion-ui.test.js
+      - tests/energygraph.test.js
+      - tests/chargepoint-loading.test.js
       - research/charge-fill-v3/**
       - tests/picture-storage.test.js
       - tests/saved-prices.test.js
