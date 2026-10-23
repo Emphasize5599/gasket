@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 async function run(mode){
  let elapsed=0,clicked=0,result;
  const price='Price Prices Set by Example Energy Rate $0.52 / kWh',card={id:'station_card_18009231',innerText:'Example station',querySelector:()=>({innerText:'Example station'}),click:()=>clicked++};
- const body=()=>mode==='http_error'?'Failed to load station details':(mode==='map'&&!clicked||mode==='ambiguous')?'Stations Example station':elapsed<2500?'Loading…':price;
+ const body=()=>mode==='http_error'?'Failed to load station details':(mode==='map'&&!clicked||mode==='ambiguous')?'Stations Example station':mode==='partial'&&elapsed<4000?'Price Prices Set by ChargePoint Service Fee $0.99 / session':elapsed<2500?'Loading…':price;
  const frame={getBoundingClientRect:()=>({width:mode==='hidden'?0:300,height:mode==='hidden'?0:200})};
  const ctx={Array,String,Date:{now:()=>100000+elapsed},Promise,getComputedStyle:()=>({visibility:'visible',display:'block'}),setTimeout:(f,ms)=>{elapsed+=ms;f();},GasketSite:{result:(_,s)=>result=JSON.parse(s)},__gasketChargePointHttpStatus:403};ctx.window=ctx;
  ctx.document={title:'ChargePoint',get body(){return {innerText:body()};},querySelector:s=>s==='#slideout_station_details'?(mode==='map'&&!clicked||mode==='ambiguous'?null:{innerText:body()}):s.startsWith('iframe')?(mode==='real_check'||mode==='hidden'||mode==='auto_check'&&elapsed<2000?frame:null):s.startsWith('[id^=')&&(mode==='map'||mode==='ambiguous')?card:null,querySelectorAll:()=>mode==='ambiguous'?[{...card,id:'station_card_111111'}, {...card,id:'station_card_222222'}]:[card]};
@@ -14,5 +14,6 @@ async function run(mode){
  x=await run('http_error');assert.equal(x.result.code,'details_error');assert(!x.result.blocked&&!x.result.missing,'persistent data error is not a CAPTCHA or a nonexistent station');
  x=await run('map');assert.equal(x.clicked,1);assert.match(x.result.text,/0.52/);assert.equal(x.result.diagnostics.clickedCard,true);
  x=await run('ambiguous');assert.equal(x.clicked,0);assert.equal(x.result.code,'timeout','never select an ambiguous nearby station');
+ x=await run('partial');assert.match(x.result.text,/Energy Rate/,'wait for the host tariff after the account service-fee block');
  console.log('ChargePoint automatic-check recovery, hidden frames, persistent challenge, HTTP errors and exact station opening passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

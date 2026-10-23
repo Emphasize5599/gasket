@@ -449,7 +449,7 @@
     // Ordinary Club discounts are linear when a tank cannot exceed the purchase
     // cap. Only actual monthly eligibility or a reachable cap needs reward states.
     var grain=o.step||.1,levels=Math.max(1,Math.round(o.capGal/grain)),maxBuy=(o.fillCap?Math.max(1,Math.min(levels,Math.round(o.fillCap/grain))):levels)*grain;
-    if(o.cands.some(function(c){return c.citgo&&(c.citgo.bit||c.citgo.cap<maxBuy-1e-9);}))return optimizeRewards(o,priceFn,stopCostFn);
+    if(o.objective!=='time'&&o.cands.some(function(c){return c.citgo&&(c.citgo.bit||c.citgo.cap<maxBuy-1e-9);}))return optimizeRewards(o,priceFn,stopCostFn);
     // o.step: the planning grain (0.1 gal; coarser for a big EV battery). o.fillCap: fill no higher than this at a stop
     // (EVs: 80% — charging slows to a crawl above it), though you may start the trip above it.
     var STEP = o.step || 0.1, model = o.model;
@@ -499,7 +499,7 @@
           }
         }
       } else if(nodes[i].kind==='charge'){
-        for(var f=0;f<=LV;f++)if(row[f]<INF){var charged=destinationCharge(nodes[i].event,f*STEP,o.capGal),depart=Math.max(f,Math.min(LV,Math.floor(charged.departGal/STEP+1e-9))),cost=(depart-f)*STEP/.9*Math.max(0,+nodes[i].event.price||0);if(row[f]+cost<best[depart]){best[depart]=row[f]+cost;from[depart]=f;}}
+        for(var f=0;f<=LV;f++)if(row[f]<INF){var charged=destinationCharge(nodes[i].event,f*STEP,o.capGal),depart=Math.max(f,Math.min(LV,Math.floor(charged.departGal/STEP+1e-9))),cost=o.objective==='time'?charged.minutes:(depart-f)*STEP/.9*Math.max(0,+nodes[i].event.price||0);if(row[f]+cost<best[depart]){best[depart]=row[f]+cost;from[depart]=f;}}
       } else { for (g = 0; g <= LV; g++) { best[g] = row[g]; from[g] = g; } }
       bestFrom.push(from);
       var firstFuel=LV+1,lastFuel=-1;
@@ -677,8 +677,11 @@
     var oo = Object.assign({}, o, { cands: cands });
     var noStopGal = o.startGal - o.model.galTo(o.model.totalMi);
     if((o.destinationCharges||[]).length){var at=0,g=o.startGal,valid=true;o.destinationCharges.forEach(function(e){g-=o.model.galTo(e.d)-o.model.galTo(at);if(g<0)valid=false;if(valid)g=destinationCharge(e,g,o.capGal).departGal;at=e.d;});noStopGal=valid?g-(o.model.galTo(o.model.totalMi)-o.model.galTo(at)):-1;}
-    var best = optimize(oo);
-    if (!best.ok) { oo.firstDip = true; best = optimize(oo); }
+    // Time is a separate objective in minutes, not a hidden dollars/hour preference.
+    // Nonlinear EV charging/thermal estimates are validated by propulsionPlan below.
+    function choose(){if(o.objective!=='time')return optimize(oo);return optimize(Object.assign({},oo,{refPrice:0,stopPenalty:0}),function(c){return serviceMinutes({c:c,buyGal:1},o.fuelKind)+Math.max(0,c.price)*1e-8;},function(c){return (c.detourMin||0)+(o.stopMinutes||0);});}
+    var best = choose();
+    if (!best.ok) { oo.firstDip = true; best = choose(); }
     if (!best.ok) return { ok: false, reachMi: best.reachMi, noStopGal: noStopGal, refPrice: o.refPrice, tooFar: tooFar };
     var bestEval = evaluate(oo, best);
     if (o.lite) return { ok: true, lite: true, tooFar: tooFar, cands: cands, stops: best.stops,destinationCharges:best.destinationCharges||[], arriveGal: best.arriveGal, totals: bestEval, refPrice: o.refPrice, noStopGal: noStopGal,

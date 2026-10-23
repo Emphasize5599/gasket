@@ -7,7 +7,7 @@ async function (reqId, args) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const flat = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const t0 = Date.now(), LIMIT = 32000;
-  let failedAt = 0, challengeAt = 0, clicked = false, phase = 'loading';
+  let failedAt = 0, challengeAt = 0, clicked = false, phase = 'loading',priceText='',priceAt=0;
   const normalized = s => flat(s).toLowerCase().replace(/[^a-z0-9]/g, '');
   const diagnostic = () => ({phase, elapsedMs:Date.now()-t0, httpStatus:window.__gasketChargePointHttpStatus||0, clickedCard:clicked, title:document.title||''});
   const visible = el => !!el && (!el.getBoundingClientRect || (el.getBoundingClientRect().width>0 && el.getBoundingClientRect().height>0 && getComputedStyle(el).visibility!=='hidden' && getComputedStyle(el).display!=='none'));
@@ -35,6 +35,11 @@ async function (reqId, args) {
     failedAt = 0;
     const at = t.search(/\bPrices? Set by\b|\bEnergy Rate\b|\bPrice\b[^|]{0,40}\bFree\b/i);
     if (at >= 0 && !/Loading station details/i.test(t) && (panel || !document.querySelector('[id^="station_card_"]'))) {
+      // The account service-fee section often draws before the host's tariff.
+      // Wait for stable details rather than declaring that partial block priced.
+      if(priceText!==t){priceText=t;priceAt=Date.now();}
+      const tariffReady=/\b(?:Energy|Charging)\s*(?:Rate|Fee)\b.*?\$\s*\d|\bStation Time Rate\s+while Connected\s*\$\s*\d|\bPrice\s*[·|:]?\s*Free\b|\bFree charging\b/i.test(t);
+      if(!tariffReady&&Date.now()-priceAt<6000){phase='partial_price';await sleep(500);continue;}
       await sleep(600);   // the rest of the price block (fees) draws a moment later
       const t2 = flat((panel || document.body).innerText), at2 = Math.max(0, t2.search(/\bPrices?\b/i));
       phase='priced';send({ text: t2.slice(at2, at2 + 6000),diagnostics:diagnostic() });

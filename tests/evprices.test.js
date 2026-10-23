@@ -84,4 +84,11 @@ const flexi=(cost,fee)=>({serviceFee:fee,days:['sunday','monday'].map(day=>({day
   const cachedResult=await cachedCP.E.annotate(cachedSites,{});
   assert.equal(cachedResult.priced,45);assert.equal(cachedCP.calls.length,0);assert(cachedSites.every(x=>x.st.netPrice));assert.equal(cachedSites[44].st.netPrice.free,true,'confirmed free survives the cache prepass too');
   console.log('Network charger prices and all cached ChargePoint prices beyond the website-read budget passed.');
+  assert.equal(E.parseChargePoint('Price Prices Set by Host Station Time Rate while Connected $0.12 / minute Need help').rate,.12);
+  assert.equal(E.parseChargePoint('Station Time Rate while Connected While Not Charging $1.00/minute'),null,'idle-only rates are not charging rates');
+  const failures=setup(()=>({error:'Station details did not load'})),failed=[{st:{id:'retry',network:'ChargePoint',netIds:{station:['USCPIL900000']}},dc:true,kw:100}];
+  await failures.E.annotate(failed,{});const attempts=failures.calls.length;await failures.E.annotate(failed,{});assert.equal(failures.calls.length,attempts,'overlapping routes do not immediately retry failed pages');
+  const observed=setup(()=>{throw Error('Fresh observed price should be reused');}),oldTime=Date.now()-30*3600e3;observed.S.evPriceAgeHours=48;
+  await observed.E.annotate([{...failed[0],st:{...failed[0].st,netPrice:{src:'chargepoint',rate:.39,uom:'kwh',t:oldTime}}}],{});assert.equal(observed.calls.length,0,'inventory rates respect the configured freshness window without restamping');
+  const stale=setup(()=>({error:'Station details did not load'})),stamp=Date.now()-48*3600e3;stale.shared.set('evprices|cp-v2|900000',{t:stamp,v:{rate:.42,uom:'kwh',t:stamp}});const sites=failed.map(x=>({...x,st:{...x.st}}));await stale.E.annotate(sites,{});assert.equal(sites[0].st.netPrice.rate,.42);assert.equal(sites[0].st.netPrice.t,stamp,'a failed refresh retains an old published tariff, never stamps it fresh');
 })().catch(e=>{console.error(e);process.exitCode=1;});
