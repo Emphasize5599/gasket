@@ -109,3 +109,29 @@ Using any of these needs a **user-supplied developer token**, like the DOE key. 
 - Chargeway (paid plan) and Octopus Charge US (free account; ChargePoint, EVgo, Blink, bp, Shell, FLO, Circle K) show prices in apps only.
 - DCFC Tracker publishes per-station prices for EA, EVgo, bp, Shell, Rivian, Mercedes, Red E, Francis and Walmart, sourced from "public data published by" those networks (source not named). Its site forbids scraping; a paid API key is the only allowed route.
 - No public US OCPI endpoint without credentials was found.
+
+### Follow-up 2026-10-23: signed-out display and app guest access
+
+**Websites: confirmed from their own code**
+
+- **Electric Era:** the drivers page writes `$x.xx / kWh` into each site card from the public JSON.
+  - Placeholders (0–2¢) also show on coming-soon cards.
+  - One open site shows $0.00. Treat it as unknown, never as free.
+- **Francis Energy:** the public map shows socket prices to signed-out visitors.
+  - The anonymous configuration has `showPricesForUpperLevel: true` and `hide3rdPartyPricesForOtp: false`, so prices for other networks' stations on its map are shown too.
+  - Checked from the code and settings, not in a rendered browser.
+
+**Apps: public sources don't settle whether prices need a login**
+
+| App | Map signed out | Prices signed out | Evidence |
+|---|---|---|---|
+| PlugShare | Yes | Not confirmed | BC Hydro: no registration needed except to check in |
+| Chargeway | Unknown | Unknown | — |
+| Octopus Charge | Unknown | Unknown | — |
+| Rivian | Unknown in the app | Rivian.com map shows none | — |
+| Shell | Unknown | Unknown | New Shell App account required for charging |
+| Walmart | Unknown | Unknown | Help text says get the app and an account; site behind a bot check |
+| bp pulse US | Unknown | Unknown | Reviews say registration and payment before charging |
+| Mercedes HPC | Unknown | Unknown | Payment through the Mercedes-Benz app |
+
+A hands-on signed-out check on the phone is the reliable answer for the apps.
