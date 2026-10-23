@@ -1,6 +1,12 @@
 # EV and hydrogen models — integrated in 0.0.237
 
-## 0.0.240 speed graph
+## 0.0.244 consumption graph and saved prices
+
+The EV/H2 graph now follows the fossil-fuel graph: driving kWh/100 mi (EV) or kg/100 mi (hydrogen) versus requested speed offset. Straight diagonal segments connect computed scenarios; infeasible gaps are not bridged. Separate buttons select the lowest-energy and lowest-energy-cost tested plans (ties prefer shorter total trip time). These are minima among tested settings, not global optima. Green indicates that the percentage energy increase between adjacent settings is no greater than the percentage driving-time decrease, analogous to the gas graph. It is a balance guide, not a promise of lowest cost, fastest total trip, safety or exact optimum. Charging/stop choices and different tariffs can separate minimum energy from minimum cost. The selected summary shows actual modeled trip energy cost and total-time differences versus posted limits (or the first feasible sample). Per-road controls, speed rules/caps, weather, and discrete feasible-only application remain.
+
+Saved trips retain EV/H2 raw station inventories and original tariff timestamps, including previously searched alternatives. Cold reopening reprojects these prices without website reads; it does not restore alternative-route consent. New coverage metadata scopes the inventory by connector/charging-level/provider settings, Tesla-owner pricing eligibility, exact route geometry and searched corridor. Wider corridors or changed discovery settings require discovery; explicit refresh bypasses reuse. Legacy nonempty matching route inventories can be replayed but lack verified coverage metadata. Incomplete scans are not newly marked complete. Saving a narrower selection preserves previous inventories; tariffs stay within scoped inventories rather than a cross-vehicle global union. Price-age preferences still apply without advancing timestamps.
+
+## Previous 0.0.240–243 speed graph (superseded)
 
 0.0.243 clarifies the same finite-difference calculation: connected steps, a labeled zero baseline with no invented negative range, no fake starting measurement, and regular five-mph axis ticks even when the current setting is +9. The caption includes the full trip mileage and speed cap. Large minute changes can be real over a multi-thousand-mile trip (2,632 miles at 45 versus 50 mph differs by about 351 driving minutes). Debug logs now retain each sample’s driving, active charging, elapsed time, cost, average speed and normalized intervals; a screenshot alone cannot validate the charging series.
 

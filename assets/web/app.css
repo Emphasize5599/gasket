@@ -466,6 +466,7 @@ b.good, .leg-sub.good { color: var(--save); }
 .spdbox { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 12px 0; }
 .energy-chart { width:100%; height:auto; display:block; overflow:visible; }
 .energy-axis-caption { text-align:center; color:var(--ink-2); font-size:12px; margin:0 0 8px; }
+.energy-choices .btn { height:auto; min-height:70px; padding:10px 8px; line-height:1.35; white-space:normal; align-self:stretch; }
 .energy-chart text { fill:var(--ink-2); font-size:14px; }
 .energy-chart .energy-drive { color:var(--accent); stroke:var(--accent); fill:var(--accent); }
 .energy-chart .energy-charge { color:var(--warn); stroke:var(--warn); fill:var(--warn); }

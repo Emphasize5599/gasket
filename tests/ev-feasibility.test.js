@@ -62,7 +62,26 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    let before=await p.evaluate(()=>__pricePasses);await p.evaluate(()=>__trip.find(true));await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
    assert((await p.evaluate(()=>__pricePasses))>before,'explicit refresh bypasses completed-price-pass reuse');
    before=await p.evaluate(()=>__pricePasses);await p.evaluate(()=>{const now=Date.now;Date.now=()=>now()+11*60e3;__trip.find();});await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
-   assert((await p.evaluate(()=>__pricePasses))>before,'automatic price-pass reuse expires after ten minutes');
+   assert.equal(await p.evaluate(()=>__pricePasses),before,'saved route prices survive the ten-minute in-memory TTL; only explicit refresh rereads websites');
+  }
+  if(scenario==='approved-projection'){
+   const saved=await p.evaluate(()=>{const index=__app.KV.get('trips','index').v,id=index[0].id;return {S:JSON.parse(JSON.stringify(__app.S)),id,index,record:__app.KV.get('trips','trip|'+id).v};});
+   assert(saved.record.stations.google.length>=3,'acceptance retains the previously searched alternatives');
+   await p.reload();await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+   await p.evaluate(saved=>{Object.assign(__app.S,saved.S);__app.S.trip.altCompare=false;__app.S.limitLookup=false;Garage.speedFn=()=>null;__app.KV.put('trips','index',saved.index);__app.KV.put('trips','trip|'+saved.id,saved.record);window.__discoveryReads=0;window.__pricePasses=0;AltFuel.alongRoute=async()=>{__discoveryReads++;return [];};EVPrices.annotate=async()=>{__pricePasses++;return {priced:0,notes:[]};};Limits.along=async m=>({roads:[{name:'Fixture',from:0,to:m.totalMi,sections:[{from:0,to:m.totalMi,limit:60}]}]});const wx=RouteWx.forRoute,h=Math.floor(Date.now()/3600000)*3600000;RouteWx.forRoute=async(...a)=>Object.assign(await wx(...a),{temperatures:[{mi:0,hours:[[h-3600000,20],[h+7*86400000,20]]}]});},saved);
+   await p.click('#btnTrip');await p.click('[data-hist="'+saved.id+'"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
+   assert(await p.evaluate(()=>__trip.state().result.plan.ok),'cold reopen plans using station tariffs stored with the trip');
+   const originalTimes=new Map(saved.record.stations.google.flatMap(g=>g.list).filter(s=>s.netPrice).map(s=>[s.id,s.netPrice.t]));
+   const reopenedTimes=await p.evaluate(()=>__trip.state().result.cands.map(c=>[c.station.id,c.station.netPrice?.t]));assert(reopenedTimes.length>0);assert(reopenedTimes.every(([id,t])=>originalTimes.get(id)===t),'reuse must not make old price timestamps look freshly checked');
+   assert.equal(await p.evaluate(()=>__discoveryReads),0,'cold reopen does not rediscover covered routes');assert.equal(await p.evaluate(()=>__pricePasses),0,'cold reopen does not read pricing websites');
+   assert(await p.evaluate(()=>__app.KV.get('trips','trip|'+__app.KV.get('trips','index').v[0].id).v.stations.google.length>=3),'saving only the chosen route keeps alternative inventories');
+   await p.waitForSelector('[data-energy-pick]');assert.match(await p.locator('.energy-chart').textContent(),/kWh \/ 100 miles/);assert.match(await p.locator('[data-energy-summary]').innerText(),/trip energy/);assert.equal(await p.locator('button[data-energy-speed]').count(),2,'separate lowest-energy and lowest-cost choices');
+   await p.locator('button[data-energy-speed]').last().click();assert.match(await p.locator('[data-energy-summary]').innerText(),/versus/);assert.equal(await p.evaluate(()=>__pricePasses),0,'graph trials do not refresh prices');
+   assert(await p.locator('.energy-choices button').evaluateAll(bs=>bs.every(b=>b.scrollHeight<=b.clientHeight+1)),'choice labels wrap without clipping at enlarged font size');
+   if(width===320)await p.locator('[data-trip-speed]').screenshot({path:'build/energy-graph-244.png'});
+   await p.evaluate(()=>{__app.S.trip.altCompare=true;const toggle=document.querySelector('#tAltCmp');if(toggle)toggle.checked=true;__trip.state().route.legs.forEach((l,i)=>l.alts.forEach(a=>__app.S.trip.routeChoices[RouteChoices.key(i,a)]={consider:true}));__trip.find();});await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
+   assert.equal(await p.evaluate(()=>__discoveryReads),0,'reapproved alternatives reuse their own saved coverage after a cold reopen');assert.equal(await p.evaluate(()=>__pricePasses),0,'saved alternative prices do not trigger website refresh');
+   await p.evaluate(()=>{__app.S.trip.maxDetourMin=40;__trip.find();});await p.waitForFunction(()=>!__trip.state().busy);assert((await p.evaluate(()=>__discoveryReads))>0,'widening the search corridor does not pretend previously unsearched areas are covered');
   }
   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);await p.close();
  }

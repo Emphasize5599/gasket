@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.234**, 2026-10-22, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 52 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 53 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 ## feat — product features
 
@@ -32,6 +32,8 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 12. [ ] **Richer optional doodles.** Consider more wheel detail, roof racks and two-tone paint. This is an existing enhancement idea, not a replacement for vehicle photos.
 
 ### Discounts and trip optimization
+
+52. [ ] **Clearer fossil-fuel speed guidance.** Review the gas/diesel speed graph using the EV distinction between lowest energy use, lowest trip cost and an energy/time balance. Show concise choices and their cost/time differences; do not call a percentage-based compromise the most efficient or a proven optimum. Retain per-road controls, speed caps and feasibility checks. Coordinate with energy-model validation (50).
 
 14. [ ] **Cash-price offers and comparisons.** The current one-price-per-grade model does not preserve payment eligibility; Google fuel-price responses have no cash/card field. Add separate explicitly labeled offers, cash/card preferences, correct reward/cashback eligibility and history/cache support, then verify real source coverage. Never infer that an unlabeled price is cash. Findings and a proposed design are in [DATA_OPTIONS.md](docs/DATA_OPTIONS.md).
 

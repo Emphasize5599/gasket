@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.244 - 2026-10-22
+- Reuse saved EV/H2 route prices after reopening, retaining searched alternatives and original price timestamps.
+- Show a gas-style energy-use curve with diagonal lines and separate lowest-energy/lowest-cost tested choices.
+
 ## 0.0.243 - 2026-10-22
 - Startup loading screen, readiness stages and timing diagnostics; preserve Android edge-to-edge layout.
 - Clarify the speed graph’s zero baseline, steps and whole-trip scale; log exact sample values.

@@ -2244,6 +2244,18 @@
     if(KIND()!=='ev')return P.mergeSites(P.reconcileStations(rows));
     var known=new Map();rows.forEach(function(st){var prior=known.get(st.id),copy=Object.assign({},prior||{},st);if(prior&&prior.netPrice&&(!st.netPrice||(+prior.netPrice.t||0)>(+st.netPrice.t||0))){copy.netPrice=prior.netPrice;if(prior.netPrice.src==='flo')copy.units=prior.units;}known.set(st.id,copy);});return Array.from(known.values());
   }
+  function altInventoryScope(){return VehicleCompare.key([KIND(),KIND()==='ev'?AltFuel.compatiblePlugs(Garage.car(),Garage.plugs(Garage.car())):null,/tesla/i.test(Garage.car().make||''),S.trip.evChargers,S.evUseDOE,S.evUseOCM]);}
+  function altCorridor(){return KIND()==='ev'?Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)):8;}
+  function savedAltInventory(saved,rr,corridor){
+    if(!saved||!rr||!saved.stations||saved.stations.kind!==KIND())return null;
+    var sig=altSig(rr),geometry=rr.polyline&&rr.polyline.encodedPolyline,scope=altInventoryScope(),g=(saved.stations.google||[]).find(function(g){return (g.sig||(saved.alts&&saved.alts[g.k]?altSig(saved.alts[g.k]):''))===sig&&(!g.geometry||g.geometry===geometry)&&(!g.coverage||g.coverage.scope===scope&&g.coverage.corridor>=corridor&&g.coverage.complete);});
+    if(!g)return null;
+    var rows=(saved.stations.official||[]).concat(g.list||[]);
+    // Legacy saves lack coverage metadata. An empty placeholder is not proof of a scan.
+    if(!g.coverage&&!rows.length)return null;
+    if(!g.coverage&&rows.some(function(st){return st.netPrice&&st.netPrice.src==='tesla'&&(/Tesla-owner/.test(st.netPrice.label||'')?!/tesla/i.test(Garage.car().make||''):/non-Tesla/.test(st.netPrice.label||'')&&/tesla/i.test(Garage.car().make||''));}))return null;
+    return mergeRouteStations(rows);
+  }
   async function gatherAlt(models, pg, dbgS,replay,rawRoutes,force) {
     var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = kd === 'ev' ? Math.min(15,Math.max(2,(+S.trip.maxDetourMin||0)*25/60/2/1.3)) : 8;
     if(kd==='ev')plugs=AltFuel.compatiblePlugs(c,plugs);
@@ -2254,8 +2266,10 @@
       var list = [], m = models[mi];
       var priceKey=JSON.stringify([kd,T.encodePolyline(m.pts),c.id,c.make,c.plug,c.adapter,c.acAdapter,c.dcKw,c.acKw,plugs,S.trip.evChargers,S.trip.evNetworksOff,S.evUseDOE,S.evUseOCM,S.evRefreshPrices,S.nrelKey,S.ocmKey,S.evNetPrices,S.evPriceAgeHours]);
       priceKeys.push(priceKey);var priced=altPricePasses.get(priceKey),reusePrices=!replay&&force!==true&&force!=='discover'&&priced&&Date.now()-priced.at<10*60e3&&priced.corridor>=corridor;
+      var stored=replay&&replay.saved&&savedAltInventory(replay.saved,rawRoutes&&rawRoutes[mi],corridor);
       try {
-        if(reusePrices){list=priced.rows.map(function(st){return Object.assign({},st);});notes=Array.from(new Set(notes.concat(priced.notes)));priceReused[mi]=true;LG.info('stations','Reusing completed charger price pass',{stations:list.length,ageSec:Math.round((Date.now()-priced.at)/1000)});}
+        if(stored){list=stored.map(function(st){return Object.assign({},st);});priceReused[mi]=true;if(notes.indexOf('Saved station prices reused with their original timestamps. Use Refresh to request updated prices.')<0)notes.push('Saved station prices reused with their original timestamps. Use Refresh to request updated prices.');LG.info('stations','Reusing saved route inventory and prices',{kind:kd,stations:list.length,ageSec:Math.round((Date.now()-replay.saved.t)/1000)});}
+        else if(reusePrices){list=priced.rows.map(function(st){return Object.assign({},st);});notes=Array.from(new Set(notes.concat(priced.notes)));priceReused[mi]=true;LG.info('stations','Reusing completed charger price pass',{stations:list.length,ageSec:Math.round((Date.now()-priced.at)/1000)});}
         else if(replay&&replay.localOnly)list=(replay.google[mi]||{}).list||[];
         else {
           var rr=rawRoutes&&rawRoutes[mi],pieces=rr&&rr._sel&&legsMode()&&(m.legEnds||[]).length>1?rr._sel.map(function(k,i){return route.legs[i].alts[k];}):[rr];
@@ -2315,7 +2329,7 @@
     if(kd==='ev'&&!discoveryIncomplete&&!jobCancel)raw.forEach(function(list,i){if(priceReused[i])return;altPricePasses.delete(priceKeys[i]);altPricePasses.set(priceKeys[i],{at:Date.now(),corridor:corridor,rows:list.map(function(st){return Object.assign({},st);}),notes:notes.slice()});while(altPricePasses.size>64)altPricePasses.delete(altPricePasses.keys().next().value);});
     dbgS.stations = raw.map(function (l) { return l.length; });
     pg(1, 'Choosing stops');
-    return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd } };
+    return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd,incomplete:discoveryIncomplete||jobCancel } };
   }
   async function gatherAll(models, pg, dbgS, force, replay, ks,areaPlan) {
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay,(ks||[]).map(function(k){return alts[k];}),force);
@@ -2722,14 +2736,15 @@
     if(rows&&pick==null){var off=scope!=='all'&&Number.isFinite(ctx.roadOffsets[scope])?ctx.roadOffsets[scope]:ctx.offset;pick=rows.findIndex(function(x){return x.offset===off;});if(pick<0)pick=rows.findIndex(function(x){return x.offset===0;});r.propulsionSpeedPick=pick;}
     var baseline=rows&&(rows.find(function(x){return x.offset===0&&x.ok;})||rows.find(function(x){return x.ok;})),chosen=rows&&rows[pick];
     function signed(n,unit){return (n>0?'+':n<0?'−':'')+Math.abs(n).toFixed(1)+unit;}
-    function summary(i){var s=rows&&rows[i];if(!s||!s.ok)return 'No plan at this setting';var q=EnergyGraph.intervals(rows)[i],d=s.cost-baseline.cost;return (s.offset===0?'At posted limits':signed(s.offset,' mph versus posted limits'))+' · '+money(s.cost)+' energy · '+Math.round(s.minutes)+' min total.'+(Math.abs(d)<.005?'':' '+(d>0?'+':'−')+money(Math.abs(d))+' versus '+(baseline.offset===0?'at-limit':'first feasible')+'.')+(q?' Per +5 mph: driving '+signed(-q.driving,' min')+', '+(KIND()==='h2'?'refueling ':'charging ')+signed(q.charging,' min')+', trip '+signed(-q.net,' min')+'.':' No slower adjacent sample.');}
-    el.innerHTML='<h3>Speed & energy estimates</h3><p class="lead small">'+(KIND()==='h2'?'Unvalidated hydrogen estimates.':'Driving time saved versus extra charging time.')+' '+A.qBtn('Both lines use minutes per +5 mph, averaged between neighboring tested plans. Blue is driving time saved; yellow is extra charging or refueling time. Gaps are infeasible plans. Green means that increase reduces total modeled trip time, including detours, setup and scheduled waits; it does not mean cheapest or safest. Destination charging can overlap a planned stay. Stop changes can cause jumps: no smooth or exact optimum is claimed. Speed changes affect only the chosen road, or every known road if All roads is selected. Other roads keep their settings. Requested offsets obey your speed cap; unknown-limit stretches keep their original speeds. Follow posted signs, minimum speeds and conditions.')+'</p><label class="nf"><span>Road to adjust</span><select data-energy-road><option value="all"'+(scope==='all'?' selected':'')+'>All roads</option>'+roads.map(function(rd,i){var id=energyRoadKey(rd);return '<option value="'+esc(id)+'"'+(scope===id?' selected':'')+'>'+esc((rd.name||'Road '+(i+1))+' · mile '+Math.round(rd.from)+'–'+Math.round(rd.to))+'</option>';}).join('')+'</select></label>'+
-      (rows&&baseline?EnergyGraph.chart(rows,baseline,pick)+'<div class="energy-axis-caption">Requested mph versus posted limits</div><small>Green = faster total trip, not lowest cost. Other roads '+(scope==='all'?'are adjusted together.':'stay unchanged.')+'</small><label class="nf"><span>Choose a speed setting</span><input type="range" data-energy-pick min="0" max="'+(rows.length-1)+'" step="1" value="'+pick+'"></label><p data-energy-summary>'+summary(pick)+'</p><button class="btn primary" data-energy-use'+(!chosen||!chosen.ok?' disabled':'')+'>Use for '+(scope==='all'?'all roads':'this road')+'</button>':loading?A.ldBar('Testing speed increases with saved stations'):rows?'<p>No feasible speed scenarios with these parameters.</p>':ready?'':model._lim&&model._lim!=='loading'?'<p>Speed estimates are unavailable for this route.</p>':A.ldBar('Waiting for speed limits'))+
+    function summary(i){var s=rows&&rows[i];if(!s||!s.ok)return 'No plan at this setting';var d=s.cost-baseline.cost,dt=s.minutes-baseline.minutes;return (s.offset===0?'At posted limits':signed(s.offset,' mph versus posted limits'))+' · '+s.per100.toFixed(1)+(KIND()==='h2'?' kg':' kWh')+'/100 mi · '+money(s.cost)+' trip energy.'+(Math.abs(d)<.005?' Same cost':(d>0?' Costs '+money(d)+' more':' Saves '+money(-d)))+' versus '+(baseline.offset===0?'posted limits':'first feasible setting')+'. '+Math.abs(Math.round(dt))+' min '+(dt>0?'longer':'sooner')+' overall (includes stops).';}
+    el.innerHTML='<h3>Speed & energy estimates</h3><p class="lead small">'+(KIND()==='h2'?'Unvalidated hydrogen estimates.':'Steeper = more energy for extra speed.')+' '+A.qBtn('Like the gas graph, this plots driving energy per 100 miles. Green marks adjacent speed increases where the percentage increase in driving energy is no greater than the percentage decrease in driving time. This is a balance guide, not a cheapest-speed guarantee or a safety recommendation. Charging prices and stop choices can change trip cost and total time; compare the selected cost below. Lines connect tested settings without inventing results between them. Gaps are infeasible plans. Changes apply only to the selected road, or all known roads together. Your speed cap applies; unknown-limit stretches keep their original speeds. Follow posted signs, minimum speeds and conditions.')+'</p><label class="nf"><span>Road to adjust</span><select data-energy-road><option value="all"'+(scope==='all'?' selected':'')+'>All roads</option>'+roads.map(function(rd,i){var id=energyRoadKey(rd);return '<option value="'+esc(id)+'"'+(scope===id?' selected':'')+'>'+esc((rd.name||'Road '+(i+1))+' · mile '+Math.round(rd.from)+'–'+Math.round(rd.to))+'</option>';}).join('')+'</select></label>'+
+      (rows&&baseline?EnergyGraph.chart(rows,baseline,pick)+'<div class="energy-axis-caption">Requested mph versus posted limits</div><small>Green = energy/time balance, like the gas graph. Other roads '+(scope==='all'?'are adjusted together.':'stay unchanged.')+'</small><label class="nf"><span>Choose a speed setting</span><input type="range" data-energy-pick min="0" max="'+(rows.length-1)+'" step="1" value="'+pick+'"></label><p data-energy-summary>'+summary(pick)+'</p><button class="btn primary" data-energy-use'+(!chosen||!chosen.ok?' disabled':'')+'>Use for '+(scope==='all'?'all roads':'this road')+'</button>':loading?A.ldBar('Testing speed increases with saved stations'):rows?'<p>No feasible speed scenarios with these parameters.</p>':ready?'':model._lim&&model._lim!=='loading'?'<p>Speed estimates are unavailable for this route.</p>':A.ldBar('Waiting for speed limits'))+
       '<button class="btn tonal sm" data-energy-check'+(!ready||loading?' disabled':'')+'>'+(loading?'Calculating…':rows?'Refresh graph':'Build graph')+'</button>';
     var caption=el.querySelector('.energy-axis-caption');if(caption)caption.textContent+=' · '+Math.round(model.totalMi).toLocaleString()+'-mile trip'+(ctx.speedCap?' · cap '+ctx.speedCap+' mph':'');
+    if(rows&&baseline){var best=EnergyGraph.choices(rows),options=document.createElement('div');options.className='grid2 energy-choices';options.innerHTML=[['energy','Lowest energy tested'],['cost','Lowest cost tested']].map(function(x){var i=best[x[0]],s=rows[i];return i<0?'':'<button class="btn tonal sm" data-energy-speed="'+i+'"><span>'+x[1]+'<br>'+(s.offset===0?'At posted limits':signed(s.offset,' mph'))+' · '+(x[0]==='energy'?s.per100.toFixed(1)+(KIND()==='h2'?' kg':' kWh')+'/100 mi':money(s.cost))+'</span></button>';}).join('');caption.insertAdjacentElement('afterend',options);}
     var check=async function(){
       if(r!==result||r.propulsionSpeedBusy||!ready)return;r.propulsionSpeedBusy=true;renderPropulsionSpeed(el);
-      var original=r.opts,end=window.Tasks?Tasks.begin('energy-speeds',{text:'Comparing driving savings and charging time using saved stations',priority:1}):function(){};
+      var original=r.opts,end=window.Tasks?Tasks.begin('energy-speeds',{text:'Comparing speed, energy use and cost using saved stations',priority:1}):function(){};
       function valid(){return result===r&&r.opts===original&&(r.energyScope||'all')===scope&&r.propulsionSpeedKey===key;}
       try{
         var offsets=[-20,-15,-10,-5,0];if(rule.on)offsets=offsets.concat([5,10,15]);var def=rule.on?Math.max(-10,Math.min(15,+rule.over||0)):0;if(offsets.indexOf(def)<0)offsets.push(def);offsets.sort(function(a,b){return a-b;});
@@ -2740,8 +2755,9 @@
           var p=await planAsync(o,valid,1);if(p.cancelled||!valid())return;
           var met=p.ok?VehicleCompare.metrics({kind:KIND(),trip:S.trip,result:{opts:o,plan:p,startGal:r.startGal,startPrice:r.startPrice},tolls:[]}):null;
           var driving=p.ok?o.model.durationSec/60:NaN,total=p.ok&&p.propulsion?driving+p.propulsion.stopMinutes:NaN,charging=p.ok&&p.propulsion?p.propulsion.chargingMinutes:NaN;
-          out.push({offset:offset,kind:KIND(),ok:p.ok&&!p.firstDip&&Number.isFinite(met.energy)&&Number.isFinite(total)&&Number.isFinite(charging),cost:met&&met.energy,minutes:total,driving:driving,charging:charging,mph:p.ok?o.model.totalMi/o.model.durationSec*3600:NaN});
-        }if(valid()){LG.debug('speed','Energy graph samples',{scope:scope==='all'?'all roads':scope,miles:model.totalMi,cap:ctx.speedCap,defaultOffset:ctx.offset,rows:out.map(function(s){return {offset:s.offset,ok:s.ok,driving:s.driving,charging:s.charging,total:s.minutes,cost:s.cost,averageMph:s.mph};}),intervals:EnergyGraph.intervals(out)});r.propulsionGraphCache.set(key,out);r.propulsionSpeeds=out;r.propulsionSpeedKey=key;r.propulsionSpeedPick=null;}
+          var per100=p.ok&&o.model.totalMi>0?o.model.galTo(o.model.totalMi)/o.model.totalMi*100:NaN;
+          out.push({offset:offset,kind:KIND(),ok:p.ok&&!p.firstDip&&Number.isFinite(met.energy)&&Number.isFinite(total)&&Number.isFinite(charging)&&Number.isFinite(per100),per100:per100,cost:met&&met.energy,minutes:total,driving:driving,charging:charging,mph:p.ok?o.model.totalMi/o.model.durationSec*3600:NaN});
+        }if(valid()){LG.debug('speed','Energy graph samples',{scope:scope==='all'?'all roads':scope,miles:model.totalMi,cap:ctx.speedCap,defaultOffset:ctx.offset,rows:out.map(function(s){return {offset:s.offset,ok:s.ok,driving:s.driving,charging:s.charging,total:s.minutes,cost:s.cost,per100:s.per100,averageMph:s.mph};}),intervals:EnergyGraph.intervals(out)});r.propulsionGraphCache.set(key,out);r.propulsionSpeeds=out;r.propulsionSpeedKey=key;r.propulsionSpeedPick=null;}
       }catch(e){r.propulsionSpeedFailed=key;A.toast('Speed comparison failed. '+e.message);}finally{r.propulsionSpeedBusy=false;end();var active=speedTile();if(result===r&&active)renderPropulsionSpeed(active);}
     };
     el.querySelector('[data-energy-check]').onclick=check;
@@ -3361,7 +3377,8 @@
       if(webSummary.blocked)A.showSiteCheck(webSummary.blockedSite||'gasweb',webSummary.blockedSite==='walmart'?'Walmart':webSummary.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
     }
     var rp = (force === true||force==='discover'||noReplay)&&!webRefresh ? null : replay, rpSt = null, partialKs = null;
-    if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null;   // saved for another kind of car (or EV stations: the finder's own cache covers them)
+    var altReplay=rp&&KIND()!=='gas'&&rp.stations.kind===KIND()?{saved:rp}:null;
+    if (rp && (KIND() !== 'gas' || (rp.stations.kind || 'gas') !== 'gas')) rp = null; // gas replay has a separate reconciliation path
     if (rp) {
       // which route each saved station list was for (older saves: worked out from the saved route options)
       rpSt = { official: rp.stations.official, google: (rp.stations.google || []).map(function (g) { return Object.assign({}, g, { sig: g.sig || (rp.alts && rp.alts[g.k] ? altSig(rp.alts[g.k]) : '') }); }) };
@@ -3402,14 +3419,14 @@
       var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
       var coverage=discovering?KeylessGas.discoveryPhases([okModels[0]],extraModels,T,P):null;
       if(coverage)LG.info('keyless','Shared primary/alternative coverage',{primaryAreas:coverage.primary.length,alternativeAreas:coverage.alternatives.length,reusedPrimaryAreas:coverage.alternatives.plan.reusedPrimaryAreas});
-      var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Primary routes · '+l);},firstDebug,force,null,[okKs[0]],coverage&&coverage.primary);
+      var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Primary routes · '+l);},firstDebug,force,altReplay,[okKs[0]],coverage&&coverage.primary);
       var rest;
       if(jobCancel||firstDebug.keyless&&firstDebug.keyless.blocked){rest={per:okModels.slice(1).map(function(){return {cands:[],notes:['Alternative search not started after cancellation or restriction.'],unpriced:0,stale:0,grade:gradeOf()};}),raw:{official:[],google:okModels.slice(1).map(function(){return [];})}};}
       else {
         finishScanPending('alternatives');
         // A multi-leg alternative changes one leg, not the whole trip. Discover
         // only that changed leg, then project the saved union onto full routes.
-        var searched=await gatherAll(extraModels,function(f,l){prog(.47+f*.43,'Approved alternatives · '+l);},restDebug,discovering?'discover-cache':false,null,okKs.slice(1),coverage&&coverage.alternatives);
+        var searched=await gatherAll(extraModels,function(f,l){prog(.47+f*.43,'Approved alternatives · '+l);},restDebug,discovering?'discover-cache':false,altReplay,okKs.slice(1),coverage&&coverage.alternatives);
         var baseStations=(first.raw.official||[]).concat.apply(first.raw.official||[],first.raw.google||[]);
         var drop=function(s){var c=Object.assign({},s);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;};
         // the primary's stations plus the alternatives' own: one copy each (they overlap, and were listed twice)
@@ -3420,8 +3437,8 @@
       }
       dbg.search={primary:firstDebug,alternatives:restDebug,keyless:restDebug.keyless||firstDebug.keyless};
       if(restDebug.keyless&&(restDebug.keyless.cancelled||restDebug.keyless.blocked))first.per[0].notes.push('Alternative discovery was '+(restDebug.keyless.blocked?'restricted':'cancelled')+'; only completed results were kept.');
-      ga={per:first.per.concat(rest.per),cachedAgeMs:Math.max(first.cachedAgeMs||0,rest.cachedAgeMs||0),raw:{official:P.reconcileStations((first.raw.official||[]).concat(rest.raw.official||[])),google:first.raw.google.concat(rest.raw.google),kind:first.raw.kind}};
-    }else ga=await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force, rpSt, okKs);
+      ga={per:first.per.concat(rest.per),cachedAgeMs:Math.max(first.cachedAgeMs||0,rest.cachedAgeMs||0),raw:{official:P.reconcileStations((first.raw.official||[]).concat(rest.raw.official||[])),google:first.raw.google.concat(rest.raw.google),kind:first.raw.kind,incomplete:first.raw.incomplete||rest.raw.incomplete||searched&&searched.raw.incomplete}};
+    }else ga=await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force, rpSt||altReplay, okKs);
     choicePool=ga.raw;
     choiceCandidates.clear();ga.per.forEach(function(g,i){cacheChoiceCandidates(alts[okKs[i]],okModels[i],g);});
     // cancelled: website discovery hands back what it finished (planned with, and noted); anything else stops here
@@ -4105,6 +4122,17 @@
     var choices=rememberedChoices(prior&&prior.v&&prior.v.routeChoicesByVehicle);choiceSavedId=id;
     var previousComparison=A.KV.get('trips','trip|'+id);
     var google = (raw.google || []).map(function (list, i) { return { k: ks[i], sig: alts[ks[i]] ? altSig(alts[ks[i]]) : '', list: list }; });
+    if(raw.kind==='ev'||raw.kind==='h2'){
+      var old=previousComparison&&previousComparison.v&&previousComparison.v.stations;
+      google.forEach(function(g){g.list=mergeRouteStations((raw.official||[]).concat(g.list));g.geometry=alts[g.k]&&alts[g.k].polyline&&alts[g.k].polyline.encodedPolyline;g.coverage={scope:altInventoryScope(),corridor:altCorridor(),complete:!raw.incomplete&&!jobCancel};});
+      if(old&&old.kind===raw.kind){
+        google.forEach(function(g){var prior=(old.google||[]).find(function(x){return x.sig===g.sig&&(!x.geometry||x.geometry===g.geometry)&&(!x.coverage||x.coverage.scope===g.coverage.scope);});if(prior){g.list=mergeRouteStations((prior.list||[]).concat(g.list));if(prior.coverage&&prior.coverage.complete)g.coverage={scope:g.coverage.scope,corridor:Math.max(prior.coverage.corridor,g.coverage.complete?g.coverage.corridor:0),complete:true};}});
+        (old.google||[]).forEach(function(g){if(!google.some(function(x){return x.sig===g.sig&&(!g.geometry||x.geometry===g.geometry)&&(!g.coverage||x.coverage.scope===g.coverage.scope);}))google.push(Object.assign({},g,{list:mergeRouteStations((old.official||[]).concat(g.list||[]))}));});
+      }
+      // Tariffs may be vehicle-specific. Keep each inventory with its own scope,
+      // not in a global union that can replace another vehicle's Tesla-owner rate.
+      raw=Object.assign({},raw,{official:[]});
+    }
     var keepStop = function (st) { var o = Object.assign({}, st); delete o.choices; return o; };
     A.KV.put('trips', 'trip|' + id, {
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
