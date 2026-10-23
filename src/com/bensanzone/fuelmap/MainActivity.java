@@ -1250,7 +1250,7 @@ public class MainActivity extends Activity {
             if (!ns.isDirectory()) continue;
             w.name(ns.getName()).beginObject();
             File[] fs = ns.listFiles();
-            if (fs != null) for (File f : fs) { if (!f.isFile()) continue; w.name(f.getName()).value(readAll(new java.io.FileInputStream(f))); nKv++; }
+            if (fs != null) for (File f : fs) { if (!f.isFile() || f.getName().startsWith(".kv-")) continue; w.name(f.getName()).value(readAll(new java.io.FileInputStream(f))); nKv++; }
             w.endObject();
         }
         w.endObject();
@@ -2136,32 +2136,26 @@ public class MainActivity extends Activity {
             try {
                 java.io.File f = kvFile(ns, key);
                 if (!f.exists()) return "";
+                if("trips".equals(ns)&&key.startsWith("trip|")&&f.length()==0)js("window.FLog&&FLog.error('storage','Empty saved-trip record on disk')");
                 return readAll(new java.io.FileInputStream(f));
             } catch (Exception e) { return ""; }
         }
 
         @JavascriptInterface
         public boolean kvPut(String ns, String key, String value) {
-            if ("pricehistory".equals(ns)) {
-                synchronized (MainActivity.this) {
-                    try {
-                        java.io.File f = kvFile(ns, key);
-                        java.io.File tmp = new java.io.File(f.getParentFile(), f.getName() + ".tmp");
-                        java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
-                        try { out.write(value.getBytes("UTF-8")); } finally { out.close(); }
-                        if (!tmp.renameTo(f)) { tmp.delete(); return false; }
-                        return true;
-                    } catch (Exception ignored) { }
+            synchronized (MainActivity.this) {
+                long started=android.os.SystemClock.elapsedRealtime();
+                try {
+                    KVStore.write(kvFile(ns,key),value,"trips".equals(ns));
+                    if("trips".equals(ns)&&key.startsWith("trip|"))js("window.FLog&&FLog.debug('storage','Saved-trip record persisted',{chars:"+value.length()+",ms:"+(android.os.SystemClock.elapsedRealtime()-started)+"})");
+                    return true;
                 }
-                return false;
+                catch(Exception e) {
+                    android.util.Log.e("GasketStorage","KV write failed: namespace="+ns+", chars="+(value==null?0:value.length())+", error="+e.getClass().getSimpleName());
+                    js("window.FLog&&FLog.error('storage','Persistent write failed',{namespace:"+JSONObject.quote(ns)+",chars:"+(value==null?0:value.length())+",error:"+JSONObject.quote(e.getClass().getSimpleName())+"})");
+                    return false;
+                }
             }
-            try {
-                java.io.FileOutputStream o = new java.io.FileOutputStream(kvFile(ns, key));
-                o.write(value.getBytes("UTF-8"));
-                o.close();
-                return true;
-            } catch (Exception ignored) { }
-            return false;
         }
 
         @JavascriptInterface

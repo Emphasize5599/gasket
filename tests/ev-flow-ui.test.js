@@ -30,7 +30,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await p.evaluate(()=>{__app.S.trip.maxDetourMin=8;__trip.find();});await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
   assert.equal(await p.evaluate(()=>__discoveryCalls),calls,'narrower corridor reuses raw discovery and reprojects candidates');
   await p.evaluate(()=>{__app.S.trip.maxDetourMin=16;__trip.find();});await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
-  assert((await p.evaluate(()=>__discoveryCalls))>calls,'widening coverage searches the larger corridor');
+  assert.equal(await p.evaluate(()=>__discoveryCalls),calls,'larger detour limits reuse the full 30-minute discovery corridor');
   const widened=await p.evaluate(()=>__discoveryCalls);
   await p.evaluate(()=>__trip.find(true));await p.waitForFunction(()=>__trip.state().result?.plan.ok&&!__trip.state().busy);
   assert((await p.evaluate(()=>__discoveryCalls))>widened,'explicit API refresh is not suppressed by the route cache');

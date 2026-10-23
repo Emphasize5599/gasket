@@ -238,6 +238,7 @@ jobs:
           GASKET_NATIVE_TESTS=1 node tests/routes-budget.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-native.test.js
           GASKET_NATIVE_TESTS=1 node tests/backup-io.test.js
+          GASKET_NATIVE_TESTS=1 node tests/kv-store.test.js
           GASKET_NATIVE_TESTS=1 node tests/reader-resources.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-processor.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-gpu-support.test.js

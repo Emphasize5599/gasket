@@ -11,3 +11,6 @@ const d=svg.match(/class="energy-line energy-drive" d="([^"]+)"/)[1];assert.equa
 const coords=d.match(/[-\d.]+,[-\d.]+/g).map(p=>p.split(',').map(Number));assert(coords[2][0]>coords[1][0]&&coords[2][1]<coords[1][1],'increasing energy slopes up with speed');
 assert(!/NaN|Infinity/.test(G.chart([{...rows[0],per100:0}],null,0)),'zero-energy fixture remains finite');
 console.log('Gas-style kWh/kg consumption curves, diagonal segments, infeasible gaps, percentage balance and distinct cost/energy choices passed');
+assert.match(G.balanceNote(rows),/^Green/);
+const steep=[{...rows[2],per100:25},{...rows[3],per100:30}];assert.match(G.balanceNote(steep),/No green band/);assert.equal((G.chart(steep,steep[0],0).match(/class="energy-good"/g)||[]).length,0,'do not invent shading for an unfavorable balance');
+assert.match(G.balanceNote([rows[0]]),/Not enough/);

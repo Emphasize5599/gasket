@@ -7,6 +7,7 @@
  function consumption(r){return valid(r)&&Number.isFinite(r.per100)&&r.per100>=0;}
  function balanced(a,b){return consumption(a)&&consumption(b)&&b.offset>a.offset&&a.per100>0&&a.driving>0&&b.driving<a.driving&&(b.per100-a.per100)/a.per100<=(a.driving-b.driving)/a.driving;}
  function choices(rows){var energy=-1,cost=-1;rows.forEach(function(r,i){if(!consumption(r))return;if(energy<0||r.per100<rows[energy].per100-1e-9||Math.abs(r.per100-rows[energy].per100)<1e-9&&r.minutes<rows[energy].minutes)energy=i;if(cost<0||r.cost<rows[cost].cost-1e-9||Math.abs(r.cost-rows[cost].cost)<1e-9&&r.minutes<rows[cost].minutes)cost=i;});return {energy:energy,cost:cost};}
+ function balanceNote(rows){if(rows.some(function(r,i){return balanced(rows[i-1],r);}))return 'Green = energy/time balance, like the gas graph.';return rows.some(function(r,i){return consumption(rows[i-1])&&consumption(r)&&r.driving<rows[i-1].driving;})?'No green band in this tested range: each evaluated speed increase uses proportionally more energy than the driving time it saves.':'Not enough neighboring feasible speed settings to show a balance band.';}
  function chart(rows,baseline,selected){
   var good=rows.filter(consumption);if(!good.length)return '<p>No feasible speed scenarios with these parameters.</p>';
   var W=360,H=230,L=48,R=344,T=32,B=193,x0=Math.min.apply(null,rows.map(function(r){return r.offset;})),x1=Math.max.apply(null,rows.map(function(r){return r.offset;}));if(x1-x0<1){x0-=1;x1+=1;}
@@ -24,5 +25,5 @@
    if(!nearSelected&&(r.offset%5===0||i===selected))h+='<circle class="energy-drive" cx="'+x(r.offset)+'" cy="'+y(r.per100)+'" r="'+(i===selected?5:3)+'"/>';h+='</g>';});
   return h+'</svg>';
  }
- var api={chart:chart,intervals:intervals,balanced:balanced,choices:choices};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.EnergyGraph=api;
+ var api={chart:chart,intervals:intervals,balanced:balanced,choices:choices,balanceNote:balanceNote};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.EnergyGraph=api;
 })(typeof window!=='undefined'?window:globalThis);

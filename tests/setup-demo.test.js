@@ -14,7 +14,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{window.__demoAirDue=Tires.airDue;window.__demoAckDue=Climate.ackDue;Tires.airDue=()=>false;Climate.ackDue=()=>false;});
  for(const id of ['demo-prime','demo-tesla','demo-ram3500','demo-mirai']){
   await p.evaluate(()=>__trip.step(1));await p.click('[data-car="'+id+'"]');await p.evaluate(()=>__trip.step(4));
-  assert.deepEqual(await p.evaluate(()=>__app.S.trip.fuel),id==='demo-tesla'?{mode:'pct',pct:'80'}:{mode:'gauge',n16:1},'selected demo vehicle receives its own fuel default');assert.equal(await p.inputValue('#tBuffer'),'50');assert.equal(await p.inputValue('#tTankPrice'),id==='demo-tesla'||id==='demo-mirai'?'':'4.00','a gas price is never the battery\'s or hydrogen tank\'s');assert.equal(await p.inputValue('#tMaxMin'),'7.5');
+  assert.deepEqual(await p.evaluate(()=>__app.S.trip.fuel),id==='demo-tesla'?{mode:'pct',pct:'80'}:{mode:'gauge',n16:1},'selected demo vehicle receives its own fuel default');assert.equal(await p.inputValue('#tBuffer'),'50');assert.equal(await p.inputValue('#tTankPrice'),id==='demo-tesla'||id==='demo-mirai'?'':'4.00','a gas price is never the battery\'s or hydrogen tank\'s');assert.equal(await p.inputValue('#tMaxMin'),id==='demo-tesla'||id==='demo-mirai'?'30':'7.5','EV and hydrogen demo detour defaults are 30 minutes');
  }
  await p.evaluate(()=>{Tires.airDue=__demoAirDue;Climate.ackDue=__demoAckDue;__trip.step(1);__app.S.carId='demo-ram3500';Garage.redraw();});
  assert.equal(await p.evaluate(()=>Garage.units().fuelWord),'Diesel');
