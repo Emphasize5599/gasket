@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.247 - 2026-10-23
+- Make recall rating resilient on CPU: smaller batches, preserved progress and bounded retries.
+- Show completed recall counts and explicit retry controls instead of endless rating indicators; expand inference diagnostics.
+
 ## 0.0.246 - 2026-10-23
 - Search the full 30-minute detour window once; accept 1.0–30.0-minute limits in tenths. Tesla and Mirai demos default to 30 minutes.
 - Protect saved trips with atomic writes, checked save results, smaller inventories and storage diagnostics.

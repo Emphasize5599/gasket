@@ -39,6 +39,8 @@ release.push('vehicle-weather-ui');
 release.push('route-memory-ui');
 release.push('ui-flow');
 release.push('severity');
+release.push('severity-bulk');
+release.push('recall-rating-ui');
 release.push('apk-build');
 release.push('vehiclecompare','vehiclecompare-ui');
 release.push('propulsion','propulsion-ui');

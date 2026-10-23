@@ -14,6 +14,12 @@ Decision recorded 2026-10-15 against `ae87187` on `test/keyless-regular-gas`; in
 
 ## Model responsibilities
 
+### Recall-rating reliability (0.0.247)
+
+The owner's 0.0.246 log reported MiniLM on **WASM CPU: no GPU adapter**. Gemma's native GPU messages describe a different runtime and do not prove MiniLM acceleration. A Tesla Model3 recall batch timed out at the former fixed20s watchdog; the old failure handler discarded unfinished work. The worker now chunks CPU embeddings one text at a time and WebGPU embeddings at most four, including anchors and shared hazard examples. Requests remain serialized; waiting in a healthy FIFO no longer consumes a separate timeout. Active work has a bounded60s CPU/45s GPU deadline, with backend, input count/character count, queue wait, execution time and failure details logged without recall prose.
+
+Completed recall ratings persist after each batch and the status reports completed/total. Interrupted/queued recalls are preserved for one automatic retry after cooldown. Two consecutive failures stop automatic work and show **Not rated**, with official recall details and an explicit retry action; a timeout is never classified as a successful safety rating. NHTSA's factual do-not-drive/park-outside flags still bypass model inference. Synthetic tests cover22 slowCPU recalls concurrent with hazard comparisons, restart persistence, bounded failure/resume and narrow-phone failure UI. These are scheduler/UI regressions, not real-model or GPU performance measurements. WebGPU adapter availability remains device/WebView-controlled; native acceleration for Gemma does not change it.
+
 1. Keep `Xenova/all-MiniLM-L6-v2` for the existing embedding/similarity work in `assets/web/severity.js`. It compares text; it cannot compose advice. Use deterministic source flags and numerical calculations ahead of any model when those already answer the question.
 2. Use **Gemma 4 E4B instruction-tuned** for dynamic, whole-setup explanations that need generated language. Do not send routine ratings through it merely because it is available. First integration target: tire advice, not arbitrary chat or autonomous changes to the vehicle/route.
 3. Run **one larger-model task at a time**, using one native engine and a bounded, coalescing queue. This is a generation-concurrency limit, not a reduction of the user's station-reader setting. Do not retain an unbounded queue of obsolete requests.

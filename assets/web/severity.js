@@ -32,15 +32,19 @@
   function store() { var s = S(); if (!s) return {}; if (!s.recallSev || s.recallSev.v !== VERSION) s.recallSev = { v: VERSION, r: {} }; return s.recallSev.r; }
   function dot(a, b) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
   // In the main thread the model would share the thread that draws the screen and takes your taps. So it runs in a
-  // background worker. A failed worker uses wording rules; inference never falls back to the UI thread.
+  // background worker. Hazard callers can use wording rules on failure; recalls
+  // stay explicitly unrated until retry succeeds. Inference never uses the UI thread.
   function rest(ms) { return new Promise(function (r) { setTimeout(r, ms == null ? 24 : ms); }); }
   var KV = function () { return root.__app && root.__app.KV; };
   // how far along: the download (first time only, 0–70%), working out the examples (70–95%), then ready
   var prog = { f: 0, label: 'Waiting to rate' }, listeners = [];
   var comparing = 0, failedAt = 0, groupVectors = new Map();
+  var recallDone=0,recallTotal=0,recallFailures=0,failedRatings=new Map();
+  function log(level,message,details){if(root.FLog&&root.FLog[level])root.FLog[level]('ai',message,details);}
   function taskStatus() {
     if (!root.Tasks) return;
-    if (state === 'loading' || running || comparing) root.Tasks.upsert('lightweight-ai', { text: state === 'loading' ? prog.label : running && comparing ? 'AI: rating recalls and route hazards…' : running ? 'AI: rating safety recalls…' : 'AI: reading route hazards…', frac: null });
+    if (state === 'loading' || running || comparing) root.Tasks.upsert('lightweight-ai', { state:'running',text: state === 'loading' ? prog.label : running && comparing ? 'AI: rating recalls and route hazards…' : running ? 'AI: rating recalls · '+recallDone+'/'+recallTotal : 'AI: reading route hazards…', frac: running&&!comparing&&state!=='loading'&&recallTotal?recallDone/recallTotal:null });
+    else if(retryTimer&&queue.length)root.Tasks.upsert('lightweight-ai',{state:'pending',text:'AI: '+queue.length+' recall ratings waiting to retry',frac:null});
     else root.Tasks.remove('lightweight-ai');
   }
   function setProg(f, label) { prog = { f: Math.max(prog.f, Math.min(1, f)), label: label }; taskStatus(); listeners.forEach(function (fn) { try { fn(prog); } catch (e) { } }); }
@@ -74,25 +78,27 @@
   function startWorker() {
     return new Promise(function (ok, no) {
       var w, url, seq = 0, pend = {}, ready = false, dog = 0, dead = false, active = 0, queue = [];
-      var fail = function (why) { if(dead)return;dead=true;clearTimeout(dog);try { w && w.terminate(); URL.revokeObjectURL(url); } catch (e) { }
-        Object.keys(pend).forEach(function (k) { clearTimeout(pend[k].timer);pend[k].no(new Error(why)); });pend={};queue=[];
-        if(ready){state='failed';failedAt=Date.now();loading=null;groupVectors.clear();taskStatus();if(root.FLog)root.FLog.warn('ai','Lightweight model stopped; using wording rules',why);}else no(new Error(why)); };
-      function pump(){if(dead||active||!queue.length)return;active=queue.shift();try{w.postMessage({type:'embed',id:active,texts:pend[active].texts});dog=setTimeout(function(){fail('Rating request timed out');},20000);}catch(e){fail('Rating worker unavailable');}}
+      var fail = function (why) { if(dead)return;dead=true;clearTimeout(dog);var current=pend[active];log('warn','Lightweight inference failed',{reason:why,device:device||'initializing',dtype:dtype,active:active,count:current&&current.texts.length||0,elapsedMs:current?Date.now()-current.startedAt:0,queued:queue.length});try { w && w.terminate(); URL.revokeObjectURL(url); } catch (e) { }
+        Object.keys(pend).forEach(function (k) { pend[k].no(new Error(why)); });pend={};queue=[];
+        if(ready){state='failed';failedAt=Date.now();loading=null;groupVectors.clear();taskStatus();log('warn','Lightweight model stopped; unfinished recall ratings will be retried',why);}else no(new Error(why)); };
+      function pump(){if(dead||active||!queue.length)return;active=queue.shift();var p=pend[active];p.startedAt=Date.now();var timeout=device==='webgpu'?45000:60000;log('debug','Lightweight inference started',{id:active,device:device,dtype:dtype,count:p.texts.length,chars:p.texts.reduce(function(n,t){return n+t.length;},0),queueMs:p.startedAt-p.queuedAt,timeoutMs:timeout});try{w.postMessage({type:'embed',id:active,texts:p.texts});dog=setTimeout(function(){fail('Rating request timed out');},timeout);}catch(e){fail('Rating worker unavailable');}}
       var watch = function () { clearTimeout(dog); if (!ready) dog = setTimeout(function () { fail('the worker went quiet'); }, 30000); };
       try { url=URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' })); w = new Worker(url); } catch (e) { if(url)URL.revokeObjectURL(url);return no(e); }   // a classic worker; imports the library itself
       w.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); fail(e && e.message || 'worker error'); };
       w.onmessage = function (e) {
         var m = e.data || {}; if(dead)return;if(!ready)watch();
         if (m.type === 'progress') onFile(m);
-        else if (m.type === 'ready') { ready = true; clearTimeout(dog); device = m.device || 'wasm'; dtype = m.dtype || 'q8'; if (root.FLog) root.FLog[device === 'webgpu' ? 'info' : 'warn']('car', 'Recall rating model on ' + (device === 'webgpu' ? 'the GPU (WebGPU, ' + dtype + ')' : 'the CPU' + (m.gpuWhy ? ': ' + m.gpuWhy : '')), {}); ok(function (texts) {
-          return new Promise(function (r, j) { if(dead)return j(new Error('Rating worker stopped'));var id = ++seq; pend[id] = { ok: r, no: j, texts:texts, timer:setTimeout(function(){fail('Rating queue timed out');},60000) }; queue.push(id);pump(); });
+        else if (m.type === 'ready') { ready = true; clearTimeout(dog); device = m.device || 'wasm'; dtype = m.dtype || 'q8'; if (root.FLog) root.FLog[device === 'webgpu' ? 'info' : 'warn']('car', 'Recall rating model on ' + (device === 'webgpu' ? 'the GPU (WebGPU, ' + dtype + ')' : 'the CPU' + (m.gpuWhy ? ': ' + m.gpuWhy : '')), {}); ok(async function (texts) {
+          var rows=[],batch=device==='webgpu'?4:1;
+          for(var at=0;at<texts.length;at+=batch){var part=texts.slice(at,at+batch);rows=rows.concat(await new Promise(function (r, j) { if(dead)return j(new Error('Rating worker stopped'));var id = ++seq; pend[id] = { ok: r, no: j, texts:part,queuedAt:Date.now() }; queue.push(id);pump(); }));}
+          return rows;
         }); }
         else if (m.type === 'emb') {
           var p = pend[m.id]; if (!p||m.id!==active) return;
-          if(!Array.isArray(m.data)||m.n!==p.texts.length||!m.n||m.data.length%m.n||!m.data.every(Number.isFinite)){fail('Invalid rating result');return;}
-          delete pend[m.id]; clearTimeout(p.timer);clearTimeout(dog);active=0;
+          if(!Array.isArray(m.data)||!m.data.length||m.n!==p.texts.length||!m.n||m.data.length%m.n||!m.data.every(Number.isFinite)){fail('Invalid rating result');return;}
+          log('debug','Lightweight inference completed',{id:m.id,device:device,count:m.n,elapsedMs:Date.now()-p.startedAt,queued:queue.length});delete pend[m.id];clearTimeout(dog);active=0;
           var dim = m.data.length / m.n, rows = []; for (var i = 0; i < m.n; i++) rows.push(m.data.slice(i * dim, (i + 1) * dim)); p.ok(rows);pump();
-        } else if (m.type === 'error') fail('Rating worker error');
+        } else if (m.type === 'error') fail('Rating worker error: '+String(m.msg||'unknown').slice(0,160));
       };
       watch();
       w.postMessage({ type: 'init', lib: LIB, model: MODEL });
@@ -109,7 +115,7 @@
       setProg(0.7, 'Setting up the rating model');
       // the examples' vectors are worked out once and kept (they only change with VERSION)
       var kv = KV(), ak = 'anchors|' + VERSION + '|' + MODEL + (dtype && dtype !== 'q8' ? '|' + dtype : ''), kept = kv && kv.get('ai', ak);
-      if (kept && kept.v && kept.v[3] && kept.v[3].length === EXAMPLES[3].length && kept.v[1].length === EXAMPLES[1].length && kept.v[2].length === EXAMPLES[2].length) anchors = kept.v;
+      if (kept && kept.v && [3,2,1].every(function(k){return Array.isArray(kept.v[k])&&kept.v[k].length===EXAMPLES[k].length&&kept.v[k].every(function(a){return a&&typeof a.t==='string'&&Array.isArray(a.v)&&a.v.length&&a.v.every(Number.isFinite);});})) anchors = kept.v;
       else {
         var a = {};
         for (var k = 3; k >= 1; k--) {
@@ -128,6 +134,7 @@
   function score(v) {
     var sc = {}, near = {};
     for (var k = 3; k >= 1; k--) {
+      if(anchors[k].some(function(a){return a.v.length!==v.length;}))throw Error('Rating vector dimensions do not match the cached examples');
       var s = anchors[k].map(function (a) { return { s: dot(v, a.v), t: a.t }; }).sort(function (p, q) { return q.s - p.s; });
       sc[k] = s.slice(0, TOP).reduce(function (a, b) { return a + b.s; }, 0) / TOP; near[k] = s[0].t;
     }
@@ -146,40 +153,55 @@
   }
   /** Rate the recalls not rated yet (loading the model the first time); calls done() after each group that's in.
    *  One run at a time: recalls asked for while it runs join the queue (a redraw asking again adds nothing). In the
-   *  background worker, a few at once without foreground-only delays; the page fallback yields between texts. */
+   *  background worker, CPU singles or small GPU batches without foreground-only delays. */
   var queue = [], queued = {}, dones = [], running = false, retryTimer = 0;
   var watching = function () { return true; };    // Advisory says whether it's on screen (focus)
+  function ratingProgress(label){prog={f:recallTotal?recallDone/recallTotal:0,label:label||'Rating recalls · '+recallDone+'/'+recallTotal};taskStatus();listeners.forEach(function(fn){try{fn(prog);}catch(e){}});}
+  function scheduleRetry(){if(retryTimer||!queue.length)return;var wait=Math.max(0,60000-(Date.now()-failedAt));retryTimer=setTimeout(function(){retryTimer=0;rate([],null);},wait+50);ratingProgress('Recall ratings paused · retrying automatically');}
   function rate(list, done) {
-    var todo = (list || []).filter(function (x) { return !get(x) && !queued[key(x)]; });
+    var todo = (list || []).filter(function (x) { return !get(x) && !queued[key(x)]&&!failedRatings.has(key(x)); });
+    if(!running&&!queue.length&&todo.length){recallDone=0;recallTotal=0;recallFailures=0;}
+    recallTotal+=todo.length;
     todo.forEach(function (x) { queued[key(x)] = 1; queue.push(x); });
     if (done && (todo.length || running) && dones.indexOf(done) < 0) dones.push(done);
     if (running || !queue.length) return;
     // After a failure the model rests a minute. Failing each ask at once made the screen redraw, which asked again
     // (2,848 "cooling down" warnings in two minutes in the 0.0.217 log): wait once for the rest to end instead.
     var coolLeft = failedAt && !(root.__mocks && root.__mocks.severity) ? 60000 - (Date.now() - failedAt) : 0;
-    if (coolLeft > 0) { if (!retryTimer) retryTimer = setTimeout(function () { retryTimer = 0; rate([], null); }, coolLeft + 50); return; }
+    if (coolLeft > 0) { scheduleRetry();return; }
     running = true;
     taskStatus();
     var mock = root.__mocks && root.__mocks.severity;        // the desktop tests stand in for the model
     var tell = function () { var d = dones.slice(); d.forEach(function (f) { try { f(); } catch (e) { } }); };
-    var finish = function () { running = false; taskStatus(); queue = []; queued = {}; if (root.__app && root.__app.save) root.__app.save(); var d = dones; dones = []; d.forEach(function (f) { try { f(); } catch (e) { } }); };
+    var group=[];
+    var finish = function () { running = false;queue = []; queued = {};taskStatus(); if (root.__app && root.__app.save) root.__app.save(); var d = dones; dones = []; d.forEach(function (f) { try { f(); } catch (e) { } }); };
     (async function () {
       if (!mock) await load();
       var st = store();
+      ratingProgress();
       while (queue.length) {
-        var n = mock ? queue.length : mode === 'worker' ? 4 : 1;
-        var group = queue.splice(0, n).filter(function (x) { return !st[key(x)]; });
+        var n = mock ? queue.length : device==='webgpu'?4:1;
+        group = queue.splice(0, n).filter(function (x) { return !st[key(x)]; });
         if (!group.length) continue;
         var r = mock ? group.map(function (x) { return mock(text(x)); }) : await rateTexts(group.map(text));
         group.forEach(function (x, i) { st[key(x)] = r[i]; });
+        recallDone+=group.length;recallFailures=0;log('info','Recall rating batch completed',{device:device,batch:group.length,completed:recallDone,total:recallTotal,pending:queue.length});group=[];ratingProgress();
         if (!queue.length || mock) break;
         if (root.__app && root.__app.save) root.__app.save();
         tell();                                                                           // show the ones done so far
         await rest(mode === 'worker' ? 0 : 250); // worker batches continue in the background; page fallback still yields
       }
       finish();
-    })().catch(function (e) { if (root.FLog) root.FLog.warn('car', 'Couldn\'t load the recall rating model', String(e && e.message || e)); finish(); });
+    })().catch(function (e) {
+      var why=String(e&&e.message||e);running=false;recallFailures++;
+      queue=group.filter(function(x){return !get(x);}).concat(queue);group=[];
+      log('warn','Recall rating pass interrupted',{reason:why,completed:recallDone,total:recallTotal,pending:queue.length,consecutiveFailures:recallFailures});
+      if(root.__app&&root.__app.save)root.__app.save();
+      if(recallFailures<2&&queue.length){if(!failedAt)failedAt=Date.now();scheduleRetry();tell();}
+      else {queue.forEach(function(x){failedRatings.set(key(x),{recall:x,reason:why});});ratingProgress('AI recall ratings unavailable · retry in Advice');finish();}
+    });
   }
+  function retry(){clearTimeout(retryTimer);retryTimer=0;var pending=Array.from(failedRatings.values()).map(function(x){return x.recall;});failedRatings.clear();recallFailures=0;failedAt=0;if(state==='failed')loading=null;rate(pending,null);}
   function busy() { return running; }
   /** How close a text reads to each group of example sentences: { group: average of its two closest } (loads the model
    *  if needed), or null when it can't (no model in the tests, or it failed). */
@@ -197,5 +219,5 @@
       return out;
     }).catch(function () { return null; }).finally(function () { comparing--; taskStatus(); });
   }
-  root.Severity = { get: get, rate: rate, busy: busy, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, device: function () { return device; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
+  root.Severity = { get: get, rate: rate, busy: busy,retry:retry,failure:function(x){return failedRatings.get(key(x))||null;}, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, device: function () { return device; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

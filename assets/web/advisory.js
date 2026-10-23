@@ -252,12 +252,12 @@
       var k = key + '|' + title;
       return body ? '<details class="rc-sec" data-open="' + esc(k) + '"' + (rcOpen[k] ? ' open' : '') + '><summary>' + title + '</summary><p>' + esc(body) + '</p></details>' : '';
     };
-    var sv = severity(x), lv = sv ? sv.level : 0;
+    var sv = severity(x), lv = sv ? sv.level : 0,failed=!sv&&window.Severity&&Severity.failure&&Severity.failure(x);
     var pg = window.Severity && Severity.progress ? Severity.progress() : { f: 0, label: 'Rating' };
-    var why = !sv ? '<span class="rc-plab">' + esc(pg.label) + '…</span>' : sv.fact ? sv.near : 'Rated ' + SEV_NAME[lv].toLowerCase() + ' by the small AI model on your phone. It reads most like: “' + sv.near + '”';
-    return '<details class="rc-tile sev' + lv + '" data-open="' + esc(key) + '"' + (rcOpen[key] ? ' open' : '') + '><summary><span class="rc-sev">' + (sv ? SEV_NAME[lv] : 'Rating…') + '</span><span class="rc-t"><b>' + esc(compPlain(x.comp)) + '</b>' +
+    var why = failed?'AI rating unavailable. Read the official recall details below. <button type="button" class="btn tonal sm" data-recall-retry>Retry AI ratings</button>':!sv ? '<span class="rc-plab">' + esc(pg.label) + '…</span>' : sv.fact ? sv.near : 'Rated ' + SEV_NAME[lv].toLowerCase() + ' by the small AI model on your phone. It reads most like: “' + sv.near + '”';
+    return '<details class="rc-tile sev' + lv + '" data-open="' + esc(key) + '"' + (rcOpen[key] ? ' open' : '') + '><summary><span class="rc-sev">' + (sv ? SEV_NAME[lv] : failed?'Not rated':'Rating…') + '</span><span class="rc-t"><b>' + esc(compPlain(x.comp)) + '</b>' +
       '<small>' + esc(firstSentence(x.cons || x.sum)) + '</small></span>' +
-      (sv ? '' : '<span class="rc-bar' + (pg.f ? '' : ' ind') + '"><i style="transform:scaleX(' + pg.f.toFixed(3) + ')"></i></span>') + '</summary>' +
+      (sv||failed ? '' : '<span class="rc-bar' + (pg.f ? '' : ' ind') + '"><i style="transform:scaleX(' + pg.f.toFixed(3) + ')"></i></span>') + '</summary>' +
       '<div class="rc-why">' + (sv ? esc(why) : why) + (x.ota ? ' Fixed over the air.' : '') + '</div>' +
       sec('What\'s wrong', x.sum) + sec('The risk', x.cons) + sec('The fix', x.fix) +
       sec('When it began', ((x.date ? 'Reported to NHTSA ' + datePlain(x.date) + '.' : '') + (x.id ? ' NHTSA campaign ' + x.id + '.' : '')).trim()) + '</details>';
@@ -318,6 +318,7 @@
       }).join('') + '</div>';
   }
   function bind(c) {
+    host.querySelectorAll('[data-recall-retry]').forEach(function(b){b.onclick=function(){Severity.retry();preRate(c);draw();};});
     if ($('gemmaRetry')) $('gemmaRetry').onclick = function () { Gemma.retry(); };
     if($('advTowHelp'))$('advTowHelp').onclick=roadsideHelp;
     if ($('advCheck')) $('advCheck').onclick = function () { checkVin(c); };
