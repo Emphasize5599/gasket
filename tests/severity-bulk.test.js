@@ -1,22 +1,22 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const source=fs.readFileSync('assets/web/severity.js','utf8'),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const source=fs.readFileSync('assets/web/lightweightgpu.js','utf8')+'\n'+fs.readFileSync('assets/web/severity.js','utf8'),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn){for(let i=0;i<1000;i++){if(fn())return;await sleep(5);}throw Error('Timed out waiting for rating queue');}
 function harness(settings={}){
- const tasks=new Map(),logs=[],calls=[],timers=new Set();let workers=0,active=0,peak=0,skew=0,saves=0;
+ const tasks=new Map(),logs=[],calls=[],timers=new Set(),listeners=new Map(),inits=[];let workers=0,active=0,peak=0,skew=0,saves=0;
  const root={FLog:Object.fromEntries(['info','warn','debug'].map(level=>[level,(tag,message,data)=>logs.push({level,message,data})])),Tasks:{upsert:(id,v)=>tasks.set(id,v),remove:id=>tasks.delete(id)},__app:{S:settings.state||{},save:()=>saves++,KV:{get:()=>({v:Object.fromEntries(Object.entries(root.Severity.EXAMPLES).map(([k,rows])=>[k,rows.map(t=>({t,v:[1,0]}))]))})}}};
- const config={hang:settings.hang||(()=>false),device:settings.device||'wasm'};
+ const config={hang:settings.hang||(()=>false),device:settings.device||'wasm',cpuOnly:!!settings.cpuOnly};root.Gemma={status:()=>({cpuOnly:config.cpuOnly})};root.Event=class {constructor(type){this.type=type;}};root.addEventListener=(type,fn)=>{if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn);};root.dispatchEvent=e=>(listeners.get(e.type)||[]).forEach(fn=>fn(e));
  class Worker{
   constructor(){workers++;this.dead=false;this.flight=false;}
   terminate(){this.dead=true;if(this.flight){this.flight=false;active--;}}
-  postMessage(m){if(m.type==='init')return queueMicrotask(()=>this.onmessage({data:{type:'ready',device:config.device,dtype:config.device==='wasm'?'q8':'fp16',gpuWhy:config.device==='wasm'?'no GPU adapter':''}}));
-   calls.push(m.texts);active++;peak=Math.max(peak,active);this.flight=true;if(config.hang(m.texts))return;
+  postMessage(m){if(m.type==='init'){inits.push(m.cpuOnly);const device=this.device=m.cpuOnly?'wasm':config.device;return queueMicrotask(()=>this.onmessage({data:{type:'ready',device,dtype:device==='wasm'?'q8':'fp16',gpuWhy:m.cpuReason||(device==='wasm'?'no GPU adapter':'')}}));}
+   calls.push(m.texts);active++;peak=Math.max(peak,active);this.flight=true;if(config.hang(m.texts,this.device))return;
    setTimeout(()=>{if(this.dead)return;this.flight=false;active--;this.onmessage({data:{type:'emb',id:m.id,n:m.texts.length,data:m.texts.flatMap(()=>[1,0])}});},settings.delay||2);
   }
  }
  class D extends Date{static now(){return Date.now()+skew;}}
  function timeout(fn,ms){const id=setTimeout(()=>{timers.delete(id);if(ms>=20000)skew+=ms;fn();},ms>=20000?ms/1000:ms);timers.add(id);return id;}
  vm.runInNewContext(source,{window:root,Date:D,Worker,Blob,URL,console,setTimeout:timeout,clearTimeout:id=>{timers.delete(id);clearTimeout(id);}});
- return {root,config,tasks,logs,calls,stats:()=>({workers,active,peak,saves}),close:()=>timers.forEach(clearTimeout)};
+ return {root,config,tasks,logs,calls,inits,stats:()=>({workers,active,peak,saves}),close:()=>timers.forEach(clearTimeout)};
 }
 const recalls=Array.from({length:22},(_,i)=>({id:'fixture-recall-'+i,cons:'Recall '+i+' '+('Long official consequence text. '.repeat(30)),sum:'Official summary.'}));
 (async()=>{
@@ -37,5 +37,11 @@ const recalls=Array.from({length:22},(_,i)=>({id:'fixture-recall-'+i,cons:'Recal
   bad.config.hang=()=>false;bad.root.Severity.retry();await until(()=>recalls.every(r=>bad.root.Severity.get(r))&&!bad.root.Severity.busy());assert.equal(bad.calls.filter(x=>x.some(t=>t.startsWith('Recall 0 '))).length,firstCount,'retry resumes only unfinished recalls');assert.equal(bad.stats().workers,3);assert.equal(bad.tasks.size,0);
  }finally{bad.close();}
  const gpu=harness({device:'webgpu'});try{gpu.root.Severity.rate(recalls);await until(()=>recalls.every(r=>gpu.root.Severity.get(r))&&!gpu.root.Severity.busy());assert(gpu.calls.some(x=>x.length===4));assert(gpu.calls.every(x=>x.length<=4));assert.equal(gpu.stats().peak,1);}finally{gpu.close();}
+ const changing=harness({device:'webgpu',delay:10});try{
+  changing.root.Severity.rate(recalls);await until(()=>changing.root.Severity.get(recalls[3]));const first=changing.calls.filter(x=>x.some(t=>t.startsWith('Recall 0 '))).length;
+  changing.config.cpuOnly=true;changing.root.dispatchEvent(new changing.root.Event('gemmachange'));await until(()=>recalls.every(r=>changing.root.Severity.get(r))&&!changing.root.Severity.busy());assert.deepEqual(changing.inits,[false,true]);assert.equal(changing.root.Severity.device(),'wasm');assert.equal(changing.calls.filter(x=>x.some(t=>t.startsWith('Recall 0 '))).length,first,'processor changes retain finished ratings');assert(recalls.every(r=>!changing.root.Severity.failure(r)),'a deliberate processor change is not a model failure');assert.equal(changing.tasks.size,0);
+  changing.config.cpuOnly=false;changing.root.dispatchEvent(new changing.root.Event('gemmachange'));const extra={id:'new-recall',cons:'Another official consequence'};changing.root.Severity.rate([extra]);await until(()=>changing.root.Severity.get(extra)&&!changing.root.Severity.busy());assert.deepEqual(changing.inits,[false,true,false]);assert.equal(changing.root.Severity.device(),'webgpu');
+ }finally{changing.close();}
+ const fallback=harness({device:'webgpu',hang:(texts,device)=>device==='webgpu'&&texts.some(t=>t.startsWith('Recall 4 '))});try{fallback.root.Severity.rate(recalls);await until(()=>recalls.every(r=>fallback.root.Severity.get(r))&&!fallback.root.Severity.busy());assert.deepEqual(fallback.inits,[false,true],'failed GPU inference resumes on CPU, not the same failing GPU');assert.equal(fallback.root.Severity.info().cpuOnly,false,'CPU fallback does not overwrite the automatic preference');assert.equal(fallback.root.Severity.device(),'wasm');assert.match(fallback.root.Severity.info().gpuWhy,/Previous GPU inference failed/);}finally{fallback.close();}
  console.log('22 slow CPU recalls, concurrent hazard queue, persisted progress, bounded failures, resumable retries and GPU batch sizing passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

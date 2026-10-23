@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.248 - 2026-10-23
+- Apply the CPU/GPU setting to both models and show the small model's actual backend.
+- Try additional supported WebGPU adapters, including compatibility mode; verify GPU warm-up before use, with CPU fallback.
+
 ## 0.0.247 - 2026-10-23
 - Make recall rating resilient on CPU: smaller batches, preserved progress and bounded retries.
 - Show completed recall counts and explicit retry controls instead of endless rating indicators; expand inference diagnostics.

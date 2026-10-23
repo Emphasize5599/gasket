@@ -40,6 +40,10 @@
   var prog = { f: 0, label: 'Waiting to rate' }, listeners = [];
   var comparing = 0, failedAt = 0, groupVectors = new Map();
   var recallDone=0,recallTotal=0,recallFailures=0,failedRatings=new Map();
+  var workerStop=null,workerCPUOnly=null,gpuFailed=false,backendInfo={state:'idle',device:'',dtype:'',gpuWhy:'',adapterPath:''};
+  function cpuOnly(){try{var a=root.__app,st=root.Gemma&&root.Gemma.status&&root.Gemma.status();if(st&&typeof st.cpuOnly==='boolean')return st.cpuOnly;if(a&&a.N&&a.N.aiStatus)return !!JSON.parse(a.N.aiStatus()).cpuOnly;}catch(e){}return false;}
+  function notifyBackend(){backendInfo.state=state;backendInfo.cpuOnly=cpuOnly();if(root.dispatchEvent&&root.Event)root.dispatchEvent(new root.Event('lightweightchange'));}
+  if(root.addEventListener)root.addEventListener('gemmachange',function(){if(workerCPUOnly!==null&&workerCPUOnly!==cpuOnly()){gpuFailed=false;if(workerStop)workerStop('AI processor setting changed',true);}});
   function log(level,message,details){if(root.FLog&&root.FLog[level])root.FLog[level]('ai',message,details);}
   function taskStatus() {
     if (!root.Tasks) return;
@@ -56,18 +60,15 @@
     setProg(0.02 + 0.68 * (a / b), 'Downloading the rating model (first time only)');
   }
   var WORKER = [
+    'var initializeBackend = '+root.LightweightGPU.initialize.toString()+';',
     'var pipe = null;',
     'self.onmessage = async function (e) { var m = e.data; try {',
     '  if (m.type === "init") {',
     '    var T = await import(m.lib); T.env.allowLocalModels = false; T.env.useBrowserCache = false;',
     '    if (T.env.backends && T.env.backends.onnx && T.env.backends.onnx.wasm) { T.env.backends.onnx.wasm.numThreads = 1; T.env.backends.onnx.wasm.proxy = false; }',
     '    var prog = function (p) { if (p && p.status === "progress" && p.total) self.postMessage({ type: "progress", file: p.file, loaded: p.loaded, total: p.total }); };',
-    // GPU first (WebGPU, when this WebView offers it): fp16 if the adapter can, else fp32; the 8-bit model on the CPU otherwise
-    '    var device = "wasm", dtype = "q8", gpuWhy = "";',
-    '    try { var ad = self.navigator && navigator.gpu && await navigator.gpu.requestAdapter(); if (ad) { device = "webgpu"; dtype = ad.features && ad.features.has("shader-f16") ? "fp16" : "fp32"; } else gpuWhy = self.navigator && navigator.gpu ? "no GPU adapter" : "WebGPU not offered"; } catch (g) { gpuWhy = String(g && g.message || g).slice(0, 160); }',
-    '    if (device === "webgpu") { try { pipe = await T.pipeline("feature-extraction", m.model, { device: "webgpu", dtype: dtype, progress_callback: prog }); await pipe(["warm up"], { pooling: "mean", normalize: true }); } catch (g) { gpuWhy = String(g && g.message || g).slice(0, 160); pipe = null; device = "wasm"; dtype = "q8"; } }',
-    '    if (!pipe) pipe = await T.pipeline("feature-extraction", m.model, { dtype: "q8", progress_callback: prog });',
-    '    self.postMessage({ type: "ready", device: device, dtype: dtype, gpuWhy: gpuWhy });',
+    '    var backend = await initializeBackend(T,self.navigator,{model:m.model,cpuOnly:m.cpuOnly,cpuReason:m.cpuReason,progress:prog},function(info){self.postMessage({type:"backend",info:info});}); pipe=backend.pipe;',
+    '    self.postMessage({ type: "ready", device: backend.device, dtype: backend.dtype, gpuWhy: backend.gpuWhy, adapterPath:backend.adapterPath, attempts:backend.attempts });',
     '  } else if (m.type === "embed") {',
     '    var o = await pipe(m.texts, { pooling: "mean", normalize: true });',
     '    self.postMessage({ type: "emb", id: m.id, data: Array.from(o.data), n: m.texts.length });',
@@ -76,17 +77,22 @@
   var mode = '', device = '', dtype = '';      // 'worker' | 'page'; 'webgpu' | 'wasm'; the model's number format
   /** The model in a background worker -> embedMany(texts) -> [vector per text]. Rejects if the phone won't run one. */
   function startWorker() {
+    workerCPUOnly=cpuOnly();
     return new Promise(function (ok, no) {
       var w, url, seq = 0, pend = {}, ready = false, dog = 0, dead = false, active = 0, queue = [];
-      var fail = function (why) { if(dead)return;dead=true;clearTimeout(dog);var current=pend[active];log('warn','Lightweight inference failed',{reason:why,device:device||'initializing',dtype:dtype,active:active,count:current&&current.texts.length||0,elapsedMs:current?Date.now()-current.startedAt:0,queued:queue.length});try { w && w.terminate(); URL.revokeObjectURL(url); } catch (e) { }
-        Object.keys(pend).forEach(function (k) { pend[k].no(new Error(why)); });pend={};queue=[];
-        if(ready){state='failed';failedAt=Date.now();loading=null;groupVectors.clear();taskStatus();log('warn','Lightweight model stopped; unfinished recall ratings will be retried',why);}else no(new Error(why)); };
+      var fail = function (why,changed) { if(dead)return;dead=true;workerStop=null;clearTimeout(dog);var current=pend[active],error=new Error(why);error.processorChanged=!!changed;log(changed?'info':'warn','Lightweight inference '+(changed?'processor changed':'failed'),{reason:why,device:device||'initializing',dtype:dtype,active:active,count:current&&current.texts.length||0,elapsedMs:current?Date.now()-current.startedAt:0,queued:queue.length});try { w && w.terminate(); URL.revokeObjectURL(url); } catch (e) { }
+        if(!changed&&!workerCPUOnly&&(ready&&device==='webgpu'||!ready&&/^(gpu-|adapter-probe)/.test(backendInfo.phase||'')))gpuFailed=true;
+        Object.keys(pend).forEach(function (k) { pend[k].no(error); });pend={};queue=[];
+        if(changed){state='idle';failedAt=0;loading=null;groupVectors.clear();notifyBackend();taskStatus();if(!ready)no(error);return;}
+        if(ready){state='failed';failedAt=Date.now();loading=null;groupVectors.clear();notifyBackend();taskStatus();log('warn','Lightweight model stopped; unfinished recall ratings will be retried',why);}else no(new Error(why)); };
       function pump(){if(dead||active||!queue.length)return;active=queue.shift();var p=pend[active];p.startedAt=Date.now();var timeout=device==='webgpu'?45000:60000;log('debug','Lightweight inference started',{id:active,device:device,dtype:dtype,count:p.texts.length,chars:p.texts.reduce(function(n,t){return n+t.length;},0),queueMs:p.startedAt-p.queuedAt,timeoutMs:timeout});try{w.postMessage({type:'embed',id:active,texts:p.texts});dog=setTimeout(function(){fail('Rating request timed out');},timeout);}catch(e){fail('Rating worker unavailable');}}
-      var watch = function () { clearTimeout(dog); if (!ready) dog = setTimeout(function () { fail('the worker went quiet'); }, 30000); };
+      var watch = function () { clearTimeout(dog); if (!ready) dog = setTimeout(function () { fail('the worker went quiet'); }, workerCPUOnly?60000:120000); };
       try { url=URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' })); w = new Worker(url); } catch (e) { if(url)URL.revokeObjectURL(url);return no(e); }   // a classic worker; imports the library itself
       w.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); fail(e && e.message || 'worker error'); };
       w.onmessage = function (e) {
         var m = e.data || {}; if(dead)return;if(!ready)watch();
+        if(m.type==='backend'){backendInfo=Object.assign({},backendInfo,{phase:m.info&&m.info.phase,attempt:m.info});log('debug','Lightweight GPU initialization',m.info);setProg(prog.f,m.info&&m.info.phase==='cpu-fallback'?'Preparing the rating model on CPU':'Checking the rating model GPU');notifyBackend();return;}
+        if(m.type==='ready'){backendInfo=Object.assign({},backendInfo,{device:m.device||'wasm',dtype:m.dtype||'q8',gpuWhy:m.gpuWhy||'',adapterPath:m.adapterPath||'',attempts:m.attempts||[]});notifyBackend();log('info','Lightweight backend selected',backendInfo);}
         if (m.type === 'progress') onFile(m);
         else if (m.type === 'ready') { ready = true; clearTimeout(dog); device = m.device || 'wasm'; dtype = m.dtype || 'q8'; if (root.FLog) root.FLog[device === 'webgpu' ? 'info' : 'warn']('car', 'Recall rating model on ' + (device === 'webgpu' ? 'the GPU (WebGPU, ' + dtype + ')' : 'the CPU' + (m.gpuWhy ? ': ' + m.gpuWhy : '')), {}); ok(async function (texts) {
           var rows=[],batch=device==='webgpu'?4:1;
@@ -100,8 +106,8 @@
           var dim = m.data.length / m.n, rows = []; for (var i = 0; i < m.n; i++) rows.push(m.data.slice(i * dim, (i + 1) * dim)); p.ok(rows);pump();
         } else if (m.type === 'error') fail('Rating worker error: '+String(m.msg||'unknown').slice(0,160));
       };
-      watch();
-      w.postMessage({ type: 'init', lib: LIB, model: MODEL });
+      workerStop=fail;watch();
+      w.postMessage({ type: 'init', lib: LIB, model: MODEL,cpuOnly:workerCPUOnly||gpuFailed,cpuReason:!workerCPUOnly&&gpuFailed?'Previous GPU inference failed; CPU fallback':'' });
     });
   }
   /** Load the library and the model (the first time: the download); resolves to embedMany(texts). */
@@ -125,10 +131,10 @@
         }
         anchors = a; if (kv) kv.put('ai', ak, a);
       }
-      state = 'ready'; setProg(0.95, 'Rating');
+      state = 'ready';notifyBackend(); setProg(0.95, 'Rating');
       if (root.FLog) root.FLog.info('car', 'Recall rating model ready (' + (mode === 'worker' ? 'background worker' : 'in the page') + (device ? ', ' + (device === 'webgpu' ? 'GPU' : 'CPU') : '') + ')');
       return embed;
-    })().catch(function (e) { state = 'failed'; failedAt=Date.now();loading = null;groupVectors.clear(); taskStatus(); throw e; });
+    })().catch(function (e) { state = e.processorChanged?'idle':'failed'; failedAt=e.processorChanged?0:Date.now();loading = null;groupVectors.clear();notifyBackend(); taskStatus(); throw e; });
     return loading;
   }
   function score(v) {
@@ -193,8 +199,10 @@
       }
       finish();
     })().catch(function (e) {
-      var why=String(e&&e.message||e);running=false;recallFailures++;
+      var why=String(e&&e.message||e);running=false;
       queue=group.filter(function(x){return !get(x);}).concat(queue);group=[];
+      if(e.processorChanged){ratingProgress('Switching the rating model processor');setTimeout(function(){rate([],null);},0);return;}
+      recallFailures++;
       log('warn','Recall rating pass interrupted',{reason:why,completed:recallDone,total:recallTotal,pending:queue.length,consecutiveFailures:recallFailures});
       if(root.__app&&root.__app.save)root.__app.save();
       if(recallFailures<2&&queue.length){if(!failedAt)failedAt=Date.now();scheduleRetry();tell();}
@@ -219,5 +227,5 @@
       return out;
     }).catch(function () { return null; }).finally(function () { comparing--; taskStatus(); });
   }
-  root.Severity = { get: get, rate: rate, busy: busy,retry:retry,failure:function(x){return failedRatings.get(key(x))||null;}, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, device: function () { return device; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
+  root.Severity = { get: get, rate: rate, busy: busy,retry:retry,failure:function(x){return failedRatings.get(key(x))||null;},info:function(){return Object.assign({},backendInfo,{state:state,cpuOnly:cpuOnly()});}, focus: function (fn) { watching = fn; }, compare: compare, progress: function () { return prog; }, onProgress: function (fn) { listeners.push(fn); }, state: function () { return state; }, EXAMPLES: EXAMPLES, mode: function () { return mode; }, device: function () { return device; }, _rateText: function (t) { return load().then(function () { return rateTexts([t]); }).then(function (r) { return r[0]; }); } };
 })(typeof window !== 'undefined' ? window : globalThis);

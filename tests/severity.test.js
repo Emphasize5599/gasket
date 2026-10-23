@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
  let warns=0,logs=[];const root={FLog:{info:(a,b)=>logs.push(b),warn:(a,b)=>{warns++;logs.push(b);}},Tasks:{upsert:(id,x)=>tasks.set(id,x),remove:id=>tasks.delete(id)},__app:{S:{},KV:{get:()=>({v:Object.fromEntries(Object.entries(root.Severity.EXAMPLES).map(([k,rows])=>[k,rows.map(t=>({t,v:[1,0]}))]))})}}};
  let readyMsg={type:'ready'};class Worker{constructor(){workers++;}terminate(){terminated++;}postMessage(m){if(m.type==='init')return queueMicrotask(()=>this.onmessage({data:readyMsg}));active++;peak=Math.max(peak,active);if(m.texts.includes('Example one'))anchorCalls++;if(hang)return;setTimeout(()=>{active--;this.onmessage({data:{type:'emb',id:m.id,n:m.texts.length,data:m.texts.flatMap(()=>[1,0])}});},2);}}
  let skew=0;class D extends Date{static now(){return Date.now()+skew;}}
- vm.runInNewContext(fs.readFileSync('assets/web/severity.js','utf8'),{Date:D,window:root,Worker,Blob,URL,setTimeout:(fn,ms)=>setTimeout(fn,ms>=20000?ms/100:ms),clearTimeout,console});
+ vm.runInNewContext(fs.readFileSync('assets/web/lightweightgpu.js','utf8')+'\n'+fs.readFileSync('assets/web/severity.js','utf8'),{Date:D,window:root,Worker,Blob,URL,setTimeout:(fn,ms)=>setTimeout(fn,ms>=20000?ms/100:ms),clearTimeout,console});
  const groups={hazard:['Example one','Example two']};
  const results=await Promise.all(Array.from({length:5},(_,i)=>root.Severity.compare('Query '+i,groups)));
  assert(results.every(r=>r.hazard===1));assert.equal(peak,1,'only one inference at a time');assert.equal(anchorCalls,1,'example embeddings shared across comparisons');assert.equal(tasks.size,0);
