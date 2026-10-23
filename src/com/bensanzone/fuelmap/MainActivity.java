@@ -361,7 +361,7 @@ public class MainActivity extends Activity {
     }
 
     private void applyBarIconColors() {
-        int flags = web != null ? getWindow().getDecorView().getSystemUiVisibility() : 0;
+        int flags = getWindow().getDecorView().getSystemUiVisibility();
         int lightStatus = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR; // 0x2000
         int lightNav = 0x10; // SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR (API 26)
         if (isDark()) flags &= ~(lightStatus | lightNav);
