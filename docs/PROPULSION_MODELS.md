@@ -2,6 +2,8 @@
 
 ## 0.0.240 speed graph
 
+0.0.242 clarifies the same finite-difference calculation: connected steps, a labeled zero baseline with no invented negative range, no fake starting measurement, and regular five-mph axis ticks even when the current setting is +9. The caption includes the full trip mileage and speed cap. Large minute changes can be real over a multi-thousand-mile trip (2,632 miles at 45 versus 50 mph differs by about 351 driving minutes). Debug logs now retain each sample’s driving, active charging, elapsed time, cost, average speed and normalized intervals; a screenshot alone cannot validate the charging series.
+
 The EV/H2 tile compares **driving minutes saved** with **extra active charging/refueling minutes**, on one shared scale normalized to each +5 mph increase. Values are finite differences between adjacent feasible, explicitly tested scenarios; steps do not interpolate across failed plans or claim a smooth/global optimum. Each point also reports whole-trip energy cost and its difference from the selected road's at-limit scenario (other roads unchanged). The first feasible sample is the cost reference if at-limit is infeasible. Requested offsets are relative to posted limits, not average trip speed. Caps may flatten the curves.
 
 Green means a tested increase reduces total simulated elapsed trip time, including detours, stop setup, destination stays and scheduled waits. It does **not** mean cheapest, legal or safest. Charging can overlap a planned stay, and stop changes can cause jumps: merely comparing the two lines is not sufficient to establish an optimum. The projection exposes active charging time separately from total non-driving time for this purpose. Hydrogen remains explicitly unvalidated.

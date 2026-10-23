@@ -5,4 +5,8 @@ let svg=G.chart(rows,rows[2],3);assert.match(svg,/Minutes per \+5 mph/);assert.m
 assert.equal(G.intervals([{...rows[2]},{...rows[3],charging:10}])[1].charging,-5,'reduced charging remains a signed value');
 assert.equal(G.intervals([{...rows[2]},{...rows[3],offset:0}])[1],null,'zero-width intervals cannot divide by zero');
 assert.match(G.chart(rows.map(r=>({...r,kind:'h2'})),rows[2],3),/Extra refueling time/);
+assert(!svg.includes('class="energy-base"'),'no invented zero-valued starting measurement');
+const long=[45,50,55,60,65,70].map((mph,i)=>({offset:-20+i*5,ok:true,cost:100+i,minutes:2632/mph*60+50,driving:2632/mph*60,charging:50}));assert(Math.abs(G.intervals(long)[1].driving-350.9333333333334)<1e-8,'a five-mph change across a 2632-mile trip really can save hours');
+const longSVG=G.chart(long,long[4],4);assert(!/>-\d/.test(longSVG.match(/<text[^>]*text-anchor="end">[^<]*<\/text>/g).join('')),'positive rates do not invent a negative axis range');assert.match(longSVG,/text-anchor="end">0<\/text>/,'zero is explicitly labeled');
+const closePoints=[...long.slice(0,5),{...long[5],offset:9},{...long[5],offset:10}];const compact=G.chart(closePoints,closePoints[4],5);assert(!/>\+9<\/text>/.test(compact),'non-grid current settings do not crowd the axis');
 console.log('Shared-minute finite differences, irregular intervals, cost deltas, overhead-aware green regions and infeasible gaps passed');

@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.242 - 2026-10-22
+- Show startup readiness before browser initialization, with loading stages, retry on failure and timing diagnostics.
+- Clarify the speed graph’s whole-trip scale, zero baseline and connected steps; avoid crowded ticks and log the underlying samples.
+
 ## 0.0.241 - 2026-10-22
 - Driving-time savings versus charging/refueling time, with per-road speed controls and trip cost changes.
 - Stabilize the existing AI-notice regression check. No APK was published for 0.0.240.

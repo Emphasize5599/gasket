@@ -77,6 +77,10 @@ public class MainActivity extends Activity {
             + "places.addressComponents,places.types,places.fuelOptions,places.businessStatus,places.googleMapsUri,places.websiteUri";
 
     private WebView web;
+    private TextView startupText;
+    private android.widget.LinearLayout startupLayout;
+    private android.widget.ProgressBar startupSpinner;
+    private long startupStarted, startupPrepared;
     // Aggregate only while AI is active. Frame timing is a diagnostic, not proof of visual corruption.
     private Window.OnFrameMetricsAvailableListener aiFrames;
     private long aiFrameCount, aiFrameSlow, aiFrameMax, aiFrameLost, aiFrameStarted;
@@ -190,6 +194,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        startupStarted = android.os.SystemClock.elapsedRealtime();
         Window w = getWindow();
         // Edge-to-edge (enforced on Android 15+/16 anyway); the web UI pads itself with the real insets.
         w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -200,6 +205,30 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
 
+        root = new FrameLayout(this);
+        startupLayout=new android.widget.LinearLayout(this);
+        startupLayout.setOrientation(android.widget.LinearLayout.VERTICAL);startupLayout.setGravity(Gravity.CENTER);
+        int startupPad=(int)(24*getResources().getDisplayMetrics().density);startupLayout.setPadding(startupPad,startupPad,startupPad,startupPad);
+        startupLayout.setBackgroundColor(isDark()?Color.rgb(16,18,22):Color.rgb(242,243,245));
+        startupText = new TextView(this);
+        startupText.setText("Gasket\n\nGetting ready…");
+        startupText.setTextSize(22);startupText.setGravity(Gravity.CENTER);
+        startupText.setTextColor(isDark() ? Color.rgb(128,178,255) : Color.rgb(11,95,217));
+        startupText.setBackgroundColor(isDark() ? Color.rgb(16,18,22) : Color.rgb(242,243,245));
+        startupLayout.addView(startupText,new android.widget.LinearLayout.LayoutParams(-1,-2));
+        startupSpinner=new android.widget.ProgressBar(this);
+        startupSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(isDark()?Color.rgb(128,178,255):Color.rgb(11,95,217)));
+        int spinnerSize=(int)(32*getResources().getDisplayMetrics().density);
+        android.widget.LinearLayout.LayoutParams spinnerParams=new android.widget.LinearLayout.LayoutParams(spinnerSize,spinnerSize);spinnerParams.topMargin=spinnerSize;
+        startupLayout.addView(startupSpinner,spinnerParams);
+        root.addView(startupLayout,new FrameLayout.LayoutParams(-1,-1));
+        setContentView(root);
+        applyBarIconColors();
+        // Paint the native loading screen before migration and WebView creation.
+        root.postOnAnimation(() -> root.post(() -> { if(!isFinishing()&&!isDestroyed())try{initializeApp();}catch(Exception e){android.util.Log.e("Gasket","Startup failed",e);if(startupSpinner!=null)startupSpinner.setVisibility(View.GONE);if(startupText!=null){startupText.setText("Gasket could not start.\n\nTap to retry.");startupText.setOnClickListener(v -> recreate());}} }));
+    }
+
+    private void initializeApp() {
         lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
         migrateCarPictures();
@@ -282,7 +311,6 @@ public class MainActivity extends Activity {
             HttpResponseCache.install(new File(getCacheDir(), "tiles"), 80L * 1024 * 1024);
         } catch (Exception ignored) { }
 
-        root = new FrameLayout(this);
         workers.put("walmart", new SiteWorker("walmart", "https://www.walmart.com/store-finder", "https://www.walmart.com/"));
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
@@ -318,10 +346,11 @@ public class MainActivity extends Activity {
         wmDone.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { endVerify(); }
         });
-        setContentView(root);
+        if(startupLayout!=null)startupLayout.bringToFront();
         applyBarIconColors();
         boolean recoveringRenderer = getIntent().getBooleanExtra("rendererRecovery", false);
         getIntent().removeExtra("rendererRecovery");
+        startupPrepared=android.os.SystemClock.elapsedRealtime()-startupStarted;
         web.loadUrl("file:///android_asset/web/index.html" + (recoveringRenderer ? "#restored" : ""));
         handleShare(getIntent());
     }
@@ -856,6 +885,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if(web==null||startupText!=null){super.onBackPressed();return;}
         if (verifying != null) { endVerify(); return; }
         web.evaluateJavascript("window.onBack?onBack():false", new android.webkit.ValueCallback<String>() {
             public void onReceiveValue(String handled) {
@@ -1404,6 +1434,11 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
+        @JavascriptInterface public void startupStage(final String text) { runOnUiThread(() -> { if(startupText!=null)startupText.setText("Gasket\n\n"+(text==null?"Getting ready…":text.substring(0,Math.min(160,text.length())))); }); }
+        @JavascriptInterface public void startupReady(final String report) { runOnUiThread(() -> {
+            if(startupLayout!=null){root.removeView(startupLayout);startupLayout=null;startupText=null;startupSpinner=null;}
+            try { JSONObject timing=new JSONObject();timing.put("nativePrepareMs",startupPrepared);timing.put("totalMs",android.os.SystemClock.elapsedRealtime()-startupStarted);timing.put("web",new JSONObject(report));js("window.FLog&&FLog.info('startup','Native startup timings',"+timing.toString()+")"); } catch(Exception ignored) { }
+        }); }
         @JavascriptInterface public String aiStatus() { return gemma().status().toString(); }
         @JavascriptInterface public void aiCommand(int reqId, String command) { gemma().command(reqId, command); }
         @JavascriptInterface public void aiGenerate(int reqId, String prompt) { gemma().generate(reqId, prompt); }

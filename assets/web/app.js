@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   var P = window.Pricing;
+  if(window.GasketStartup)GasketStartup.stage('Loading your garage and settings…');
   var $ = function (id) { return document.getElementById(id); };
 
   // ---------- native bridge (with a browser stand-in for testing) ----------
@@ -131,6 +132,7 @@
     FLog.configure(S.debug ? S.logLevel : 0, N.saveLog ? { save: function (t) { N.saveLog(t); }, load: function () { return N.loadLog(); } } : null, [S.apiKey, S.nrelKey, S.ocmKey, S.fuelKey, S.hereKey].filter(function (k) { return k && k !== 'DEMO_KEY'; }));
     if(window.VisualDiagnostics)VisualDiagnostics.sync();
   }
+  if(window.GasketStartup)GasketStartup.stage('Restoring diagnostic history…');
   logSetup();
   if (window.FLog) FLog.info('app', 'Started Gasket ' + (N.appVersion ? N.appVersion() : ''));
 
@@ -1503,7 +1505,9 @@
     } catch (e) {}
   }
   buildGrades();
+  if(window.GasketStartup)GasketStartup.stage('Restoring saved stations…');
   loadCache();
+  if(window.GasketStartup)GasketStartup.stage('Preparing the map…');
   if (lastFetch) map.setView([lastFetch.lat, lastFetch.lng], zoomForRadius(S.radiusMi));
   render();
   // The short first-run walkthrough starts after all feature modules have loaded.

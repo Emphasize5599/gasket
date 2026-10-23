@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
+ for(const width of [320,448]){
+  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());let release;const gate=new Promise(r=>release=r);
+  await p.route('**/app.js',async r=>{await gate;await r.continue();});
+  const opening=p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.waitForSelector('#startupScreen');assert(await p.locator('#startupScreen').isVisible(),'splash paints before the app script initializes');assert(!await p.evaluate(()=>window.__app));assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));release();await opening;
+  await p.waitForFunction(()=>GasketStartup.state().ready);assert.equal(await p.locator('#startupScreen').count(),0);assert(await p.evaluate(()=>!!__app.map));assert(await p.locator('#onboarding').isVisible(),'readiness does not wait for onboarding, location or model downloads');assert(await p.evaluate(()=>GasketStartup.state().stages.some(s=>s.stage.includes('saved stations'))));assert.deepEqual(errors,[]);await p.close();
+ }
+ const p=await b.newPage();await p.route(/^https?:\/\//,r=>r.abort());await p.route('**/app.js',r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.waitForSelector('#startupReload:visible');assert(await p.evaluate(()=>GasketStartup.state().failed));assert(!await p.evaluate(()=>GasketStartup.state().ready));assert.match(await p.locator('#startupStatus').innerText(),/could not finish/);await p.close();
+ const java=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert(java.indexOf('setContentView(root)')<java.indexOf('private void initializeApp()'),'native splash precedes expensive initialization');assert.match(java,/postOnAnimation/);assert.match(java,/void startupReady/);assert.match(java,/if\(web==null\|\|startupText!=null\)\{super.onBackPressed\(\);return;\}/);
+ console.log('Native first-frame splash contract, gated web startup, ready handshake, error/reload and narrow onboarding passed');
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -45,6 +45,7 @@ release.push('propulsion','propulsion-ui');
 release.push('menu-labels');
 release.push('energygraph');
 release.push('chargepoint-loading');
+release.push('startup-ui');
 const args=process.argv.slice(2),all=args.includes('--all'),names=all?fs.readdirSync(__dirname).filter(f=>f.endsWith('.test.js')).map(f=>f.slice(0,-8)):args.includes('--release')?release:args;
 if(!names.length){console.error('Use --release, --all, or test names without .test.js');process.exit(2);}
 for(const name of names)if(!/^[a-z0-9-]+$/.test(name)||!fs.existsSync(path.join(__dirname,name+'.test.js'))){console.error('Unknown test: '+name);process.exit(2);}
