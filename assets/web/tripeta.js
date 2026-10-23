@@ -9,5 +9,6 @@
   return {rate:rate,observe:observe,begin:begin,text:text,clear:function(){stages.clear();}};
  }
  function work(o){return Math.pow((o.cands||[]).length+1,2)*Math.max(1,Math.ceil(o.capGal/o.step))/1e6;}
- var api={create:create,work:work};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TripETA=api;
+ function batch(jobs){var network=new Map(),ms=0;jobs.forEach(function(j){ms+=Math.max(0,j.computeMs||0);(j.network||[]).forEach(function(n){network.set(n.key,Math.max(network.get(n.key)||0,n.ms||0));});});network.forEach(function(n){ms+=n;});var lo=Math.max(1,Math.floor(ms*.65/60000)),hi=Math.max(lo+1,Math.ceil(ms*1.8/60000));return {ms:ms,networkJobs:network.size,text:ms<45000?'About a minute total':lo+'–'+hi+' min estimated total'};}
+ var api={create:create,work:work,batch:batch};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TripETA=api;
 })(typeof window==='undefined'?globalThis:window);

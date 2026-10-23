@@ -17,6 +17,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tRule');
  await p.evaluate(()=>{Tasks.upsert('layout-test',{text:'Reading hazards…'});Tasks.upsert('layout-other',{text:'Downloading model…'});});await p.waitForSelector('#taskMore:not(.hidden)');
  assert(await p.evaluate(()=>{const bar=document.querySelector('#jobBar').getBoundingClientRect(),meter=document.querySelector('#apiCount').getBoundingClientRect(),tabs=document.querySelector('.tp-head').getBoundingClientRect();return bar.left>=meter.right+7&&bar.bottom<tabs.top;}),'full-screen status respects API meter and menu selectors');
+ await p.click('#taskMore');assert(await p.locator('#taskList').evaluate(el=>{var r=el.getBoundingClientRect();return r.left>=10&&r.left<=14&&r.right<=innerWidth-10;}),'expanded task list uses full phone width independently of API meter');
  await p.evaluate(()=>{Tasks.remove('layout-test');Tasks.remove('layout-other');});
  assert.equal(await p.locator('#tTime').count(),0,'no dollar/hour input');
  await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tAltCmp');assert.equal(await p.locator('#tpS3 #tAltCmp').count(),1);

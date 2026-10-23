@@ -11,7 +11,7 @@
   function layout(){
     if(!doc)return;var hub=doc.getElementById('taskHub'),meter=doc.getElementById('apiCount'),inset=12;
     if(hub&&doc.body.classList.contains('trip-full')&&doc.body.classList.contains('trip-on')&&meter){var r=meter.getBoundingClientRect();if(r.width&&r.height)inset=Math.min(Math.ceil(r.right)+8,Math.max(12,root.innerWidth-180));}
-    if(hub){hub.style.left=inset+'px';var full=fullMenu(),bar=doc.getElementById('jobBar'),button=bar.querySelector('.jb-expand');if(!full)messageExpanded=false;
+    if(hub){hub.style.left=inset+'px';var list=doc.getElementById('taskList');if(list)list.style.marginLeft=(12-inset)+'px';var full=fullMenu(),bar=doc.getElementById('jobBar'),button=bar.querySelector('.jb-expand');if(!full)messageExpanded=false;
       hub.classList.toggle('compact',full);hub.classList.toggle('full-message',full&&messageExpanded);
       if(button){button.classList.toggle('hidden',!full);button.setAttribute('aria-expanded',String(messageExpanded));button.setAttribute('aria-label',messageExpanded?'Collapse status message':'Show full status message');button.querySelector('.chev').classList.toggle('up',messageExpanded);}
       var label=bar.querySelector('.jb-t'),text=bar.dataset.fullText||'';if(label)label.textContent=full&&!messageExpanded&&root.__app&&root.__app.jobShort?root.__app.jobShort(text):text;

@@ -165,8 +165,8 @@
   function hasEpa(c) { return c.epa && c.epa.city > 0 && c.epa.hwy > 0; }
   function pctOf(c) { return hasEpa(c) ? Math.round(harm(obsCity(c), obsHwy(c)) / harm(c.epa.city, c.epa.hwy) * 100) : 100; }
   /** What the trip planner uses: your observed numbers where you have them, else the EPA's (miles per gal / kWh / kg). */
-  function carModel() {
-    var c = car(), k = kind(c), city = obsCity(c) || (k === 'ev' ? 3.5 : k === 'h2' ? 65 : 25), hwy = obsHwy(c) || (k === 'ev' ? 3.0 : k === 'h2' ? 60 : 33);
+  function carModel(c) {
+    c=c||car();var k = kind(c), city = obsCity(c) || (k === 'ev' ? 3.5 : k === 'h2' ? 65 : 25), hwy = obsHwy(c) || (k === 'ev' ? 3.0 : k === 'h2' ? 60 : 33);
     var comb = hasEpa(c) && c.epa.comb ? c.epa.comb * harm(city, hwy) / harm(c.epa.city, c.epa.hwy) : harm(city, hwy);
     return { city: city, hwy: hwy, comb: comb, adjustPct: 100, kind: k };
   }
@@ -394,7 +394,7 @@
    * then the tank / battery size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
    */
   /** Is the car ready for a trip (mileage and tank size), without pointing at anything? */
-  function ok() { var c = car(); return !!S.cars.length && !!c && !matching && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0; }
+  function ok(c) { c=c||car();return !!S.cars.length && !!c && (c.id!==S.carId||!matching) && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0; }
   function need() {
     if(!S.cars.length)return {el:host&&host.querySelector('[data-car="+"]'),kind:'pick',msg:'Add your vehicle before planning a trip.'};
     var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0, k = kind(c);

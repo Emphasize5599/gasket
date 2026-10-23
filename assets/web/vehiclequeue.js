@@ -10,8 +10,8 @@
     try{for(var i=0;i<jobs.length&&!pause;i++){var j=jobs[i];if((j.status==='Ready'||j.status==='Adjustments ready')&&a.eligible(j.id)&&(!a.complete||a.complete(j.id)))continue;
       if(!a.eligible(j.id)){j.status='Needs input';changed();continue;}
       j.status='Working';j.error='';changed();
-      try{var status=await a.run(j.id,function(){return mine===epoch&&!cancelled;});j.status=cancelled?'Paused':status||'Ready';if(!cancelled&&a.notify)a.notify(j);}
-      catch(e){j.status=cancelled?'Paused':'Needs input';j.error=String(e.message||e).slice(0,200);if(a.failed)a.failed(j);}
+      try{var status=await a.run(j.id,function(){return mine===epoch&&!cancelled;});j.status=cancelled?'Cancelled':status||'Ready';if(!cancelled&&a.notify)a.notify(j);}
+      catch(e){j.status=cancelled?'Cancelled':'Needs input';j.error=String(e.message||e).slice(0,200);if(!cancelled&&a.failed)a.failed(j);}
       finally{try{await a.restore();}catch(e){pause=true;j.status='Needs input';j.error='Could not restore the selected vehicle. Reopen the comparison before continuing.';if(a.failed)a.failed(j);}changed();}
     }}finally{running=false;changed();if(a.finished)a.finished(state());}
    }

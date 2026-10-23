@@ -459,7 +459,8 @@
     var P=A.P,groups=knownAreas(known,P,priority),rows=new Map(),errors=[],reads=0,blocked=false,start=Date.now();
     var buckets=new Map();known.forEach(function(s){var key=Math.floor(s.lat*50)+'|'+Math.floor(s.lng*50);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(s);});
     function nearby(w){var x=Math.floor(w.lat*50),y=Math.floor(w.lng*50);for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var candidates=buckets.get((x+dx)+'|'+(y+dy))||[];if(candidates.some(function(s){return P.haversineMi(s.lat,s.lng,w.lat,w.lng)<=officialRadius(w);}))return true;}return false;}
-    var cached=groups.map(function(g){var key='known-v3|'+grade+'|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort());return {g:g,key:key,cache:A.KV.get('gasweb',key,15*60000)};});
+    var priceAgeHours=+(A.S||{}).staleHours||24;
+    var cached=groups.map(function(g){var key='known-v3|'+grade+'|'+[g.lat.toFixed(4),g.lng.toFixed(4)].join('|')+'|'+JSON.stringify(g.stations.map(knownKey).sort()),hit=A.KV.get('gasweb',key,Math.min(15*60000,priceAgeHours*3600e3));if(hit&&(hit.v.stores||[]).some(function(s){var p=s.prices&&s.prices[grade];return p&&!P.priceFresh(Object.assign({},p,{observedAt:p.observedAt||hit.t}),priceAgeHours);}))hit=null;return {g:g,key:key,cache:hit};});
     // Dedicated readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
     var next=0,done=0,samples=0,totalMs=0,active=new Map();

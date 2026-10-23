@@ -453,6 +453,7 @@
 
   var api = { stationKey: stationKey, reconcileStations: reconcileStations, mergeSites: mergeSites, mapTier: mapTier, BRANDS: BRANDS, ALT: ALT, brand: brand, displayName: displayName, GRADES: GRADES, DEFAULTS: DEFAULTS, detectBrand: detectBrand, normalize: normalize, normalizeWalmart: normalizeWalmart, normalizeMurphy: normalizeMurphy, mergeOfficial: mergeOfficial, mergeWalmart: mergeWalmart,
     compute: compute, tripPrice: tripPrice, citgoRedeemed: citgoRedeemed, setCitgoRedeemed: setCitgoRedeemed, isBad: isBad, fmtSign: fmtSign, fmt3: fmt3, setCents: setCents, haversineMi: haversineMi, todayKey: todayKey, monthKey: monthKey, citgoBonus: citgoBonus, moneyToNumber: moneyToNumber };
+  api.priceFresh=function(p,hours,now){if(!p)return false;now=now==null?Date.now():now;var t=p.updated?(typeof p.updated==='number'?p.updated:Date.parse(p.updated)):NaN;if(!Number.isFinite(t))t=Number(p.observedAt);return t>0&&t<=now+300000&&now-t<=Math.max(1,+hours||24)*3600e3;};
   api.workerSource='('+initPricing.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Pricing = api;
 })(this);
