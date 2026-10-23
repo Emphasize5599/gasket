@@ -3,15 +3,17 @@
  function create(a){var running=false,pause=false,cancelled=false,jobs=[],epoch=0;
   function state(){return {running:running,paused:pause,jobs:jobs.map(function(j){return Object.assign({},j);})};}
   function changed(){a.changed(state());}
-  return {state:state,load:function(rows){if(running)return; jobs=(rows||[]).map(function(j){return {id:j.id,status:'Needs review',error:'Review setup and hazards after reopening.'};});changed();},
+  return {state:state,load:function(rows){if(running)return; jobs=(rows||[]).map(function(j){return {id:j.id,status:'Needs review',error:'Review setup and hazards after reopening.',review:true};});changed();},
    select:function(ids){if(running)return;jobs=Array.from(new Set(ids)).map(function(id){return jobs.find(function(j){return j.id===id;})||{id:id,status:'Queued'};});changed();},
+   // A job waiting only on the user's setup/hazard review goes back to Queued once that review is done.
+   refresh:function(){if(running)return false;var any=false;jobs.forEach(function(j){if(j.review&&a.eligible(j.id)){j.status='Queued';j.error='';delete j.review;any=true;}});if(any)changed();return any;},
    pause:function(){pause=true;changed();},cancel:function(){cancelled=true;pause=true;if(a.cancel)a.cancel();changed();},
    start:async function(){if(running)return;running=true;pause=false;cancelled=false;var mine=++epoch;changed();
     try{for(var i=0;i<jobs.length&&!pause;i++){var j=jobs[i];if((j.status==='Ready'||j.status==='Adjustments ready')&&a.eligible(j.id)&&(!a.complete||a.complete(j.id)))continue;
-      if(!a.eligible(j.id)){j.status='Needs input';changed();continue;}
-      j.status='Working';j.error='';changed();
+      if(!a.eligible(j.id)){j.status='Needs input';j.review=true;changed();continue;}
+      j.status='Working';j.error='';delete j.review;changed();
       try{var status=await a.run(j.id,function(){return mine===epoch&&!cancelled;});j.status=cancelled?'Cancelled':status||'Ready';if(!cancelled&&a.notify)a.notify(j);}
-      catch(e){j.status=cancelled?'Cancelled':'Needs input';j.error=String(e.message||e).slice(0,200);if(!cancelled&&a.failed)a.failed(j);}
+      catch(e){j.status=cancelled?'Cancelled':'Needs input';j.error=String(e.message||e).slice(0,200);if(!cancelled&&!a.eligible(j.id))j.review=true;if(!cancelled&&a.failed)a.failed(j);}
       finally{try{await a.restore();}catch(e){pause=true;j.status='Needs input';j.error='Could not restore the selected vehicle. Reopen the comparison before continuing.';if(a.failed)a.failed(j);}changed();}
     }}finally{running=false;changed();if(a.finished)a.finished(state());}
    }

@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.254 - 2026-10-23
+- Comparison batch: a vehicle's "Needs review" note clears once its setup and hazards are reviewed.
+- Status bar: opening or closing the other statuses keeps an expanded status message open.
+
 ## 0.0.253 - 2026-10-23
 - Move batch planning/cancellation to the footer and highlight every vehicle needing review before launch.
 - Show an overall batch-time estimate and expand background task lists to the full width.

@@ -82,7 +82,8 @@
       if(root.ResizeObserver)new ResizeObserver(layout).observe(hub.querySelector('.task-top'));
       doc.getElementById('taskMore').onclick=function(){expanded=!expanded;draw();};
       hub.onclick=function(e){if(e.target.closest('.jb-expand')){messageExpanded=!messageExpanded;layout();return;}var b=e.target.closest('[data-cancel]');if(b)cancel(b.dataset.cancel);};
-      doc.addEventListener('click',function(e){if(messageExpanded&&!e.target.closest('.jb-expand')){messageExpanded=false;layout();}},true);
+      // The other-statuses button and its list keep the expanded message open.
+      doc.addEventListener('click',function(e){if(messageExpanded&&!e.target.closest('.jb-expand,#taskMore,#taskList')){messageExpanded=false;layout();}},true);
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
     var all=visible(), multiple=all.length>1;
