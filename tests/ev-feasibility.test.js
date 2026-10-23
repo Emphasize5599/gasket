@@ -42,6 +42,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   const reads=await p.evaluate(()=>__discoveryReads),passes=await p.evaluate(()=>__pricePasses);
   await p.click('#tNext');await p.waitForSelector('[data-ev-replace]');assert.match(await p.locator('#tsResults').innerText(),/Routes that would work/i);
   await p.click('[data-ev-replace]');await p.waitForFunction(()=>__trip.state().step===5);
+  assert(await p.evaluate(()=>{const id=__app.KV.get('trips','index').v[0].id,o=JSON.parse(__app.N.kvGet('trips','trip|'+id));return o.v.stationPoolVersion===1&&o.v.stationPool.length>0&&!o.v.stations.google.some(g=>g.list);}), 'accepted routes are persisted through the compact native bridge format');
   assert(await p.evaluate(()=>__trip.state().result?.plan.ok),'the hazard review must retain the accepted, validated plan');
   await p.evaluate(()=>window.__acceptedPlan=__trip.state().result.plan);
   assert.deepEqual(await p.evaluate(()=>__trip.state().route.legs.map(l=>l.sel)),[1,1]);

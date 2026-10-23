@@ -492,6 +492,7 @@
   /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
   function adviceDue() { return !!((window.Tires && Tires.airDue && Tires.airDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
+    if(step>=ST_ROUTE&&KIND()==='ev'&&window.ChargerData)ChargerData.firstTrip().catch(function(e){LG.warn('chargers','First-trip inventory check failed',e.name||'Error');});
     if(step===ST_GARAGE&&shown>ST_GARAGE)compareCapture();
     if(step===ST_COMPARE)compareCapture();else if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     if(window.VisualDiagnostics)VisualDiagnostics.redraw('trip_step');

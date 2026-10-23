@@ -101,11 +101,25 @@
    var r=await call('chargerInventory','download',key);after('doe',key,r);if(r.error)throw new Error(r.error);return r;
   }finally{done=true;clearInterval(timer);if(root.Tasks)Tasks.remove('charger-inventory');downloadPromise=null;}})();return downloadPromise;
  }
+ var firstTripCheck=null;
+ function firstTrip(){
+  if(!N.chargerInventory||S.evInventoryPrompted)return Promise.resolve();
+  if(firstTripCheck)return firstTripCheck;
+  firstTripCheck=(async function(){try{
+   var status=await call('chargerInventory','status','');if(status.error)return;
+   S.evInventoryPrompted=true;A.save();
+   if(status.count||status.busy)return;
+   var yes=await A.confirmDel({always:true,title:'Download charger locations?',body:'Save the DOE charger database for faster EV discovery and fewer API calls. Includes public U.S. and Canada chargers and connector types, not guaranteed live prices. This can be a large download; Wi-Fi is recommended.',action:'Download',no:'Not now',goClass:'primary'});
+   if(!yes||root.__erasing)return;
+   try{var r=await download(String(S.nrelKey||'').trim()||'DEMO_KEY');A.toast(Number(r.count||0).toLocaleString()+' charger locations saved.');}
+   catch(e){A.toast('Charger download failed: '+e.message+'. Retry in Settings → Connections.');}
+  }finally{firstTripCheck=null;}})();return firstTripCheck;
+ }
  function attach(pg){var button=pg.querySelector('#evDownload'),cancel=pg.querySelector('#evCancelDownload'),info=pg.querySelector('#evInventoryStatus');if(!button)return;
   function show(r){info.textContent=r.error?r.error:r.count?Number(r.count).toLocaleString()+' chargers saved · '+new Date(r.updated).toLocaleDateString():'No offline charger inventory downloaded yet.';var q=pg.querySelector('#evQuotaStatus');if(q)q.textContent=quotaText();}
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
+ root.ChargerData={firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();
 })(window);

@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');require('../assets/web/tripstorage.js');
+const rows=Array.from({length:3000},(_,i)=>({id:i,lat:35,lng:-90,name:'Charger '+i,netPrice:{price:.35,t:123},description:'x'.repeat(500)}));
+const original={route:{stops:[1,2]},stations:{kind:'ev',official:[],google:Array.from({length:14},(_,k)=>({k,sig:'route'+k,coverage:{scope:'owner',complete:true},list:rows.map(r=>({...r}))}))}};
+const packed=TripStorage.pack(original),size=JSON.stringify(packed).length;
+assert(size<JSON.stringify(original).length/8,'shared inventories must not multiply saved size');
+assert.deepEqual(TripStorage.unpack(JSON.parse(JSON.stringify(packed))),original);
+assert.equal(original.stations.google[0].list.length,3000,'packing does not mutate live inventories');
+const rates={stations:{official:[rows[0]],google:[{list:[{...rows[0],netPrice:{price:.6,t:124}}]}]}};
+assert.equal(TripStorage.pack(rates).stationPool.length,2,'distinct owner tariffs and timestamps are retained');
+assert.deepEqual(TripStorage.unpack(TripStorage.pack(rates)),rates);
+assert.deepEqual(TripStorage.unpack(original),original,'legacy saves read unchanged');
+assert.throws(()=>TripStorage.unpack({stationPoolVersion:1,stationPool:[],stations:{google:[{refs:[0]}]}}),/reference/);
+const compared={...original,comparison:[{id:'car',replay:{stations:original.stations}}]};
+const compact=TripStorage.pack(compared);assert.equal(compact.stationPool.length,rows.length,'comparison snapshots share the pool too');assert.deepEqual(TripStorage.unpack(JSON.parse(JSON.stringify(compact))),compared);
+console.log('Lossless inventory pooling, independent tariff identity, legacy read and corrupt-reference rejection.');

@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.249 - 2026-10-23
+- Reduce saved-trip duplication to fix failures when accepting workable EV routes; preserve cached prices across alternatives and vehicles.
+- Offer a DOE charger-location download on the first EV trip.
+
 ## 0.0.248 - 2026-10-23
 - Apply the CPU/GPU setting to both models and show the small model's actual backend.
 - Try additional supported WebGPU adapters, including compatibility mode; verify GPU warm-up before use, with CPU fallback.

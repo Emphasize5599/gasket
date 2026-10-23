@@ -1517,9 +1517,9 @@
   /** Saved answers (searches, speed limits, routes) in the app's private storage: {t: saved ms, v: value}. */
   var KV = {
     get: function (ns, key, maxAgeMs) {
-      try { if (!N.kvGet) return null; var s = N.kvGet(ns, key); if (!s) return null; var o = JSON.parse(s); return maxAgeMs && Date.now() - o.t > maxAgeMs ? null : o; } catch (e) { return null; }
+      try { if (!N.kvGet) return null; var s = N.kvGet(ns, key); if (!s) return null; var o = JSON.parse(s);if(ns==='trips'&&key.startsWith('trip|'))o.v=TripStorage.unpack(o.v);return maxAgeMs && Date.now() - o.t > maxAgeMs ? null : o; } catch (e) { return null; }
     },
-    put: function (ns, key, v) { if(window.__erasing)return false;try { if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { } return false; },
+    put: function (ns, key, v) { if(window.__erasing)return false;try { if(ns==='trips'&&key.startsWith('trip|'))v=TripStorage.pack(v);if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { if(window.FLog)FLog.error('storage','Persistent serialization or bridge failure',{namespace:ns,error:e.name||'Error'}); } return false; },
     clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
   };
   var lastScan=KV.get('gasmeta','last-scan');
