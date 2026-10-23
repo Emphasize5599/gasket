@@ -59,6 +59,10 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   assert.match(await p.innerText('#tsResults'),/No new stations discovered/);
   assert.equal(await p.evaluate(()=>__trip.state().result.stale),1,'only the retained genuinely old price counts as old');
   assert.match(await p.innerText('#tsResults'),/unknown pump-update times/);
+  assert.equal(await p.locator('#tsResults .note').filter({hasText:/unknown pump-update times/}).count(),1,'one consolidated freshness warning');
+  // A plain HTTP refusal from a supplemental discount endpoint is actionable, not an invented CAPTCHA.
+  await p.evaluate(async()=>{__app.S.xomCheck=true;__app.KV.clear('xom');__app.N.fetchJson=(id)=>onNativeResult(id,{error:'HTTP 403'});await __xom(__trip.state().result.cands.map(c=>c.station));__trip.relogo();});await p.waitForSelector('#tsResults [data-retry-xom]');
+  await p.evaluate(()=>{window.__xomRetries=0;__app.N.fetchJson=id=>{__xomRetries++;onNativeResult(id,{body:'{"Locations":[]}'});};});await p.click('#tsResults [data-retry-xom]');await p.waitForFunction(()=>__xomRetries>0&&!document.querySelector('#tsResults [data-retry-xom]'));assert.equal(await p.locator('#wmCheck:not(.hidden)').count(),0);assert.equal(await p.evaluate(()=>__api.web),2,'retrying discounts does not rescan station websites');
   await p.evaluate(()=>__trip.step(6));
   assert.equal(await p.isDisabled('#taResults [data-trip-refresh="api"]'),true,'explicit API choice respects its cap');
   await p.click('#taResults [data-trip-refresh="web"]');await p.waitForFunction(()=>!__trip.state().busy);

@@ -87,7 +87,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 
     // 4. Back to Parameters (asks, runs on), where the status bar shows; Back from there is closed (Hazards would change it)
     await p.click('#tBack'); await p.waitForSelector('#cfm.on'); await p.click('#cfmYes'); await p.waitForSelector('#cfm', { state: 'detached' });
-    await p.waitForFunction(() => __trip.state().step === 4); await p.waitForSelector('#jobBar:not(.hidden)');
+    await p.waitForFunction(() => __trip.state().step === 8); await p.waitForSelector('#jobBar:not(.hidden)');
     assert.equal(await p.isDisabled('#tBack'), false, 'Parameters can return to Advice while the search runs');
     // in a full-screen menu the bar sits in the empty space above the step tabs
     await p.evaluate(() => { document.getElementById('trip').classList.add('full'); document.body.classList.add('trip-full'); __app.jobDraw(); });
@@ -114,7 +114,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     await p.waitForFunction(() => !__trip.state().busy, null, { timeout: 20000 });
     const c = await p.evaluate(() => ({ step: __trip.state().step, cancels: __cancels, job: !!__app.job(), bar: document.getElementById('jobBar').className }));
     console.log('  cancelled:', JSON.stringify(c));
-    assert.equal(c.step, 4); assert.ok(c.cancels > 0, 'the website readers were cancelled'); assert.equal(c.job, false);
+    assert.equal(c.step, 8); assert.ok(c.cancels > 0, 'the website readers were cancelled'); assert.equal(c.job, false);
 
     // 7. the status bar's ✕ cancels a background search
     await p.evaluate(() => __trip.step(6)); await p.waitForFunction(() => !__trip.state().busy && document.querySelector('#taResults .price-refresh-card'));

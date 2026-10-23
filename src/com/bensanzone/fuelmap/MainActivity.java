@@ -65,6 +65,13 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
+    private static java.lang.ref.WeakReference<MainActivity> queueActivity=new java.lang.ref.WeakReference<>(null);
+    public static void queueTimeout(){MainActivity a=queueActivity.get();if(a!=null)a.js("window.onTripQueueTimeout&&onTripQueueTimeout()");}
+    private void handleQueueIntent(Intent i){
+        if(i==null||!i.getBooleanExtra("tripQueueOpen",false))return;i.removeExtra("tripQueueOpen");
+        String payload="{car:"+q(i.getStringExtra("queueCar"))+",trip:"+q(i.getStringExtra("queueTrip"))+",site:"+q(i.getStringExtra("queueSite"))+"}";
+        String code="window.onTripQueueOpen?onTripQueueOpen("+payload+"):(window.__pendingQueueOpen="+payload+")";if(pageReady)js(code);else pendingQueue=code;
+    }
     private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|[1-4][0-9]|50)?"); }
     private volatile int gasReaderRecycles = 0, gasRendererLosses = 0;
 
@@ -190,10 +197,18 @@ public class MainActivity extends Activity {
     private boolean pageReady = false;
     private String pendingInsets = null;
     private String pendingShare = null;
+    private String pendingQueue = null;
+    private JSONObject pendingQueueNotification;
+    private void queueNotificationPermission(){
+        if(android.os.Build.VERSION.SDK_INT>=33&&hasWindowFocus()&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED&&!prefs().getBoolean("queueNotificationAsked",false)){
+            prefs().edit().putBoolean("queueNotificationAsked",true).apply();requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},44);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        queueActivity=new java.lang.ref.WeakReference<>(this);
         startupStarted = android.os.SystemClock.elapsedRealtime();
         Window w = getWindow();
         // Edge-to-edge (enforced on Android 15+/16 anyway); the web UI pads itself with the real insets.
@@ -284,6 +299,7 @@ public class MainActivity extends Activity {
                 pageReady = true;
                 if (pendingInsets != null) js(pendingInsets);
                 if (pendingShare != null) { js(pendingShare); pendingShare = null; }
+                if (pendingQueue != null) { js(pendingQueue); pendingQueue = null; }
             }
             @Override
             public boolean onRenderProcessGone(WebView gone, android.webkit.RenderProcessGoneDetail detail) {
@@ -353,6 +369,7 @@ public class MainActivity extends Activity {
         startupPrepared=android.os.SystemClock.elapsedRealtime()-startupStarted;
         web.loadUrl("file:///android_asset/web/index.html" + (recoveringRenderer ? "#restored" : ""));
         handleShare(getIntent());
+        handleQueueIntent(getIntent());
     }
 
     private boolean isDark() {
@@ -964,6 +981,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if(code==44){if(pendingQueueNotification!=null&&android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")==PackageManager.PERMISSION_GRANTED){JSONObject p=pendingQueueNotification;TripQueueService.alert(this,p.optString("title"),p.optString("text"),p.optString("car"),p.optString("trip"),p.optString("site"));}pendingQueueNotification=null;return;}
         if (code == REQ_CAM) {
             android.webkit.PermissionRequest r = camReq; camReq = null;
             if (r == null) return;
@@ -1200,6 +1218,7 @@ public class MainActivity extends Activity {
         super.onNewIntent(i);
         setIntent(i);
         handleShare(i);
+        handleQueueIntent(i);
     }
 
     private static final int PICK_FILE = 4711, RESTORE_FILE = 4712, PICK_IMAGE = 4713;
@@ -1434,6 +1453,22 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
+        @JavascriptInterface public void tripQueue(final int id,final String action,final String payload){main.post(()->{
+            try{
+                if(!java.util.Arrays.asList("start","progress","ready","check","finish","stop").contains(action))throw new IllegalArgumentException("Unknown queue action");
+                JSONObject p=new JSONObject(payload);Intent i=new Intent(MainActivity.this,TripQueueService.class).putExtra("action",action);
+                for(String k:new String[]{"title","text","car","trip","site"})i.putExtra(k,p.optString(k,""));
+                if("ready".equals(action)||"check".equals(action)){
+                    pendingQueueNotification=p;queueNotificationPermission();
+                    TripQueueService.alert(MainActivity.this,p.optString("title"),p.optString("text"),p.optString("car"),p.optString("trip"),p.optString("site"));js("onNativeResult("+id+",{ok:true})");return;
+                }
+                if("start".equals(action)){
+                    queueNotificationPermission();
+                    startForegroundService(i);
+                }else startService(i);
+                js("onNativeResult("+id+",{ok:true,notifications:"+(android.os.Build.VERSION.SDK_INT<33||checkSelfPermission("android.permission.POST_NOTIFICATIONS")==PackageManager.PERMISSION_GRANTED)+"})");
+            }catch(Exception e){js("onNativeResult("+id+",{error:"+q(e.getClass().getSimpleName())+"})");}
+        });}
         @JavascriptInterface public void startupStage(final String text) { runOnUiThread(() -> { if(startupText!=null)startupText.setText("Gasket\n\n"+(text==null?"Getting ready…":text.substring(0,Math.min(160,text.length())))); }); }
         @JavascriptInterface public void startupReady(final String report) { runOnUiThread(() -> {
             if(startupLayout!=null){root.removeView(startupLayout);startupLayout=null;startupText=null;startupSpinner=null;}

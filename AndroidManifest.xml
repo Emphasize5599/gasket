@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.bensanzone.fuelmap"
-    android:versionCode="251"
-    android:versionName="0.0.251">
+    android:versionCode="252"
+    android:versionName="0.0.252">
     <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- the VIN barcode scanner only; asked the first time you tap it -->
@@ -19,6 +23,7 @@
         android:hardwareAccelerated="true">
         <!-- lets the phone's own System Tracing / Perfetto record this app (for the AI flicker investigation); not debuggable -->
         <profileable android:shell="true" />
+        <service android:name=".TripQueueService" android:exported="false" android:foregroundServiceType="dataSync" />
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <activity

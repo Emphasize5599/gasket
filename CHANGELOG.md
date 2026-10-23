@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.252 - 2026-10-23
+- Queue vehicles before Adjustments, with background planning and completion/website-check notifications.
+- Add adaptive, cache-aware stage estimates and targeted website retries.
+- Preserve comparison approvals when switching cars and combine repeated price-age warnings.
+
 ## 0.0.251 - 2026-10-23
 - Improve ChargePoint price parsing, cached-price reuse and retry backoff.
 - Add automatic lowest-cost or shortest-total-time planning, including buffer and detour adjustments while keeping speed settings.

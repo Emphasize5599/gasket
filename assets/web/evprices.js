@@ -211,9 +211,12 @@
     // progress by expected time (Tesla ~0.8 s a site, ChargePoint ~8 s a page, Blink ~0.5 s), with the time left once it's measurable
     var W = { tesla: 0.8, ionna: 0.05, blink: 0.5, chargepoint: 8,flo:1 }, total = 0, done = 0;
     Object.keys(by).forEach(function (k) { total += by[k].length * W[k]; });
+    var eta=root.__tripETA,etaWeights=new Map(),etaDone=0,etaCounted=new Set();
+    if(eta)Object.keys(by).forEach(function(k){by[k].forEach(function(x){var hit=false;if(k==='tesla')hit=!!cached('tesla-v1|'+(isTesla?'t':'n')+'|'+x.st.id,DAY);else if(k==='ionna')hit=!!cached('ionna-v1',DAY);else if(k==='blink'){var sites=cached('blink-sites-v1',WEEK),near=sites&&nearest(x.st,sites,200);hit=!!(near&&cached('blink-price-v1|'+near.id+'|'+(x.dc?'dc':'ac'),DAY));}else if(k==='flo'){var plugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('flo-v1|'+x.st.id+'|'+x.dc+'|'+plugs.slice().sort().join(','),DAY);}if(!hit)etaWeights.set(x,W[k]);});});
+    var etaTotal=0;etaWeights.forEach(function(w){etaTotal+=w;});var etaPrices=eta&&eta.begin('charger-prices','charger-prices',etaTotal,1000,'Reading charger prices (cached tariffs excluded)');
     var report = function () { if (!onProg) return; var f = Math.min(0.99, done / Math.max(0.001, total)), el = Date.now() - t, left = f > 0.05 && el > 4000 ? el / f * (1 - f) : 0;
       onProg(f, left ? 'about ' + (left < 90e3 ? Math.max(1, Math.round(left / 1000 / 5) * 5) + ' s' : Math.round(left / 60e3) + ' min') + ' left' : ''); };
-    var step = function (k, n) { done += (n == null ? 1 : n) * W[k]; report(); };
+    var step = function (k, n, cacheBatch) { done += (n == null ? 1 : n) * W[k];if(etaPrices){var count=n==null?1:n;by[k].forEach(function(x){if(count>0&&!etaCounted.has(x)&&(k!=='tesla'||etaWeights.has(x)!==!!cacheBatch)){etaCounted.add(x);etaDone+=etaWeights.get(x)||0;count--;}});etaPrices.progress(etaDone);}report(); };
     if (by.ionna.length) try { var ion = await ionnaSites(); by.ionna.forEach(function (x) { var s = nearest(x.st, ion, 250); if (s && s.open) set(x, { t:s.t,rate: s.rate, peak: s.rate, low: s.rate, uom: 'kwh', fee: 0, tax: s.tax }, 'ionna', 'IONNA\'s published rate' + (s.tax ? ' plus tax' : '')); step('ionna'); }); }
       catch (e) { notes.push('IONNA\'s price list didn\'t load: ' + e.message); }
     if (by.blink.length) try {
@@ -221,7 +224,7 @@
       var lane = async function () { while (queue.length) { var q = queue.shift(); try { var p = await blinkPrice(q.s.id, q.x.dc); if (p) set(q.x, p, 'blink', 'The charger\'s host-set Blink rate' + (p.fee ? ' + $' + p.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { queue.length = 0; if (notes.indexOf(e.message) < 0) notes.push(e.message); } } step('blink'); await new Promise(function (ok) { setTimeout(ok, 250); }); } };
       await Promise.all([lane(), lane(), lane()]);
     } catch (e) { notes.push('Blink\'s charger map didn\'t load: ' + e.message); }
-    if (by.tesla.length) try { var tp = await teslaPrices(by.tesla.map(function (x) { return x.st; }), isTesla, function (n) { step('tesla', n); }); by.tesla.forEach(function (x) { var p = tp[x.st.id]; if (p) set(x, { t:p.t,rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0, congestion: p.congestion, tou: p.tou }, 'tesla', 'Tesla\'s published ' + (isTesla ? 'Tesla-owner' : 'non-Tesla') + ' rate' + (p.tou && p.low < p.peak ? ' (peak; off-peak $' + p.low.toFixed(2) + ')' : '')); }); }
+    if (by.tesla.length) try { var tp = await teslaPrices(by.tesla.map(function (x) { return x.st; }), isTesla, function (n, cacheBatch) { step('tesla', n, cacheBatch); }); by.tesla.forEach(function (x) { var p = tp[x.st.id]; if (p) set(x, { t:p.t,rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0, congestion: p.congestion, tou: p.tou }, 'tesla', 'Tesla\'s published ' + (isTesla ? 'Tesla-owner' : 'non-Tesla') + ' rate' + (p.tou && p.low < p.peak ? ' (peak; off-peak $' + p.low.toFixed(2) + ')' : '')); }); }
       catch (e) { notes.push(e.message); if (e.partial) by.tesla.forEach(function (x) { var p = e.partial[x.st.id]; if (p) set(x, { t:p.t,rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0 }, 'tesla', 'Tesla\'s published rate'); }); }
     for(var fi=0;fi<Math.min(24,by.flo.length)&&!cancelled;fi++){var fx=by.flo[fi];try{var fp=await floPrice(fx,car);if(fp&&fp.price){set(fx,Object.assign({},fp.price,{t:fp.t}),'flo','FLO\'s published host rate (additional fees may apply)');fx.st.units=(fx.st.units||[]).filter(function(u){return fx.dc?u.charging_level!=='dc_fast':u.charging_level==='dc_fast';}).concat(fp.units);}}catch(e){if(notes.indexOf(e.message)<0)notes.push(e.message);if(e.blocked)break;}step('flo');}
     if(by.flo.length>24)notes.push('FLO website reads covered 24 route sites; other sites need a published inventory price or remain excluded.');
@@ -230,7 +233,7 @@
     for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; if (cpMiss >= CP_GIVE_UP && !cpGot) { notes.push('ChargePoint\'s station pages didn\'t load, so its prices are estimates this time.'); LG.info('stations', 'ChargePoint reads stopped', { pagesMissing: cpMiss }); break; }
       try { var cpP = await chargePointPrice(cx.st); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
     LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached,chargepointDeferred:cpDeferred, flo:by.flo.length, priced: priced, ms: Date.now() - t });
-    return { priced: priced, notes: notes };
+    if(etaPrices)etaPrices.finish(!cancelled&&!verification&&!notes.length);return { priced: priced, notes: notes };
   }
   root.EVPrices = { annotate: annotate, cancel: cancel, onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
 })(window);

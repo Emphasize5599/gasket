@@ -33,7 +33,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  // Simulate late search/plan completion: labels must remain review actions, not Back/Next.
  await p.evaluate(()=>{__trip.relogo();__trip.discountsChanged();});await p.waitForTimeout(80);assert.equal(await p.innerText('#tBack'),'No');assert.equal(await p.innerText('#tNext'),'Yes');
  await p.click('#tBack');await p.click('#tNext');await p.click('#tNext');await p.click('#tBack');
- await p.waitForFunction(()=>__trip.state().step===6&&!__trip.state().busy);
+ await p.waitForSelector('#tCompare');await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===6&&!__trip.state().busy);
  await p.waitForSelector('#tsBuf');await p.waitForSelector('#tsDet');
  await p.locator('#tsBuf').evaluate(el=>{el.value='30';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});
  await p.waitForSelector('#tsDet');await p.locator('#tsDet').evaluate(el=>{const i=__trip.state().result.dsweep.findIndex(x=>x.mi===6);if(i<0)throw Error('Missing 6-minute detour setting');el.value=String(i);el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});await p.waitForFunction(()=>__trip.state().result.opts.maxDetourMin===6);
@@ -99,6 +99,6 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>__continueScan());await p.waitForFunction(()=>!__trip.state().busy);
  assert.equal(await p.evaluate(()=>Tasks.list().filter(t=>t.id.startsWith('trip-pending:')||t.id.startsWith('station-source:')).length),0,'completed pipeline leaves no pending or provider tasks');
  // A previously approved replacement does not lose this vehicle's current review.
- await p.evaluate(()=>{__app.S.cars=[Garage.car()];__trip.step(7);});if(!await p.locator('#tsIdeal:visible').count())await p.click('#tNext');await p.waitForSelector('#tsIdeal',{state:'visible'});await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);assert(await p.locator('[data-vc-use]').isEnabled(),'single-vehicle approved replacement remains reviewed');await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===9);
+ await p.evaluate(()=>{__app.S.cars=[Garage.car()];__trip.step(8);});assert(await p.locator('[data-vc-use]').isEnabled(),'single-vehicle approved replacement remains reviewed');await p.click('[data-vc-use]');await p.waitForFunction(()=>__trip.state().step===6);await p.evaluate(()=>__trip.step(7));if(!await p.locator('#tsIdeal:visible').count())await p.click('#tNext');await p.waitForSelector('#tsIdeal',{state:'visible'});await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===9);
  await p.evaluate(()=>__trip.close());assert.deepEqual(errors,[]);await p.close();
 }console.log('320/448px global settings, optional whole-trip recommendations, decline, skip and cached replacement passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

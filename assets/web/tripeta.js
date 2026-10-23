@@ -1,0 +1,13 @@
+/* Adaptive stage estimates. Cache hits are not network work; planner time is independent. */
+(function(root){'use strict';
+ function create(saved,save,clock){var rates=saved||{},stages=new Map(),now=clock||Date.now,lastSave=0;
+  function rate(key,seed){var r=rates[key];return r&&Number.isFinite(r.ms)&&r.ms>0?r.ms:seed;}
+  function observe(key,units,ms){if(!(units>0&&Number.isFinite(units)&&ms>0&&Number.isFinite(ms)))return;var old=rates[key];rates[key]={ms:old?old.ms*.65+ms/units*.35:ms/units,n:Math.min(100,(old&&old.n||0)+1)};if(save&&now()-lastSave>=15000){lastSave=now();save(rates);}}
+  function elapsed(s){return Math.max(0,now()-s.start-s.pausedMs-(s.pausedAt==null?0:now()-s.pausedAt));}
+  function begin(id,key,units,seed,label){var s={key:key,total:Math.max(0,units),done:0,start:now(),seed:seed,label:label,pausedMs:0,pausedAt:null};stages.set(id,s);if(root.FLog)root.FLog.info('eta','Stage estimate',{stage:id,units:s.total,initialMs:Math.round(s.total*rate(key,seed)),calibrated:!!rates[key]});return {progress:function(n){s.done=Math.max(s.done,Math.min(s.total,n));},finish:function(ok){if(ok!==false)observe(key,s.total,elapsed(s));if(root.FLog)root.FLog.info('eta','Stage completed',{stage:id,units:s.total,elapsedMs:elapsed(s),complete:ok!==false});stages.delete(id);}};}
+  function text(paused){stages.forEach(function(s){if(paused&&s.pausedAt==null)s.pausedAt=now();else if(!paused&&s.pausedAt!=null){s.pausedMs+=now()-s.pausedAt;s.pausedAt=null;}});if(paused)return 'Waiting for website verification · estimate paused';var ms=0,labels=[];stages.forEach(function(s){var remaining=Math.max(0,s.total-s.done),r=rate(s.key,s.seed);if(s.done>=3)r=Math.max(r*.5,elapsed(s)/s.done);ms+=remaining*r;labels.push(s.label);});if(!labels.length)return 'Preparing the next stage · estimating…';var lo=Math.max(1,Math.floor(ms*.65/60000)),hi=Math.max(lo+1,Math.ceil(ms*1.65/60000));return labels.join(' + ')+' · '+(ms<45000?'about a minute':lo+'–'+hi+' min remaining')+' for this stage';}
+  return {rate:rate,observe:observe,begin:begin,text:text,clear:function(){stages.clear();}};
+ }
+ function work(o){return Math.pow((o.cands||[]).length+1,2)*Math.max(1,Math.ceil(o.capGal/o.step))/1e6;}
+ var api={create:create,work:work};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TripETA=api;
+})(typeof window==='undefined'?globalThis:window);

@@ -423,6 +423,7 @@
   };
   var checkKey = null;
   function showSiteCheck(key,label){
+    window.dispatchEvent(new CustomEvent('sitecheckneeded',{detail:{key:key,label:label}}));
     var evPaused=window.EVPrices&&EVPrices.isPaused(),paused=(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())||evPaused;checkKey=key;
     $('wmCheckTitle').textContent=label+' wants a check';
     $('wmCheck').querySelector('span').textContent=evPaused?'Price reads paused. Open the check, complete it, then tap Done to retry this station. × skips this network and keeps prices already found.':paused?'Scan paused. Open the check, complete it, then tap Done to retry unfinished areas. × cancels the scan and keeps completed results.':'Complete the site’s “are you human?” step to continue.';

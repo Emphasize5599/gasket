@@ -346,6 +346,8 @@
     var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||50,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;scanChanged();
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
+    var cachedAreas=force?0:areas.filter(function(a){var c=A.KV.get('gasweb','discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,15*60000);return c&&!(c.v&&c.v.detail&&c.v.detail.stopReason==='quiet');}).length;
+    var eta=root.__tripETA,et=eta&&eta.begin('discovery','discovery|'+Math.min(16,lanes.length),areas.length-cachedAreas,1600*16/Math.max(1,Math.min(16,lanes.length)),'Website discovery ('+cachedAreas+' cached areas)');
     if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,aggressive:!!A.S.keylessAggressive,grade:grade,force:!!force,mem:mem0});
     var audit=scanAudit(A,'discovery',lanes,areas.length,control),outcome='failed';
     function progressLog(){if(!LG||done%50)return;var recent=recs.slice(-50).filter(function(r){return !r.cache;}),el=Date.now()-started;
@@ -385,7 +387,7 @@
         if(root.PriceHistory){var persistAt=Date.now();root.PriceHistory.observe(found);audit.persist(Date.now()-persistAt);}
         var before=rows.length;rows=dedupeDiscovery(rows.concat(found),P);details.push(r.detail||{});
         recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cache:!!cache,d:r.detail||null,found:found.length,added:rows.length-before,err:r.error||null});
-        done++;audit.complete(!!cache);report();progressLog();
+        done++;if(et)et.progress(recs.filter(function(r){return !r.cache&&!r.retry;}).length);audit.complete(!!cache);report();progressLog();
       }}
       var webWork=(async function(){
         await Promise.all(lanes.map(lane));
@@ -408,7 +410,7 @@
       }
       outcome=control.cancelled?'cancelled':blocked||control.blocked?'restricted':errors.length?'partial':'finished';
       return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked||!!control.blocked,blockedSite:control.blockedSite||'gasweb',cancelled:control.cancelled,areas:areas.length,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
-    }finally{clearInterval(timer);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
+    }finally{if(et)et.finish(outcome==='finished'&&cachedAreas<areas.length);clearInterval(timer);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
   }
   async function search(lat,lng,radius){
     if(busy)throw new Error('A keyless gas lookup is already running');
@@ -461,6 +463,7 @@
     // Dedicated readers; never overlap requests on the same WebView.
     var ordered=cached.filter(function(x){return x.cache;}).concat(cached.filter(function(x){return !x.cache;}));
     var next=0,done=0,samples=0,totalMs=0,active=new Map();
+    var etaEngine=root.__tripETA,etaRefresh=etaEngine&&etaEngine.begin('refresh','refresh|'+grade+'|'+Math.min(16,lanes.length),cached.filter(function(x){return !x.cache;}).length,10000/Math.max(1,Math.min(16,lanes.length)),'Refreshing prices ('+cached.filter(function(x){return !!x.cache;}).length+' cached areas)');
     var audit=scanAudit(A,'refresh',lanes,groups.length,control),outcome='failed';
     var pool=readerPool(A,lanes,control,audit,function(){return next<ordered.length&&!blocked;});
     function report(){
@@ -520,7 +523,7 @@
           recordObserved(checkpoint.stations);
           audit.persist(Date.now()-persistAt);
         }
-        done++;audit.complete(!!x.cache);
+        done++;if(etaRefresh)etaRefresh.progress(samples);audit.complete(!!x.cache);
         report();
       }}
       report();
@@ -540,7 +543,7 @@
       if(root.FLog)FLog.info('keyless','Saved trip price refresh',{updated:result.updated,total:result.total,retained:result.retained,websiteLoads:reads,areas:groups.length,readerConcurrency:lanes.length,averageAreaMs:samples?Math.round(totalMs/samples):null,blocked:blocked,errors:errors,elapsedMs:Date.now()-start});
       outcome=control.cancelled?'cancelled':blocked||control.blocked?'restricted':errors.length?'partial':'finished';
       return result;
-    }finally{clearInterval(ticker);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
+    }finally{if(etaRefresh)etaRefresh.finish(outcome==='finished');clearInterval(ticker);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
   }
   function recordObserved(stations){if(!root.PriceHistory)return;root.PriceHistory.observe(stations.map(function(s){var prices={};Object.keys(s.prices||{}).forEach(function(g){if(s.prices[g].observedAt)prices[g]=s.prices[g];});return Object.assign({},s,{prices:prices});}));}
   function estimate(known,grade){

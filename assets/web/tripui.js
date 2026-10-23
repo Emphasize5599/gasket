@@ -29,6 +29,7 @@
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if (fn === 'aiCommand') timeout = 15000;
       if (fn === 'visualSnapshot') timeout = 5000;
+      if (fn === 'tripQueue') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
         if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancelAdvice'); } catch (e) { }
         window.onNativeResult(id, { error: (/^ai/.test(fn) ? 'Local AI' : args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
@@ -51,6 +52,8 @@
   var LG = window.FLog || { error: function () {}, warn: function () {}, info: function () {}, debug: function () {}, trace: function () {} };
   // what happened on the last trip, for the troubleshooting report
   var dbg = {};
+  var etaData=A.KV.get('tripmeta','eta-v1'),eta=TripETA.create(etaData&&etaData.v,function(rates){A.KV.put('tripmeta','eta-v1',rates);});
+  window.__tripETA=eta;
   var siteWait = {};
   window.__tripSite = function (key, id, res) {
     var f = siteWait[key + ':' + id]; if (!f) return false;
@@ -119,7 +122,7 @@
   function reviewStart(){return reviewShow(choicePending()[0]);}
   function reviewOrder(){return RouteChoices.pending(choiceLists(),choiceSelections(),{});}
   function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
-  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes,goal:autoPriority()==='time'?'time':'cost'});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_ADJ);}
+  async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes,goal:autoPriority()==='time'?'time':'cost'});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_COMPARE);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
   var recommendationMissing={speed:0,stations:0,routes:[]},recommendationTollGaps=0, recommendations=[], recommendationBase=null, recommendationPlan=null, recommendationEpoch=0, recommendationState='idle', recommendationPage=0, recommendationDeclined=0, recommendationMaps=[], recommendationObserver=null, recommendationSpeeds=new Map();
   function choiceCost(r){var p=r&&r.plan;if(!p||!p.ok)return null;return T.account(r.startGal,startRate(p),[{stops:T.purchases(p),arriveGal:p.arriveGal}]).legs[0].cost;}
@@ -133,23 +136,25 @@
   function autoPriority(){return /^(cost|time)$/.test(S.autoTripPriority||'')?S.autoTripPriority:null;}
   async function autoChoose(){
     if(autoPlanning)return;
-    var state=autoPlanning={cancelled:false},owner=route,car=S.carId,priority=autoPriority();choiceComplete=true;step=ST_STOPS;
+    var state=autoPlanning={cancelled:false},owner=route,car=S.carId,priority=autoPriority(),optEta=null,optDone=0;choiceComplete=true;step=ST_STOPS;
     function valid(){return autoPlanning===state&&!state.cancelled&&route===owner&&S.carId===car&&step===ST_STOPS&&document.body.classList.contains('trip-on')&&autoPriority()===priority;}
-    function progress(text){if(window.Tasks)Tasks.upsert('auto-trip',{text:text,frac:null,cancel:function(){state.cancelled=true;}});}
+    function progress(text){if(optEta)text+=' · '+eta.text(false);if(window.Tasks)Tasks.upsert('auto-trip',{text:text,frac:null,cancel:function(){state.cancelled=true;}});}
     try{
       renderStep();progress('Preparing automatic trip planning');await findStops();if(!valid())return;if(!result)throw Error('Station discovery did not finish.');
       var base=result,lists=choiceLists(),selected=choiceSelections(),it=RouteChoices.combinations(lists,selected,routeFlow()?choiceAnswers():{}),best=null,checked=0,missing=0,review=compareReviewContext(),speeds=JSON.stringify([S.speed,S.trip.propulsionOffset,S.trip.propulsionRoads]);
       await prepareRecommendationSpeeds(valid,function(i,n){progress('Checking approved routes’ speed limits '+i+' / '+n);});if(!valid())return;
       var pool=choicePool,rows=pool?(pool.official||[]).concat.apply(pool.official||[],pool.google||[]):[],snapshot={localOnly:true,skipNetworkPrices:true,google:[{list:mergeRouteStations(rows)}]};
+      var optPer=AutoTrip.budget({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS});
       for(var next=it.next();!next.done&&valid();next=it.next()){
         var sel=next.value,raw=recommendationRaw(sel),m=T.buildRoute(raw,carModel()),g=cachedChoiceCandidates(raw,m);
         if(!g||g.guessed||sel.some(function(k,i){return !recommendationSpeeds.has(RouteChoices.key(i,lists[i][k]));})){missing++;continue;}
         if(KIND()!=='gas'){var exact=await gatherAlt([m],function(){},{},snapshot,[raw]);g=exact.per[0];if(!valid())return;}
         var toll=tripTolls(raw);if(priority==='cost'&&toll.cost==null){missing++;continue;}
+        if(!optEta){var sample=recommendationOpts(m,g,sel,raw),ms=eta.rate('kernel|'+KIND(),KIND()==='gas'?60:120)*TripETA.work(sample)/Math.max(1,Planner.size());optEta=eta.begin('optimize','optimize|'+KIND()+'|'+Math.round(sample.cands.length/250),it.total*optPer,Math.max(100,ms),'Route optimization ('+it.total+' combinations)');}
         var routeBest=await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,
           evaluate:async function(x){var o=recommendationOpts(m,g,sel,raw);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=true;var p=await planAsync(o,valid,10);if(!p.ok||p.firstDip)return null;var saved=KIND()==='gas'?sel.reduce(function(n,k,i){return n+(recommendationTimeSaved.get(RouteChoices.key(i,lists[i][k]))||0);},0):0;return {cost:choiceCost({plan:p,startGal:base.startGal})+(toll.cost||0),minutes:routeMin({model:m,res:{plan:p,opts:o}})-saved,opts:o,plan:p};},
-          progress:function(n){progress('Optimizing approved trip '+(checked+1)+' / '+it.total+' · '+n+' settings checked');}});
-        if(!valid())return;checked++;if(routeBest&&AutoTrip.better(routeBest,best,priority))best=Object.assign(routeBest,{sel:sel.slice(),candidates:g});await breathe();
+          progress:function(n){if(optEta)optEta.progress(optDone+n);progress('Optimizing approved trip '+(checked+1)+' / '+it.total+' · '+n+' settings checked');}});
+        if(!valid())return;checked++;optDone+=optPer;if(optEta)optEta.progress(optDone);if(routeBest&&AutoTrip.better(routeBest,best,priority))best=Object.assign(routeBest,{sel:sel.slice(),candidates:g});await breathe();
       }
       if(!valid())return;
       if(!best){var noPlan=Error('No approved route works within your reserve floor.');noPlan.noPlan=true;throw noPlan;}
@@ -161,8 +166,8 @@
       result.notes.push('Automatically prioritized '+(priority==='time'?'shortest estimated total time':'lowest estimated cost')+'. Speed unchanged; buffer '+best.buffer+' mi, detour '+best.detour+' min.');
       LG.info('routes','Automatic trip selected',{priority:priority,checked:checked,missing:missing,bufferMi:best.buffer,maxDetourMin:best.detour,cost:best.cost,minutes:best.minutes});
       choiceComplete=true;step=ST_STOPS;
-    }catch(e){if(valid()){if(e.noPlan)await A.confirmDel({always:true,singleAction:true,title:'No automatic trip works',body:'No approved route can meet your current vehicle, charging and minimum-reserve settings.',action:'Return to Parameters',goClass:'primary'});else A.toast(e.message);if(valid())step=ST_PARAMS;}}
-    finally{if(autoPlanning===state){autoPlanning=null;if(window.Tasks)Tasks.remove('auto-trip');if(state.cancelled&&step===ST_STOPS)step=ST_ADJ;choiceComplete=true;if(route===owner&&S.carId===car&&document.body.classList.contains('trip-on'))renderStep();}}
+    }catch(e){if(queueWorking)throw e;if(valid()){if(e.noPlan)await A.confirmDel({always:true,singleAction:true,title:'No automatic trip works',body:'No approved route can meet your current vehicle, charging and minimum-reserve settings.',action:'Return to Parameters',goClass:'primary'});else A.toast(e.message);if(valid())step=ST_PARAMS;}}
+    finally{if(optEta)optEta.finish(false);if(autoPlanning===state){autoPlanning=null;if(window.Tasks)Tasks.remove('auto-trip');if(state.cancelled&&step===ST_STOPS)step=ST_ADJ;choiceComplete=true;if(route===owner&&S.carId===car&&document.body.classList.contains('trip-on'))renderStep();}}
   }
   var SPEED_TRIES=3;   // automatic tries per route before the comparison says it couldn't read them (and offers Try again)
   // The other routes' speed limits, one route at a time (all at once they took 30-40 s each with errors, past the old
@@ -403,6 +408,7 @@
     return {id:id,t:v.savedT||o.t,stations:v.stations,alts:v.alts,partial:true};
   }
   document.addEventListener('click',function(e){
+    var retryXom=e.target.closest('[data-retry-xom]');if(retryXom){if(busy||queueWorking)return;retryXom.disabled=true;retryXom.textContent='Retrying…';xomFailed.clear();var stations=[];[result].concat(result&&result.routes?result.routes.map(function(r){return r.res;}):[]).forEach(function(r){if(r)(r.cands||[]).forEach(function(c){if(c.station)stations.push(c.station);});});xomCheck(stations).then(function(){if(xomFailed.size)A.toast('The discount website is still unavailable. Your station results are kept.');repriceRewards();renderResults();}).finally(function(){retryXom.disabled=false;});return;}
     var cancel=e.target.closest('[data-cancel-prices]');
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
     var cx=e.target.closest('[data-cancel-search]');
@@ -411,7 +417,8 @@
     if(dd){var menu=dd.closest('.price-refresh-card').querySelector('.split-menu'),open=menu.classList.toggle('hidden')===false;dd.setAttribute('aria-expanded',String(open));return;}
     if(!e.target.closest('.split-menu'))document.querySelectorAll('.split-menu:not(.hidden)').forEach(function(m){m.classList.add('hidden');});
     var button=e.target.closest('[data-trip-refresh]');if(!button||busy)return;
-    if(button.dataset.tripRefresh==='web')findStops('web');
+    if(button.dataset.tripRefresh==='retry')findStops('retry');
+    else if(button.dataset.tripRefresh==='web')findStops('web');
     else if(button.dataset.tripRefresh==='discover')findStops('discover');
     else findStops(true);
   });
@@ -486,6 +493,11 @@
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
   var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Compare', 'Departure'], step = 1;
   var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_COMPARE = 8, ST_DEPART = 9;
+  var STEP_ORDER=[1,2,3,4,5,8,6,7,9];
+  function rank(k){return STEP_ORDER.indexOf(k);}
+  function nextStep(k){return STEP_ORDER[Math.min(STEP_ORDER.length-1,rank(k)+1)];}
+  function prevStep(k){return STEP_ORDER[Math.max(0,rank(k)-1)];}
+  var queueEngine=null,queueWorking=false,queueSwitching=false,queueViewCar=null,queueOpenCar=null;
   var compareEntries=new Map(),compareOwner=null,compareReviewed=0,compareReviewKey=null,compareEditing=false,compareSwitching=false,compareCalculating=null;
   var compareView={sort:'cost',scope:'trip',leg:0,open:{}},compareJourney=null;
   var compareReviewProof=null;
@@ -510,7 +522,7 @@
       var b = e.target.closest('[data-step]'); if (!b) return;
       var k = +b.dataset.step; if (k === step || jobLocked(k)) return;
       if(k===ST_COMPARE){collectSafe();compareCapture();step=k;renderStep();return;}
-      if (k < step) { collectSafe(); step = k; renderStep(); } else advance(k);
+      if (rank(k) < rank(step)) { collectSafe(); step = k; renderStep(); } else advance(k);
     };
     panelDrag(pg);
   }
@@ -524,12 +536,14 @@
   }
   /** Forget the built steps (a new or reopened trip). */
   function resetSteps() {
+    if(queueWorking)return;
     STEPS.forEach(function (n, i) { var e = $('tpS' + (i + 1)); if (e) e.remove(); });
     built = {}; scrolls = {}; shown = 0;
   }
   /** Something on Advice still to tick (the spare's air, recirculate): no step past it shows until it is, however you got there. */
   function adviceDue() { return !!((window.Tires && Tires.airDue && Tires.airDue(Garage.car())) || (window.Climate && Climate.ackDue())); }
   function renderStep() {
+    if(queueWorking){compareRender();return;}
     if(step>=ST_ROUTE&&KIND()==='ev'&&window.ChargerData)ChargerData.firstTrip().catch(function(e){LG.warn('chargers','First-trip inventory check failed',e.name||'Error');});
     if(step===ST_GARAGE&&shown>ST_GARAGE)compareCapture();
     if(step===ST_COMPARE)compareCapture();else if(window.VehicleCompareUI)VehicleCompareUI.dispose();
@@ -563,10 +577,10 @@
     pg.classList.toggle('full', full); document.body.classList.toggle('trip-full', full);
     if (!full && step !== ST_HAZ && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
     if (full) mapLoaded();
-    $('tpSteps').innerHTML = STEPS.map(function (n, i) {
-      var k = i + 1, sh = { Advisory: 'Advice', Hazards: 'Hazards', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
+    $('tpSteps').innerHTML = STEP_ORDER.map(function (k, i) {
+      var n=STEPS[k-1],sh = { Advisory: 'Advice', Hazards: 'Hazards', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
       var attn = k === ST_ADVISORY && window.Advisory && Advisory.attention() > 0;   // something worth a look
-      return '<button data-step="' + k + '" aria-label="Step '+k+': '+n+'" title="'+n+'" class="' + (k === step ? 'on' : k < step ? 'done' : '') + (k > reach() ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + k + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
+      return '<button data-step="' + k + '" aria-label="Step '+(i+1)+': '+n+'" title="'+n+'" class="' + (k === step ? 'on' : rank(k) < rank(step) ? 'done' : '') + (rank(k) > rank(reach()) ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + (i+1) + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
     requestAnimationFrame(function(){var rail=$('tpSteps'),active=rail&&rail.querySelector('.on');if(active)rail.scrollLeft+=active.getBoundingClientRect().left-rail.getBoundingClientRect().left-(rail.clientWidth-active.offsetWidth)/2;});
     navRender();
@@ -613,6 +627,7 @@
   }
   function navRender() {
     var nav = $('tpNav');nav.classList.toggle('route-review',step===ST_HAZ&&!!routeReview);
+    if(queueWorking){nav.innerHTML='<button class="btn tonal" id="tBack">Pause after this vehicle</button><button class="btn primary" disabled>Next</button>';$('tBack').onclick=function(){queueEngine.pause();};return;}
     if(autoPlanning){nav.innerHTML='<button class="btn tonal" id="tBack">Cancel</button><button class="btn primary" id="tNext" disabled>Next</button>';$('tBack').onclick=function(){autoPlanning.cancelled=true;};return;}
     if (loadingTrip) {   // a saved trip opening: say so where Next will be, and nothing else can be pressed yet
       nav.innerHTML = '<span></span><button class="btn primary" disabled>Next</button>';if(window.Tasks)Tasks.upsert('trip-draw',{text:'Opening your trip',frac:null});
@@ -621,8 +636,8 @@
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
     if(step===ST_HAZ&&routeReview){nav.insertAdjacentHTML('afterbegin','<button type="button" class="btn tonal route-review-back" id="tReviewBack" aria-label="Back to previous route"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>');$('tReviewBack').onclick=reviewBack;$('tBack').textContent='No';$('tNext').textContent='Yes';$('tBack').onclick=function(){reviewAnswer(false);};$('tNext').onclick=function(){reviewAnswer(true);};routeGate();return;}
-    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } var previous=step-1;while(previous>ST_ADVISORY&&jobLocked(previous))previous--;if (jobLocked(previous)) return; leaveAsk(function () { closeLegs(); collectSafe(); step=previous; renderStep(); }); };
-    if ($('tNext')) $('tNext').onclick = async function () {if(onPlan(step)&&failedPlan()){if(step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.options.length)step=ST_STOPS;else step=ST_PARAMS;renderStep();return;} if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { var i=hzLeg,a=hzAlts(i)[hzSel(i)];if(await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i&&hzAlts(i)[hzSel(i)]===a;}))hzGoLeg(i + 1); return; } advance(step + 1); };   // Save and continue: keep the speeds, back to the stops
+    if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } var previous=prevStep(step);while(rank(previous)>rank(ST_ADVISORY)&&jobLocked(previous))previous=prevStep(previous);if (jobLocked(previous)) return; leaveAsk(function () { closeLegs(); collectSafe(); step=previous; renderStep(); }); };
+    if ($('tNext')) $('tNext').onclick = async function () {if(onPlan(step)&&failedPlan()){if(step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.options.length)step=ST_STOPS;else step=ST_PARAMS;renderStep();return;} if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { var i=hzLeg,a=hzAlts(i)[hzSel(i)];if(await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i&&hzAlts(i)[hzSel(i)]===a;}))hzGoLeg(i + 1); return; } advance(nextStep(step)); };
     if ($('tOpen')) $('tOpen').onclick = openMaps;
     backMode(); routeGate();
   }
@@ -633,9 +648,9 @@
     if (busy && loadingTrip) { jumpTo = to; return; }
     if (busy) {
       // a search runs: Advisory → Parameters (or Adjustments) still go, checking the steps between without opening them
-      if (jobLocked(to) || to > ST_ADJ) return;
+      if (jobLocked(to) || rank(to) > rank(ST_ADJ)) return;
       collectSafe();
-      for (var s0 = step; s0 < to; s0++) {
+      for (var s0 = step; rank(s0) < rank(to); s0=nextStep(s0)) {
         if (s0 === ST_ADVISORY || s0 === ST_PARAMS) { if (!(await ready(s0))) return; }
         else if(s0===ST_HAZ){if(!(await ready(s0)))return;} // A background scan must not skip route-consideration questions.
         else if (s0 === ST_ROUTE && (!model || timesNeed())) return;
@@ -643,10 +658,10 @@
       step = to; renderStep(); return;
     }
     collectSafe(); freshModel();
-    while (step < to) {
+    while (rank(step) < rank(to)) {
       var ok = await ready(step);
       if (!ok) { LG.info('trip', 'Stopped at ' + STEPS[step - 1] + ' on the way to ' + STEPS[to - 1]); return; }
-      step++;
+      step=nextStep(step);
       renderStep();
     }
   }
@@ -691,9 +706,10 @@
       compareReviewed=Date.now();
       compareReviewKey=compareSafetyKey();
       compareReviewProof={context:compareReviewContext(),routes:choiceLists().map(function(list,i){return list.filter(function(a,k){return k===hzSel(i)||(choiceAnswers()[RouteChoices.key(i,a)]||{}).consider===true;}).map(function(a){return RouteChoices.key(i,a);});})};
-      if(autoPriority()){await autoChoose();return false;}
+      compareCapture();
     }
-    if(k===ST_COMPARE){compareCapture();var selected=compareEntries.get(S.carId);if(!compareUsable(selected)){A.toast('Review this vehicle’s setup and hazards before departure.');return false;}return true;}
+    if(k===ST_COMPARE){compareCapture();var selected=compareEntries.get(S.carId);if(!comparePrepared(selected)){A.toast('Review this vehicle’s setup and hazards first.');return false;}if(autoPriority()){await autoChoose();return false;}return true;}
+    if(k===ST_STOPS){compareCapture();if(!comparePrepared(compareEntries.get(S.carId))){A.toast('Your setup or hazard approval changed or is over an hour old. Please review it again.');step=ST_HAZ;renderStep();return false;}}
     if (onPlan(k)) {
       if (!result) { await findStops(); if (!result) return false; }
       if (!result.plan.ok) { flag($('tsBufBox') || $('tsResults'), 'pick', 'No plan works with this buffer — try a smaller one.'); return false; }
@@ -737,8 +753,8 @@
   /** Step tabs past what you can reach are grayed out (pressing one still goes as far as it can and points at what's missing). */
   function gateTabs() {
     var r = reach();
-    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', +b.dataset.step > r); b.classList.toggle('job-lock', jobLocked(+b.dataset.step)); b.disabled = jobLocked(+b.dataset.step); });
-    var bk = $('tBack'); if (bk) { var previous=step-1;while(previous>ST_ADVISORY&&jobLocked(previous))previous--;var lockBack = jobLocked(previous) && !speedMode() && !(step === ST_HAZ && hzLeg > 0); bk.disabled = lockBack; bk.classList.toggle('job-lock', lockBack); }
+    document.querySelectorAll('#tpSteps [data-step]').forEach(function (b) { b.classList.toggle('dim', rank(+b.dataset.step) > rank(r)); b.classList.toggle('job-lock', jobLocked(+b.dataset.step)); b.disabled = jobLocked(+b.dataset.step); });
+    var bk = $('tBack'); if (bk) { var previous=prevStep(step);while(rank(previous)>rank(ST_ADVISORY)&&jobLocked(previous))previous=prevStep(previous);var lockBack = jobLocked(previous) && !speedMode() && !(step === ST_HAZ && hzLeg > 0); bk.disabled = lockBack; bk.classList.toggle('job-lock', lockBack); }
   }
   /**
    * Routes are fetched by themselves whenever the Route step has a link or both addresses and every stop is settled.
@@ -857,6 +873,7 @@
     if (k === ST_GARAGE) {
       Garage.render($('tGarage'), null, function () {
         if(compareGarageChanged())return;
+        if(compareReviewProof&&compareReviewProof.context===compareReviewContext()){gateTabs();return;}
         compareReviewed=0;
         if (model) { modelStale = true; clearTimeout(staleT); staleT = setTimeout(freshModel, 400); }   // after the Garage has redrawn
         result = null; gateTabs();
@@ -2225,14 +2242,15 @@
     }
     return list;
   }
-  var xomPending = {};
+  var xomPending = {},xomFailed=new Set();
   function xomCell(k) {
     var o = A.KV.get('xom', k, XOM_DAYS * 24 * 3600e3); if (o) return Promise.resolve(o.v);
+    if(xomFailed.has(k))return Promise.resolve(null);
     if (xomPending[k]) return xomPending[k];
     var ij = k.split(':').map(Number), m = 0.01;
     var b = [ij[0] * XOM_CELL - m, (ij[0] + 1) * XOM_CELL + m, ij[1] * XOM_CELL - m, (ij[1] + 1) * XOM_CELL + m];
     return (xomPending[k] = xomBox(b, 0).then(function (list) { A.KV.put('xom', k, list); delete xomPending[k]; return list; },
-      function (e) { delete xomPending[k]; xomWarn(String(e)); return null; }));
+      function (e) { delete xomPending[k]; xomFailed.add(k);xomWarn(String(e)); return null; }));
   }
   // one line per failure kind a minute (a 403 on every square was 242 identical lines in a phone log)
   var xomLast = { e: '', t: 0, n: 0 };
@@ -2451,7 +2469,7 @@
         tasks.push(KeylessGas.discover(areaPlan||KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover').then(function(r){
           dbgS.keyless={areas:r.areas,completed:r.completedAreas,stations:r.stations.length,websiteLoads:r.websiteLoads,cancelled:r.cancelled,blocked:r.blocked,apiCalls:0};
           r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=3)perModel[i].push(s);});});
-          notes=notes.concat(r.errors||[]);if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
+          notes=notes.concat(r.errors||[]);if(r.errors&&r.errors.length&&!r.cancelled&&!r.blocked)notes.push('Some website discovery work failed; completed station results are kept.');if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
           var incomplete=r.details.filter(function(d){return !d.exhausted;}).length;
           if(incomplete)notes.push('Website discovery stopped before the list ended in '+incomplete+' areas; coverage is partial.');
           if(r.blocked)A.showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
@@ -2919,7 +2937,8 @@
       function (e) { end(); if (my !== planSeq) return; LG.warn('plan', 'Background plan failed', { error: e.message }); toastMsg(e.message); });
   }
   /** Plans for several option sets side by side across the planner pool; resolves in the same order. */
-  function planAll(list,valid) { return Promise.all(list.map(function (o) { return planAsync(o,valid,1); })); }
+  var etaBatch=0;
+  function planAll(list,valid) {var work=list.reduce(function(n,o){return n+TripETA.work(o);},0),width=Math.max(1,Math.min(Planner.size(),list.length)),done=0,et=eta.begin('plans-'+(++etaBatch),'batch|'+KIND()+'|'+width,work,eta.rate('kernel|'+KIND(),KIND()==='gas'?60:120)/width,'Choosing stops from cached/discovered prices');return Promise.all(list.map(function (o) { return planAsync(o,valid,1).then(function(p){done+=TripETA.work(o);et.progress(done);return p;}); })).then(function(p){et.finish(true);return p;},function(e){et.finish(false);throw e;}); }
   /** The buffer the speeds allow, as warnings: "keeps this at N mi or less". */
   function bufLimits() {
     var r = result, cx = speedCx(), sw = r && r.sweep;
@@ -2950,7 +2969,7 @@
 
   // ---------- buffer slider ----------
   function startSweep() {
-    if(autoPlanning)return;
+    if(autoPlanning||queueWorking)return;
     var r = result;
     if(!r||!r.plan.ok)return;
     if (r.sweep || r.sweeping) return;
@@ -3185,7 +3204,7 @@
   var DET_STEPS = [1, 2, 3, 4, 5, 6, 7.5, 10, 12.5, 15, 20, 25, 30];
   function detMinOf(r) { return r.opts && r.opts.maxDetourMin != null ? +r.opts.maxDetourMin : +S.trip.maxDetourMin; }
   function startDetSweep() {
-    if(autoPlanning)return;
+    if(autoPlanning||queueWorking)return;
     var r = result; if (!r || !r.opts || !r.plan || !r.plan.ok || r.dsweep || r.dsweeping) return;
     r.dsweeping = true;
     var list = DET_STEPS.slice();
@@ -3321,7 +3340,7 @@
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
   function planAsync(opts,valid,priority){
     var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
-    return Planner.run(opts,{departAt:opts.rewardDepartAt,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority}).then(function(p){var tm=opts._plannerTiming;if(tm&&(tm.waitMs>1000||tm.runMs>3000))LG.debug('plan','Planner timing',{candidates:opts.cands.length,lite:!!opts.lite,waitMs:tm.waitMs,runMs:tm.runMs,pool:Planner.stats?Planner.stats():null});return p;});
+    return Planner.run(opts,{departAt:opts.rewardDepartAt,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority}).then(function(p){var tm=opts._plannerTiming;if(tm)eta.observe('kernel|'+(opts.propulsion&&opts.propulsion.kind||'gas'),TripETA.work(opts),tm.runMs);if(tm&&(tm.waitMs>1000||tm.runMs>3000))LG.debug('plan','Planner timing',{candidates:opts.cands.length,lite:!!opts.lite,waitMs:tm.waitMs,runMs:tm.runMs,pool:Planner.stats?Planner.stats():null});return p;});
   }
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
   function findStops(force) {
@@ -3359,7 +3378,7 @@
   }
   /** Steps closed while a search runs: the ones that would change what it uses (the car, the route), and Stops and
    *  Departure, whose answers it's about to change (Adjustments shows its progress). */
-  function jobLocked(k) { return !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
+  function jobLocked(k) { return queueWorking || !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
   async function findStops1(force) {
     busy = true;adjustError=''; jobCancel = false; searchCancelled = false; bgJob = false;
     choiceCandidates.clear();      // a new search: per-leg candidates from an earlier one (and their prices) are out of date
@@ -3388,6 +3407,7 @@
     if(step===ST_COMPARE){compareCapture();compareRender();}
   }
   async function findStops0(force, noReplay) {
+    noReplay=noReplay||force==='retry';
     scanPending('plan','Choosing stops',100);scanPending('draw','Preparing the map and trip costs',110);
     var cap=Number(S.monthlyCap)||0,exhausted=cap>0&&N.callsThisMonth()>=cap;
     var webRefresh=force==='web';
@@ -3595,6 +3615,7 @@
   // ---------- step 3 (Stops): the plan ----------
   /** Redraw whatever step is showing with the current plan. */
   function showResult() {
+    if(queueWorking){compareRender();return;}
     if ($('trip') && $('trip').classList.contains('hidden')) return;    // finished in the background: shown when the trip opens again
     document.body.classList.add('trip-on');
     if (onPlan(step) && ($('tsResults') || $('taResults'))) { renderResults(); drawSoon(); }
@@ -3614,6 +3635,7 @@
       'A <b>longer max detour</b> lets cheaper stations farther off the route count, but only if they save more money than the extra miles cost.</div></div>';
   }
   function renderResults() {
+    if(queueWorking){compareRender();return;}
     var el = $('tsResults'), ea = $('taResults'); if (!el && !ea) return;
     if(autoPlanning){if(el)el.innerHTML='<div class="card"><h3>Choosing your trip</h3><p class="lead keep">Comparing approved routes, buffer and detour. Your speed settings stay unchanged.</p></div>';return;}
     clearRecommendationMaps();
@@ -3650,8 +3672,11 @@
     if(p.ok&&p.firstDip&&!p.stops.length&&(p.destinationCharges||[]).length)w.push({t:'The first destination is reached below your chosen buffer. Increase starting charge or adjust the route; destination charging cannot help before arrival.'});
     if(KIND()==='ev'&&p.ok&&p.priceFreshFallback&&p.stops.length)w.push({t:'Recent charger prices could not cover this trip. Some prices may be older than your '+(+S.evPriceAgeHours||24)+'-hour preference or have no price-check date.'});
     if (r.estUsed) w.push({ t: r.estUsed + ' stop' + (r.estUsed === 1 ? ' is at a station' : 's are at stations') + ' with no posted price — nothing priced is in reach there. Its price is an estimate (marked est.).' });
-    if (r.stale) w.push({ t: r.stale + ' price' + (r.stale === 1 ? ' is' : 's are') + ' over ' + S.staleHours + ' hours old (marked).' });
-    (r.notes||[]).concat(evRecovery&&evRecovery.base===r?Array.from(new Set(evRecovery.errors)):[]).forEach(function (n) { w.push({ t: n }); });
+    var freshness=!!r.stale,seenNotes=new Set();
+    (r.notes||[]).concat(evRecovery&&evRecovery.base===r?Array.from(new Set(evRecovery.errors)):[]).forEach(function(n){if(/unknown pump-update times|website prices were last retrieved|website retrieval does not establish/i.test(n)){freshness=true;return;}if(/Website retrieval is not a pump-price update timestamp\./i.test(n)){freshness=true;n=n.replace(/\s*Website retrieval is not a pump-price update timestamp\./i,'');}if(!seenNotes.has(n)){seenNotes.add(n);w.push({t:n});}});
+    if(freshness)w.push({t:'Some prices are older than '+S.staleHours+' hours or have unknown pump-update times. A recent website read does not mean the pump price changed recently. Confirm the price before filling up.'});
+    if(KIND()==='gas'&&xomFailed.size)w.push({t:'Exxon/Mobil discount verification was unavailable. Station discovery and recorded prices are kept; unverified discounts are not assumed.',html:' <button class="btn tonal" data-retry-xom>Retry discount check</button>'});
+    if(KIND()==='gas'&&(r.notes||[]).some(function(n){return /Some website discovery work failed/.test(n);}))w.push({t:'Retry incomplete website work without discarding completed results. Recently cached areas are reused.',html:' <button class="btn tonal" data-trip-refresh="retry">Retry incomplete scan</button>'});
     var wm = $('wmCheck'); if (wm && !wm.classList.contains('hidden')) w.push({ t: $('wmCheckTitle').textContent + ' before its prices can load.', html: ' <a href="#" id="tsSiteCheck">Open</a>' });
     if (r.cachedAgeMs > 0) w.push({ t: r.fromHistory ? 'Saved trip · original discovery from ' + agoText(r.cachedAgeMs) + ' (no lookups used).' : 'Prices from ' + agoText(r.cachedAgeMs) + '.', cls: 'saved' });
     var warnHtml = w.length ? '<div class="warns pre">' + w.map(function (x) { return '<div class="' + (x.err ? 'msg err' : 'note') + (x.cls ? ' ' + x.cls : '') + '">' + esc(x.t) + (x.html || '') + '</div>'; }).join('') + '</div>' : '';
@@ -4682,6 +4707,7 @@
     var pg = $('trip'); if (pg) pg.classList.remove('submode', 'tall');
   }
   function closeTrip() {
+    if(queueWorking){A.toast('Pause the vehicle queue before changing trips. You can leave Gasket or lock your phone while it works.');return;}
     if(autoPlanning)autoPlanning.cancelled=true;
     collectSafe();compareCapture();if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     hzRiskAcks=new WeakMap();
@@ -4696,12 +4722,13 @@
   function endTrip() { closeTrip(); }
   function closeQ() { if (window.__closeQ) window.__closeQ(); }
   window.__tripBack = function () {
+    if(queueWorking){comparisonQueue().pause();A.toast('The queue will pause after this vehicle.');return true;}
     if (closePicker()) return true;
     if (closeLegs()) return true;
     if (!$('trip').classList.contains('hidden')) {
       if(step===ST_HAZ&&routeReview){reviewBack();return true;}
       if (speedMode()) { leaveSpeedMode(); return true; }
-      var previous=step-1;while(previous>ST_ADVISORY&&jobLocked(previous))previous--;
+      var previous=prevStep(step);while(rank(previous)>rank(ST_ADVISORY)&&jobLocked(previous))previous=prevStep(previous);
       if (step > 1 && !jobLocked(previous)) leaveAsk(function () { collectSafe(); step=previous; renderStep(); });
       else leaveAsk(closeTrip);     // the step before is closed while a search runs: Back leaves the trip instead
       return true;
@@ -4719,11 +4746,50 @@
   // the car's recalls and VIN check run in the background soon after the app starts (NHTSA, never Google), so Advisory is ready
   setTimeout(function () { if (window.Advisory) Advisory.init(call); }, 4000);
   // Vehicle plans own all mutable planner state. Only raw provider caches are shared.
-  function compareReset(){compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareReviewProof=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
+  function compareReset(){if(!queueWorking){queueEngine=null;queueViewCar=null;}compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareReviewProof=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
   function compareReviewContext(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip)]);}
   function compareSafetyKey(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip),choiceLists().map(function(l,i){return altSig(l[hzSel(i)]);})]);}
   function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices'].map(function(k){return S[k];}));}
-  function compareLocked(){return !!(busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
+  function compareLocked(){return !!(queueWorking||busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
+  function queueNotify(action,text,car){var payload={title:action==='finish'?'Vehicle comparisons updated':'Gasket trip planning',text:text,car:car||'',trip:route&&route.histId||''};return window.TripNotify?TripNotify.send(action,payload):Promise.resolve({unavailable:true});}
+  function comparisonQueue(){
+    if(queueEngine)return queueEngine;
+    queueEngine=VehicleQueue.create({
+      eligible:function(id){return comparePrepared(compareEntries.get(id));},
+      complete:function(id){return compareUsable(compareEntries.get(id));},
+      changed:function(s){A.KV.put('tripqueue','current',{trip:route&&route.histId,owner:queueViewCar||S.carId,jobs:s.jobs});if($('tCompare'))compareRender();},
+      run:async function(id,valid){var started=Date.now();queueSwitching=true;try{if(!compareSwitch(id,true))throw Error('Vehicle could not be opened');}finally{queueSwitching=false;}
+        LG.info('compare','Queue vehicle started',{id:id,kind:KIND(),automatic:!!autoPriority()});
+        if(!comparePrepared(compareEntries.get(id)))throw Error('Review this vehicle’s setup and hazards.');
+        if(autoPriority())await autoChoose();else {step=ST_COMPARE;await findStops();}
+        if(!valid())throw Error('Queue cancelled');if(!result||!result.plan.ok)throw Error(adjustError||'No workable route found. Review parameters.');
+        compareCapture();LG.info('compare','Queue vehicle completed',{id:id,kind:KIND(),elapsedMs:Date.now()-started,automatic:!!autoPriority(),candidates:result.cands.length,stops:result.plan.stops.length});
+        return autoPriority()?'Ready':'Adjustments ready';
+      },
+      restore:function(){compareCapture();queueSwitching=true;try{if(queueViewCar)compareSwitch(queueViewCar,true);}finally{queueSwitching=false;}step=ST_COMPARE;},
+      cancel:function(){cancelSearch();if(autoPlanning)autoPlanning.cancelled=true;},
+      notify:function(j){queueNotify('ready',Garage.shortName(S.cars.find(function(c){return c.id===j.id;}))+(j.status==='Ready'?' is ready for final stop review.':' has a route ready for slider adjustments.'),j.id);},
+      failed:function(j){LG.warn('compare','Queue vehicle needs input',{id:j.id,error:j.error});queueNotify('ready','A vehicle needs input. Other queued vehicles will continue.',j.id);},
+      finished:function(s){queueWorking=false;clearInterval(queueTick);queueTick=null;resetSteps();step=ST_COMPARE;A.save();queueNotify(s.paused?'stop':'finish',s.paused?'Planning paused.':'Queued vehicles processed. Review results and any vehicles needing input.',queueOpenCar||queueViewCar);if(queueOpenCar){var id=queueOpenCar;queueOpenCar=null;queueOpen(id);}else renderStep();}
+    });
+    var saved=A.KV.get('tripqueue','current');if(saved&&saved.v&&route&&route.histId&&saved.v.trip===route.histId){queueEngine.load((saved.v.jobs||[]).filter(function(j){return S.cars.some(function(c){return c.id===j.id;});}));LG.info('compare','Recovered queue checkpoint; hazard reviews required',{vehicles:queueEngine.state().jobs.length});}
+    return queueEngine;
+  }
+  var queueTick=null,queueStarted=0;
+  async function queueStart(){if(compareLocked())return;compareCapture();var q=comparisonQueue();if(!q.state().jobs.length)q.select([S.carId]);
+    queueWorking=true;queueViewCar=S.carId;queueStarted=Date.now();eta.clear();var r=await queueNotify('start','Preparing queued vehicles',queueViewCar);if(r&&r.error){A.toast('Background planning could not start. Keep Gasket open.');}
+    navRender();queueTick=setInterval(function(){var s=q.state(),done=s.jobs.filter(function(j){return j.status==='Ready'||j.status==='Adjustments ready';}).length,text=eta.text(window.KeylessGas&&KeylessGas.isPaused());queueNotify('progress',done+' / '+s.jobs.length+' ready · '+text,queueViewCar);if(window.Tasks)Tasks.upsert('vehicle-queue',{text:'Planning vehicles · '+done+' / '+s.jobs.length+' ready · '+text,frac:done/Math.max(1,s.jobs.length),cancel:function(){q.cancel();}});var live=$('vcQueueTime');if(live)live.textContent='Elapsed '+Math.floor((Date.now()-queueStarted)/60000)+' min · '+text;},10000);
+    try{await q.start();}finally{if(window.Tasks)Tasks.remove('vehicle-queue');}
+  }
+  function queueOpen(id){if(queueWorking){queueOpenCar=id;comparisonQueue().pause();A.toast('Opening this vehicle after the current job finishes.');return;}if(!compareSwitch(id))return;var s=compareEntries.get(id);step=compareUsable(s)?autoPriority()?ST_STOPS:ST_ADJ:ST_ADVISORY;renderStep();}
+  function queueSelect(id,on){if(compareLocked())return;compareCapture();if(!compareEntries.has(id)){var seed=compareEntries.get(S.carId),s=VehicleCompare.portable(seed);s.id=id;s.profile=VehicleCompare.profile(S.cars.find(function(c){return c.id===id;}));s.kind=null;s.trip.fuel=null;s.trip.milesLeft='';s.trip.evDestinations=null;s.replay=null;s.reviewedAt=0;s.needsReview=true;['tankPrice','evTankPrice','h2TankPrice'].forEach(function(k){s.trip[k]='';});compareEntries.set(id,s);comparePersist();}
+    var ids=comparisonQueue().state().jobs.map(function(j){return j.id;}).filter(function(x){return x!==id;});if(on)ids.push(id);comparisonQueue().select(ids);
+  }
+  window.onTripQueueTimeout=function(){if(queueEngine)queueEngine.cancel();LG.warn('compare','Android ended background planning; checkpoints retained');};
+  window.onTripQueueOpen=async function(d){if(d.site){var button=$('wmCheckGo');if(button&&window.TripNotify&&TripNotify.pendingSite()===d.site&&!$('wmCheck').classList.contains('hidden'))button.click();else A.toast('This website check is no longer pending.');return;}
+    if(queueWorking){queueOpen(d.car||queueViewCar);return;}if((!route||d.trip&&route.histId!==d.trip)&&d.trip)await openSaved(d.trip);if(d.car&&compareEntries.has(d.car))queueOpen(d.car);else openTrip(ST_COMPARE);
+  };
+  if(window.__pendingQueueOpen){var queueIntent=window.__pendingQueueOpen;delete window.__pendingQueueOpen;setTimeout(function(){window.onTripQueueOpen(queueIntent);},0);}
   function comparePersist(){
     if(!route||!route.histId)return;var o=A.KV.get('trips','trip|'+route.histId);if(!o||!o.v)return;
     o.v.comparison=Array.from(compareEntries.values()).map(function(s){return VehicleCompare.portable(s);});A.KV.put('trips','trip|'+route.histId,o.v);
@@ -4748,8 +4814,9 @@
     s.reviewKey=compareReviewKey;s.reviewProof=compareReviewProof;s.settingsKey=settingsKey;compareEntries.set(car.id,s);comparePersist();
   }
   function compareUsable(s){return !!(s&&s.result&&s.result.plan.ok&&s.reviewedAt&&Date.now()-s.reviewedAt<3600000&&s.settingsKey===compareSettingsKey()&&s.profile===VehicleCompare.profile(S.cars.find(function(c){return c.id===s.id;}))&&!s.needsReview);}
+  function comparePrepared(s){return !!(s&&s.reviewedAt&&Date.now()-s.reviewedAt<3600000&&!s.needsReview&&s.profile===VehicleCompare.profile(S.cars.find(function(c){return c.id===s.id;}))&&s.settingsKey===compareSettingsKey());}
   function compareSwitch(id,restoreOnly){
-    if(compareLocked())return false;if(!restoreOnly){collectSafe();compareCapture();}var s=compareEntries.get(id),car=S.cars.find(function(c){return c.id===id;});if(!car)return false;
+    if(compareLocked()&&!queueSwitching)return false;if(!restoreOnly){collectSafe();compareCapture();}var s=compareEntries.get(id),car=S.cars.find(function(c){return c.id===id;});if(!car)return false;
     var seed=compareEntries.get(compareOwner);
     if(!s){if(!seed){A.toast('Plan a route first.');return false;}s=VehicleCompare.portable(seed);s.id=id;s.profile=VehicleCompare.profile(car);s.kind=null;s.trip.fuel=null;s.trip.milesLeft='';s.trip.evDestinations=null;['tankPrice','evTankPrice','h2TankPrice'].forEach(function(k){s.trip[k]='';});s.replay=null;s.reviewedAt=0;s.resumeStep=ST_ADVISORY;compareEntries.set(id,s);}
     if(seed&&seed.id!==id)['depart','departNow','returnTrip','backAuto','backAt'].forEach(function(k){s.trip[k]=seed.trip[k];});
@@ -4763,7 +4830,7 @@
     hzCache=!changed&&s.hzCache||new WeakMap();hzModels=!changed&&s.hzModels||new WeakMap();hzRiskAcks=!changed&&s.hzRiskAcks||new WeakMap();hzLeg=s.hzLeg||0;hzFitKey=null;
     choiceOwner=id;choiceSavedId=s.choiceSavedId||route.histId||null;choiceChecked=!!s.choiceChecked;choiceReviewedAt=s.choiceReviewedAt||0;choiceComplete=!!s.choiceComplete;choicePool=s.choicePool||null;choiceCandidates=s.choiceCandidates||new Map();routeReview=s.routeReview||null;
     compareOwner=id;compareReviewed=changed?0:s.reviewedAt||0;compareReviewKey=s.reviewKey||null;compareReviewProof=changed?null:s.reviewProof||null;if(compareReviewed&&Date.now()-compareReviewed>=3600000){compareReviewed=0;compareReviewProof=null;hzCache=new WeakMap();hzRiskAcks=new WeakMap();}
-    evRecovery=null;adjustError='';opened={};routeBounds=null;userMoved=false;layer.clearLayers();drawn={};compareSwitching=false;A.save();window.dispatchEvent(new Event('garagechange'));return true;
+    evRecovery=null;adjustError='';opened={};routeBounds=null;userMoved=false;layer.clearLayers();drawn={};try{if(!queueWorking){A.save();window.dispatchEvent(new Event('garagechange'));}}finally{compareSwitching=false;}return true;
   }
   function compareGarageChanged(){
     if(compareEditing||compareSwitching)return true;
@@ -4771,11 +4838,11 @@
     var next=S.carId;S.carId=compareOwner;compareCapture();S.carId=compareOwner;
     if(compareSwitch(next)){step=ST_GARAGE;setTimeout(renderStep,0);}return true;
   }
-  function compareRows(){return Array.from(compareEntries.values()).filter(function(s){return S.cars.some(function(c){return c.id===s.id;});}).map(function(s,i){var usable=compareUsable(s),metrics=VehicleCompare.metrics(s,compareView.scope==='leg'?compareView.leg:null);metrics.ready=usable;return {id:s.id,car:S.cars.find(function(c){return c.id===s.id;}),kind:s.kind,session:s,order:i,metrics:metrics,reviewed:usable,canUse:usable,status:usable?'Ready':s.result&&s.result.plan.ok?'Review needed':'Setup needed',message:usable?(metrics.cost==null?'Some prices or tolls are unknown.':metrics.estimated?'Includes estimated energy prices.':''):'Review this vehicle’s setup and hazards before departure.',hazardsText:s.hazards&&s.hazards.length?s.hazards.length+' hazard areas. Review the Hazards step for details.':'Open Hazards for current conditions; no safety guarantee.'};});}
+  function compareRows(){return Array.from(compareEntries.values()).filter(function(s){return S.cars.some(function(c){return c.id===s.id;});}).map(function(s,i){var usable=compareUsable(s),prepared=comparePrepared(s),metrics=VehicleCompare.metrics(s,compareView.scope==='leg'?compareView.leg:null);metrics.ready=usable;return {id:s.id,car:S.cars.find(function(c){return c.id===s.id;}),kind:s.kind,session:s,order:i,metrics:metrics,reviewed:prepared,canUse:usable,status:usable?'Ready':prepared?'Ready to plan':s.result&&s.result.plan.ok?'Review needed':'Setup needed',message:usable?(metrics.cost==null?'Some prices or tolls are unknown.':metrics.estimated?'Includes estimated energy prices.':''):prepared?'Setup and hazards reviewed. Select this vehicle for queued planning.':'Review this vehicle’s setup and hazards before departure.',hazardsText:s.hazards&&s.hazards.length?s.hazards.length+' hazard areas. Review the Hazards step for details.':'Open Hazards for current conditions; no safety guarantee.'};});}
   function compareRender(){
     var e=$('tCompare');if(!e)return;
-    VehicleCompareUI.render(e,{view:compareView,rows:compareRows,selected:function(){return S.carId;},legs:function(){return route?route.stops.slice(1).map(function(s,i){return (i+1)+': '+stopName(route.stops[i])+' → '+stopName(s);}):[];},locked:compareLocked,redraw:compareRender,edit:compareEdit,plan:function(id){if(compareSwitch(id)){step=compareUsable(compareEntries.get(id))?ST_PARAMS:ST_ADVISORY;renderStep();}},use:function(id){if(!compareUsable(compareEntries.get(id)))return;if(compareSwitch(id)){step=ST_DEPART;renderStep();}},pick:comparePick,add:compareAdd,start:function(){step=model?ST_ADVISORY:ST_GARAGE;renderStep();}});A.qify(e);
-    if($('tNext'))$('tNext').disabled=compareLocked()||!compareUsable(compareEntries.get(S.carId));
+    VehicleCompareUI.render(e,{view:compareView,rows:compareRows,selected:function(){return queueWorking?queueViewCar:S.carId;},queue:function(){var q=comparisonQueue().state();return {state:q,cars:S.cars,elapsed:queueWorking?Math.floor((Date.now()-queueStarted)/1000):0,select:queueSelect,start:queueStart,pause:function(){comparisonQueue().pause();},cancel:function(){comparisonQueue().cancel();}};},legs:function(){return route?route.stops.slice(1).map(function(s,i){return (i+1)+': '+stopName(route.stops[i])+' → '+stopName(s);}):[];},locked:compareLocked,redraw:compareRender,edit:compareEdit,plan:function(id){if(compareSwitch(id)){step=compareUsable(compareEntries.get(id))?ST_ADJ:ST_ADVISORY;renderStep();}},use:function(id){if(compareUsable(compareEntries.get(id)))queueOpen(id);},pick:comparePick,add:compareAdd,start:function(){step=model?ST_ADVISORY:ST_GARAGE;renderStep();}});A.qify(e);
+    if($('tNext'))$('tNext').disabled=compareLocked()||!comparePrepared(compareEntries.get(S.carId));
   }
   function comparePick(){
     if(compareLocked())return;if(!model){step=ST_GARAGE;renderStep();return;}var cars=S.cars.filter(function(c){return !compareEntries.has(c.id);});

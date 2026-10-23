@@ -34,11 +34,11 @@ assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measure
  await p.click('[data-hzk="1"]');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmYes');await p.waitForFunction(()=>document.querySelector('.hz-opt.on').dataset.hzk==='1',null,{timeout:5000}).catch(async e=>{console.error(await p.evaluate(()=>({toasts:__wetToasts,tires:Garage.car().tires,step:__trip.state().step})));throw e;});await p.waitForSelector('#cfm',{state:'detached'});
  // Explicit Now retains its checked forecast across minute boundaries, not an unset departure.
  await p.clock.setFixedTime(new Date(await p.evaluate(()=>Date.now()+61000)));
- await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===6);assert.equal(await p.locator('#cfm').count(),0,'same route/risk does not prompt twice across a minute boundary');
+ await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);assert.equal(await p.locator('#cfm').count(),0,'same route/risk does not prompt twice across a minute boundary');
  await p.waitForFunction(()=>!__trip.state().busy);
  // Tire edits invalidate acknowledgment, and genuinely worn-out tires get stronger wording.
  await p.evaluate(()=>{Garage.car().tires.tread.depth=2;__trip.step(5);});await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');assert.match(await p.innerText('#cfm'),/replace before driving/i);
- await p.click('#cfmYes');await p.waitForFunction(()=>__trip.state().step===6);await p.waitForSelector('#cfm',{state:'detached'});await p.waitForFunction(()=>!__trip.state().busy);
+ await p.click('#cfmYes');await p.waitForFunction(()=>__trip.state().step===8);await p.waitForSelector('#cfm',{state:'detached'});await p.waitForFunction(()=>!__trip.state().busy);
  // A new explicit departure invalidates both forecast and acknowledgment.
  await p.evaluate(()=>{__app.S.trip.departNow=false;__app.S.trip.depart=new Date(Date.now()+86400000).toISOString().slice(0,16);__trip.step(5);});
  await p.waitForFunction(()=>__weatherGates.length>0);await p.click('#tNext');await p.evaluate(()=>__weatherGates.splice(0).forEach(r=>r()));await p.waitForSelector('.wet-tire-warning');
@@ -47,11 +47,11 @@ assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measure
  // A healthy car with low estimated trailer tread still needs confirmation. Unhooked tires do not count.
  await p.evaluate(()=>{const t=Garage.car().tires;t.towMode=true;t.trailers=[{id:'wet-trailer',name:'Cargo',hooked:true,axles:1,per:2,split:true,type:'Trailer',size:'205/75R15',warrantyMi:60000}];t.corners['wet-trailer:a1l']={miles:59000,rotated:'no'};t.corners['wet-trailer:a1r']={miles:59000,rotated:'no'};});
  await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');assert.match(await p.innerText('#cfm'),/Cargo: all 2 tires — estimated/);assert.doesNotMatch(await p.innerText('#cfm'),/All 4 car tires/);
- await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});await p.evaluate(()=>Garage.car().tires.towMode=false);await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===6);assert.equal(await p.locator('#cfm').count(),0);await p.waitForFunction(()=>!__trip.state().busy);
+ await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});await p.evaluate(()=>Garage.car().tires.towMode=false);await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);assert.equal(await p.locator('#cfm').count(),0);await p.waitForFunction(()=>!__trip.state().busy);
  // Considering a cheaper alternate is gated too; No can always reject it without acknowledging.
- await p.evaluate(()=>{Garage.car().tires.tread.depth=3;__app.S.trip.altCompare=true;__app.S.trip.routeChoices={};__trip.step(5);});
+ await p.evaluate(()=>{Garage.car().tires.tread.depth=3;__app.S.trip.altCompare=true;__app.S.trip.routeChoices={};__trip.step(5);});await p.waitForTimeout(80);await p.evaluate(()=>__weatherGates.splice(0).forEach(r=>r()));
  await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmYes');await p.waitForFunction(()=>document.querySelector('#tBack').textContent==='No');await p.waitForSelector('#cfm',{state:'detached'});
  await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.innerText('#tBack'),'No');
- await p.click('#tBack');await p.waitForFunction(()=>__trip.state().step===6);assert.equal(await p.locator('#cfm').count(),0);
+ await p.click('#tBack');await p.waitForFunction(()=>__trip.state().step===8);assert.equal(await p.locator('#cfm').count(),0);
  assert.deepEqual(errors,[]);await p.close();
 }console.log('Wet/snow thresholds, estimated/car/trailer tires, in-flight reuse, cancel/ack, default-route gate and changed-risk invalidation passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

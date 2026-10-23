@@ -44,6 +44,7 @@ release.push('lightweight-gpu');
 release.push('recall-rating-ui');
 release.push('apk-build');
 release.push('vehiclecompare','vehiclecompare-ui');
+release.push('vehiclequeue','tripeta','tripnotifications');
 release.push('propulsion','propulsion-ui');
 release.push('menu-labels');
 release.push('energygraph');
