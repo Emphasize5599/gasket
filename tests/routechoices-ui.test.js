@@ -36,7 +36,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.waitForFunction(()=>__trip.state().step===6&&!__trip.state().busy);
  await p.waitForSelector('#tsBuf');await p.waitForSelector('#tsDet');
  await p.locator('#tsBuf').evaluate(el=>{el.value='30';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});
- await p.waitForSelector('#tsDet');await p.locator('#tsDet').evaluate(el=>{el.value='4';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});
+ await p.waitForSelector('#tsDet');await p.locator('#tsDet').evaluate(el=>{const i=__trip.state().result.dsweep.findIndex(x=>x.mi===6);if(i<0)throw Error('Missing 6-minute detour setting');el.value=String(i);el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));});await p.waitForFunction(()=>__trip.state().result.opts.maxDetourMin===6);
  assert.equal(await p.locator('.route-choice-adjust').count(),0,'one global adjustment screen, not per-leg settings');
  await p.evaluate(()=>{window.__projectCount=0;const original=Trip.projectLegs;Trip.projectLegs=function(...args){__projectCount++;return original(...args);};});
  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===7);

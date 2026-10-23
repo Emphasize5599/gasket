@@ -4,10 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
-## 0.0.245 - 2026-10-23
+## 0.0.246 - 2026-10-23
 - Search the full 30-minute detour window once; accept 1.0–30.0-minute limits in tenths. Tesla and Mirai demos default to 30 minutes.
 - Protect saved trips with atomic writes, checked save results, smaller inventories and storage diagnostics.
 - Confirm failed speed previews with the full planner and explain when no green balance band exists.
+
+## 0.0.245 - 2026-10-23
+- No APK: the release gate caught an outdated slider-index test. Corrected in 0.0.246 without changing the selected-minute behavior.
 
 ## 0.0.244 - 2026-10-22
 - Reuse saved EV/H2 route prices after reopening, retaining searched alternatives and original price timestamps.
