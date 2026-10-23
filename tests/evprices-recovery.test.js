@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 function boot(answer){
  const cache=new Map(),calls=[],checks=[],tasks=new Map(),c={console,Map,Set,Date,Math,JSON,Promise,Number,Object,Array,String,RegExp,Error,isFinite,encodeURIComponent,setTimeout:f=>{f();}};c.window=c;
- c.__app={S:{},KV:{get:(n,k)=>cache.get(k),put:(n,k,v)=>cache.set(k,{v})},showSiteCheck:(...a)=>checks.push(a)};
+ c.__app={S:{},KV:{get:(n,k,age)=>{const o=cache.get(k);return o&&(!age||Date.now()-o.t<=age)?o:null;},put:(n,k,v)=>cache.set(k,{v,t:Date.now()})},showSiteCheck:(...a)=>checks.push(a)};
  c.Tasks={upsert:(k,v)=>tasks.set(k,v),remove:k=>tasks.delete(k)};
  c.__trip={call:async(...a)=>{calls.push(a);return answer(...a);}};
  for(const f of ['chargerdata','evprices'])vm.runInNewContext(fs.readFileSync('assets/web/'+f+'.js','utf8'),c);
@@ -17,7 +17,10 @@ const wait=()=>new Promise(setImmediate);
  const before=x.calls.length;await x.E.annotate([station()],{});assert.equal(x.calls.length,before,'successful result cached with corrected identity');
  x=boot(()=>({blocked:true}));p=x.E.annotate([station(),{...station(),st:{...station().st,id:'second'}}],{});await wait();x.E.dismissCheck();await p;assert.equal(x.calls.length,1,'dismissal stops this provider, not another request');assert.equal(x.cache.size,0,'restrictions never cached as missing/free');
  x=boot(()=>({blocked:true}));p=x.E.annotate([station()],{});await wait();x.E.cancel();await p;assert(!x.E.isPaused());assert.equal(x.calls.length,1);
- x=boot(()=>({error:'Page could not load',code:'network'}));await x.E.annotate([station()],{});assert.equal(x.cache.size,0,'transient errors are not cached as unavailable pages');
+ x=boot(()=>({error:'Page could not load',code:'network'}));await x.E.annotate([station()],{});
+ assert(![...x.cache.keys()].some(k=>k.startsWith('cp-v2|')),'transient errors never create a price/missing/free entry');
+ const backoff=[...x.cache.entries()].find(([k])=>k.startsWith('cp-retry|'));assert(backoff,'a separate short retry backoff avoids hammering overlapping routes');assert.equal(backoff[1].v.reason,'load_failed');
+ const attempts=x.calls.length;await x.E.annotate([station()],{});assert.equal(x.calls.length,attempts,'backoff pauses repeat failures');backoff[1].t=Date.now()-11*60e3;await x.E.annotate([station()],{});assert(x.calls.length>attempts,'failed pages can be retried after backoff expires');
  for(const rate of [null,'',false,0,NaN])assert.equal(x.C.tariff({country:'US',netPrice:{rate,uom:'kwh'}},.5,50).price,.5,'unconfirmed zero/malformed rate cannot become free');
  assert.equal(x.C.tariff({country:'US',netPrice:{rate:0,free:true,uom:'kwh'}},.5,50).price,0);
  assert.equal(x.C.tariff({country:'US',source:'DOE AFDC',pricing:'Free'},.5,50).price,0,'explicit government Free note remains supported');
