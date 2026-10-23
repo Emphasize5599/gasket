@@ -91,4 +91,28 @@ const flexi=(cost,fee)=>({serviceFee:fee,days:['sunday','monday'].map(day=>({day
   const observed=setup(()=>{throw Error('Fresh observed price should be reused');}),oldTime=Date.now()-30*3600e3;observed.S.evPriceAgeHours=48;
   await observed.E.annotate([{...failed[0],st:{...failed[0].st,netPrice:{src:'chargepoint',rate:.39,uom:'kwh',t:oldTime}}}],{});assert.equal(observed.calls.length,0,'inventory rates respect the configured freshness window without restamping');
   const stale=setup(()=>({error:'Station details did not load'})),stamp=Date.now()-48*3600e3;stale.shared.set('evprices|cp-v2|900000',{t:stamp,v:{rate:.42,uom:'kwh',t:stamp}});const sites=failed.map(x=>({...x,st:{...x.st}}));await stale.E.annotate(sites,{});assert.equal(sites[0].st.netPrice.rate,.42);assert.equal(sites[0].st.netPrice.t,stamp,'a failed refresh retains an old published tariff, never stamps it fresh');
+
+ // Electric Era: one public list; placeholders (<10¢), coming-soon sites and a 0 on an open site are no price
+ const eeList=JSON.stringify([{coordinates:{latitude:'34.7465',longitude:'-92.2896'},title:'Testville Market',priceCentsKwh:42,ports:['2 ports, 150 kW (CCS)']},{coordinates:{latitude:'34.80',longitude:'-92.30'},title:'Soon',priceCentsKwh:1,expectedCompletion:'2027-01'},{coordinates:{latitude:'34.90',longitude:'-92.40'},title:'Zero',priceCentsKwh:0}]);
+ const eeP=E.parseElectricEra(eeList);assert.equal(eeP[0].rate,.42);assert.equal(eeP[1].open,false);assert.equal(eeP[2].rate,null,'0 cents on an open site is not free');assert.equal(E.parseElectricEra('nope').length,0);
+ // Francis Energy: guest-plan USD per plug; zero = not published; private / coming-soon stations give nothing
+ const sock=(name,type,mode,prices)=>({name,stationModelSocketSocketTypeId:type,stationModelSocketChargingMode:mode,maximumPower:50,socketPrices:prices});
+ const guest=(k,f=0,m=0)=>[{billingPlanCode:'Guest plan',currency:'USD',kwhPrice:k,transactionFee:f,plugInMinuteRate:m}];
+ const fst=(extra={})=>({id:7,latitude:34.7465,longitude:-92.2896,stationAccessLevelId:'PUBLIC',siteStationAccessLevel:'PUBLIC',addressCountryIso2Code:'US',stationSockets:[sock('CCS','SAE_J1772_COMBO_US','LEVEL3',guest(.52)),sock('Chademo','TYPE_4_CHADEMO','LEVEL3',guest(.52))],...extra});
+ assert.equal(JSON.stringify(E.parseFrancis(fst(),true,['J1772COMBO']).map(p=>p.rate)),'[0.52]');
+ assert.equal(E.parseFrancis(fst(),false,['J1772']).length,0,'DC plugs are not an AC price');
+ assert.equal(E.parseFrancis(fst({stationAccessLevelId:'PRIVATE'}),true,['J1772COMBO']).length,0);
+ assert.equal(E.parseFrancis(fst({comingSoon:true}),true,['J1772COMBO']).length,0);
+ assert.equal(JSON.stringify(E.parseFrancis(fst({stationSockets:[sock('CCS','SAE_J1772_COMBO_US','LEVEL3',guest(0))]}),true,['J1772COMBO'])),'[null]','all zeros: not published, never free');
+ const pm=E.parseFrancis(fst({stationSockets:[sock('CCS','SAE_J1772_COMBO_US','LEVEL3',guest(0,1,.3))]}),true,['J1772COMBO'])[0];assert.equal(pm.uom,'min');assert.equal(pm.fee,1);
+ // annotate: Electric Era by distance; Francis: a box around the DOE site (test / coming-soon / distant / AC stations skipped), then details; cached a day
+ let fcnCalls=[];const fAns=(fn,a,b)=>{if(fn==='fetchJson'&&/electricera/.test(a))return {body:eeList};
+  if(fn==='fetchFrancis'&&a==='box'){fcnCalls.push(a);return {body:JSON.stringify({success:true,data:[{id:7,caption:'TV01',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'SEMI_FAST',stationStatusId:'AVAILABLE'},{id:8,caption:'AC003_Test',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'SEMI_FAST'},{id:9,caption:'TV09',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'FAST',comingSoon:true},{id:10,caption:'TV10',latitude:34.7565,longitude:-92.2896,chargingSpeedId:'FAST'},{id:11,caption:'TV11',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'SLOW'}]})};}
+  if(fn==='fetchFrancis'&&a==='station'){fcnCalls.push(b);return {body:JSON.stringify({success:true,data:fst({id:+b})})};}return {error:'unexpected '+fn+' '+a};};
+ const f=setup(fAns),fItems=()=>[{st:{id:'e1',network:'ELECTRIC_ERA',lat:34.7466,lng:-92.2897,plugs:['J1772COMBO']},dc:true,kw:150},{st:{id:'f1',network:'FCN',name:'Testville Ford',lat:34.7465,lng:-92.2896,plugs:['J1772COMBO','CHADEMO']},dc:true,kw:50}];
+ let fi=fItems(),fr=await f.E.annotate(fi,{make:'Toyota'});assert.equal(fr.priced,2,fr.notes.join(' '));assert.equal(fi[0].st.netPrice.rate,.42);assert.equal(fi[0].st.netPrice.src,'electricera');assert.equal(fi[1].st.netPrice.rate,.52);assert.match(fi[1].st.netPrice.label,/Francis Energy.*guest/);
+ assert.deepEqual(fcnCalls,['box','7'],'only the usable DC station at this site is read');
+ fcnCalls=[];fi=fItems();await f.E.annotate(fi,{make:'Toyota'});assert.deepEqual(fcnCalls,[],'cached for a day');assert.equal(fi[1].st.netPrice.rate,.52);
+ const fb=setup((fn,a,b)=>fn==='fetchFrancis'?{error:'HTTP 403',blocked:true}:fAns(fn,a,b));fi=[fItems()[1],{...fItems()[1],st:{...fItems()[1].st,id:'f2',lat:34.9}}];fr=await fb.E.annotate(fi,{});
+ assert.equal(fb.calls.filter(c=>c[0]==='fetchFrancis').length,1,'a refusal stops Francis reads for this pass');assert.match(fr.notes.join(' '),/Francis Energy/);assert.equal(fi[0].st.netPrice,undefined);
 })().catch(e=>{console.error(e);process.exitCode=1;});

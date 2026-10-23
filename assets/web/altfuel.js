@@ -436,7 +436,7 @@
 
   // ---------- charging networks you can choose in Parameters (S.trip.evNetworksOff = {key: true} for unticked ones) ----------
   // Networks whose own published prices Gasket reads come first, then the rest (dimmed, still choosable); each A–Z.
-  var NET_PRICED = [['blink', 'Blink'], ['chargepoint', 'ChargePoint'], ['flo', 'FLO'], ['ionna', 'IONNA'], ['tesla', 'Tesla Supercharger']];
+  var NET_PRICED = [['blink', 'Blink'], ['chargepoint', 'ChargePoint'], ['electricera', 'Electric Era'], ['flo', 'FLO'], ['francis', 'Francis Energy'], ['ionna', 'IONNA'], ['tesla', 'Tesla Supercharger']];
   var NET_OTHER = [['ea', 'Electrify America'], ['evconnect', 'EV Connect'], ['evgo', 'EVgo'], ['nonnet', 'Non-networked (no app)'], ['other', 'Other networks'], ['rivian', 'Rivian Adventure'], ['shell', 'Shell Recharge'], ['walmart', 'Walmart']];
   var NET_HOSTED = [['dealer', 'Car dealerships'], ['hotel', 'Hotels / lodging'], ['teslaDest', 'Tesla Destination (hotels)']];
   // a dealership's chargers (usually customers only, often listed as free): by the site's name
@@ -448,6 +448,9 @@
     if (/ionna/i.test(n)) return 'ionna';
     if (/^electrify america/i.test(n)) return 'ea';
     if (/^evgo/i.test(n)) return 'evgo';
+    // before the dealership test: Francis Energy hosts public fast chargers at dealerships
+    if (/^electric[_ ]?era$/i.test(n)) return 'electricera';
+    if (/^fcn$|francis/i.test(n)) return 'francis';
     if (DEALER.test(name)) return 'dealer';
     if (!st.dc && /\b(?:hotel|motel|resort|inn|suites|marriott|hilton|hyatt)\b/i.test(name)) return 'hotel';
     if (/^chargepoint/i.test(n)) return 'chargepoint';

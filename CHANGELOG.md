@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.255 - 2026-10-23
+- Charger prices from two more networks' public websites: Electric Era and Francis Energy. Both are now listed with the readable networks and on by default.
+
 ## 0.0.254 - 2026-10-23
 - Comparison batch: a vehicle's "Needs review" note clears once its setup and hazards are reviewed.
 - Status bar: opening or closing the other statuses keeps an expanded status message open.

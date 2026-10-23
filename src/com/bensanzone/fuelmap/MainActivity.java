@@ -1165,7 +1165,9 @@ public class MainActivity extends Activity {
             "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org", "en.wikipedia.org",
             "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov",
             // EV networks' own published prices: IONNA's site list page, Blink's map service
-            "www.ionna.com", "chargermap.blinknetwork.com", "apigw.blinknetwork.com"};
+            "www.ionna.com", "chargermap.blinknetwork.com", "apigw.blinknetwork.com",
+            // Electric Era's drivers page reads this public site list (prices, ports, availability)
+            "ocpi-http.app.electricera.tech"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
     private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "thumb.wikimedia.org", "i.fuelapi.com"};
@@ -1874,6 +1876,77 @@ public class MainActivity extends Activity {
                     try(InputStream in=ChargerInventory.bounded(c.getInputStream(),512000)){out.put("body",readAll(in));}
                 } catch(Exception e){try{out.put("error",e.getMessage());}catch(Exception ignored){}}finally{if(c!=null)c.disconnect();}
                 reply(reqId,out);
+            }).start();
+        }
+
+        // Francis Energy's signed-out finder map (Driivz): the page's own anonymous session cookie and CSRF token,
+        // then only its two map queries (stations in a small box around a charger, one station's detail).
+        private final Object fcnLock = new Object();
+        private String fcnCookie = null, fcnCsrf = null;
+        private long fcnAt = 0;
+        private static final String FCN = "https://driver.francisenergy.com";
+        private void fcnCookies(HttpURLConnection c) {
+            java.util.List<String> set = c.getHeaderFields().get("Set-Cookie");
+            if (set == null || set.isEmpty()) return;
+            java.util.LinkedHashMap<String, String> jar = new java.util.LinkedHashMap<>();
+            if (fcnCookie != null) for (String kv : fcnCookie.split("; ")) { int i = kv.indexOf('='); if (i > 0) jar.put(kv.substring(0, i), kv); }
+            for (String h : set) { String kv = h.split(";", 2)[0].trim(); int i = kv.indexOf('='); if (i > 0) jar.put(kv.substring(0, i), kv); }
+            fcnCookie = android.text.TextUtils.join("; ", jar.values());
+        }
+        private void fcnSession(boolean fresh) throws Exception {
+            if (!fresh && fcnCsrf != null && System.currentTimeMillis() - fcnAt < 20 * 60000) return;
+            fcnCookie = null; fcnCsrf = null;
+            HttpURLConnection c = (HttpURLConnection) new URL(FCN + "/findCharger").openConnection();
+            try {
+                c.setInstanceFollowRedirects(false); c.setConnectTimeout(8000); c.setReadTimeout(12000);
+                c.setRequestProperty("User-Agent", userAgent()); c.setRequestProperty("Accept", "text/html");
+                int st = c.getResponseCode(); if (st != 200) throw new Exception("HTTP " + st);
+                fcnCookies(c);
+                String html; try (InputStream in = ChargerInventory.bounded(c.getInputStream(), 512000)) { html = readAll(in); }
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("name=\"_csrf\" content=\"([A-Za-z0-9-]{8,80})\"").matcher(html);
+                if (!m.find()) throw new Exception("Francis Energy's map page changed");
+                fcnCsrf = m.group(1); fcnAt = System.currentTimeMillis();
+            } finally { c.disconnect(); }
+        }
+
+        @JavascriptInterface
+        public void fetchFrancis(final int reqId, final String action, final String args) {
+            new Thread(() -> {
+                JSONObject out = new JSONObject();
+                try {
+                    String url, body = null;
+                    if ("box".equals(action)) {
+                        JSONObject p = new JSONObject(args); double lat = p.getDouble("lat"), lng = p.getDouble("lng"), d = 0.003;
+                        if (!Double.isFinite(lat) || !Double.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Exception("Invalid charger coordinates");
+                        url = FCN + "/stationFacade/findStationsInBounds";
+                        body = new JSONObject().put("filterByIsManaged", true).put("filterByBounds", new JSONObject()
+                            .put("northEastLat", lat + d).put("northEastLng", lng + d).put("southWestLat", lat - d).put("southWestLng", lng - d)).toString();
+                    } else if ("station".equals(action) && args != null && args.matches("\\d{1,9}")) url = FCN + "/stationFacade/findStationById?stationId=" + args;
+                    else throw new Exception("Invalid Francis Energy query");
+                    synchronized (fcnLock) {
+                        for (int attempt = 0; ; attempt++) {
+                            fcnSession(attempt > 0);
+                            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                            try {
+                                c.setInstanceFollowRedirects(false); c.setConnectTimeout(8000); c.setReadTimeout(12000);
+                                c.setRequestProperty("User-Agent", userAgent()); c.setRequestProperty("Accept", "application/json");
+                                c.setRequestProperty("Cookie", fcnCookie == null ? "" : fcnCookie); c.setRequestProperty("X-CSRF-TOKEN", fcnCsrf);
+                                c.setRequestProperty("X-APP-TYPE", "WEB"); c.setRequestProperty("X-JSON-TYPES", "None");
+                                if (body != null) { c.setRequestMethod("POST"); c.setDoOutput(true); c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                                    try (java.io.OutputStream os = c.getOutputStream()) { os.write(body.getBytes("UTF-8")); } }
+                                int status = c.getResponseCode(); out.put("status", status);
+                                // an expired session answers 401/403: one fresh session, then a refusal is a refusal
+                                if ((status == 401 || status == 403) && attempt == 0) continue;
+                                if (status == 403 || status == 429) out.put("blocked", true);
+                                if (status != 200) throw new Exception("HTTP " + status);
+                                fcnCookies(c);
+                                try (InputStream in = ChargerInventory.bounded(c.getInputStream(), 512000)) { out.put("body", readAll(in)); }
+                                break;
+                            } finally { c.disconnect(); }
+                        }
+                    }
+                } catch (Exception e) { try { out.put("error", e.getMessage()); } catch (Exception ignored) { } }
+                reply(reqId, out);
             }).start();
         }
 

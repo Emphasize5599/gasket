@@ -1,6 +1,7 @@
 /* EV charging networks' own published prices, read the way their public maps read them (signed out, a few requests
  * at a time, cached): Tesla Superchargers (tesla.com/findus page reader), IONNA (one page lists every site and price),
- * Blink (its map service: sites, then each charger's host-set price). Each DOE station is matched to the network's
+ * Blink (its map service: sites, then each charger's host-set price), FLO, ChargePoint, Electric Era (one public site list)
+ * and Francis Energy (its finder map's guest prices). Each DOE station is matched to the network's
  * site by network and distance, and gets `netPrice` {rate, uom: kwh | min | hour, fee, peak, low, src, label, t},
  * which ChargerData.tariff prefers to DOE's free text. Not live prices; a check on a network's page is never got around. */
 (function (root) {
@@ -189,13 +190,58 @@
     var p=Object.assign({},prices[0],{rate:Math.max.apply(null,prices.map(function(p){return p.rate;})),free:prices.every(function(p){return p.free;})}),v={price:p,units:units};keep(key,v);return v;
   }
 
+  // ---------- Electric Era: its drivers page's public site list (price per kWh, ports, live availability) ----------
+  var EE_URL = 'https://ocpi-http.app.electricera.tech/ocpi/2.2/locations_web';
+  /** The list → [{lat, lng, name, open, rate}]. Coming-soon sites carry 0–2¢ placeholders, and an open site can say 0:
+   * under 10¢ is no published price (never free). */
+  function parseElectricEra(text) {
+    var a; try { a = JSON.parse(text); } catch (e) { return []; }
+    return (Array.isArray(a) ? a : []).map(function (x) { var c = +x.priceCentsKwh, g = x.coordinates || {};
+      return { lat: +g.latitude, lng: +g.longitude, name: x.title || '', open: !x.expectedCompletion, rate: isFinite(c) && c >= 10 ? Math.round(c) / 100 : null };
+    }).filter(function (x) { return isFinite(x.lat) && isFinite(x.lng); });
+  }
+  async function eeSites() { var c = cached('ee-v1', DAY); if (c) return c; var list = parseElectricEra(await json(EE_URL)); if (list.length) keep('ee-v1', list); return list; }
+
+  // ---------- Francis Energy: its signed-out finder map (Driivz): the stations at a site, then each plug's guest price ----------
+  // DOE's FCN network IDs aren't the map's station numbers, so a site is found by its coordinates (the map's match DOE's exactly).
+  function fcnPlug(s) { var t = String(s.stationModelSocketSocketTypeId || '') + ' ' + String(s.name || ''); return /chademo/i.test(t) ? 'CHADEMO' : /combo|ccs/i.test(t) ? 'J1772COMBO' : /nacs|tesla|j3400/i.test(t) ? 'TESLA' : /j1772|type_1/i.test(t) ? 'J1772' : null; }
+  /** A station's detail → one price per matching plug ({rate, uom, fee} or null = not published). Public US stations only. */
+  function parseFrancis(d, dc, plugs) {
+    var out = [];
+    if (!d || d.comingSoon || d.stationAccessLevelId !== 'PUBLIC' || d.siteStationAccessLevel && d.siteStationAccessLevel !== 'PUBLIC' || d.addressCountryIso2Code && d.addressCountryIso2Code !== 'US') return out;
+    (d.stationSockets || []).forEach(function (s) {
+      var fast = /LEVEL3/i.test(s.stationModelSocketChargingMode || '') || s.stationModelSocketVoltageType === 'DC', p = fcnPlug(s);
+      if (fast !== !!dc || !p || plugs.indexOf(p) < 0) return;
+      var g = (s.socketPrices || []).filter(function (x) { return /guest/i.test(x.billingPlanCode || '') && (x.currency || x.billingSpCurrencyCurrency) === 'USD'; })[0];
+      var kwh = g ? +g.kwhPrice || 0 : 0, min = g ? +g.plugInMinuteRate || 0 : 0, fee = g ? +g.transactionFee || 0 : 0;
+      // all zeros = nothing published, never "free"
+      out.push(kwh > 0 ? { rate: kwh, uom: 'kwh', fee: fee, extraFees: min > 0 } : min > 0 ? { rate: min, uom: 'min', fee: fee, extraFees: false } : null);
+    });
+    return out;
+  }
+  async function fcnJson(action, args) { var r = await call('fetchFrancis', action, args); if (!r || r.error || r.blocked) { var e = new Error(r && r.blocked ? 'Francis Energy\'s map refused the request; its prices are estimates this time.' : r && r.error || 'Francis Energy didn\'t answer'); e.blocked = !!(r && r.blocked) || /\bHTTP (403|429)\b/.test(r && r.error || ''); throw e; } var j = JSON.parse(r.body); if (!j || j.success === false) throw new Error('Francis Energy didn\'t answer'); return j.data; }
+  async function francisPrice(x, car) {
+    var plugs = root.AltFuel ? root.AltFuel.compatiblePlugs(car, x.st.plugs) : x.st.plugs || [], key = 'fcn-v1|' + x.st.id + '|' + (x.dc ? 'dc' : 'ac') + '|' + plugs.slice().sort().join(','), c = cached(key, DAY);
+    if (c) return c.none ? null : c;
+    var here = function (s) { return meters(x.st, { lat: +s.latitude, lng: +s.longitude }) <= 150; };
+    var near = (await fcnJson('box', JSON.stringify({ lat: x.st.lat, lng: x.st.lng })) || []).filter(function (s) { return !s.comingSoon && !/test/i.test(s.caption || '') && here(s) && (x.dc ? s.chargingSpeedId !== 'SLOW' : s.chargingSpeedId === 'SLOW'); })
+      .sort(function (a, b) { return (b.stationStatusId === 'AVAILABLE' ? 1 : 0) - (a.stationStatusId === 'AVAILABLE' ? 1 : 0); }).slice(0, 3);
+    var prices = [];
+    for (var i = 0; i < near.length; i++) { var d = await fcnJson('station', String(near[i].id)); if (d && here(d)) prices = prices.concat(parseFrancis(d, x.dc, plugs)); }
+    // one plug without a published price, or plugs priced in different units: no network price for this site
+    if (!prices.length || prices.some(function (p) { return !p || p.uom !== prices[0].uom; })) { keep(key, { none: true }); return null; }
+    var rates = prices.map(function (p) { return p.rate; }), v = { rate: Math.max.apply(null, rates), peak: Math.max.apply(null, rates), low: Math.min.apply(null, rates), uom: prices[0].uom,
+      fee: Math.max.apply(null, prices.map(function (p) { return p.fee; })), extraFees: prices.some(function (p) { return p.extraFees; }) };
+    keep(key, v); return v;
+  }
+
   /** Give each station (that a network publishes a price for) `netPrice`. items: [{st, dc, kw}]. Returns {priced, notes}. */
   async function annotate(items, car, onProg) {
     cancelled = false;
     var notes = [], priced = 0, t = Date.now(), isTesla = /tesla/i.test(car && car.make || '');
     if (S.evNetPrices === false || !items.length) return { priced: 0, notes: notes };
-    var by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[] };
-    items.forEach(function (x) { var n = String(x.st.network || ''); if (/^tesla(?! destination)/i.test(n) && x.dc) by.tesla.push(x); else if (/ionna/i.test(n)) by.ionna.push(x); else if (/^blink/i.test(n)) by.blink.push(x); else if (/^chargepoint/i.test(n) && chargePointIds(x.st).length) by.chargepoint.push(x);else if(/^flo$/i.test(n))by.flo.push(x); });
+    var by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[],ee:[],fcn:[] };
+    items.forEach(function (x) { var n = String(x.st.network || ''); if (/^tesla(?! destination)/i.test(n) && x.dc) by.tesla.push(x); else if (/ionna/i.test(n)) by.ionna.push(x); else if (/^blink/i.test(n)) by.blink.push(x); else if (/^chargepoint/i.test(n) && chargePointIds(x.st).length) by.chargepoint.push(x);else if(/^flo$/i.test(n))by.flo.push(x);else if(/^electric[_ ]?era$/i.test(n)&&x.dc)by.ee.push(x);else if(/^fcn$|francis/i.test(n))by.fcn.push(x); });
     var set = function (x, p, src, label) { x.st.netPrice = Object.assign({ src: src, label: label, t: null }, p); priced++; };
     // The website budget limits uncached sites, not the usable catalog. Apply
     // EVERY cached rate first, including sites beyond the first 20 in provider order.
@@ -209,10 +255,11 @@
     });
     by.chargepoint = by.chargepoint.sort(function (a, b) { return (b.dc ? 1 : 0) - (a.dc ? 1 : 0); }).slice(0, 20);
     // progress by expected time (Tesla ~0.8 s a site, ChargePoint ~8 s a page, Blink ~0.5 s), with the time left once it's measurable
-    var W = { tesla: 0.8, ionna: 0.05, blink: 0.5, chargepoint: 8,flo:1 }, total = 0, done = 0;
+    var W = { tesla: 0.8, ionna: 0.05, blink: 0.5, chargepoint: 8,flo:1,ee:0.05,fcn:2 }, total = 0, done = 0;
+    by.fcn=by.fcn.slice(0,30);
     Object.keys(by).forEach(function (k) { total += by[k].length * W[k]; });
     var eta=root.__tripETA,etaWeights=new Map(),etaDone=0,etaCounted=new Set();
-    if(eta)Object.keys(by).forEach(function(k){by[k].forEach(function(x){var hit=false;if(k==='tesla')hit=!!cached('tesla-v1|'+(isTesla?'t':'n')+'|'+x.st.id,DAY);else if(k==='ionna')hit=!!cached('ionna-v1',DAY);else if(k==='blink'){var sites=cached('blink-sites-v1',WEEK),near=sites&&nearest(x.st,sites,200);hit=!!(near&&cached('blink-price-v1|'+near.id+'|'+(x.dc?'dc':'ac'),DAY));}else if(k==='flo'){var plugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('flo-v1|'+x.st.id+'|'+x.dc+'|'+plugs.slice().sort().join(','),DAY);}if(!hit)etaWeights.set(x,W[k]);});});
+    if(eta)Object.keys(by).forEach(function(k){by[k].forEach(function(x){var hit=false;if(k==='tesla')hit=!!cached('tesla-v1|'+(isTesla?'t':'n')+'|'+x.st.id,DAY);else if(k==='ionna')hit=!!cached('ionna-v1',DAY);else if(k==='blink'){var sites=cached('blink-sites-v1',WEEK),near=sites&&nearest(x.st,sites,200);hit=!!(near&&cached('blink-price-v1|'+near.id+'|'+(x.dc?'dc':'ac'),DAY));}else if(k==='flo'){var plugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('flo-v1|'+x.st.id+'|'+x.dc+'|'+plugs.slice().sort().join(','),DAY);}else if(k==='ee')hit=!!cached('ee-v1',DAY);else if(k==='fcn'){var fplugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('fcn-v1|'+x.st.id+'|'+(x.dc?'dc':'ac')+'|'+fplugs.slice().sort().join(','),DAY);}if(!hit)etaWeights.set(x,W[k]);});});
     var etaTotal=0;etaWeights.forEach(function(w){etaTotal+=w;});var etaPrices=eta&&eta.begin('charger-prices','charger-prices',etaTotal,1000,'Reading charger prices (cached tariffs excluded)');
     var report = function () { if (!onProg) return; var f = Math.min(0.99, done / Math.max(0.001, total)), el = Date.now() - t, left = f > 0.05 && el > 4000 ? el / f * (1 - f) : 0;
       onProg(f, left ? 'about ' + (left < 90e3 ? Math.max(1, Math.round(left / 1000 / 5) * 5) + ' s' : Math.round(left / 60e3) + ' min') + ' left' : ''); };
@@ -227,13 +274,16 @@
     if (by.tesla.length) try { var tp = await teslaPrices(by.tesla.map(function (x) { return x.st; }), isTesla, function (n, cacheBatch) { step('tesla', n, cacheBatch); }); by.tesla.forEach(function (x) { var p = tp[x.st.id]; if (p) set(x, { t:p.t,rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0, congestion: p.congestion, tou: p.tou }, 'tesla', 'Tesla\'s published ' + (isTesla ? 'Tesla-owner' : 'non-Tesla') + ' rate' + (p.tou && p.low < p.peak ? ' (peak; off-peak $' + p.low.toFixed(2) + ')' : '')); }); }
       catch (e) { notes.push(e.message); if (e.partial) by.tesla.forEach(function (x) { var p = e.partial[x.st.id]; if (p) set(x, { t:p.t,rate: p.peak, peak: p.peak, low: p.low, uom: p.uom, fee: 0 }, 'tesla', 'Tesla\'s published rate'); }); }
     for(var fi=0;fi<Math.min(24,by.flo.length)&&!cancelled;fi++){var fx=by.flo[fi];try{var fp=await floPrice(fx,car);if(fp&&fp.price){set(fx,Object.assign({},fp.price,{t:fp.t}),'flo','FLO\'s published host rate (additional fees may apply)');fx.st.units=(fx.st.units||[]).filter(function(u){return fx.dc?u.charging_level!=='dc_fast':u.charging_level==='dc_fast';}).concat(fp.units);}}catch(e){if(notes.indexOf(e.message)<0)notes.push(e.message);if(e.blocked)break;}step('flo');}
+    if (by.ee.length) try { var ee = await eeSites(); by.ee.forEach(function (x) { var s = nearest(x.st, ee, 250); if (s && s.open && s.rate != null) set(x, { t: s.t, rate: s.rate, peak: s.rate, low: s.rate, uom: 'kwh', fee: 0 }, 'electricera', 'Electric Era\'s published rate'); step('ee'); }); }
+      catch (e) { notes.push('Electric Era\'s price list didn\'t load: ' + e.message); }
+    for (var ri = 0; ri < by.fcn.length && !cancelled; ri++) { var rx = by.fcn[ri]; try { var rp = await francisPrice(rx, car); if (rp) set(rx, rp, 'francis', 'Francis Energy\'s published guest rate' + (rp.fee ? ' + $' + rp.fee.toFixed(2) + ' session fee' : '') + (rp.extraFees ? ' (plus a per-minute fee)' : '')); } catch (e) { if (notes.indexOf(e.message) < 0) notes.push(e.message); if (e.blocked) break; } step('fcn'); }
     if(by.flo.length>24)notes.push('FLO website reads covered 24 route sites; other sites need a published inventory price or remain excluded.');
     // pages that never load (the station's data refused or unknown) cost ~4 s each: stop after CP_GIVE_UP in a row with none priced
     var cpMiss = 0, cpGot = 0;
     for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; if (cpMiss >= CP_GIVE_UP && !cpGot) { notes.push('ChargePoint\'s station pages didn\'t load, so its prices are estimates this time.'); LG.info('stations', 'ChargePoint reads stopped', { pagesMissing: cpMiss }); break; }
       try { var cpP = await chargePointPrice(cx.st); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
-    LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached,chargepointDeferred:cpDeferred, flo:by.flo.length, priced: priced, ms: Date.now() - t });
+    LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached,chargepointDeferred:cpDeferred, flo:by.flo.length, electricEra:by.ee.length, francis:by.fcn.length, priced: priced, ms: Date.now() - t });
     if(etaPrices)etaPrices.finish(!cancelled&&!verification&&!notes.length);return { priced: priced, notes: notes };
   }
-  root.EVPrices = { annotate: annotate, cancel: cancel, onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
+  root.EVPrices = { annotate: annotate, cancel: cancel, onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseElectricEra:parseElectricEra, parseFrancis:parseFrancis, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
 })(window);
