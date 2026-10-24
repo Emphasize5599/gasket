@@ -8,6 +8,45 @@ The proposed private-app add-on is off by default. Enabling it must explain undo
 
 Evidence below means the supplied capture or owner-run native probe, not a new live verification by this session. A successful sample proves neither network-wide coverage nor permission. Prefer an existing reliable public reader over an extra private/aggregator request.
 
+### Owner coverage requirements and default eligibility
+
+Updated 2026-10-23: a usable offer must have **(1) applicable published price, including time-of-day schedule where applicable, (2) charging level (DC fast / L2 / L1), and (3) connector type**. Live availability is optional. Multiple sources may jointly satisfy this contract; one provider need not supply every field. Price must apply to the identified compatible charger, not merely a nearby site. Include mandatory fee applicability in price completeness; a network average or a peak-only reduction of a variable schedule does not meet the contract.
+
+Use three distinct states:
+
+1. **Default eligible:** validated source chain supplies all three, including schedule interpretation. This is still subject to the private add-on's explicit opt-in and provider access gates. Each station/offer must pass the same completeness check; a network checkbox is not proof every station is usable.
+2. **Not default eligible / validation pending:** a price source exists, but equipment joins, tariff interpretation, source reliability or implementation remain incomplete. User selection must not permit an incomplete offer into automatic stop planning.
+3. **Disabled for now:** no usable station-price source established. Non-selectable in the network picker and excluded from automatic/alternative-route planning; no "try anyway" override or estimated-price fallback for these networks. This is an intentional lockout until a future implementation validates a real source, not a permanent claim that the provider can never publish prices. Existing user preferences/saved trips cannot silently re-enable them. Explicit user-entered destination charging is separate from network discovery.
+
+**This is an evidence assessment, not a claim of nationwide completeness or a change already applied to the app.** The existing `NET_PRICED` list is not a certification. Current readers sometimes discard schedule/port detail, so retaining today's defaults without validation would not implement this policy.
+
+| Network | Source chain capable of supplying all three | Assessment / remaining gate |
+| --- | --- | --- |
+| IONNA | Published site tariff + matched DOE/OCM charging level and connectors | Strong default candidate for validated flat-rate sites. Confirm site/port mapping and any applicable variable schedule before certification. |
+| Electric Era | Public site price + same-site equipment text / matched DOE units | Strong default candidate for open, non-placeholder, flat-rate sites. Current parser does not retain all equipment; verify joins and tariff scope. |
+| Tesla Supercharger | Tesla tariff/schedule + matched DOE/OCM units | Candidate, not yet certified under this stricter rule: retain full schedule, correct vehicle/member applicability and compatible port association instead of peak/low only. Destination is a separate category. |
+| Francis Energy | Same guest socket's tariff, charging mode and connector | All three observed. Validate simultaneous energy/minute charges and any variable pricing. Current aggregation of socket prices must not create a synthetic quote from different sockets. |
+| Blink | Host tariff schedule + charger equipment / matched DOE units | All three potentially available. Current parser collapses day/time slots and chooses a charger, so schedule and connector-specific applicability need correction. |
+| FLO | Same station's tariff and connector/level records | All three observed for simple offers. Current parser reduces hourly schedules to a maximum and rejects complex tariffs: those sites are not default eligible until schedule handling is correct. |
+| ChargePoint | Native guest per-port equipment + station tariff; public page as fallback | All three observed, but guest/service fee applicability and scheduled rates need validation. Do not default-enable on partial energy-only quotes. |
+| Electrify America | Direct guest tariff + same location's EVSE/connector data | All three observed. Resolve station-local time versus UTC preference, tariff/power-band join and implement reader before default eligibility. |
+| EVgo USA | Direct guest site → charger → connector pricing/equipment | All three observed. Resolve TOU/fee precedence, test refresh and implement before default eligibility. |
+| Walmart-operated EV | Chargeway station TOU + exact PlugShare stall equipment or validated DOE unit | Combined chain demonstrates all three at a sample site, not network-wide coverage. Verify unit join, fees, refresh, access rights and multiple sites; default off meanwhile. Direct Walmart blocking does not invalidate a sound alternative chain. |
+| Mercedes HPC | Chargeway/PlugShare tariff + exact stall equipment; ChargePoint direct only for verified backend IDs | Combined chain demonstrates all three at samples. Different hardware/backends and fee/schedule coverage require multi-site validation; default off meanwhile. |
+| bp pulse US | PlugShare stall tariff/schedule and equipment | All three demonstrated at LAX only. More sites, sanctioned access and implementation needed; default off. Chargeway generic text cannot fill a gap. |
+| Shell Recharge US | Exact PlugShare stall tariff/fees/equipment, optionally Chargeway schedule | Potential combined chain, but operator tariff not independently confirmed and Chargeway omits fees. Validation pending, default off; not classified as price-unavailable solely because the own app is closed. |
+| Rivian Adventure | Chargeway station tariff + exact PlugShare/DOE connector and level | Potential combined chain; source-only tariff and equipment join need validation. Default off, not claimed price-unavailable. No further protected-app investigation. |
+| PowerFlex | Explicit PlugShare stall tariff + same stall equipment | Isolated evidence only; default off pending operator-specific validation. Do not extrapolate to all aggregator operators. |
+| EV Connect, Rivian Waypoints, generic other/non-networked | No dependable network-wide station-price chain established in this research | Disabled for now. Isolated DOE notes are not evidence of reliable network coverage; investigate separately before unlocking. |
+| Red E, Circle K, Revel, Love's, EVCS, SWTCH, Noodoe, Loop, Xeal, Applegreen, 7Charge, Kwik Trip, Casey's, Gravity | No validated usable station-price chain in supplied research | Disabled for now, unless a separately validated existing source is documented before release. Not a claim that all their stations lack published prices. |
+| Hotels, dealerships, Tesla Destination and other potentially complimentary hosts | No universal tariff; explicit host terms may support individual stations | Separate, not default enabled. Unknown is not free. Offers lacking an explicit applicable price remain unavailable; network-operated equipment on these properties keeps its real operator classification. |
+
+No additional network is certified default-on by this documentation change. To promote one, record a small stratified validation set spanning AC/DC where offered, connector variants, different hosts/backends, flat and scheduled prices, fees and unknown-price cases. Check each against displayed provider prices where possible; record successes/failures and the matched inventory fraction, not just a single success. Exact sample thresholds should reflect network diversity, not imply statistical national coverage. A failure to load today is distinct from absence of a price source: preserve valid cache and report failure, but do not fabricate an offer.
+
+For combined sources, equipment can be older than the price if still valid, but its IDs/connector association must remain consistent. Stable validated DOE/provider/OCPI identity is preferred; unique operator/location/address matching can establish a station join, but a station join alone cannot assign different tariffs to its ports. When port association is ambiguous, exclude the offer until resolved. Treat availability as an optional separately timestamped field, never a completeness prerequisite.
+
+This owner policy supersedes historical "unchecked but selectable" language below for networks with no price source. It also supersedes generic estimated-price fallback for those networks. Implementation remains pending approval; do not imply these locks already exist in version 255.
+
 ### Per-network source plan
 
 | Network | Price, connectors and speed evidence | Primary / secondary and exact join | Fallback / limitation |
