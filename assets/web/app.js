@@ -1354,7 +1354,6 @@
     S.ocmKey = $('ocmKey').value.trim();
     S.evUseDOE = $('evUseDOE').checked; S.evUseOCM = $('evUseOCM').checked; if ($('evNetPrices')) S.evNetPrices = $('evNetPrices').checked; S.evRefreshPrices = $('evRefreshPrices').checked;
     if ($('evPriceAgeHours')) S.evPriceAgeHours = Math.max(1,Math.min(720,Number($('evPriceAgeHours').value)||24));
-    if($('autoTripPriority'))S.autoTripPriority=$('autoTripPriority').value;
     if ($('evAllowUnknownPrices')) S.evAllowUnknownPrices = $('evAllowUnknownPrices').checked;
     if ($('hereKey')) { S.hereKey = $('hereKey').value.trim(); apiCount(); }
     if ($('hereMonthlyCap')) S.hereMonthlyCap = Math.max(0, parseInt($('hereMonthlyCap').value, 10) || 0);

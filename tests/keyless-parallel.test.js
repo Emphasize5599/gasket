@@ -24,7 +24,14 @@ async function run(block){
   assert.equal(peak,4);assert.equal(result.apiCalls,0);assert.equal(result.stations.length,231);
   assert.equal(result.websiteLoads,block?4:231);assert.equal(result.blocked,block);
   if(!block){assert.equal(progress.at(-1).completed,231);assert.equal(progress.at(-1).f,1);assert(progress.some(p=>p.remainingSeconds>0),'ETA from measured durations');}
-  if(!block){const cached=await window.KeylessGas.refreshKnown(known);assert.equal(cached.websiteLoads,0);}
+  if(!block){
+   assert(known.every(s=>!window.KeylessGas.needsPriceRefresh(s,'regular',24)),'completed no-price checks are shared per station across changed area sets');
+   assert(known.every(s=>window.KeylessGas.needsPriceRefresh(s,'premium',24)),'different fuel grades still need their own check');
+   assert(!P.priceFresh(known[0].prices.regular,24),'a successful check never makes an undated price fresh');
+   const cached=await window.KeylessGas.refreshKnown(known);assert.equal(cached.websiteLoads,0);
+   now+=25*3600000;cache.forEach((v,k)=>{if(k.startsWith('price-check-v1|'))cache.delete(k);});
+   assert(window.KeylessGas.needsPriceRefresh(known[0],'regular',24),'clearing successful-check cache permits another automatic attempt');
+  }else assert(window.KeylessGas.needsPriceRefresh(known[0],'regular',24),'blocked checks cannot suppress a retry');
 }
 async function cancelled(){
   const callbacks=[],calls=[],cache=new Map(),cancelled=[],observations=[];

@@ -47,7 +47,7 @@ release.push('recall-rating-ui');
 release.push('apk-build');
 release.push('vehiclecompare','vehiclecompare-ui');
 release.push('vehiclequeue','tripeta','tripnotifications');
-release.push('batch-policy');
+release.push('batch-policy','batch-price-cache');
 release.push('propulsion','propulsion-ui');
 release.push('menu-labels');
 release.push('energygraph');

@@ -144,7 +144,7 @@
   function cpObserved(st,stale){var p=st.netPrice,t=p&&+p.t;return p&&p.complete!==false&&p.src==='chargepoint'&&t>0&&t<=Date.now()&&(stale||Date.now()-t<=priceAge())&&['kwh','min','hour'].indexOf(p.uom)>=0&&(p.rate>0||p.rate===0&&p.free===true)?p:null;}
   async function chargePointPrice(st,force) {
     var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (!force&&c && (!c.none || miss)) return c.none ? null : c;
-    var old=cached(key,0),fallback=old&&!old.none&&!old.missing?old:cpObserved(st,true),retryKey='cp-retry|'+ids.slice().sort().join(',');if(!force&&cached(retryKey,10*60e3))return fallback;
+    var old=cached(key,0),fallback=old&&!old.none&&!old.missing?old:cpObserved(st,true),retryKey='cp-retry|'+ids.slice().sort().join(','),retryAge=Math.min(DAY,Math.max(1,+A.S.evPriceAgeHours||24)*3600e3);if(!force&&cached(retryKey,retryAge))return fallback;
     var nDevice = ids.filter(function (d) { return (st.netIds.posts || []).indexOf(d) < 0; }).length;
     for (var i = 0; i < ids.length; i++) {
       var t0 = Date.now(), r = await call('siteRead', 'chargepoint', JSON.stringify({ url: 'https://driver.chargepoint.com/stations/' + ids[i],name:st.name }));

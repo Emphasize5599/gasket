@@ -39,8 +39,17 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(await p.evaluate(()=>__offRoutePriceReads),0,'off-corridor inventory never spends a website price lookup');
   if(scenario==='approved-projection')assert.equal(await p.evaluate(()=>__pricePasses),2,'primary and changed legs each enrich once; full-route reprojection never starts a third price pass');
   assert(await p.evaluate(()=>__energyContexts.every(x=>x.limits>0&&x.weather>0)),'primary and recovery plans both include real per-leg limits and hourly weather, even without turn instructions or a gasoline speed function');
-  const reads=await p.evaluate(()=>__discoveryReads),passes=await p.evaluate(()=>__pricePasses);
-  await p.click('#tNext');await p.waitForSelector('[data-ev-replace]');assert.match(await p.locator('#tsResults').innerText(),/Routes that would work/i);
+  let reads=await p.evaluate(()=>__discoveryReads),passes=await p.evaluate(()=>__pricePasses);
+  if(width===320&&scenario==='cached-prices'){
+   await p.evaluate(()=>__trip.step(5));await p.click('#tNext');await p.click('#tNext');await p.waitForFunction(()=>!__trip.state().busy&&__trip.state().evRecovery?.state==='done');reads=await p.evaluate(()=>__discoveryReads);passes=await p.evaluate(()=>__pricePasses);await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tCompare');
+   assert.equal(await p.locator('[data-vc-recover]').count(),1,'failed reviewed EV exposes the feasible-route action');
+   assert(await p.locator('[data-vc-recover]').evaluate(e=>e.previousElementSibling.hasAttribute('data-vc-plan')&&e.nextElementSibling.hasAttribute('data-vc-use')),'recovery sits between Adjust and Review');
+   await p.evaluate(()=>{const c=DemoCars.create().find(c=>c.power!=='ev'&&c.power!=='h2');__app.S.cars.push(c);});await p.click('#vcCompare');await p.click('[data-compare-car]');
+   await p.evaluate(()=>__trip.step(8));await p.click('[data-vc-recover]');await p.waitForSelector('[data-ev-replace]');
+   assert.equal(await p.evaluate(()=>__trip.state().evRecovery.usable),1,'returning from another car restores its completed recovery');
+   assert.equal(await p.evaluate(()=>__discoveryReads),reads,'comparison recovery does not rediscover');assert.equal(await p.evaluate(()=>__pricePasses),passes,'comparison recovery does not reprice');
+  }else await p.click('#tNext');
+  await p.waitForSelector('[data-ev-replace]');assert.match(await p.locator('#tsResults').innerText(),/Routes that would work/i);
   await p.click('[data-ev-replace]');await p.waitForFunction(()=>__trip.state().step===5);
   assert(await p.evaluate(()=>{const id=__app.KV.get('trips','index').v[0].id,o=JSON.parse(__app.N.kvGet('trips','trip|'+id));return o.v.stationPoolVersion===1&&o.v.stationPool.length>0&&!o.v.stations.google.some(g=>g.list);}), 'accepted routes are persisted through the compact native bridge format');
   assert(await p.evaluate(()=>__trip.state().result?.plan.ok),'the hazard review must retain the accepted, validated plan');

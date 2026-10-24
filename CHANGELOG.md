@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.260 - 2026-10-24
+- Reuse completed station-price checks across comparison vehicles; avoid repeating unchanged or failed lookups.
+- Add “Routes that would work” to failed EV comparison cards and retain checked alternatives when switching cars.
+- Choose each vehicle’s planning priority in Route or below its comparison buttons.
+
 ## 0.0.259 - 2026-10-24
 - Allow charging above the preferred 80% when needed in Cheapest overall mode; show the required charge level and include charging time.
 - Refresh expired guest-source authentication once, then pause denied sources and try existing EVgo price fallbacks.

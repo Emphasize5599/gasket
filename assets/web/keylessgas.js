@@ -452,6 +452,13 @@
       return result;
     }finally{busy=null;scanChanged();}
   }
+  // Successful checks are separate from price observations: no result must not make
+  // an old pump price look current, or make every vehicle repeat the same check.
+  function priceCheckKey(s,grade){return 'price-check-v1|'+grade+'|'+knownKey(s);}
+  function needsPriceRefresh(s,grade,hours){
+    var A=root.__app;if(A.P.priceFresh(s.prices&&s.prices[grade],hours))return false;
+    return !A.KV.get('gasmeta',priceCheckKey(s,grade),Math.max(1,+hours||24)*3600e3);
+  }
   async function refreshKnown(known,onProgress,priority,grade){
     grade=grade||'regular';if(!root.__app.P.GRADES[grade])throw new Error('Unsupported fuel grade');
     if(busy)throw new Error('A keyless lookup is already running');
@@ -514,6 +521,7 @@
           if((!r.error||r.code==='no_prices')&&!r.blocked)A.KV.put('gasweb',x.key,Object.assign({},r,{stores:(r.stores||[]).filter(nearby)}));
         }
         var added=(r.stores||[]).filter(nearby);
+        if(!r.blocked&&!r.cancelled&&!r.partial&&(!r.error||r.code==='no_prices'))x.g.stations.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:at});});
         added.forEach(function(w){var id=w.placeId||w.featureId||w.id,old=rows.get(id);if(!old||old.observedAt<=at)rows.set(id,Object.assign({},w,{observedAt:at}));});
         // Flush successful observations after each area, not after a twenty-minute batch.
         if(root.PriceHistory&&added.length){
@@ -551,5 +559,5 @@
     var A=root.__app,groups=knownAreas(known,A.P),o=A.KV.get('gasmeta','timing|'+(grade||'regular')),ms=o&&o.v.averageAreaMs||10000;
     var readers=readerCount(A);return {areas:groups.length,seconds:Math.ceil(groups.length*ms/readers/1000),measured:!!o,readers:readers};
   }
-  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
+  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,needsPriceRefresh:needsPriceRefresh,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
 })(typeof window!=='undefined'?window:globalThis);

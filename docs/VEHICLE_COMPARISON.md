@@ -1,5 +1,13 @@
 # Vehicle comparison
 
+## Current planning controls (0.0.260)
+
+Each vehicle has its own manual / lowest cost / shortest total time priority. The selector appears below its comparison buttons and in its Route menu, after Other routes. A batch uses each vehicle's own objective and estimates its work accordingly. Changing a priority retains station inventory but invalidates that vehicle's optimized result. Changing between time and cost goals requires renewed consideration of alternative routes; it does not silently reuse consent for a different question.
+
+Failed EV cards offer **Routes that would work** between Adjust and Review. Completed alternative checks survive switching comparison vehicles in this session, tied to the same result/configuration. Queued failures also check alternatives, then let the user choose and review hazards rather than silently accepting a different route. Ready states, recovery results and safety approvals are not persisted as current consent in portable saved drafts.
+
+Automatic gas price checks share successful station/grade checks for the configured freshness window, including a completed response with no new price. These checks do not change a price's source timestamp or hide stale-price warnings. Failed, partial, blocked and cancelled checks do not suppress another attempt. Explicit refresh can query again. Failed ChargePoint pages use the EV freshness window (up to 24 hours) before automatic retry; targeted Retry bypasses that cooldown.
+
 Implemented in 0.0.236 (0.0.235 was source-only after a release-test failure). Compare is step 8, between Stops and Depart (now 9),
 including with only one garage vehicle. Compare another vehicle opens the garage
 picker; Add vehicle below it opens the existing editor. A new participant starts

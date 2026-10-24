@@ -14,6 +14,7 @@ const rows=[{id:'unknown',order:0,metrics:{ready:true,cost:null,minutes:10}},{id
 assert.deepEqual(V.sorted(rows,'cost').map(r=>r.id),['a','b','unknown','pending']);assert.equal(V.sorted(rows,'time')[0].id,'unknown');
 a.trip.routeChoices={secret:{consider:true}};const saved=V.portable(a);assert.equal(saved.trip.routeChoices,undefined);assert.equal(saved.needsReview,true);assert.equal(saved.result,undefined);assert.equal(saved.reviewedAt,undefined);
 assert.equal(V.profile({id:'a',tank:10,nick:'A',pic:'a'}),V.profile({id:'a',tank:10,nick:'B',pic:'b'}));assert.notEqual(V.profile({tank:10}),V.profile({tank:20}));
+assert.equal(V.profile({id:'a',autoTripPriority:'cost'}),V.profile({id:'a',autoTripPriority:'time'}),'planning objective does not change physical vehicle configuration');
 assert.equal(V.profile({tires:{airedAt:1,aired:1,type:'Touring'}}),V.profile({tires:{airedAt:2,aired:2,type:'Touring'}}),'maintenance acknowledgment timestamps do not alter the vehicle configuration');
 const ev=session();ev.kind='ev';ev.trip={returnTrip:true,backAuto:false,backAt:new Date(3*3600000).toISOString()};ev.result.opts.rewardDepartAt=1;ev.result.plan.destinationCharges=[{d:100,index:0,arriveGal:20,buyGal:5,cost:2,minutes:60}];ev.result.plan.arriveGal=15;
 assert.equal(V.metrics(ev).overlap,60,'scheduled dwell absorbs destination charging, not road charging');assert.equal(V.metrics(ev).minutes,200);
