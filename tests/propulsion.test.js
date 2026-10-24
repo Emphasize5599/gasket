@@ -38,4 +38,12 @@ let missing=[];P.weather([],0,0,missing);assert(missing.includes('weather_missin
 let future=[];P.weather([{mi:0,hours:[[1000,10],[3601000,20]]}],0,9000000,future);assert(future.includes('weather_outside_forecast'));
 const timed=options(),tariff={currency:'USD',uom:'kwh',fee:.99,complete:true,zone:'UTC',blocks:[{rate:.1,start:0,end:60},{rate:.7,start:60,end:1440}]};
 timed.cands=timed.cands.map(c=>({...c,tariffOffer:tariff,price:.1,sessionFee:.99}));const priced=T.plan(timed);assert(priced.ok,JSON.stringify(priced));assert.equal(priced.stops[0].c.price,.7,'arrival after the cheap window is repriced before returning a plan');close(priced.stops[0].propulsion.cost,priced.stops[0].propulsion.billedKWh*.7+.99);close(priced.totals.cost,priced.stops[0].propulsion.cost);
-console.log('Propulsion: weather, metered billing, tariff arrival repricing, session fees, repeat planning and legal caps passed');
+// Synthetic final-leg gap: an efficiency target must not become a physical battery limit.
+const gapModel=T.restoreModel({pts:[],cum:[],totalMi:300,durationSec:18000,legEnds:[300],cityGpm:.25,hwyGpm:.25,combGpm:.25,segs:[{from:0,to:300,t0:0,t1:18000,mph:60,gpm:.25}]});
+const gap=()=>({model:gapModel,cands:[{id:'last-priced',d:80,price:.4,priceKnown:true,kw:105,stationKw:150,detourMi:0,detourMin:0}],startGal:60,capGal:75,fillCap:60,bufferGal:10,arriveGal:10,step:.1,fuelKind:'ev',stopMinutes:5,requireKnownPrice:true,priceAgeHours:24,propulsion:{kind:'ev',capacity:75,dcKw:150},propulsionContext:{departAt:Date.UTC(2026,9,22),weather:[]}});
+assert(!T.plan(gap()).ok,'explicit 80% mode remains a hard ceiling');
+const expanded=T.plan({...gap(),fillCap:75,preferredFillCap:60});assert(expanded.ok,JSON.stringify(expanded));assert(expanded.higherChargeFallback);assert(expanded.stops.some(s=>s.departGal>60));assert(expanded.stops.every(s=>s.departGal<=75+1e-6));assert(expanded.arriveGal>=10-1e-6);assert(expanded.propulsion.chargingMinutes>0,'higher charge retains thermal/taper timing');
+const feasible=options(),preferred=T.plan({...feasible,fillCap:60,preferredFillCap:48});assert(preferred.ok);assert(!preferred.higherChargeFallback);assert(preferred.stops.every(s=>s.departGal<=48+1e-6),'keep the efficient target when it already works');
+const unknownGap=gap();unknownGap.cands[0].priceKnown=false;assert(!T.plan({...unknownGap,fillCap:75,preferredFillCap:60}).ok,'higher charging never enables unknown prices');
+assert(!T.plan({...gap(),startGal:5,fillCap:75,preferredFillCap:60}).ok,'cannot fix an unreachable first charger by increasing a later target');
+console.log('Propulsion: weather, billing, arrival tariffs, preferred versus strict charge targets, reserves, repeat planning and legal caps passed');

@@ -4,9 +4,13 @@
  function call(){return root.__trip.call.apply(null,arguments);}
  async function configure(a){var r=await call('evGuestConfig',JSON.stringify(a||{}));if(!r||r.error)throw new Error('EV source settings could not be saved');capabilities=r;return r;}
  async function request(source,action,args){if(stopped||!S.evGuestApps)throw new Error('Guest lookup cancelled');if(paused.has(source)){var stoppedError=new Error(source+': access restricted; this source is paused');stoppedError.blocked=true;throw stoppedError;}var started=Date.now(),r=await call('fetchEvGuest',source,action,JSON.stringify(args));
-  if(root.FLog)root.FLog.info('stations','Guest EV source request',{source:source,phase:action,status:r&&r.status||null,ms:Date.now()-started,blocked:!!(r&&r.blocked)});
-  if(!r||r.error||r.blocked){var e=new Error(source+': '+(r&&r.blocked?'access restricted; this source is paused':r&&r.status===401?'authentication expired':'guest data unavailable'));e.blocked=r&&r.blocked;if(e.blocked)paused.add(source);sourceErrors.add(e.message);throw e;}
-  var j;try{j=JSON.parse(r.body);}catch(e){throw new Error(source+': unreadable station data');}if(j.errors)throw new Error(source+': unsuccessful response');return j;
+  if(root.FLog)root.FLog.info('stations','Guest EV source request',{source:source,phase:action,status:r&&r.status||null,ms:Date.now()-started,blocked:!!(r&&r.blocked),authRefreshed:!!(r&&r.authRefreshed),authDenied:!!(r&&r.authDenied),authRefreshFailed:!!(r&&r.authRefreshFailed),paused:!!(r&&r.paused)});
+  if(!r||r.error||r.blocked){var e=new Error(source+': '+(r&&r.authDenied?'guest access denied after token refresh; source paused (not a bot check)':r&&r.authRefreshFailed?'token refresh failed; source paused':r&&r.blocked?'access restricted; this source is paused':r&&r.status===401?'authentication expired':'guest data unavailable'));e.blocked=r&&r.blocked;if(e.blocked)paused.add(source);sourceErrors.add(e.message);throw e;}
+  var j;try{j=JSON.parse(r.body);}catch(e){throw new Error(source+': unreadable station data');}if(j.errors&&j.errors.length){
+   var denied=j.errors.some(function(x){return /not authorized|unauthenticated|forbidden|access denied/i.test(String(x.message||'')+' '+String(x.extensions&&x.extensions.code||''));});
+   var error=new Error(source+(denied?': guest access denied; source paused (not a bot check)':': unsuccessful API response'));
+   if(denied){paused.add(source);error.blocked=true;}sourceErrors.add(error.message);if(root.FLog)root.FLog.warn('stations','Guest EV API response rejected',{source:source,phase:action,denied:denied});throw error;
+  }return j;
  }
  function distance(a,b){return Math.hypot((+a.lat-+b.lat)*111320,(+a.lng-+b.lng)*111320*Math.cos(+a.lat*Math.PI/180));}
  function unique(st,list,coords){var matches=(list||[]).filter(function(s){return distance(st,coords(s))<=100;});return matches.length===1?matches[0]:null;}
@@ -52,7 +56,10 @@
  async function annotate(items,car,progress){stopped=false;session++;paused.clear();sourceErrors.clear();var notes=[],count=0;if(!S.evGuestApps||!A.N.fetchEvGuest||!T)return {priced:0,notes:notes};
   var run=session;capabilities=await configure({});if(!capabilities.enabled)return {priced:0,notes:['Enable guest sources in Settings → Connections on this device.']};var todo=items.filter(function(x){var g=root.AltFuel.netGroup(x.st);return root.AltFuel.netEnabled(g)&&(['ea','chargepoint','evgo','walmart','mercedes','bp','shell','rivian'].indexOf(g)>=0);});
   var blocked=new Set();for(var i=0;i<todo.length;i++){if(stopped||run!==session)break;var x=todo[i],g=root.AltFuel.netGroup(x.st);if(blocked.has(g))continue;
-   try{var data=await cached('v1|'+g+'|'+x.st.id,async function(){return ['ea','chargepoint','evgo'].indexOf(g)>=0?direct(x,g):aggregate(x,g);});
+   try{var data=await cached('v1|'+g+'|'+x.st.id,async function(){if(g==='evgo'){
+     if(!paused.has('evgo')){try{var own=await direct(x,g);if(own&&own.offers.length)return own;}catch(e){sourceErrors.add(e.message);}}
+     return aggregate(x,g);
+    }return ['ea','chargepoint'].indexOf(g)>=0?direct(x,g):aggregate(x,g);});
     var selected=data&&T.select(data.offers,x,car,Date.now());if(selected){var p=selected.price,o=selected.offer;
      // Incomplete mandatory fees cannot override a better public price or enter automatic planning.
      if(!p.complete){x.st.evTariffIssue='Published energy price found; fee applicability is unverified';if(x.st.netPrice)continue;}

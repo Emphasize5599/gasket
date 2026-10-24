@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.234**, 2026-10-22, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 53 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 55 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 ## feat — product features
 
@@ -32,6 +32,9 @@ Keep existing item numbers so references remain valid; gaps are intentional. New
 12. [ ] **Richer optional doodles.** Consider more wheel detail, roof racks and two-tone paint. This is an existing enhancement idea, not a replacement for vehicle photos.
 
 ### Discounts and trip optimization
+
+53. [ ] **Departure-time traffic predictions and congestion-aware energy estimates.** Investigate how [Vela](https://github.com/PimpinPumpkin/Vela) obtains Google traffic data and whether a reliable, permitted source can support future departure dates/times. Apply predicted congestion at the estimated time each route section is reached, including rush-hour city crossings and delays from earlier stops. Feed actual expected driving speeds into travel-time and vehicle energy/fuel estimates without changing posted speed limits. Distinguish predictive, live and missing traffic data, preserve cached-data age/confidence and avoid pretending current traffic predicts a future trip. Review source terms and any reused-code license before implementation; do not bypass access controls. Coordinate with speed guidance (52) and energy models (50).
+54. [ ] **“Fill in a time for me” departure setting.** Let the user ask Gasket to choose a leave time that avoids as much projected traffic as possible, using item 53. Offer an explicit search date/time window and respect arrival deadlines and required stops; compare whole-trip predicted congestion/travel time, not just traffic at the starting point. Show the recommended time, expected improvement and uncertainty, and let the user accept or adjust it. Recalculate section arrival times, fuel/energy use and time-dependent charging prices consistently; never guarantee a congestion-free trip.
 
 52. [ ] **Clearer fossil-fuel speed guidance.** Review the gas/diesel speed graph using the EV distinction between lowest energy use, lowest trip cost and an energy/time balance. Show concise choices and their cost/time differences; do not call a percentage-based compromise the most efficient or a proven optimum. Retain per-road controls, speed caps and feasibility checks. Coordinate with energy-model validation (50).
 

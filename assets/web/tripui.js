@@ -3358,7 +3358,7 @@
   }
   function makeBaseOpts(model, cands, startGal,raw) {
     var kd = KIND(), cap = Garage.tank();
-    return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * 0.8 : null,
+    return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * (S.trip.fillUp?0.8:1) : null,preferredFillCap:kd==='ev'&&!S.trip.fillUp?cap*.8:null,
       priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
       propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2}),propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
@@ -3693,6 +3693,7 @@
     // warnings first: what could go wrong on this trip
     var w = [];
     if(p.propulsion){var ef=p.propulsion.flags||[];w.push({t:KIND()==='h2'?'Hydrogen speed estimates are unvalidated; weather effects on consumption are unknown.':'EV energy, charging time and losses are estimates. '+(ef.some(function(x){return /^weather_/.test(x);})?'Hourly temperatures are missing for part of this trip; those sections use 20°C. ':'' )+'Confirm charging access and rates before travel.'});}
+    if(p.higherChargeFallback)w.push({t:'This route needs charging above the preferred '+p.higherChargeFallback.preferredPct+'% at '+p.higherChargeFallback.stops+' stop(s), up to '+p.higherChargeFallback.maxPct+'%. Near-full charging is slower; the estimate includes that extra charging time. Confirm your car and the stations allow the required charge level.'});
     if (!p.ok) {
       var gap='No plan keeps you above a '+r.bufMi+'-mile buffer. '+(p.reachMi>0?'The current station list cannot bridge the gap past mile '+Math.round(p.reachMi)+'.':'No usable stop is reachable within your current range and detour limit.');
       if(KIND()==='ev'){
@@ -4406,7 +4407,7 @@
       '<span class="mid"><span class="nm">' + esc(P.displayName(st)) + '</span><span class="sub">Mile ' + Math.round(c.d) + ' · ' + (KIND() === 'ev' ? 'add ' : 'buy ') + s.buyGal.toFixed(1) + ' ' + UN() + ' · ~' + Math.max(1, Math.round(T.serviceMinutes(s,result.opts.fuelKind))) + ' min '+(KIND()==='ev'?'charging':'refueling') + (c.detourMi < 0.15 ? '' : ' · +' + c.detourMi.toFixed(1) + ' mi off') + '</span></span>' +
       '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + (c.est ? '<span class="o est-tag">est.</span>' : '') + '</span><span class="chev"></span></button>';
     if (!open) return h + '</div>';
-    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' ' + UN() + (s.propulsion&&s.propulsion.billedKWh!=null?' stored · ~'+s.propulsion.billedKWh.toFixed(1)+' kWh billed':'') + (KIND() === 'ev' ? (s.departGal >= Garage.tank() * 0.8 - 0.3 ? ' (to 80%)' : '') : S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') +
+    h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' ' + UN() + (s.propulsion&&s.propulsion.billedKWh!=null?' stored · ~'+s.propulsion.billedKWh.toFixed(1)+' kWh billed':'') + (KIND() === 'ev' ? ' (to '+Math.max(0,Math.min(100,Math.round(s.departGal/Garage.tank()*100)))+'%)' : S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') +
       ' · <b>~' + Math.max(1, Math.round(T.serviceMinutes(s,result.opts.fuelKind))) + ' min '+(KIND()==='ev'?'charging':'refueling')+'</b>'+(c.kw?' at ~'+Math.round(c.kw)+' kW average':'') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
       ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';

@@ -1,8 +1,8 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-function setup(){const calls=[],cache=new Map(),S={evGuestApps:true,evPriceAgeHours:24},ctx={Map,Set,Date,Math,Number,JSON,Promise,Intl};ctx.window=ctx;
+function setup(handler){const calls=[],cache=new Map(),S={evGuestApps:true,evPriceAgeHours:24},ctx={Map,Set,Date,Math,Number,JSON,Promise,Intl};ctx.window=ctx;
  ctx.__app={S,N:{fetchEvGuest(){}},KV:{get:(ns,k)=>cache.get(k),put:(ns,k,v)=>cache.set(k,{v})}};
  ctx.AltFuel={netGroup:st=>st.group,netEnabled:()=>true,compatiblePlugs:()=>['J1772COMBO']};
- ctx.__trip={call:async(fn,source,action,args)=>{calls.push([fn,source,action,args]);if(fn==='evGuestConfig')return {enabled:true,chargeway:true,evgo:true,plugshare:false};
+ ctx.__trip={call:async(fn,source,action,args)=>{calls.push([fn,source,action,args]);if(handler)return handler(fn,source,action,args);if(fn==='evGuestConfig')return {enabled:true,chargeway:true,evgo:true,plugshare:false};
   if(source==='ea'&&action==='near')return {body:JSON.stringify([{id:'site',coordinates:{latitude:35,longitude:-91}}])};
   if(source==='ea')return {body:JSON.stringify({coordinates:{latitude:35,longitude:-91},pricing:[{energy:.3,minPower:1,maxPower:350,timePeriod:'12am - 8am'},{energy:.5,minPower:1,maxPower:350,timePeriod:'8am - 12am'}],fixedFees:[{fee:0}],evses:[{id:'1',connectors:[{id:'1',standard:'IEC_62196_T1_COMBO'}]}]})};
   if(source==='chargeway'&&action==='near')return {body:JSON.stringify({results:[{id:'zone',nrel_id:1,latitude:35,longitude:-91,time_zone:'America/Chicago'}]})};throw Error('Unexpected request');}};
@@ -13,5 +13,25 @@ function setup(){const calls=[],cache=new Map(),S={evGuestApps:true,evPriceAgeHo
  assert.equal(z.G.unique({lat:35,lng:-91},[{lat:35,lng:-91},{lat:35,lng:-91}],x=>x),null,'ambiguous collocated sites do not match');
  const off=setup();off.S.evGuestApps=false;await off.G.annotate([item()],{});assert.equal(off.calls.length,0,'opt-out makes zero calls');
  const native=fs.readFileSync('src/com/bensanzone/fuelmap/EvAppClient.java','utf8');assert.match(native,/setInstanceFollowRedirects\(false\)/);assert.match(native,/!prefs.getBoolean\("enabled",false\)/);assert.match(native,/grant_type=refresh_token/);assert.match(native,/AES\/GCM\/NoPadding/);assert.match(native,/Retry-After/);assert(!/idToken\s*=\s*"ey/.test(native));
- console.log('EV guest sources: opt-in, multi-source identity join, shared cache, ambiguous matches and native security gates passed');
+ for(const nativeDenied of [false,true]){
+  const denied=setup((fn,source,action)=>{
+   if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:true,plugshare:true};
+   if(source==='evgo')return nativeDenied?{status:200,blocked:true,authDenied:true,authRefreshed:true,error:'Denied'}:{status:200,body:JSON.stringify({errors:[{message:'Not Authorized'}]})};
+   if(source==='plugshare'&&action==='near')return {body:JSON.stringify([{id:4,latitude:35,longitude:-91,stations:[{network_id:19}]}])};
+   if(source==='plugshare')return {body:JSON.stringify({access:1,latitude:35,longitude:-91,stations:[{network_id:19,outlets:[{id:1,connector:13,is_dc:true,kilowatts:150,prices:[{currency:'USD',elements:[{price_components:[{type:'ENERGY',price:.3}]}]}]}]}]})};
+   throw Error('Unexpected source '+source);
+  });
+  const stations=[1,2].map(i=>({st:{id:'evgo'+i,afdcId:i,lat:35,lng:-91,group:'evgo',plugs:['J1772COMBO']},dc:true}));
+  const result=await denied.G.annotate(stations,{});
+  assert.equal(denied.calls.filter(c=>c[1]==='evgo').length,1,'denied source pauses rather than repeating at every station');
+  assert.equal(result.priced,2,'existing independent source still provides matching per-port tariffs');
+  assert(stations.every(x=>x.st.tariffV2.source==='plugshare'));
+  assert(result.notes.some(n=>n.includes('not a bot check')),'authentication failure is visible without a CAPTCHA claim');
+ }
+ assert.match(native,/if\(renew&&\(auth==null\|\|auth\.optString\("refresh"\)\.isEmpty\(\)\)\)throw/,'refresh cannot create a replacement identity');
+ assert.match(native,/if\(out\.optBoolean\("blocked"\)\)return false/,'do not refresh on a protection block');
+ assert.match(native,/if\(out\.optInt\("status"\)!=200\)return false/);
+ assert.match(native,/if\(authenticationFailure\(out\)\)\s*\{\s*refused\.put/,'a second auth failure pauses instead of refreshing again');
+ assert.equal((native.match(/token\(source,s,true\)/g)||[]).length,1,'exactly one refresh call site');
+ console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh and native security gates passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -649,6 +649,7 @@
 
   /** Full plan: optimized + a "convenient" baseline (fewest stops, least detour, fill up) for comparison. */
   function plan(o) {
+    if(o.preferredFillCap>0&&o.fillCap>o.preferredFillCap+1e-8&&!o.preferredChargePass)return preferredChargePlan(o);
     if(EP&&o.propulsion&&!o.propulsionPass)return propulsionPlan(o);
     // EV reliability is a preference tier, not an invented dollar surcharge. Try a whole
     // feasible trip with recently observed tariffs first; never strand the driver by
@@ -706,6 +707,19 @@
     return { ok: true, tooFar: tooFar, cands: cands, stops: best.stops,destinationCharges:best.destinationCharges||[], arriveGal: best.arriveGal, totals: bestEval, easy: easy.ok ? { stops: easy.stops,destinationCharges:easy.destinationCharges||[], totals: easyEval } : null,
       minStops: minStops, refPrice: o.refPrice, noStopGal: noStopGal, firstDip: !!oo.firstDip,
       arriveMi: best.arriveGal / o.model.combGpm, savings: easyEval ? easyEval.net - bestEval.net : null };
+  }
+
+  // An efficiency preference is not a physical battery limit. Only callers that explicitly
+  // provide a preferred target may expand to their separately supplied maximum.
+  function preferredChargePlan(o){
+    var firstOpts=Object.assign({},o,{preferredChargePass:true,fillCap:o.preferredFillCap}),first=plan(firstOpts),chosen=first,used=firstOpts;
+    if(!first.ok&&(first.reachMi!==0||(first.stops||[]).length)){
+      var fullOpts=Object.assign({},o,{preferredChargePass:true}),full=plan(fullOpts);
+      if(full.ok){chosen=full;used=fullOpts;var high=(full.stops||[]).filter(function(s){return s.departGal>o.preferredFillCap+Math.max(.01,o.step||.1);});
+        if(high.length)full.higherChargeFallback={preferredPct:Math.round(o.preferredFillCap/o.capGal*100),maxPct:Math.min(100,Math.ceil(Math.max.apply(null,high.map(function(s){return s.departGal;}))/o.capGal*100)),stops:high.length};
+      }
+    }
+    ['model','refPrice','propulsionBase'].forEach(function(k){if(used[k]!==undefined)o[k]=used[k];});return chosen;
   }
 
   // Reuse the existing cost optimizer. Coupled thermal/ETA validation happens in the

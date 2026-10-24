@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.259 - 2026-10-24
+- Allow charging above the preferred 80% when needed in Cheapest overall mode; show the required charge level and include charging time.
+- Refresh expired guest-source authentication once, then pause denied sources and try existing EVgo price fallbacks.
+
 ## 0.0.258 - 2026-10-24
 - Guest-source confirmation, onboarding key guides and targeted ChargePoint retries from 257, with cancellation-safe stop rebuilding.
 

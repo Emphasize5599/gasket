@@ -88,7 +88,7 @@ final class EvAppClient {
     private double coord(JSONObject a, String k, double limit) throws Exception { double n=a.getDouble(k); if (!Double.isFinite(n)||Math.abs(n)>limit) throw new Exception("Invalid charger coordinates"); return n; }
     private String encode(String s) throws Exception { return URLEncoder.encode(s,"UTF-8"); }
     private JSONObject http(String source, String url, String body, String type, String bearer, String headerKey, String headerValue) throws Exception {
-        long now=System.currentTimeMillis(); if (refused.getOrDefault(source,0L)>now) throw new Exception("Source paused after refusal; try later");
+        long now=System.currentTimeMillis(); if (refused.getOrDefault(source,0L)>now) return new JSONObject().put("paused",true).put("blocked",true).put("error","Source is cooling down after a refusal");
         long wait=next.getOrDefault(source,0L)-now; if(wait>0)Thread.sleep(Math.min(wait,2000)); next.put(source,System.currentTimeMillis()+1100);
         HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
         try {
@@ -107,6 +107,7 @@ final class EvAppClient {
     }
     private String token(String source, JSONObject s, boolean renew) throws Exception {
         JSONObject auth=s.optJSONObject(source+"Auth"); long now=System.currentTimeMillis();
+        if(renew&&(auth==null||auth.optString("refresh").isEmpty()))throw new Exception("No refresh token; anonymous identity will not be replaced automatically");
         if(!renew&&auth!=null&&auth.optLong("until")>now+120000)return auth.getString("id");
         String api=s.optString(source+"ApiKey");if(api.isEmpty())throw new Exception("Guest source credentials are not configured");
         boolean refresh=auth!=null&&!auth.optString("refresh").isEmpty();
@@ -117,6 +118,21 @@ final class EvAppClient {
         auth=new JSONObject().put("id",j.getString(refresh?"id_token":"idToken")).put("refresh",j.getString(refresh?"refresh_token":"refreshToken"))
             .put("until",now+Math.min(86400,j.getLong(refresh?"expires_in":"expiresIn"))*1000);
         s.put(source+"Auth",auth);store(s);return auth.getString("id");
+    }
+    private static boolean authenticationFailure(JSONObject out) {
+        if(out.optBoolean("blocked"))return false;
+        if(out.optInt("status")==401)return true;
+        if(out.optInt("status")!=200)return false;
+        try {
+            JSONArray errors=new JSONObject(out.optString("body")).optJSONArray("errors");
+            if(errors==null)return false;
+            for(int i=0;i<errors.length();i++) {
+                JSONObject e=errors.optJSONObject(i);if(e==null)continue;JSONObject ext=e.optJSONObject("extensions");
+                String message=(e.optString("message")+" "+(ext==null?"":ext.optString("code"))).toLowerCase(java.util.Locale.ROOT).replaceAll("[ _-]","");
+                if(message.contains("notauthorized")||message.contains("unauthenticated")||message.contains("tokenexpired")||message.contains("jwtexpired")||message.contains("invalidtoken"))return true;
+            }
+        }catch(Exception ignored){}
+        return false;
     }
     synchronized JSONObject request(String source,String action,String args) throws Exception {
         if(!prefs.getBoolean("enabled",false))throw new Exception("Guest-app add-on is disabled");
@@ -163,8 +179,19 @@ final class EvAppClient {
             body=new JSONObject().put("query",query).put("variables",vars).toString();bearer="Bearer "+token(source,s,false);
         } else throw new Exception("Unsupported guest source");
         JSONObject out=http(source,url,body,type,bearer,hk,hv);
-        if((source.equals("evgo")||source.equals("chargeway"))&&(out.optInt("status")==401||out.optString("body").contains("UNAUTHENTICATED")))
-            out=http(source,url,body,type,"Bearer "+token(source,s,true),hk,hv);
+        if((source.equals("evgo")||source.equals("chargeway"))&&authenticationFailure(out)) {
+            try {
+                out=http(source,url,body,type,"Bearer "+token(source,s,true),hk,hv);
+                out.put("authRefreshed",true);
+                if(authenticationFailure(out)) {
+                    refused.put(source,System.currentTimeMillis()+900000);
+                    out.put("authDenied",true).put("blocked",true).put("error","Guest access denied after one token refresh; source paused");
+                }
+            }catch(Exception e) {
+                refused.put(source,System.currentTimeMillis()+60000);
+                out=new JSONObject().put("authRefreshFailed",true).put("blocked",true).put("error","Token refresh failed; source paused without creating a replacement identity");
+            }
+        }
         return out;
     }
 }
