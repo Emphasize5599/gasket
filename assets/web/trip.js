@@ -15,6 +15,7 @@
 (function initTrip(root) {
   'use strict';
   var EP=typeof module!=='undefined'&&module.exports?require('./propulsion.js'):root.Propulsion;
+  var ET=typeof module!=='undefined'&&module.exports?require('./evtariffs.js'):root.EVTariffs;
   var M_PER_MI = 1609.344;
 
   // ---------------- Google Maps links ----------------
@@ -469,7 +470,7 @@
     // Extra time has to pay for itself: every stop must save at least stopPenalty, and leaving the road for a
     // station (more than ~1.5 min of detour) must save at least detourPenalty more than staying on the route.
     var stopCost = stopCostFn || function (c) {
-      return (o.stopPenalty || 0) + (c.penalty || 0) + ((c.detourMin || 0) > 1.5 ? (o.detourPenalty || 0) : 0) +
+      return (o.stopPenalty || 0) + (c.penalty || 0) + Math.max(0,+c.sessionFee||0) + ((c.detourMin || 0) > 1.5 ? (o.detourPenalty || 0) : 0) +
         (o.timeValue || 0) * ((c.detourMin || 0) + (o.stopMinutes || 0)) / 60;
     };
     var detGal = function (n) { return n.kind === 'stop' ? (n.c.detourMi || 0) * model.cityGpm : 0; };
@@ -552,7 +553,7 @@
   // A purchase's effective average price, including the 30-gallon Club cap. Never mutate a
   // shared candidate: alternative routes/sweeps must not consume each other's hypothetical reward.
   function purchaseQuote(c,gal,monthly){
-    if(!c.citgo||!(gal>0))return {c:c,cost:gal*c.price};
+    if(!c.citgo||!(gal>0))return {c:c,cost:gal*c.price+(gal>0?Math.max(0,+c.sessionFee||0):0)};
     var r=c.citgo,discount=r.ordinary+(monthly?r.extra:0),factor=Math.min(gal,r.cap)/gal;
     var price=r.price-discount*factor,yes=monthly?r.bonus:r.normal,no=r.none;
     var steps=yes.steps.map(function(s){var base=no.steps.find(function(x){return x.label===s.label;});return Object.assign({},s,{amount:(base?base.amount:0)*(1-factor)+s.amount*factor});});
@@ -713,12 +714,18 @@
   function propulsionPlan(o){
     if(!o.propulsionBase){o.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){o.propulsionBase[k]=o.model[k];});}
     var base=makeModel(Object.assign({},o.model,o.propulsionBase)),ctx=Object.assign({},o.propulsionContext,{startGal:o.startGal,fillCap:o.fillCap||o.capGal,reserve:o.bufferGal,stopMinutes:o.stopMinutes,destinations:o.destinationCharges||[]}),projection=EP.project(base,o.propulsion,ctx,null),m=makeModel(projection.model),p,applied;
+    var tariffCands=o.cands,priceChanged=false;
     for(var pass=0;pass<3;pass++){
-      var oo=Object.assign({},o,{model:m,propulsionPass:true});p=plan(oo);o.refPrice=oo.refPrice;if(!p.ok)return p;
+      var oo=Object.assign({},o,{model:m,cands:tariffCands,propulsionPass:true});p=plan(oo);o.refPrice=oo.refPrice;if(!p.ok)return p;
       applied=EP.project(base,o.propulsion,ctx,p);
-      if(applied.ok&&applied.mismatch<=Math.max(.01,2*(o.step||.1))&&Math.abs(applied.arriveGal-p.arriveGal)<=Math.max(.01,2*(o.step||.1))&&applied.arriveGal>=o.arriveGal-1e-7)break;
+      priceChanged=false;
+      if(ET&&o.propulsion.kind==='ev')tariffCands=tariffCands.map(function(c){if(!c.tariffOffer)return c;
+        var delay=p.stops.filter(function(s){return s.c.d<c.d;}).reduce(function(sum,s){return sum+stopDelay(o,s)*60;},0),at=(ctx.departAt||Date.now())+(m.timeTo(c.d)+delay+(c.detourMin||0)*30)*1000,q=ET.quote(c.tariffOffer,at);
+        if(!q)return c;var changed=Math.abs(c.price-q.rate)>1e-8;priceChanged=priceChanged||changed;return Object.assign({},c,{price:q.rate,sessionFee:q.fee});});
+      if(!priceChanged&&applied.ok&&applied.mismatch<=Math.max(.01,2*(o.step||.1))&&Math.abs(applied.arriveGal-p.arriveGal)<=Math.max(.01,2*(o.step||.1))&&applied.arriveGal>=o.arriveGal-1e-7)break;
       m=makeModel(applied.model);
     }
+    if(priceChanged)return Object.assign(p,{ok:false,propulsionReason:'Charging prices changed across arrival-time windows. Adjust departure or charging settings and retry.'});
     if(!applied.ok||applied.mismatch>Math.max(.01,2*(o.step||.1))||Math.abs(applied.arriveGal-p.arriveGal)>Math.max(.01,2*(o.step||.1))||applied.arriveGal<o.arriveGal-1e-7)return Object.assign(p,{ok:false,propulsionReason:applied.reason||'Weather-aware energy estimate did not settle. Review range, buffer and charging settings.',propulsionFlags:applied.flags});
     m=makeModel(applied.model);o.model=m;
     p.arriveGal=applied.arriveGal;p.arriveMi=p.arriveGal/m.combGpm;p.stops=p.stops.filter(function(s){return s.buyGal>1e-8;});

@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.256 - 2026-10-23
+- Optional native guest prices for EA, EVgo and ChargePoint, plus Chargeway/PlugShare coverage for Walmart EV, Mercedes HPC and bp pulse.
+- Separate straightforward and experimental tariffs; networks without reliable price readers cannot be selected.
+- Preserve connector/charging-level matches, reuse cached tariffs, recheck arrival-time prices and include known session fees. Unresolved prices remain labeled estimates or excluded.
+
 ## 0.0.255 - 2026-10-23
 - Charger prices from two more networks' public websites: Electric Era and Francis Energy. Both are now listed with the readable networks and on by default.
 

@@ -27,6 +27,7 @@
       if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
       if(fn==='siteRead'&&args[0]==='brave')timeout=40000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='fetchFrancis')timeout=45000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
+      if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if (fn === 'aiCommand') timeout = 15000;
       if (fn === 'visualSnapshot') timeout = 5000;
       if (fn === 'tripQueue') timeout = 15000;
@@ -2290,8 +2291,8 @@
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function serviceMin(p,kind) { return p.stops.reduce(function (a, s) { return a + T.serviceMinutes(s,kind); }, 0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0); }
   /** Charging networks to use (S.trip.evNetworksOff): the ones Gasket reads prices from first, the rest dimmed but choosable; each A–Z. */
-  function netListHtml(){var off=S.trip.evNetworksOff||{},row=function(x){return '<label class="nf chk"><span>'+esc(x[1])+'</span><input type="checkbox" data-net="'+x[0]+'"'+(AltFuel.netEnabled(x[0],off)?' checked':'')+'></label>';};
-    return '<div class="sub-h">Charging networks '+A.qBtn('Readable networks are enabled by default. Others are opt-in: a published government price note may be available even when the network website has none. Unknown prices are excluded unless enabled in Settings → Connections. Hotel and dealership charging may be complimentary, paid, or restricted to guests/customers; verify access.')+'</div><div id="tNetworks"><div class="lead small keep">Public website prices</div>'+AltFuel.NET_PRICED.map(row).join('')+'<div class="net-unpriced"><div class="lead small keep">No reliable website price reader yet</div>'+AltFuel.NET_OTHER.map(row).join('')+'</div><div class="net-hosted"><div class="lead small keep">Potentially complimentary · verify access & price</div>'+AltFuel.NET_HOSTED.map(row).join('')+'</div></div>';}
+  function netListHtml(){var off=S.trip.evNetworksOff||{},row=function(x,disabled){return '<label class="nf chk"><span>'+esc(x[1])+'</span><input type="checkbox" data-net="'+x[0]+'"'+(disabled?' disabled':AltFuel.netEnabled(x[0],off)?' checked':'')+'></label>';};
+    return '<div class="sub-h">Charging networks '+A.qBtn('Price, charging level and connector must match. Default networks have straightforward published rates. Other readable networks need tariff validation; upper estimates are labeled, not promised arrival prices. Guest sources require the optional add-on in Settings → Connections. Networks with no price reader are unavailable, including in saved trips. Availability is optional. Hotel/dealership charging is never assumed free.')+'</div><div id="tNetworks"><div class="lead small keep">Published prices · on by default</div>'+AltFuel.NET_PRICED.map(function(x){return row(x,false);}).join('')+'<div class="net-review"><div class="lead small keep">Tariff validation · optional</div>'+(AltFuel.NET_REVIEW||[]).map(function(x){return row(x,false);}).join('')+'</div><div class="net-unpriced"><div class="lead small keep">Unavailable · no reliable price reader</div>'+AltFuel.NET_OTHER.map(function(x){return row(x,true);}).join('')+'</div><div class="net-hosted"><div class="lead small keep">Potentially complimentary · verify access & price</div>'+AltFuel.NET_HOSTED.map(function(x){return row(x,false);}).join('')+'</div></div>';}
   /** When you get there: an EV starts on "a destination has a charger" until you pick (arriveSet); gas never has that choice. */
   function arriveNow(){var t=S.trip,a=t.arrive;if(KIND()==='ev'&&!t.arriveSet){t.arrive='destination';return 'destination';}return a==='full'||a==='destination'&&KIND()==='ev'?a:'buffer';}
   /** What's already in the tank / battery cost, typed per fuel kind (a gas price is never a $/kWh). */
@@ -2330,7 +2331,7 @@
     dbgS.started = new Date().toISOString(); dbgS.kind = kd;
     for (var mi = 0; mi < models.length; mi++) {
       var list = [], m = models[mi];
-      var priceKey=JSON.stringify([kd,T.encodePolyline(m.pts),c.id,c.make,c.plug,c.adapter,c.acAdapter,c.dcKw,c.acKw,plugs,S.trip.evChargers,S.trip.evNetworksOff,S.evUseDOE,S.evUseOCM,S.evRefreshPrices,S.nrelKey,S.ocmKey,S.evNetPrices,S.evPriceAgeHours]);
+      var priceKey=JSON.stringify([kd,T.encodePolyline(m.pts),c.id,c.make,c.plug,c.adapter,c.acAdapter,c.dcKw,c.acKw,plugs,S.trip.evChargers,S.trip.evNetworksOff,S.evUseDOE,S.evUseOCM,S.evRefreshPrices,S.nrelKey,S.ocmKey,S.evNetPrices,S.evPriceAgeHours,S.evGuestApps]);
       priceKeys.push(priceKey);var priced=altPricePasses.get(priceKey),reusePrices=!replay&&force!==true&&force!=='discover'&&priced&&Date.now()-priced.at<10*60e3&&priced.corridor>=corridor;
       var stored=replay&&replay.saved&&savedAltInventory(replay.saved,rawRoutes&&rawRoutes[mi],corridor);
       try {
@@ -2369,6 +2370,7 @@
     if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var seenNet={},items=[];raw.forEach(function(list,i){if(priceReused[i])return;list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
       try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
     if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
+    if(kd==='ev'&&typeof items!=='undefined'){var enriched={};(items||[]).forEach(function(x){if(x.st.tariffV2)enriched[x.st.id]=x.st;});raw.forEach(function(list,i){list.forEach(function(st,j){var e=enriched[st.id];if(e){st.tariffV2=e.tariffV2;st.units=e.units;kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];
@@ -2376,14 +2378,15 @@
       for (var si = 0; si < list.length; si++) {
         var st = list[si],charging=kinds[mi][si];if(kd==='ev'&&st.netPrice&&st.netPrice.src==='flo')charging=AltFuel.charging(st,c,S.trip.evChargers,plugs);if(kd==='ev'&&!charging)continue;
         var guess=kd==='ev'?evGuess(charging.level==='dc_fast',price):{price:price,label:'Your hydrogen-price estimate'};
-        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,guess.price,charging.kw):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
-        if(kd==='ev'&&!tariff.known&&S.evAllowUnknownPrices!==true){skippedPrices++;continue;}
+        var eta=departAt().getTime()+m.timeTo((projections[mi][si][0]||{}).along||0)*1000;
+        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,guess.price,charging.kw,eta):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
+        if(kd==='ev'&&(!AltFuel.netAllowed(st)||(!tariff.known||tariff.complete===false)&&S.evAllowUnknownPrices!==true)){skippedPrices++;continue;}
         if(tariff.estimated&&tariff.price===guess.price&&tariff.label==='Your charging-price estimate')tariff.label=guess.label;
         var prs = projections[mi][si];
         for (var pi = 0; pi < prs.length; pi++) {
           var pr = prs[pi], det = 2 * pr.offset * 1.3 + (pr.offset > 0.15 ? 0.2 : 0), kw = charging?charging.kw:0;
           cands.push({ id: pr.leg ? st.id + '@' + pr.leg : st.id, d: pr.along, offset: pr.offset, detourMi: det, detourMin: det < 0.15 ? 0 : det / 25 * 60 + 1, detourExact: false,
-            price: tariff.price, priceKnown:tariff.known===true, freeCharging:kd==='ev'&&tariff.known&&tariff.price===0,kw: kw, stationKw:charging&&charging.stationKw,chargeLevel:charging&&charging.level,powerShare:st.powerShare,billingBasis:st.billingBasis,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
+            price: tariff.price, priceKnown:tariff.known===true&&tariff.complete!==false,sessionFee:kd==='ev'?tariff.fee||0:0,tariffOffer:kd==='ev'&&st.tariffV2?st.tariffV2.offer:null, freeCharging:kd==='ev'&&tariff.known&&tariff.price===0,kw: kw, stationKw:charging&&charging.stationKw,chargeLevel:charging&&charging.level,powerShare:st.powerShare,billingBasis:st.billingBasis,timeCost: kw ? tv / kw : 0, station: st, lat: st.lat, lng: st.lng, leg: pr.leg,
             calc: { base: tariff.price, final: tariff.price, est: tariff.estimated, stale: kd==='ev'&&(!tariff.updated||Date.parse(tariff.updated)>Date.now()||Date.now()-Date.parse(tariff.updated)>(+S.evPriceAgeHours||24)*3600e3), updated: tariff.updated?Date.parse(tariff.updated)||null:null, notes: [],
               steps: [{ label: tariff.label, kind: 'base', amount: tariff.price }] } });
         }

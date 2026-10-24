@@ -436,8 +436,9 @@
 
   // ---------- charging networks you can choose in Parameters (S.trip.evNetworksOff = {key: true} for unticked ones) ----------
   // Networks whose own published prices Gasket reads come first, then the rest (dimmed, still choosable); each A–Z.
-  var NET_PRICED = [['blink', 'Blink'], ['chargepoint', 'ChargePoint'], ['electricera', 'Electric Era'], ['flo', 'FLO'], ['francis', 'Francis Energy'], ['ionna', 'IONNA'], ['tesla', 'Tesla Supercharger']];
-  var NET_OTHER = [['ea', 'Electrify America'], ['evconnect', 'EV Connect'], ['evgo', 'EVgo'], ['nonnet', 'Non-networked (no app)'], ['other', 'Other networks'], ['rivian', 'Rivian Adventure'], ['shell', 'Shell Recharge'], ['walmart', 'Walmart']];
+  var NET_PRICED = [['electricera', 'Electric Era'], ['ionna', 'IONNA']];
+  var NET_REVIEW = [['blink', 'Blink'], ['bp', 'bp pulse'], ['chargepoint', 'ChargePoint'], ['ea', 'Electrify America'], ['evgo', 'EVgo'], ['flo', 'FLO'], ['francis', 'Francis Energy'], ['mercedes', 'Mercedes-Benz HPC'], ['tesla', 'Tesla Supercharger'], ['walmart', 'Walmart EV']];
+  var NET_OTHER = [['evconnect', 'EV Connect'], ['nonnet', 'Non-networked (no app)'], ['other', 'Other networks'], ['rivian', 'Rivian Adventure'], ['shell', 'Shell Recharge']];
   var NET_HOSTED = [['dealer', 'Car dealerships'], ['hotel', 'Hotels / lodging'], ['teslaDest', 'Tesla Destination (hotels)']];
   // a dealership's chargers (usually customers only, often listed as free): by the site's name
   var DEALER = /\b(?:nissan|chevrolet|chevy|ford|lincoln|toyota|honda|hyundai|kia|bmw|audi|volkswagen|vw|subaru|mazda|buick|gmc|cadillac|jeep|dodge|chrysler|mitsubishi|volvo|porsche|mercedes(?:-benz)?|lexus|acura|infiniti|genesis|jaguar|land rover|polestar)\b|\bmotor (?:company|co\.?)\b|\bmotors\b|\bauto (?:mall|group|plaza)\b|\bdealership\b/i;
@@ -451,6 +452,9 @@
     // before the dealership test: Francis Energy hosts public fast chargers at dealerships
     if (/^electric[_ ]?era$/i.test(n)) return 'electricera';
     if (/^fcn$|francis/i.test(n)) return 'francis';
+    if (/mercedes.*(?:hpc|charging)|mercedes.benz/i.test(n)) return 'mercedes';
+    if (/^bp[ _-]?pulse/i.test(n)) return 'bp';
+    if (/walmart/i.test(n)) return 'walmart';
     if (DEALER.test(name)) return 'dealer';
     if (!st.dc && /\b(?:hotel|motel|resort|inn|suites|marriott|hilton|hyatt)\b/i.test(name)) return 'hotel';
     if (/^chargepoint/i.test(n)) return 'chargepoint';
@@ -463,9 +467,9 @@
     if (!n || /^non-?networked$/i.test(n)) return 'nonnet';
     return 'other';
   }
-  function netEnabled(key, off) { off = off || (S.trip && S.trip.evNetworksOff) || {}; return Object.prototype.hasOwnProperty.call(off,key) ? !off[key] : NET_PRICED.some(function(x){return x[0]===key;}); }
+  function netEnabled(key, off) { if(NET_OTHER.some(function(x){return x[0]===key;}))return false;off = off || (S.trip && S.trip.evNetworksOff) || {}; return Object.prototype.hasOwnProperty.call(off,key) ? !off[key] : NET_PRICED.some(function(x){return x[0]===key;}); }
   function netAllowed(st, off) { return netEnabled(netGroup(st),off); }
 
-  window.AltFuel = { netGroup: netGroup, netAllowed: netAllowed, netEnabled:netEnabled, NET_PRICED: NET_PRICED, NET_OTHER: NET_OTHER, NET_HOSTED:NET_HOSTED, hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
+  window.AltFuel = { netGroup: netGroup, netAllowed: netAllowed, netEnabled:netEnabled, NET_PRICED: NET_PRICED, NET_REVIEW:NET_REVIEW, NET_OTHER: NET_OTHER, NET_HOSTED:NET_HOSTED, hydrogenAll: hydrogenAll, evNear: evNear, alongRoute: alongRoute, norm: norm, avgKw: avgKw, plugName: plugName, unitOf: unitOf,
     open: openPanel, seg: seg, renderList: renderList, refresh: refresh, focus: focus, modeChanged: modeChanged, h2Range: h2Range, coverage: function () { return cov; }, h2: function () { return h2List; }, stationHtml: stationHtml, ROAD: ROAD,tripTypes:tripTypes,compatiblePlugs:compatiblePlugs,charging:charging,routePoints:routePoints };
 })();

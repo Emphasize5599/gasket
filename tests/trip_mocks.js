@@ -1,5 +1,7 @@
 // Stand-ins for Google Routes, Places along-route, EPA, Walmart and Murphy (shapes match the real APIs)
 (function () {
+  // Route fixtures explicitly opt into experimental tariff networks; defaults are tested separately.
+  if(window.__app&&__app.S.trip) __app.S.trip.evNetworksOff={tesla:false,blink:false,flo:false,francis:false,chargepoint:false};
   // Test-owned baseline vehicles, never populated by the production app on a fresh install.
   if(window.__app&&!__app.S.cars.length){__app.S.cars=[{id:'corolla20',name:'2020 Toyota Corolla Hybrid LE',year:2020,make:'Toyota',model:'Corolla Hybrid',trim:'LE',epaId:'41214',epa:{city:53,hwy:52,comb:52,fuel:'Regular Gasoline'},type:'hybrid',power:'hybrid',grade:'regular',tank:11.4,obs:{},entries:[],info:{engine:'1.8L Inline 4 Cyl',trans:'ecvt',drive:'fwd'}},{id:'venza12',name:'2012 Toyota Venza XLE',year:2012,make:'Toyota',model:'Venza',trim:'XLE',epaId:'32199',epa:{city:19,hwy:26,comb:21,fuel:'Regular Gasoline'},type:'suv',power:'gas',grade:'regular',tank:17.7,obs:{},entries:[],info:{engine:'3.5L V6',trans:'auto',transN:6,drive:'fwd'}}];__app.S.carId='corolla20';}
   // recirculate's advice already acknowledged (climate_test unticks it to check the gate)

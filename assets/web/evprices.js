@@ -14,7 +14,7 @@
   function finishCheck(retry) { if (!verification) return false; var v = verification; verification = null; if(root.Tasks)root.Tasks.remove('ev-price-check'); v.resolve(retry); return true; }
   function onVerified(key) { return verification && verification.key === key ? finishCheck(true) : false; }
   function dismissCheck() { return finishCheck(false); }
-  function cancel() { cancelled = true; if(verification&&root.document){var banner=root.document.getElementById('wmCheck');if(banner)banner.classList.add('hidden');}dismissCheck(); }
+  function cancel() { cancelled = true;if(root.EVGuest)root.EVGuest.cancel(); if(verification&&root.document){var banner=root.document.getElementById('wmCheck');if(banner)banner.classList.add('hidden');}dismissCheck(); }
   async function call() {
     var args = Array.prototype.slice.call(arguments), key = args[0] === 'siteRead' ? args[1] : /ionna/.test(args[1] || '') ? 'ionna' : 'blink';
     for (var attempt = 0; ; attempt++) {
@@ -129,7 +129,7 @@
   function chargePointIds(st) { var ids = st.netIds || {}, out = []; (ids.station || []).forEach(function (s) { var m = /^(?:USCPIL)?(\d{4,12})$/.exec(String(s)); if (m && out.indexOf(m[1]) < 0) out.push(m[1]); }); (ids.posts || []).forEach(function (p) { p = String(p); if (/^\d{4,12}$/.test(p) && out.indexOf(p) < 0) out.push(p); }); return out.slice(0, 4); }
   var CP_GIVE_UP = 6;
   function cpKey(st){return 'cp-v2|'+chargePointIds(st).join(',');}
-  function cpObserved(st,stale){var p=st.netPrice,t=p&&+p.t;return p&&p.src==='chargepoint'&&t>0&&t<=Date.now()&&(stale||Date.now()-t<=priceAge())&&['kwh','min','hour'].indexOf(p.uom)>=0&&(p.rate>0||p.rate===0&&p.free===true)?p:null;}
+  function cpObserved(st,stale){var p=st.netPrice,t=p&&+p.t;return p&&p.complete!==false&&p.src==='chargepoint'&&t>0&&t<=Date.now()&&(stale||Date.now()-t<=priceAge())&&['kwh','min','hour'].indexOf(p.uom)>=0&&(p.rate>0||p.rate===0&&p.free===true)?p:null;}
   async function chargePointPrice(st) {
     var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (c && (!c.none || miss)) return c.none ? null : c;
     var old=cached(key,0),fallback=old&&!old.none&&!old.missing?old:cpObserved(st,true),retryKey='cp-retry|'+ids.slice().sort().join(',');if(cached(retryKey,10*60e3))return fallback;
@@ -152,7 +152,7 @@
   // Only FLO's own US stations. Roaming rates and CAD fees are not silently presented as USD energy rates.
   var FLO_PLUGS={IEC_62196_T1:'J1772',IEC_62196_T1_COMBO:'J1772COMBO',CHADEMO:'CHADEMO',J3400:'TESLA'};
   function parseFlo(j,dc,plugs){
-    var out={units:[],price:null},rates=[];
+    var out={units:[],price:null},rates=[],variable=false;
     if(!j||!j.address||j.address.country!=='USA'||[1,6].indexOf(+j.networkId)<0)return out;
     if(/\b(?:gov only|government only|fleet only|private|employees only)\b/i.test(j.name||''))return out;
     (j.stations||[]).forEach(function(s){
@@ -163,6 +163,7 @@
       var t=s.tariff&&s.tariff.description&&s.tariff.description.en||'',m,a=[],re=/\$\s*(\d*\.?\d+)\s*(?:\(USD\)\s*)?(?:\/|per)\s*(kwh|hour|hr|minute|min)\b/gi;
       if(/\bCAD\b|\$CA|C\$/i.test(t)){rates.push(null);return;}
       while((m=re.exec(t)))a.push({rate:+m[1],uom:/kwh/i.test(m[2])?'kwh':/min/i.test(m[2])?'min':'hour'});
+      if(a.some(function(r){return r.rate!==a[0].rate;}))variable=true;
       // Complex tier/idle schedules cannot be flattened into one price without their rules.
       if(a.length&&a.every(function(r){return r.rate>0&&r.uom===a[0].uom;})&&!/after\s+\d|first\s+\d|session|minimum|maximum|idle|tier/i.test(t))rates.push({rate:Math.max.apply(null,a.map(function(r){return r.rate;})),uom:a[0].uom});
       else if(s.freeOfCharge===true&&!/\$\s*\d/.test(t))rates.push({rate:0,uom:'kwh',free:true});
@@ -170,7 +171,7 @@
     });
     if(!rates.length||rates.some(function(r){return !r||r.uom!==rates[0].uom;}))return out;
     var hi=Math.max.apply(null,rates.map(function(r){return r.rate;}));
-    out.price={rate:hi,peak:hi,low:Math.min.apply(null,rates.map(function(r){return r.rate;})),uom:rates[0].uom,free:rates.every(function(r){return r.free===true;}),extraFees:true};return out;
+    out.price={rate:hi,peak:hi,low:Math.min.apply(null,rates.map(function(r){return r.rate;})),uom:rates[0].uom,free:rates.every(function(r){return r.free===true;}),extraFees:true,conservative:variable,estimated:variable};return out;
   }
   async function floJson(action,args){var r=await call('fetchFlo',action,args);if(!r||r.error||r.blocked){var e=new Error(r&&r.blocked?'FLO access restricted; price reads stopped.':r&&r.error||'FLO did not answer');e.blocked=!!(r&&r.blocked);throw e;}return JSON.parse(r.body);}
   function sameFloSite(st,p){
@@ -240,9 +241,11 @@
     cancelled = false;
     var notes = [], priced = 0, t = Date.now(), isTesla = /tesla/i.test(car && car.make || '');
     if (S.evNetPrices === false || !items.length) return { priced: 0, notes: notes };
+    var guestPhase=!!(root.EVGuest&&S.evGuestApps);
+    if(guestPhase){try{var guest=await root.EVGuest.annotate(items,car,function(f,text){if(onProg)onProg(f*.3,text);});priced+=guest.priced;notes=notes.concat(guest.notes);}catch(e){notes.push('Guest charger sources could not complete; existing prices preserved.');}}
     var by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[],ee:[],fcn:[] };
     items.forEach(function (x) { var n = String(x.st.network || ''); if (/^tesla(?! destination)/i.test(n) && x.dc) by.tesla.push(x); else if (/ionna/i.test(n)) by.ionna.push(x); else if (/^blink/i.test(n)) by.blink.push(x); else if (/^chargepoint/i.test(n) && chargePointIds(x.st).length) by.chargepoint.push(x);else if(/^flo$/i.test(n))by.flo.push(x);else if(/^electric[_ ]?era$/i.test(n)&&x.dc)by.ee.push(x);else if(/^fcn$|francis/i.test(n))by.fcn.push(x); });
-    var set = function (x, p, src, label) { x.st.netPrice = Object.assign({ src: src, label: label, t: null }, p); priced++; };
+    var set = function (x, p, src, label) { if(src==='chargepoint'&&p.complete!==false&&!p.blocks)delete x.st.tariffV2;x.st.netPrice = Object.assign({ src: src, label: label, t: null }, p); priced++; };
     // The website budget limits uncached sites, not the usable catalog. Apply
     // EVERY cached rate first, including sites beyond the first 20 in provider order.
     var cpCached=0,cpDeferred=0;
@@ -262,7 +265,7 @@
     if(eta)Object.keys(by).forEach(function(k){by[k].forEach(function(x){var hit=false;if(k==='tesla')hit=!!cached('tesla-v1|'+(isTesla?'t':'n')+'|'+x.st.id,DAY);else if(k==='ionna')hit=!!cached('ionna-v1',DAY);else if(k==='blink'){var sites=cached('blink-sites-v1',WEEK),near=sites&&nearest(x.st,sites,200);hit=!!(near&&cached('blink-price-v1|'+near.id+'|'+(x.dc?'dc':'ac'),DAY));}else if(k==='flo'){var plugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('flo-v1|'+x.st.id+'|'+x.dc+'|'+plugs.slice().sort().join(','),DAY);}else if(k==='ee')hit=!!cached('ee-v1',DAY);else if(k==='fcn'){var fplugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('fcn-v1|'+x.st.id+'|'+(x.dc?'dc':'ac')+'|'+fplugs.slice().sort().join(','),DAY);}if(!hit)etaWeights.set(x,W[k]);});});
     var etaTotal=0;etaWeights.forEach(function(w){etaTotal+=w;});var etaPrices=eta&&eta.begin('charger-prices','charger-prices',etaTotal,1000,'Reading charger prices (cached tariffs excluded)');
     var report = function () { if (!onProg) return; var f = Math.min(0.99, done / Math.max(0.001, total)), el = Date.now() - t, left = f > 0.05 && el > 4000 ? el / f * (1 - f) : 0;
-      onProg(f, left ? 'about ' + (left < 90e3 ? Math.max(1, Math.round(left / 1000 / 5) * 5) + ' s' : Math.round(left / 60e3) + ' min') + ' left' : ''); };
+      onProg(guestPhase?.3+f*.69:f, left ? 'about ' + (left < 90e3 ? Math.max(1, Math.round(left / 1000 / 5) * 5) + ' s' : Math.round(left / 60e3) + ' min') + ' left' : ''); };
     var step = function (k, n, cacheBatch) { done += (n == null ? 1 : n) * W[k];if(etaPrices){var count=n==null?1:n;by[k].forEach(function(x){if(count>0&&!etaCounted.has(x)&&(k!=='tesla'||etaWeights.has(x)!==!!cacheBatch)){etaCounted.add(x);etaDone+=etaWeights.get(x)||0;count--;}});etaPrices.progress(etaDone);}report(); };
     if (by.ionna.length) try { var ion = await ionnaSites(); by.ionna.forEach(function (x) { var s = nearest(x.st, ion, 250); if (s && s.open) set(x, { t:s.t,rate: s.rate, peak: s.rate, low: s.rate, uom: 'kwh', fee: 0, tax: s.tax }, 'ionna', 'IONNA\'s published rate' + (s.tax ? ' plus tax' : '')); step('ionna'); }); }
       catch (e) { notes.push('IONNA\'s price list didn\'t load: ' + e.message); }
@@ -282,6 +285,8 @@
     var cpMiss = 0, cpGot = 0;
     for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; if (cpMiss >= CP_GIVE_UP && !cpGot) { notes.push('ChargePoint\'s station pages didn\'t load, so its prices are estimates this time.'); LG.info('stations', 'ChargePoint reads stopped', { pagesMissing: cpMiss }); break; }
       try { var cpP = await chargePointPrice(cx.st); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
+    // Legacy readers can expose only peak/low for variable tariffs. Never present a peak as an arrival quote.
+    items.forEach(function(x){var p=x.st.netPrice;if(p&&(p.low<p.peak||p.tou||p.conservative)&&!x.st.tariffV2){p.conservative=true;p.estimated=true;if(!/upper estimate/.test(p.label||''))p.label+=' · upper estimate; arrival-time rate unverified';}});
     LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached,chargepointDeferred:cpDeferred, flo:by.flo.length, electricEra:by.ee.length, francis:by.fcn.length, priced: priced, ms: Date.now() - t });
     if(etaPrices)etaPrices.finish(!cancelled&&!verification&&!notes.length);return { priced: priced, notes: notes };
   }

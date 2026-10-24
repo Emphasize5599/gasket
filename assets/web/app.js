@@ -927,7 +927,7 @@
     $('dBlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) { BL.remove(e); $('dClose').onclick(); } }); };
   }
 
-  var CACHE_NS = ['aiexplanations', 'along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb'];
+  var CACHE_NS = ['aiexplanations', 'along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb', 'evprices', 'evguest'];
   function askDeleteBl() {
     var n = BL.list().length; if (!n) { deleteBl(); return Promise.resolve(false); }
     return confirmDel({ title: 'Delete your bad CITGO list?', body: 'All ' + n + ' station' + (n === 1 ? '' : 's') + ' will get the Walmart+ discount again.', action: 'Delete' })
@@ -969,6 +969,7 @@
   /** Back to a fresh install (keeps this month's lookup count, so the safety cap still protects you). */
   async function eraseAll() {
     window.__erasing=true;
+    if(N.evGuestConfig&&window.__trip){var cleared=await window.__trip.call('evGuestConfig','{"clear":true}');if(cleared.error){window.__erasing=false;toast('Could not erase private EV credentials. Please try again.');return;}}
     if(N.chargerInventory&&window.__trip){var erased=await window.__trip.call('chargerInventory','clear','');if(erased.error){window.__erasing=false;toast('Could not erase the charger inventory. Please try again.');return;}}
     CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
     if(window.PriceHistory)PriceHistory.reset();

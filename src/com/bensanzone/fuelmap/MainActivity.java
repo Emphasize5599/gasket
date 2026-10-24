@@ -1851,6 +1851,28 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        private EvAppClient evGuestClient;
+        private synchronized EvAppClient evGuestClient() {
+            if (evGuestClient == null) evGuestClient = new EvAppClient(MainActivity.this);
+            return evGuestClient;
+        }
+        @JavascriptInterface
+        public void evGuestConfig(final int reqId, final String args) {
+            new Thread(() -> { JSONObject out;
+                try { out = evGuestClient().configure(args); }
+                catch (Exception e) { out = new JSONObject(); try { out.put("error", "Could not update private EV source settings"); } catch (Exception ignored) {} }
+                reply(reqId, out);
+            }).start();
+        }
+        @JavascriptInterface
+        public void fetchEvGuest(final int reqId, final String source, final String action, final String args) {
+            new Thread(() -> { JSONObject out;
+                try { out = evGuestClient().request(source, action, args); }
+                catch (Exception e) { out = new JSONObject(); try { out.put("error", "Guest EV source unavailable: " + (e.getMessage()!=null && e.getMessage().startsWith("Guest") ? "credentials required" : "request failed")); } catch (Exception ignored) {} }
+                reply(reqId, out);
+            }).start();
+        }
+
         @JavascriptInterface
         public void fetchFlo(final int reqId, final String action, final String args) {
             new Thread(() -> {

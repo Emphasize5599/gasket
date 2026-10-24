@@ -36,4 +36,6 @@ let parked=P.project({...m,segs:[],totalMi:0},{...measured,initialTempC:40},{sta
 close(parked.stopMinutes,360);assert.equal(parked.chargingMinutes,0,'scheduled waiting is not active charging');
 let missing=[];P.weather([],0,0,missing);assert(missing.includes('weather_missing'));
 let future=[];P.weather([{mi:0,hours:[[1000,10],[3601000,20]]}],0,9000000,future);assert(future.includes('weather_outside_forecast'));
-console.log('Propulsion: profile opt-in, hourly weather, shared power budget, thermal derating, metered billing, repeat planning and legal caps passed');
+const timed=options(),tariff={currency:'USD',uom:'kwh',fee:.99,complete:true,zone:'UTC',blocks:[{rate:.1,start:0,end:60},{rate:.7,start:60,end:1440}]};
+timed.cands=timed.cands.map(c=>({...c,tariffOffer:tariff,price:.1,sessionFee:.99}));const priced=T.plan(timed);assert(priced.ok,JSON.stringify(priced));assert.equal(priced.stops[0].c.price,.7,'arrival after the cheap window is repriced before returning a plan');close(priced.stops[0].propulsion.cost,priced.stops[0].propulsion.billedKWh*.7+.99);close(priced.totals.cost,priced.stops[0].propulsion.cost);
+console.log('Propulsion: weather, metered billing, tariff arrival repricing, session fees, repeat planning and legal caps passed');
