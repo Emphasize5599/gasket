@@ -64,5 +64,10 @@
    if(progress)progress((i+1)/todo.length,'Reading guest charger tariffs');
   }return {priced:count,notes:Array.from(new Set(notes.concat(Array.from(sourceErrors))))};
  }
- root.EVGuest={annotate:annotate,configure:configure,cancel:function(){stopped=true;session++;},distance:distance,unique:unique};
+ async function setEnabled(enabled){
+  if(!A.N.evGuestConfig)throw new Error('Guest sources require the Android app.');
+  if(enabled&&!await A.confirmDel({always:true,title:'Enable guest-app price sources?',body:'Fetches extra EV prices through unofficial app APIs and creates anonymous IDs on this phone. Sources may block requests, change, or return incomplete prices; provider data rights are not confirmed. No personal charging-account login is needed.',action:'Enable',no:'Not now',goClass:'primary'}))return false;
+  await configure({enabled:!!enabled});S.evGuestApps=!!enabled;if(!enabled){stopped=true;session++;}A.save();return true;
+ }
+ root.EVGuest={annotate:annotate,configure:configure,setEnabled:setEnabled,cancel:function(){stopped=true;session++;},distance:distance,unique:unique};
 })(window);

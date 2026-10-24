@@ -128,24 +128,42 @@
   /** DOE's USCPIL station identifier is the public page's device ID. Ports are a fallback, never truncate them. */
   function chargePointIds(st) { var ids = st.netIds || {}, out = []; (ids.station || []).forEach(function (s) { var m = /^(?:USCPIL)?(\d{4,12})$/.exec(String(s)); if (m && out.indexOf(m[1]) < 0) out.push(m[1]); }); (ids.posts || []).forEach(function (p) { p = String(p); if (/^\d{4,12}$/.test(p) && out.indexOf(p) < 0) out.push(p); }); return out.slice(0, 4); }
   var CP_GIVE_UP = 6;
+  var cpFailures=new Map(),cpScope=new Map(),cpRefs=new Map(),cpRetryRunning=false,cpScopeReady=false;
+  try{var storedFailures=KV.get(NS,'cp-failed-v1');if(storedFailures)(storedFailures.v||[]).forEach(function(f){if(f&&f.key&&f.at>Date.now()-WEEK)cpFailures.set(f.key,f);});}catch(e){}
+  function saveCpFailures(){try{KV.put(NS,'cp-failed-v1',Array.from(cpFailures.values()).slice(-100));}catch(e){}}
+  function markCpFailure(st,why){var key=cpKey(st);cpFailures.set(key,{key:key,at:Date.now(),station:{id:st.id,name:st.name,lat:st.lat,lng:st.lng,network:'ChargePoint',netIds:st.netIds,country:st.country},reason:why});saveCpFailures();}
+  function clearCpFailure(st){if(cpFailures.delete(cpKey(st)))saveCpFailures();}
+  function trackChargePoints(stations){cpScopeReady=true;cpScope.clear();cpRefs.clear();var names=new Map();
+    (stations||[]).filter(function(st){return /^chargepoint/i.test(st.network||'')&&chargePointIds(st).length;}).forEach(function(st){var key=cpKey(st);cpScope.set(key,st);if(!cpRefs.has(key))cpRefs.set(key,[]);cpRefs.get(key).push(st);if(!names.has(st.name))names.set(st.name,new Set());names.get(st.name).add(key);});
+    // Old logs contain station names but no IDs. Recover only unique names in this trip's inventory.
+    var outcomes=new Map();if(root.FLog&&root.FLog.entries)root.FLog.entries().forEach(function(e){if(e.m!=='ChargePoint station page')return;try{var d=JSON.parse(e.d||'{}');if(d.station)outcomes.set(d.station,{outcome:d.outcome,at:Date.parse(e.t)});}catch(ignored){}});
+    outcomes.forEach(function(e,name){var keys=names.get(name);if(!keys||keys.size!==1||!(e.at>Date.now()-WEEK))return;var key=Array.from(keys)[0],st=cpScope.get(key),existing=cpFailures.get(key);if(e.outcome==='error'&&(!existing||existing.at<e.at)){cpFailures.set(key,{key:key,at:e.at,station:{id:st.id,name:st.name,lat:st.lat,lng:st.lng,network:'ChargePoint',netIds:st.netIds,country:st.country},reason:'load_failed'});}else if(e.outcome==='priced'&&existing&&existing.at<=e.at)cpFailures.delete(key);});saveCpFailures();
+  }
+  function failedChargePoints(){return Array.from(cpFailures.values()).filter(function(f){return f.at>Date.now()-WEEK&&(!cpScopeReady||cpScope.has(f.key));});}
   function cpKey(st){return 'cp-v2|'+chargePointIds(st).join(',');}
   function cpObserved(st,stale){var p=st.netPrice,t=p&&+p.t;return p&&p.complete!==false&&p.src==='chargepoint'&&t>0&&t<=Date.now()&&(stale||Date.now()-t<=priceAge())&&['kwh','min','hour'].indexOf(p.uom)>=0&&(p.rate>0||p.rate===0&&p.free===true)?p:null;}
-  async function chargePointPrice(st) {
-    var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (c && (!c.none || miss)) return c.none ? null : c;
-    var old=cached(key,0),fallback=old&&!old.none&&!old.missing?old:cpObserved(st,true),retryKey='cp-retry|'+ids.slice().sort().join(',');if(cached(retryKey,10*60e3))return fallback;
+  async function chargePointPrice(st,force) {
+    var ids = chargePointIds(st), key = 'cp-v2|' + ids.join(','), c = cached(key, DAY), miss = cached(key, 10 * 60e3); if (!ids.length) return null; if (!force&&c && (!c.none || miss)) return c.none ? null : c;
+    var old=cached(key,0),fallback=old&&!old.none&&!old.missing?old:cpObserved(st,true),retryKey='cp-retry|'+ids.slice().sort().join(',');if(!force&&cached(retryKey,10*60e3))return fallback;
     var nDevice = ids.filter(function (d) { return (st.netIds.posts || []).indexOf(d) < 0; }).length;
     for (var i = 0; i < ids.length; i++) {
       var t0 = Date.now(), r = await call('siteRead', 'chargepoint', JSON.stringify({ url: 'https://driver.chargepoint.com/stations/' + ids[i],name:st.name }));
       if(r&&r.diagnostics)LG.info('stations','ChargePoint reader state',r.diagnostics);
       LG.info('stations', 'ChargePoint station page', { idForm: i < nDevice ? 'device' : 'post', outcome: r && r.blocked ? 'blocked' : r && r.missing ? 'missing' : r && r.text ? (parseChargePoint(r.text) ? 'priced' : 'no price on page') : 'error', ms: Date.now() - t0, error: r && r.error ? String(r.error).slice(0, 160) : undefined, sample: r && (r.text && !parseChargePoint(r.text) ? r.text : r.missing && r.sample) ? String(r.text || r.sample).slice(0, 160) : undefined, station: st.name });
       if (r && r.error === 'No Native bridge') return null;
-      if (r && r.blocked) { var e = new Error('ChargePoint\'s station page asked for a check, so its prices are estimates this time.'); e.blocked = true; throw e; }
+      if (r && r.blocked) { markCpFailure(st,'blocked');var e = new Error('ChargePoint\'s station page asked for a check, so its prices are estimates this time.'); e.blocked = true; throw e; }
       if (r && r.missing) continue;
       var p = r && r.text ? parseChargePoint(r.text) : null;
-      if (r && r.text) { if(p)keep(key,p);else keep(retryKey,{reason:'unparsed'});return p||fallback; }
+      if (r && r.text) { clearCpFailure(st);if(p)keep(key,p);else keep(retryKey,{reason:'unparsed'});return p||fallback; }
     }
     // Network/timeouts are not proof a station is missing. Cache only explicit missing-page answers.
-    keep(retryKey,{reason:r&&r.missing?'missing':'load_failed'});return fallback;
+    markCpFailure(st,r&&r.missing?'missing':'load_failed');keep(retryKey,{reason:r&&r.missing?'missing':'load_failed'});return fallback;
+  }
+  async function retryFailedChargePoints(progress){if(cpRetryRunning)return {updated:[],failed:failedChargePoints().length};cpRetryRunning=true;cancelled=false;var failures=failedChargePoints(),updated=[];
+    try{for(var i=0;i<failures.length&&!cancelled;i++){var f=failures[i],st=cpScope.get(f.key)||f.station;try{var p=await chargePointPrice(st,true);
+      if(p&&p.t>=f.at&&!cpFailures.has(f.key)){var np=Object.assign({src:'chargepoint',label:'ChargePoint published host rate',t:null},p);(cpRefs.get(f.key)||[st]).forEach(function(s){s.netPrice=np;delete s.tariffV2;});updated.push({key:f.key,station:st,price:np});}
+    }catch(e){if(e.blocked)break;}if(progress)progress((i+1)/failures.length,i+1,failures.length);}
+    }finally{cpRetryRunning=false;}return {updated:updated,failed:failedChargePoints().length,cancelled:cancelled};
   }
 
   // FLO's signed-out map: nearby parks, then the exact station's tariff and connector detail.
@@ -252,7 +270,7 @@
     by.chargepoint=by.chargepoint.filter(function(x){
       var p=cached(cpKey(x.st),DAY);if(!p||p.none||p.missing)p=cpObserved(x.st);
       var label=function(q){return q.free?'Free, set by the station\'s host on ChargePoint':'The station host\'s ChargePoint rate'+(q.fee?' + $'+q.fee.toFixed(2)+' session fee':'');};
-      if(p){set(x,p,'chargepoint',label(p));cpCached++;return false;}
+      if(p){var failure=cpFailures.get(cpKey(x.st));if(failure&&p.t>=failure.at)clearCpFailure(x.st);set(x,p,'chargepoint',label(p));cpCached++;return false;}
       var old=cached(cpKey(x.st),0);if(!old||old.none||old.missing)old=cpObserved(x.st,true);if(old)set(x,old,'chargepoint',label(old));
       if(cached('cp-retry|'+chargePointIds(x.st).slice().sort().join(','),10*60e3)){cpDeferred++;return false;}return true;
     });
@@ -290,5 +308,5 @@
     LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached,chargepointDeferred:cpDeferred, flo:by.flo.length, electricEra:by.ee.length, francis:by.fcn.length, priced: priced, ms: Date.now() - t });
     if(etaPrices)etaPrices.finish(!cancelled&&!verification&&!notes.length);return { priced: priced, notes: notes };
   }
-  root.EVPrices = { annotate: annotate, cancel: cancel, onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseElectricEra:parseElectricEra, parseFrancis:parseFrancis, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
+  root.EVPrices = { annotate: annotate, cancel: cancel,trackChargePoints:trackChargePoints,failedChargePoints:failedChargePoints,retryFailedChargePoints:retryFailedChargePoints,onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseElectricEra:parseElectricEra, parseFrancis:parseFrancis, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
 })(window);

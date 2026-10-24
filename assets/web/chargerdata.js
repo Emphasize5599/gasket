@@ -122,7 +122,7 @@
  function attach(pg){var button=pg.querySelector('#evDownload'),cancel=pg.querySelector('#evCancelDownload'),info=pg.querySelector('#evInventoryStatus');if(!button)return;
   var toggle=pg.querySelector('#evGuestApps'),status=pg.querySelector('#evGuestStatus'),input=pg.querySelector('#evGuestCredentials');
   async function guest(a){try{var r=await root.EVGuest.configure(a);status.textContent='Guest sources '+(r.enabled?'enabled':'off')+' · EVgo '+(r.evgo?'ready':'not configured')+' · Chargeway '+(r.chargeway?'ready':'not configured')+' · PlugShare '+(r.plugshare?'ready':'not configured');return r;}catch(e){status.textContent='Private source settings unavailable on this device.';return null;}}
-  if(toggle){toggle.disabled=!N.evGuestConfig;toggle.onchange=async function(){var wanted=toggle.checked,r=await guest({enabled:wanted});if(!r){toggle.checked=!!S.evGuestApps;return;}S.evGuestApps=wanted;if(!wanted&&root.EVGuest)root.EVGuest.cancel();A.save();};}
+  if(toggle){toggle.disabled=!N.evGuestConfig;toggle.onchange=async function(){var wanted=toggle.checked;toggle.checked=!!S.evGuestApps;toggle.disabled=true;try{if(await root.EVGuest.setEnabled(wanted))await guest({});}catch(e){status.textContent='Guest-source change could not be saved. Your previous setting is unchanged.';}finally{toggle.checked=!!S.evGuestApps;toggle.disabled=false;}};}
   if(N.evGuestConfig)guest({});
   var imp=pg.querySelector('#evGuestImport'),forget=pg.querySelector('#evGuestClear');
   if(imp)imp.onclick=async function(){try{var v=JSON.parse(input.value);await guest({credentials:v});}catch(e){status.textContent='Enter a valid JSON credential object.';}finally{input.value='';}};

@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.257 - 2026-10-24
+- Confirm before enabling guest-app EV prices, in Settings and onboarding.
+- Add all five optional API keys to onboarding, with expandable setup instructions and provider links.
+- Retry failed ChargePoint pages without rescanning stations or discarding successful cached prices.
+
 ## 0.0.256 - 2026-10-23
 - Optional native guest prices for EA, EVgo and ChargePoint, plus Chargeway/PlugShare coverage for Walmart EV, Mercedes HPC and bp pulse.
 - Separate straightforward and experimental tariffs; networks without reliable price readers cannot be selected.

@@ -401,6 +401,20 @@
   var busy = false;
   var priceRefreshActive=false;
   var priceCancelRequested=false;
+  var cpRetryPool=new Map(),cpRetryRoute=null,cpRetryBusy=false;
+  function cpRetryCard(){var n=window.EVPrices&&EVPrices.failedChargePoints?EVPrices.failedChargePoints().length:0;if(!n)return '';return '<div class="card price-refresh-card"><h3>ChargePoint lookups</h3><p class="lead small keep">'+n+' station page'+(n===1?' did':'s did')+' not load. Successful cached prices are kept.</p><button class="btn tonal" data-retry-cp'+(busy||cpRetryBusy?' disabled':'')+'>Retry failed ChargePoint lookups</button></div>';}
+  async function retryCpPages(){if(busy||queueWorking||cpRetryBusy||!window.EVPrices)return;var owner=route,car=S.carId,r=result,retryCancelled=false;cpRetryBusy=true;busy=true;stopRecommendations();evRecovery=null;if(window.Tasks)Tasks.remove('ev-recovery');renderResults();
+    var task=function(f,text){if(window.Tasks)Tasks.upsert('cp-retry',{text:text||'Retrying failed ChargePoint pages',frac:f,cancel:function(){retryCancelled=true;EVPrices.cancel();}});};task(0);
+    try{var ret=await EVPrices.retryFailedChargePoints(function(f,done,total){task(f,'ChargePoint retry · '+done+' / '+total);});if(route!==owner||S.carId!==car||result!==r||ret.cancelled)return;
+      var changes=new Map(ret.updated.map(function(x){return [x.key,x.price];})),update=function(st){if(!st||!st.netIds)return;var p=changes.get('cp-v2|'+EVPrices.chargePointIds(st).join(','));if(p){st.netPrice=p;delete st.tariffV2;}};
+      cpRetryPool.forEach(update);altPricePasses.forEach(function(pass){(pass.rows||[]).forEach(update);});
+      if(ret.updated.length){var record=A.KV.get('trips','trip|'+histId(route));if(record&&record.v){var patch=function(s){if(!s)return;(s.official||[]).forEach(update);(s.google||[]).forEach(function(g){(g.list||[]).forEach(update);});};patch(record.v.stations);(record.v.comparison||[]).forEach(function(c){patch(c.replay&&c.replay.stations);});if(!A.KV.put('trips','trip|'+histId(route),record.v))A.toast('Prices read, but could not update the saved trip.');}
+        if(r&&cpRetryPool.size){task(null,'Rebuilding stops with updated ChargePoint prices');var projected={localOnly:true,skipNetworkPrices:true,google:[{list:Array.from(cpRetryPool.values())}]},found=await gatherAlt([r.opts.model],function(){},{},projected,[rawRoute],false);
+          if(route!==owner||S.carId!==car||result!==r||retryCancelled)return;r.cands=found.per[0].cands;r.opts.cands=r.cands;var rebuilt=await planAsync(r.opts);if(route!==owner||S.carId!==car||result!==r||retryCancelled)return;r.plan=rebuilt;recompute();}
+      }A.toast(ret.updated.length+' ChargePoint price'+(ret.updated.length===1?'':'s')+' updated'+(ret.failed?' · '+ret.failed+' still need attention.':'.'));
+    }catch(e){LG.warn('stations','Targeted ChargePoint retry failed',{error:String(e&&e.message||e).slice(0,160)});A.toast('ChargePoint retry could not complete. Cached prices are kept.');}
+    finally{cpRetryBusy=false;if(window.Tasks)Tasks.remove('cp-retry');if(route===owner&&S.carId===car){busy=false;renderResults();navRender();}}
+  }
   function savedPriceReplay(){
     if(replay)return replay;
     if(!result||!model||!alts[altSel])return null;
@@ -409,6 +423,7 @@
     return {id:id,t:v.savedT||o.t,stations:v.stations,alts:v.alts,partial:true};
   }
   document.addEventListener('click',function(e){
+    if(e.target.closest('[data-retry-cp]')){retryCpPages();return;}
     var retryXom=e.target.closest('[data-retry-xom]');if(retryXom){if(busy||queueWorking)return;retryXom.disabled=true;retryXom.textContent='Retrying…';xomFailed.clear();var stations=[];[result].concat(result&&result.routes?result.routes.map(function(r){return r.res;}):[]).forEach(function(r){if(r)(r.cands||[]).forEach(function(c){if(c.station)stations.push(c.station);});});xomCheck(stations).then(function(){if(xomFailed.size)A.toast('The discount website is still unavailable. Your station results are kept.');repriceRewards();renderResults();}).finally(function(){retryXom.disabled=false;});return;}
     var cancel=e.target.closest('[data-cancel-prices]');
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
@@ -425,6 +440,7 @@
   });
   var RF_ICON='<svg class="rf-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
   function refreshCard(){
+    if(KIND()==='ev'&&model)return cpRetryCard();
     if(KIND()!=='gas'||!model)return '';
     var saved=savedPriceReplay(),web=!!saved;
     var capped=Number(S.monthlyCap)>0&&N.callsThisMonth()>=Number(S.monthlyCap),apiUnavailable=capped||!S.apiKey;
@@ -2364,6 +2380,7 @@
     // Project once, before expensive website reads; reuse those projections below.
     var projectionAt=Date.now(),projections=[];
     for(var ri=0;ri<raw.length;ri++){var pp=[];for(var rj=0;rj<raw[ri].length;rj++){var st0=raw[ri][rj];pp.push(T.projectLegs(models[ri],{lat:st0.lat,lng:st0.lng},corridor));if(rj%100===99)await breathe();}projections.push(pp);}
+    if(kd==='ev'&&window.EVPrices&&EVPrices.trackChargePoints){if(cpRetryRoute!==route){cpRetryRoute=route;cpRetryPool.clear();}raw.forEach(function(list){list.forEach(function(st){cpRetryPool.set(st.id,st);});});EVPrices.trackChargePoints(Array.from(cpRetryPool.values()).filter(function(st){return AltFuel.netAllowed(st);}));}
     var kinds=raw.map(function(list,i){return list.map(function(st,j){return kd==='ev'&&projections[i][j].length&&AltFuel.netAllowed(st)?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});   // unticked networks: never a stop
     LG.debug('stations','Route corridor projection',{models:models.length,inventory:raw.map(function(l){return l.length;}),compatible:kinds.map(function(l){return l.filter(Boolean).length;}),ms:Date.now()-projectionAt,priceProjectionOnly:!!(replay&&replay.skipNetworkPrices)});
     // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it

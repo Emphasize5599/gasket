@@ -873,6 +873,8 @@ body.trip-full #btnSettings { display: none !important; }   /* under the lookup 
 .ob-body { flex:1; min-height:0; overflow:auto; padding:12px 2px 24px; max-width:560px; width:100%; align-self:center; }
 .ob-body h1 { color:var(--accent); font-size:30px; line-height:1.15; margin:12px 0 20px; outline:none; }
 .ob-body p { line-height:1.5; }
+.ob-key { margin:16px 0; min-width:0; }
+.ob-key .mono { overflow-wrap:anywhere; white-space:normal; }
 .ob-body > small { display:block; color:var(--ink-2); margin:12px 0; }
 .ob-progress { display:flex; gap:6px; margin-bottom:18px; }
 .ob-progress span { flex:1; height:5px; background:var(--line); border-radius:5px; }
