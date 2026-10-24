@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.258 - 2026-10-24
+- Guest-source confirmation, onboarding key guides and targeted ChargePoint retries from 257, with cancellation-safe stop rebuilding.
+
 ## 0.0.257 - 2026-10-24
 - Confirm before enabling guest-app EV prices, in Settings and onboarding.
 - Add all five optional API keys to onboarding, with expandable setup instructions and provider links.
