@@ -439,6 +439,7 @@ Ideas saved for later (weather along the route, polluted zones, hydrogen / EV, c
 - A restore, and the restart right after it, never use Google lookups; restored lookup counts keep the higher number.
 
 ## Working with the owner
+- Always push finished work to `main` (which releases it) unless the owner says not to; a session's working branch is kept in step with it.
 - Local recall ratings start with cached/fetched recall data, not on expansion of the folded list; open campaigns go first when known. Worker batches continue without foreground-only delays, and the page fallback yields between individual texts. Route warming/prefetch must not spend paid discovery calls or hold navigation for the AI.
 - Every patch release handoff includes a short phone-check checklist for the changed features, and clearly distinguishes automated checks from on-phone/live-site verification.
 - Small changes don't need the full test suite; run it on a larger batch of changes (it catches anything a small change broke). Still syntax-check what you touched.
