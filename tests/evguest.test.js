@@ -31,7 +31,7 @@ function setup(handler){const calls=[],cache=new Map(),S={evGuestApps:true,evPri
  assert.match(native,/if\(renew&&\(auth==null\|\|auth\.optString\("refresh"\)\.isEmpty\(\)\)\)throw/,'refresh cannot create a replacement identity');
  assert.match(native,/if\(out\.optBoolean\("blocked"\)\)return false/,'do not refresh on a protection block');
  assert.match(native,/if\(out\.optInt\("status"\)!=200\)return false/);
- assert.match(native,/if\(authenticationFailure\(out\)\)\s*\{\s*refused\.put/,'a second auth failure pauses instead of refreshing again');
+ assert.match(native,/if\(authenticationFailure\(out\)\)\s*\{[^}]{0,700}?refused\.put\(source/,'a second auth failure pauses instead of refreshing again');
  assert.equal((native.match(/token\(source,s,true\)/g)||[]).length,1,'exactly one refresh call site');
  // an answered "no matching published tariff" is remembered (0.0.264 log: 214 ChargePoint lookups again 54 min later); an error isn't
  const empty=setup((fn,source)=>{if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:false,plugshare:false};if(source==='chargepoint')return {status:200,body:JSON.stringify({stations:[{deviceId:'999',latitude:35,longitude:-91}]})};throw Error('Unexpected '+source);});
@@ -43,5 +43,25 @@ function setup(handler){const calls=[],cache=new Map(),S={evGuestApps:true,evPri
  const flaky=setup((fn,source)=>{if(fn==='evGuestConfig')return {enabled:true,chargeway:true,evgo:false,plugshare:false};if(source==='chargeway')return {status:429,error:'Too many requests'};throw Error('Unexpected '+source);});
  const wm=()=>({st:{id:'wm1',afdcId:7,lat:35,lng:-91,group:'walmart',plugs:['J1772COMBO']},dc:true});
  await flaky.G.annotate([wm()],{});await flaky.G.annotate([wm()],{});assert.equal(flaky.calls.filter(c=>c[0]==='fetchEvGuest').length,2,'a lookup that hit an error is not remembered as "no tariff"');
- console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh, native security gates, no-tariff answers remembered 6 h (errors never) passed');
+ // EVgo refuses station details to every guest (2026-10-25: a fresh identity asking only the site ID got "Not Authorized"):
+ // remembered for a day, so later passes skip EVgo's own lookups and use PlugShare; Update prices asks again
+ const guest=setup((fn,source,action)=>{
+  if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:true,plugshare:true};
+  if(source==='evgo'&&action==='near')return {status:200,body:JSON.stringify({data:{getEvgoSitesForMobile:{edges:[{altId:'73807',access:'PUBLIC',networkName:'EVgo',latitude:35,longitude:-91}]}}})};
+  if(source==='evgo')return {status:200,blocked:true,authDenied:true,authRefreshed:true,guestNotPermitted:true,scope:'site',gqlErrors:[{message:'Not Authorized',code:'INTERNAL_SERVER_ERROR',service:'falcon',path:''}],error:'Denied'};
+  if(source==='plugshare'&&action==='near')return {body:JSON.stringify([{id:4,latitude:35,longitude:-91,stations:[{network_id:19}]}])};
+  if(source==='plugshare')return {body:JSON.stringify({access:1,latitude:35,longitude:-91,stations:[{network_id:19,outlets:[{id:1,connector:13,is_dc:true,kilowatts:150,prices:[{currency:'USD',elements:[{price_components:[{type:'ENERGY',price:.3}]}]}]}]}]})};
+  throw Error('Unexpected '+source);});
+ const logged=[];guest.ctx.FLog={info:(t,m,d)=>logged.push([m,d]),warn:(t,m,d)=>logged.push([m,d])};
+ const ev=i=>({st:{id:'evgo-g'+i,afdcId:100+i,lat:35,lng:-91,group:'evgo',plugs:['J1772COMBO']},dc:true});
+ let res=await guest.G.annotate([ev(1)],{});assert.equal(res.priced,1,'PlugShare still prices the EVgo station');
+ assert(res.notes.some(n=>/signed-in EVgo account/.test(n)),'the note says what EVgo needs, not a vague failure');
+ assert(logged.some(([m,d])=>m==='Guest EV source request'&&d.guestNotPermitted&&d.gqlErrors[0].message==='Not Authorized'),'the refusal reason is in the log');
+ assert(logged.some(([m])=>/need a signed-in EVgo account/.test(m)));
+ const evgoCalls=()=>guest.calls.filter(c=>c[1]==='evgo').length,before2=evgoCalls();
+ await guest.G.annotate([ev(2)],{});assert.equal(evgoCalls(),before2,'remembered: no EVgo near/site/refresh round trip on the next pass');
+ await guest.G.annotate([ev(3)],{},null,true);assert(evgoCalls()>before2,'Update prices tries EVgo again');
+ assert.match(native,/guest=source\.equals\("evgo"\)&&action\.equals\("site"\)/);assert.match(native,/guest\?86400000L:900000L/,'a guest refusal pauses a day, a token denial 15 minutes');
+ assert.match(native,/put\("gqlErrors",gqlErrors\(out\)\)/);assert.match(native,/out\.remove\("body"\)/,'a refused body is never passed on whole');assert.match(native,/\[redacted\]/,'token-like text is removed from logged messages');
+ console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh, native security gates, no-tariff answers remembered 6 h (errors never), EVgo guest refusal logged with its reason and remembered a day passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

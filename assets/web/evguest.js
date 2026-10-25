@@ -4,8 +4,11 @@
  function call(){return root.__trip.call.apply(null,arguments);}
  async function configure(a){var r=await call('evGuestConfig',JSON.stringify(a||{}));if(!r||r.error)throw new Error('EV source settings could not be saved');capabilities=r;return r;}
  async function request(source,action,args){if(stopped||!S.evGuestApps)throw new Error('Guest lookup cancelled');if(paused.has(source)){var stoppedError=new Error(source+': access restricted; this source is paused');stoppedError.blocked=true;throw stoppedError;}var started=Date.now(),r=await call('fetchEvGuest',source,action,JSON.stringify(args));
-  if(root.FLog)root.FLog.info('stations','Guest EV source request',{source:source,phase:action,status:r&&r.status||null,ms:Date.now()-started,blocked:!!(r&&r.blocked),authRefreshed:!!(r&&r.authRefreshed),authDenied:!!(r&&r.authDenied),authRefreshFailed:!!(r&&r.authRefreshFailed),paused:!!(r&&r.paused)});
-  if(!r||r.error||r.blocked){failures++;var e=new Error(source+': '+(r&&r.authDenied?'guest access denied after token refresh; source paused (not a bot check)':r&&r.authRefreshFailed?'token refresh failed; source paused':r&&r.blocked?'access restricted; this source is paused':r&&r.status===401?'authentication expired':'guest data unavailable'));e.blocked=r&&r.blocked;if(e.blocked)paused.add(source);sourceErrors.add(e.message);throw e;}
+  if(root.FLog)root.FLog.info('stations','Guest EV source request',Object.assign({source:source,phase:action,status:r&&r.status||null,ms:Date.now()-started,blocked:!!(r&&r.blocked),authRefreshed:!!(r&&r.authRefreshed),authDenied:!!(r&&r.authDenied),authRefreshFailed:!!(r&&r.authRefreshFailed),paused:!!(r&&r.paused)},r&&r.gqlErrors&&r.gqlErrors.length?{gqlErrors:r.gqlErrors}:{},r&&r.guestNotPermitted?{guestNotPermitted:true}:{}));
+  // EVgo refuses its station-detail query to every guest identity (not an expired token): remember it for a day,
+  // across restarts, and go straight to Chargeway / PlugShare for EVgo stations instead of three doomed requests a run.
+  if(r&&r.guestNotPermitted&&source==='evgo'){A.KV.put('evguest','evgo-guest-denied',{t:Date.now(),scope:r.scope||action});if(root.FLog)root.FLog.warn('stations','EVgo station details need a signed-in EVgo account',{scope:r.scope||action,gqlErrors:r.gqlErrors||[]});}
+  if(!r||r.error||r.blocked){failures++;var e=new Error(source+': '+(r&&r.guestNotPermitted?'station details need a signed-in EVgo account, so EVgo prices come from Chargeway / PlugShare when they have them':r&&r.authDenied?'guest access denied after token refresh; source paused (not a bot check)':r&&r.authRefreshFailed?'token refresh failed; source paused':r&&r.blocked?'access restricted; this source is paused':r&&r.status===401?'authentication expired':'guest data unavailable'));e.blocked=r&&r.blocked;if(e.blocked)paused.add(source);sourceErrors.add(e.message);throw e;}
   var j;try{j=JSON.parse(r.body);}catch(e){failures++;throw new Error(source+': unreadable station data');}if(j.errors&&j.errors.length){
    var denied=j.errors.some(function(x){return /not authorized|unauthenticated|forbidden|access denied/i.test(String(x.message||'')+' '+String(x.extensions&&x.extensions.code||''));});
    failures++;var error=new Error(source+(denied?': guest access denied; source paused (not a bot check)':': unsuccessful API response'));
@@ -18,7 +21,8 @@
  // age): every pass otherwise re-asked the same unpriced chargers (0.0.264 log: 214 ChargePoint lookups again 54 min
  // later). Only when every request in the lookup answered: an error or refusal (even one aggregate() carried on past)
  // is never cached. Explicit Update prices (force) asks again.
- var EMPTY_MS=6*3600e3;
+ var EMPTY_MS=6*3600e3,EVGO_DENIED_MS=24*3600e3;
+ function evgoGuestDenied(){return !forcePrices&&!!A.KV.get('evguest','evgo-guest-denied',EVGO_DENIED_MS);}
  async function cached(key,work){var age=Math.min(24,Math.max(1,+S.evPriceAgeHours||24))*3600e3,old=!forcePrices&&A.KV.get('evguest',key,age);if(old&&(old.v&&old.v.offers&&old.v.offers.length||Date.now()-(+old.v.checked||0)<=Math.min(age,EMPTY_MS)))return old.v;
   if(pending.has(key))return pending.get(key);var run=session,p=(async function(){var before=failures,v=await work();if(stopped||run!==session)return null;if(v&&v.offers.length)A.KV.put('evguest',key,v);else if(v&&failures===before)A.KV.put('evguest',key,Object.assign({},v,{offers:[],checked:Date.now()}));return v;})();pending.set(key,p);try{return await p;}finally{if(pending.get(key)===p)pending.delete(key);}}
  function record(offers,source){var times=offers.map(function(o){return Date.parse(o.updated);}).filter(function(t){return Number.isFinite(t)&&t>0&&t<=Date.now();});return {offers:offers,source:source,t:times.length?Math.min.apply(null,times):Date.now()};}
@@ -62,7 +66,7 @@
   var run=session;capabilities=await configure({});if(!capabilities.enabled)return {priced:0,notes:['Enable guest sources in Settings → Connections on this device.']};var todo=items.filter(function(x){var g=root.AltFuel.netGroup(x.st);return root.AltFuel.netEnabled(g)&&(['ea','chargepoint','evgo','walmart','mercedes','bp','shell','rivian'].indexOf(g)>=0);});
   var blocked=new Set();for(var i=0;i<todo.length;i++){if(stopped||run!==session)break;var x=todo[i],g=root.AltFuel.netGroup(x.st);if(blocked.has(g))continue;
    try{var data=await cached('v1|'+g+'|'+x.st.id,async function(){if(g==='evgo'){
-     if(!paused.has('evgo')){try{var own=await direct(x,g);if(own&&own.offers.length)return own;}catch(e){sourceErrors.add(e.message);}}
+     if(!paused.has('evgo')&&!evgoGuestDenied()){try{var own=await direct(x,g);if(own&&own.offers.length)return own;}catch(e){sourceErrors.add(e.message);}}
      return aggregate(x,g);
     }return ['ea','chargepoint'].indexOf(g)>=0?direct(x,g):aggregate(x,g);});
     var selected=data&&T.select(data.offers,x,car,Date.now());if(selected){var p=selected.price,o=selected.offer;

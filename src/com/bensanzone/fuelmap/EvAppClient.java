@@ -134,6 +134,20 @@ final class EvAppClient {
         }catch(Exception ignored){}
         return false;
     }
+    // What a GraphQL source said when it refused: message, code, service and the refused field path. Server text
+    // only, trimmed and with anything token-like removed: never the request, the token or the rest of the body.
+    private static JSONArray gqlErrors(JSONObject out) {
+        JSONArray list=new JSONArray();
+        try {
+            JSONArray errors=new JSONObject(out.optString("body")).optJSONArray("errors");
+            for(int i=0;errors!=null&&i<errors.length()&&i<4;i++) {
+                JSONObject e=errors.optJSONObject(i);if(e==null)continue;JSONObject ext=e.optJSONObject("extensions");JSONArray path=e.optJSONArray("path");
+                String message=e.optString("message").replaceAll("[A-Za-z0-9_\\-.]{32,}","[redacted]");if(message.length()>120)message=message.substring(0,120);
+                list.put(new JSONObject().put("message",message).put("code",ext==null?"":ext.optString("code")).put("service",ext==null?"":ext.optString("service")).put("path",path==null?"":path.join(".")));
+            }
+        }catch(Exception ignored){}
+        return list;
+    }
     synchronized JSONObject request(String source,String action,String args) throws Exception {
         if(!prefs.getBoolean("enabled",false))throw new Exception("Guest-app add-on is disabled");
         JSONObject a=new JSONObject(args),s=secrets();String url,body=null,type="application/json",bearer=null,hk=null,hv=null;
@@ -179,13 +193,20 @@ final class EvAppClient {
             body=new JSONObject().put("query",query).put("variables",vars).toString();bearer="Bearer "+token(source,s,false);
         } else throw new Exception("Unsupported guest source");
         JSONObject out=http(source,url,body,type,bearer,hk,hv);
+        if((source.equals("evgo")||source.equals("chargeway"))&&out.optInt("status")==200&&gqlErrors(out).length()>0)out.put("gqlErrors",gqlErrors(out));
         if((source.equals("evgo")||source.equals("chargeway"))&&authenticationFailure(out)) {
             try {
                 out=http(source,url,body,type,"Bearer "+token(source,s,true),hk,hv);
                 out.put("authRefreshed",true);
                 if(authenticationFailure(out)) {
-                    refused.put(source,System.currentTimeMillis()+900000);
-                    out.put("authDenied",true).put("blocked",true).put("error","Guest access denied after one token refresh; source paused");
+                    // EVgo answers its station-detail query with "Not Authorized" for every guest identity, even a fresh
+                    // one asking only for the site's ID (checked 2026-10-25), while its nearby-sites query works: that's a
+                    // guest permission, not an expired token, so the refresh can't help. Pause a day, not 15 minutes.
+                    boolean guest=source.equals("evgo")&&action.equals("site");
+                    refused.put(source,System.currentTimeMillis()+(guest?86400000L:900000L));
+                    out.put("authDenied",true).put("blocked",true).put("scope",action).put("gqlErrors",gqlErrors(out)).put("guestNotPermitted",guest)
+                        .put("error",guest?"EVgo doesn't let guest accounts read station details; source paused for a day":"Guest access denied after one token refresh; source paused");
+                    out.remove("body");
                 }
             }catch(Exception e) {
                 refused.put(source,System.currentTimeMillis()+60000);
