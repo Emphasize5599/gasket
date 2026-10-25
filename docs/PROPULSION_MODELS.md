@@ -1,5 +1,15 @@
 # EV and hydrogen models — integrated in 0.0.237
 
+## 0.0.264 charging curves in stop selection
+
+Before 0.0.264 the stop optimizer charged every kWh at one average kW per charger (`kw = 0.7 × min(car peak, station)`), so in Fastest mode a top-up from 70→90% looked as quick as 10→30%; the taper appeared only afterwards, in the thermal validation. Now:
+
+- **The curve.** `chargecurve.js` `ChargeCurve.forCar(car)` = the curve typed in Garage → Edit → Energy & charging estimates (`car.dcCurve`, kW at 0, 10 … 100%), else a bundled Open EV Data curve for the matched make / model words / variant / drive / usable battery / year (scaled to the car's typed or Brave peak when there is one), else a generic shape scaled to the peak (150 kW when none). The generic shape is steeper than 0.0.263's (72% of peak at 50%, 43% at 70%, 30% at 80%, 17% at 90%; previously 83 / 63 / 50 / 34%), between the owner's Model Y figures and the dataset's curves.
+- **Stop selection.** `trip.js` `chargeTimes` builds, per charger, cumulative minutes from empty to every planning level: power = min(curve at that SOC, charger kW × sharing × 0.98), 0.93 stored/terminal (AC: min(car AC, station), tapering above 90%, 0.9). A stop from level *f* to *g* costs `T[g] − T[f]`, which keeps the DP's running-minimum transition exact (tests/charge-curve.test.js checks it against brute force). Fastest mode minimizes these minutes plus detour and stop setup, so it charges low in the battery and often when chargers are close together, and charges higher only to cross long gaps. Cheapest overall still minimizes cost; curve minutes only break exact cost ties (1e-6 $/min).
+- **Validation.** `Propulsion` uses the same curve (capped at the peak) in its thermal charging simulation, so the reported minutes match what was optimized, before the temperature effects the model already has.
+
+Limits: Open EV Data curves are often coarse (4 points) and some entries look wrong (e.g. a 57.5 kW Model 3); the editor shows the source so the user can correct it. US coverage is incomplete (no Rivian, no Kia EV6 here). Temperature and charger-specific behavior are still estimates. This is the exact optimum for the planner's model, not a guarantee for real charging sessions.
+
 ## 0.0.245 coverage and persistence corrections
 
 EV discovery now uses a fixed corridor covering the supported 30-minute extra-driving limit (the existing geometric road-distance approximation, not a guarantee of road access). Planning still enforces the selected 1.0–30.0 minutes. Narrower old saves need one broader discovery; subsequent limit changes reuse inventory/tariffs. Tesla/Mirai demos default to 30 minutes; explicit edits remain editable. No green band is a valid result when no tested increase meets the percentage balance rule; the tile now explains it. Failed lite previews are checked again with full-planner options before being declared infeasible.

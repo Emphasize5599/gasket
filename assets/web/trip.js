@@ -446,6 +446,24 @@
     var boundaries=(o.legPolicies||[]).map(function(p,i,ps){return {d:p.to,gal:o.model.galTo(p.to)+Math.max(p.bufferGal||0,ps[i+1]&&ps[i+1].bufferGal||0)};});
     return function(from,to,base,detourEnd,galTo){var need=base;for(var i=0;i<boundaries.length;i++){var p=boundaries[i];if(p.d>from+1e-7&&p.d<to-1e-7)need=Math.max(need,p.gal-galTo-(detourEnd||0));}return Math.max(0,need);};
   }
+  // EV charging time on the car's curve (o.chargeCurve {points [[SOC %, kW]], acKw}, from ChargeCurve.forCar): T[g] =
+  // minutes from empty to level g at this charger, so a stop from f to g takes T[g] - T[f]. Power = the lower of the
+  // car's curve and the charger (shared power scales it); AC tapers above 90%. A stop low in the battery charges faster
+  // than the same energy near the top, so "fastest" plans can choose more, shorter stops.
+  function curveKw(p,soc){var pct=Math.max(0,Math.min(100,soc*100));if(pct<=p[0][0])return p[0][1];for(var i=1;i<p.length;i++)if(pct<=p[i][0])return p[i-1][1]+(p[i][1]-p[i-1][1])*(pct-p[i-1][0])/Math.max(1e-9,p[i][0]-p[i-1][0]);return p[p.length-1][1];}
+  function chargeTimes(o,step,levels){
+    var cc=o.chargeCurve;if(!cc||!Array.isArray(cc.points)||cc.points.length<2||o.fuelKind!=='ev'||!(o.capGal>0))return null;
+    var pts=cc.points,ac=+cc.acKw||7.2,memo={};
+    return function(c){
+      var dc=c.chargeLevel?c.chargeLevel==='dc_fast':(+c.stationKw||0)>=20,kw=+c.stationKw||0;
+      if(!(kw>0)){if(!(c.kw>0))return null;kw=c.kw/(dc?.7:.9);}
+      var share=+c.powerShare>0&&+c.powerShare<=1?+c.powerShare:1,key=(dc?'d':'a')+kw*share;
+      if(memo[key])return memo[key];
+      var t=new Float64Array(levels+1),eta=dc?.93:.9;
+      for(var l=0;l<levels;l++){var soc=(l+.5)*step/o.capGal,pw=dc?Math.min(curveKw(pts,soc),kw*share*.98):Math.min(ac,kw)*(soc>.9?Math.max(.2,(1-soc)/.1):1);t[l+1]=t[l]+step/(Math.max(.1,pw)*eta)*60;}
+      return memo[key]=t;
+    };
+  }
   function optimize(o, priceFn, stopCostFn) {
     // Ordinary Club discounts are linear when a tank cannot exceed the purchase
     // cap. Only actual monthly eligibility or a reachable cap needs reward states.
@@ -476,6 +494,8 @@
     var detGal = function (n) { return n.kind === 'stop' ? (n.c.detourMi || 0) * model.cityGpm : 0; };
     var routeGal = nodes.map(function (n) { return model.galTo(n.d); }),reserveAt=reserveChecker(o);
 
+    // charging minutes on the curve: the objective when time is what's optimized, else a tie-break between equal costs
+    var CT=chargeTimes(o,STEP,LV),TW=o.objective==='time'?1:1e-6;
     var dp = [], par = [], bestFrom = [];
     for (var i = 0; i < N; i++) { dp.push(new Float64Array(LV + 1).fill(INF)); par.push(new Int32Array(LV + 1).fill(-1)); }
     dp[0][start] = 0;
@@ -484,19 +504,20 @@
     for (i = 0; i < N - 1; i++) {
       var row = dp[i], best = new Float64Array(LV + 1).fill(INF), from = new Int16Array(LV + 1).fill(-1), any = false;
       if (nodes[i].kind === 'stop') {
-        var p = price(nodes[i].c), runBest = INF, runF = -1;
+        var p = price(nodes[i].c), runBest = INF, runF = -1, Tc = CT ? CT(nodes[i].c) : null;
+        var tAt = function (g) { return Tc ? TW * Tc[g] : 0; };
         if (o.fillUp) {
           for (var f = 0; f <= LV; f++) if (row[f] < INF) {
             if (f > FL) { if (row[f] < best[f]) { best[f] = row[f]; from[f] = f; } continue; }   // already above the fill cap
-            var v = row[f] + (FL - f) * STEP * p;
+            var v = row[f] + (FL - f) * STEP * p + tAt(FL) - tAt(f);
             if (v < best[FL]) { best[FL] = v; from[FL] = f; }
           }
         } else {
           for (var g = 0; g <= LV; g++) {
             if (g > FL) { if (row[g] < INF) { best[g] = row[g]; from[g] = g; } continue; }   // above the fill cap: no buying
-            // min over f<=g of row[f] - f*STEP*p, then + g*STEP*p
-            if (row[g] < INF && row[g] - g * STEP * p < runBest) { runBest = row[g] - g * STEP * p; runF = g; }
-            if (runF >= 0) { best[g] = runBest + g * STEP * p; from[g] = runF; }
+            // min over f<=g of row[f] - f*STEP*p - T(f), then + g*STEP*p + T(g) (curve time stays separable)
+            if (row[g] < INF && row[g] - g * STEP * p - tAt(g) < runBest) { runBest = row[g] - g * STEP * p - tAt(g); runF = g; }
+            if (runF >= 0) { best[g] = runBest + g * STEP * p + tAt(g); from[g] = runF; }
           }
         }
       } else if(nodes[i].kind==='charge'){
@@ -543,7 +564,7 @@
       var code = par[cur][curF];
       var pi = Math.floor(code / (LV + 1)), pg = code % (LV + 1);
       var pf = bestFrom[pi][pg];
-      if (nodes[pi].kind === 'stop') stops.unshift({ c: nodes[pi].c, arriveGal: pf * STEP, departGal: pg * STEP, buyGal: (pg - pf) * STEP });
+      if (nodes[pi].kind === 'stop') { var Tw = CT ? CT(nodes[pi].c) : null; stops.unshift(Object.assign({ c: nodes[pi].c, arriveGal: pf * STEP, departGal: pg * STEP, buyGal: (pg - pf) * STEP }, Tw ? { curveMin: Tw[pg] - Tw[pf] } : {})); }
       if(nodes[pi].kind==='charge'){var e=nodes[pi].event,ch=destinationCharge(e,pf*STEP,o.capGal);ch.departGal=pg*STEP;ch.buyGal=(pg-pf)*STEP;ch.gridKWh=ch.buyGal/.9;ch.cost=ch.gridKWh*Math.max(0,+e.price||0);charges.unshift(Object.assign(ch,{d:e.d,index:e.index,label:e.label,level:e.level,kw:e.kw,price:e.price}));}
       cur = pi; curF = pf;
     }
@@ -681,7 +702,8 @@
     if((o.destinationCharges||[]).length){var at=0,g=o.startGal,valid=true;o.destinationCharges.forEach(function(e){g-=o.model.galTo(e.d)-o.model.galTo(at);if(g<0)valid=false;if(valid)g=destinationCharge(e,g,o.capGal).departGal;at=e.d;});noStopGal=valid?g-(o.model.galTo(o.model.totalMi)-o.model.galTo(at)):-1;}
     // Time is a separate objective in minutes, not a hidden dollars/hour preference.
     // Nonlinear EV charging/thermal estimates are validated by propulsionPlan below.
-    function choose(){if(o.objective!=='time')return optimize(oo);return optimize(Object.assign({},oo,{refPrice:0,stopPenalty:0}),function(c){return serviceMinutes({c:c,buyGal:1},o.fuelKind)+Math.max(0,c.price)*1e-8;},function(c){return (c.detourMin||0)+(o.stopMinutes||0);});}
+    // With a charging curve the charging minutes come from it (optimize's chargeTimes), not a flat average kW.
+    function choose(){if(o.objective!=='time')return optimize(oo);var curve=!!chargeTimes(o,1,1);return optimize(Object.assign({},oo,{refPrice:0,stopPenalty:0}),function(c){return (curve?0:serviceMinutes({c:c,buyGal:1},o.fuelKind))+Math.max(0,c.price)*1e-8;},function(c){return (c.detourMin||0)+(o.stopMinutes||0);});}
     var best = choose();
     if (!best.ok) { oo.firstDip = true; best = choose(); }
     if (!best.ok) return { ok: false, reachMi: best.reachMi, noStopGal: noStopGal, refPrice: o.refPrice, tooFar: tooFar };
@@ -950,6 +972,7 @@
   // Retail fueling estimates, not station throughput/queue measurements. EVs keep their average-kW model.
   function serviceMinutes(s,kind){
     if(s.propulsion&&s.propulsion.ok!==false&&Number.isFinite(s.propulsion.minutes))return s.propulsion.minutes;
+    if(Number.isFinite(s.curveMin))return s.curveMin;
     var amount=Math.max(0,Number(s.buyGal)||0);if(!Number.isFinite(amount))return 0;
     if(kind==='ev'||!kind&&s.c.kw)return s.c.kw>0?amount/s.c.kw*60:0;
     return kind?amount/(kind==='h2'?1:8):0;

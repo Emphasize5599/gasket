@@ -52,7 +52,7 @@
   }
   function accept(p,soc,t,flags,level){
     if(level&&level!=='dc_fast')return Math.min(p.acKw||7.2,level==='1'?1.4:1e6)*(soc>.9?Math.max(.2,(1-soc)/.1):1);
-    if(!p.measured){mark(flags,'charging_curve_estimated');if(t<10||t>35)mark(flags,'charging_temperature_response_unknown');return p.dcKw*lerp(soc,[0,.2,.3,.4,.5,.6,.7,.8,.9,1],[1,.98,.96,.91,.83,.74,.63,.5,.34,.1]);}
+    if(!p.measured){mark(flags,'charging_curve_estimated');if(t<10||t>35)mark(flags,'charging_temperature_response_unknown');if(Array.isArray(p.curve)&&p.curve.length>1)return Math.min(p.dcKw,lerp(soc,p.curve.map(function(x){return x[0]/100;}),p.curve.map(function(x){return x[1];})));return p.dcKw*lerp(soc,[0,.2,.3,.4,.5,.6,.7,.8,.9,1],[1,.98,.96,.91,.83,.74,.63,.5,.34,.1]);}
     var current=lerp(soc,cs,ci),voltage=lerp(soc,cs,cv),warm=lerp(soc,cs,ct);
     if(soc<.19)mark(flags,'charging_soc_extrapolated');if(soc>.83){mark(flags,'charging_soc_extrapolated');current*=Math.max(0,1-.85*(soc-.83)/.17);}
     if(t<19)mark(flags,'charging_temperature_extrapolated');

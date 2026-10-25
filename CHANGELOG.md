@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.264 - 2026-10-25
+- EV charging stops follow the car's charging curve: Fastest plans charge low in the battery and stop more often when that's quicker, charging higher only to cross long gaps, instead of assuming every kWh charges at one average speed.
+- Bundled charging curves for 346 EVs from Open EV Data, matched to your car; otherwise a typical curve scaled to its peak. The car editor shows the curve as a graph and lets you type your own kW at each charge level.
+- A more realistic (steeper) generic charging curve.
+
 ## 0.0.263 - 2026-10-25
 - Show Tesla Model 3 / Model Y "Long Range" as "Premium" for 2026 and later (the EPA's names and IDs are kept underneath); Fuel API photos match either name and Tesla photos try Fuel API before Commons.
 - Fill in an EV's fastest DC charging rate from Brave Search's answer when it's blank, with That's right / See Brave's answer; a typed number is never replaced and a new trim asks again.

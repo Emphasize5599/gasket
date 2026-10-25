@@ -3377,11 +3377,12 @@
     return {weather:temps,departAt:departAt().getTime(),limits:flatSecs(m),offset:rule.on?off:Math.min(0,off),roadOffsets:roadOffsets,allowAbove:!!rule.on,speedCap:capOn?Garage.ruleCap():null,waitAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null};
   }
   function makeBaseOpts(model, cands, startGal,raw) {
-    var kd = KIND(), cap = Garage.tank();
+    var kd = KIND(), cap = Garage.tank(), curve = kd === 'ev' && window.ChargeCurve ? ChargeCurve.forCar(Garage.car()) : null;
     return { step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * (S.trip.fillUp?0.8:1) : null,preferredFillCap:kd==='ev'&&!S.trip.fillUp?cap*.8:null,
       priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
-      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2}),propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
+      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:curve?curve.peak:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2},curve?{curve:curve.points}:{}),
+      chargeCurve:curve?{points:curve.points,acKw:+Garage.car().acKw||7.2,src:curve.src}:null,propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
       destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,S.evPrice):[],
       arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
@@ -4428,7 +4429,7 @@
       '<span class="pr"><span class="f">' + priceHtml(c.price) + '</span>' + (c.calc.stale ? '<span class="o stale">stale</span>' : '') + (c.est ? '<span class="o est-tag">est.</span>' : '') + '</span><span class="chev"></span></button>';
     if (!open) return h + '</div>';
     h += '<div class="s-body"><div class="s-buy"><b>' + money(s.cost) + '</b> for ' + s.buyGal.toFixed(1) + ' ' + UN() + (s.propulsion&&s.propulsion.billedKWh!=null?' stored · ~'+s.propulsion.billedKWh.toFixed(1)+' kWh billed':'') + (KIND() === 'ev' ? ' (to '+Math.max(0,Math.min(100,Math.round(s.departGal/Garage.tank()*100)))+'%)' : S.trip.fillUp || s.departGal >= Garage.tank() - 0.05 ? ' (fill up)' : '') +
-      ' · <b>~' + Math.max(1, Math.round(T.serviceMinutes(s,result.opts.fuelKind))) + ' min '+(KIND()==='ev'?'charging':'refueling')+'</b>'+(c.kw?' at ~'+Math.round(c.kw)+' kW average':'') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
+      ' · <b>~' + Math.max(1, Math.round(T.serviceMinutes(s,result.opts.fuelKind))) + ' min '+(KIND()==='ev'?'charging':'refueling')+'</b>'+(c.kw?' at ~'+Math.round(KIND()==='ev'&&T.serviceMinutes(s,result.opts.fuelKind)>0?s.buyGal*60/T.serviceMinutes(s,result.opts.fuelKind):c.kw)+' kW average':'') + ' · ' + det + (c.detourMi >= 0.15 ? ' / +' + Math.max(1, Math.round(c.detourMin)) + ' min' : '') +
       ' · arrive with ~' + Math.round(s.arriveMi) + ' mi left · ' + fmtDur(s.etaSec) + ' in</div>';
     if (s.why) h += '<div class="why-not"><b>Why not the cheaper one?</b> ' + esc(s.why) + '</div>';
     if(c.citgo){var redemption=s.citgoRedemption;

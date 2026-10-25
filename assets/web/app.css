@@ -2022,6 +2022,15 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .ac-src-row .ac-src { flex: 1 1 160px; min-width: 0; margin: 0; }
 .ac-src-row .btn { flex: 0 0 auto; width: auto; padding-left: 18px; padding-right: 18px; }
 .ed-details { margin: 12px 0; }
+.dc-curve { margin-top: 12px; }
+.dc-curve-h b { display: block; }
+.dc-curve-h small { display: block; color: var(--ink-2); }
+.dc-curve-svg { display: block; width: 100%; max-width: 360px; height: auto; margin: 8px 0; }
+.dc-curve-svg .dc-axis { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.dc-curve-svg .dc-line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.dc-curve-svg text { font-size: 11px; fill: var(--ink-2); }
+.dc-curve-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 4.6em), 1fr)); gap: 8px; }
+.dc-curve-grid .nf { margin: 0; }
 /* car tire details: Done and Discard changes side by side, the same size */
 .tz-trbtns #tzDone, .tz-trbtns #tzDetailsDiscard { flex: 1 1 0; min-width: 0; }
 /* everything placed from the top leaves room for the status bar while it shows (--task-space is 0 without one) */

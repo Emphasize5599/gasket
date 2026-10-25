@@ -174,7 +174,7 @@
     if(types.superchargers)types=Object.assign({},types,{dc:true,l2:false,l1:false});
     var counts={dc_fast:st.dc,'2':st.l2,'1':st.l1},enabled={dc_fast:types.dc,'2':types.l2,'1':types.l1};
     function accepts(p,level){if(plugs.indexOf(p)<0)return false;if(level==='dc_fast')return p!=='J1772'&&!/^NEMA/.test(p);if(p==='TESLA')return car.plug==='NACS'||car.acAdapter===true;if(p==='J1772')return (car.plug||'CCS')!=='NACS'||car.acAdapter===true;return false;}
-    function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||150):(+car.acKw||7.2),stationKw=kw||(dc?(st.kw||50):level==='1'?1.4:7.2);candidates.push({level:level,stationKw:stationKw,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,stationKw)),estimated:!kw||!!st.kwEst});}
+    function add(level,kw){var dc=level==='dc_fast',cap=dc?(+car.dcKw||(typeof ChargeCurve!=='undefined'&&car.make?ChargeCurve.forCar(car).peak:0)||150):(+car.acKw||7.2),stationKw=kw||(dc?(st.kw||50):level==='1'?1.4:7.2);candidates.push({level:level,stationKw:stationKw,kw:Math.max(0.1,(dc?0.7:0.9)*Math.min(cap,stationKw)),estimated:!kw||!!st.kwEst});}
     if(st.units&&st.units.length)st.units.forEach(function(u){var level=u.charging_level;if(!enabled[level])return;Object.keys(u.connectors||{}).forEach(function(p){var port=u.connectors[p];if(accepts(p,level)&&port&&+port.port_count>0)add(level,+port.power_kw||0);});});
     else Object.keys(counts).forEach(function(level){if(enabled[level]&&counts[level]>0&&(st.plugs||[]).some(function(p){return accepts(p,level);}))add(level,level==='dc_fast'&&!st.kwEst?st.kw:0);});
     return candidates.sort(function(a,b){return b.kw-a.kw;})[0]||null;

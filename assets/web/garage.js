@@ -628,11 +628,34 @@
     // engine, transmission, drive, fuel and features: changed here (the Garage page's About this car only shows them)
     if(k==='ev'){
       var ep=c.propulsion||{};
-      h+='<details class="card ed-details"><summary>Energy & charging estimates</summary><label class="nf"><span>Vehicle profile</span><select id="gEnergyProfile">'+opts({'estimate':'EPA/observed baseline · estimated speed and charging curve','tum-m3-lfp':'I confirm: 2020 Model 3 SR+ · CATL LFP, ~55.4 kWh'},ep.profile||'estimate')+'</select></label><p class="lead small">The measured profile covers one car, not every Model 3. Other cars retain their EPA/observed consumption with estimated weather and charging adjustments.</p><label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label><label class="nf"><span>Starting battery temperature (°C)<small>blank: estimate from ambient weather</small></span><input id="gPackTemp" type="number" min="-40" max="65" step="1" value="'+esc(Number.isFinite(ep.initialTempC)?ep.initialTempC:'')+'"></label></details>';
+      var eOld=$('gEnergy');if(eOld)energyOpen=eOld.open;   // kept open across redraws (typing a curve value redraws)
+      h+='<details class="card ed-details" id="gEnergy"'+(energyOpen?' open':'')+'><summary>Energy & charging estimates</summary><label class="nf"><span>Vehicle profile</span><select id="gEnergyProfile">'+opts({'estimate':'EPA/observed baseline · estimated speed and charging curve','tum-m3-lfp':'I confirm: 2020 Model 3 SR+ · CATL LFP, ~55.4 kWh'},ep.profile||'estimate')+'</select></label><p class="lead small">The measured profile covers one car, not every Model 3. Other cars retain their EPA/observed consumption with estimated weather and charging adjustments.</p><label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label><label class="nf"><span>Starting battery temperature (°C)<small>blank: estimate from ambient weather</small></span><input id="gPackTemp" type="number" min="-40" max="65" step="1" value="'+esc(Number.isFinite(ep.initialTempC)?ep.initialTempC:'')+'"></label>'+curveHtml(c)+'</details>';
     }
     var dOld = $('gDetails'); if (dOld) detOpen = dOld.open;   // its toggle event comes a task later: a redraw before it would close it
     h +=tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
     return h;
+  }
+  // ---------- the DC charging curve (chargecurve.js): what the planner charges by, editable ----------
+  function curveSvg(points){
+    var pk=Math.max(1,ChargeCurve.peak(points)),xy=function(p){return (p[0]*2.8+10).toFixed(1)+','+(90-p[1]/pk*76).toFixed(1);};
+    return '<svg class="dc-curve-svg" viewBox="0 0 300 104" role="img" aria-label="Charging power falls from '+Math.round(pk)+' kW as the battery fills"><path class="dc-axis" d="M10 14V90H290"/>'+
+      '<polyline class="dc-line" points="'+points.map(xy).join(' ')+'"/><text x="10" y="102">0%</text><text x="150" y="102" text-anchor="middle">50%</text><text x="290" y="102" text-anchor="end">100%</text><text x="14" y="11">'+Math.round(pk)+' kW</text></svg>';
+  }
+  function curveHtml(c){
+    if(!window.ChargeCurve)return '';
+    var cc=ChargeCurve.forCar(c),rows=ChargeCurve.rows11(cc.points);
+    return '<div class="dc-curve" id="gDcCurve"><div class="dc-curve-h"><b>DC charging curve</b><small>'+esc(cc.label)+(cc.src==='generic'?'. Type your car\'s figures for better charging stops.':'')+'</small></div>'+curveSvg(cc.points)+
+      '<p class="lead small keep">How fast the car charges at each battery level. Charging slows as the battery fills, so the planner can pick more, shorter stops when that\'s faster. Real speeds also depend on battery temperature and the charger.</p>'+
+      '<div class="dc-curve-grid">'+rows.map(function(r){return '<label class="nf"><span>'+r[0]+'%</span><input type="number" inputmode="numeric" min="1" max="1000" step="1" data-dc-pct="'+r[0]+'" aria-label="kW at '+r[0]+'% charge" value="'+r[1]+'"></label>';}).join('')+'</div>'+
+      (cc.src==='user'?'<button type="button" class="btn tonal sm" id="gDcCurveReset">Use the automatic curve</button>':'')+'</div>';
+  }
+  function bindCurve(c){
+    var host=$('gDcCurve');if(!host)return;
+    host.querySelectorAll('[data-dc-pct]').forEach(function(el){el.onchange=function(){
+      var pts=[].map.call(host.querySelectorAll('[data-dc-pct]'),function(x){return [+x.dataset.dcPct,+x.value];}),ok=ChargeCurve.clean(pts);
+      if(!ok||ok.length!==pts.length){this.value=Math.round(ChargeCurve.at(ChargeCurve.forCar(c).points,+this.dataset.dcPct/100));return;}   // 1–1000 kW in every box
+      c.dcCurve=ok;LG.info('car','Charging curve typed',{peak:ChargeCurve.peak(ok)});changed();draw();};});
+    if($('gDcCurveReset'))$('gDcCurveReset').onclick=function(){delete c.dcCurve;LG.info('car','Charging curve reset to automatic');changed();draw();};
   }
   function infoLine(c) {
     var i = c.info || {}, bits = [POWER_PLAIN[c.power] || '', enginePlain(c).text, i.drive ? DRIVE_PLAIN[i.drive] || '' : ''].filter(Boolean);
@@ -700,7 +723,7 @@
   }
 
   // ---------- about this car ----------
-  var verOpen = false, featOpen = false, detOpen = false;
+  var verOpen = false, featOpen = false, detOpen = false, energyOpen = false;
   var TILE_Q = {
     power: 'What makes the car go: a <b>gas engine</b>; a <b>diesel engine</b>; a <b>hybrid</b>, with a gas engine and an electric motor that share the work and charge themselves; a <b>plug-in hybrid</b>, which also charges from the wall; <b>fully electric</b>; or a <b>hydrogen fuel cell</b>, which makes electricity from hydrogen.',
     engine: 'The engine\'s size is the total space inside its cylinders, in liters. Bigger engines and more cylinders usually mean more power and more fuel used.',
@@ -988,6 +1011,7 @@
       if ($('gDcShow')) $('gDcShow').onclick = function (e) { e.preventDefault(); dcFind(c, true); };
       if ($('gDcYes')) $('gDcYes').onclick = function () { c.dcKwLookup.ok = true; c.dcKwSrc = 'from Brave Search · you confirmed it'; LG.info('car', 'DC charging rate confirmed: ' + c.dcKw + ' kW'); changed(); draw(); };
       if ($('gDcSee')) $('gDcSee').onclick = function () { dcFind(c, true); };
+      bindCurve(c);
       ['gEnergyProfile','gHeatPump','gPrecondition','gPackTemp'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=function(){var p=c.propulsion=c.propulsion||{};if(id==='gEnergyProfile')p.profile=this.value;else if(id==='gPackTemp'){if(this.value==='')delete p.initialTempC;else{var t=Number(this.value);if(!Number.isFinite(t)||t< -40||t>65){this.value=Number.isFinite(p.initialTempC)?p.initialTempC:'';return;}p.initialTempC=t;}}else p[id==='gHeatPump'?'heatPump':'precondition']=this.checked;changed();};});
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
@@ -1023,6 +1047,7 @@
     var both = function (sel) { var out = Array.prototype.slice.call(host.querySelectorAll(sel)); if (ed && ed.body) out = out.concat(Array.prototype.slice.call(ed.body.querySelectorAll(sel))); return out; };
     if ($('gInfoEdit')) $('gInfoEdit').onclick = function () { if (!editing) editSnap = { id: c.id, before: JSON.stringify(c), previous: S.carId }; editing = true; detOpen = true; draw(); setTimeout(function () { var d = $('gDetails'); if (d) d.scrollIntoView({ block: 'start' }); }, 50); };
     if ($('gDetails')) $('gDetails').addEventListener('toggle', function () { detOpen = this.open; });
+    if ($('gEnergy')) $('gEnergy').addEventListener('toggle', function () { if (this.isConnected) energyOpen = this.open; });
     both('[data-set]').forEach(function (sel) {
       sel.onchange = function () { if (!this.value) return; info[this.dataset.set] = this.value; markUser(this.dataset.set); save(); draw(); };
     });
@@ -1120,7 +1145,7 @@
       el('vcUse').onclick=async function(){if(busy)return;var year=+el('vcYear').value,make=el('vcMake').selectedOptions[0],model=el('vcModel').selectedOptions[0],type=C.TYPES.filter(function(t){return String(t.id)===el('vcType').value;})[0];if(!year||!make||!model||!model.value)return;busy=true;el('vcUse').disabled=true;
         var same=c.year===year&&String(c.make).toLowerCase()===make.text.toLowerCase()&&c.model===model.text;
         if(!same&&(c.year||c.make||c.model)&&!(await A.confirmDel({always:true,title:'Change this vehicle?',body:'Existing vehicle details, mileage and tires will be cleared; any custom picture is kept. Discard changes in the car editor can restore the previous details.',action:'Change vehicle',goClass:'tonal caution'}))){busy=false;el('vcUse').disabled=false;return;}
-        if(!alive||S.carId!==c.id)return;if(!same){['epaId','epaBase','epa','trim','tank','tankSrc','tankLookup','dcKw','dcKwSrc','dcKwLookup','tires','pic','picMode','paint','vinHints','demoMileage'].forEach(function(k){delete c[k];});c.info={};c.obs={};c.entries=[];c.power='gas';c.grade='';}
+        if(!alive||S.carId!==c.id)return;if(!same){['epaId','epaBase','epa','trim','tank','tankSrc','tankLookup','dcKw','dcKwSrc','dcKwLookup','dcCurve','tires','pic','picMode','paint','vinHints','demoMileage'].forEach(function(k){delete c[k];});c.info={};c.obs={};c.entries=[];c.power='gas';c.grade='';}
         c.year=year;c.make=make.text;c.model=model.text;c.vpicModel=model.text;c.name=[year,make.text,model.text].join(' ');c.type=type.type;c.catalog={source:'nhtsa',makeId:make.value,modelId:model.value};close();changed();draw();if(c.entryMode!=='custom')await epaMatch(c,'Selected from NHTSA: '+c.name+'.');
       };load(false);return function(){alive=false;revision++;};
     });
