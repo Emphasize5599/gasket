@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.262 - 2026-10-24
+- Search Tesla photos by base model, including Model Y Long Range RWD → Model Y.
+- Use Fuel API's newest available image year when the requested year is missing; retain rotation and label the source year without changing the car's configuration.
+- Broaden Commons model searches and Tesla photo choices across model years.
+- Keep saved vehicle identity fields editable and update open dropdowns when choices finish loading.
+
 ## 0.0.261 - 2026-10-24
 - Share remembered stations and completed scan areas across trips and the map in persistent app storage; separate price updates from rediscovery.
 - Reuse overlapping charger discovery and cached vehicle-specific prices; avoid redundant DOE searches with downloaded inventory.

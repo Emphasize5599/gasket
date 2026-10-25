@@ -8,6 +8,18 @@ Downloaded views stay in persistent `carpics` storage and full backups; expiring
 
 Reference: [Fuel API official API documentation](https://fuelapi.com/support/api-documentation).
 
+## Model and year fallback (262)
+
+Tesla Model Y/3/S/X names normalize to the base model for photo searches, even when EPA model names contain Long Range, RWD, AWD, Performance or Plaid. Fuel lookups use the selected model rather than a potentially broader NHTSA alias. The exact year is tried first, retrieving all offered trims without a trim filter. If none has a usable color image, the provider's `modelYears/` catalog supplies older candidate years in descending order. No future or invented year is probed. Each year's closest trim is tried first, then its other offered trims before moving to an older year. Successful catalog responses coalesce across cars in the session; auth/network errors stop instead of triggering a year search. Source image year/model/trim are stored under `pic.fuel`, with a source-year label when different. EPA identity, drivetrain, fuel economy and actual trim remain untouched. A similar-year photo is a visual substitute, not proof the designs are identical.
+
+Commons queries use make + base photo model without a year or range/drive suffix. Automatic non-Tesla selection retains the existing year/configuration checks. Tesla fallback accepts older model photos when a close-year image is unavailable, retains the title/license/attribution, labels the image approximate, and never automatically selects a later-year photo. The Tesla picker shows all model years; the existing broader-search button enables broader years for other models. Model identity, unsuitable-photo and dually checks still apply. Fuel API failed lookups and Commons failed lookups from previous policies are retried once by revised lookup signatures. Photo-configuration fallbacks never supply older trims to the actual vehicle setup.
+
+## Editable saved identity
+
+Saved EPA selectors load their complete choices independently, preserving the saved selection on errors and ignoring replies for changed ancestors or replaced controls. Rehydration does not simulate user changes or reapply the saved EPA record. Handlers remain attached across redraws; selecting a new ancestor still clears dependent controls and blocks Save until the record is valid. The app's dropdown popup observes changes to its source options while open, so tapping before an EPA response arrives no longer traps the user in a snapshot containing only the saved choice. Its observer is disconnected on close, and filter text is retained on updates.
+
+Custom/NHTSA-only vehicles also retain editable year/make/model inputs after VIN decoding. Changing those entries detaches the old VIN association and its decoded facts; changing an already EPA-configured vehicle to a different identity clears the old trim. VIN-assisted initial EPA matching still preserves decoded trim/facts. Pending VIN decode replies cannot overwrite later manual identity edits. Discard restores the prior configuration. Tests use actual popup clicks with a delayed year reply, saved selectors after redraw, required dependent choices, custom VIN edits, and discard at 320/448px.
+
 ## Spare storage research
 
 The location selector distinguishes inside the vehicle (including below the cargo floor), underbody, and exterior rear-mounted. A soft or hard cover does not establish the spare's size, original fitment, or whether it is standard on the exact trim. Brave supplies a suggestion; the user confirms it.

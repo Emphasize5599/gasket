@@ -2,11 +2,11 @@
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
 const release=['tirerack','keylessgas','keyless-discovery-ui','saved-prices','map-refresh','map-known-pan','picture-storage','tires','keyless-parallel','slow-link','map-tiers','map-tiers-ui','tolls','tolls-ui','backup-io','saved-partial-search','vinscan','vinscan-ui','tank-answer-ui','pricehistory','fuel-grades','keyless-discovery','walmart-keyless','climate','pricing','routes-limit','worker-pool','speed-settings','speed','trip','limits','discovery-log','routewx','speed-nokey','tile-hazards','vin-trim','recall-check','background-search'];
 release.push('nhtsa-reader','editor-tires','hazard-prefetch','styled-tire-flow','trailer-editor','vehicle-catalog','nhtsa-catalog','setup-demo');
-release.push('carpics','carpics-download','car-photo-picker','recalls-nhtsa','car-search-name','fuel-angles','car-rotation-ui');
+release.push('carpics','carpics-download','car-photo-picker','recalls-nhtsa','car-search-name','fuel-angles','car-rotation-ui','car-photo-fallback','car-photo-fallback-ui');
 release.push('citgo-trip','scan-audit','citgo-trip-ui');
 release.push('vin-feedback','roadside-cash');
 release.push('station-reconcile','map-scan-merge');
-release.push('routechoices','routechoices-ui','vehicle-required');
+release.push('routechoices','routechoices-ui','vehicle-required','vehicle-identity-edit');
 release.push('adaptive-readers');
 release.push('tire-estimate-ui','planner-worker');
 release.push('planner-queue');

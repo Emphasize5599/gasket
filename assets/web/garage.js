@@ -224,6 +224,7 @@
     try { settle(host); if (ed && ed.body) settle(ed.body); draw0(); } finally { drawing = false; }
     var fresh = grid && keepFor === S.carId && $('eYear') && $('eYear').closest('.epa-grid');
     if (fresh) fresh.replaceWith(grid);
+    if(editing&&!matching)bindEpa(car());
     syncVinUi(car());
     editorGate(car());
   }
@@ -564,8 +565,7 @@
       '<div class="epa-msg" id="eMsg"></div>' + trimHtml(c) + '</details>';
     if(custom&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
     if(custom)h+='<button type="button" class="btn tonal sm" id="gBuildCustom">Build completely custom vehicle</button>';
-    if(custom&&c.vin)h+='<details class="epa ymm" id="gVinIdentity" open><summary>'+ymmTitle+'<small>from your VIN</small></summary><p class="lead small keep">'+esc([c.year,c.make,c.model].filter(Boolean).join(' '))+'. Enter your mileage under Observed mileage; switch to EPA vehicle to find a rating.</p>'+trimHtml(c)+'</details>';
-    if (custom && !c.vin) h += '<details class="epa ymm" id="gCustom" open><summary>'+ymmTitle+'<small>Enter custom details. Changing identity clears the previous EPA match.</small></summary>' +
+    if (custom) h += '<details class="epa ymm" id="gCustom" open><summary>'+ymmTitle+'<small>Changing identity clears the previous EPA match and VIN association.</small></summary>' +
       '<div class="grid2"><label class="nf"><span>Year</span><input id="gCustomYear" type="number" inputmode="numeric" step="1" min="1886" max="9999" value="'+esc(c.year||'')+'"></label>' +
       '<label class="nf"><span>Make</span><input id="gCustomMake" type="text" value="'+esc(c.make||'')+'"></label></div>' +
       '<label class="nf wide"><span>Model</span><input id="gCustomModel" type="text" value="'+esc(c.model||'')+'"></label>' +
@@ -927,7 +927,7 @@
       if($('gBuildCustom'))$('gBuildCustom').onclick=function(){openCustom(c);};
       document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
       if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!editorOk(Object.assign({},c,{nick:this.value.trim(),name:this.value.trim()||c.name}));};
-      ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
+      ['Year','Make','Model'].forEach(function(part){var el=$('gCustom'+part);if(!el)return;el.onchange=function(){var v=this.value.trim(),key=part.toLowerCase();if(part==='Year'){var n=Number(v);v=v&&Number.isInteger(n)&&n>=1886&&n<=9999?n:'';}if(c[key]!==v){epaInvalidate(c);detachVin(c);delete c.epaId;delete c.epaBase;delete c.epa;delete c.vpicModel;delete c.catalog;}c[key]=v;draw();if($('gCustom'))$('gCustom').open=true;changed();};});
       if ($('gTrim')) {
         $('gTrim').oninput = function () { if ($('gSave')) $('gSave').disabled = !editorOk(Object.assign({}, c, { trim: this.value.trim() })); };
         $('gTrim').onchange = function () { setTrim(c, this.value); };
@@ -1088,6 +1088,7 @@
   function fill(sel, list, ph) {
     sel.innerHTML = '<option value="">' + ph + '</option>' + list.map(function (x) { return '<option value="' + esc(x.value) + '">' + esc(x.text) + '</option>'; }).join('');
     sel.disabled = !list.length;
+    if(/^e(?:Year|Make|Model|Opt)$/.test(sel.id))sel.dataset.epaMenu=list.length?'1':'0';
   }
   // Ephemeral per-car lookup feedback, not vehicle facts or backup data. A redraw may restore an
   // outline but never replay a blink. Hidden controls blink once when first revealed.
@@ -1123,20 +1124,26 @@
       var had = $('eMsg') && $('eMsg').textContent;
       if (!had) eMsg('Loading…');
       fill($('eYear'), items(await epaGet('menu/year')), 'Year'); if (!had) eMsg('');
+      bindEpa(c);
+    } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true);if(matching)throw e; }
+  }
+  function bindEpa(c){
+    if(!$('eYear'))return;
+    ['eYear','eMake','eModel','eOpt'].forEach(function(id){var el=$(id);if(el)el.onfocus=function(){if(!matching&&this.dataset.epaMenu!=='1')epaPreset(c);};});
       $('eYear').onchange = async function () {
-        if(!presetting)epaInvalidate(c);
+        epaInvalidate(c);
         clearVinField(c,'eYear');
         var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!y) return;
         try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
       };
       $('eMake').onchange = async function () {
-        if(!presetting)epaInvalidate(c);
+        epaInvalidate(c);
         clearVinField(c,'eMake');
         var y = $('eYear').value, mk = this.value; fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!mk) return;
         try{var models=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)));if(car()===c&&$('eMake')&&$('eYear').value===y&&$('eMake').value===mk)fill($('eModel'),models,'Model');}catch(e){if(car()===c&&$('eModel')){eMsg('Could not load models. Choose the make again to retry.',true);needVinFields(c,['eModel'],'EPA model menu failed');}if(matching)throw e;}
       };
       $('eModel').onchange = async function () {
-        if(!presetting)epaInvalidate(c);
+        epaInvalidate(c);
         clearVinField(c,'eModel');
         var y = $('eYear').value, mk = $('eMake').value, md = this.value; fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!md) return;
         var opts;
@@ -1144,8 +1151,8 @@
         if(car()!==c||!$('eModel')||$('eYear').value!==y||$('eMake').value!==mk||$('eModel').value!==md)return;
         fill($('eOpt'), opts, 'Engine / transmission');
         // Trims depend on model, not the EPA engine selection; start promptly.
-        if(!presetting)trimFind({id:c.id,year:+y,make:mk,model:md});
-        if (opts.length === 1 && !presetting) { $('eOpt').value = opts[0].value; await $('eOpt').onchange(); }
+        trimFind({id:c.id,year:+y,make:mk,model:md});
+        if (opts.length === 1) { $('eOpt').value = opts[0].value; await $('eOpt').onchange(); }
       };
       $('eOpt').onchange = async function () {
         var id = $('eOpt').value;editorGate(c); if (!id) return;
@@ -1164,26 +1171,19 @@
         eMsg(r.msg);
         }catch(e){if(epaEpoch.get(c)===epoch){needVinFields(c,['eOpt'],'EPA record request failed');eMsg('EPA lookup failed. Choose again to retry.',true);LG.warn('car','EPA record request failed',{message:e.message});}}finally{if(epaEpoch.get(c)===epoch)epaPending.delete(c);editorGate(c);}
       };
-    } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true);if(matching)throw e; }
   }
-  /** Show the car you have in the year / make / model pickers (after a VIN lookup, or opening them later). */
-  var presetting = false, presetAgain = false;
+  /** Expand saved selections into editable menus without replaying selection changes.
+   * Each reply owns its DOM and ancestor values, so a user's edit always wins. */
   async function epaPreset(c) {
-    if (presetting) { presetAgain = true; return; }   // a redraw replaced the pickers mid-way: fill the new ones after
-    presetting = true;
-    if($('eYear'))$('eYear').dataset.savedEpa='0';
-    try {
-      await epaYears(c);
-      var set = async function (id, want) {
-        var el = $(id); if (!el) return false;
-        var o = Array.prototype.filter.call(el.options, function (x) { return x.value && (x.value === String(want) || x.text.toLowerCase() === String(want).toLowerCase()); })[0];
-        if (!o) return false; el.value = o.value;
-        if (id !== 'eOpt' && el.onchange) await el.onchange.call(el);   // the last one only shows your pick: re-applying it would redraw and start over
-        return true;
-      };
-      if (await set('eYear', c.year) && await set('eMake', c.make) && await set('eModel', c.model)) await set('eOpt', c.epaId);
-    } catch (e) { } finally { presetting = false;editorGate(c); if (presetAgain) { presetAgain = false; if ($('tEpa') && $('tEpa').open) epaPreset(c); } }
+    var ids=['eYear','eMake','eModel','eOpt'],els=ids.map($),grid=els[0]&&els[0].closest('.epa-grid');if(!grid||grid.dataset.epaHydrating==='1'||matching)return;
+    bindEpa(c);grid.dataset.epaHydrating='1';var values=els.map(function(el){return el&&el.value||'';}),y=encodeURIComponent(values[0]),mk=encodeURIComponent(values[1]),md=encodeURIComponent(values[2]),failed=false;
+    var paths=['menu/year',y&&'menu/make?year='+y,y&&mk&&'menu/model?year='+y+'&make='+mk,y&&mk&&md&&'menu/options?year='+y+'&make='+mk+'&model='+md],labels=['Year','Make','Model','Engine / transmission'];
+    try{await Promise.all(paths.map(async function(path,i){var el=els[i];if(!path||!el||el.dataset.epaMenu==='1')return;try{var list=items(await epaGet(path));if(car()!==c||$(ids[i])!==el||values.slice(0,i+1).some(function(v,j){return !$(ids[j])||$(ids[j]).value!==v;}))return;
+      var selected=values[i],label=el.selectedOptions[0]&&el.selectedOptions[0].text;if(selected&&!list.some(function(o){return String(o.value)===selected;}))list.push({value:selected,text:label||selected});fill(el,list,labels[i]);el.value=selected;el.dataset.epaMenu=list.length?'1':'0';
+    }catch(e){failed=true;if(car()===c&&$(ids[i])===el)eMsg('Could not load '+labels[i].toLowerCase()+' choices. Tap the field to retry; your saved selection is kept.',true);}}));}
+    finally{grid.dataset.epaHydrating='0';if($(ids[0])===els[0])els[0].dataset.savedEpa=failed?'1':'0';editorGate(c);}
   }
+  function detachVin(c){if(!c.vin)return;['vin','vinDecodeRev','vinHints','vpicModel','recalls','recallCheck'].forEach(function(k){delete c[k];});var i=c.info||{},src=i.src||{},fs=i.featSrc||{};Object.keys(src).forEach(function(k){if(src[k]==='vin'){delete i[k];delete src[k];}});i.features=(i.features||[]).filter(function(k){if(fs[k]==='vin'){delete fs[k];return false;}return true;});}
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {
     // another EPA version (say the Blazer after the Blazer EV): its details replace the old version's, not just the blanks
@@ -1193,8 +1193,10 @@
     var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;
     if (!(city > 0 && hwy > 0)) return { error: 'The EPA has no mileage numbers for that one.' };
     var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
+    var identityChanged=wasCar!==[+v.year,String(v.make||'').toLowerCase(),baseOf({model:v.model,epaBase:v.baseModel}).toLowerCase()].join('|');
+    if(identityChanged&&!matching&&c.epaId){detachVin(c);c.trim='';delete c.catalog;delete c.vpicModel;c.recalls=null;delete c.recallCheck;delete trimOther[c.id];}
     c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : /diesel/i.test(fuel) ? 'diesel' : 'gas';
-    c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);
+    c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);else delete c.epaBase;
     c.name = [v.year, v.make, v.model].join(' ') + (opt ? ' · ' + opt : '');c.epaOption=opt||'';
     if (ev) {
       // MPGe -> miles per kWh (33.705 kWh = 1 gallon-equivalent)
@@ -1305,10 +1307,10 @@
     if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { needVinFields(c,['gVin'],'invalid format');vMsg('A VIN is 17 letters and numbers (never I, O or Q).', true); return; }
     if (vin === c.vin && c.vinDecodeRev===130 && hasEpa(c) && c.epaId) { vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
     var ui=vinStates.get(c);ui.pending='Decoding VIN';syncVinUi(c);vMsg('');eMsg('');
-    var epoch=editSnap;
+    var epoch=editSnap,identityEpoch=epaEpoch.get(c);
     try {
       var r = await call('fetchJson', VPIC + 'DecodeVinValuesExtended/' + vin + '?format=json');
-      if(epoch&&editSnap!==epoch||S.cars.indexOf(c)<0)return;
+      if(epoch&&editSnap!==epoch||S.cars.indexOf(c)<0||epaEpoch.get(c)!==identityEpoch)return;
       if (r.error) throw new Error(r.error);
       var R = (JSON.parse(r.body).Results || [])[0] || {};
       var d = fromVpic(R);
