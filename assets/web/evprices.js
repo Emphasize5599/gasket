@@ -40,7 +40,8 @@
   async function json(url) { var r = await call('fetchJson', url); if (!r || r.error || r.blocked) { var e = new Error(r && r.blocked ? 'Website access restricted; prices remain estimates.' : r && r.error || 'no answer'); e.blocked = !!(r && r.blocked); throw e; } return r.body; }
   function priceAge(){return Math.min(720,Math.max(1,+S.evPriceAgeHours||24))*HOUR;}
   function stamp(v,t){(Array.isArray(v)?v:[v]).forEach(function(x){if(x&&typeof x==='object'&&!x.t)x.t=t;});return v;}
-  function cached(key, age) { try { var o = KV.get(NS, key, age===DAY?priceAge():age); return o ? stamp(o.v,o.t) : null; } catch (e) { return null; } }
+  var forcePriceRead=false;
+  function cached(key, age) { if(forcePriceRead&&age)return null;try { var o = KV.get(NS, key, age===DAY?priceAge():age); return o ? stamp(o.v,o.t) : null; } catch (e) { return null; } }
   function keep(key, v) { stamp(v,Date.now());try { KV.put(NS, key, v); } catch (e) { } }
   /** "$0.59/kWh", "$1.00/Hour", "$0.25/min" → {v, uom} */
   function money(text) { var m = /\$\s*(\d*\.?\d+)\s*\/\s*(kwh|hour|hr|min(?:ute)?)/i.exec(String(text || '')); return m ? { v: +m[1], uom: /kwh/i.test(m[2]) ? 'kwh' : /min/i.test(m[2]) ? 'min' : 'hour' } : null; }
@@ -255,12 +256,12 @@
   }
 
   /** Give each station (that a network publishes a price for) `netPrice`. items: [{st, dc, kw}]. Returns {priced, notes}. */
-  async function annotate(items, car, onProg) {
+  async function annotate0(items, car, onProg) {
     cancelled = false;
     var notes = [], priced = 0, t = Date.now(), isTesla = /tesla/i.test(car && car.make || '');
     if (S.evNetPrices === false || !items.length) return { priced: 0, notes: notes };
     var guestPhase=!!(root.EVGuest&&S.evGuestApps);
-    if(guestPhase){try{var guest=await root.EVGuest.annotate(items,car,function(f,text){if(onProg)onProg(f*.3,text);});priced+=guest.priced;notes=notes.concat(guest.notes);}catch(e){notes.push('Guest charger sources could not complete; existing prices preserved.');}}
+    if(guestPhase){try{var guest=await root.EVGuest.annotate(items,car,function(f,text){if(onProg)onProg(f*.3,text);},forcePriceRead);priced+=guest.priced;notes=notes.concat(guest.notes);}catch(e){notes.push('Guest charger sources could not complete; existing prices preserved.');}}
     var by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[],ee:[],fcn:[] };
     items.forEach(function (x) { var n = String(x.st.network || ''); if (/^tesla(?! destination)/i.test(n) && x.dc) by.tesla.push(x); else if (/ionna/i.test(n)) by.ionna.push(x); else if (/^blink/i.test(n)) by.blink.push(x); else if (/^chargepoint/i.test(n) && chargePointIds(x.st).length) by.chargepoint.push(x);else if(/^flo$/i.test(n))by.flo.push(x);else if(/^electric[_ ]?era$/i.test(n)&&x.dc)by.ee.push(x);else if(/^fcn$|francis/i.test(n))by.fcn.push(x); });
     var set = function (x, p, src, label) { if(src==='chargepoint'&&p.complete!==false&&!p.blocks)delete x.st.tariffV2;x.st.netPrice = Object.assign({ src: src, label: label, t: null }, p); priced++; };
@@ -268,7 +269,7 @@
     // EVERY cached rate first, including sites beyond the first 20 in provider order.
     var cpCached=0,cpDeferred=0;
     by.chargepoint=by.chargepoint.filter(function(x){
-      var p=cached(cpKey(x.st),DAY);if(!p||p.none||p.missing)p=cpObserved(x.st);
+      var p=forcePriceRead?null:cached(cpKey(x.st),DAY);if(!forcePriceRead&&(!p||p.none||p.missing))p=cpObserved(x.st);
       var label=function(q){return q.free?'Free, set by the station\'s host on ChargePoint':'The station host\'s ChargePoint rate'+(q.fee?' + $'+q.fee.toFixed(2)+' session fee':'');};
       if(p){var failure=cpFailures.get(cpKey(x.st));if(failure&&p.t>=failure.at)clearCpFailure(x.st);set(x,p,'chargepoint',label(p));cpCached++;return false;}
       var old=cached(cpKey(x.st),0);if(!old||old.none||old.missing)old=cpObserved(x.st,true);if(old)set(x,old,'chargepoint',label(old));
@@ -302,11 +303,12 @@
     // pages that never load (the station's data refused or unknown) cost ~4 s each: stop after CP_GIVE_UP in a row with none priced
     var cpMiss = 0, cpGot = 0;
     for (var ci = 0; ci < by.chargepoint.length; ci++) { var cx = by.chargepoint[ci]; if (cpMiss >= CP_GIVE_UP && !cpGot) { notes.push('ChargePoint\'s station pages didn\'t load, so its prices are estimates this time.'); LG.info('stations', 'ChargePoint reads stopped', { pagesMissing: cpMiss }); break; }
-      try { var cpP = await chargePointPrice(cx.st); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
+      try { var cpP = await chargePointPrice(cx.st,forcePriceRead); if (cpP) cpGot++; else cpMiss++; if (cpP) set(cx, cpP, 'chargepoint', cpP.free ? 'Free, set by the station\'s host on ChargePoint' : 'The station host\'s ChargePoint rate' + (cpP.fee ? ' + $' + cpP.fee.toFixed(2) + ' session fee' : '')); } catch (e) { if (e.blocked) { notes.push(e.message); break; } } step('chargepoint'); }
     // Legacy readers can expose only peak/low for variable tariffs. Never present a peak as an arrival quote.
     items.forEach(function(x){var p=x.st.netPrice;if(p&&(p.low<p.peak||p.tou||p.conservative)&&!x.st.tariffV2){p.conservative=true;p.estimated=true;if(!/upper estimate/.test(p.label||''))p.label+=' · upper estimate; arrival-time rate unverified';}});
     LG.info('stations', 'Charger network prices', { tesla: by.tesla.length, ionna: by.ionna.length, blink: by.blink.length, chargepoint: by.chargepoint.length, chargepointCached:cpCached,chargepointDeferred:cpDeferred, flo:by.flo.length, electricEra:by.ee.length, francis:by.fcn.length, priced: priced, ms: Date.now() - t });
     if(etaPrices)etaPrices.finish(!cancelled&&!verification&&!notes.length);return { priced: priced, notes: notes };
   }
+  async function annotate(items,car,onProg,force){forcePriceRead=!!force;try{return await annotate0(items,car,onProg);}finally{forcePriceRead=false;}}
   root.EVPrices = { annotate: annotate, cancel: cancel,trackChargePoints:trackChargePoints,failedChargePoints:failedChargePoints,retryFailedChargePoints:retryFailedChargePoints,onVerified: onVerified, dismissCheck: dismissCheck, isPaused: function () { return !!verification; }, parseIonna: parseIonna, parseBlinkPrice: parseBlinkPrice, parseFlo:parseFlo, parseElectricEra:parseElectricEra, parseFrancis:parseFrancis, parseChargePoint: parseChargePoint, chargePointIds: chargePointIds, money: money };
 })(window);

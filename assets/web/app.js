@@ -358,24 +358,24 @@
     if (demo) { gStations = []; official = {}; receiveGoogle(window.demoPlaces(lat, lng), []); finish(lat, lng); return; }
     var sites = Object.keys(SITES).filter(siteOn);
     var keyless = method!=='api'&&(!S.apiKey||S.keylessRegular||method==='discover')&&window.KeylessGas;
-    var useGoogle = !!S.apiKey && !keyless;
+    var useGoogle = !!S.apiKey && !keyless,cellApi=useGoogle&&window.StationStore&&N.fetchStationCell;
     if (!useGoogle && !keyless && !sites.length) { openSettings(true); return; }
     var b = bounds || bbox(lat, lng, S.radiusMi);
     var areas;
-    if(keyless)try{areas=KeylessGas.mapAreas(b,P);}catch(e){status(e.message,true);$('btnArea').classList.remove('hidden');return;}
+    if(keyless||cellApi)try{areas=KeylessGas.mapAreas(b,P);}catch(e){status(e.message,true);$('btnArea').classList.remove('hidden');return;}
     var id = ++reqId; pending = id; errs = [];
     pendingSources = 0; sitePending = {}; siteOk = {};
     pendingCenter = { lat: lat, lng: lng };
     $('btnRefresh').classList.add('spin');
     status('Getting live prices…');
-    if (useGoogle) {
+    if (useGoogle&&!cellApi) {
       var queries = Object.keys(P.BRANDS).filter(function (k) { return S.brands[k]; }).map(function (k) { return P.BRANDS[k].query; });
       if (queries.length) { pendingSources++; N.search(id, S.apiKey, JSON.stringify(queries), b[0], b[1], b[2], b[3], Number(S.monthlyCap) || 0); }
     } else gStations = [];
-    if (keyless) {
+    if (keyless||cellApi) {
       pendingSources++;
-      jobStart({kind:'map',label:'Discovering stations · No API',cancel:function(){KeylessGas.cancel();}});
-      KeylessGas.discover(areas,function(f,text){jobProg(f,text);},S.grade,false).then(function(r){
+      jobStart({kind:'map',label:'Finding stations · '+(cellApi?'API':'No API'),cancel:function(){KeylessGas.cancel();}});
+      (cellApi?KeylessGas.discoverAPI:KeylessGas.discover)(areas,function(f,text){jobProg(f,text);},S.grade,method==='discover'||method==='api').then(function(r){
         if(id!==reqId)return;
         gStations=r.stations.filter(function(s){return S.brands[s.brand]&&s.lat>=b[0]&&s.lat<=b[2]&&s.lng>=b[1]&&s.lng<=b[3];});
         errs=errs.concat(r.errors||[]);
@@ -386,11 +386,11 @@
       }).catch(function(e){if(id!==reqId)return;errs.push('Keyless gas: '+e.message);sourceDone();}).finally(function(){jobEnd();});
     }
     var radius = Math.min(Math.max(P.haversineMi(lat, lng, b[2], lng), 3), 30);
-    (keyless?[]:sites).forEach(function (k) {
+    (keyless||cellApi?[]:sites).forEach(function (k) {
       pendingSources++; sitePending[k] = true;
       N.siteSearch(k, id, JSON.stringify({ lat: lat, lng: lng, radiusMi: radius, max: SITES[k].max }));
     });
-    Object.keys(SITES).forEach(function (k) { if (keyless||sites.indexOf(k) < 0) official[k] = []; });
+    Object.keys(SITES).forEach(function (k) { if (keyless||cellApi||sites.indexOf(k) < 0) official[k] = []; });
     if (!pendingSources) { finish(lat, lng); }
   }
   var pendingCenter = null;
@@ -447,6 +447,7 @@
       seen[s.id] = 1; list.push(s);
     });
     if(window.PriceHistory&&observations.length)PriceHistory.observe(observations);
+    if(!demo&&window.StationStore)StationStore.observe(observations,'gas');
     if (list.length || !errors.length) gStations = list;
     errors.forEach(function (e) { errs.push(e); });
   }
@@ -455,6 +456,7 @@
     $('btnRefresh').classList.remove('spin');
     stations = P.mergeOfficial(gStations, allOfficial()).filter(function (s) { return S.brands[s.brand]; });
     if(!demo&&window.PriceHistory)PriceHistory.observe(stations);
+    if(!demo&&window.StationStore)StationStore.observe(stations,'gas');
     lastFetch = { ts: Date.now(), lat: lat, lng: lng, demo: demo };
     if (!demo) N.saveCache(JSON.stringify({ lastFetch: lastFetch, g: gStations, o: official }));
     movedByUser = false;
@@ -478,6 +480,7 @@
     stations.forEach(add);
     // This is local app storage, not a network lookup. It covers stations from earlier map searches and saved trips.
     if(!demo&&window.__app&&window.PriceHistory&&PriceHistory.near)PriceHistory.near(box).forEach(add);
+    if(!demo&&window.__app&&window.StationStore)StationStore.query(box,'gas').forEach(add);
     return P.mergeSites(P.reconcileStations(out));
   }
   function enriched() {
@@ -971,7 +974,8 @@
     window.__erasing=true;
     if(N.evGuestConfig&&window.__trip){var cleared=await window.__trip.call('evGuestConfig','{"clear":true}');if(cleared.error){window.__erasing=false;toast('Could not erase private EV credentials. Please try again.');return;}}
     if(N.chargerInventory&&window.__trip){var erased=await window.__trip.call('chargerInventory','clear','');if(erased.error){window.__erasing=false;toast('Could not erase the charger inventory. Please try again.');return;}}
-    CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory','stationstore']).forEach(function (ns) { KV.clear(ns); });
+    if(window.StationStore)StationStore.reset();
     if(window.PriceHistory)PriceHistory.reset();
     try { N.saveCache(''); } catch (e) { }
     try { N.saveSettings(JSON.stringify({debug:true,logLevel:5})); } catch (e) { }
@@ -1212,12 +1216,12 @@
     h += '<div class="card"><h3>Bad CITGO stations</h3>' +
       '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
-      '<div class="field"><div class="lbl">Station price history<small>Posted prices are kept in app storage, not cache, with their source and timestamps. Full backups include this history; clearing cache does not remove it.</small></div></div>' +
+      '<div class="field"><div class="lbl">Remembered stations & price history<small>Station locations, completed scan areas and price observations are shared across trips and map searches in app storage. Full backups include them. Clear cache keeps them; Rediscover checks an area again, while Update prices only checks known stations.</small></div></div>' +
       '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/Gasket you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
       '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div>' +
       '<div class="field col"><div class="lbl">Full backup (moving to a new install)<small class="keep">Everything, exactly as it is: settings <b>including your API keys</b>, cars, trips, all saved searches and prices, the bad CITGO list, the debug log and this month\'s Google lookup counts. Restoring replaces everything in the app, and lookup counts never go down, so your monthly cap still holds. Uses no lookups. Keep the file private — it has your keys.</small></div>' +
         '<div class="btns wrap"><button class="btn tonal sm" id="bkSave">Save full backup</button><button class="btn tonal sm" id="bkRestore">Restore full backup</button></div></div>' +
-      '<div class="field"><div class="lbl">Clear cache<small>Stations, prices, speed limits, routes and Walmart+ station checks saved from recent searches, so the same route doesn\'t use Google lookups twice. Your trips, cars and settings stay.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
+      '<div class="field"><div class="lbl">Clear cache<small>Clears temporary responses, AI explanations, speed limits and route lookups. Remembered stations, scanned areas, price history, trips, cars and settings stay.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
       '<div class="field"><div class="lbl">Delete bad CITGO list<small class="keep" id="blCount2">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blDelAll">Delete</button></div>' +
       '<div class="field"><div class="lbl">Erase all data<small>Settings, API key, cars, mileage log, trips, the bad CITGO list and the cache — like a fresh install. This month\'s lookup count is kept so your safety cap still works.</small></div><button class="btn tonal sm danger-sm" id="eraseAll">Erase</button></div></div>';
     h += '<div class="card"><h3>Debugging</h3>' +
@@ -1262,7 +1266,7 @@
       document.querySelector('.citgo-today').textContent = citgoToday();
     };
     $('kvClear').onclick = function () {
-      confirmDel({ title: 'Clear the cache?', body: 'Stations, prices, speed limits and routes saved from recent searches. Searching the same places again will use lookups. Your trips, cars and settings stay.', action: 'Clear' }).then(function (ok) {
+      confirmDel({ title: 'Clear the cache?', body: 'Temporary responses, AI explanations, speed limits and route lookups will be cleared. Remembered stations, scanned areas, price history, trips, cars and settings stay.', action: 'Clear' }).then(function (ok) {
         if (!ok) return; var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); });window.dispatchEvent(new Event('cacheclear')); toast('Cleared ' + n + ' saved answers.');
       });
     };
@@ -1458,8 +1462,8 @@
     // the same blue buttons as the trip's refresh card, each with its (?) beside it; a tap anywhere else closes it
     var row=function(k,label,off,help){return '<button class="btn primary" data-refresh="'+k+'" role="menuitem"'+(off?' disabled':'')+'>'+label+'</button>'+qBtn(help);};
     menu.innerHTML=row('web','Refresh prices · No API',!allowWeb,'Updates the prices of the stations already on the map from the Google Maps website, Walmart and Murphy USA. No API calls.'+(!allowWeb?' Nothing on the map to refresh yet.':''))+
-      row('discover','Discover stations · No API',false,'Finds the stations around here from the Google Maps website. Slower: it scrolls each result list in overlapping areas and can miss stations or prices. An API key is recommended for faster, more reliable discovery.')+
-      row('api','Discover stations · API',!S.apiKey,'Finds the stations around here with Google\'s Places API: fast and complete, but it counts toward your monthly lookups.'+(!S.apiKey?' Add the recommended API key in Settings to use this.':''));
+      row('discover','Rediscover stations · No API',false,'Scans this area again, including remembered cells, for new or changed stations. Slower: websites can omit stations or prices. Ordinary Search this area only discovers unknown cells.')+
+      row('api','Rediscover stations · API',!S.apiKey,'Scans this area again with Google\'s Places API, including remembered cells. Uses your monthly budget; incomplete pages remain eligible for another search.'+(!S.apiKey?' Add the recommended API key in Settings to use this.':''));
     document.body.appendChild(menu);
     var away=function(e){if(menu.contains(e.target)||anchor.contains(e.target)||e.target.closest('.qpop'))return;menu.remove();document.removeEventListener('pointerdown',away,true);};
     document.addEventListener('pointerdown',away,true);   // opened on click: this tap's pointerdown is already past

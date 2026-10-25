@@ -49,6 +49,8 @@
   }
   /** The paint pictures to use: the front three-quarter (032), else the side view (001), which is all older cars have. */
   function bestColors(v) { var a = colorsOf(v, 'color_0640_032_png'); return a.length ? a : colorsOf(v, 'color_0640_001_png'); }
+  function fuelViews(v){var out=[];['032','001','014'].forEach(function(angle){colorsOf(v,'color_0640_'+angle+'_png').forEach(function(c){out.push(Object.assign({angle:angle},c));});});return out;}
+  function selectedView(c){var f=c&&c.pic&&c.pic.fuel,col=f&&(pickColor(f.colors,c.paint)||f.colors[0]),views=f&&f.views&&f.views.filter(function(v){return col&&v.code===col.code;})||[];return views.find(function(v){return v.angle===c.picAngle;})||views.find(function(v){return v.angle==='032';})||views[0]||{angle:'032',code:col&&col.code};}
   function pickColor(colors, paint) {
     if (!colors || !colors.length || !paint) return null;
     return colors.filter(function (c) { return paint.code && c.code === paint.code; })[0] || null;
@@ -129,12 +131,12 @@
     if (/sedan|saloon|cars\b|\b4 dr\b/.test(s)) return 'sedan';
     var t = c && c.type; return t === 'truck' ? 'pickup' : t === 'suv' ? 'suv' : 'sedan';
   }
-  var CarPicMath = { closestModel:closestModel, bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
+  var CarPicMath = { fuelViews:fuelViews,selectedView:selectedView,closestModel:closestModel, bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
   root.CarPicMath = CarPicMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = CarPicMath;
   if (!root.document) return;
 
-  var A = root.__app, S = A.S, FORMAT_ID = '12,6', LG = root.FLog || { info: function () {}, warn: function () {} };
+  var A = root.__app, S = A.S, FORMAT_ID = '12,8,6', LG = root.FLog || { info: function () {}, warn: function () {} };
   var RETRY_H = 24, busy = {}, mem = {};
   function call(name) { var args = [].slice.call(arguments, 1); return root.__trip ? root.__trip.call.apply(null, [name].concat(args)) : Promise.reject(new Error('no bridge')); }
   function stored(k) { if (mem[k]) return mem[k]; try { var o = A.KV.get('carpics', k); if (o && o.v) return (mem[k] = o.v); } catch (e) { } return null; }
@@ -152,14 +154,14 @@
   /** Fuel API: the trim and its factory colors (needs the key; asked when you open Edit, or when there's no other photo). */
   function lookFuel(c) {
     var sg = sig(c, true), b = 'f|' + c.id;
-    if (!hasKey() || !due(P(c).fuel, sg) || busy[b]) return Promise.resolve();
+    if (!hasKey() || (!due(P(c).fuel, sg)&&(P(c).fuel.views||P(c).fuel.fail)) || busy[b]) return Promise.resolve();
     busy[b] = 1;
     return fuel('vehicles?year=' + encodeURIComponent(c.year) + '&make=' + encodeURIComponent(c.make) + '&model=' + encodeURIComponent(baseModel(c.model))).then(function (list) {
       var m = matchTrim(list, c.trim, driveOf(c.model)); if (!m) throw new Error('not listed');
       return fuel('vehicle/' + encodeURIComponent(m.v.id) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) {
         var cols = bestColors(v); if (!cols.length) throw new Error('no pictures');
-        mem['urls|' + m.v.id] = cols;
-        P(c).fuel = { sig: sg, vid: String(m.v.id), trim: m.v.trim || '', exact: m.exact, colors: cols.map(function (x) { return { code: x.code, name: x.name, simple: x.simple, rgb: x.rgb }; }), t: Date.now() };
+        var views=fuelViews(v);mem['urls|' + m.v.id] = views;
+        P(c).fuel = { sig: sg, vid: String(m.v.id), trim: m.v.trim || '', exact: m.exact, colors: cols.map(function (x) { return { code: x.code, name: x.name, simple: x.simple, rgb: x.rgb }; }),views:views.map(function(x){return {code:x.code,angle:x.angle};}), t: Date.now() };
         LG.info('car', 'Fuel API: ' + cols.length + ' colors' + (m.exact ? '' : ' (closest trim: ' + (m.v.trim || 'base') + ')'));
       });
     }).catch(function (e) { P(c).fuel = { sig: sg, fail: Date.now(), err: String(e && e.message || e) }; LG.warn('car', 'No Fuel API pictures', P(c).fuel.err); })
@@ -208,7 +210,7 @@
   }
   function imgKey(c) {
     var w = which(c, hasKey()); if (!w) return null;
-    if (w === 'fuel') { var col = pickColor(c.pic.fuel.colors, c.paint) || c.pic.fuel.colors[0]; return 'fuel|' + c.pic.fuel.vid + '|' + col.code; }
+    if (w === 'fuel') { var col = pickColor(c.pic.fuel.colors, c.paint) || c.pic.fuel.colors[0]; return 'fuel|' + c.pic.fuel.vid + '|' + col.code+(c.pic.fuel.views?'|'+selectedView(c).angle:''); }
     return w + '|' + c.pic[w].url;
   }
   /** Makes sure the car's photo is looked up and kept: NHTSA's, else Commons'. Doodle mode needs nothing. */
@@ -234,8 +236,9 @@
     if (w !== 'fuel') urlP = Promise.resolve(c.pic[w].url);
     else {
       var f = c.pic.fuel, want = pickColor(f.colors, c.paint) || f.colors[0], cached = mem['urls|' + f.vid];
-      urlP = (cached ? Promise.resolve(cached) : fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) { return (mem['urls|' + f.vid] = bestColors(v)); }))
-        .then(function (cols) { var m = cols.filter(function (x) { return x.code === want.code; })[0]; if (!m) throw new Error('no picture in that color'); return m.url; });   // Fuel API's links expire: fresh ones each time
+      var view=selectedView(c);
+      urlP = (cached ? Promise.resolve(cached) : fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) { return (mem['urls|' + f.vid] = fuelViews(v)); }))
+        .then(function (cols) { var m = cols.filter(function (x) { return x.code === want.code&&x.angle===view.angle; })[0]; if (!m) throw new Error('no picture in that color and angle'); return m.url; });   // Fuel API's links expire: fresh ones each time
     }
     return urlP.then(function (u) { return call('fetchImage', u); }).then(function (r) { if (r.error || !r.body) throw new Error(r.error || 'no image'); keep(k, r.body); if(c.pic && c.pic[w]) delete c.pic[w].imageFail; })
       .catch(function (e) { mem['imageFail|' + k] = Date.now(); if(c.pic && c.pic[w]) { c.pic[w].imageFail=Date.now(); A.save(); } LG.warn('car', 'Couldn\'t download the car\'s picture', String(e && e.message || e)); })
@@ -246,6 +249,8 @@
   function hasGenerated(c) { return !!(c && stored(generatedKey(c))); }
   function imageDialog(text,ask){return root.__app.confirmDel({always:true,title:'Vehicle image',body:root.__app.esc(text),action:ask?'Continue':'OK',no:ask?'Cancel':'Close',goClass:'primary'});}
   function src(c) { var g = c && stored(generatedKey(c)); if (g) return g; var k = c && imgKey(c); return k ? stored(k) : null; }
+  function angles(c){if(!c||!hasKey()||c.picMode==='doodle'||hasOverride(c))return [];var f=c.pic&&c.pic.fuel,view=selectedView(c);return (f&&f.views||[]).filter(function(v){return v.code===view.code;}).map(function(v){return v.angle;});}
+  async function rotate(c,d){var list=angles(c);if(list.length<2)return false;var old=c.picAngle,oldPaint=c.paint&&Object.assign({},c.paint),f=c.pic.fuel,at=list.indexOf(selectedView(c).angle);if(!pickColor(f.colors,c.paint))c.paint=Object.assign({},f.colors[0]);c.picAngle=list[(at+(d<0?-1:1)+list.length)%list.length];A.save();var work=fetchPic(c);told(c);await work;if(!stored(imgKey(c))){c.picAngle=old;c.paint=oldPaint;delete c.pic.fuel.imageFail;A.save();told(c);if(A.toast)A.toast('That angle could not load. Your current view was kept.');return false;}told(c);return true;}
   function importGenerated(c) {
     if (!c || !c.id) return Promise.resolve();
     return call('pickImageFile').then(function (r) {
@@ -353,7 +358,7 @@
       if (!f || f.fail || !f.colors || !f.colors.length || !f.vid) throw new Error('No Fuel API image is available for this vehicle and trim.');
       var want = pickColor(f.colors, c.paint) || f.colors[0];
       return fuel('vehicle/' + encodeURIComponent(f.vid) + '?productID=2&productFormatIDs=' + FORMAT_ID).then(function (v) {
-        var fresh = bestColors(v).filter(function (x) { return x.code === want.code; })[0];
+        var fresh = fuelViews(v).filter(function (x) { return x.code === want.code&&x.angle===selectedView(c).angle; })[0];
         if (!fresh || !fresh.url) throw new Error('Fuel API did not return an image for the selected paint color.');
         var name = ('gasket-' + [c.year, c.make, baseModel(c.model), c.paint && c.paint.simple || want.simple || want.name || want.code].filter(Boolean).join('-'))
           .toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) + '.webp';
@@ -388,7 +393,7 @@
   function resetChatGPTSetup() {
     keep('chatgptSetup', '');
   }
-  root.CarPics = { trims: trims, loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
+  root.CarPics = { angles:angles,rotate:rotate,trims: trims, loadColors: loadColors, keyChanged: keyChanged, hasKey: hasKey, busyColors: function (c) { return !!(c && busy['f|' + c.id]); },
     colors: function (c) { var f = c && c.pic && c.pic.fuel; return hasKey() && f && !f.fail ? f.colors || [] : []; }, ensure: ensure, src: src, pending: pending, drawing: drawing, credit: credit, which: which, bodyOf: bodyOf,
     hasGenerated: hasGenerated, hasOverride:hasOverride, choose:choose, importGenerated: importGenerated, clearGenerated: clearGenerated, recreate: recreate, recreationPrompt: recreationPrompt, resetChatGPTSetup: resetChatGPTSetup };
 })(typeof window !== 'undefined' ? window : globalThis);

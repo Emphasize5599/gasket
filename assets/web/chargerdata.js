@@ -77,8 +77,13 @@
  function routeRates(list){var dc=[],ac=[];list.forEach(function(x){var t=tariff(x.st,null,x.kw);if(t.price>0&&t.label.indexOf('rate')>=0)(x.dc?dc:ac).push(t.price);});
   var med=function(a){if(a.length<3)return null;a=a.slice().sort(function(p,q){return p-q;});var k=a.length>>1;return a.length%2?a[k]:(a[k-1]+a[k])/2;};
   return {dc:med(dc),ac:med(ac),all:med(dc.concat(ac)),nDc:dc.length,nAc:ac.length};}
- async function ocmRoute(model,mi){var key=String(S.ocmKey||'').trim();if(!key)throw new Error('Open Charge Map is enabled but needs its free personal key in Settings → Connections.');
-  var line=encode(root.AltFuel.routePoints(model.pts||[])),ck='ocm-route-v1|'+mi+'|'+line,cached=KV.get('afdc',ck,DAY);if(cached)return cached.v;
+ async function ocmRoute(model,mi,force){
+  if(!root.StationStore||!root.Trip||!model.cum)return ocmRouteFetch(model,mi,force);
+  var scope='ocm-all',runs=StationStore.uncoveredRuns(model,Trip,scope,mi,force),known=StationStore.activeRows(StationStore.routeRows([model],Trip,mi,'ev',StationStore.priceScope(root.Garage&&Garage.car())),scope);
+  for(var i=0;i<runs.length;i++){try{var rows=await ocmRouteFetch(runs[i],mi,force);known=merge(known,rows);if(StationStore.observe(rows,'ev')!==false)StationStore.rememberRoute(scope,root.AltFuel.routePoints(runs[i].pts),mi+.2,rows.map(function(s){return s.id;}));}catch(e){e.stations=merge(known,e.stations||[]);throw e;}}return StationStore.activeRows(known,scope);
+ }
+ async function ocmRouteFetch(model,mi,force){var key=String(S.ocmKey||'').trim();if(!key)throw new Error('Open Charge Map is enabled but needs its free personal key in Settings → Connections.');
+  var line=encode(root.AltFuel.routePoints(model.pts||[])),ck='ocm-route-v1|'+mi+'|'+line,cached=!force&&KV.get('afdc',ck,DAY);if(cached)return cached.v;
   if(pending.has(ck))return pending.get(ck);
   var task=(async function(){var all=[],last=0;for(var page=0;page<20;page++){
    before('ocm',key);var r=await call('fetchChargerApi','ocm',key,params({output:'json',polyline:line,distance:mi+.2,distanceunit:'Miles',maxresults:1000,sortby:'id_asc',greaterthanid:last,opendata:true,verbose:true,compact:false,includecomments:false,client:'Gasket'}));after('ocm',key,r);if(r.error){var e=new Error('Open Charge Map update failed ('+(r.status||'connection')+'); saved chargers remain available.');e.stations=all;throw e;}

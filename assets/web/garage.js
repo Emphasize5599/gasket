@@ -306,7 +306,7 @@
     var brave = r[0] && r[0].text ? TrimMath.parse(r[0].text, c) : [], list = TrimMath.merge(r[1], brave);
     var v = { list: list, t: Date.now(), failed: !list.length };
     trimMem[k] = v; try { A.KV.put('trims', TRIM_V + k, v); } catch (e) { }
-    LG.info('car', list.length ? 'Trims: ' + list.length + ' (' + (r[1].length ? 'Fuel API' + (brave.length ? ' + ' : '') : '') + (brave.length ? 'Brave Search' : '') + ')' : 'No trim list', list.length ? list.join(', ') : (r[0] && (r[0].error || (r[0].blocked ? 'a check on Brave Search\'s page' : ''))) || 'no reply in 40 s');
+    LG.info('car', list.length ? 'Trims: ' + list.length + ' (' + (r[1].length ? 'Fuel API' + (brave.length ? ' + ' : '') : '') + (brave.length ? 'Brave Search' : '') + ')' : 'No trim list', list.length ? list.join(', ') : (r[0] && (r[0].error || (r[0].blocked ? 'a check on Brave Search\'s page' : ''))) || 'no reply before the reader deadline');
     if (trimKey(car()) === k) drawIdle();
   }
   /** A lookup's redraw: not while you're typing in the editor (it would replace the box); once you leave it. */
@@ -385,7 +385,7 @@
       changed();
     } else if (!(r && r.closed)) {
       c.tankLookup = { key: key, t: Date.now(), failed: true }; save();
-      LG.warn('car', 'Tank size lookup got no answer', r ? (r.blocked ? 'a check on Brave Search\'s page' : r.error || '') : 'no reply in 40 s');
+      LG.warn('car', 'Tank size lookup got no answer', r ? (r.blocked ? 'a check on Brave Search\'s page' : r.error || '') : 'no reply before the reader deadline');
     }
     draw();
   }
@@ -446,7 +446,7 @@
     var i = S.cars.indexOf(c), n = S.cars.length, many = n > 1;
     var sub = subHtml(c);
     if (inEditor && noIdentity(c)) return '<div class="tipbox gc-tip" id="gcPic"><div><b>Tip:</b> ' + PIC_TIP + '</div></div>' + imgActions(c);
-    if (inEditor) return '<div class="gc gc-solo" id="gCars"><div class="gc-stage" id="gcStage"><div class="gc-slide carchip on"><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div>' +
+    if (inEditor) return '<div class="gc gc-solo" id="gCars"><div class="gc-stage" id="gcStage"><div class="gc-slide carchip on"><div class="gc-photo-row" id="gcPhotoRow"><button type="button" class="btn tonal gc-rotate hidden" id="gcRotateLeft" aria-label="Rotate vehicle left" title="Previous available Fuel API view">'+ARROW+'</button><div class="gc-pic" id="gcPic">' + picHtml(c) + '</div><button type="button" class="btn tonal gc-rotate next hidden" id="gcRotateRight" aria-label="Rotate vehicle right" title="Next available Fuel API view">'+ARROW+'</button></div>' +
       '<b class="gc-name">' + esc(shortName(c)) + '</b><small class="gc-sub" id="gcSub">' + sub + '</small></div></div></div>' + imgActions(c);
     function imgActions(c) { return '<div class="gc-image-actions"><span><button type="button" class="gc-recreate" id="gcRecreate">Recreate with ChatGPT</button>'+A.qBtn('Mainly used for recreating watermarked images and removing image backgrounds.')+'</span>' +
       '<button type="button" class="gc-recreate" id="gcUseGenerated">Pick a photo...</button>' +
@@ -470,6 +470,7 @@
   }
   function bindCarousel(c) {
     if (!$('gcStage')) return;
+    syncRotation(c);
     if ($('gcPrev')) { $('gcPrev').onclick = function () { go(-1); }; $('gcNext').onclick = function () { go(1); }; }
     var st = $('gcStage'), x0 = null, y0 = 0, sl = st.querySelector('.gc-slide');
     if (!$('gcPrev')) st = document.createElement('div');      // the editor's picture: no swiping to another car
@@ -490,10 +491,12 @@
     };
     if (window.CarPics) { CarPics.ensure(c); var n = S.cars.length, i = S.cars.indexOf(c); if (n > 1) { CarPics.ensure(S.cars[(i + 1) % n]); CarPics.ensure(S.cars[(i - 1 + n) % n]); } }
   }
+  function syncRotation(c){var row=$('gcPhotoRow');if(!row)return;var CP=window.CarPics,available=CP&&CP.angles&&CP.angles(c).length>1;row.classList.toggle('can-rotate',!!available);['Left','Right'].forEach(function(side){var b=$('gcRotate'+side);if(!b)return;b.classList.toggle('hidden',!available);b.disabled=!!(CP&&CP.pending(c));b.onclick=async function(){b.disabled=true;try{await CP.rotate(c,side==='Left'?-1:1);}finally{syncRotation(c);}};});}
   // a picture came in: put it in place (no redraw)
   window.addEventListener('carpic', function (e) {
     var c = car(); if (!c || e.detail !== c.id || !host) return;
     var p = document.getElementById('gcPic'); if (p && p.classList.contains('gc-tip')) { draw(); return; } if (p) p.innerHTML = picHtml(c);
+    syncRotation(c);
     var originalButton = document.getElementById('gcOriginal');
     if (originalButton && window.CarPics) originalButton.disabled = !CarPics.hasOverride(c);
     var s = document.getElementById('gcSub'); if (s) { s.innerHTML = subHtml(c); bindSub(); }

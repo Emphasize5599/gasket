@@ -1,6 +1,7 @@
 /* Experimental nearby regular-fuel lookup. Independently authored, not copied from Vela. */
 (function(root){
   'use strict';
+  var Grid=typeof module!=='undefined'&&module.exports?require('./stationstore.js'):root.StationStore;
   function area(lat,lng,radius){
     lat=Number(lat);lng=Number(lng);radius=Number(radius);
     if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>85||Math.abs(lng)>180||!Number.isFinite(radius)||radius<=0)throw new Error('Invalid search area');
@@ -11,6 +12,7 @@
   }
   function osmUrl(a){return 'https://overpass-api.de/api/interpreter?data='+encodeURIComponent('[out:json][timeout:20];nwr["amenity"="fuel"]('+a.bounds.map(function(n){return n.toFixed(5);}).join(',')+');out center tags;');}
   function mapAreas(b,P){
+    if(Grid){try{return Grid.cells(b);}catch(e){throw Error(e.message+' No search was started.');}}
     if(!b||b.length!==4||!b.every(Number.isFinite)||b[0]>b[2]||b[1]>b[3]||b[0]<-85||b[2]>85||b[1]<-180||b[3]>180)throw new Error('Zoom in to a map area within supported coordinates (no date-line crossing). No search was started.');
     var rows=Math.max(1,Math.ceil((b[2]-b[0])*69/6)),out=[],lat=(b[0]+b[2])/2,lng=(b[1]+b[3])/2;
     // Midpoints of six-mile cells cover the entire rectangle, including corners
@@ -26,7 +28,7 @@
     out.sort(function(a,c){return P.haversineMi(lat,lng,a.lat,a.lng)-P.haversineMi(lat,lng,c.lat,c.lng);});
     return out;
   }
-  function webUrl(a){return 'https://www.google.com/maps/search/gas+stations/@'+a.lat.toFixed(5)+','+a.lng.toFixed(5)+',13z?hl=en';}
+  function webUrl(a){var zoom=a.cellId?Math.max(1,Math.floor(Math.log2(700*156543*Math.cos(a.lat*Math.PI/180)/(12*1609.344)))):13;return 'https://www.google.com/maps/search/gas+stations/@'+a.lat.toFixed(5)+','+a.lng.toFixed(5)+','+zoom+'z?hl=en';}
   function contains(s,a,P){return P.haversineMi(a.lat,a.lng,s.lat,s.lng)<=a.radius;}
   function normalizeOsm(data,a,P){
     if(!data||!Array.isArray(data.elements))throw new Error('OpenStreetMap returned an unreadable response');
@@ -103,6 +105,7 @@
   // 8-mile searches every 10 miles: still overlapping (a 2,600-mile trip at 6 had 57% repeat rows and 74 areas adding nothing)
   var SPACING=10;
   function discoveryAreas(models,T,P){
+    if(Grid){var cells=Grid.routeCells(models,T,P,(30-1)*25/60/2/1.3);cells.plan={routeMi:Math.round(models.reduce(function(n,m){return n+(m.totalMi||0);},0)),cells:cells.length,gridVersion:1,radiusMi:8};return cells;}
     var groups=[];
     var sampled=0,miles=0;
     models.forEach(function(m){miles+=m.totalMi||0;T.samplePoints(m,SPACING).forEach(function(p){sampled++;if(!groups.some(function(g){return P.haversineMi(g.lat,g.lng,p.lat,p.lng)<2;}))groups.push(area(p.lat,p.lng,8));});});
@@ -340,13 +343,16 @@
     official.forEach(function(w){if(!updated.some(function(s){return w.wmStoreId&&s.wmStoreId===w.wmStoreId||w.murphyStore&&s.murphyStore===w.murphyStore||s.id===w.id;}))updated.push(w);});
     return dedupeDiscovery(updated,P);
   }
-  async function discover(areas,onProgress,grade,force){
+  function rememberedArea(a,grade){if(!root.StationStore||!a.cellId||!(root.StationStore.covered(a,'gasweb',grade)||root.StationStore.covered(a,'places','all')))return null;return {durable:true,v:{stores:root.StationStore.rows(a,'gas'),detail:{exhausted:true,stopReason:'remembered_cell'}}};}
+  async function discover0(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
     var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||50,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;scanChanged();
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
     var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
-    var cachedAreas=force?0:areas.filter(function(a){var c=A.KV.get('gasweb','discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,15*60000);return c&&!(c.v&&c.v.detail&&c.v.detail.stopReason==='quiet');}).length;
+    var remembered=new Map();if(!force)areas.forEach(function(a){var c=rememberedArea(a,grade);if(c)remembered.set(a.cellId,c);});
+    var cachedAreas=force?0:areas.filter(function(a){var c=remembered.get(a.cellId)||A.KV.get('gasweb','discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,15*60000);return c&&!(c.v&&c.v.detail&&c.v.detail.stopReason==='quiet');}).length;
+    var newAreas=areas.filter(function(a){return !remembered.has(a.cellId);});
     var eta=root.__tripETA,et=eta&&eta.begin('discovery','discovery|'+Math.min(16,lanes.length),areas.length-cachedAreas,1600*16/Math.max(1,Math.min(16,lanes.length)),'Website discovery ('+cachedAreas+' cached areas)');
     if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,aggressive:!!A.S.keylessAggressive,grade:grade,force:!!force,mem:mem0});
     var audit=scanAudit(A,'discovery',lanes,areas.length,control),outcome='failed';
@@ -356,7 +362,7 @@
     try{
       control.report=report;timer=setInterval(function(){report();audit.tick();},1000);report();
       var chain=officialReader(control,function(){loads++;},function(e){errors.push(e);},function(label){chainLabel=label;report();});
-      var chainWork=chain([],areas,true,force).finally(function(){sourcesDone=true;officialMs=Date.now()-started;report();});
+      var chainWork=chain([],newAreas,true,force).finally(function(){sourcesDone=true;officialMs=Date.now()-started;report();});
       // queue: area indexes still to read. A read that failed to load (network, timeout, unreadable page) and found
       // nothing goes to `again` and is read again after the pass, on a few lanes (RETRY_LANES), up to RETRIES more times:
       // a check's aftermath or a burst of 50 readers loses pages, and a lost area left a hole in the route's stations.
@@ -367,7 +373,7 @@
         // just after a check closed, only the first few lanes read: 50 pages at once would bring the check back
         while(control.calmUntil>Date.now()&&lanes.indexOf(key)>=RETRY_LANES&&!control.cancelled&&!control.pause)await new Promise(function(r){setTimeout(r,1000);});
         if(next>=queue.length||blocked||control.blocked||control.cancelled)break;
-        var idx=queue[next++],a=areas[idx],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&A.KV.get('gasweb',cacheKey,15*60000),r,wake,t0=Date.now();
+        var idx=queue[next++],a=areas[idx],cacheKey='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,cache=!force&&(remembered.get(a.cellId)||A.KV.get('gasweb',cacheKey,15*60000)),r,wake,t0=Date.now();
         if(cache&&cache.v&&cache.v.detail&&cache.v.detail.stopReason==='quiet')cache=null; // Older readers incorrectly cached silence as complete.
         if(cache)r=cache.v;
         else{
@@ -384,6 +390,12 @@
         if(r.error&&!r.blocked&&!(r.stores||[]).length)errors.push(r.error);
         if(tries[idx])retried++;
         var found=dedupeDiscovery((r.stores||[]).filter(function(s){return contains(s,a,P);}),P);
+        if(root.StationStore){
+          if(!r.blocked&&!r.error&&!r.partial&&r.detail&&r.detail.exhausted&&r.detail.stopReason!=='quiet'){
+            if(!cache||!cache.durable)root.StationStore.complete(a,'gasweb',grade,found,cache&&cache.t);
+            if(!cache)found.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:Date.now()});});
+          }else root.StationStore.observe(found,'gas');
+        }
         if(root.PriceHistory){var persistAt=Date.now();root.PriceHistory.observe(found);audit.persist(Date.now()-persistAt);}
         var before=rows.length;rows=dedupeDiscovery(rows.concat(found),P);details.push(r.detail||{});
         recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cache:!!cache,d:r.detail||null,found:found.length,added:rows.length-before,err:r.error||null});
@@ -409,8 +421,35 @@
         for(var b=0;b<recs.length;){var from=b,block=[];while(b<recs.length){var row=line(recs[b]);if(block.length&&JSON.stringify({cols:cols,rows:block.concat([row])}).length>1800)break;block.push(row);b++;}LG.debug('keyless','Discovery areas '+(from+1)+'–'+b+' of '+recs.length,{cols:cols,rows:block});}
       }
       outcome=control.cancelled?'cancelled':blocked||control.blocked?'restricted':errors.length?'partial':'finished';
-      return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked||!!control.blocked,blockedSite:control.blockedSite||'gasweb',cancelled:control.cancelled,areas:areas.length,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
+      return {stations:rows,errors:Array.from(new Set(errors)),details:details,blocked:blocked||!!control.blocked,blockedSite:control.blockedSite||'gasweb',cancelled:control.cancelled,areas:areas.length,reusedAreas:cachedAreas,completedAreas:done,websiteLoads:loads,apiCalls:0,partial:true,at:Date.now()};
     }finally{if(et)et.finish(outcome==='finished'&&cachedAreas<areas.length);clearInterval(timer);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
+  }
+  async function discover(areas,onProgress,grade,force){
+    grade=grade||'regular';return refreshRemembered(await discover0(areas,onProgress,grade,force),onProgress,grade,force);
+  }
+  async function refreshRemembered(r,onProgress,grade,force){var A=root.__app;
+    if(root.StationStore&&!force&&r.reusedAreas&&!r.blocked&&!r.cancelled){
+      var expired=r.stations.filter(function(s){return needsPriceRefresh(s,grade,A.S.staleHours);});
+      if(expired.length){var prices=await refreshKnown(expired,onProgress,[],grade),by=new Map(prices.stations.map(function(s){return [knownKey(s),s];}));r.stations=r.stations.map(function(s){return by.get(knownKey(s))||s;});r.errors=Array.from(new Set(r.errors.concat(prices.errors)));r.cancelled=prices.cancelled;r.blocked=prices.blocked;r.blockedSite=prices.blockedSite;r.websiteLoads+=prices.websiteLoads;r.priceUpdates=prices.updated;}
+    }return r;
+  }
+  async function discoverAPI(areas,onProgress,grade,force){grade=grade||'regular';return refreshRemembered(await discoverAPI0(areas,onProgress,grade,force),onProgress,grade,force);}
+  async function discoverAPI0(areas,onProgress,grade,force){
+    if(busy)throw Error('A station lookup is already running');var A=root.__app,P=A.P,control={cancelled:false,wake:[],lanes:[]};busy=control;scanChanged();grade=grade||'regular';
+    var rows=[],details=[],errors=[],next=0,done=0,reused=0,loads=0,halted=false;
+    try{await Promise.all(Array.from({length:Math.min(4,Math.max(1,areas.length))},async function(){while(next<areas.length&&!control.cancelled&&!halted){var a=areas[next++],r,cached=!force&&root.StationStore&&(root.StationStore.covered(a,'places','all')||root.StationStore.covered(a,'gasweb',grade));
+      if(cached){r={stores:root.StationStore.rows(a,'gas'),complete:true};reused++;}
+      else {var wake,stopped=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);});loads++;
+       try{r=await Promise.race([call('fetchStationCell',A.S.apiKey,JSON.stringify(a.bounds),Number(A.S.monthlyCap)||0),stopped]);}catch(e){r={error:e.message};}finally{control.wake=control.wake.filter(function(f){return f!==wake;});}
+       if(control.cancelled||r.cancelled)break;
+       r.stores=(r.places||[]).map(function(s){var n=P.normalize(s);if(n&&root.PriceHistory)root.PriceHistory.stamp(n,Date.now());return n;}).filter(Boolean);
+       if(root.StationStore){if(r.complete&&!r.error)root.StationStore.complete(a,'places','all',r.stores);else root.StationStore.observe(r.stores,'gas');}
+       if(r.complete&&!r.error)r.stores.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:Date.now()});});
+      }
+      rows=dedupeDiscovery(rows.concat(r.stores||[]),P);details.push({exhausted:!!r.complete,stopReason:cached?'remembered_cell':r.complete?'api_end':'partial'});if(r.error){errors.push(r.error);if(/cap reached|quota|Google Places error (?:40|429)/i.test(r.error))halted=true;}done++;
+      if(onProgress)onProgress(done/Math.max(1,areas.length),'Stations · '+done+' / '+areas.length+' areas · '+reused+' remembered');
+    }}));recordObserved(rows);return {stations:rows,errors:Array.from(new Set(errors)),details:details,areas:areas.length,completedAreas:done,reusedAreas:reused,websiteLoads:0,apiAreas:loads,cancelled:control.cancelled,at:Date.now()};
+    }finally{busy=null;scanChanged();if(root.__apiCount)root.__apiCount();}
   }
   async function search(lat,lng,radius){
     if(busy)throw new Error('A keyless gas lookup is already running');
@@ -554,10 +593,10 @@
       return result;
     }finally{if(etaRefresh)etaRefresh.finish(outcome==='finished');clearInterval(ticker);audit.finish(outcome);busy=null;releaseReaders();scanChanged();}
   }
-  function recordObserved(stations){if(!root.PriceHistory)return;root.PriceHistory.observe(stations.map(function(s){var prices={};Object.keys(s.prices||{}).forEach(function(g){if(s.prices[g].observedAt)prices[g]=s.prices[g];});return Object.assign({},s,{prices:prices});}));}
+  function recordObserved(stations){if(root.StationStore)root.StationStore.observe(stations,'gas');if(!root.PriceHistory)return;root.PriceHistory.observe(stations.map(function(s){var prices={};Object.keys(s.prices||{}).forEach(function(g){if(s.prices[g].observedAt)prices[g]=s.prices[g];});return Object.assign({},s,{prices:prices});}));}
   function estimate(known,grade){
     var A=root.__app,groups=knownAreas(known,A.P),o=A.KV.get('gasmeta','timing|'+(grade||'regular')),ms=o&&o.v.averageAreaMs||10000;
     var readers=readerCount(A);return {areas:groups.length,seconds:Math.ceil(groups.length*ms/readers/1000),measured:!!o,readers:readers};
   }
-  root.KeylessGas=Object.assign(math,{search:search,discover:discover,refreshKnown:refreshKnown,needsPriceRefresh:needsPriceRefresh,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
+  root.KeylessGas=Object.assign(math,{search:search,discover:discover,discoverAPI:discoverAPI,refreshKnown:refreshKnown,needsPriceRefresh:needsPriceRefresh,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
 })(typeof window!=='undefined'?window:globalThis);

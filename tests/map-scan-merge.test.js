@@ -14,10 +14,11 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   window.__maps={...__official,id:'web:test-fuel',featureId:'test-fuel',lat:c.lat+0.002,address:'101 Side Drive',source:'Google Maps web',prices:{regular:{price:3.1}}};
   window.__edge={...__maps,id:'web:corner',featureId:'corner',wmStoreId:'99002',lat:b.getNorth()-0.001,lng:b.getEast()-0.001};
   window.__calls=0;window.__hold=true;
-  __app.N.siteRead=(id,key)=>{
+  __app.N.siteRead=(id,key,json)=>{
    if(!/^gasweb/.test(key))return setTimeout(()=>onNativeResult(id,{stores:[]}),0);
    __calls++;
    if(__hold&&__calls>1)return;
+   if(__calls===1){const m=JSON.parse(json).url.match(/@([\d.-]+),([\d.-]+),/),lat=Math.max(b.getSouth()+.01,Math.min(b.getNorth()-.01,+m[1])),lng=Math.max(b.getWest()+.01,Math.min(b.getEast()-.01,+m[2]));Object.assign(__official,{lat,lng});Object.assign(__maps,{lat:lat+.002,lng});}
    // Official readers checkpoint before a later Maps identity is linked.
    PriceHistory.observe([__official]);
    setTimeout(()=>onNativeResult(id,{stores:[structuredClone(__maps),structuredClone(__edge)],detail:{exhausted:true}}),0);
@@ -36,7 +37,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  assert.equal(await p.evaluate(()=>__app.stations().find(s=>s.id==='web:corner')!=null),true,'wide-view corner not circle-clipped');
  assert.equal(await p.evaluate(()=>PriceHistory.history(__official).some(r=>r.grade==='regular')),true);
  await p.evaluate(()=>{__app.map.panBy([20,0],{animate:false});});
- await p.waitForFunction(()=>document.querySelectorAll('#rows .row').length===2);
+ await p.waitForFunction(()=>document.querySelectorAll('#rows .row').length>=1);
+ await p.evaluate(()=>__app.map.panBy([-20,0],{animate:false}));await p.waitForFunction(()=>document.querySelectorAll('#rows .row').length===2);
  // Persist the browser stand-in's exact native cache and KV across reopening.
  // (handed to the reloaded page by an init script: sessionStorage alone can come back empty after a file:// reload)
  const snap=await p.evaluate(()=>({s:__app.N.loadSettings()||JSON.stringify(__app.S),c:__app.N.loadCache(),kv:window.__kv}));

@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawnSync}=require('node:child_process');
-const main=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(main,/KVStore.write\(kvFile\(ns,key\),value,"trips".equals\(ns\)\)/);assert.match(main,/Persistent write failed/);assert.match(main,/startsWith\("\.kv-"\)/);
+const main=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(main,/KVStore.write\(kvFile\(ns,key\),value,"trips".equals\(ns\)\|\|"stationstore".equals\(ns\)\)/);assert.match(main,/Persistent write failed/);assert.match(main,/startsWith\("\.kv-"\)/);
 if(spawnSync('javac',['-version']).error){if(process.env.GASKET_NATIVE_TESTS==='1')throw Error('JDK required');console.log('Atomic KV store native tests need a JDK; enforced in CI');process.exit(0);}
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gasket-kv-')),pkg=path.join(dir,'com/bensanzone/fuelmap');fs.mkdirSync(pkg,{recursive:true});fs.copyFileSync('src/com/bensanzone/fuelmap/KVStore.java',path.join(pkg,'KVStore.java'));
 fs.writeFileSync(path.join(pkg,'StoreTest.java'),`package com.bensanzone.fuelmap;

@@ -1,5 +1,5 @@
 /* Optional guest-app enrichment. Cache normalized offers only, never raw traffic/identities. */
-(function(root){'use strict';var A=root.__app,S=A.S,T=root.EVTariffs,stopped=false,pending=new Map(),session=0,paused=new Set(),sourceErrors=new Set();
+(function(root){'use strict';var A=root.__app,S=A.S,T=root.EVTariffs,stopped=false,pending=new Map(),session=0,paused=new Set(),sourceErrors=new Set(),forcePrices=false;
  var providers={ea:47,evgo:19,walmart:2457,mercedes:89,bp:1672,shell:26,rivian:1047},capabilities=null;
  function call(){return root.__trip.call.apply(null,arguments);}
  async function configure(a){var r=await call('evGuestConfig',JSON.stringify(a||{}));if(!r||r.error)throw new Error('EV source settings could not be saved');capabilities=r;return r;}
@@ -14,7 +14,7 @@
  }
  function distance(a,b){return Math.hypot((+a.lat-+b.lat)*111320,(+a.lng-+b.lng)*111320*Math.cos(+a.lat*Math.PI/180));}
  function unique(st,list,coords){var matches=(list||[]).filter(function(s){return distance(st,coords(s))<=100;});return matches.length===1?matches[0]:null;}
- async function cached(key,work){var age=Math.min(24,Math.max(1,+S.evPriceAgeHours||24))*3600e3,old=A.KV.get('evguest',key,age);if(old)return old.v;
+ async function cached(key,work){var age=Math.min(24,Math.max(1,+S.evPriceAgeHours||24))*3600e3,old=!forcePrices&&A.KV.get('evguest',key,age);if(old)return old.v;
   if(pending.has(key))return pending.get(key);var run=session,p=(async function(){var v=await work();if(stopped||run!==session)return null;if(v&&v.offers.length)A.KV.put('evguest',key,v);return v;})();pending.set(key,p);try{return await p;}finally{if(pending.get(key)===p)pending.delete(key);}}
  function record(offers,source){var times=offers.map(function(o){return Date.parse(o.updated);}).filter(function(t){return Number.isFinite(t)&&t>0&&t<=Date.now();});return {offers:offers,source:source,t:times.length?Math.min.apply(null,times):Date.now()};}
  async function direct(x,group){var st=x.st,args={lat:st.lat,lng:st.lng},offers=[];
@@ -53,7 +53,7 @@
   }
   return record(offers,ps?'plugshare':cw?'chargeway':group);
  }
- async function annotate(items,car,progress){stopped=false;session++;paused.clear();sourceErrors.clear();var notes=[],count=0;if(!S.evGuestApps||!A.N.fetchEvGuest||!T)return {priced:0,notes:notes};
+ async function annotate0(items,car,progress){stopped=false;session++;paused.clear();sourceErrors.clear();var notes=[],count=0;if(!S.evGuestApps||!A.N.fetchEvGuest||!T)return {priced:0,notes:notes};
   var run=session;capabilities=await configure({});if(!capabilities.enabled)return {priced:0,notes:['Enable guest sources in Settings → Connections on this device.']};var todo=items.filter(function(x){var g=root.AltFuel.netGroup(x.st);return root.AltFuel.netEnabled(g)&&(['ea','chargepoint','evgo','walmart','mercedes','bp','shell','rivian'].indexOf(g)>=0);});
   var blocked=new Set();for(var i=0;i<todo.length;i++){if(stopped||run!==session)break;var x=todo[i],g=root.AltFuel.netGroup(x.st);if(blocked.has(g))continue;
    try{var data=await cached('v1|'+g+'|'+x.st.id,async function(){if(g==='evgo'){
@@ -71,6 +71,7 @@
    if(progress)progress((i+1)/todo.length,'Reading guest charger tariffs');
   }return {priced:count,notes:Array.from(new Set(notes.concat(Array.from(sourceErrors))))};
  }
+ async function annotate(items,car,progress,force){forcePrices=!!force;try{return await annotate0(items,car,progress);}finally{forcePrices=false;}}
  async function setEnabled(enabled){
   if(!A.N.evGuestConfig)throw new Error('Guest sources require the Android app.');
   if(enabled&&!await A.confirmDel({always:true,title:'Enable guest-app price sources?',body:'Fetches extra EV prices through unofficial app APIs and creates anonymous IDs on this phone. Sources may block requests, change, or return incomplete prices; provider data rights are not confirmed. No personal charging-account login is needed.',action:'Enable',no:'Not now',goClass:'primary'}))return false;

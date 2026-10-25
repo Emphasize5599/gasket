@@ -31,7 +31,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('[data-rec-scan]');await p.waitForFunction(()=>__areas.length===1&&__trip.state().result&&!__trip.state().busy,null,{timeout:20000});
  const r=await p.evaluate(()=>({areas:__areas,union:__union,saved:__app.KV.get('trips','trip|part').v.stations.google.length}));
  console.log('  partial search:',JSON.stringify(r));
- assert(r.areas[0]>0&&r.areas[0]<r.union,'only areas off your route are read ('+r.areas[0]+' of '+r.union+')');
+ assert(r.areas[0]>=0&&r.areas[0]<r.union,'overlapping world cells need no discovery; only unknown cells off your route are read ('+r.areas[0]+' of '+r.union+')');
  assert.equal(r.saved,2,'saved again with both routes\' stations');
  await p.waitForFunction(()=>!document.querySelector('[data-rec-scan]')&&!Tasks.list().some(t=>t.id==='route-comparison'),null,{timeout:20000});
  // the next search reads both from the saved trip: nothing searched

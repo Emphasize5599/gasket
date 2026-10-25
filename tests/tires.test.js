@@ -297,3 +297,9 @@ console.log('tire version matching ok');
   assert.equal(T.spareDot(''), '');
   console.log('tire age from the DOT code; spare age assumed from the model year');
 }
+for(const text of ['Full-size spare. Location: rear-exterior.','The spare is mounted externally on the rear tailgate.','A rear-mounted spare with an optional hard cover.','The full-size spare is on the rear door and may have a cover.'])assert.equal(T.spareLocation(text),'rear',text);
+assert.equal(T.spareLocation('Compact spare under the cargo floor.'),'inside');
+assert.equal(T.spareLocation('Full-size spare mounted externally.'),'','external alone is not underbody');
+assert.equal(T.spareLocation('An aftermarket rear-mounted spare can be installed.'),'');
+assert.equal(T.spareLocation('A rear spare tire cover is optional.'),'','a cover accessory does not prove a factory spare');
+assert.equal(T.spareLocation('Stored inside the vehicle. Stored under the vehicle.'),'','conflicting locations stay unconfirmed');

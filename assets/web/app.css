@@ -1161,6 +1161,11 @@ details.g-obs[open] { padding-bottom: 12px; }
 .g-newpic svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
 .gc-tip { margin: 8px 0; text-align: left; }
 .gc-solo .gc-stage { margin: 0 auto; }
+.gc-photo-row {width:100%;display:grid;grid-template-columns:minmax(0,1fr);align-items:center;gap:6px;}
+.gc-photo-row.can-rotate {grid-template-columns:36px minmax(0,1fr) 36px;}
+.gc-rotate.btn {width:36px;height:42px;min-width:0;padding:6px;border-radius:12px;}
+.gc-rotate svg {width:24px;height:24px;fill:currentColor;}
+.gc-rotate.next svg {transform:rotate(180deg);}
 /* the car's editor: Discard changes / Save at the bottom, like the per-road speed submenu */
 .sub-page > .sub-nav { margin: 0 -10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .sub-page > .sub-nav .btn { font-size: 15px; white-space: nowrap; padding-left: 6px; padding-right: 6px; }

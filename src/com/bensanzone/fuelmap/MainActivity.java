@@ -421,7 +421,7 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "tolls", "chargerusage"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "stationstore", "tolls", "chargerusage"));
 
     /** Pictures are user data, including imported images. Upgrade the old cache without
      * overwriting a newer stored image or deleting the only copy if a move fails. */
@@ -1029,10 +1029,15 @@ public class MainActivity extends Activity {
 
     private String placesSearch(String apiKey, String text, double minLat, double minLng, double maxLat, double maxLng)
             throws Exception {
+        return placesSearch(apiKey,text,minLat,minLng,maxLat,maxLng,null);
+    }
+    private String placesSearch(String apiKey, String text, double minLat, double minLng, double maxLat, double maxLng, String pageToken)
+            throws Exception {
         JSONObject body = new JSONObject();
         body.put("textQuery", text);
         body.put("includedType", "gas_station");
         body.put("pageSize", 20);
+        if(pageToken!=null)body.put("pageToken",pageToken);
         JSONObject rect = new JSONObject();
         rect.put("low", new JSONObject().put("latitude", minLat).put("longitude", minLng));
         rect.put("high", new JSONObject().put("latitude", maxLat).put("longitude", maxLng));
@@ -1045,7 +1050,7 @@ public class MainActivity extends Activity {
         c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "application/json");
         c.setRequestProperty("X-Goog-Api-Key", apiKey);
-        c.setRequestProperty("X-Goog-FieldMask", FIELD_MASK);
+        c.setRequestProperty("X-Goog-FieldMask", FIELD_MASK+",nextPageToken");
         // Lets the key be restricted to this app in Google Cloud Console.
         c.setRequestProperty("X-Android-Package", getPackageName());
         c.setRequestProperty("X-Android-Cert", certSha1());
@@ -2276,7 +2281,7 @@ public class MainActivity extends Activity {
             synchronized (MainActivity.this) {
                 long started=android.os.SystemClock.elapsedRealtime();
                 try {
-                    KVStore.write(kvFile(ns,key),value,"trips".equals(ns));
+                    KVStore.write(kvFile(ns,key),value,"trips".equals(ns)||"stationstore".equals(ns));
                     if("trips".equals(ns)&&key.startsWith("trip|"))js("window.FLog&&FLog.debug('storage','Saved-trip record persisted',{chars:"+value.length()+",ms:"+(android.os.SystemClock.elapsedRealtime()-started)+"})");
                     return true;
                 }
@@ -2528,6 +2533,24 @@ public class MainActivity extends Activity {
          * Runs one Text Search per query string inside the bounding box, in a background thread.
          * Calls window.onSearchResult(reqId, {places:[...], errors:[...], calls:n}).
          */
+        @JavascriptInterface
+        public void fetchStationCell(final int reqId, final String apiKey, final String boundsJson, final int monthlyCap) {
+            new Thread(() -> {
+                JSONObject out=new JSONObject();JSONArray places=new JSONArray();
+                try {
+                    JSONArray b=new JSONArray(boundsJson);double south=b.getDouble(0),west=b.getDouble(1),north=b.getDouble(2),east=b.getDouble(3);
+                    if(b.length()!=4||!Double.isFinite(south)||!Double.isFinite(west)||!Double.isFinite(north)||!Double.isFinite(east)||south < -85.1||north>85.1||west < -180||east>180||south>=north||west>=east||(north-south)*69>11||(east-west)*69.17*Math.cos((south+north)*Math.PI/360)>11)throw new Exception("Invalid station cell");
+                    String token=null;boolean complete=false;
+                    for(int page=0;page<3;page++) {
+                        synchronized(MainActivity.this){int used=prefs().getInt(monthKey(),0);if(monthlyCap>0&&used>=monthlyCap)throw new Exception("Monthly Places cap reached; remembered stations retained");prefs().edit().putInt(monthKey(),used+1).apply();}
+                        JSONObject r=new JSONObject(placesSearch(apiKey,"gas stations",south,west,north,east,token));JSONArray a=r.optJSONArray("places");if(a!=null)for(int i=0;i<a.length();i++)places.put(a.getJSONObject(i));
+                        token=r.optString("nextPageToken","");if(token.isEmpty()){complete=true;break;}
+                    }
+                    out.put("complete",complete);
+                }catch(Exception e){try{out.put("error",String.valueOf(e.getMessage()));out.put("complete",false);}catch(Exception ignored){}}
+                try{out.put("places",places);out.put("calls",prefs().getInt(monthKey(),0));}catch(Exception ignored){}reply(reqId,out);
+            }).start();
+        }
         @JavascriptInterface
         public void search(final int reqId, final String apiKey, final String queriesJson,
                            final double minLat, final double minLng, final double maxLat, final double maxLng,

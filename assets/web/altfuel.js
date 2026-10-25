@@ -85,17 +85,18 @@
     };
     return station;
   }
-  function normalizedRows(raw){var rows=raw.map(norm).filter(Boolean);if(window.PriceHistory)PriceHistory.observe(rows);return rows;}
+  function normalizedRows(raw){var rows=raw.map(norm).filter(Boolean);if(window.PriceHistory)PriceHistory.observe(rows);if(window.StationStore){['ev','h2'].forEach(function(k){StationStore.observe(rows.filter(function(s){return s.brand===k;}),k);});}return rows;}
 
   /** Every open, public hydrogen station (US and Canada), kept a week. force: fetch again now. */
   async function hydrogenAll(force) {
+    var durable=!force&&KV.get('stationstore','h2-all');if(durable&&durable.v&&Array.isArray(durable.v.list))return durable.v;
     var o = !force && KV.get('afdc', 'hy-all', WEEK);
     if (o) return { list: normalizedRows(o.v), t: o.t };
     var j = await get('.json', { fuel_type: 'HY', status: 'E', access: 'public', country: 'all', limit: 'all' });
     var raw = j.fuel_stations || [];
     KV.put('afdc', 'hy-all', raw);
     LG.info('altfuel', 'Fetched ' + raw.length + ' hydrogen stations');
-    return { list: normalizedRows(raw), t: Date.now() };
+    var result={ list: normalizedRows(raw), t: Date.now() };KV.put('stationstore','h2-all',result);return result;
   }
   function plugParam(plugs) { return plugs && plugs.length ? plugs.join(',') : 'J1772COMBO,TESLA,CHADEMO'; }
   /** DC fast chargers within radius miles of a point that take one of these plugs, kept a week. */
@@ -129,30 +130,37 @@
     return points.filter(function(_,i){return keep.has(i);});
   }
   var discoveredPool=new Map();
-  async function onlineRoute(model, kind, plugs, corridorMi, onProg, types) {
+  async function onlineRouteFetch(model, kind, plugs, corridorMi, onProg, types, force) {
     types=tripTypes(types);var wanted=routePlugs(plugs),levels=[types.dc?'dc_fast':'',types.l2?'2':'',types.l1?'1':''].filter(Boolean);
     if(kind==='ev'&&!levels.length)throw new Error('Select at least one charger type in Parameters → Charging stops.');
     var pts=routePoints(model.pts||[]);if(pts.length<2)pts=[model.pointAt(0),model.pointAt(model.totalMi)].filter(Boolean);
     var coords=pts.map(function(p){return p.lng.toFixed(5)+' '+p.lat.toFixed(5);}),line='LINESTRING('+coords.join(',')+')',reverse='LINESTRING('+coords.slice().reverse().join(',')+')';
     var params={route:line,distance:corridorMi+0.15,fuel_type:kind==='ev'?'ELEC':'HY',status:kind==='ev'?'E,T':'E',access:'public',limit:'all'};
     if(kind==='ev'){params.ev_charging_level=levels.length===1?levels[0]:'all';params.ev_connector_type=plugParam(wanted);}
-    var ck='route-v2|'+kind+'|'+corridorMi+'|'+levels.join(',')+'|'+wanted.join(',')+'|'+(line<reverse?line:reverse),o=KV.get('afdc',ck,kind==='ev'&&window.ChargerData?3600e3:WEEK),raw;
+    var ck='route-v2|'+kind+'|'+corridorMi+'|'+levels.join(',')+'|'+wanted.join(',')+'|'+(line<reverse?line:reverse),o=!force&&KV.get('afdc',ck,kind==='ev'&&window.ChargerData?3600e3:WEEK),raw;
     try{
       if(o)raw=o.v;else{
-        var promise=routePending.get(ck);if(!promise){promise=get('/nearby-route.json',params,true).then(function(j){var rows=j.fuel_stations||[];KV.put('afdc',ck,rows);return rows;}).finally(function(){routePending.delete(ck);});routePending.set(ck,promise);}
+        var promise=routePending.get(ck);if(!promise){promise=get('/nearby-route.json',params,true).then(function(j){var rows=j.fuel_stations||[];if(+j.total_results>rows.length){var partial=Error('Station provider returned an incomplete route inventory');partial.stations=normalizedRows(rows);throw partial;}KV.put('afdc',ck,rows);return rows;}).finally(function(){routePending.delete(ck);});routePending.set(ck,promise);}
         raw=await promise;
       }
       var list=normalizedRows(raw);list.forEach(function(s){discoveredPool.set(s.id,s);});
       if(onProg)onProg(1);LG.info('altfuel','Route station discovery',{kind:kind,stations:list.length,points:pts.length,cached:!!o,levels:levels});return list;
-    }catch(e){e.stations=Array.from(discoveredPool.values()).filter(function(s){return s.brand===kind;});throw e;}
+    }catch(e){e.stations=Array.from(new Map(Array.from(discoveredPool.values()).filter(function(s){return s.brand===kind;}).concat(e.stations||[]).map(function(s){return [s.id,s];})).values());throw e;}
   }
-  async function alongRoute(model,kind,plugs,corridorMi,onProg,types){
-    if(kind!=='ev'||!window.ChargerData)return onlineRoute(model,kind,plugs,corridorMi,onProg,types);
+  async function onlineRoute(model,kind,plugs,corridorMi,onProg,types,force){
+    if(!window.StationStore||!window.Trip||!model.cum)return onlineRouteFetch(model,kind,plugs,corridorMi,onProg,types,force);
+    var levels=tripTypes(types),scope=JSON.stringify(['doe',kind,routePlugs(plugs).sort(),[!!levels.dc,!!levels.l2,!!levels.l1]]),car=window.Garage&&Garage.car(),priceScope=StationStore.priceScope(car),known=StationStore.activeRows(StationStore.routeRows([model],Trip,corridorMi,kind,priceScope),scope),runs=StationStore.uncoveredRuns(model,Trip,scope,corridorMi,force);
+    if(!runs.length){if(onProg)onProg(1);LG.info('altfuel','Shared geographic route inventory reused',{kind:kind,stations:known.length});return known;}
+    for(var i=0;i<runs.length;i++){try{var rows=await onlineRouteFetch(runs[i],kind,plugs,corridorMi,function(f){if(onProg)onProg((i+f)/runs.length);},types,force);known=window.ChargerData?ChargerData.merge(known,rows):Array.from(new Map(known.concat(rows).map(function(s){return [s.id,s];})).values());if(StationStore.observe(rows,kind)!==false)StationStore.rememberRoute(scope,routePoints(runs[i].pts),corridorMi+.15,rows.map(function(s){return s.id;}));}catch(e){e.stations=known.concat(e.stations||[]);throw e;}}
+    known=StationStore.activeRows(known,scope);LG.info('altfuel','Shared route inventory extended',{kind:kind,newSections:runs.length,stations:known.length});return known;
+  }
+  async function alongRoute(model,kind,plugs,corridorMi,onProg,types,rediscover){
+    if(kind!=='ev'||!window.ChargerData)return onlineRoute(model,kind,plugs,corridorMi,onProg,types,rediscover);
     var list=[],notes=[],hasInventory=false;
     try{var local=await ChargerData.localRoute(model,corridorMi);if(local){hasInventory=true;list=normalizedRows(local.fuel_stations);if(Date.now()-local.updated>30*24*3600e3)notes.push('Offline chargers were downloaded over 30 days ago. Update the inventory for new and closed sites.');}}
     catch(e){notes.push('Offline charger lookup failed: '+e.message);}
-    if(S.evUseDOE!==false&&(!hasInventory||S.evRefreshPrices!==false))try{list=ChargerData.merge(list,await onlineRoute(model,kind,plugs,corridorMi,onProg,types));}catch(e){list=ChargerData.merge(list,e.stations||[]);notes.push(e.message);}
-    if(S.evUseOCM)try{list=ChargerData.merge(list,await ChargerData.ocmRoute(model,corridorMi));}catch(e){list=ChargerData.merge(list,e.stations||[]);notes.push(e.message);}
+    if(S.evUseDOE!==false&&(!hasInventory||rediscover))try{list=ChargerData.merge(list,await onlineRoute(model,kind,plugs,corridorMi,onProg,types,rediscover));}catch(e){list=ChargerData.merge(list,e.stations||[]);notes.push(e.message);}
+    if(S.evUseOCM)try{list=ChargerData.merge(list,await ChargerData.ocmRoute(model,corridorMi,rediscover));}catch(e){list=ChargerData.merge(list,e.stations||[]);notes.push(e.message);}
     if(!hasInventory&&S.evUseDOE===false&&!S.evUseOCM)notes.push('Download the offline charger inventory or enable a charger provider in Settings → Connections.');
     if(onProg)onProg(1);
     list=list.filter(function(s){return s.status==='E';});
@@ -384,7 +392,7 @@
         showEv();
       } else if (h2On()) {
         A.status && A.status('Fetching hydrogen stations…');
-        var res = await hydrogenAll(h2List.length > 0);   // a week's list is used first; ↻ with stations shown fetches again
+        var res = await hydrogenAll(area===true||h2List.length > 0);   // an explicit area refresh also retries a previously empty inventory
         h2List = res.list; h2T = res.t;
         showH2();
       }
@@ -393,7 +401,9 @@
     A.rebuild();
   }
   /** The bottom line and list in ⚡ / H₂ mode: nearest first. */
+  var rememberedMapKey='';
   function renderList(best, rows) {
+    if(window.StationStore&&window.ChargerData&&(evOn()||h2On())){var bd=map.getBounds(),box=[bd.getSouth(),Math.max(-180,bd.getWest()),bd.getNorth(),Math.min(180,bd.getEast())],kind=evOn()?'ev':'h2',scope=StationStore.priceScope(window.Garage&&Garage.car()),key=JSON.stringify([kind,scope,box.map(function(n){return Math.round(n*1000);})]);if(key!==rememberedMapKey){rememberedMapKey=key;var saved=StationStore.query(box,kind,scope);if(evOn()){var plugs=carPlugs();saved=saved.filter(function(s){return s.status==='E'&&(!plugs||(s.plugs||[]).some(function(p){return plugs.indexOf(p)>=0;}))&&(S.alt.evSpeed==='all'||(S.alt.evSpeed==='l2'?s.l2>0:s.dc>0));});evList=ChargerData.merge(evList,saved);showEv();}else{h2List=ChargerData.merge(h2List,saved);showH2();}}}
     var ev = evOn(), list = ev ? evList : h2Shown(), c = here();
     var withD = list.map(function (s) { return { s: s, d: P.haversineMi(c.lat, c.lng, s.lat, s.lng) }; }).sort(function (a, b) { return a.d - b.d; });
     var what = ev ? (S.alt.evSpeed === 'dc' ? 'fast charger' : S.alt.evSpeed === 'l2' ? 'Level 2 charger' : 'charger') : 'hydrogen station';

@@ -613,12 +613,15 @@
     CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, instead: instead, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
-  function spareLocation(text){var inside=false,under=false;String(text||'').replace(/\s+/g,' ').trim().split(/[.!?;]+/).forEach(function(s){
-    if(/optional|can (?:be )?(?:added|installed)|may|could|depending on|aftermarket|not (?:located |stored |mounted |housed )?(?:under|inside|beneath)|no spare|without a spare/i.test(s))return;
-    if(/inside (?:the )?(?:vehicle|car|cargo)|(?:in|under|beneath) (?:the )?(?:trunk|cargo|luggage)(?: area| compartment)?(?: floor)?|dedicated (?:storage|compartment|spot) inside/i.test(s))inside=true;
-    if(/(?:under|beneath|underneath) (?:the )?(?:vehicle|car|van|truck|rear of the vehicle)|underbody|underside|externally mounted/i.test(s))under=true;
-  });return inside!==under?(inside?'inside':'under'):'';}
-  function locationName(v){return v==='inside'?'Dedicated storage inside the vehicle':v==='under'?'Under the vehicle':'';}
+  function spareLocation(text){var found=new Set();String(text||'').replace(/\s+/g,' ').trim().split(/[.!?;]+/).forEach(function(s){
+    s=s.replace(/(?:with\s+)?(?:an?\s+)?optional(?:\s+(?:hard|soft|spare|tire|wheel))*\s+cover/ig,'').replace(/(?:may|can|could)\s+(?:have|use|include)\s+(?:an?\s+)?(?:spare\s+tire\s+)?cover/ig,'').replace(/(?:the\s+)?(?:spare\s+tire\s+)?cover\s+(?:is|may be|can be)\s+optional/ig,'');
+    s=s.replace(/\bnot\s+(?:(?:located|stored|mounted|housed)\s+)?(?:under|inside|beneath|rear)[^,;]*(?=,|$)/ig,'');
+    if(/optional|can (?:be )?(?:added|installed)|may|could|depending on|aftermarket|no spare|without a spare/i.test(s))return;
+    if(/inside(?: (?:the )?(?:vehicle|car|cargo))?|(?:in|under|beneath|underneath) (?:the )?(?:trunk|cargo|luggage)(?: area| compartment)?(?: floor)?|dedicated (?:storage|compartment|spot) inside/i.test(s))found.add('inside');
+    if(/(?:under|beneath|underneath) (?:the )?(?:vehicle|car|van|truck|rear of the vehicle)\b|underbody|underside/i.test(s))found.add('under');
+    if(/rear[- ]mounted|rear[- ]exterior|(?:on|to) (?:the )?(?:exterior )?rear (?:door|tailgate|swing[- ]?gate|carrier)|mounted (?:externally |outside )?(?:on|at) (?:the )?rear|(?:exterior|externally|outside)[^.;]*\brear\b|rear[- ]door[- ]mounted|tailgate[- ]mounted/i.test(s))found.add('rear');
+  });return found.size===1?Array.from(found)[0]:'';}
+  function locationName(v){return v==='inside'?'Dedicated storage inside the vehicle':v==='under'?'Under the vehicle':v==='rear'?'Outside, rear-mounted':'';}
   TireMath.generalized=generalized;TireMath.spareLocation=spareLocation;
   TireMath.axlePositions=axlePositions;TireMath.moveAxle=moveAxle;TireMath.trailerGeometry=trailerGeometry;TireMath.normalizeTrailer=normalizeTrailer;TireMath.tireFootprint=tireFootprint;TireMath.fillTrailerSizes=fillTrailerSizes;
   root.TireMath = TireMath;
@@ -798,7 +801,7 @@
   // (read for sure below), and the tip in its own short words. Answers that don't follow it are still read as before.
   // Brave turns away a query over 50 words or 400 characters ("Your query is too long"): this one is 36 words before the car
   // (40 words since 0.0.169: "Only this version." keeps it off the model's other versions, e.g. a gas Blazer's answer about the Blazer EV)
-  var SPARE_ASK = ' come with a spare tire as standard? Only this version. Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if a spare is optional or can be added (size).';
+  var SPARE_ASK = ' have a standard spare? Exact version only. Start: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Location: inside/underbody/rear-exterior/unknown. Cover: standard/optional/unknown. If absent, can a spare be added?';
   /** The powertrain, said in the question when the car's name doesn't (a gas Blazer and the Blazer EV share "Blazer"). */
   function powerWord(c) {
     var n = String(spareKey(c)), p = c.power || 'gas';
@@ -839,7 +842,7 @@
     var t = tires(c), sp = spare(t), key = spareKey(c);
     if (!call || !key || !c.year || spareBusy[c.id]) return;
     if (shown ? !N.siteShow : (!N.siteRead || sp.location)) { if (shown && N.openUrl) N.openUrl(spareUrl(c)); return; }
-    var L = sp.lookup; if (!shown && L && L.key === key && L.locationV===1 && (L.guess || recent(L, RETRY_H))) return;
+    var L = sp.lookup;if(L&&L.text&&L.locationV!==2){L.location=spareLocation(L.text);L.locationV=2;save();} if (!shown && L && L.key === key && L.locationV===2 && (L.guess || recent(L, RETRY_H))) return;
     var prev = sp.lookup;
     spareBusy[c.id] = true; sp.lookup = { key: key, t: Date.now() };
     LG.info('car', 'Asking Brave Search about the spare tire' + (shown ? ' (shown to you)' : ''), key);
@@ -850,8 +853,8 @@
       return readSpare(r && r.text, c.power).then(function (pick) {
         var g = pick.kind;
         var text=String(r&&r.text||'').replace(/\s+/g,' ').trim();
-        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 4,location:spareLocation(pick.text||text),locationV:1, standardV: 1, insteadV: 1, variantV: 1 };
-        LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply in 40 s');
+        sp.lookup = { key: key, t: Date.now(), guess: g, by: pick.by, failed: !g, src: r && r.src, text: text.slice(0, 1200), tip: String(pick.tip||'').replace(/\s+/g,' ').trim(), tipV: 4,location:spareLocation(pick.text||text),locationV:2, standardV: 1, insteadV: 1, variantV: 1 };
+        LG.info('car', g ? 'Brave Search says the spare is: ' + g + ' (read by ' + (pick.by === 'ai' ? 'the AI' + (pick.score ? ', ' + pick.score : '') : 'keywords') + ')' : 'Couldn\'t tell the spare from Brave Search', r ? (r.blocked ? 'a check on the page' : r.error || (r.text || '').slice(0, 200)) : 'no reply before the reader deadline');
         save(); redraw(c); onChange();
       });
     });
@@ -1065,6 +1068,7 @@
     }).join('') + '</div>';
     // the spare
     var sp = spare(t), kind = sp.kind, guess = sp.lookup && sp.lookup.guess;
+    if(sp.lookup&&sp.lookup.text&&sp.lookup.locationV!==2){sp.lookup.location=spareLocation(sp.lookup.text);sp.lookup.locationV=2;save();}
     h += '<div class="sub-h tz-h">Spare tire</div>';
     if (spareBusy[c.id]) h += window.__app.ldBar('Asking Brave Search about the spare');
     var showBtn = '<button class="btn tonal sm" id="tzSpareShow"' + (spareBusy[c.id] ? ' disabled' : '') + '>See Brave\'s answer</button>';
@@ -1072,7 +1076,7 @@
     h += '<label class="nf wide"><span>What your car has' + q(Q.spare) + '</span><select id="tzSpare"><option value="">' + (guess && !kind ? 'Not confirmed yet' : 'Not sure') + '</option>' +
       ['full', 'compact', 'kit', 'runflat', 'none'].map(function (k) { return '<option value="' + k + '"' + (kind === k ? ' selected' : '') + '>' + SPARE_NAME[k] + '</option>'; }).join('') + '</select></label>';
     var k1 = kind || guess;
-    if(k1==='full'||k1==='compact')h+='<label class="nf wide"><span>Where the spare is stored<small>Confirm in the owner\'s manual or on the vehicle; a search answer is not confirmation.</small></span><select id="tzSpareLocation"><option value="">Not confirmed</option>'+['inside','under'].map(function(v){return '<option value="'+v+'"'+(sp.location===v?' selected':'')+'>'+locationName(v)+'</option>';}).join('')+'</select></label>'+(sp.lookup&&sp.lookup.location&&!sp.location?'<p class="lead small keep">Brave suggests: '+esc(locationName(sp.lookup.location))+'.</p>':'');
+    if(k1==='full'||k1==='compact')h+='<label class="nf wide"><span>Where the spare is stored'+q('Inside includes a spare under the cargo floor. Underbody means below the vehicle. Rear-mounted means outside on a rear door, tailgate or carrier, possibly hidden by a soft or hard cover. A cover alone does not establish the spare type or factory equipment. Confirm on your vehicle or in its manual.')+'</span><select id="tzSpareLocation"><option value="">Not confirmed</option>'+['inside','under','rear'].map(function(v){return '<option value="'+v+'"'+(sp.location===v?' selected':'')+'>'+locationName(v)+'</option>';}).join('')+'</select></label>'+(sp.lookup&&sp.lookup.location&&sp.lookup.location!==sp.location?'<p class="lead small keep">Brave suggests: '+esc(locationName(sp.lookup.location))+'. Confirm the location on your vehicle.</p>':'');
     // a tip from before tips were short: said again the short way, from the answer it kept
     if (sp.lookup && sp.lookup.tip && !(sp.lookup.tipV >= 3) && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
     // 0.0.151: an answer that says a spare was optional gets that sentence as its tip
@@ -1085,7 +1089,7 @@
     if (sp.lookup && sp.lookup.text && sp.lookup.guess && !sp.lookup.variantV) { var f2 = forThisCar(sp.lookup.text, c.power); sp.lookup.variantV = 1; if (f2.mixed && f2.kind && f2.kind !== sp.lookup.guess) { if (sp.kind === sp.lookup.guess) sp.kind = ''; LG.info('car', 'Spare tire read again for this version: ' + sp.lookup.guess + ' → ' + f2.kind); sp.lookup.guess = f2.kind; sp.lookup.by = 'answer'; sp.lookup.standardV = sp.lookup.insteadV = 1; sp.lookup.location = spareLocation(f2.text); sp.lookup.tip = f2.kind === 'full' || f2.kind === 'compact' ? '' : optTip(f2.text) || sp.lookup.tip; } save(); }
     if (sp.lookup && sp.lookup.text && sp.lookup.guess === 'none' && !sp.lookup.insteadV) { var i2 = instead(sp.lookup.text); sp.lookup.insteadV = 1; if (i2) { if (sp.kind === 'none') sp.kind = ''; sp.lookup.guess = i2; LG.info('car', 'Spare tire read again: none → ' + i2); } save(); }
     if (sp.lookup && sp.lookup.tip && (k1 === 'kit' || k1 === 'none' || k1 === 'runflat')) h += '<div class="tipbox tz-tip">' + BULB + '<div><b>Tip:</b> ' + esc(sp.lookup.tip) + '</div></div>';
-    if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check dedicated storage inside the vehicle and mounts under the vehicle, and verify in the owner\'s manual. ' + showBtn + '</div>';
+    if (!kind && !guess && sp.lookup && sp.lookup.failed && !spareBusy[c.id]) h += '<div class="lead small keep">Brave Search couldn\'t tell. Check inside storage, underbody mounts and the outside rear door or tailgate, and verify in the owner\'s manual. ' + showBtn + '</div>';
     var k2 = kind;      // the air check is for a spare you've said the car has (not Brave's guess)
     if (k2 === 'full' || k2 === 'compact') h += '<div class="tz-air ' + (airedOk(t) ? 'ok' : 'due') + '">' + (airedOk(t) ? 'Air checked ' + new Date(sp.aired).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '. Next check by ' + new Date(sp.aired + AIR_DAYS * 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '.' :
       'Its air hasn\'t been checked this month. Check it' + (k2 === 'compact' ? ' (compact spares usually need 60 psi)' : '') + ', then tick it in Advice.') + '</div>';
@@ -2014,7 +2018,7 @@
     else if (k === 'kit' || k === 'none') out.push({ level: 'warn', nodot: true, title: 'No spare tire', text: (k === 'kit' ? 'Your car has a repair kit instead: it fixes small punctures in the tread, not sidewall cuts or blowouts. ' : '') + 'Have a plan for a flat: roadside assistance (your insurer or the car maker may include it), and your phone charged.' });
     else if (k === 'runflat') out.push({ level: 'info', title: 'Run-flat tires', text: 'No spare: after a puncture you can drive about 50 miles at up to 50 mph to get it fixed. Have a plan for a sidewall cut or a blowout.' });
     else if (spareKind(t)) out.push({ level: 'info', title: 'Spare tire', text: 'Brave Search says: ' + SPARE_NAME[spareKind(t)] + '. '+(t.spare.lookup.location?'Suggested location: '+locationName(t.spare.lookup.location)+'. ':'')+'Confirm it in Garage → Tires.' });
-    else out.push({ level: 'info', title: 'Spare tire', text: 'Does your car have one? Check inside the cargo/trunk storage or under the vehicle, and confirm in the owner\'s manual. Set its kind and storage location in Garage → Tires.' });
+    else out.push({ level: 'info', title: 'Spare tire', text: 'Does your car have one? Check inside cargo/trunk storage, under the vehicle or outside on the rear door/tailgate, and confirm in the owner\'s manual. Set its kind and storage location in Garage → Tires.' });
     if(e&&!e.measured&&generalized(t))out.push({level:'warn',nodot:true,title:'Generalized tread estimate',text:'This tread estimate is extremely generalized. Select the tire type, brand and model, or enter its mileage warranty. Measure the tread to know what is actually left.'});
     return out;
   }

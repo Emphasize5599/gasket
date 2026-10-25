@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.261 - 2026-10-24
+- Share remembered stations and completed scan areas across trips and the map in persistent app storage; separate price updates from rediscovery.
+- Reuse overlapping charger discovery and cached vehicle-specific prices; avoid redundant DOE searches with downloaded inventory.
+- Give Brave's AI answers 25 seconds and distinguish exterior rear-mounted spare tires.
+- Add left/right Fuel API vehicle views in the car editor.
+
 ## 0.0.260 - 2026-10-24
 - Reuse completed station-price checks across comparison vehicles; avoid repeating unchanged or failed lookups.
 - Add “Routes that would work” to failed EV comparison cards and retain checked alternatives when switching cars.

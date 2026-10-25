@@ -25,7 +25,7 @@
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
-      if(fn==='siteRead'&&args[0]==='brave')timeout=40000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='fetchFrancis')timeout=45000;
+      if(fn==='siteRead'&&args[0]==='brave')timeout=60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='fetchFrancis')timeout=45000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if (fn === 'aiCommand') timeout = 15000;
@@ -444,14 +444,15 @@
     if(dd){var menu=dd.closest('.price-refresh-card').querySelector('.split-menu'),open=menu.classList.toggle('hidden')===false;dd.setAttribute('aria-expanded',String(open));return;}
     if(!e.target.closest('.split-menu'))document.querySelectorAll('.split-menu:not(.hidden)').forEach(function(m){m.classList.add('hidden');});
     var button=e.target.closest('[data-trip-refresh]');if(!button||busy)return;
-    if(button.dataset.tripRefresh==='retry')findStops('retry');
+    if(button.dataset.tripRefresh==='alt-prices')findStops('prices');
+    else if(button.dataset.tripRefresh==='retry')findStops('retry');
     else if(button.dataset.tripRefresh==='web')findStops('web');
     else if(button.dataset.tripRefresh==='discover')findStops('discover');
     else findStops(true);
   });
   var RF_ICON='<svg class="rf-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
   function refreshCard(){
-    if(KIND()==='ev'&&model)return cpRetryCard();
+    if(KIND()==='ev'&&model)return '<div class="card price-refresh-card"><h3>Remembered charging stations</h3>'+(busy?'<div class="scan-pending" aria-busy="true"><span></span><span></span></div>':'<div class="scan-launches"><button class="btn primary" data-trip-refresh="alt-prices">Update prices</button>'+A.qBtn('Requests updated prices at known chargers without discovering locations. Website restrictions still apply; completed observations are retained.')+'<button class="btn tonal" data-trip-refresh="api">Rediscover stations</button>'+A.qBtn('Checks this route again for new or changed chargers through enabled providers. Uses their request budgets. Known locations and observations stay in app storage across trips.')+'</div>')+'</div>'+cpRetryCard();
     if(KIND()!=='gas'||!model)return '';
     var saved=savedPriceReplay(),web=!!saved;
     var capped=Number(S.monthlyCap)>0&&N.callsThisMonth()>=Number(S.monthlyCap),apiUnavailable=capped||!S.apiKey;
@@ -466,7 +467,7 @@
         '<button type="button" class="btn primary split-dd" data-split aria-haspopup="true" aria-expanded="false" aria-label="More No API options">▾</button></span>'+A.qBtn(webHelp)+
         '<button class="btn primary" data-trip-refresh="api"'+(apiUnavailable?' disabled':'')+'>'+RF_ICON+'API</button>'+A.qBtn(apiHelp)+
         // finding stations already ran when the trip was planned: doing it again is a "force" option, tucked under No API
-        '<div class="split-menu hidden"><button type="button" class="btn primary" data-trip-refresh="discover">'+RF_ICON+'Discover stations</button>'+
+        '<div class="split-menu hidden"><button type="button" class="btn primary" data-trip-refresh="discover">'+RF_ICON+'Rediscover stations</button>'+
         A.qBtn('Searches the whole route again for stations, without the API (it already ran when you planned the trip). Slower: overlapping website searches, '+KeylessGas.readerCount(A)+' readers (Settings), with progress and Cancel. No paid fallback; your brand filters still apply.')+'</div></div>')+'</div>';
   }
   var replay = null;     // a trip opened from history: {id, t, stations} — its saved stations are used instead of new lookups
@@ -2336,7 +2337,7 @@
   // identities separate and retain the newest enriched price when routes overlap.
   function mergeRouteStations(rows){
     if(KIND()!=='ev')return P.mergeSites(P.reconcileStations(rows));
-    var known=new Map();rows.forEach(function(st){var prior=known.get(st.id),copy=Object.assign({},prior||{},st);if(prior&&prior.netPrice&&(!st.netPrice||(+prior.netPrice.t||0)>(+st.netPrice.t||0))){copy.netPrice=prior.netPrice;if(prior.netPrice.src==='flo')copy.units=prior.units;}known.set(st.id,copy);});return Array.from(known.values());
+    var known=new Map();rows.forEach(function(st){var prior=known.get(st.id),copy=Object.assign({},prior||{},st);if(prior&&prior.netPrice&&(!st.netPrice||(+prior.netPrice.t||0)>(+st.netPrice.t||0))){copy.netPrice=prior.netPrice;copy.tariffV2=prior.tariffV2;if(prior.netPrice.src==='flo')copy.units=prior.units;}known.set(st.id,copy);});return Array.from(known.values());
   }
   function altInventoryScope(){return VehicleCompare.key([KIND(),KIND()==='ev'?AltFuel.compatiblePlugs(Garage.car(),Garage.plugs(Garage.car())):null,/tesla/i.test(Garage.car().make||''),S.trip.evChargers,S.evUseDOE,S.evUseOCM]);}
   // Discover for the largest supported detour once; the planner still enforces
@@ -2364,7 +2365,8 @@
       priceKeys.push(priceKey);var priced=altPricePasses.get(priceKey),reusePrices=!replay&&force!==true&&force!=='discover'&&priced&&Date.now()-priced.at<10*60e3&&priced.corridor>=corridor;
       var stored=replay&&replay.saved&&savedAltInventory(replay.saved,rawRoutes&&rawRoutes[mi],corridor);
       try {
-        if(stored){list=stored.map(function(st){return Object.assign({},st);});priceReused[mi]=true;if(notes.indexOf('Saved station prices reused with their original timestamps. Use Refresh to request updated prices.')<0)notes.push('Saved station prices reused with their original timestamps. Use Refresh to request updated prices.');LG.info('stations','Reusing saved route inventory and prices',{kind:kd,stations:list.length,ageSec:Math.round((Date.now()-replay.saved.t)/1000)});}
+        if(force==='prices')list=stored||replay&&replay.localOnly&&(replay.google[mi]||{}).list||window.StationStore&&StationStore.routeRows([m],T,corridor,kd,StationStore.priceScope(c))||[];
+        else if(stored){list=stored.map(function(st){return Object.assign({},st);});priceReused[mi]=true;if(notes.indexOf('Saved station prices reused with their original timestamps. Use Refresh to request updated prices.')<0)notes.push('Saved station prices reused with their original timestamps. Use Refresh to request updated prices.');LG.info('stations','Reusing saved route inventory and prices',{kind:kd,stations:list.length,ageSec:Math.round((Date.now()-replay.saved.t)/1000)});}
         else if(reusePrices){list=priced.rows.map(function(st){return Object.assign({},st);});notes=Array.from(new Set(notes.concat(priced.notes)));priceReused[mi]=true;LG.info('stations','Reusing completed charger price pass',{stations:list.length,ageSec:Math.round((Date.now()-priced.at)/1000)});}
         else if(replay&&replay.localOnly)list=(replay.google[mi]||{}).list||[];
         else {
@@ -2374,7 +2376,7 @@
             var cm=pieces.length>1?hzModel(a):m;
             var key=JSON.stringify([kd,a&&a.polyline&&a.polyline.encodedPolyline||cm.pts,plugs,S.trip.evChargers,S.evUseDOE,S.evUseOCM,S.evRefreshPrices,S.nrelKey,S.ocmKey]);
             var hit=altSearches.get(key),reuse=force!==true&&force!=='discover'&&hit&&Date.now()-hit.at<3600e3&&hit.corridor>=corridor;
-            var rows=reuse?hit.rows:await AltFuel.alongRoute(cm,kd,plugs,corridor,function(f){pg((mi+(ai+f)/pieces.length)/models.length,kd==='ev'?'Finding compatible chargers':'Finding hydrogen stations');},S.trip.evChargers);
+            var rows=reuse?hit.rows:await AltFuel.alongRoute(cm,kd,plugs,corridor,function(f){pg((mi+(ai+f)/pieces.length)/models.length,kd==='ev'?'Finding compatible chargers':'Finding hydrogen stations');},S.trip.evChargers,force===true||force==='discover');
             if(!reuse&&!jobCancel){altSearches.delete(key);altSearches.set(key,{at:Date.now(),corridor:corridor,rows:rows});while(altSearches.size>64)altSearches.delete(altSearches.keys().next().value);}
             if(reuse)LG.info('stations','Reusing completed route discovery',{kind:kd,stations:rows.length,ageSec:Math.round((Date.now()-hit.at)/1000)});
             // Website enrichment (including owner-specific Tesla tariffs and FLO
@@ -2385,6 +2387,7 @@
         }
       }
       catch (e) { discoveryIncomplete=true;list=list.concat(e.stations||[]);if (notes.indexOf(e.message) < 0) notes.push(e.message); LG.warn('stations', e.message); }
+      if(window.StationStore){var ids=new Set(list.map(function(s){return s.id;})),shared=StationStore.routeRows([m],T,corridor,kd,StationStore.priceScope(c)).filter(function(s){return ids.has(s.id);});list=mergeRouteStations(shared.concat(list));if(kd==='ev')StationStore.observe(list,kd);}
       if(queueWorking&&kd==='ev'&&!(replay&&replay.localOnly))priceReused[mi]=list.every(function(st){return st.netPrice&&P.priceFresh({updated:st.netPrice.t},S.evPriceAgeHours||24);});
       raw.push(list);
     }
@@ -2397,8 +2400,8 @@
     var kinds=raw.map(function(list,i){return list.map(function(st,j){return kd==='ev'&&projections[i][j].length&&AltFuel.netAllowed(st)?AltFuel.charging(st,c,S.trip.evChargers,plugs):null;});});   // unticked networks: never a stop
     LG.debug('stations','Route corridor projection',{models:models.length,inventory:raw.map(function(l){return l.length;}),compatible:kinds.map(function(l){return l.filter(Boolean).length;}),ms:Date.now()-projectionAt,priceProjectionOnly:!!(replay&&replay.skipNetworkPrices)});
     // the networks' own published prices (Tesla, IONNA, Blink), once per station even when routes share it
-    if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var seenNet={},items=[];raw.forEach(function(list,i){if(priceReused[i])return;list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
-      try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));});np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
+    if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var seenNet={},items=[];raw.forEach(function(list,i){if(priceReused[i])return;list.forEach(function(st,j){var ch=kinds[i][j];if(ch&&!seenNet[st.id]&&(force===true||force==='prices'||!st.netPrice||!P.priceFresh({updated:st.netPrice.t},S.evPriceAgeHours||24))){seenNet[st.id]=1;items.push({st:st,dc:ch.level==='dc_fast',kw:ch.kw});}});});
+      try{var np=await EVPrices.annotate(items,c,function(f,left){pg(Math.min(.99,f),'Getting charger prices from the networks'+(left?' · '+left:''));},force===true||force==='prices');np.notes.forEach(function(n){if(notes.indexOf(n)<0)notes.push(n);});dbgS.netPrices=np.priced;var byId={};items.forEach(function(x){if(x.st.netPrice)byId[x.st.id]=x.st.netPrice;});raw.forEach(function(list){list.forEach(function(st){if(byId[st.id])st.netPrice=byId[st.id];});});}catch(e){LG.warn('stations','Charger network prices failed: '+e.message);}}
     if(kd==='ev'&&window.EVPrices&&models.some(function(_,i){return !priceReused[i];})&&!(replay&&replay.skipNetworkPrices)){var floUnits={};items.forEach(function(x){if(x.st.netPrice&&x.st.netPrice.src==='flo')floUnits[x.st.id]=x.st.units;});raw.forEach(function(list,i){list.forEach(function(st,j){if(floUnits[st.id]){st.units=floUnits[st.id];kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
     if(kd==='ev'&&typeof items!=='undefined'){var enriched={};(items||[]).forEach(function(x){if(x.st.tariffV2)enriched[x.st.id]=x.st;});raw.forEach(function(list,i){list.forEach(function(st,j){var e=enriched[st.id];if(e){st.tariffV2=e.tariffV2;st.units=e.units;kinds[i][j]=AltFuel.charging(st,c,S.trip.evChargers,plugs);}});});}
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
@@ -2427,6 +2430,7 @@
     }
     if (kd === 'ev') {if(skippedPrices)notes.push('Chargers without published prices were excluded. To include estimated costs, enable them in Settings → Connections.');notes.push('Recent published prices are preferred; older or undated rates may be needed. Rates are not live: confirm prices, access and available stalls with the network.');var fd=!S.trip.departNow&&futureDepart();if(fd&&fd.getTime()>Date.now())notes.push('Leaving '+fd.toLocaleString()+' — prices may change by then.');}
     if(kd==='ev'&&!discoveryIncomplete&&!jobCancel)raw.forEach(function(list,i){if(priceReused[i])return;altPricePasses.delete(priceKeys[i]);altPricePasses.set(priceKeys[i],{at:Date.now(),corridor:corridor,rows:list.map(function(st){return Object.assign({},st);}),notes:notes.slice()});while(altPricePasses.size>64)altPricePasses.delete(altPricePasses.keys().next().value);});
+    if(window.StationStore)raw.forEach(function(list){StationStore.observe(list,kd,kd==='ev'?StationStore.priceScope(c):null);});
     dbgS.stations = raw.map(function (l) { return l.length; });
     pg(1, 'Choosing stops');
     return { per: per, cachedAgeMs: 0, raw: { official: [], google: raw, kind: kd,incomplete:discoveryIncomplete||jobCancel } };
@@ -2435,7 +2439,7 @@
     if (KIND() !== 'gas') return gatherAlt(models, pg, dbgS,replay,(ks||[]).map(function(k){return alts[k];}),force);
     if(!(replay&&replay.localOnly)&&S.xomCheck!==false)scanPending('discounts','Checking station discount eligibility',15);
     var KV = A.KV, notes = [], official = [], siteOk = [], perModel = models.map(function () { return []; }), guessed = [];
-    var webDiscovery=force==='discover'||force==='discover-cache'||force!==true&&(!S.apiKey||S.keylessRegular);
+    var webDiscovery=force==='discover'||force==='discover-cache'||force!==true&&(!S.apiKey||S.keylessRegular),cellApi=!webDiscovery&&window.StationStore&&N.fetchStationCell;
     if (replay) {
       // Keep saved station discovery; batches update expired prices separately below.
       official = window.PriceHistoryRecovery?PriceHistoryRecovery(replay.official||[]):(replay.official || []).slice();
@@ -2478,9 +2482,11 @@
       return out;
     };
     if (!replay) try {
+      if(window.StationStore)await StationStore.seedHistory(function(){return !jobCancel;});
+      if(window.StationStore){var remembered=StationStore.routeRows(models,T,maxOff,'gas').filter(function(s){return S.brands[s.brand];});models.forEach(function(m,i){perModel[i]=remembered.filter(function(s){return T.project(m,s).offset<=maxOff;});});LG.info('stations','Shared geographic station inventory',{known:remembered.length,models:models.length});}
       // --- Google, along each route ---
       var jobs = [], skippedBack = 0;
-      if (S.apiKey&&!webDiscovery) {
+      if (S.apiKey&&!webDiscovery&&!cellApi) {
         var gb = googleBrands();
         models.forEach(function (m, mi) {
           T.chunks(m, 125).forEach(function (ch, ci) {
@@ -2511,11 +2517,11 @@
       };
       done.forEach(function (d) { d.results.forEach(function (r) { takeGoogle(jobs[d.job], r,d.at); }); });
       var tasks = [];
-      if(webDiscovery){
+      if(webDiscovery||cellApi){
         weight.google=1;
-        tasks.push(KeylessGas.discover(areaPlan||KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover').then(function(r){
+        tasks.push((cellApi?KeylessGas.discoverAPI:KeylessGas.discover)(areaPlan||KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover'||force===true).then(function(r){
           dbgS.keyless={areas:r.areas,completed:r.completedAreas,stations:r.stations.length,websiteLoads:r.websiteLoads,cancelled:r.cancelled,blocked:r.blocked,apiCalls:0};
-          r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=3)perModel[i].push(s);});});
+          r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=maxOff)perModel[i].push(s);});});
           notes=notes.concat(r.errors||[]);if(r.errors&&r.errors.length&&!r.cancelled&&!r.blocked)notes.push('Some website discovery work failed; completed station results are kept.');if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
           var incomplete=r.details.filter(function(d){return !d.exhausted;}).length;
           if(incomplete)notes.push('Website discovery stopped before the list ended in '+incomplete+' areas; coverage is partial.');
@@ -2525,8 +2531,8 @@
         if(priceCancelRequested)KeylessGas.cancel();
       }
       if (todo.length) weight.google = 0.55;
-      if (!webDiscovery&&A.siteOn('murphy')) weight.murphy = 0.15;
-      if (!webDiscovery&&A.siteOn('walmart')) weight.walmart = 0.3;
+      if (!webDiscovery&&!cellApi&&A.siteOn('murphy')) weight.murphy = 0.15;
+      if (!webDiscovery&&!cellApi&&A.siteOn('walmart')) weight.walmart = 0.3;
       dbgSearch.googleLookups = todo.length; dbgSearch.googleSaved = done.length; dbgSearch.skippedWayBack = skippedBack;
       if (skippedBack) LG.info('stations', skippedBack + ' search piece(s) on the way back skipped — same roads as the way out');
       LG.info('stations', 'Searching along ' + models.length + ' route(s)', { googleLookups: todo.length, saved: done.length, walmart: A.siteOn('walmart'), murphy: A.siteOn('murphy'), force: !maxAge });
@@ -2550,7 +2556,7 @@
         }));
       }
       // --- Murphy USA (their store finder), one pass for all routes ---
-      if (!webDiscovery&&A.siteOn('murphy')) {
+      if (!webDiscovery&&!cellApi&&A.siteOn('murphy')) {
         var mpts = ptsUnion(50), mkey = mpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
         var mo = getKV('murphy', mkey, maxAge);
         var takeMurphy = function (stores,at) { (stores || []).forEach(function (m) { var s = P.normalizeMurphy(m); if (s){if(window.PriceHistory)PriceHistory.stamp(s,at);official.push(s);} }); };
@@ -2565,7 +2571,7 @@
         }));
       }
       // --- Walmart: which stores have fuel (kept a month), then today's prices for the ones near a route ---
-      if (!webDiscovery&&A.siteOn('walmart')) tasks.push((async function () {
+      if (!webDiscovery&&!cellApi&&A.siteOn('walmart')) tasks.push((async function () {
         var wpts = ptsUnion(40), wkey = wpts.map(function (p) { return p.lat.toFixed(2) + ',' + p.lng.toFixed(2); }).join(';');
         var no = KV.get('wmnodes', wkey, 30 * 24 * 3600e3), nodes;
         if (no) nodes = no.v;
@@ -2598,6 +2604,7 @@
     } catch (e) { notes.push(String(e && e.message || e)); LG.error('stations', String(e && e.message || e)); }
     dbgSearch.savedPieces = saved; dbgSearch.oldestSavedMin = Math.round(oldest / 60000);
     if(!replay&&window.PriceHistory){PriceHistory.observe(official);}
+    if(window.StationStore)StationStore.observe(official.concat.apply(official,perModel),'gas');
 
     finishScanPending('walmart');
     // Exxon / Mobil stations that aren't in the Walmart+ program lose that discount
@@ -4824,11 +4831,12 @@
     jobs.forEach(function(j){var s=compareEntries.get(j.id),c=S.cars.find(function(c){return c.id===j.id;});if(!s||!c)return;
       if(/^(Ready|Adjustments ready)$/.test(j.status)&&queuePrepared(s)&&compareUsable(s)&&queuePricesFresh(s))return;
       var kind=Garage.kind(c),choice=modelsFor(s,c),known=[],pools=[s.replay&&s.replay.stations,s.choicePool,inventory&&inventory.stations];pools.forEach(function(p){if(!p||(p.kind||'gas')!==kind)return;known=known.concat(p.official||[]);(p.google||[]).forEach(function(g){known=known.concat(Array.isArray(g)?g:g.list||[]);});});known=Array.from(new Map(known.map(function(st){return [st.id,st];})).values());
+      if(window.StationStore){known=Array.from(new Map(known.concat(StationStore.routeRows(choice.models,T,10,kind,StationStore.priceScope(c))).map(function(st){return [st.id,st];})).values());}
       var points=new Map();choice.models.forEach(function(m){T.samplePoints(m,10).forEach(function(p){var k=Math.floor(p.lat*4)+'|'+Math.floor(p.lng*4);if(!points.has(k))points.set(k,[]);points.get(k).push(p);});});known=known.filter(function(st){for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var near=points.get((Math.floor(st.lat*4)+dx)+'|'+(Math.floor(st.lng*4)+dy))||[];if(near.some(function(p){return P.haversineMi(p.lat,p.lng,st.lat,st.lng)<14;}))return true;}return false;});
       var network=[],miles=s.model&&s.model.totalMi||choice.models.reduce(function(n,m){return n+m.totalMi;},0),grade=c.grade||S.grade||'regular',have=!!(s.result||s.choicePool||known.length),n=s.result?s.result.cands.length:Math.max(5,Math.min(known.length||Infinity,miles*(kind==='gas'?.65:.08))),cap=+c.tank||14,step0=kind==='ev'?Math.max(.1,Math.round(cap/150*10)/10):kind==='h2'?.05:.1;
       if(kind==='gas'){
         var uncovered=choice.models.filter(function(m,i){if(s.result&&s.choicePool)return false;var sig=altSig(choice.entries[i].route);return !pools.some(function(p){return p&&(p.kind||'gas')==='gas'&&(p.google||[]).some(function(g){return g.sig===sig&&(!g.coverage||g.coverage.complete)&&Array.isArray(g.list);});});});
-        KeylessGas.discoveryAreas(uncovered,T,P).forEach(function(a){var ck='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,hit=A.KV.get('gasweb',ck,15*60000);if(!hit||hit.v.detail&&hit.v.detail.stopReason==='quiet')network.push({key:ck,ms:eta.rate('discovery|'+readers,1600*16/readers)});});
+        KeylessGas.discoveryAreas(uncovered,T,P).forEach(function(a){if(window.StationStore&&a.cellId&&(StationStore.covered(a,'gasweb',grade)||StationStore.covered(a,'places','all')))return;var ck='discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,hit=A.KV.get('gasweb',ck,15*60000);if(!hit||hit.v.detail&&hit.v.detail.stopReason==='quiet')network.push({key:ck,ms:eta.rate('discovery|'+readers,1600*16/readers)});});
         var expired=known.filter(function(st){return KeylessGas.needsPriceRefresh(st,grade,S.staleHours);});KeylessGas.knownAreas(expired,P).forEach(function(a){network.push({key:'refresh|'+grade+'|'+a.lat.toFixed(4)+'|'+a.lng.toFixed(4),ms:eta.rate('refresh|'+grade+'|'+readers,10000/readers)});});
       }else if(kind==='ev'){
         if(!have)network.push({key:'ev-discovery|'+VehicleCompare.journey(s.route,s.trip),ms:30000});

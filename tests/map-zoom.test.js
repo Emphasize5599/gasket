@@ -35,7 +35,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  }
  await p.evaluate(()=>__app.setMode('gas'));await p.waitForSelector('.mbub');
  // Reproduce the screenshot: main-map H2 dots/coverage must not overlay a trip.
- await p.evaluate(async()=>{__app.S.fuelMode='h2';__app.KV.put('afdc','hy-all',[{id:901,fuel_type_code:'HY',station_name:'Synthetic H2',latitude:35,longitude:-119,hy_pressures:['700'],status_code:'E',access_code:'public'}]);await AltFuel.refresh();});
+ await p.evaluate(async()=>{__app.S.fuelMode='h2';__app.KV.put('stationstore','h2-all',null);__app.KV.put('afdc','hy-all',[{id:901,fuel_type_code:'HY',station_name:'Synthetic H2',latitude:35,longitude:-119,hy_pressures:['700'],status_code:'E',access_code:'public'}]);await AltFuel.refresh();});
  await p.waitForFunction(()=>AltFuel.h2().length===1&&__app.map.hasLayer(AltFuel.coverage()));
  const coverage=await p.evaluate(()=>{
   const cov=AltFuel.coverage(),z=6,data=cov.rings(z),ring=data.rings.find(r=>r.part===.5),point={x:ring.bounds.maxX,y:(ring.bounds.minY+ring.bounds.maxY)/2},tile=cov.createTile({x:Math.floor(point.x/256),y:Math.floor(point.y/256),z}),pixels=tile.getContext('2d').getImageData(0,0,tile.width,tile.height).data,alphas=new Set();
