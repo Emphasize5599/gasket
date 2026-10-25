@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.271 - 2026-10-25
+- The Walmart+ check for Exxon and Mobil stations works again: ExxonMobil's station finder refused the app's requests, so it's now asked from a hidden exxon.com page, a few areas at a time. If ExxonMobil asks for a check, the usual banner opens it, and finishing it retries the areas that failed.
+- Bug fixes.
+
 ## 0.0.270 - 2026-10-25
 - Searched areas are always reused: every later trip, car and fuel grade uses the stations found in an area searched before (no more re-searching after a week, or for a car on another grade). Only areas never searched are read; Rediscover still searches everything again.
 - Stations found just across an area's edge come back when the area is reused, instead of dropping out of later trips.

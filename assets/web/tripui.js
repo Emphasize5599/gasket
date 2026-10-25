@@ -25,7 +25,7 @@
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 35000 : 0;
       if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
-      if(fn==='siteRead'&&args[0]==='brave')timeout=60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='fetchFrancis')timeout=45000;
+      if(fn==='siteRead'&&args[0]==='brave')timeout=60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if (fn === 'aiCommand') timeout = 15000;
@@ -435,7 +435,7 @@
   }
   document.addEventListener('click',function(e){
     if(e.target.closest('[data-retry-cp]')){retryCpPages();return;}
-    var retryXom=e.target.closest('[data-retry-xom]');if(retryXom){if(busy||queueWorking)return;retryXom.disabled=true;retryXom.textContent='Retrying…';xomFailed.clear();var stations=[];[result].concat(result&&result.routes?result.routes.map(function(r){return r.res;}):[]).forEach(function(r){if(r)(r.cands||[]).forEach(function(c){if(c.station)stations.push(c.station);});});xomCheck(stations).then(function(){if(xomFailed.size)A.toast('The discount website is still unavailable. Your station results are kept.');repriceRewards();renderResults();}).finally(function(){retryXom.disabled=false;});return;}
+    var retryXom=e.target.closest('[data-retry-xom]');if(retryXom){if(busy||queueWorking)return;retryXom.disabled=true;retryXom.textContent='Retrying…';xomFailed.clear();xomBlocked=false;var stations=[];[result].concat(result&&result.routes?result.routes.map(function(r){return r.res;}):[]).forEach(function(r){if(r)(r.cands||[]).forEach(function(c){if(c.station)stations.push(c.station);});});xomCheck(stations).then(function(){if(xomFailed.size)A.toast('The discount website is still unavailable. Your station results are kept.');repriceRewards();renderResults();}).finally(function(){retryXom.disabled=false;});return;}
     var cancel=e.target.closest('[data-cancel-prices]');
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
     var cx=e.target.closest('[data-cancel-search]');
@@ -2259,17 +2259,48 @@
     return 'https://www.exxon.com/en/api/locator/Locations?Latitude1=' + b[0].toFixed(3) + '&Latitude2=' + b[1].toFixed(3) +
       '&Longitude1=' + b[2].toFixed(3) + '&Longitude2=' + b[3].toFixed(3) + '&DataSource=RetailGasStations&Country=US&Customsort=False';
   }
-  async function xomBox(b, depth) {
-    var res = await call('fetchJson', xomUrl(b));
-    if (res.error || !res.body) throw new Error(res.error || 'no answer');
-    var j = JSON.parse(String(res.body).replace(/[\u0000-\u001f]/g, ' '));
-    var list = (j.Locations || []).map(function (x) {
+  function xomRows(j) {
+    return (j.Locations || []).map(function (x) {
       var tags = (x.StoreAmenities || []).concat(x.FeaturedItems || []);
       return [+x.Latitude, +x.Longitude, tags.some(function (a) { return a && /walmart/i.test(a.Name || a.Title || ''); }) ? 1 : 0, String(x.DisplayName || x.LocationName || '').slice(0, 60)];
     });
-    if (list.length >= 100 && depth < 3) {          // the finder caps its answer: split the square and ask again
+  }
+  // Without the app (desktop stand-in): ask the locator directly.
+  async function xomDirect(b) {
+    var res = await call('fetchJson', xomUrl(b));
+    if (res.error || !res.body) throw new Error(res.error || 'no answer');
+    return xomRows(JSON.parse(String(res.body).replace(/[\u0000-\u001f]/g, ' ')));
+  }
+  // On the phone: ExxonMobil's edge refuses the locator asked from outside its pages ("Access Denied", HTTP 403 on
+  // 130 of 131 squares in the 0.0.269 log), so the hidden exxon.com page asks it (xom_worker.js), one square at a time.
+  // Squares are batched (40 a read) and shared by every caller waiting on them; a refusal stops the batch.
+  var xomQueue = [], xomRunning = null, xomBlocked = false;
+  function xomBox(b) {
+    if (!window.Native) return xomDirect(b);
+    return new Promise(function (ok, fail) { xomQueue.push({ b: b, ok: ok, fail: fail }); xomKick(); });
+  }
+  // a tick later, so every square asked at once is in the batch; squares queued as a drain ends start another
+  function xomKick() {
+    if (xomRunning) return;
+    xomRunning = new Promise(function (r) { setTimeout(r, 0); }).then(xomDrain).finally(function () { xomRunning = null; if (xomQueue.length) xomKick(); });
+  }
+  async function xomDrain() {
+    while (xomQueue.length) {
+      var batch = xomQueue.splice(0, 40);
+      if (xomBlocked) { batch.forEach(function (q) { q.fail(new Error('ExxonMobil asked for a check')); }); continue; }
+      var r; try { r = await call('siteRead', 'xom', JSON.stringify({ url: XOM_PAGE, boxes: batch.map(function (q) { return q.b; }) })); } catch (e) { r = { error: e.message }; }
+      var got = (r && r.boxes) || [];
+      batch.forEach(function (q, i) { if (Array.isArray(got[i])) q.ok(got[i]); else q.fail(new Error(r && r.blocked ? 'ExxonMobil asked for a check' : r && r.error || 'no answer')); });
+      if (r && r.blocked && !xomBlocked) { xomBlocked = true; LG.warn('stations', 'ExxonMobil station finder wants a check', { status: r.status || null, squaresRead: got.length }); if (A.showSiteCheck) A.showSiteCheck('xom', 'ExxonMobil'); }
+    }
+  }
+  var XOM_PAGE = 'https://www.exxon.com/en';
+  // the finder caps its answer at 100: split the square (up to 3 times) and ask again, so nothing is cut off
+  async function xomSquare(b, depth) {
+    var list = await xomBox(b);
+    if (list.length >= 100 && depth < 3) {
       var mLat = (b[0] + b[1]) / 2, mLng = (b[2] + b[3]) / 2, out = [];
-      var parts = await Promise.all([[b[0], mLat, b[2], mLng], [b[0], mLat, mLng, b[3]], [mLat, b[1], b[2], mLng], [mLat, b[1], mLng, b[3]]].map(function (q) { return xomBox(q, depth + 1); }));
+      var parts = await Promise.all([[b[0], mLat, b[2], mLng], [b[0], mLat, mLng, b[3]], [mLat, b[1], b[2], mLng], [mLat, b[1], mLng, b[3]]].map(function (q) { return xomSquare(q, depth + 1); }));
       parts.forEach(function (p) { out = out.concat(p); });
       return out;
     }
@@ -2282,7 +2313,7 @@
     if (xomPending[k]) return xomPending[k];
     var ij = k.split(':').map(Number), m = 0.01;
     var b = [ij[0] * XOM_CELL - m, (ij[0] + 1) * XOM_CELL + m, ij[1] * XOM_CELL - m, (ij[1] + 1) * XOM_CELL + m];
-    return (xomPending[k] = xomBox(b, 0).then(function (list) { A.KV.put('xom', k, list); delete xomPending[k]; return list; },
+    return (xomPending[k] = xomSquare(b, 0).then(function (list) { A.KV.put('xom', k, list); delete xomPending[k]; return list; },
       function (e) { delete xomPending[k]; xomFailed.add(k);xomWarn(String(e)); return null; }));
   }
   // one line per failure kind a minute (a 403 on every square was 242 identical lines in a phone log)
@@ -2317,6 +2348,8 @@
     return changed;
   }
   window.__xom = xomCheck;
+  // the check on exxon.com done: unblock and retry the squares that failed (the note's Retry, when one is showing)
+  window.addEventListener('xomverified',function(){xomBlocked=false;var b=document.querySelector('[data-retry-xom]');if(b&&!b.disabled)b.click();else xomFailed.clear();});
 
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function serviceMin(p,kind) { return p.stops.reduce(function (a, s) { return a + T.serviceMinutes(s,kind); }, 0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0); }

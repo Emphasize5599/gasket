@@ -415,6 +415,7 @@
   window.onSiteVerified = function (key) {
     if(window.EVPrices&&EVPrices.onVerified(key))return;
     if(/^(tesla|chargepoint)$/.test(key))return;
+    if(key==='xom'){window.dispatchEvent(new Event('xomverified'));return;} // never a map search
     if(window.KeylessGas&&KeylessGas.onVerified&&KeylessGas.onVerified(key))return;
     if(/^(brave|nhtsa|tirerack)$/.test(key))return; // vehicle verification must never start station/API discovery
     if(/^gasweb\d*$/.test(key)){status('Google Maps check closed. Retry the website price refresh when ready.');return;}
