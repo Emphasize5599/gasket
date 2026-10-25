@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.269 - 2026-10-25
+- Same as 0.0.268 (whose APK build stopped on a test timing problem; no app change).
+
 ## 0.0.268 - 2026-10-25
 - Comparisons have an "Update prices first" switch. Turn it off and every queued vehicle plans with the stations and prices already saved with the trip, with no price websites read.
 - Tapping ✕ while a comparison is updating prices now skips the rest of the update and still finishes that vehicle's trip (and the rest of the batch) with the saved prices. Before, it stopped the trip with "Station discovery did not finish".
