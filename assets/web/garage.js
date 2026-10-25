@@ -9,6 +9,7 @@
   var LG = window.FLog || { info: function () {}, debug: function () {}, warn: function () {} };
   var EPA = 'https://www.fueleconomy.gov/ws/rest/vehicle/';
   var VPIC = 'https://vpic.nhtsa.dot.gov/api/vehicles/';
+  function vehicleLabel(c,text){return window.VehicleNames?VehicleNames.display(c,text):String(text||'');}
 
   // Tank sizes we could confirm from manufacturer spec sheets (no free API publishes tank capacity —
   // fueleconomy.gov and NHTSA's vPIC don't have it). Anything else: type it from the owner's manual.
@@ -270,7 +271,7 @@
     if (window.Tires) Tires.render($('gTiresIn'), call, function () { var l = $('gTiresLine'); if (l) l.innerHTML = Tires.summaryHtml(c); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } });
     bind(c);
     drawSpeed();
-    setTimeout(function () { tankAuto(car()); }, 0);
+    setTimeout(function () { tankAuto(car()); dcAuto(car()); }, 0);
   }
   // ---------- the tank size, from Brave Search's AI answer ----------
   // A gas or hybrid car with no tank size gets it looked up once, in the hidden window: Brave Search with its AI answer,
@@ -293,7 +294,7 @@
   }
   function trimList(c) {
     var st = trimState(c), vin = (c.vinHints || {}).trim || '';
-    return TrimMath.merge(st && st.list, vin ? [vin] : []);
+    return TrimMath.merge(TrimMath.merge(st && st.list, vin ? [vin] : []).map(function(t){return vehicleLabel(c,t);}));
   }
   async function trimFind(c) {
     var k = trimKey(c); if (!k || !call || !N.siteRead || matching) return;
@@ -321,11 +322,13 @@
     v = String(v || '').trim(); if (v === String(c.trim || '')) return;
     c.trim = v; LG.info('car', 'Trim ' + (v ? 'set' : 'cleared'));
     if (kind(c) === 'gas') { c.tank = ''; c.tankSrc = ''; c.tankLookup = null; }
+    if (kind(c) === 'ev' && c.dcKwSrc !== 'you entered it') { c.dcKw = ''; c.dcKwSrc = ''; c.dcKwLookup = null; }   // trims can charge at different rates
     draw(); changed();
     if (kind(c) === 'gas' && v && tankKey(c)) tankFind(c, false);
+    if (kind(c) === 'ev' && v && tankKey(c)) dcFind(c, false);
   }
   function trimHtml(c) {
-    var st = trimState(c), list = trimList(c), have = TrimMath.find(list, c.trim), other = trimOther[c.id] || (!!c.trim && !have);
+    var st = trimState(c), list = trimList(c), have = TrimMath.find(list, vehicleLabel(c,c.trim)), other = trimOther[c.id] || (!!c.trim && !have);
     var hint = st && st.busy ? 'looking up this model\'s trims…' : list.length ? 'pick yours: it can change the tank size' : 'can change the tank size';
     var h = '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>' + hint + '</small></span>';
     if (st && st.busy && !list.length) return h + '<select id="gTrimSel" disabled><option>Looking up trims…</option></select>' + A.ldBar('Asking Brave Search for this model\'s trims') + '</label>' +
@@ -390,6 +393,35 @@
     }
     draw();
   }
+  // ---------- an EV's fastest DC charging rate, from Brave Search's AI answer (the EPA and NHTSA don't publish it) ----------
+  // Optional (blank = 150 kW), so it's only filled in when the box is empty and never over a number you typed.
+  var dcBusy = {}, DC_SRC = 'from Brave Search\'s AI answer · check the maker\'s specs';
+  function dcUrl(c) { return 'https://search.brave.com/ask?q=' + encodeURIComponent(tankKey(c) + ' maximum DC fast charging rate in kW?') + '&source=llmSuggest'; }
+  function dcAuto(c) {
+    if (!c || kind(c) !== 'ev' || +c.dcKw > 0 || !call || !N.siteRead || dcBusy[c.id] || matching) return;
+    var key = tankKey(c); if (!key || !trimOk(c)) return;   // the trim can change it: wait for it
+    var L = c.dcKwLookup; if (L && L.key === key && (!L.failed || Date.now() - L.t < 6 * 3600e3)) return;   // once per car (a failure: again after 6 h)
+    dcFind(c, false);
+  }
+  async function dcFind(c, shown) {
+    var key = tankKey(c); if (!key || dcBusy[c.id] || !trimOk(c) || !window.EvSpecs) return;
+    dcBusy[c.id] = true; draw();
+    LG.info('car', 'Asking Brave Search for the fastest DC charging rate' + (shown ? ' (shown to you)' : ''), key);
+    var read = function (r) { return r && !r.blocked && !r.error && r.text ? EvSpecs.parseDcKw(r.text) : null; };
+    var ask = function () { return BraveLookup.read({ url: dcUrl(c), kind: 'dckw' }, { call: call, shown: shown, label: 'DC charging rate', valid: function (r) { return !!read(r); }, current: function () { return !window.__erasing && car() && car().id === c.id && tankKey(c) === key; } }); };
+    var r = await braveSerial(ask), f = read(r);
+    dcBusy[c.id] = false;
+    if (tankKey(c) !== key) { LG.info('car', 'DC charging answer was for another trim: asking again'); if (!(+c.dcKw > 0)) dcFind(c, shown); return; }
+    if (f && c.dcKwSrc !== 'you entered it') {
+      c.dcKw = f.kw; c.dcKwSrc = DC_SRC; c.dcKwLookup = { key: key, t: Date.now(), kw: f.kw, text: f.text, src: r.src || '' };
+      LG.info('car', 'Fastest DC charging from Brave Search' + (r.src === 'results' ? '\'s results (no AI answer)' : '') + ': ' + f.kw + ' kW', f.text);
+      changed();
+    } else if (!(r && r.closed)) {
+      c.dcKwLookup = { key: key, t: Date.now(), failed: true }; save();
+      LG.warn('car', 'DC charging rate lookup got no answer', r ? (r.blocked ? 'a check on Brave Search\'s page' : r.error || 'no kW figure in the answer') : 'no reply before the reader deadline');
+    }
+    draw();
+  }
   /**
    * What the trip planner still needs from the car, top to bottom: the EPA lookup (or your own city + highway mileage),
    * then the tank / battery size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
@@ -419,7 +451,7 @@
     if (x.year && x.model) return autoName(x) + (x.demoMileage ? ' (demo)' : '');
     return x.name || 'New car';
   }
-  function autoName(x) { return x.year + ' ' + String(x.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i, '') + (x.trim ? ' ' + x.trim : ''); }
+  function autoName(x) { var model=vehicleLabel(x,x.model).replace(/\s+(2WD|4WD|FWD|AWD|RWD)$/i,''),trim=vehicleLabel(x,x.trim);return x.year+' '+model+(trim&&(' '+model.toLowerCase()+' ').indexOf(' '+trim.toLowerCase()+' ')<0?' '+trim:''); }
   function opts(map, cur, blank) {
     return (blank != null ? '<option value="">' + blank + '</option>' : '') + Object.keys(map).map(function (k) { return '<option value="' + esc(k) + '"' + (cur === k ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join('');
   }
@@ -560,8 +592,8 @@
     if(!custom)h+='<div class="epa-tip"><span>Can\'t find your car? It might be exempt from the EPA.</span><button type="button" class="btn tonal sm" id="gNhtsaTip">NHTSA lookup</button></div>';
     // one tile for who the car is, down to the trim (folded once it's all known; never while the required trim is missing)
     var ymmTitle = 'Year / make / model / trim';
-    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id && trimOk(c) ? '' : ' open') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc([c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')) : 'no VIN? pick your car here') + '</small></summary>' +
-      '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
+    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id && trimOk(c) ? '' : ' open') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc(vehicleLabel(c,[c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))) : 'no VIN? pick your car here') + '</small></summary>' +
+      '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':i===2?vehicleLabel(c,value):value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
       '<div class="epa-msg" id="eMsg"></div>' + trimHtml(c) + '</details>';
     if(custom&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
     if(custom)h+='<button type="button" class="btn tonal sm" id="gBuildCustom">Build completely custom vehicle</button>';
@@ -582,7 +614,13 @@
       tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
       tankFindable && TL && TL.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' :
       TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
-    if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>the car\'s peak · blank = 150</small></span><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '"></label></div>' +
+    var dcFindable = k === 'ev' && !!tankKey(c), DL = c.dcKwLookup, dcSee = '<button type="button" class="btn tonal sm" id="gDcSee">See Brave\'s answer</button>';
+    if (k === 'ev') tkExtra += tankLocked || !dcFindable ? '' : dcBusy[c.id] ? A.ldBar('Asking Brave Search for the DC charging rate') :
+      DL && DL.failed && !(+c.dcKw > 0) ? '<small class="tk-fail dc-fail">No DC charging rate yet. <a href="#" id="gDcShow">Complete Brave verification</a>, or leave it blank (150 kW).</small>' :
+      DL && DL.kw && !DL.ok && c.dcKwSrc === DC_SRC && +c.dcKw === DL.kw ? '<div class="tz-guess tk-guess dc-guess">Brave Search says the fastest DC charging is <b>' + DL.kw + ' kW</b>.<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gDcYes">That\'s right</button>' + dcSee + '</div></div>' : '';
+    if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>' + esc(tankLocked ? 'choose your trim first' : c.dcKwSrc || 'the car\'s peak · blank = 150') + '</small></span>' +
+      '<span class="tk-join' + (dcFindable ? ' has-find' : '') + '"><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '">' +
+      (dcFindable ? '<button type="button" class="btn primary sm tk-find" id="gDcFind" aria-label="Look the DC charging rate up again"' + (dcBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label></div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
@@ -945,7 +983,11 @@
       if ($('gTankYes')) $('gTankYes').onclick = function () { c.tankLookup.ok = true; c.tankSrc = 'from Brave Search · you confirmed it'; LG.info('car', 'Tank size confirmed: ' + c.tank + ' gal'); changed(); draw(); };
       if ($('gTankSee')) $('gTankSee').onclick = function () { tankFind(c, true); };
       if ($('gType')) $('gType').onchange = function () { c.type = this.value; changed(); draw(); };
-      if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; changed(); };
+      if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; c.dcKwSrc = c.dcKw ? 'you entered it' : ''; changed(); draw(); };
+      if ($('gDcFind')) $('gDcFind').onclick = function () { if (c.dcKwSrc === 'you entered it') c.dcKwSrc = ''; dcFind(c, false); };
+      if ($('gDcShow')) $('gDcShow').onclick = function (e) { e.preventDefault(); dcFind(c, true); };
+      if ($('gDcYes')) $('gDcYes').onclick = function () { c.dcKwLookup.ok = true; c.dcKwSrc = 'from Brave Search · you confirmed it'; LG.info('car', 'DC charging rate confirmed: ' + c.dcKw + ' kW'); changed(); draw(); };
+      if ($('gDcSee')) $('gDcSee').onclick = function () { dcFind(c, true); };
       ['gEnergyProfile','gHeatPump','gPrecondition','gPackTemp'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=function(){var p=c.propulsion=c.propulsion||{};if(id==='gEnergyProfile')p.profile=this.value;else if(id==='gPackTemp'){if(this.value==='')delete p.initialTempC;else{var t=Number(this.value);if(!Number.isFinite(t)||t< -40||t>65){this.value=Number.isFinite(p.initialTempC)?p.initialTempC:'';return;}p.initialTempC=t;}}else p[id==='gHeatPump'?'heatPump':'precondition']=this.checked;changed();};});
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
@@ -1078,7 +1120,7 @@
       el('vcUse').onclick=async function(){if(busy)return;var year=+el('vcYear').value,make=el('vcMake').selectedOptions[0],model=el('vcModel').selectedOptions[0],type=C.TYPES.filter(function(t){return String(t.id)===el('vcType').value;})[0];if(!year||!make||!model||!model.value)return;busy=true;el('vcUse').disabled=true;
         var same=c.year===year&&String(c.make).toLowerCase()===make.text.toLowerCase()&&c.model===model.text;
         if(!same&&(c.year||c.make||c.model)&&!(await A.confirmDel({always:true,title:'Change this vehicle?',body:'Existing vehicle details, mileage and tires will be cleared; any custom picture is kept. Discard changes in the car editor can restore the previous details.',action:'Change vehicle',goClass:'tonal caution'}))){busy=false;el('vcUse').disabled=false;return;}
-        if(!alive||S.carId!==c.id)return;if(!same){['epaId','epaBase','epa','trim','tank','tankSrc','tankLookup','tires','pic','picMode','paint','vinHints','demoMileage'].forEach(function(k){delete c[k];});c.info={};c.obs={};c.entries=[];c.power='gas';c.grade='';}
+        if(!alive||S.carId!==c.id)return;if(!same){['epaId','epaBase','epa','trim','tank','tankSrc','tankLookup','dcKw','dcKwSrc','dcKwLookup','tires','pic','picMode','paint','vinHints','demoMileage'].forEach(function(k){delete c[k];});c.info={};c.obs={};c.entries=[];c.power='gas';c.grade='';}
         c.year=year;c.make=make.text;c.model=model.text;c.vpicModel=model.text;c.name=[year,make.text,model.text].join(' ');c.type=type.type;c.catalog={source:'nhtsa',makeId:make.value,modelId:model.value};close();changed();draw();if(c.entryMode!=='custom')await epaMatch(c,'Selected from NHTSA: '+c.name+'.');
       };load(false);return function(){alive=false;revision++;};
     });
@@ -1086,6 +1128,7 @@
   function items(body) { try { var j = JSON.parse(body); var m = j && j.menuItem; return !m ? [] : Array.isArray(m) ? m : [m]; } catch (e) { return []; } }
   async function epaGet(path) { var r = await call('fetchJson', EPA + path); if (r.error) throw new Error(r.error); return r.body; }
   function fill(sel, list, ph) {
+    if(sel.id==='eModel')list=list.map(function(x){return Object.assign({},x,{text:vehicleLabel({year:$('eYear').value,make:$('eMake').value,model:x.value},x.text)});});
     sel.innerHTML = '<option value="">' + ph + '</option>' + list.map(function (x) { return '<option value="' + esc(x.value) + '">' + esc(x.text) + '</option>'; }).join('');
     sel.disabled = !list.length;
     if(/^e(?:Year|Make|Model|Opt)$/.test(sel.id))sel.dataset.epaMenu=list.length?'1':'0';

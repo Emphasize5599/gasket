@@ -7,6 +7,7 @@
  * downloaded once. CarPicMath is pure and runs in Node for the tests. */
 (function (root) {
   'use strict';
+  var Names=typeof module!=='undefined'&&module.exports?require('./vehiclenames.js'):root.VehicleNames;
   var DRIVE = /\s+(2WD|4WD|AWD|FWD|RWD|4x4)$/i;
   function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
   /** "Venza AWD" -> "Venza" (the EPA adds the drive to some model names). */
@@ -38,6 +39,13 @@
     }
     return { v: byDrive(list)[0], exact: false };
   }
+  function fuelMatch(c,list){var suffix=String(c.model||'').slice(fuelModel(c).length).trim(),trim=c.trim||suffix,drive=driveOf(c.model)||String(c.info&&c.info.drive||'').toUpperCase();
+    if(!Names||!Names.tesla(c))return matchTrim(list,trim,drive);
+    if(!/premium|long range|performance|standard/i.test(trim)&&/premium|long range|performance|standard/i.test(suffix))trim=suffix;
+    var mapped=(list||[]).map(function(v){return Object.assign({},v,{trim:Names.photo(c,v.trim)});}),m=matchTrim(mapped,Names.photo(c,trim),drive);if(!m)return null;
+    var original=list.find(function(v){return v.id===m.v.id;});return {v:original,exact:m.exact&&norm(original.trim)===norm(trim),alias:norm(original.trim)!==norm(trim)&&/premium/i.test(Names.photo(c,trim))};
+  }
+  function preferFuel(c){return /^tesla$/i.test(String(c&&c.make||'').trim());}
   /** Fuel API's color assets in one format -> [{ code, name, simple, rgb, url }], one per paint. */
   function colorsOf(vehicle, formatCode) {
     var out = [], seen = {};
@@ -104,7 +112,7 @@
   }
   function wikiPick(pages,car){var tesla=norm(car.make)==='tesla';if(tesla)pages=(pages||[]).filter(function(p){var y=String(p.title||'').match(/\b(19\d{2}|20\d{2})\b/);return !y||+y[1]<=+car.year;});var exact=wikiRank(pages,car,false)[0];if(exact){var y=exact.title.match(/\b(19\d{2}|20\d{2})\b/);return tesla&&(!y||+y[1]!==+car.year)?Object.assign({},exact,{approximate:true}):exact;}if(tesla){var broad=wikiRank(pages,Object.assign({},car,{photoAnyYear:true}),false)[0];if(broad)return Object.assign({},broad,{approximate:true});}return null;}
   /** What a lookup depends on: one photo per model (year / make / model). */
-  function sig(c, fuel) { return (fuel ? ['f3'] : []).concat([c.year, norm(c.make), norm(baseModel(c.model))]).concat(fuel ? [norm(c.trim)] : []).join('|'); }
+  function sig(c, fuel) { return (fuel ? [preferFuel(c)?'f4':'f3'] : []).concat([c.year, norm(c.make), norm(baseModel(c.model))]).concat(fuel ? [norm(c.trim)] : []).join('|'); }
   function photoConfig(c){return [norm(c.trim),norm(c.info&&c.info.body),((c.info||{}).drw==='yes'||c.tires&&c.tires.corners&&c.tires.corners.dually)?'drw':''].join('|');}
   function nhtsaSig(c) { return 'n5|'+sig(c)+'|'+norm(c.vpicModel)+'|'+photoConfig(c); }
   function wikiSig(c){return 'w5|'+sig(c)+'|'+photoConfig(c)+'|'+!!c.photoAnyYear;}
@@ -114,10 +122,10 @@
    */
   function which(c, hasKey) {
     if (!c || c.picMode === 'doodle') return null;
-    var p = c.pic || {}, f = hasKey && p.fuel && !p.fuel.fail && p.fuel.colors && p.fuel.colors.length ? p.fuel : null;
+    var p = c.pic || {}, f = hasKey && p.fuel && !p.fuel.fail && (!p.fuel.imageFail||Date.now()-p.fuel.imageFail>24*3600e3) && p.fuel.colors && p.fuel.colors.length ? p.fuel : null;
     if(usable(p.chosen)&&p.chosen.sig===sig(c))return 'chosen';
     if (f && pickColor(f.colors, c.paint)) return 'fuel';
-    return usable(p.nhtsa) ? 'nhtsa' : usable(p.wiki) ? 'wiki' : f && p.nhtsa && (p.nhtsa.fail || p.nhtsa.imageFail) && p.wiki && (p.wiki.fail || p.wiki.imageFail) ? 'fuel' : null;
+    return usable(p.nhtsa) ? 'nhtsa' : preferFuel(c)&&f?'fuel':usable(p.wiki) ? 'wiki' : f && p.nhtsa && (p.nhtsa.fail || p.nhtsa.imageFail) && p.wiki && (p.wiki.fail || p.wiki.imageFail) ? 'fuel' : null;
   }
   /** The body to draw: from the VIN's body class, the EPA's size class, NHTSA's listing, then the Garage's type. */
   function bodyOf(c) {
@@ -134,7 +142,7 @@
   }
   function fuelModel(c){return photoModel(Object.assign({},c,{vpicModel:''}));}
   function catalogYears(list,year){return Array.from(new Set((Array.isArray(list)?list:[]).map(function(v){return +(v&&typeof v==='object'?(v.year||v.modelYear||v.name||v.id):v);}).filter(function(y){return Number.isInteger(y)&&y>=1998&&y<+year;}))).sort(function(a,b){return b-a;});}
-  var CarPicMath = { fuelModel:fuelModel,catalogYears:catalogYears,fuelViews:fuelViews,selectedView:selectedView,closestModel:closestModel, bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
+  var CarPicMath = { fuelMatch:fuelMatch,fuelModel:fuelModel,catalogYears:catalogYears,fuelViews:fuelViews,selectedView:selectedView,closestModel:closestModel, bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
   root.CarPicMath = CarPicMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = CarPicMath;
   if (!root.document) return;
@@ -161,7 +169,7 @@
   async function fuelImage(c){
     var years=[+c.year],old=null;
     for(var i=0;i<years.length;i++){
-      var year=years[i],list=await fuelList(c,year),m=matchTrim(list,c.trim||String(c.model||'').slice(fuelModel(c).length).trim(),driveOf(c.model)||String(c.info&&c.info.drive||'').toUpperCase());
+      var year=years[i],list=await fuelList(c,year),m=fuelMatch(c,list);
       if(m){var candidates=[m.v].concat(list.filter(function(v){return v.id!==m.v.id;}));for(var j=0;j<candidates.length;j++){var v=await fuel('vehicle/'+encodeURIComponent(candidates[j].id)+'?productID=2&productFormatIDs='+FORMAT_ID),cols=bestColors(v);if(cols.length)return {m:{v:candidates[j],exact:j===0&&m.exact},year:year,cols:cols,views:fuelViews(v)};}}
       if(i===0){old=await catalog('modelYears/');years=years.concat(catalogYears(old,c.year));}
     }
@@ -231,7 +239,9 @@
     var b = 'ensure|' + c.id; if (busy[b]) return busy[b];
     var before = JSON.stringify(c.pic || {}) + (src(c) || '');
     busy[b] = lookNhtsa(c).then(function () { return fetchPic(c); })
-      .then(function () { var p = c.pic || {}; return !usable(p.nhtsa) ? lookWiki(c) : null; })
+      .then(function () { return hasKey()&&preferFuel(c)&&!hasOverride(c)&&!usable((c.pic||{}).nhtsa)?lookFuel(c):null; })
+      .then(function () { return fetchPic(c); })
+      .then(function () { var p = c.pic || {}; return !usable(p.nhtsa)&&which(c,hasKey())!=='fuel' ? lookWiki(c) : null; })
       .then(function () { return fetchPic(c); })
       .then(function () { var p = c.pic || {}; return hasKey() && ((c.paint && c.paint.code) || (!usable(p.nhtsa) && !usable(p.wiki))) ? lookFuel(c) : null; })
       .then(function () { return fetchPic(c); })

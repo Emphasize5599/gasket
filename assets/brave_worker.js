@@ -5,6 +5,7 @@ async function (reqId, args) {
   // Reports back through GasketSite.result(reqId, json): {gal, text, src: 'ai' | 'results'} or {blocked} or {error}.
   // args.kind 'spare' asks about the spare tire instead: {text, src} (the AI answer's words; the app reads which kind).
   // args.kind 'trims' asks for the model's trim levels the same way: {text, src} (the app reads the names: TrimMath.parse).
+  // args.kind 'dckw' asks for an EV's fastest DC charging rate: {text, src} (the app reads the kW: EvSpecs.parseDcKw).
   const send = (o) => GasketSite.result(reqId, JSON.stringify(o));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const flat = (s) => (s || '').replace(/\s+/g, ' ').trim();
@@ -39,7 +40,7 @@ async function (reqId, args) {
   // the best-ranked figure (the first of those): a "20-gallon tank, light at 4 gallons left" answer is 20, not 4
   const best = (list) => list.reduce((a, x) => (!a || x.rank > a.rank ? x : a), null);
   // the AI answer's own text, or '' (not there yet)
-  const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), words = spare || trims;   // text answers, not a number
+  const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), dckw = !!(args && args.kind === 'dckw'), words = spare || trims || dckw;   // text answers, not a number
   const loc = typeof location !== 'undefined' ? location : { pathname: '', search: '' };
   const ask = loc.pathname.indexOf('/ask') === 0;
   const q = flat(new URLSearchParams(loc.search).get('q') || ''), qHead = q.slice(0, 40);
@@ -59,7 +60,7 @@ async function (reqId, args) {
     if (spare) a = a.replace(/Start with:?\s*Full-size spare,?\s*Compact spare,?\s*Repair kit,?\s*Run-flat tires,?\s*(or\s+)?No spare\.?/gi, ' ');
     return flat(a);
   };
-  const want = spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : /gal/i;
+  const want = spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /gal/i;
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {
@@ -74,7 +75,7 @@ async function (reqId, args) {
     const end = a.search(AI_END);
     if (end >= 0) a = a.slice(0, end);
     a = unask(a);
-    return (spare ? want : trims ? want : /\d\s*(?:-|\s)?\s*gal/i).test(a) ? a : '';
+    return (words ? want : /\d\s*(?:-|\s)?\s*gal/i).test(a) ? a : '';
   };
   // no AI answer: the search results, ones about this model year first, then the value most of them give
   const fromResults = (t) => {
@@ -108,8 +109,8 @@ async function (reqId, args) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
         if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= STEADY) { send({ text: ai.slice(0, 1500), src: 'ai', ask: ask }); return; } }
         else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
-          const at = t.search(trims ? /\btrim(s| levels?)\b/i : /spare tire/i);
-          if (at >= 0) { send({ text: t.slice(at, at + 1500), src: 'results' }); return; }
+          const at = t.search(trims ? /\btrim(s| levels?)\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /spare tire/i);
+          if (at >= 0) { send({ text: t.slice(Math.max(0, at - (dckw ? 200 : 0)), at + 1500), src: 'results' }); return; }
         }
         await sleep(400); continue;
       }
@@ -125,5 +126,5 @@ async function (reqId, args) {
     }
     await sleep(400);
   }
-  send({ error: 'Brave Search didn\'t give ' + (spare ? 'an answer about the spare.' : trims ? 'a list of trims.' : 'a tank size.') + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });
+  send({ error: 'Brave Search didn\'t give ' + (spare ? 'an answer about the spare.' : trims ? 'a list of trims.' : dckw ? 'a DC charging rate.' : 'a tank size.') + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });
 }

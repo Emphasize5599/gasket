@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.263 - 2026-10-25
+- Show Tesla Model 3 / Model Y "Long Range" as "Premium" for 2026 and later (the EPA's names and IDs are kept underneath); Fuel API photos match either name and Tesla photos try Fuel API before Commons.
+- Fill in an EV's fastest DC charging rate from Brave Search's answer when it's blank, with That's right / See Brave's answer; a typed number is never replaced and a new trim asks again.
+
 ## 0.0.262 - 2026-10-24
 - Search Tesla photos by base model, including Model Y Long Range RWD → Model Y.
 - Use Fuel API's newest available image year when the requested year is missing; retain rotation and label the source year without changing the car's configuration.
