@@ -43,25 +43,34 @@ function setup(handler){const calls=[],cache=new Map(),S={evGuestApps:true,evPri
  const flaky=setup((fn,source)=>{if(fn==='evGuestConfig')return {enabled:true,chargeway:true,evgo:false,plugshare:false};if(source==='chargeway')return {status:429,error:'Too many requests'};throw Error('Unexpected '+source);});
  const wm=()=>({st:{id:'wm1',afdcId:7,lat:35,lng:-91,group:'walmart',plugs:['J1772COMBO']},dc:true});
  await flaky.G.annotate([wm()],{});await flaky.G.annotate([wm()],{});assert.equal(flaky.calls.filter(c=>c[0]==='fetchEvGuest').length,2,'a lookup that hit an error is not remembered as "no tariff"');
- // EVgo refuses station details to every guest (2026-10-25: a fresh identity asking only the site ID got "Not Authorized"):
- // remembered for a day, so later passes skip EVgo's own lookups and use PlugShare; Update prices asks again
- const guest=setup((fn,source,action)=>{
+ // EVgo's own guest path end to end (shapes from the 2026-10-23 app capture): nearby site -> site detail -> per-charger price.
+ // 2026-10-25: site detail had been refused ("Not Authorized" in a 200) only because the request named no Apollo client.
+ const evgoOk=setup((fn,source,action)=>{
+  if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:true,plugshare:false};
+  if(source==='evgo'&&action==='near')return {status:200,body:JSON.stringify({data:{getEvgoSitesForMobile:{edges:[{altId:'73782',access:'PUBLIC',networkName:'EVgo',latitude:35,longitude:-91}]}}})};
+  if(source==='evgo'&&action==='site')return {status:200,body:JSON.stringify({data:{siteForMobile:{altId:'73782',access:'PUBLIC',latitude:35,longitude:-91,timeZone:'America/Chicago',chargers:[{altId:'439141',chargerType:'DC',maxConnectorPower:350,evses:[{connectors:[{altId:'442779',connectorType:'CCS Combo',maxPower:350}]}]}]}}})};
+  if(source==='evgo'&&action==='price')return {status:200,body:JSON.stringify({data:{getChargerPricingForMobile:{chargerType:'DC',maxSessionFee:'0.990',connectorsPrice:[{altText:'Mon.-Sun.: $0.99 Session Fee',vehicleConnectorId:3,kwhFee:'0.540',minuteFee:'0.000'}],touPricing:[{name:'Super Off-Peak',order:1,price:'0.49',priceUnit:'/kWh',schedule:['12AM-7AM']},{name:'Off-Peak',order:2,price:'0.54',priceUnit:'/kWh',schedule:['7AM-12AM']}]}}})};
+  throw Error('Unexpected '+source+' '+action);});
+ const evStation=()=>({st:{id:'evgo-ok',afdcId:300,lat:35,lng:-91,group:'evgo',plugs:['J1772COMBO']},dc:true});
+ const okStation=evStation();const okRes=await evgoOk.G.annotate([okStation],{});
+ assert.equal(okRes.priced,1,'EVgo prices its own station once site detail is allowed');assert.equal(okStation.st.tariffV2.source,'evgo');
+ // A refusal pauses EVgo for that pass only (falls back to PlugShare); the next pass asks EVgo again. No day-long memory.
+ const refusing=setup((fn,source,action)=>{
   if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:true,plugshare:true};
   if(source==='evgo'&&action==='near')return {status:200,body:JSON.stringify({data:{getEvgoSitesForMobile:{edges:[{altId:'73807',access:'PUBLIC',networkName:'EVgo',latitude:35,longitude:-91}]}}})};
-  if(source==='evgo')return {status:200,blocked:true,authDenied:true,authRefreshed:true,guestNotPermitted:true,scope:'site',gqlErrors:[{message:'Not Authorized',code:'INTERNAL_SERVER_ERROR',service:'falcon',path:''}],error:'Denied'};
+  if(source==='evgo')return {status:200,blocked:true,authDenied:true,authRefreshed:true,scope:'site',gqlErrors:[{message:'Not Authorized',code:'INTERNAL_SERVER_ERROR',service:'falcon',path:''}],error:'Denied'};
   if(source==='plugshare'&&action==='near')return {body:JSON.stringify([{id:4,latitude:35,longitude:-91,stations:[{network_id:19}]}])};
   if(source==='plugshare')return {body:JSON.stringify({access:1,latitude:35,longitude:-91,stations:[{network_id:19,outlets:[{id:1,connector:13,is_dc:true,kilowatts:150,prices:[{currency:'USD',elements:[{price_components:[{type:'ENERGY',price:.3}]}]}]}]}]})};
   throw Error('Unexpected '+source);});
- const logged=[];guest.ctx.FLog={info:(t,m,d)=>logged.push([m,d]),warn:(t,m,d)=>logged.push([m,d])};
+ const logged=[];refusing.ctx.FLog={info:(t,m,d)=>logged.push([m,d]),warn:(t,m,d)=>logged.push([m,d])};
  const ev=i=>({st:{id:'evgo-g'+i,afdcId:100+i,lat:35,lng:-91,group:'evgo',plugs:['J1772COMBO']},dc:true});
- let res=await guest.G.annotate([ev(1)],{});assert.equal(res.priced,1,'PlugShare still prices the EVgo station');
- assert(res.notes.some(n=>/signed-in EVgo account/.test(n)),'the note says what EVgo needs, not a vague failure');
- assert(logged.some(([m,d])=>m==='Guest EV source request'&&d.guestNotPermitted&&d.gqlErrors[0].message==='Not Authorized'),'the refusal reason is in the log');
- assert(logged.some(([m])=>/need a signed-in EVgo account/.test(m)));
- const evgoCalls=()=>guest.calls.filter(c=>c[1]==='evgo').length,before2=evgoCalls();
- await guest.G.annotate([ev(2)],{});assert.equal(evgoCalls(),before2,'remembered: no EVgo near/site/refresh round trip on the next pass');
- await guest.G.annotate([ev(3)],{},null,true);assert(evgoCalls()>before2,'Update prices tries EVgo again');
- assert.match(native,/guest=source\.equals\("evgo"\)&&action\.equals\("site"\)/);assert.match(native,/guest\?86400000L:900000L/,'a guest refusal pauses a day, a token denial 15 minutes');
+ let res=await refusing.G.annotate([ev(1)],{});assert.equal(res.priced,1,'PlugShare still prices the EVgo station');
+ assert(logged.some(([m,d])=>m==='Guest EV source request'&&d.gqlErrors&&d.gqlErrors[0].message==='Not Authorized'),'the refusal reason is in the log');
+ const evgoCalls=()=>refusing.calls.filter(c=>c[1]==='evgo').length,before2=evgoCalls();
+ await refusing.G.annotate([ev(2)],{});assert(evgoCalls()>before2,'the next pass asks EVgo again (no stored day-long denial)');
+ assert(!/guestNotPermitted|evgo-guest-denied/.test(fs.readFileSync('assets/web/evguest.js','utf8')+native),'the day-long guest-denial path is gone');
+ assert.match(native,/"apollographql-client-name","EVgo Android Client","apollographql-client-version"/,'EVgo requests name the Apollo client');
+ assert.match(native,/extra=EVGO_CLIENT_HEADERS/);assert.match(native,/http\(source,url,body,type,bearer,hk,hv,extra\)/);assert.match(native,/token\(source,s,true\),hk,hv,extra\)/,'the refresh retry sends the same headers');
  assert.match(native,/put\("gqlErrors",gqlErrors\(out\)\)/);assert.match(native,/out\.remove\("body"\)/,'a refused body is never passed on whole');assert.match(native,/\[redacted\]/,'token-like text is removed from logged messages');
- console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh, native security gates, no-tariff answers remembered 6 h (errors never), EVgo guest refusal logged with its reason and remembered a day passed');
+ console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh, native security gates, no-tariff answers remembered 6 h (errors never), EVgo own guest path (site detail with Apollo client headers) prices end to end, a refusal is logged and retried next pass passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -25,6 +25,7 @@ final class EvAppClient {
     private static final String ALIAS = "gasket-ev-guest-v1";
     // Public Firebase project identifier, not an identity/session token. Guest identities are created per device.
     private static final String EVGO_FIREBASE_CLIENT = "AIzaSyB3lt9BT-8YCybXkXuMmL9MXV9zc3823tc";
+    private static final String[] EVGO_CLIENT_HEADERS = {"apollographql-client-name","EVgo Android Client","apollographql-client-version","26.14.0-122279"};
     EvAppClient(Context context) { prefs = context.getSharedPreferences("ev-guest-private", Context.MODE_PRIVATE); }
     private JSONObject bootstrap(JSONObject s) throws Exception {
         // Owner explicitly approved packaging shared app-client credentials (2026-10-23).
@@ -88,6 +89,9 @@ final class EvAppClient {
     private double coord(JSONObject a, String k, double limit) throws Exception { double n=a.getDouble(k); if (!Double.isFinite(n)||Math.abs(n)>limit) throw new Exception("Invalid charger coordinates"); return n; }
     private String encode(String s) throws Exception { return URLEncoder.encode(s,"UTF-8"); }
     private JSONObject http(String source, String url, String body, String type, String bearer, String headerKey, String headerValue) throws Exception {
+        return http(source,url,body,type,bearer,headerKey,headerValue,null);
+    }
+    private JSONObject http(String source, String url, String body, String type, String bearer, String headerKey, String headerValue, String[] extra) throws Exception {
         long now=System.currentTimeMillis(); if (refused.getOrDefault(source,0L)>now) return new JSONObject().put("paused",true).put("blocked",true).put("error","Source is cooling down after a refusal");
         long wait=next.getOrDefault(source,0L)-now; if(wait>0)Thread.sleep(Math.min(wait,2000)); next.put(source,System.currentTimeMillis()+1100);
         HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
@@ -96,6 +100,7 @@ final class EvAppClient {
             c.setRequestProperty("Accept","application/json"); c.setRequestProperty("User-Agent","Gasket EV guest reader");
             if(bearer!=null)c.setRequestProperty("Authorization",bearer);
             if(headerKey!=null)c.setRequestProperty(headerKey,headerValue);
+            for(int i=0;extra!=null&&i+1<extra.length;i+=2)c.setRequestProperty(extra[i],extra[i+1]);
             if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type",type);try(java.io.OutputStream out=c.getOutputStream()){out.write(body.getBytes(StandardCharsets.UTF_8));}}
             int code=c.getResponseCode(); JSONObject out=new JSONObject().put("status",code);
             if(code==403||code==418||code==429){long seconds=900;try{seconds=Math.max(60,Math.min(86400,Long.parseLong(c.getHeaderField("Retry-After"))));}catch(Exception ignored){}
@@ -150,7 +155,7 @@ final class EvAppClient {
     }
     synchronized JSONObject request(String source,String action,String args) throws Exception {
         if(!prefs.getBoolean("enabled",false))throw new Exception("Guest-app add-on is disabled");
-        JSONObject a=new JSONObject(args),s=secrets();String url,body=null,type="application/json",bearer=null,hk=null,hv=null;
+        JSONObject a=new JSONObject(args),s=secrets();String url,body=null,type="application/json",bearer=null,hk=null,hv=null;String[] extra=null;
         if(source.equals("ea")) {
             url="https://msp.electrifyamerica.com/public/locations";
             if(action.equals("near")){double lat=coord(a,"lat",89.99),lng=coord(a,"lng",179.99);url+="?swLong="+(lng-.004)+"&swLat="+(lat-.004)+"&neLong="+(lng+.004)+"&neLat="+(lat+.004)+"&lat="+lat+"&long="+lng+"&comingSoon=false&unit=IMPERIAL";}
@@ -191,21 +196,20 @@ final class EvAppClient {
                 vars.put("chargerId",id(a));
             }else throw new Exception("Unsupported EVgo action");
             body=new JSONObject().put("query",query).put("variables",vars).toString();bearer="Bearer "+token(source,s,false);
+            // EVgo refuses siteForMobile ("Not Authorized" in a 200) unless the request names an Apollo client, the way
+            // its app does; the token is fine either way (2026-10-25: header alone fixed a fresh guest identity).
+            extra=EVGO_CLIENT_HEADERS;
         } else throw new Exception("Unsupported guest source");
-        JSONObject out=http(source,url,body,type,bearer,hk,hv);
+        JSONObject out=http(source,url,body,type,bearer,hk,hv,extra);
         if((source.equals("evgo")||source.equals("chargeway"))&&out.optInt("status")==200&&gqlErrors(out).length()>0)out.put("gqlErrors",gqlErrors(out));
         if((source.equals("evgo")||source.equals("chargeway"))&&authenticationFailure(out)) {
             try {
-                out=http(source,url,body,type,"Bearer "+token(source,s,true),hk,hv);
+                out=http(source,url,body,type,"Bearer "+token(source,s,true),hk,hv,extra);
                 out.put("authRefreshed",true);
                 if(authenticationFailure(out)) {
-                    // EVgo answers its station-detail query with "Not Authorized" for every guest identity, even a fresh
-                    // one asking only for the site's ID (checked 2026-10-25), while its nearby-sites query works: that's a
-                    // guest permission, not an expired token, so the refresh can't help. Pause a day, not 15 minutes.
-                    boolean guest=source.equals("evgo")&&action.equals("site");
-                    refused.put(source,System.currentTimeMillis()+(guest?86400000L:900000L));
-                    out.put("authDenied",true).put("blocked",true).put("scope",action).put("gqlErrors",gqlErrors(out)).put("guestNotPermitted",guest)
-                        .put("error",guest?"EVgo doesn't let guest accounts read station details; source paused for a day":"Guest access denied after one token refresh; source paused");
+                    refused.put(source,System.currentTimeMillis()+900000L);
+                    out.put("authDenied",true).put("blocked",true).put("scope",action).put("gqlErrors",gqlErrors(out))
+                        .put("error","Guest access denied after one token refresh; source paused");
                     out.remove("body");
                 }
             }catch(Exception e) {

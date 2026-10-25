@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.267 - 2026-10-25
+- EVgo prices come from EVgo again: its station-detail lookup was refused only because Gasket's request didn't identify itself the way EVgo's app does. Gasket now sends the same app identification, so EVgo stations get EVgo's own per-charger prices. The one-day "EVgo needs a signed-in account" skip from 0.0.266 is removed; Chargeway / PlugShare remain the fallback.
+
 ## 0.0.266 - 2026-10-25
 - EVgo diagnosis: EVgo doesn't let guest accounts read station details (the token refresh can't fix that), so the app now says so, logs EVgo's refusal reason, and goes straight to Chargeway / PlugShare for EVgo prices for a day instead of retrying every plan.
 
