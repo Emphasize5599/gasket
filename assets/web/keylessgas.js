@@ -434,10 +434,15 @@
   async function discover(areas,onProgress,grade,force){
     grade=grade||'regular';return refreshRemembered(await discover0(areas,onProgress,grade,force),onProgress,grade,force);
   }
+  // Price-only refresh of remembered cells. priceRefresh(false) skips it (a comparison batch planning with saved prices);
+  // skipRefresh() stops a running one without cancelling the search it belongs to.
+  var pricesOn=true,remembering=false,skipped=false;
+  function priceRefresh(on){pricesOn=on!==false;skipped=false;}
+  function skipRefresh(){if(!remembering)return false;skipped=true;cancel();return true;}
   async function refreshRemembered(r,onProgress,grade,force){var A=root.__app;
-    if(root.StationStore&&!force&&r.reusedAreas&&!r.blocked&&!r.cancelled){
+    if(root.StationStore&&!force&&pricesOn&&!skipped&&r.reusedAreas&&!r.blocked&&!r.cancelled){
       var expired=r.stations.filter(function(s){return needsPriceRefresh(s,grade,A.S.staleHours);});
-      if(expired.length){var prices=await refreshKnown(expired,onProgress,[],grade),by=new Map(prices.stations.map(function(s){return [knownKey(s),s];}));r.stations=r.stations.map(function(s){return by.get(knownKey(s))||s;});r.errors=Array.from(new Set(r.errors.concat(prices.errors)));r.cancelled=prices.cancelled;r.blocked=prices.blocked;r.blockedSite=prices.blockedSite;r.websiteLoads+=prices.websiteLoads;r.priceUpdates=prices.updated;}
+      if(expired.length){remembering=true;var prices;try{prices=await refreshKnown(expired,onProgress,[],grade);}finally{remembering=false;}var by=new Map(prices.stations.map(function(s){return [knownKey(s),s];}));r.stations=r.stations.map(function(s){return by.get(knownKey(s))||s;});r.errors=Array.from(new Set(r.errors.concat(prices.errors)));r.cancelled=prices.cancelled&&!skipped;r.pricesSkipped=skipped;r.blocked=prices.blocked;r.blockedSite=prices.blockedSite;r.websiteLoads+=prices.websiteLoads;r.priceUpdates=prices.updated;}
     }return r;
   }
   async function discoverAPI(areas,onProgress,grade,force){grade=grade||'regular';return refreshRemembered(await discoverAPI0(areas,onProgress,grade,force),onProgress,grade,force);}
@@ -500,6 +505,9 @@
   }
   // Successful checks are separate from price observations: no result must not make
   // an old pump price look current, or make every vehicle repeat the same check.
+  // A refresh read checked its stations when the page loaded and answered. The reader marks every reply partial
+  // (search results are never a full catalog), so judge by its code: 'limited' = read, 'no_prices' = read, none posted.
+  function priceChecked(r){return !!r&&!r.blocked&&!r.cancelled&&(!r.error||r.code==='no_prices')&&(!r.partial||r.code==='limited'||r.code==='no_prices');}
   function priceCheckKey(s,grade){return 'price-check-v1|'+grade+'|'+knownKey(s);}
   function needsPriceRefresh(s,grade,hours){
     var A=root.__app;if(A.P.priceFresh(s.prices&&s.prices[grade],hours))return false;
@@ -567,7 +575,7 @@
           if((!r.error||r.code==='no_prices')&&!r.blocked)A.KV.put('gasweb',x.key,Object.assign({},r,{stores:(r.stores||[]).filter(nearby)}));
         }
         var added=(r.stores||[]).filter(nearby);
-        if(!r.blocked&&!r.cancelled&&!r.partial&&(!r.error||r.code==='no_prices'))x.g.stations.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:at});});
+        if(priceChecked(r))x.g.stations.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:at});});
         added.forEach(function(w){var id=w.placeId||w.featureId||w.id,old=rows.get(id);if(!old||old.observedAt<=at)rows.set(id,Object.assign({},w,{observedAt:at}));});
         // Flush successful observations after each area, not after a twenty-minute batch.
         if(root.PriceHistory&&added.length){
@@ -605,5 +613,5 @@
     var A=root.__app,groups=knownAreas(known,A.P),o=A.KV.get('gasmeta','timing|'+(grade||'regular')),ms=o&&o.v.averageAreaMs||10000;
     var readers=readerCount(A);return {areas:groups.length,seconds:Math.ceil(groups.length*ms/readers/1000),measured:!!o,readers:readers};
   }
-  root.KeylessGas=Object.assign(math,{search:search,discover:discover,discoverAPI:discoverAPI,refreshKnown:refreshKnown,needsPriceRefresh:needsPriceRefresh,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
+  root.KeylessGas=Object.assign(math,{search:search,discover:discover,discoverAPI:discoverAPI,refreshKnown:refreshKnown,needsPriceRefresh:needsPriceRefresh,priceChecked:priceChecked,priceRefresh:priceRefresh,skipRefresh:skipRefresh,cancel:cancel,estimate:estimate,isBusy:function(){return !!busy;},onVerified:verified,isPaused:function(){return !!(busy&&busy.pause);}});
 })(typeof window!=='undefined'?window:globalThis);

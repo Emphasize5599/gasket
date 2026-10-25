@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.268 - 2026-10-25
+- Comparisons have an "Update prices first" switch. Turn it off and every queued vehicle plans with the stations and prices already saved with the trip, with no price websites read.
+- Tapping ✕ while a comparison is updating prices now skips the rest of the update and still finishes that vehicle's trip (and the rest of the batch) with the saved prices. Before, it stopped the trip with "Station discovery did not finish".
+- Gas price checks are remembered between runs on the phone again: a refresh no longer re-reads every older price minutes after the last one checked them.
+- Bug fixes.
+
 ## 0.0.267 - 2026-10-25
 - EVgo prices come from EVgo again: its station-detail lookup was refused only because Gasket's request didn't identify itself the way EVgo's app does. Gasket now sends the same app identification, so EVgo stations get EVgo's own per-charger prices. The one-day "EVgo needs a signed-in account" skip from 0.0.266 is removed; Chargeway / PlugShare remain the fallback.
 
