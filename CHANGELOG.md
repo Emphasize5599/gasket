@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.270 - 2026-10-25
+- Searched areas are always reused: every later trip, car and fuel grade uses the stations found in an area searched before (no more re-searching after a week, or for a car on another grade). Only areas never searched are read; Rediscover still searches everything again.
+- Stations found just across an area's edge come back when the area is reused, instead of dropping out of later trips.
+- Reusing hundreds of searched areas takes seconds instead of over a minute.
+- Bug fixes.
+
 ## 0.0.269 - 2026-10-25
 - Same as 0.0.268 (whose APK build stopped on a test timing problem; no app change).
 

@@ -349,13 +349,18 @@
   function searched(r){var d=r&&r.detail;if(!d||r.blocked||r.error||r.cancelled||d.paginationStalled||r.code==='unreadable'||r.code==='pagination_stalled')return null;
     if(d.exhausted&&d.stopReason!=='quiet')return 'end';
     return d.stopReason==='quiet'&&(d.scrolls||0)>=1&&r.code!=='no_feed'?'quiet':null;}
-  function rememberedArea(a,grade){if(!root.StationStore||!a.cellId||!(root.StationStore.covered(a,'gasweb',grade)||root.StationStore.covered(a,'places','all')))return null;return {durable:true,v:{stores:root.StationStore.rows(a,'gas'),detail:{exhausted:true,stopReason:'remembered_cell'}}};}
+  // A searched cell's read covered its whole 8-mile circle, and each station was stored in its own grid cell, so the
+  // replay gathers every cell under that circle (a station just over the line, in a cell off the route, is still found).
+  function rememberedArea(a,grade){var Store=root.StationStore;if(!Store||!a.cellId||!(Store.covered(a,'gasweb',grade)||Store.covered(a,'places','all')))return null;
+    var r=(a.radius||8)+1,dy=r/69,dx=r/(69.17*Math.max(.08,Math.cos(a.lat*Math.PI/180))),stores=[];
+    Store.cells([Math.max(-85,a.lat-dy),Math.max(-180,a.lng-dx),Math.min(85,a.lat+dy),Math.min(180,a.lng+dx)]).forEach(function(c){stores=stores.concat(Store.rows(c,'gas'));});
+    return {durable:true,v:{stores:stores,detail:{exhausted:true,stopReason:'remembered_cell'}}};}
   async function discover0(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
     grade=grade||'regular';var A=root.__app,P=A.P;if(!P.GRADES[grade])throw new Error('Unsupported fuel grade');
     var lanes=readerKeys(Math.min(readerCount(A),areas.maxLanes||50,Math.max(1,areas.length))),control={cancelled:false,wake:[],lanes:lanes};busy=control;scanChanged();
     var next=0,done=0,rows=[],errors=[],details=[],loads=0,blocked=false,started=Date.now(),timer,sourcesDone=false,chainLabel='Checking Walmart website prices';
-    var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog;
+    var recs=[],officialMs=null,mem0=memNow(A),LG=root.FLog,stored=[],storedSince=0;
     var remembered=new Map();if(!force)areas.forEach(function(a){var c=rememberedArea(a,grade);if(c)remembered.set(a.cellId,c);});
     var cachedAreas=force?0:areas.filter(function(a){var c=remembered.get(a.cellId)||A.KV.get('gasweb','discover-v1|'+grade+'|'+a.lat.toFixed(5)+'|'+a.lng.toFixed(5)+'|'+a.radius,15*60000);return c&&!(c.v&&c.v.detail&&c.v.detail.stopReason==='quiet');}).length;
     var newAreas=areas.filter(function(a){return !remembered.has(a.cellId);});
@@ -363,7 +368,7 @@
     if(LG)LG.info('keyless','Discovery started',{areas:areas.length,plan:areas.plan||null,lanes:lanes.length,aggressive:!!A.S.keylessAggressive,grade:grade,force:!!force,mem:mem0});
     var audit=scanAudit(A,'discovery',lanes,areas.length,control),outcome='failed';
     function progressLog(){if(!LG||done%50)return;var recent=recs.slice(-50).filter(function(r){return !r.cache;}),el=Date.now()-started;
-      LG.info('keyless','Discovery progress',{done:done,of:areas.length,elapsedS:Math.round(el/1000),areasPerMin:+(done/(el/60000)).toFixed(1),recentAreaMs:recent.length?Math.round(recent.reduce(function(a,r){return a+r.ms;},0)/recent.length):null,stations:rows.length,mem:memNow(A)});}
+      LG.info('keyless','Discovery progress',{done:done,of:areas.length,elapsedS:Math.round(el/1000),areasPerMin:+(done/(el/60000)).toFixed(1),recentAreaMs:recent.length?Math.round(recent.reduce(function(a,r){return a+r.ms;},0)/recent.length):null,stations:rows.length+stored.length,mem:memNow(A)});}
     function report(){var seconds=done?Math.ceil((Date.now()-started)/1000/done*(areas.length-done)):null;var text=done===areas.length&&!sourcesDone?chainLabel:!done?'Preparing… · '+areas.length+' areas to search':'Discovering stations · '+done+'/'+areas.length+' areas · '+(seconds==null?'Estimating time…':seconds>=60?'~'+Math.ceil(seconds/60)+' min remaining':'~'+seconds+' sec remaining');text=pausedText(control)||text;if(onProgress)onProgress(areas.length?done/areas.length*(sourcesDone?1:0.9):sourcesDone?1:0,text);}
     try{
       control.report=report;timer=setInterval(function(){report();audit.tick();},1000);report();
@@ -403,9 +408,14 @@
             if(!cache)found.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:Date.now()});});
           }else root.StationStore.observe(found,'gas');
         }
-        if(root.PriceHistory){var persistAt=Date.now();root.PriceHistory.observe(found);audit.persist(Date.now()-persistAt);}
-        var before=rows.length;rows=dedupeDiscovery(rows.concat(found),P);details.push(r.detail||{});
-        recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cache:!!cache,d:r.detail||null,found:found.length,added:rows.length-before,err:r.error||null});
+        // A remembered cell's stations came from the store (already in price history): set aside and merged once at the
+        // end. Per cell, the history write and a de-duplication against every row so far cost ~0.1 s (0.0.269 log: 640
+        // remembered cells took 73 s on one lane).
+        var before=rows.length;
+        if(cache&&cache.durable){stored=stored.concat(found);if(++storedSince>=25){storedSince=0;await new Promise(function(r){setTimeout(r,0);});}}
+        else{if(root.PriceHistory){var persistAt=Date.now();root.PriceHistory.observe(found);audit.persist(Date.now()-persistAt);}rows=dedupeDiscovery(rows.concat(found),P);}
+        details.push(r.detail||{});
+        recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cache:!!cache,d:r.detail||null,found:found.length,added:cache&&cache.durable?found.length:rows.length-before,err:r.error||null});
         done++;if(et)et.progress(recs.filter(function(r){return !r.cache&&!r.retry;}).length);audit.complete(!!cache);report();progressLog();
       }}
       var webWork=(async function(){
@@ -418,6 +428,7 @@
         }
       })();
       var finished=await Promise.all([chainWork,webWork]);
+      if(stored.length)rows=dedupeDiscovery(rows.concat(stored),P);
       var webRows=rows.length;rows=P.mergeSites(mergeOfficialDiscovery(rows,finished[0],P));recordObserved(rows);
       if(LG){
         var el=Date.now()-started,sum=discoveryReport(recs.filter(function(r){return !r.retry;}),{elapsedMs:el,areas:areas.length,lanes:lanes.length,stations:webRows,priced:rows.filter(function(s){return s.prices&&s.prices[grade];}).length,officialMs:officialMs,errors:Array.from(new Set(errors)).slice(0,5),mem:{start:mem0,end:memNow(A)}});

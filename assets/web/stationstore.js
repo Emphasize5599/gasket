@@ -38,11 +38,14 @@
    });return ok;
   }
   function rows(c,kind,scope){return load(c.cellId||c.id).stations.filter(function(s){return s._kind===(kind||'gas');}).map(function(s){var v=kind==='ev'&&s._priceVariants&&s._priceVariants[scope],copy=JSON.parse(JSON.stringify(Object.assign({},s,v||{})));delete copy._kind;delete copy._priceVariants;return copy;});}
-  // A list read to its end is complete for good. A list that sat quiet at its bottom (Google Maps' usual finish on a phone:
-  // no end marker, nothing new after scrolling) is a finished search but not proof of exhaustion: reused for QUIET_MS,
-  // then searched again. Without it no cell was ever recorded (0.0.264 log: 329 of 329 areas quiet, every car rescanned).
-  var QUIET_MS=7*24*3600e3;
-  function covered(c,source,profile){var r=load(c.cellId||c.id),v=r.coverage[source+'|'+(profile||'all')];return !!(v&&v.complete&&v.version===VERSION&&(!v.quiet||Date.now()-(+v.at||0)<=QUIET_MS));}
+  // A searched cell stays searched: a list read to its end, or one that sat quiet at its bottom after scrolling (Google
+  // Maps' usual finish on a phone), is reused by every later trip, car and grade until Rediscover (force) reads it again.
+  // Owner (0.0.270): cells in storage must ALWAYS be used; only cells never searched are read. (0.0.265 expired quiet
+  // records after a week.) The station list is the same whichever grade's prices were asked for, so a website search for
+  // one grade covers the others; their prices go through the price-only refresh.
+  function good(v){return !!(v&&v.complete&&v.version===VERSION);}
+  function covered(c,source,profile){var r=load(c.cellId||c.id),k=source+'|'+(profile||'all');if(good(r.coverage[k]))return true;
+   if(source!=='gasweb')return false;return Object.keys(r.coverage).some(function(key){return key.indexOf('gasweb|')===0&&good(r.coverage[key]);});}
   function complete(c,source,profile,list,time,quiet){if(!c.cellId)return false;if(!observe(list,'gas'))return false;var old=load(c.cellId),r={schema:VERSION,stations:old.stations.slice(),coverage:Object.assign({},old.coverage)},k=source+'|'+(profile||'all'),prev=r.coverage[k];
    if(quiet&&prev&&prev.complete&&!prev.quiet&&prev.version===VERSION)return true;   // an end-of-list record outranks a quiet one
    r.coverage[k]=Object.assign({complete:true,version:VERSION,at:time||Date.now()},quiet?{quiet:true}:{});return write(c.cellId,r);}

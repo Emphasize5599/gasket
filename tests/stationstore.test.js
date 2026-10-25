@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),G=require('../a
 const data=new Map(),KV={get:(ns,k)=>data.get(ns+'|'+k),put:(ns,k,v)=>{data.set(ns+'|'+k,{t:Date.now(),v:JSON.parse(JSON.stringify(v))});return true;}};
 let S=G.create(KV,P);const a=G.cell({lat:35,lng:-92}),b=G.cell({lat:35,lng:-91}),station={id:'local',brand:'exxon',lat:a.lat,lng:a.lng,prices:{regular:{price:3.2,observedAt:Date.now()}},detourExact:true,detourMi:2,detourRange:[1,5]};
 S.observe([station],'gas');assert(!S.covered(a,'gasweb','regular'),'known stations never imply complete coverage');assert(S.complete(a,'gasweb','regular',[station]));
-S=G.create(KV,P);assert(S.covered(a,'gasweb','regular'),'completed area survives a cold load');assert(!S.covered(b,'gasweb','regular'));assert(!S.covered(a,'gasweb','diesel'),'grade-specific reader coverage is not invented');
+S=G.create(KV,P);assert(S.covered(a,'gasweb','regular'),'completed area survives a cold load');assert(!S.covered(b,'gasweb','regular'));assert(S.covered(a,'gasweb','diesel'),'a website search covers every grade (0.0.270): the station list is the same');assert(!S.covered(a,'places','all'),'website coverage is not recorded as API coverage');
 let result=S.query([-85,-180,85,180],'gas');assert.equal(result.length,1,'sparse world query does not enumerate the world');assert(!result[0].detourExact);assert.equal(result[0].detourRange,undefined);
 result[0].prices.regular.price=9;assert.equal(S.rows(a,'gas')[0].prices.regular.price,3.2,'returned rows cannot mutate stored observations');
 S.observe([{...station,prices:{premium:{price:4.2,observedAt:Date.now()}}}],'gas');assert.equal(S.rows(a,'gas')[0].prices.regular.price,3.2);assert.equal(S.rows(a,'gas')[0].prices.premium.price,4.2);
