@@ -38,8 +38,14 @@
    });return ok;
   }
   function rows(c,kind,scope){return load(c.cellId||c.id).stations.filter(function(s){return s._kind===(kind||'gas');}).map(function(s){var v=kind==='ev'&&s._priceVariants&&s._priceVariants[scope],copy=JSON.parse(JSON.stringify(Object.assign({},s,v||{})));delete copy._kind;delete copy._priceVariants;return copy;});}
-  function covered(c,source,profile){var r=load(c.cellId||c.id),v=r.coverage[source+'|'+(profile||'all')];return !!(v&&v.complete&&v.version===VERSION);}
-  function complete(c,source,profile,list,time){if(!c.cellId)return false;if(!observe(list,'gas'))return false;var old=load(c.cellId),r={schema:VERSION,stations:old.stations.slice(),coverage:Object.assign({},old.coverage)};r.coverage[source+'|'+(profile||'all')]={complete:true,version:VERSION,at:time||Date.now()};return write(c.cellId,r);}
+  // A list read to its end is complete for good. A list that sat quiet at its bottom (Google Maps' usual finish on a phone:
+  // no end marker, nothing new after scrolling) is a finished search but not proof of exhaustion: reused for QUIET_MS,
+  // then searched again. Without it no cell was ever recorded (0.0.264 log: 329 of 329 areas quiet, every car rescanned).
+  var QUIET_MS=7*24*3600e3;
+  function covered(c,source,profile){var r=load(c.cellId||c.id),v=r.coverage[source+'|'+(profile||'all')];return !!(v&&v.complete&&v.version===VERSION&&(!v.quiet||Date.now()-(+v.at||0)<=QUIET_MS));}
+  function complete(c,source,profile,list,time,quiet){if(!c.cellId)return false;if(!observe(list,'gas'))return false;var old=load(c.cellId),r={schema:VERSION,stations:old.stations.slice(),coverage:Object.assign({},old.coverage)},k=source+'|'+(profile||'all'),prev=r.coverage[k];
+   if(quiet&&prev&&prev.complete&&!prev.quiet&&prev.version===VERSION)return true;   // an end-of-list record outranks a quiet one
+   r.coverage[k]=Object.assign({complete:true,version:VERSION,at:time||Date.now()},quiet?{quiet:true}:{});return write(c.cellId,r);}
   function query(b,kind,scope){var out=[];indexRows().forEach(function(y){var row=band(y);if(row.north<b[0]||row.south>b[2])return;columns(y).forEach(function(x){var c=cell(y,x);if(c.bounds[3]<b[1]||c.bounds[1]>b[3])return;rows(c,kind,scope).forEach(function(s){if(s.lat>=b[0]&&s.lat<=b[2]&&s.lng>=b[1]&&s.lng<=b[3])out.push(s);});});});return kind&&kind!=='gas'?out:P.mergeSites(P.reconcileStations(out));}
   function routeRows(models,T,pad,kind,scope){var out=[];routeCells(models,T,P,pad).forEach(function(c){out=out.concat(rows(c,kind,scope));});return kind&&kind!=='gas'?out:P.mergeSites(P.reconcileStations(out));}
   function routeCoverage(scope){var o=KV.get(NS,'routes|'+scope);return o&&Array.isArray(o.v)?o.v:[];}

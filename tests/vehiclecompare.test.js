@@ -18,4 +18,15 @@ assert.equal(V.profile({id:'a',autoTripPriority:'cost'}),V.profile({id:'a',autoT
 assert.equal(V.profile({tires:{airedAt:1,aired:1,type:'Touring'}}),V.profile({tires:{airedAt:2,aired:2,type:'Touring'}}),'maintenance acknowledgment timestamps do not alter the vehicle configuration');
 const ev=session();ev.kind='ev';ev.trip={returnTrip:true,backAuto:false,backAt:new Date(3*3600000).toISOString()};ev.result.opts.rewardDepartAt=1;ev.result.plan.destinationCharges=[{d:100,index:0,arriveGal:20,buyGal:5,cost:2,minutes:60}];ev.result.plan.arriveGal=15;
 assert.equal(V.metrics(ev).overlap,60,'scheduled dwell absorbs destination charging, not road charging');assert.equal(V.metrics(ev).minutes,200);
-console.log('Vehicle comparison: fair consumed-energy costs, missing/free rates, leg reconciliation, times, adapters, consent and profiles passed');
+// the saved list a queued car reuses: 0.0.264's log had an EV save the trip last, and both gas cars rescanned
+const gasA={kind:'gas',google:[{k:0,list:[{id:'a'}]}]},gasB={kind:'gas',google:[{k:0,list:[{id:'b'}]}]},evList={kind:'ev',google:[]};
+const rec={stations:evList,savedT:300,comparison:[{id:'tesla',replay:{t:300,stations:evList}},{id:'prius',replay:{t:100,stations:gasA}},{id:'sienna',replay:{t:200,stations:gasB}}]};
+assert.equal(V.sharedReplay(rec,'prius','gas').stations,gasA,'equal gas lists: the car\'s own, not the EV that saved last');
+assert.equal(V.sharedReplay(rec,'venza','gas').stations,gasB,'a gas car with none takes the newest other gas list');
+const full={kind:'gas',google:[{k:0,list:[{id:'a'},{id:'b'},{id:'c'}]}]},cut={kind:'gas',google:[{k:0,list:[{id:'a'}]}]};
+assert.equal(V.sharedReplay({stations:evList,comparison:[{id:'sienna',replay:{t:900,stations:cut}},{id:'prius',replay:{t:100,stations:full}}]},'sienna','gas').stations,full,'a cancelled scan\'s short list doesn\'t hide another gas car\'s complete one');
+assert.equal(V.sharedReplay(rec,'tesla','ev').stations,evList);assert.equal(V.sharedReplay(rec,'tesla','ev').own,true);
+assert.equal(V.sharedReplay({stations:gasA,comparison:[{id:'prius',replay:{stations:gasA}}]},'model3','ev'),null,'an EV never borrows a gas list');
+assert.equal(V.sharedReplay({stations:evList,comparison:[{id:'tesla',replay:{stations:evList}}]},'ioniq','ev').stations,evList,'top-level same-fuel list as before');
+assert.equal(V.sharedReplay({stations:gasA},'x','gas').stations,gasA);assert.equal(V.sharedReplay(null,'x','gas'),null);
+console.log('Vehicle comparison: shared saved-list choice per car and fuel; fair consumed-energy costs, missing/free rates, leg reconciliation, times, adapters, consent and profiles passed');

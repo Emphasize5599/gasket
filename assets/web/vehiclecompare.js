@@ -42,6 +42,19 @@
   }
   function sorted(rows,sort){var field=sort==='time'?'minutes':'cost';return rows.slice().sort(function(a,b){var av=a.metrics[field],bv=b.metrics[field],ak=a.metrics.ready&&Number.isFinite(av),bk=b.metrics.ready&&Number.isFinite(bv);return (bk?1:0)-(ak?1:0)||(ak&&bk?av-bv:0)||a.order-b.order;});}
   function portable(s,car){var t=clone(s.trip);delete t.routeChoices;return {id:s.id,trip:t,speed:clone(s.speed),route:clone(s.route),alts:clone(s.alts),altSel:s.altSel,altSure:s.altSure,replay:clone(s.replay),profile:s.profile,kind:s.kind,needsReview:true};}
-  var api={clone:clone,key:key,profile:profile,journey:journey,metrics:metrics,sorted:sorted,portable:portable};
+  /** The saved stations a queued car can reuse from its trip's record {stations, savedT, comparison: [{id, replay}]}, or
+   *  null. The top level is whichever car saved last (an EV after a gas car, or the reverse); each car's own list
+   *  survives in the comparison snapshots. EV: this car's own, else the top level if it's EV (prices and connectors are
+   *  the car's). Gas (raw stations, no car-specific prices): the fullest gas list, so a cancelled scan's short list
+   *  doesn't hide another car's complete one; ties go to this car's own, then the newest. -> {t, stations, own} */
+  function sharedReplay(record,carId,kind){
+    if(!record)return null;var fuel=function(st){return st&&(st.kind||'gas')===kind;},snaps=Array.isArray(record.comparison)?record.comparison:[];
+    var opts=snaps.filter(function(d){return d&&d.replay&&fuel(d.replay.stations);}).map(function(d){return {t:d.replay.t||record.savedT,stations:d.replay.stations,own:d.id===carId};});
+    if(fuel(record.stations))opts.push({t:record.savedT,stations:record.stations,own:false,top:true});
+    if(kind!=='gas')return opts.filter(function(o){return o.own;})[0]||opts.filter(function(o){return o.top;})[0]||null;
+    var size=function(st){return (st.official||[]).length+(st.google||[]).reduce(function(n,g){return n+((g.list||g.refs||[]).length);},0);};
+    return opts.sort(function(a,b){return size(b.stations)-size(a.stations)||(b.own?1:0)-(a.own?1:0)||(+b.t||0)-(+a.t||0);})[0]||null;
+  }
+  var api={clone:clone,key:key,profile:profile,journey:journey,metrics:metrics,sorted:sorted,portable:portable,sharedReplay:sharedReplay};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.VehicleCompare=api;
 })(typeof window!=='undefined'?window:globalThis);

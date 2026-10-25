@@ -33,5 +33,15 @@ function setup(handler){const calls=[],cache=new Map(),S={evGuestApps:true,evPri
  assert.match(native,/if\(out\.optInt\("status"\)!=200\)return false/);
  assert.match(native,/if\(authenticationFailure\(out\)\)\s*\{\s*refused\.put/,'a second auth failure pauses instead of refreshing again');
  assert.equal((native.match(/token\(source,s,true\)/g)||[]).length,1,'exactly one refresh call site');
- console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh and native security gates passed');
+ // an answered "no matching published tariff" is remembered (0.0.264 log: 214 ChargePoint lookups again 54 min later); an error isn't
+ const empty=setup((fn,source)=>{if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:false,plugshare:false};if(source==='chargepoint')return {status:200,body:JSON.stringify({stations:[{deviceId:'999',latitude:35,longitude:-91}]})};throw Error('Unexpected '+source);});
+ empty.ctx.EVPrices={chargePointIds:()=>['123']};const cpItem=()=>({st:{id:'cp1',lat:35,lng:-91,group:'chargepoint',plugs:['J1772COMBO']},dc:true});
+ const asks=()=>empty.calls.filter(c=>c[0]==='fetchEvGuest').length;
+ await empty.G.annotate([cpItem()],{});assert.equal(asks(),1);await empty.G.annotate([cpItem()],{});assert.equal(asks(),1,'no-tariff answer reused, not asked again');
+ const rec=[...empty.cache.entries()].find(e=>/chargepoint/.test(e[0]));rec[1].v.checked=Date.now()-7*3600e3;await empty.G.annotate([cpItem()],{});assert.equal(asks(),2,'a no-tariff answer is asked again after 6 h');
+ await empty.G.annotate([cpItem()],{},null,true);assert.equal(asks(),3,'Update prices asks again');
+ const flaky=setup((fn,source)=>{if(fn==='evGuestConfig')return {enabled:true,chargeway:true,evgo:false,plugshare:false};if(source==='chargeway')return {status:429,error:'Too many requests'};throw Error('Unexpected '+source);});
+ const wm=()=>({st:{id:'wm1',afdcId:7,lat:35,lng:-91,group:'walmart',plugs:['J1772COMBO']},dc:true});
+ await flaky.G.annotate([wm()],{});await flaky.G.annotate([wm()],{});assert.equal(flaky.calls.filter(c=>c[0]==='fetchEvGuest').length,2,'a lookup that hit an error is not remembered as "no tariff"');
+ console.log('EV guest sources: cache, consent, identity joins, denied-source pause/fallback, bounded refresh, native security gates, no-tariff answers remembered 6 h (errors never) passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

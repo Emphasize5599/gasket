@@ -1,21 +1,26 @@
 /* Optional guest-app enrichment. Cache normalized offers only, never raw traffic/identities. */
-(function(root){'use strict';var A=root.__app,S=A.S,T=root.EVTariffs,stopped=false,pending=new Map(),session=0,paused=new Set(),sourceErrors=new Set(),forcePrices=false;
+(function(root){'use strict';var A=root.__app,S=A.S,T=root.EVTariffs,failures=0,stopped=false,pending=new Map(),session=0,paused=new Set(),sourceErrors=new Set(),forcePrices=false;
  var providers={ea:47,evgo:19,walmart:2457,mercedes:89,bp:1672,shell:26,rivian:1047},capabilities=null;
  function call(){return root.__trip.call.apply(null,arguments);}
  async function configure(a){var r=await call('evGuestConfig',JSON.stringify(a||{}));if(!r||r.error)throw new Error('EV source settings could not be saved');capabilities=r;return r;}
  async function request(source,action,args){if(stopped||!S.evGuestApps)throw new Error('Guest lookup cancelled');if(paused.has(source)){var stoppedError=new Error(source+': access restricted; this source is paused');stoppedError.blocked=true;throw stoppedError;}var started=Date.now(),r=await call('fetchEvGuest',source,action,JSON.stringify(args));
   if(root.FLog)root.FLog.info('stations','Guest EV source request',{source:source,phase:action,status:r&&r.status||null,ms:Date.now()-started,blocked:!!(r&&r.blocked),authRefreshed:!!(r&&r.authRefreshed),authDenied:!!(r&&r.authDenied),authRefreshFailed:!!(r&&r.authRefreshFailed),paused:!!(r&&r.paused)});
-  if(!r||r.error||r.blocked){var e=new Error(source+': '+(r&&r.authDenied?'guest access denied after token refresh; source paused (not a bot check)':r&&r.authRefreshFailed?'token refresh failed; source paused':r&&r.blocked?'access restricted; this source is paused':r&&r.status===401?'authentication expired':'guest data unavailable'));e.blocked=r&&r.blocked;if(e.blocked)paused.add(source);sourceErrors.add(e.message);throw e;}
-  var j;try{j=JSON.parse(r.body);}catch(e){throw new Error(source+': unreadable station data');}if(j.errors&&j.errors.length){
+  if(!r||r.error||r.blocked){failures++;var e=new Error(source+': '+(r&&r.authDenied?'guest access denied after token refresh; source paused (not a bot check)':r&&r.authRefreshFailed?'token refresh failed; source paused':r&&r.blocked?'access restricted; this source is paused':r&&r.status===401?'authentication expired':'guest data unavailable'));e.blocked=r&&r.blocked;if(e.blocked)paused.add(source);sourceErrors.add(e.message);throw e;}
+  var j;try{j=JSON.parse(r.body);}catch(e){failures++;throw new Error(source+': unreadable station data');}if(j.errors&&j.errors.length){
    var denied=j.errors.some(function(x){return /not authorized|unauthenticated|forbidden|access denied/i.test(String(x.message||'')+' '+String(x.extensions&&x.extensions.code||''));});
-   var error=new Error(source+(denied?': guest access denied; source paused (not a bot check)':': unsuccessful API response'));
+   failures++;var error=new Error(source+(denied?': guest access denied; source paused (not a bot check)':': unsuccessful API response'));
    if(denied){paused.add(source);error.blocked=true;}sourceErrors.add(error.message);if(root.FLog)root.FLog.warn('stations','Guest EV API response rejected',{source:source,phase:action,denied:denied});throw error;
   }return j;
  }
  function distance(a,b){return Math.hypot((+a.lat-+b.lat)*111320,(+a.lng-+b.lng)*111320*Math.cos(+a.lat*Math.PI/180));}
  function unique(st,list,coords){var matches=(list||[]).filter(function(s){return distance(st,coords(s))<=100;});return matches.length===1?matches[0]:null;}
- async function cached(key,work){var age=Math.min(24,Math.max(1,+S.evPriceAgeHours||24))*3600e3,old=!forcePrices&&A.KV.get('evguest',key,age);if(old)return old.v;
-  if(pending.has(key))return pending.get(key);var run=session,p=(async function(){var v=await work();if(stopped||run!==session)return null;if(v&&v.offers.length)A.KV.put('evguest',key,v);return v;})();pending.set(key,p);try{return await p;}finally{if(pending.get(key)===p)pending.delete(key);}}
+ // A source that answered (200) with no matching published tariff is remembered too, for EMPTY_MS (within the EV price
+ // age): every pass otherwise re-asked the same unpriced chargers (0.0.264 log: 214 ChargePoint lookups again 54 min
+ // later). Only when every request in the lookup answered: an error or refusal (even one aggregate() carried on past)
+ // is never cached. Explicit Update prices (force) asks again.
+ var EMPTY_MS=6*3600e3;
+ async function cached(key,work){var age=Math.min(24,Math.max(1,+S.evPriceAgeHours||24))*3600e3,old=!forcePrices&&A.KV.get('evguest',key,age);if(old&&(old.v&&old.v.offers&&old.v.offers.length||Date.now()-(+old.v.checked||0)<=Math.min(age,EMPTY_MS)))return old.v;
+  if(pending.has(key))return pending.get(key);var run=session,p=(async function(){var before=failures,v=await work();if(stopped||run!==session)return null;if(v&&v.offers.length)A.KV.put('evguest',key,v);else if(v&&failures===before)A.KV.put('evguest',key,Object.assign({},v,{offers:[],checked:Date.now()}));return v;})();pending.set(key,p);try{return await p;}finally{if(pending.get(key)===p)pending.delete(key);}}
  function record(offers,source){var times=offers.map(function(o){return Date.parse(o.updated);}).filter(function(t){return Number.isFinite(t)&&t>0&&t<=Date.now();});return {offers:offers,source:source,t:times.length?Math.min.apply(null,times):Date.now()};}
  async function direct(x,group){var st=x.st,args={lat:st.lat,lng:st.lng},offers=[];
   if(group==='ea'){

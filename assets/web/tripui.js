@@ -3482,7 +3482,9 @@
     var models = [model];
     others.forEach(function (k) { try { models.push(T.buildRoute(alts[k], carModel())); } catch (e) { models.push(null); } });
     var okModels = models.filter(Boolean), okKs = [altSel].concat(others).filter(function (k, i) { return models[i]; });
-    if(queueWorking&&!force&&!replay&&route&&route.histId){var shared=A.KV.get('trips','trip|'+route.histId);if(shared&&shared.v&&shared.v.stations&&(shared.v.stations.kind||'gas')===KIND())replay={id:route.histId,t:shared.v.savedT||shared.t,stations:shared.v.stations,alts:shared.v.alts,partial:true};}
+    if(queueWorking&&!force&&!replay&&route&&route.histId){var shared=A.KV.get('trips','trip|'+route.histId),sv=shared&&shared.v,pick=VehicleCompare.sharedReplay(sv,S.carId,KIND());
+      // 0.0.264 log: an EV saved the trip last, so both gas cars found no gas list at the top level and rescanned the route
+      if(pick){replay={id:route.histId,t:pick.t||shared.t,stations:pick.stations,alts:sv.alts,partial:true};if(pick.stations!==sv.stations)LG.info('stations','Reusing a comparison car\'s saved stations',{kind:KIND(),own:pick.own,ageSec:Math.round((Date.now()-(+replay.t||0))/1000)});}}
     // Saved-trip refresh is price-only, including the old refresh action after Places runs out.
     var webSummary=null;
     if(webRefresh){

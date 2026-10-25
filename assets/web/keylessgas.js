@@ -233,7 +233,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={netStep:netStep,retryable:function(r){return retryable(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={netStep:netStep,retryable:function(r){return retryable(r);},searched:function(r){return searched(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -343,6 +343,12 @@
     official.forEach(function(w){if(!updated.some(function(s){return w.wmStoreId&&s.wmStoreId===w.wmStoreId||w.murphyStore&&s.murphyStore===w.murphyStore||s.id===w.id;}))updated.push(w);});
     return dedupeDiscovery(updated,P);
   }
+  // What a discovery page proves about its cell: 'end' (the list's end marker, or an exhausted reply), 'quiet' (sat at its
+  // bottom with nothing new after scrolling, the usual finish on a phone), or null (blocked, failed, stalled, unreadable,
+  // pagination stuck, cancelled). Every discovery reply says partial: results, not a catalog, so that flag isn't the test.
+  function searched(r){var d=r&&r.detail;if(!d||r.blocked||r.error||r.cancelled||d.paginationStalled||r.code==='unreadable'||r.code==='pagination_stalled')return null;
+    if(d.exhausted&&d.stopReason!=='quiet')return 'end';
+    return d.stopReason==='quiet'&&(d.scrolls||0)>=1&&r.code!=='no_feed'?'quiet':null;}
   function rememberedArea(a,grade){if(!root.StationStore||!a.cellId||!(root.StationStore.covered(a,'gasweb',grade)||root.StationStore.covered(a,'places','all')))return null;return {durable:true,v:{stores:root.StationStore.rows(a,'gas'),detail:{exhausted:true,stopReason:'remembered_cell'}}};}
   async function discover0(areas,onProgress,grade,force){
     if(busy)throw new Error('A keyless lookup is already running');
@@ -391,8 +397,9 @@
         if(tries[idx])retried++;
         var found=dedupeDiscovery((r.stores||[]).filter(function(s){return contains(s,a,P);}),P);
         if(root.StationStore){
-          if(!r.blocked&&!r.error&&!r.partial&&r.detail&&r.detail.exhausted&&r.detail.stopReason!=='quiet'){
-            if(!cache||!cache.durable)root.StationStore.complete(a,'gasweb',grade,found,cache&&cache.t);
+          var how=searched(r);
+          if(how){
+            if(!cache||!cache.durable)root.StationStore.complete(a,'gasweb',grade,found,cache&&cache.t,how==='quiet');
             if(!cache)found.forEach(function(s){A.KV.put('gasmeta',priceCheckKey(s,grade),{checkedAt:Date.now()});});
           }else root.StationStore.observe(found,'gas');
         }

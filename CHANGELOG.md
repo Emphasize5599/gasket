@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.265 - 2026-10-25
+- Searched areas are now actually remembered and shared: a gas station search done for one car, trip or the map is reused by the next instead of scanning the whole route again (searched areas are re-checked weekly; prices still refresh as usual).
+- In a multi-car comparison, each gas car reuses the trip's saved gas stations even when an EV planned last.
+- Charger tariff lookups remember when a station has no published guest-app price, so later plans don't ask again for 6 hours.
+
 ## 0.0.264 - 2026-10-25
 - EV charging stops follow the car's charging curve: Fastest plans charge low in the battery and stop more often when that's quicker, charging higher only to cross long gaps, instead of assuming every kWh charges at one average speed.
 - Bundled charging curves for 346 EVs from Open EV Data, matched to your car; otherwise a typical curve scaled to its peak. The car editor shows the curve as a graph and lets you type your own kW at each charge level.
