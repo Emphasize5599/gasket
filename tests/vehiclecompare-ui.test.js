@@ -53,8 +53,8 @@ assert.equal(await p.evaluate(()=>__expiredRefreshes.length),0,'switch off: no p
  await p.selectOption('[data-vc-priority="corolla20"]','cost');await p.selectOption('[data-vc-priority="venza12"]','time');
  assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'cost');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time');
  assert(await p.locator('[data-vc-priority="corolla20"]').evaluate(e=>e.closest('label').previousElementSibling.classList.contains('vc-actions')),'priority follows vehicle buttons');
- await p.evaluate(()=>__trip.step(3));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows this vehicle’s priority');await p.selectOption('#tAutoTripPriority','manual');await p.evaluate(()=>__trip.step(8));
- assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'manual');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','another car’s priority is unchanged');
+ await p.evaluate(()=>__trip.step(3));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows this vehicle’s priority');await p.uncheck('#tAutoTripEnabled');await p.evaluate(()=>__trip.step(8));
+ assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'cost');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','another car’s priority is unchanged');
  assert(!await p.locator('#tCompare').evaluate(e=>e.scrollWidth>e.clientWidth),'priority dropdown stays inside narrow cards');
  assert.deepEqual(errors,[]);await p.close();
 }console.log('Comparison phone UI: isolated vehicles, cached handoff, edits/discards, saved drafts and consent review passed');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
