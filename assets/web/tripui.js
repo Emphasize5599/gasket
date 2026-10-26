@@ -67,7 +67,11 @@
   function trafficStops(plan,opts){if(!plan||!plan.ok||!opts)return [];return (plan.stops||[]).map(function(s){return {d:s.c.d,seconds:Math.max(0,T.stopDelay(opts,s)*60)};}).concat((plan.destinationCharges||[]).map(function(c){return {d:(opts.model.legEnds||[])[c.index],seconds:Math.max(0,c.minutes*60)};})).filter(function(s){return Number.isFinite(s.d)&&Number.isFinite(s.seconds)&&s.seconds>0;});}
   function trafficInvalidate(){result=null;compareReviewed=0;hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();resetChoices(choiceSavedId);if(rawRoute)model=T.buildRoute(rawRoute,carModel());A.save();renderStep();}
   function buildModel(raw,car,depart){var m=T.buildRoute(raw,car);return traffic?traffic.model(raw,m,depart==null?departAt().getTime():depart):m;}
-  async function trafficPrepare(raw,base,depart,options){if(!traffic||!traffic.enabled())return base;return traffic.prepare(raw,base,depart,options||{valid:function(){return !jobCancel;},waitAt:trafficWait(base)});}
+  async function trafficPrepare(raw,base,depart,options){
+    if(!traffic||!traffic.enabled())return base;
+    try{return await traffic.prepare(raw,base,depart,options||{valid:function(){return !jobCancel;},waitAt:trafficWait(base)});}
+    catch(e){if(/cancelled/i.test(e.message))throw e;var fallback=T.buildRoute(raw,carModel());if(base._lim)fallback._lim=base._lim;fallback.trafficUnavailable={reason:String(e.message||e),at:Date.now()};return fallback;}
+  }
   // what happened on the last trip, for the troubleshooting report
   var dbg = {};
   var etaData=A.KV.get('tripmeta','eta-v1'),eta=TripETA.create(etaData&&etaData.v,function(rates){A.KV.put('tripmeta','eta-v1',rates);});
@@ -1754,6 +1758,7 @@
         var legs = await Promise.all(r.stops.slice(0, -1).map(function (_, i) {
           return routeLeg(r, i).then(function (x) { doneL++; prog(0.6 + 0.3 * doneL / nL, 'Routing each leg (' + doneL + ' of ' + nL + ')'); return x; });
         }));
+        if(route!==r)throw Error('Route changed while loading. Get the updated route again.');
         r.legs = legs;
         rebuildAlts();
         rawRoute = alts[0];
@@ -2965,7 +2970,7 @@
   function speedOff(m) { m = m || model; return KIND()==='gas'&&!S.apiKey && !(m && m.segs && m.segs.some(function (s) { return s.instr; })); }
   var SPEED_OFF = '<div class="spd-off-note">⚠ Cruising speed is off for this route: without a Google API key it needs the turn-by-turn directions from the Google Maps website, and Maps didn\'t send them for this route. Try another route, or add a key in Settings.</div>';
   // ...and the costs are rougher without a key: say so wherever totals show (Stops, Departure)
-  function costEst() { return S.apiKey || KIND()==='ev' ? '' : '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate' + (speedOff() ? ', many stations don\'t post prices online, and speeds are planned at the limits.' : ' and many stations don\'t post prices online.') + '</div>'; }
+  function costEst() { var trafficNote=traffic&&traffic.enabled()&&model&&model.trafficUnavailable?'<div class="spd-off-note est-note">Traffic forecast unavailable. Using route travel-time estimates.</div>':'';return trafficNote+(S.apiKey || KIND()==='ev' ? '' : '<div class="spd-off-note est-note">⚠ Without a Google API key these costs are rough estimates: website routes are approximate' + (speedOff() ? ', many stations don\'t post prices online, and speeds are planned at the limits.' : ' and many stations don\'t post prices online.') + '</div>'); }
   function grayOut(el) {
     el.classList.add('spd-off');
     var h3 = el.querySelector(':scope > h3');

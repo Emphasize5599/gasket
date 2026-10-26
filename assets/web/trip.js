@@ -256,7 +256,7 @@
     return {
       pts: pts, cum: cum, totalMi: totalMi, durationSec: m.durationSec,
       segs: segs, legEnds: m.legEnds, cityGpm: m.cityGpm, hwyGpm: m.hwyGpm, combGpm: m.combGpm,
-      traffic: m.traffic,
+      traffic: m.traffic, trafficUnavailable:m.trafficUnavailable,
       /** gallons burned driving the route from mile 0 to mile d */
       galTo: function (d) {
         if (d <= 0) return 0;

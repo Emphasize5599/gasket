@@ -45,3 +45,9 @@ Google's current documentation provides normal/slow/jam categories, not numerica
 - [Google speed categories](https://developers.google.com/maps/documentation/roads-management-insights/rmi-concepts)
 - [Google's 2009 relative-speed explanation](https://maps.googleblog.com/2009/08/arterial-traffic-available-on-google.html)
 - [Vela directions request](https://github.com/PimpinPumpkin/Vela/blob/main/core/src/main/java/app/vela/core/data/google/DirectionsPb.kt), [parser](https://github.com/PimpinPumpkin/Vela/blob/main/core/src/main/java/app/vela/core/data/google/parse/DirectionsParser.kt)
+
+## 0.0.273 recovery
+
+Unavailable/mismatched forecasts no longer suppress independent hazard checks or prevent comparison and stop planning. The original route model is used with a traffic-unavailable notice; this is not presented as a zero-congestion forecast. Exploration with no usable forecasts reports the actual source/matching error, and the arrival deadline remains optional. Arrival deadlines filter successful forecasts only.
+
+Guide points use recorded route vertices instead of interpolated locations. Rejections include numeric offset/backtracking diagnostics. The owner's272 log alone does not prove whether HERE selected different roads or coarse geometry caused rejection; source matching is not relaxed. Failed identical requests are retained five minutes (bounded128 failures), and an explicit new exploration retries old failures while preserving good answers. Regression coverage exercises failed forecasts through actual comparison/hazard/planning flow, not only perfect synthetic source responses.
