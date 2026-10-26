@@ -432,7 +432,7 @@
     for (var g = 0; g < pts.length; g += 50) groups.push(pts.slice(g, g + 50));
     var coords = function (ps) { return 'latitude=' + ps.map(function (p) { return r2(p.lat); }).join(',') + '&longitude=' + ps.map(function (p) { return r2(p.lng); }).join(','); };
     var done = 0, total = groups.length + 1, tell = function () { if (opts.onProg) opts.onProg(Math.min(0.97, done / total)); };
-    var get = async function (url) { var r = await getJson(url); done++; tell(); if (!r || !r.body) { stats.errors++; return null; } return r.body; };
+    var get = async function (url) { var r;try{r=await getJson(url);}catch(e){if(opts.valid&&!opts.valid())throw e;r={error:String(e.message||e)};}done++; tell(); if (!r || !r.body) { stats.errors++;if(/air-quality/.test(url))stats.airErrors=(stats.airErrors||0)+1;else if(/weather\.gov\/alerts/.test(url))stats.alertErrors=(stats.alertErrors||0)+1;return null; } return r.body; };
     tell();
     // weather: the National Weather Service's hourly forecast (its forecasters' own, about 6.5 days) at each point;
     // later than that, or where it fails, Open-Meteo: the National Blend of Models (what NWS starts from), else its default
@@ -491,7 +491,7 @@
           p.aq = { aqi: h.us_aqi[i], pm25: h.us_aqi_pm2_5[i], ozone: h.us_aqi_ozone[i], dust: h.dust ? h.dust[i] : null };
           stats.air++;
         });
-      } catch (e) { stats.errors++; }
+      } catch (e) { stats.errors++;stats.airErrors=(stats.airErrors||0)+1; }
     });
     // warnings: each state once (from the points every mile), each alert placed by its outline or its counties
     var alerts = [];

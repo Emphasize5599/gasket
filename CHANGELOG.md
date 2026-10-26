@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.279 - 2026-10-26
+- Time-window planning screens hourly options and fully plans promising trips instead of exhaustively optimizing every combination.
+- Hazard-focused review, required enabled time windows, derived return times, and missing air-quality notices in Stops.
+
 ## 0.0.278 - 2026-10-26
 - Consistent automatic hazard approval when revisiting candidates or recovering forecast data through a fallback.
 - Shows why manual review is needed and separates candidates with different forecast coverage.

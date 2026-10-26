@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),W=require('../assets/web/timewindows');
+(async()=>{
+ const start=Date.now()+86400000,h=W.HOUR,consent=W.create(),clear={hazards:[],stats:{points:1,weather:1,air:1,errors:0}},legs=[[],[]];
+ for(let leg=0;leg<2;leg++)for(let road=0;road<(leg?5:3);road++){const routeKey=leg+':'+road;consent.road(leg,routeKey,true);for(let hour=0;hour<(leg?90:44);hour++){const row={leg,routeKey,depart:start+hour*h,reading:clear,cost:road+10,minutes:60};row.signature=W.signature(clear);legs[leg].push(row);consent.answer(W.group([row])[0],true);}}
+ const theoretical=W.count(legs,consent);assert(theoretical>19620);let plans=0,refines=0,ticks=0;const timer=setInterval(()=>ticks++,1);
+ const result=await W.recommend({legs,consent,priority:'cost',estimate:r=>({cost:r.cost,minutes:r.minutes}),plan:async path=>{plans++;return {path,cost:path.reduce((n,r)=>n+r.cost,0),minutes:120,weather:0,depart:path[0].depart};},refine:async path=>{refines++;return {path,cost:19,minutes:120,weather:0,depart:path[0].depart};}});clearInterval(timer);
+ assert(result.best);assert.equal(result.screened,582);assert(plans<=16,'full stop plans are bounded, not one per combination');assert(refines<=2);assert(ticks>0,'cheap ranking yields to input');
+ const noPlans=await W.recommend({legs,consent,priority:'time',estimate:r=>({cost:r.cost,minutes:r.minutes}),plan:async()=>null});assert(noPlans.checked<=48);assert.equal(noPlans.best,null);
+ assert(W.better({cost:10,minutes:200,weather:100},{cost:11,minutes:100,weather:0},'cost'),'cost priority stays first');assert(W.better({cost:10,minutes:200,weather:0},{cost:10,minutes:100,weather:100},'cost'),'clearer weather breaks equal-cost ties');
+ const fog={hazards:[{kind:'fog',level:1,fromMi:0,toMi:10}],stats:{points:1,weather:1,errors:0}},rows=[0,1,2].map(i=>({leg:0,routeKey:'same',depart:start+i*h,reading:i===1?{...fog,stats:{...fog.stats,beyondAir:1}}:fog}));const g=W.group(rows)[0],c=W.create();assert.equal(W.group(rows).length,1);c.answer(W.group([rows[2]])[0],false);assert.equal(W.groupDecision(g,c),false,'grouping cannot erase an explicit decline');
+ const ranges=W.ranges({start,end:start+h},[{minMinutes:60,maxMinutes:90},{window:{start:start+24*h,end:start+25*h},minMinutes:60,maxMinutes:90,delayMax:120},{minMinutes:60,maxMinutes:90}]);assert(ranges[2].start>=Math.floor((start+25*h)/h)*h,'a later destination departure propagates to subsequent legs');assert(ranges[2].end>=start+28*h,'waiting/charging allowance propagates too');
+ console.log('Over 19,620 combinations reduced to bounded full plans; all hourly options ranked, UI yielding, fallback bounds, cost/time/weather order and grouped declines verified.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

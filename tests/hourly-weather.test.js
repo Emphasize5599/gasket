@@ -21,5 +21,7 @@ const assert=require('node:assert/strict'),T=require('../assets/web/trip'),W=req
  const fallback=await W.lookup(sample,async url=>url.includes('/points/')||url.includes('ncep_nbm')?{error:'provider down'}:{body:JSON.stringify(url.includes('air-quality')?air:weather)});
  assert.equal(fallback.stats.weather,1);assert.equal(fallback.stats.errors,0);assert.equal(fallback.stats.recoveredWeatherErrors,1);assert.equal(fallback.pts[0].flags.fog,1);
  const missing=await W.lookup([{lat:35,lng:-92,mi:0,eta:start}],async()=>({error:'unavailable'}));assert(missing.stats.errors>0);assert.equal(missing.stats.weather,0,'real missing data remains unresolved');
+ const airFailure=await W.lookup([{lat:35,lng:-92,mi:0,eta:start}],async url=>{if(url.includes('/points/'))return {body:point};if(url.includes('/gridpoints/'))return {body:hourly};if(url.includes('air-quality'))throw Error('Air service offline');throw Error(url);});
+ assert.equal(airFailure.stats.weather,1);assert.equal(airFailure.stats.airErrors,1);const TW=require('../assets/web/timewindows');assert.equal(TW.screeningIssues({hazards:[],stats:airFailure.stats}).length,0);assert.equal(TW.dataNotices([{reading:{hazards:[],stats:airFailure.stats}}]).length,1);
  console.log('Long-route cached hourly weather stays responsive, reuses geography/parsed forecasts/temperature series, preserves hourly hazards and stop-aware clocks.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

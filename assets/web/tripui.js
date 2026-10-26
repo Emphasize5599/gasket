@@ -75,6 +75,7 @@
   var scheduleCollecting=false,schedulePlanning=null;
   var windows=window.WindowPlanning&&WindowPlanning.init(A,{
     key:function(){return windowStateKey({id:S.carId,trip:S.trip,speed:S.speed,route:route,alts:alts});},keyFor:windowStateKey,routes:windowRoutes,
+    immediateAfter:function(i){return !!(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2);},
     destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
     changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();renderStep();},
     rows:windowRows,read:function(row,control){return windowRead(row,null,control);},forecastHtml:function(){return traffic?traffic.html():'';},
@@ -88,11 +89,9 @@
   function windowDestination(i){if(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2)return {};return windows.config().destinations&&windows.config().destinations[i]||{};}
   function windowRoutes(){return choiceLists().map(function(list,i){return list.map(function(a,k){var m=T.buildRoute(a,carModel());return {key:RouteChoices.key(i,a),index:k,raw:a,name:a.description||'Route '+(k+1),model:m};});});}
   function windowRows(roads,bounds){
-    var cfg=windows.config(),lists=windowRoutes(),out=[],min=0,max=0;
-    lists.forEach(function(list,i){var d=windowDestination(i-1),fixed=i&&d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null,a=fixed?fixed.start:i?Math.floor((bounds.depart.start+min*60000)/TimeWindows.HOUR)*TimeWindows.HOUR:bounds.depart.start,b=fixed?fixed.end:bounds.depart.end+max*60000;
-      roads.filter(function(r){return r.leg===i;}).forEach(function(r){TimeWindows.hours(a,b).forEach(function(t){out.push(Object.assign({},r,{depart:t,arrive:t+r.model.durationSec*1000}));});});
-      min+=Math.min.apply(null,list.map(function(r){return r.model.durationSec/120;}));max+=Math.max.apply(null,list.map(function(r){return r.model.durationSec/60*3;}))+(KIND()==='ev'?240:60)+(+windowDestination(i).wait||0);
-    });return out;
+    var lists=windowRoutes(),out=[],policies=[];if(KIND()==='ev'&&window.EVCharging&&model)try{policies=EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),S.evPrice);}catch(e){}
+    var specs=lists.map(function(list,i){var d=windowDestination(i-1),next=windowDestination(i),charge=policies.find(function(p){return p.index===i;}),delay=charge?T.destinationCharge(charge,0,Garage.tank()).minutes:0;return {window:i&&d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null,minMinutes:Math.min.apply(null,list.map(function(r){return r.model.durationSec/120;})),maxMinutes:Math.max.apply(null,list.map(function(r){return r.model.durationSec/60*3;})),delayMax:Math.max(KIND()==='ev'?240:60,delay||0)+(+next.wait||0)};}),ranges=TimeWindows.ranges(bounds.depart,specs);
+    lists.forEach(function(list,i){var span=ranges[i];roads.filter(function(r){return r.leg===i;}).forEach(function(r){TimeWindows.hours(span.start,span.end).forEach(function(t){out.push(Object.assign({},r,{depart:t,arrive:t+r.model.durationSec*1000}));});});});return out;
   }
   async function windowRead(row,stops,control){
     hzWarm();var m=row.model||T.buildRoute(row.raw,carModel()),p=traffic&&traffic.profile(row.raw,row.depart);if(p&&!row.actual)m=Traffic.overlay(m,p);
@@ -124,7 +123,7 @@
   }
   function windowOptions(bundle,g,path){
     var m=bundle.model,o=makeBaseOpts(m,g.cands,startFuel(m),bundle.raw),from=0,temps=[],climate=windows.current().climate;
-    o.rewardDepartAt=path[0].depart;o.legDepartures=path.map(function(r){return r.depart;});o.waits=path.slice(1).map(function(r,i){return {d:m.legEnds[i],at:r.depart};});
+    o.rewardDepartAt=path[0].depart;o.legDepartures=path.map(function(r,i){var d=windowDestination(i-1);return !i||d.leaveStart&&d.leaveEnd||(+d.wait||0)>0?r.depart:null;});o.waits=path.slice(1).map(function(r,i){return o.legDepartures[i+1]==null?null:{d:m.legEnds[i],at:o.legDepartures[i+1]};}).filter(Boolean);
     path.forEach(function(row,i){var to=m.legEnds[i]||m.totalMi,scale=(to-from)/row.model.totalMi;((climate&&climate.get(row.routeKey))||[]).forEach(function(p){temps.push({mi:from+p.mi*scale,hours:p.hours});});from=to;});
     if(o.propulsionContext){o.propulsionContext=Object.assign({},o.propulsionContext,{departAt:o.rewardDepartAt,waitAt:null,waits:o.waits,weather:temps});}
     else{var sf=Garage.speedFn&&Garage.speedFn(),secs=flatSecs(m);if(sf&&secs.length){var offsets=secs.map(function(sc){return Garage.ruleOff(sc.limit);});o.model=T.withSpeeds(m,T.speedRates(secs,offsets,sf.f,sf.lo,sf.hi));o.drivingRates=T.speedRates(secs,offsets,function(v){return v;},sf.lo,sf.hi);}}
@@ -138,47 +137,65 @@ var timeline=T.scheduleTimeline(o,p),cfg=windows.config(),conditions=[];
           var arrival=windows.arrivals()[i];if(arrival&&(t.arrive<arrival.start||t.arrive>arrival.end))return null;
           var lm=Traffic.slice(o.model,t.from,t.to),stops=p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-t.from,min:T.stopDelay(o,s)};}),reading=await windowRead(Object.assign({},row,{depart:t.depart,model:lm,actual:true}),stops),sig=TimeWindows.signature(reading),decision=windows.current().consent.decision(row,sig);
           conditions.push(Object.assign({},t,{routeKey:row.routeKey,signature:sig,reading:reading,raw:row.raw,model:row.model,index:row.index}));
+          if(decision==null&&(TimeWindows.autoAllowed(reading,S.hourlyHazardApproval,RouteWx.KINDS)||!(reading.hazards||[]).length&&!TimeWindows.screeningIssues(reading).length)&&!RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),reading.hazards||[]).tires.length){windows.current().consent.answer({rows:[row],signature:sig},true);decision=true;}
           if(decision!==true){if(decision==null)changed.set(TimeWindows.signature({hazards:[]})+'|'+i+'|'+row.routeKey+'|'+row.depart+'|'+sig,Object.assign({},conditions[conditions.length-1],{leg:i,depart:row.depart,actualDepart:t.depart}));return null;}
         }
 return conditions;
   }
-  async function windowEvaluate(path,valid,changed){
-    if(!valid()||path[0].depart<Date.now())return null;
+  function windowTimelineFits(timeline){var arrivals=windows.arrivals();return timeline.every(function(t,i){var a=arrivals[i],d=windowDestination(i-1);return !(a&&(t.arrive<a.start||t.arrive>a.end)||i&&(d.leaveStart&&d.leaveEnd?(t.depart<+new Date(d.leaveStart)||t.depart>+new Date(d.leaveEnd)):t.waitMinutes>(+d.wait||0)+1e-7));});}
+  function windowAlign(path,timeline){var session=windows.current(),rows=session.rows;return path.map(function(r,i){return rows.find(function(x){return x.leg===i&&x.routeKey===r.routeKey&&timeline[i].depart>=x.depart&&timeline[i].depart<x.depart+TimeWindows.HOUR&&session.consent.allowed(x);});});}
+  async function windowEvaluate(originalPath,valid,changed,optimize,attempt){
+    var path=originalPath.slice();if(!valid()||path[0].depart<Date.now())return null;
     var bundle=await windowModel(path,valid),m=bundle.model,g=cachedChoiceCandidates(bundle.raw,m);if(!g||g.guessed)return null;
     if(!m._lim||m._lim==='loading'){path.forEach(function(r){ensureLimits(hzModel(r.raw,r.leg));});var until=Date.now()+120000;while(valid()&&Date.now()<until&&!applyChoiceLimits(m,bundle.sel))await breathe();if(!valid()||!m._lim)return null;}
-    if(!TimeWindows.canFit(T.scheduleTimeline(windowOptions(bundle,g,path),{stops:[]}),path,windows.arrivals())){var ws=windows.current();ws.timingRejected=(ws.timingRejected||0)+1;return null;}
     if(KIND()!=='gas'){var pool=choicePool,stations=(pool.official||[]).concat.apply(pool.official||[],pool.google||[]),exact=await gatherAlt([m],function(){},{},{localOnly:true,skipNetworkPrices:true,google:[{list:mergeRouteStations(stations)}]},[bundle.raw]);g=exact.per[0];}
     var priority=windows.config().priority,toll=tripTolls(bundle.raw);if(priority==='cost'&&toll.cost==null)return null;
-    var best=await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,
-      evaluate:async function(x){
-        var o=windowOptions(bundle,g,path);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=true;
-        var p=await planAsync(o,valid,10);if(!valid()||!p.ok||p.firstDip)return null;var conditions=await windowConditions(path,o,p,changed,valid);if(!conditions)return null;var timeline=T.scheduleTimeline(o,p);
-        var finish=timeline[timeline.length-1].ready,cost=choiceCost({plan:p,startGal:o.startGal});return {cost:cost==null||toll.cost==null?null:cost+toll.cost,minutes:(finish-path[0].depart)/60000,waitMinutes:timeline.reduce(function(n,t){return n+t.waitMinutes;},0),depart:path[0].depart,legs:conditions,plan:p,opts:o,bundle:bundle,candidates:g};
-      }});
-    if(!best||!valid())return null;best.opts.lite=false;var full=await planAsync(best.opts,valid,10);if(!full.ok)return null;var verified=await windowConditions(path,best.opts,full,changed,valid);if(!verified)return null;best.plan=full;best.legs=verified;best.path=path;var tl=T.scheduleTimeline(best.opts,full);best.minutes=(tl[tl.length-1].ready-path[0].depart)/60000;var energy=choiceCost({plan:full,startGal:best.opts.startGal});best.cost=energy==null||toll.cost==null?null:energy+toll.cost;return best;
+    async function params(x){
+      var o=windowOptions(bundle,g,path);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=!!optimize;
+      var p=await planAsync(o,valid,10);if(!valid()||!p.ok||p.firstDip)return null;var timeline=T.scheduleTimeline(o,p);if(!windowTimelineFits(timeline))return null;
+      var finish=timeline[timeline.length-1].ready,cost=choiceCost({plan:p,startGal:o.startGal});return {cost:cost==null||toll.cost==null?null:cost+toll.cost,minutes:(finish-path[0].depart)/60000,weather:path.reduce(function(n,r){return n+TimeWindows.weatherScore(r.reading);},0),waitMinutes:timeline.reduce(function(n,t){return n+t.waitMinutes;},0),depart:path[0].depart,legs:timeline,plan:p,opts:o,bundle:bundle,candidates:g,buffer:x.buffer,detour:x.detour};
+    }
+    var best=optimize?await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,evaluate:params}):await params({buffer:bufFloor(),detour:30});
+    if(!best||!valid())return null;
+    if(optimize){best.opts.lite=false;best.plan=await planAsync(best.opts,valid,10);if(!best.plan.ok)return null;}
+    var timeline=T.scheduleTimeline(best.opts,best.plan),aligned=windowAlign(path,timeline);if(aligned.some(function(r){return !r;}))return null;
+    if(aligned.some(function(r,i){return r.depart!==path[i].depart;})){if((attempt||0)>=3)return null;return windowEvaluate(aligned,valid,changed,optimize,(attempt||0)+1);}
+    var verified=await windowConditions(path,best.opts,best.plan,changed,valid);if(!verified)return null;best.legs=verified;best.path=path;best.weather=verified.reduce(function(n,r){return n+TimeWindows.weatherScore(r.reading);},0);best.minutes=(timeline[timeline.length-1].ready-path[0].depart)/60000;var energy=choiceCost({plan:best.plan,startGal:best.opts.startGal});best.cost=energy==null||toll.cost==null?null:energy+toll.cost;return best;
+  }
+  function windowEstimate(row){
+    var session=schedulePlanning&&schedulePlanning.session||windows.current(),cache=session.estimateCache||(session.estimateCache=new Map()),proxy=cache.get(row.routeKey),m=row.model;
+    if(!proxy){var kind=KIND(),capacity=Garage.tank(),energy=m.totalMi*m.combGpm,stops=Math.max(0,Math.ceil(Math.max(0,energy-startFuel(m)+bufFloor()*m.combGpm)/Math.max(.001,capacity-bufFloor()*m.combGpm))),g=choiceCandidates.get(row.routeKey),prices=(g&&g.cands||[]).map(function(c){return c.price;}).filter(function(p){return Number.isFinite(p)&&p>=0;}),rate=prices.length?prices.reduce(function(n,p){return n+p;},0)/prices.length:Number(kind==='ev'?S.evPrice:kind==='h2'?S.h2Price:S.trip.tankPrice),toll=tripTolls(row.raw).cost;
+      if(!Number.isFinite(rate)||rate<0)rate=kind==='ev'?.4:kind==='h2'?30:4;
+      proxy={cost:energy*rate+(Number.isFinite(toll)?toll:0),service:stops*(kind==='ev'?35:kind==='h2'?12:10)};cache.set(row.routeKey,proxy);}
+    var profile=traffic&&traffic.profile(row.raw,row.depart);return {cost:proxy.cost,minutes:(profile?profile.seconds:m.durationSec)/60+proxy.service};
   }
   function cancelWindowPlanning(){if(schedulePlanning){schedulePlanning.cancelled=true;if(busy)cancelSearch();}}
   async function windowRun(){
     if(schedulePlanning)return;if(!windows.ready()){step=ST_HAZ;renderStep();windows.review();return;}
-    var session=windows.current(),owner=route,car=S.carId,state=schedulePlanning={cancelled:false},oldResult=result,oldModel=model,oldRaw=rawRoute,best=null,checked=0;
-    function valid(){return schedulePlanning===state&&!state.cancelled&&route===owner&&S.carId===car&&windows.current()===session;}
+    var session=windows.current(),owner=route,car=S.carId,state=schedulePlanning={cancelled:false,session:session},oldResult=result,oldModel=model,oldRaw=rawRoute,best=null,checked=0;
+    var validatedAt=0,sameSession=true;function valid(){if(schedulePlanning!==state||state.cancelled||route!==owner||S.carId!==car)return false;if(Date.now()-validatedAt>50){validatedAt=Date.now();sameSession=windows.current()===session;}return sameSession;}
     function progress(text){if(window.Tasks)Tasks.upsert('window-trip',{text:text,frac:null,priority:30,cancel:cancelWindowPlanning});}
     try{
-      step=ST_STOPS;renderStep();if(!queueWorking)await queueNotify('start','Planning approved routes and hours',car);progress('Preparing shared station coverage');
+      adjustError='';step=ST_STOPS;renderStep();if(!queueWorking)await queueNotify('start','Planning approved routes and hours',car);progress('Preparing shared station coverage');
       scheduleCollecting=true;try{await findStops();}finally{scheduleCollecting=false;}if(!valid())return;if(!choicePool)throw Error('Station coverage did not finish. Retry planning from your saved data.');
-      session.planning=true;var legs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i;});}),cfg=windows.config(),waits=choiceLists().map(function(_,i){return +windowDestination(i).wait||0;}),depWindows=[null].concat(choiceLists().map(function(_,i){var d=windowDestination(i);return d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null;})),pass=0;
+      session.planning=true;session.estimateCache=new Map();var legs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i;});}),cfg=windows.config(),waits=choiceLists().map(function(_,i){return +windowDestination(i).wait||0;}),depWindows=[null].concat(choiceLists().map(function(_,i){var d=windowDestination(i);return d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null;})),pass=0;
       while(valid()){
-        var changed=new Map(),total=TimeWindows.count(legs,session.consent),last=Date.now(),average=0;session.timingRejected=0;LG.info('timing','Approved route/hour search',{combinations:total,legs:legs.map(function(rows){var accepted=rows.filter(function(r){return session.consent.allowed(r);});return {approvedHours:accepted.length,roads:new Set(accepted.map(function(r){return r.routeKey;})).size};}),window:cfg});progress('Checking every approved route/hour combination');
-        var found=await TimeWindows.search({legs:legs,consent:session.consent,priority:cfg.priority,departures:windows.bounds().depart,arrivals:windows.arrivals(),waits:waits,departWindows:depWindows,valid:valid,evaluate:function(path){return windowEvaluate(path,valid,changed);},progress:function(n){checked=n;var now=Date.now(),sample=now-last;last=now;average=average?average*.8+sample*.2:sample;var remaining=Math.max(0,total-n)*average/60000;progress('Checking route/hour combinations · '+n+' / '+total+(n>1&&Number.isFinite(remaining)?' · about '+Math.max(1,Math.ceil(remaining))+' min left':' · estimating time')+(pass?' · updated conditions':''));}});
-        if(!found||!valid())return;LG.info('timing','Route/hour search finished',{checked:found.checked,timingRejected:session.timingRejected,found:!!found.best,changedConditions:found.review.length});best=found.best;var reviews=Array.from(changed.values()).concat(found.review);if(reviews.length){progress('Review changed conditions after planned stops');if(!await windows.reviewChanges(reviews)){state.cancelled=true;return;}pass++;continue;}if(best){var finalConditions=await windowConditions(best.path,best.opts,best.plan,changed,valid);if(!finalConditions){var more=Array.from(changed.values());if(more.length&&!await windows.reviewChanges(more)){state.cancelled=true;return;}pass++;continue;}best.legs=finalConditions;}break;
+        var changed=new Map();progress('Screening approved hourly routes');
+        var found=await TimeWindows.recommend({legs:legs,consent:session.consent,priority:cfg.priority,departures:windows.bounds().depart,arrivals:windows.arrivals(),waits:waits,departWindows:depWindows,valid:valid,estimate:windowEstimate,
+          progress:function(done,total){progress('Screening hourly routes · '+done+' / '+total);},
+          planProgress:function(n,best,total){checked=n;progress('Planning promising trips · '+n+' / '+Math.min(best?16:48,total));},
+          planKey:function(path){return JSON.stringify(path.map(function(r,i){var d=windowDestination(i-1);return [r.routeKey,!i||d.leaveStart&&d.leaveEnd||(+d.wait||0)>0?r.depart:null];}));},
+          plan:async function(path){var local=new Map(),r=await windowEvaluate(path,valid,local,false);return r||local.size? r||{review:Array.from(local.values())}:null;},
+          refine:async function(path){progress('Optimizing the best verified trips');return windowEvaluate(path,valid,new Map(),true);}});
+        if(!found||!valid())return;LG.info('timing','Hourly recommendations finished',{screened:found.screened,shortlisted:found.shortlisted,planned:found.checked,found:!!found.best,changedConditions:found.review.length});best=found.best;var reviews=Array.from(changed.values()).concat(found.review);if(reviews.length){progress('Review changed conditions after planned stops');if(!await windows.reviewChanges(reviews)){state.cancelled=true;return;}pass++;continue;}if(best){var finalConditions=await windowConditions(best.path,best.opts,best.plan,changed,valid);if(!finalConditions){var more=Array.from(changed.values());if(more.length&&!await windows.reviewChanges(more)){state.cancelled=true;return;}pass++;continue;}best.legs=finalConditions;}break;
       }
-      if(!best)throw Error('No approved route and hour combination fits your windows, reserve and charging constraints. Review Parameters or widen your windows.');
+      if(!best)throw Error('No checked recommendation fits your windows, reserve and charging constraints. Adjust Parameters or widen your time windows.');
       var full=best.plan;if(!valid())return;
       if(legsMode()){route.legs.forEach(function(l,i){l.sel=best.bundle.sel[i];});rebuildAlts();altSel=0;}else altSel=best.bundle.sel[0];rawRoute=alts[altSel];model=best.opts.model;S.trip.depart=windowLocal(best.depart);S.trip.departNow=false;S.trip.legDepartures=best.legs.map(function(t){return t.depart;});S.trip.bufferMi=best.buffer;S.trip.maxDetourMin=best.detour;
-      result={plan:full,opts:best.opts,cands:best.candidates.cands,notes:best.candidates.notes.concat(['Checked all approved route/hour combinations. Prioritized '+(cfg.priority==='time'?'total elapsed time':'estimated cost')+'.']),unpriced:best.candidates.unpriced,stale:best.candidates.stale,grade:best.candidates.grade,startGal:best.opts.startGal,bufMi:best.buffer,topMi:S.trip.topUpMi,topSel:-1,planOffs:'',schedule:best.legs};
+      result={plan:full,opts:best.opts,cands:best.candidates.cands,notes:best.candidates.notes.concat(TimeWindows.dataNotices(best.legs),['Recommended trips prioritize '+(cfg.priority==='time'?'total elapsed time':'estimated cost')+', then clearer weather. Other combinations may be '+(cfg.priority==='time'?'faster.':'cheaper.')]),unpriced:best.candidates.unpriced,stale:best.candidates.stale,grade:best.candidates.grade,startGal:best.opts.startGal,bufMi:best.buffer,topMi:S.trip.topUpMi,topSel:-1,planOffs:'',schedule:best.legs};
       compareReviewed=Date.now();compareReviewKey=compareSafetyKey();compareReviewProof={context:compareReviewContext(),routes:choiceLists().map(function(list,i){return list.filter(function(a){return session.consent.roadAllowed(i,RouteChoices.key(i,a));}).map(function(a){return RouteChoices.key(i,a);});})};choiceComplete=true;recompute();compareCapture();A.save();if(choicePool){var savedRows=(choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]);saveTrip({official:mergeRouteStations(savedRows).map(function(st){var c=Object.assign({},st);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:[[]],kind:choicePool.kind||KIND()},[altSel]);}step=ST_STOPS;state.completed=true;session.createdAt=Date.now();
       LG.info('schedule','Verified flexible-time trip ready',{checked:checked,priority:cfg.priority,cost:best.cost,minutes:best.minutes,legs:best.legs.map(function(t){return {depart:t.depart,arrive:t.arrive,waitMinutes:t.waitMinutes};})});
-    }catch(e){result=oldResult;model=oldModel;rawRoute=oldRaw;A.toast(e.message);LG.warn('schedule','Flexible-time planning stopped',{reason:e.message,checked:checked});step=ST_PARAMS;renderStep();}
+    }catch(e){result=oldResult;model=oldModel;rawRoute=oldRaw;A.toast(e.message);LG.warn('schedule','Flexible-time planning stopped',{reason:e.message,checked:checked});adjustError=e.message;step=ST_STOPS;renderStep();}
     finally{scheduleCollecting=false;session.planning=false;if(state.cancelled){result=oldResult;model=oldModel;rawRoute=oldRaw;step=ST_COMPARE;}if(schedulePlanning===state)schedulePlanning=null;if(window.Tasks)Tasks.remove('window-trip');if(!queueWorking)queueNotify('finish',state.cancelled?'Flexible-time planning cancelled.':state.completed?'Flexible-time trip ready.':'Flexible-time planning needs input.',car);if(document.body.classList.contains('trip-on'))renderStep();else navRender();}
   }
   // what happened on the last trip, for the troubleshooting report
@@ -3892,7 +3909,7 @@ return conditions;
       'A <b>longer max detour</b> lets cheaper stations farther off the route count, but only if they save more money than the extra miles cost.</div></div>';
   }
   function renderResults() {
-    if(schedulePlanning){var target=$('tsResults')||$('taResults');if(target)target.innerHTML='<div class="card" aria-busy="true"><h3>Checking approved trips</h3><p class="lead keep">Recommendations appear after every approved combination has been checked.</p></div>';return;}
+    if(schedulePlanning){var target=$('tsResults')||$('taResults');if(target)target.innerHTML='<div class="card" aria-busy="true"><h3>Finding trip recommendations</h3><p class="lead keep">Screening approved routes and forecasts, then planning the most promising trips.</p></div>';return;}
 
     if(queueWorking){compareRender();return;}
     var el = $('tsResults'), ea = $('taResults'); if (!el && !ea) return;
@@ -4234,7 +4251,7 @@ return conditions;
     return h;
   }
   function renderHz() {
-    if(windows&&windows.enabled()){var host=$('tHz');if(host){host.innerHTML='<div class="card"><h3>Routes and hourly conditions</h3><p class="lead keep">'+(windows.ready()?'Approved route and departure-hour options are ready for planning.':'Choose acceptable roads, then review their hourly conditions.')+'</p><button class="btn tonal" id="twReviewResume">'+(windows.ready()?'Review choices':'Review routes and times')+'</button></div>';host.querySelector('button').onclick=function(){windows.review();};}return;}
+    if(windows&&windows.enabled()){var host=$('tHz');if(host){host.innerHTML='<div class="card"><h3>Route hazard screening</h3><p class="lead keep">'+(windows.ready()?'Approved hazards and time windows are ready for planning.':'Choose acceptable roads, then review the hazards forecast within your windows.')+'</p><button class="btn tonal" id="twReviewResume">'+(windows.ready()?'Review choices':'Review route hazards')+'</button></div>';host.querySelector('button').onclick=function(){windows.review();};}return;}
     hereTolls();
     var el = $('tHz'); if (!el) return;
     var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
