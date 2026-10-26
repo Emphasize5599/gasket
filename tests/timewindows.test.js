@@ -17,3 +17,16 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
  let alive=true;assert.equal(await W.search({legs:[[loaded[0]]],consent:state,valid:()=>alive,evaluate:async path=>{alive=false;return evaluate(path);}}),null);
  console.log('Hourly consent, grouped hazards, missing data, changed-condition screening, actual timing/arrival constraints, cost/time choice, destination waits and cancellation.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+// Every supported hazard obeys the user's exclusions; incomplete readings never auto-approve.
+{
+ const W=require('../assets/web/timewindows.js'),kinds=Object.fromEntries(['alert','tornado','tropical','flood','storm','ice','snow','rain','fog','wind','heat','cold','air'].map(k=>[k,true]));
+ const complete=hazards=>({hazards,stats:{points:2,weather:2,errors:0}}),rules={enabled:true,ask:Object.keys(kinds)};
+ assert(W.autoAllowed(complete([]),rules,kinds));
+ for(const kind of Object.keys(kinds)){assert(!W.autoAllowed(complete([{kind}]),rules,kinds));assert(W.autoAllowed(complete([{kind}]),{enabled:true,ask:[]},kinds));}
+ assert(!W.autoAllowed(complete([{kind:'unknown'}]),{enabled:true,ask:[]},kinds));
+ for(const flag of ['errors','beyondWeather','beyondAir','aiPending']){const r=complete([]);r.stats[flag]=1;assert(!W.autoAllowed(r,rules,kinds));}
+ for(const r of [null,{hazards:[]},Object.assign(complete([]),{error:'unavailable'}),{hazards:[],stats:{points:2,weather:1}},complete([{kind:'rain',aiPending:true}]),complete([{kind:'rain',areaUncertain:true}])])assert(!W.autoAllowed(r,{enabled:true,ask:[]},kinds));
+ assert(!W.autoAllowed(complete([]),{enabled:false,ask:[]},kinds));
+ assert(!W.autoAllowed(complete([{kind:'rain'},{kind:'storm'}]),{enabled:true,ask:['storm']},kinds));
+}

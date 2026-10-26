@@ -77,7 +77,8 @@
     key:function(){return windowStateKey({id:S.carId,trip:S.trip,speed:S.speed,route:route,alts:alts});},keyFor:windowStateKey,routes:windowRoutes,
     destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
     changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();renderStep();},
-    rows:windowRows,read:windowRead,
+    rows:windowRows,read:windowRead,forecastHtml:function(){return traffic?traffic.html():'';},
+    canAuto:function(row){return !RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]).tires.length;},
     reviewed:function(s){windowReviewComplete(s);step=ST_COMPARE;renderStep();},
     confirm:async function(row){var risk=RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]);return !risk.tires.length||await A.confirmDel({always:true,title:'Low tread in these conditions',body:hzRiskHtml({risk:risk},row.raw,row.leg),no:'Choose another time',action:'I understand',goClass:'primary'});},
     map:function(el,r,reading){var mini=L.map(el,{zoomControl:false,attributionControl:true,scrollWheelZoom:false});L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'osm-tiles',attribution:'© OpenStreetMap'}).addTo(mini);var pts=r.model.pts.map(function(p){return [p.lat,p.lng];});L.polyline(pts,{color:'#7fb0ff',weight:5}).addTo(mini);(reading&&reading.hazards||[]).forEach(function(h){var a=r.model.pointAt(h.fromMi||0),b=r.model.pointAt(h.toMi||r.model.totalMi);L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#ffb35c',weight:7}).addTo(mini);});if(pts.length)mini.fitBounds(L.latLngBounds(pts),{padding:[12,12]});return mini;}
@@ -556,7 +557,7 @@ return conditions;
   }
   document.addEventListener('click',function(e){
     if(e.target.closest('[data-retry-cp]')){retryCpPages();return;}
-    var retryXom=e.target.closest('[data-retry-xom]');if(retryXom){if(busy||queueWorking)return;retryXom.disabled=true;retryXom.textContent='Retrying…';xomFailed.clear();xomBlocked=false;var stations=[];[result].concat(result&&result.routes?result.routes.map(function(r){return r.res;}):[]).forEach(function(r){if(r)(r.cands||[]).forEach(function(c){if(c.station)stations.push(c.station);});});xomCheck(stations).then(function(){if(xomFailed.size)A.toast('The discount website is still unavailable. Your station results are kept.');repriceRewards();renderResults();}).finally(function(){retryXom.disabled=false;});return;}
+    var retryXom=e.target.closest('[data-retry-xom]');if(retryXom){if(busy||queueWorking)return;retryXom.disabled=true;retryXom.textContent='Retrying…';xomFailed.clear();xomBlocked=false;xomUnavailable=false;var stations=[];[result].concat(result&&result.routes?result.routes.map(function(r){return r.res;}):[]).forEach(function(r){if(r)(r.cands||[]).forEach(function(c){if(c.station)stations.push(c.station);});});xomCheck(stations).then(function(){if(xomFailed.size)A.toast('The discount website is still unavailable. Your station results are kept.');repriceRewards();renderResults();}).finally(function(){retryXom.disabled=false;});return;}
     var cancel=e.target.closest('[data-cancel-prices]');
     if(cancel){priceCancelRequested=true;KeylessGas.cancel();cancel.disabled=true;cancel.textContent='Cancelling…';return;}
     var cx=e.target.closest('[data-cancel-search]');
@@ -984,7 +985,7 @@ return conditions;
         '<div class="field' + (t.returnTrip ? '' : ' hidden') + '" id="tBackAutoBox"><div class="lbl">Head back right away<small>Starts the way back as soon as you arrive; the weather on that leg is worked out for then. Off: pick when you\'ll head back.</small></div>' + sw('tBackAuto', backAuto()) + '</div>' +
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
         '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
-        '<div id="tRouteGo"></div></div>' + (traffic?traffic.html():'') + (windows?windows.html():'') +
+        '<div id="tRouteGo"></div></div>' + (windows?windows.html():'') +
         '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
         '<div class="card" id="tAutoTrip"><h3>Automatic trip planning</h3><label class="nf"><span>Planning priority for this vehicle</span><select id="tAutoTripPriority">'+priorityOptions(vehiclePriority(Garage.car()))+'</select></label><p class="lead small keep">After hazard approval, automatically choose among approved routes and adjust buffer and detour. Keeps your speeds and minimum reserve.</p></div><div id="tRouteInfo"></div>';
     }
@@ -2400,7 +2401,7 @@ return conditions;
   // On the phone: ExxonMobil's edge refuses the locator asked from outside its pages ("Access Denied", HTTP 403 on
   // 130 of 131 squares in the 0.0.269 log), so the hidden exxon.com page asks it (xom_worker.js), one square at a time.
   // Squares are batched (40 a read) and shared by every caller waiting on them; a refusal stops the batch.
-  var xomQueue = [], xomRunning = null, xomBlocked = false;
+  var xomQueue = [], xomRunning = null, xomBlocked = false, xomUnavailable = false;
   function xomBox(b) {
     if (!window.Native) return xomDirect(b);
     return new Promise(function (ok, fail) { xomQueue.push({ b: b, ok: ok, fail: fail }); xomKick(); });
@@ -2413,9 +2414,11 @@ return conditions;
   async function xomDrain() {
     while (xomQueue.length) {
       var batch = xomQueue.splice(0, 40);
-      if (xomBlocked) { batch.forEach(function (q) { q.fail(new Error('ExxonMobil asked for a check')); }); continue; }
+      if (xomBlocked || xomUnavailable) { batch.forEach(function (q) { q.fail(new Error(xomBlocked?'ExxonMobil asked for a check':'ExxonMobil unavailable; retry discount check')); }); continue; }
       var r; try { r = await call('siteRead', 'xom', JSON.stringify({ url: XOM_PAGE, boxes: batch.map(function (q) { return q.b; }) })); } catch (e) { r = { error: e.message }; }
       var got = (r && r.boxes) || [];
+      if(r&&r.error)xomUnavailable=true;
+      LG.debug('stations','ExxonMobil locator batch',{requested:batch.length,read:got.filter(Array.isArray).length,error:r&&r.error||null,detail:r&&r.detail||null});
       batch.forEach(function (q, i) { if (Array.isArray(got[i])) q.ok(got[i]); else q.fail(new Error(r && r.blocked ? 'ExxonMobil asked for a check' : r && r.error || 'no answer')); });
       if (r && r.blocked && !xomBlocked) { xomBlocked = true; LG.warn('stations', 'ExxonMobil station finder wants a check', { status: r.status || null, squaresRead: got.length }); if (A.showSiteCheck) A.showSiteCheck('xom', 'ExxonMobil'); }
     }
@@ -2458,9 +2461,9 @@ return conditions;
       var k = Math.floor(s.lat / XOM_CELL) + ':' + Math.floor(s.lng / XOM_CELL);
       (cells[k] = cells[k] || []).push(s);
     });
-    var changed = 0, t0 = Date.now(), not = 0;
+    var changed = 0, t0 = Date.now(), not = 0, verified = 0;
     await Promise.all(Object.keys(cells).map(async function (k) {
-      var locs = await xomCell(k); if (!locs) return;
+      var locs = await xomCell(k); if (!locs) return; verified++;
       cells[k].forEach(function (s) {
         var best = null, bd = 1e9;
         locs.forEach(function (l) { var d = P.haversineMi(s.lat, s.lng, l[0], l[1]); if (d < bd) { bd = d; best = l; } });
@@ -2470,12 +2473,12 @@ return conditions;
         if (s.wplus !== v) { s.wplus = v; changed++; }
       });
     }));
-    if (Object.keys(cells).length) LG.info('stations', 'Walmart+ at Exxon/Mobil checked', { squares: Object.keys(cells).length, notInProgram: not, ms: Date.now() - t0 });
+    if (Object.keys(cells).length) LG.info('stations', 'Walmart+ at Exxon/Mobil check finished', { squares: Object.keys(cells).length, verifiedSquares:verified, unavailableSquares:Object.keys(cells).length-verified, notInProgram: not, ms: Date.now() - t0 });
     return changed;
   }
   window.__xom = xomCheck;
   // the check on exxon.com done: unblock and retry the squares that failed (the note's Retry, when one is showing)
-  window.addEventListener('xomverified',function(){xomBlocked=false;var b=document.querySelector('[data-retry-xom]');if(b&&!b.disabled)b.click();else xomFailed.clear();});
+  window.addEventListener('xomverified',function(){xomBlocked=false;xomUnavailable=false;var b=document.querySelector('[data-retry-xom]');if(b&&!b.disabled)b.click();else xomFailed.clear();});
 
   /** EV / fuel-cell car: chargers or hydrogen stations near each route (DOE station finder) instead of gas prices. */
   function serviceMin(p,kind) { return p.stops.reduce(function (a, s) { return a + T.serviceMinutes(s,kind); }, 0)+(p.destinationCharges||[]).reduce(function(n,c){return n+c.minutes;},0); }

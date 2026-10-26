@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.275 — discount reader and hourly screening
+
+Synced to 454bf80; interrupted local work remains stashed. New log showed two XOM native 90s timeouts (18:41:08 / 18:42:39), not successful verification. Still uses Exxon's official locator API through its signed-out page (direct 403s in 269). Worker now bounds headers/body to 6s, batch to 25s, retains completed cells, rejects malformed responses; native page deadline 35s and reuses ready page. Session circuit breaker avoids repeated stalled batches until explicit Retry/check completion; weekly successful cells still shared. Batch logs carry read counts/stage/timing; summary distinguishes unavailable cells. Log cannot distinguish a stalled page from hung fetch in the old build.
+
+Removed TrafficFlow's obsolete departure picker, kept forecast prepare/cache/failure handling. Forecast toggle now above time-window toggle in one card. Road/hour footer moved outside scrolling sub-body with navigation inset. Opt-in automatic approval rules live in screening (all RouteWx kinds; checked means always ask). Complete weather coverage required; errors/out-of-horizon/AI pending/unclassified/uncertain areas stay manual. canAuto callback forbids skipping tire-risk acknowledgement. Explicit previous decisions and changed-condition review remain authoritative. Pure all-kind tests plus narrow-screen footer, automatic skipping/manual rain, departure/arrival end-to-end tests.
+
+Phone: plan a window, check stationary Back/No/Yes; enable automatic approval with Rain checked and verify rain still asks; check Forecast is above window toggle and old picker gone; Prius Exxon/Mobil check should finish or offer Retry without 90s stalls.
+
 ## 0.0.274 — flexible trip timing (Codex's patch, finished)
 
 Codex's uncommitted time-window patch applied on 0.0.273 (timewindows.js pure + windowplanning.js UI + tripui wiring; trip.js `scheduleTimeline` / `travelClock`, waits passed to propulsion / tariffs). Owner spec and flow: docs/TIME_WINDOWS.md. Finished here: Departure's "When to leave" card (`scheduleHtml`: per leg leave time, route `raw.description`, arrival, wait) from `result.schedule`; `drawDepHaz` with windows on draws each leg's checked `schedule[i].reading` hazards instead of calling `hzLoad` (which returns a placeholder when windows are on, so the old `hzLoad().then(drawDepHaz)` looped forever and crashed the renderer on Departure). timewindows + windowplanning-ui added to the release list (the UI test now checks the Departure card). Approvals are memory-only, 1 h. Phone: set a 3–4 h leave window on a 2-leg trip, decline one road, decline a rainy hour, plan, check Departure's per-leg times / routes; repeat with an arrival window and a destination wait.

@@ -2389,7 +2389,7 @@ public class MainActivity extends Activity {
                     w.readCall = "if(window.__gasketRead!==" + reqId + "){window.__gasketRead=" + reqId + ";Promise.resolve((" + script + ")(" + reqId + "," + argsJson + ")).catch(function(){GasketSite.result(" + reqId + ",JSON.stringify({error:'Page reader failed',code:'reader'}));});}";
                     w.queue.clear();
                     // Picker steps share the same page and cookies. Reuse it instead of racing same-URL reload callbacks.
-                    if ("tirerack".equals(key) && w.ready && url.equals(w.view.getUrl())) w.runRead();
+                    if (("tirerack".equals(key) || "xom".equals(key)) && w.ready && url.equals(w.view.getUrl())) w.runRead();
                     else { w.ready = false; w.view.loadUrl(url); }
                     // and if the page never says it's drawn or finished, start the reader anyway after a few seconds
                     final SiteWorker fw = w; final int fr = reqId;
@@ -2402,7 +2402,7 @@ public class MainActivity extends Activity {
                     };
                     boolean discoveryRead = false;
                     try { discoveryRead = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : 90000);
+                    main.postDelayed(fw.readDeadline, "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;

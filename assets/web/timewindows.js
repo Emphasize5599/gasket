@@ -1,5 +1,5 @@
-/* Hourly route/time consent and itinerary search. No inferred hazard approval,
- * invented costs, automatic acceptance, or dependence on the selected UI car. */
+/* Hourly route/time consent and itinerary search. Explicit road/hour consent, optional user-defined hazard rules,
+ * and exhaustive verified itinerary search. */
 (function(root){
   'use strict';
   var HOUR=3600000;
@@ -18,6 +18,13 @@
       if(last&&last.leg===row.leg&&last.routeKey===row.routeKey&&last.signature===sig&&row.depart-last.end===HOUR){last.end=row.depart;last.rows.push(row);}
       else groups.push({leg:row.leg,routeKey:row.routeKey,start:row.depart,end:row.depart,signature:sig,reading:row.reading,rows:[row]});
     });return groups;
+  }
+  // User opt-in only. Incomplete forecasts and new/unclassified hazards always need review.
+  function autoAllowed(reading,rules,kinds){
+    if(!rules||rules.enabled!==true||!reading||reading.error||!Array.isArray(reading.hazards))return false;
+    var s=reading.stats;
+    if(!s||!(s.points>0)||!(s.weather>=s.points)||s.errors||s.beyondWeather||s.beyondAir||s.aiPending)return false;
+    return reading.hazards.every(function(h){return !!kinds[h.kind]&&!h.aiPending&&!h.areaUncertain&&Array.isArray(rules.ask)&&rules.ask.indexOf(h.kind)<0;});
   }
   function create(){
     var roads=new Map(),answers=new Map();
@@ -58,6 +65,6 @@
     return valid()?{best:best,checked:checked,review:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
-  var api={HOUR:HOUR,hours:hours,signature:signature,group:group,create:create,readings:readings,better:better,search:search,count:count};
+  var api={HOUR:HOUR,hours:hours,autoAllowed:autoAllowed,signature:signature,group:group,create:create,readings:readings,better:better,search:search,count:count};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimeWindows=api;
 })(typeof window==='undefined'?globalThis:window);

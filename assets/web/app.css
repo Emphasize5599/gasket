@@ -2095,3 +2095,9 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .traffic-picker details { margin:12px 0; padding:10px 12px; border-radius:14px; background:var(--surface-2); }
 .traffic-picker summary { color:var(--accent); font-weight:600; cursor:pointer; }
 .traffic-picker .lbl { margin-top:8px; }
+
+/* Road/hour screening keeps decisions stationary while the content scrolls. */
+.time-review-page > .sub-body { padding-bottom:24px; }
+.time-review-page > .time-review-actions { flex:none; margin:0; padding:12px 2px calc(var(--sb) + 12px); background:var(--bg); }
+.time-review-actions #twBack { min-width:0; padding:8px; }
+.time-review-actions #twBack svg { width:24px; height:24px; fill:currentColor; }
