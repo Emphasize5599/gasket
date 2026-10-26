@@ -59,7 +59,7 @@
   function overlay(m,p){
     if(!p||!p.rows||!p.rows.length)return m;var segs=[],time=0,j=0;
     m.segs.forEach(function(s){var at=s.from;while(at<s.to-1e-8){while(j<p.rows.length-1&&p.rows[j].to<=at+1e-8)j++;var r=p.rows[j],end=Math.min(s.to,r.to);if(end<=at)throw Error('Invalid traffic coverage');var dt=(end-at)/(r.to-r.from)*r.seconds,mph=(end-at)/dt*3600,w=Math.max(0,Math.min(1,(mph-25)/30));
-      segs.push(Object.assign({},s,{from:at,to:end,t0:time,t1:time+dt,mph:mph,trafficMph:mph,gpm:m.cityGpm*(1-w)+m.hwyGpm*w}));time+=dt;at=end;}});
+      segs.push(Object.assign({},s,{from:at,to:end,t0:time,t1:time+dt,mph:mph,trafficMph:r.forecast===false?null:mph,gpm:m.cityGpm*(1-w)+m.hwyGpm*w}));time+=dt;at=end;}});
     var out=T.restoreModel(Object.assign({},m,{segs:segs,durationSec:time,traffic:p,trafficUnavailable:null}));if(m._lim)out._lim=m._lim;return out;
   }
   function cuts(secs,rows){var out=[];(secs||[]).forEach(function(s,i){var points=[s.from,s.to];(rows||[]).forEach(function(r){if(r.from>s.from&&r.from<s.to)points.push(r.from);if(r.to>s.from&&r.to<s.to)points.push(r.to);});points.sort(function(a,b){return a-b;});for(var k=1;k<points.length;k++)if(points[k]>points[k-1]){var mid=(points[k]+points[k-1])/2,r=(rows||[]).filter(function(r){return mid>=r.from&&mid<r.to;})[0];out.push(Object.assign({},s,{from:points[k-1],to:points[k],index:i,trafficMph:r&&r.trafficMph}));}});return out;}

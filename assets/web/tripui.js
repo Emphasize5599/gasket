@@ -72,6 +72,105 @@
     try{return await traffic.prepare(raw,base,depart,options||{valid:function(){return !jobCancel;},waitAt:trafficWait(base)});}
     catch(e){if(/cancelled/i.test(e.message))throw e;var fallback=T.buildRoute(raw,carModel());if(base._lim)fallback._lim=base._lim;fallback.trafficUnavailable={reason:String(e.message||e),at:Date.now()};return fallback;}
   }
+  var scheduleCollecting=false,schedulePlanning=null;
+  var windows=window.WindowPlanning&&WindowPlanning.init(A,{
+    key:function(){return windowStateKey({id:S.carId,trip:S.trip,speed:S.speed,route:route,alts:alts});},keyFor:windowStateKey,routes:windowRoutes,
+    destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
+    changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();renderStep();},
+    rows:windowRows,read:windowRead,
+    reviewed:function(s){windowReviewComplete(s);step=ST_COMPARE;renderStep();},
+    confirm:async function(row){var risk=RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]);return !risk.tires.length||await A.confirmDel({always:true,title:'Low tread in these conditions',body:hzRiskHtml({risk:risk},row.raw,row.leg),no:'Choose another time',action:'I understand',goClass:'primary'});},
+    map:function(el,r,reading){var mini=L.map(el,{zoomControl:false,attributionControl:true,scrollWheelZoom:false});L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'osm-tiles',attribution:'© OpenStreetMap'}).addTo(mini);var pts=r.model.pts.map(function(p){return [p.lat,p.lng];});L.polyline(pts,{color:'#7fb0ff',weight:5}).addTo(mini);(reading&&reading.hazards||[]).forEach(function(h){var a=r.model.pointAt(h.fromMi||0),b=r.model.pointAt(h.toMi||r.model.totalMi);L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#ffb35c',weight:7}).addTo(mini);});if(pts.length)mini.fitBounds(L.latLngBounds(pts),{padding:[12,12]});return mini;}
+  });
+  function windowLocal(t){var d=new Date(t);return new Date(t-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
+  function windowStateKey(s){var c=S.cars.find(function(c){return c.id===s.id;}),lists=s.route&&s.route.legs?s.route.legs.map(function(l){return l.alts;}):[s.alts||[]];return VehicleCompare.key([VehicleCompare.profile(c),s.speed,s.trip.windowPlan,s.trip.trafficForecast,s.trip.avoid,s.trip.returnTrip,s.trip.backAuto,lists.map(function(list){return list.map(function(a){return a.polyline;});})]);}
+  function windowDestination(i){if(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2)return {};return windows.config().destinations&&windows.config().destinations[i]||{};}
+  function windowRoutes(){return choiceLists().map(function(list,i){return list.map(function(a,k){var m=T.buildRoute(a,carModel());return {key:RouteChoices.key(i,a),index:k,raw:a,name:a.description||'Route '+(k+1),model:m};});});}
+  function windowRows(roads,bounds){
+    var cfg=windows.config(),lists=windowRoutes(),out=[],min=0,max=0;
+    lists.forEach(function(list,i){var d=windowDestination(i-1),fixed=i&&d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null,a=fixed?fixed.start:i?Math.floor((bounds.depart.start+min*60000)/TimeWindows.HOUR)*TimeWindows.HOUR:bounds.depart.start,b=fixed?fixed.end:bounds.depart.end+max*60000;
+      roads.filter(function(r){return r.leg===i;}).forEach(function(r){TimeWindows.hours(a,b).forEach(function(t){out.push(Object.assign({},r,{depart:t,arrive:t+r.model.durationSec*1000}));});});
+      min+=Math.min.apply(null,list.map(function(r){return r.model.durationSec/120;}));max+=Math.max.apply(null,list.map(function(r){return r.model.durationSec/60*3;}))+(KIND()==='ev'?240:60)+(+windowDestination(i).wait||0);
+    });return out;
+  }
+  async function windowRead(row,stops){
+    hzWarm();var m=row.model||T.buildRoute(row.raw,carModel()),p=traffic&&traffic.profile(row.raw,row.depart);if(p&&!row.actual)m=Traffic.overlay(m,p);
+    var session=windows.current();if(!session.wx)session.wx=new Map();function get(url){var hit=session.wx.get(url);if(!hit||Date.now()-hit.at>600000){hit={at:Date.now(),value:wxGet(url)};session.wx.set(url,hit);}return hit.value;}
+    var r=await RouteWx.forRoute(m,get,{depart:row.depart,stops:stops||[],stateAt:window.Limits&&Limits.stateAt,counties:loadCounties,countyOf:function(f){return window.US_COUNTIES&&US_COUNTIES[f];},compare:aiCan()&&Severity.state()==='ready'?Severity.compare:null});
+    if(!session.climate)session.climate=new Map();if(r.temperatures)session.climate.set(row.routeKey,r.temperatures);return {hazards:r.hazards,stats:r.stats,error:r.error};
+  }
+  function windowReviewComplete(s){
+    S.trip.altCompare=true;var lists=choiceLists();S.trip.routeChoices={};lists.forEach(function(list,i){var allowed=s.rows.filter(function(r){return r.leg===i&&s.consent.allowed(r);});list.forEach(function(a){var key=RouteChoices.key(i,a);S.trip.routeChoices[key]={consider:allowed.some(function(r){return r.routeKey===key;}),goal:windows.config().priority};});if(legsMode())route.legs[i].sel=allowed[0].index;else altSel=allowed[0].index;});
+    if(legsMode()){rebuildAlts();altSel=0;}rawRoute=alts[altSel];model=buildModel(rawRoute,carModel());S.trip.depart=windowLocal(s.rows.filter(function(r){return r.leg===0&&s.consent.allowed(r);})[0].depart);S.trip.departNow=false;
+    compareReviewed=Date.now();compareReviewKey=compareSafetyKey();compareReviewProof={context:compareReviewContext(),routes:lists.map(function(list,i){return list.filter(function(a){return S.trip.routeChoices[RouteChoices.key(i,a)].consider;}).map(function(a){return RouteChoices.key(i,a);});})};choiceComplete=true;compareCapture();A.save();
+  }
+  async function windowModel(path,valid){
+    var sel=path.map(function(r){return r.index;}),raw=recommendationRaw(sel),base=T.buildRoute(raw,carModel()),rows=[],missing=false,from=0;
+    for(var i=0;i<path.length;i++){
+      var row=path[i],leg=await trafficPrepare(row.raw,T.buildRoute(row.raw,carModel()),row.depart,{valid:valid}),to=base.legEnds[i]||base.totalMi,scale=(to-from)/leg.totalMi,profile=leg.traffic;
+      if(!profile)missing=missing||!!(traffic&&traffic.enabled());
+      (profile?profile.rows:leg.segs.map(function(s){return {from:s.from,to:s.to,seconds:s.t1-s.t0,trafficMph:null,forecast:false};})).forEach(function(r){rows.push(Object.assign({},r,{from:from+r.from*scale,to:from+r.to*scale}));});from=to;
+    }
+    var m=Traffic.overlay(base,{source:missing?'Mixed traffic and route estimates':'Hourly route timing',rows:rows,depart:path[0].depart,at:Date.now()});if(missing)m.trafficUnavailable={reason:'Some selected roads lack a verified traffic forecast'};applyChoiceLimits(m,sel);return {model:m,raw:raw,sel:sel};
+  }
+  function windowOptions(bundle,g,path){
+    var m=bundle.model,o=makeBaseOpts(m,g.cands,startFuel(m),bundle.raw),from=0,temps=[],climate=windows.current().climate;
+    o.rewardDepartAt=path[0].depart;o.legDepartures=path.map(function(r){return r.depart;});o.waits=path.slice(1).map(function(r,i){return {d:m.legEnds[i],at:r.depart};});
+    path.forEach(function(row,i){var to=m.legEnds[i]||m.totalMi,scale=(to-from)/row.model.totalMi;((climate&&climate.get(row.routeKey))||[]).forEach(function(p){temps.push({mi:from+p.mi*scale,hours:p.hours});});from=to;});
+    if(o.propulsionContext){o.propulsionContext=Object.assign({},o.propulsionContext,{departAt:o.rewardDepartAt,waitAt:null,waits:o.waits,weather:temps});}
+    else{var sf=Garage.speedFn&&Garage.speedFn(),secs=flatSecs(m);if(sf&&secs.length){var offsets=secs.map(function(sc){return Garage.ruleOff(sc.limit);});o.model=T.withSpeeds(m,T.speedRates(secs,offsets,sf.f,sf.lo,sf.hi));o.drivingRates=T.speedRates(secs,offsets,function(v){return v;},sf.lo,sf.hi);}}
+    o.rewardPriceAt=function(c,model,stops){var arrival=new Date(T.travelClock(model,c.d,o.rewardDepartAt,stops,o.waits,o));if(c.est||!c.station||c.station.brand!=='citgo')return Object.assign({},c,{rewardMonth:P.monthKey(arrival)});return P.tripPrice(c.station,gradeOf(),S,new Date(),arrival)||c;};return o;
+  }
+  async function windowConditions(path,o,p,changed,valid){
+var timeline=T.scheduleTimeline(o,p),cfg=windows.config(),conditions=[];
+        for(var i=0;i<timeline.length;i++){
+          var t=timeline[i],row=path[i],dest=windowDestination(i-1),leave=i&&dest.leaveStart&&dest.leaveEnd?{start:+new Date(dest.leaveStart),end:+new Date(dest.leaveEnd)}:null,previous=i?timeline[i-1]:null;
+          if(t.depart<row.depart||t.depart>=row.depart+TimeWindows.HOUR||previous&&(leave?(t.depart<leave.start||t.depart>leave.end):t.waitMinutes>(+dest.wait||0)+1e-7))return null;
+          var arrival=windows.arrivals()[i];if(arrival&&(t.arrive<arrival.start||t.arrive>arrival.end))return null;
+          var lm=Traffic.slice(o.model,t.from,t.to),stops=p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-t.from,min:T.stopDelay(o,s)};}),reading=await windowRead(Object.assign({},row,{depart:t.depart,model:lm,actual:true}),stops),sig=TimeWindows.signature(reading),decision=windows.current().consent.decision(row,sig);
+          conditions.push(Object.assign({},t,{routeKey:row.routeKey,signature:sig,reading:reading,raw:row.raw,model:row.model,index:row.index}));
+          if(decision!==true){if(decision==null)changed.set(TimeWindows.signature({hazards:[]})+'|'+i+'|'+row.routeKey+'|'+row.depart+'|'+sig,Object.assign({},conditions[conditions.length-1],{leg:i,depart:row.depart,actualDepart:t.depart}));return null;}
+        }
+return conditions;
+  }
+  async function windowEvaluate(path,valid,changed){
+    if(!valid()||path[0].depart<Date.now())return null;
+    var bundle=await windowModel(path,valid),m=bundle.model,g=cachedChoiceCandidates(bundle.raw,m);if(!g||g.guessed)return null;
+    if(!m._lim||m._lim==='loading'){path.forEach(function(r){ensureLimits(hzModel(r.raw,r.leg));});var until=Date.now()+120000;while(valid()&&Date.now()<until&&!applyChoiceLimits(m,bundle.sel))await breathe();if(!valid()||!m._lim)return null;}
+    if(KIND()!=='gas'){var pool=choicePool,stations=(pool.official||[]).concat.apply(pool.official||[],pool.google||[]),exact=await gatherAlt([m],function(){},{},{localOnly:true,skipNetworkPrices:true,google:[{list:mergeRouteStations(stations)}]},[bundle.raw]);g=exact.per[0];}
+    var priority=windows.config().priority,toll=tripTolls(bundle.raw);if(priority==='cost'&&toll.cost==null)return null;
+    var best=await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,
+      evaluate:async function(x){
+        var o=windowOptions(bundle,g,path);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=true;
+        var p=await planAsync(o,valid,10);if(!valid()||!p.ok||p.firstDip)return null;var conditions=await windowConditions(path,o,p,changed,valid);if(!conditions)return null;var timeline=T.scheduleTimeline(o,p);
+        var finish=timeline[timeline.length-1].ready,cost=choiceCost({plan:p,startGal:o.startGal});return {cost:cost==null||toll.cost==null?null:cost+toll.cost,minutes:(finish-path[0].depart)/60000,waitMinutes:timeline.reduce(function(n,t){return n+t.waitMinutes;},0),depart:path[0].depart,legs:conditions,plan:p,opts:o,bundle:bundle,candidates:g};
+      }});
+    if(!best||!valid())return null;best.opts.lite=false;var full=await planAsync(best.opts,valid,10);if(!full.ok)return null;var verified=await windowConditions(path,best.opts,full,changed,valid);if(!verified)return null;best.plan=full;best.legs=verified;best.path=path;var tl=T.scheduleTimeline(best.opts,full);best.minutes=(tl[tl.length-1].ready-path[0].depart)/60000;var energy=choiceCost({plan:full,startGal:best.opts.startGal});best.cost=energy==null||toll.cost==null?null:energy+toll.cost;return best;
+  }
+  function cancelWindowPlanning(){if(schedulePlanning){schedulePlanning.cancelled=true;if(busy)cancelSearch();}}
+  async function windowRun(){
+    if(schedulePlanning)return;if(!windows.ready()){step=ST_HAZ;renderStep();windows.review();return;}
+    var session=windows.current(),owner=route,car=S.carId,state=schedulePlanning={cancelled:false},oldResult=result,oldModel=model,oldRaw=rawRoute,best=null,checked=0;
+    function valid(){return schedulePlanning===state&&!state.cancelled&&route===owner&&S.carId===car&&windows.current()===session;}
+    function progress(text){if(window.Tasks)Tasks.upsert('window-trip',{text:text,frac:null,priority:30,cancel:cancelWindowPlanning});}
+    try{
+      step=ST_STOPS;renderStep();if(!queueWorking)await queueNotify('start','Planning approved routes and hours',car);progress('Preparing shared station coverage');
+      scheduleCollecting=true;try{await findStops();}finally{scheduleCollecting=false;}if(!valid())return;if(!choicePool)throw Error('Station coverage did not finish. Retry planning from your saved data.');
+      session.planning=true;var legs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i;});}),cfg=windows.config(),waits=choiceLists().map(function(_,i){return +windowDestination(i).wait||0;}),depWindows=[null].concat(choiceLists().map(function(_,i){var d=windowDestination(i);return d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null;})),pass=0;
+      while(valid()){
+        var changed=new Map(),total=TimeWindows.count(legs,session.consent),last=Date.now(),average=0;progress('Checking every approved route/hour combination');
+        var found=await TimeWindows.search({legs:legs,consent:session.consent,priority:cfg.priority,departures:windows.bounds().depart,arrivals:windows.arrivals(),waits:waits,departWindows:depWindows,valid:valid,evaluate:function(path){return windowEvaluate(path,valid,changed);},progress:function(n){checked=n;var now=Date.now(),sample=now-last;last=now;average=average?average*.8+sample*.2:sample;var remaining=Math.max(0,total-n)*average/60000;progress('Checking approved trips · '+n+' / '+total+(n>1&&Number.isFinite(remaining)?' · about '+Math.max(1,Math.ceil(remaining))+' min left':' · estimating time')+(pass?' · updated conditions':''));}});
+        if(!found||!valid())return;best=found.best;var reviews=Array.from(changed.values()).concat(found.review);if(reviews.length){progress('Review changed conditions after planned stops');if(!await windows.reviewChanges(reviews)){state.cancelled=true;return;}pass++;continue;}if(best){var finalConditions=await windowConditions(best.path,best.opts,best.plan,changed,valid);if(!finalConditions){var more=Array.from(changed.values());if(more.length&&!await windows.reviewChanges(more)){state.cancelled=true;return;}pass++;continue;}best.legs=finalConditions;}break;
+      }
+      if(!best)throw Error('No approved route and hour combination fits your windows, reserve and charging constraints. Review Parameters or widen your windows.');
+      var full=best.plan;if(!valid())return;
+      if(legsMode()){route.legs.forEach(function(l,i){l.sel=best.bundle.sel[i];});rebuildAlts();altSel=0;}else altSel=best.bundle.sel[0];rawRoute=alts[altSel];model=best.opts.model;S.trip.depart=windowLocal(best.depart);S.trip.departNow=false;S.trip.legDepartures=best.legs.map(function(t){return t.depart;});S.trip.bufferMi=best.buffer;S.trip.maxDetourMin=best.detour;
+      result={plan:full,opts:best.opts,cands:best.candidates.cands,notes:best.candidates.notes.concat(['Checked all approved route/hour combinations. Prioritized '+(cfg.priority==='time'?'total elapsed time':'estimated cost')+'.']),unpriced:best.candidates.unpriced,stale:best.candidates.stale,grade:best.candidates.grade,startGal:best.opts.startGal,bufMi:best.buffer,topMi:S.trip.topUpMi,topSel:-1,planOffs:'',schedule:best.legs};
+      compareReviewed=Date.now();compareReviewKey=compareSafetyKey();compareReviewProof={context:compareReviewContext(),routes:choiceLists().map(function(list,i){return list.filter(function(a){return session.consent.roadAllowed(i,RouteChoices.key(i,a));}).map(function(a){return RouteChoices.key(i,a);});})};choiceComplete=true;recompute();compareCapture();A.save();if(choicePool){var savedRows=(choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]);saveTrip({official:mergeRouteStations(savedRows).map(function(st){var c=Object.assign({},st);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:[[]],kind:choicePool.kind||KIND()},[altSel]);}step=ST_STOPS;state.completed=true;session.createdAt=Date.now();
+      LG.info('schedule','Verified flexible-time trip ready',{checked:checked,priority:cfg.priority,cost:best.cost,minutes:best.minutes,legs:best.legs.map(function(t){return {depart:t.depart,arrive:t.arrive,waitMinutes:t.waitMinutes};})});
+    }catch(e){result=oldResult;model=oldModel;rawRoute=oldRaw;A.toast(e.message);LG.warn('schedule','Flexible-time planning stopped',{reason:e.message,checked:checked});step=ST_PARAMS;renderStep();}
+    finally{scheduleCollecting=false;session.planning=false;if(state.cancelled){result=oldResult;model=oldModel;rawRoute=oldRaw;step=ST_COMPARE;}if(schedulePlanning===state)schedulePlanning=null;if(window.Tasks)Tasks.remove('window-trip');if(!queueWorking)queueNotify('finish',state.cancelled?'Flexible-time planning cancelled.':state.completed?'Flexible-time trip ready.':'Flexible-time planning needs input.',car);if(document.body.classList.contains('trip-on'))renderStep();else navRender();}
+  }
   // what happened on the last trip, for the troubleshooting report
   var dbg = {};
   var etaData=A.KV.get('tripmeta','eta-v1'),eta=TripETA.create(etaData&&etaData.v,function(rates){A.KV.put('tripmeta','eta-v1',rates);});
@@ -156,7 +255,7 @@
   var recommendationTimeSaved=new Map();
   function ruleMinutes(secs,sf){return !sf?0:-T.speedRates(secs,secs.map(function(s){return Garage.ruleOff(s.limit);}),function(v){return v;},sf.lo,sf.hi).reduce(function(n,r){return n+(r.to-r.from)*r.rate*60;},0);}
   function vehiclePriority(c){var p=c&&c.autoTripPriority;if(!/^(manual|cost|time)$/.test(p||''))p=S.autoTripPriority;return /^(cost|time)$/.test(p||'')?p:'manual';}
-  function autoPriority(){var p=vehiclePriority(Garage.car());return p==='manual'?null:p;}
+  function autoPriority(){if(windows&&windows.enabled())return windows.config().priority;var p=vehiclePriority(Garage.car());return p==='manual'?null:p;}
   function priorityOptions(p){return [['manual','Let me adjust the trip'],['cost','Prioritize lowest cost'],['time','Prioritize shortest total time']].map(function(x){return '<option value="'+x[0]+'"'+(p===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('');}
   function changeVehiclePriority(id,value){
     if(compareLocked()||!/^(manual|cost|time)$/.test(value))return;
@@ -168,6 +267,7 @@
     queueEstimateMemo=null;A.save();comparePersist();if($('tAutoTripPriority'))$('tAutoTripPriority').value=vehiclePriority(Garage.car());if(step===ST_COMPARE)compareRender();gateTabs();
   }
   async function autoChoose(){
+    if(windows&&windows.enabled())return windowRun();
     if(autoPlanning)return;
     var state=autoPlanning={cancelled:false},owner=route,car=S.carId,priority=autoPriority(),optEta=null,optDone=0;choiceComplete=true;step=ST_STOPS;
     function valid(){return autoPlanning===state&&!state.cancelled&&route===owner&&S.carId===car&&step===ST_STOPS&&document.body.classList.contains('trip-on')&&autoPriority()===priority;}
@@ -678,6 +778,7 @@
   function navRender() {
     var nav = $('tpNav');nav.classList.toggle('route-review',step===ST_HAZ&&!!routeReview);
     if(queueWorking||step===ST_COMPARE&&queueEngine&&queueEngine.state().jobs.length>1){nav.innerHTML='<button class="btn tonal" id="tBack">Cancel queue</button><button class="btn primary" id="tNext"'+(queueWorking||compareLocked()?' disabled':'')+'>Plan queued vehicles</button>';$('tBack').onclick=queueCancel;$('tNext').onclick=queueStart;return;}
+    if(schedulePlanning){nav.innerHTML='<button class="btn tonal" id="tBack">Cancel</button><button class="btn primary" id="tNext" disabled>Next</button>';$('tBack').onclick=cancelWindowPlanning;return;}
     if(autoPlanning){nav.innerHTML='<button class="btn tonal" id="tBack">Cancel</button><button class="btn primary" id="tNext" disabled>Next</button>';$('tBack').onclick=function(){autoPlanning.cancelled=true;};return;}
     if (loadingTrip) {   // a saved trip opening: say so where Next will be, and nothing else can be pressed yet
       nav.innerHTML = '<span></span><button class="btn primary" disabled>Next</button>';if(window.Tasks)Tasks.upsert('trip-draw',{text:'Opening your trip',frac:null});
@@ -687,7 +788,7 @@
       (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
     if(step===ST_HAZ&&routeReview){nav.insertAdjacentHTML('afterbegin','<button type="button" class="btn tonal route-review-back" id="tReviewBack" aria-label="Back to previous route"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>');$('tReviewBack').onclick=reviewBack;$('tBack').textContent='No';$('tNext').textContent='Yes';$('tBack').onclick=function(){reviewAnswer(false);};$('tNext').onclick=function(){reviewAnswer(true);};routeGate();return;}
     if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } var previous=prevStep(step);while(rank(previous)>rank(ST_ADVISORY)&&jobLocked(previous))previous=prevStep(previous);if (jobLocked(previous)) return; leaveAsk(function () { closeLegs(); collectSafe(); step=previous; renderStep(); }); };
-    if ($('tNext')) $('tNext').onclick = async function () {if(onPlan(step)&&failedPlan()){if(step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.options.length)step=ST_STOPS;else step=ST_PARAMS;renderStep();return;} if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { var i=hzLeg,a=hzAlts(i)[hzSel(i)];if(await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i&&hzAlts(i)[hzSel(i)]===a;}))hzGoLeg(i + 1); return; } advance(nextStep(step)); };
+    if ($('tNext')) $('tNext').onclick = async function () {if(onPlan(step)&&failedPlan()){if(step===ST_ADJ&&evRecovery&&evRecovery.base===result&&evRecovery.options.length)step=ST_STOPS;else step=ST_PARAMS;renderStep();return;} if (speedMode()) { leaveSpeedMode(); return; }if(recommendationActive()){stopRecommendations();choiceComplete=true;renderStep();return;} if(step===ST_HAZ&&windows&&windows.enabled()){if(windows.ready())advance(ST_COMPARE);else windows.review();return;} if (step === ST_HAZ && hzLeg < hzLegs() - 1) { var i=hzLeg,a=hzAlts(i)[hzSel(i)];if(await hzConfirmRisk(a,i,function(){return step===ST_HAZ&&hzLeg===i&&hzAlts(i)[hzSel(i)]===a;}))hzGoLeg(i + 1); return; } advance(nextStep(step)); };
     if ($('tOpen')) $('tOpen').onclick = openMaps;
     backMode(); routeGate();
   }
@@ -749,6 +850,7 @@
       return true;
     }
     if(k===ST_HAZ){
+      if(windows&&windows.enabled()){if(!windows.ready()){windows.review();return false;}windowReviewComplete(windows.current());return true;}
       await restoreChoices();
       var owner=route;
       for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)];if(!await hzConfirmRisk(a,i,function(){return route===owner&&step===ST_HAZ&&hzAlts(i)[hzSel(i)]===a;}))return false;}
@@ -882,7 +984,7 @@
         '<div class="field' + (t.returnTrip ? '' : ' hidden') + '" id="tBackAutoBox"><div class="lbl">Head back right away<small>Starts the way back as soon as you arrive; the weather on that leg is worked out for then. Off: pick when you\'ll head back.</small></div>' + sw('tBackAuto', backAuto()) + '</div>' +
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
         '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
-        '<div id="tRouteGo"></div></div>' + (traffic?traffic.html():'') +
+        '<div id="tRouteGo"></div></div>' + (traffic?traffic.html():'') + (windows?windows.html():'') +
         '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
         '<div class="card" id="tAutoTrip"><h3>Automatic trip planning</h3><label class="nf"><span>Planning priority for this vehicle</span><select id="tAutoTripPriority">'+priorityOptions(vehiclePriority(Garage.car()))+'</select></label><p class="lead small keep">After hazard approval, automatically choose among approved routes and adjust buffer and detour. Keeps your speeds and minimum reserve.</p></div><div id="tRouteInfo"></div>';
     }
@@ -935,7 +1037,7 @@
       return;
     }
     if (k === ST_ROUTE) { bindRoute(); return; }
-    if (k === ST_HAZ) { renderHz(); hzPreload(); return; }
+    if (k === ST_HAZ) { renderHz();if(windows&&windows.enabled()){if(!windows.ready())setTimeout(function(){windows.review();},0);}else hzPreload();return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
     if (k === ST_COMPARE) { compareRender(); return; }
     if (onPlan(k)) {
@@ -965,7 +1067,7 @@
     });
     var dEl = $('tDepart'), bEl = $('tBackAt'), minNow = function () { dEl.min = bEl.min = localNow(); };
     minNow(); dEl.addEventListener('focus', minNow); bEl.addEventListener('focus', minNow);
-    if(traffic)traffic.bind();
+    if(traffic)traffic.bind();if(windows){windows.bind();dEl.closest('.field.col').classList.toggle('hidden',windows.enabled());if(windows.enabled())$('tBackBox').classList.add('hidden');}
     dEl.addEventListener('change', function () {
       // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
       if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
@@ -1130,6 +1232,7 @@
   /** When you're leaving: the saved time if it's still ahead, else now. */
   /** Leaving (and, on a round trip without "right away", Head back) must be filled in, in the future, in order. */
   function timesNeed() {
+    if(windows&&windows.enabled()){var error=windows.validate();return error?{id:'twConfigure',msg:error}:null;}
     if (!futureDepart()) return { id: 'tDepart', msg: 'When are you leaving? (Now fills in this minute.)' };
     if (S.trip.returnTrip && !backAuto()) {
       var b = S.trip.backAt ? new Date(S.trip.backAt).getTime() : NaN;
@@ -3456,12 +3559,12 @@
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
   async function planAsync(opts,valid,priority){
     var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
-    var context={departAt:opts.rewardDepartAt,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority};
+    var context={departAt:opts.rewardDepartAt,waits:opts.waits,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority};
     async function forecast(stops){var raw=opts._trafficRaw,old=opts.model,base=T.buildRoute(raw,carModel()),m=await trafficPrepare(raw,base,opts.rewardDepartAt,{stops:stops,waitAt:trafficWait(base),valid:valid||function(){return !jobCancel;}});if(old._lim)m._lim=old._lim;if(raw===rawRoute)model=m;opts.model=m;if(opts.propulsionContext)opts.propulsionContext=propulsionContext(m,raw);else{var secs=flatSecs(m),sf=Garage.speedFn&&Garage.speedFn();if(sf&&secs.length){var state=result&&result.speedState&&result.speedState.offsets||{};opts.model=T.withSpeeds(m,T.speedRates(secs,secs.map(function(s,i){return state[i]==null?Garage.ruleOff(s.limit):state[i];}),sf.f,sf.lo,sf.hi));}}}
-    if(traffic&&traffic.enabled()&&opts._trafficRaw&&!opts.lite)await forecast([]);
+    if(traffic&&traffic.enabled()&&opts._trafficRaw&&!opts.lite&&!opts.legDepartures)await forecast([]);
     var p=await Planner.run(opts,context),tm=opts._plannerTiming;
     // One stop-aware refinement uses existing candidates/prices. Slider sweeps never issue provider requests.
-    if(traffic&&traffic.enabled()&&opts._trafficRaw&&!opts.lite&&p.ok&&(!valid||valid())){var stops=trafficStops(p,opts);if(stops.length){await forecast(stops);p=await Planner.run(opts,context);}}
+    if(traffic&&traffic.enabled()&&opts._trafficRaw&&!opts.lite&&!opts.legDepartures&&p.ok&&(!valid||valid())){var stops=trafficStops(p,opts);if(stops.length){await forecast(stops);p=await Planner.run(opts,context);}}
     if(tm)eta.observe('kernel|'+(opts.propulsion&&opts.propulsion.kind||'gas'),TripETA.work(opts),tm.runMs);return p;
   }
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
@@ -3514,7 +3617,7 @@
   }
   /** Steps closed while a search runs: the ones that would change what it uses (the car, the route), and Stops and
    *  Departure, whose answers it's about to change (Adjustments shows its progress). */
-  function jobLocked(k) { return queueWorking || !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
+  function jobLocked(k) { return !!schedulePlanning||queueWorking || !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
   async function findStops1(force) {
     busy = true;adjustError=''; jobCancel = false; searchCancelled = false; bgJob = false;
     pricesSkipped=false;if(window.KeylessGas&&KeylessGas.priceRefresh)KeylessGas.priceRefresh(!batchSkipsPrices());
@@ -3655,7 +3758,7 @@
       ga={per:first.per.concat(rest.per),cachedAgeMs:Math.max(first.cachedAgeMs||0,rest.cachedAgeMs||0),raw:{official:P.reconcileStations((first.raw.official||[]).concat(rest.raw.official||[])),google:first.raw.google.concat(rest.raw.google),kind:first.raw.kind,incomplete:first.raw.incomplete||rest.raw.incomplete||searched&&searched.raw.incomplete}};
     }else ga=await gatherAll(okModels, function (f, l) { prog(0.02 + f * 0.9, l + (others.length ? ' (' + okModels.length + ' routes)' : '')); }, dbg.search, force, rpSt||altReplay, okKs);
     choicePool=ga.raw;
-    choiceCandidates.clear();ga.per.forEach(function(g,i){cacheChoiceCandidates(alts[okKs[i]],okModels[i],g);});
+    choiceCandidates.clear();ga.per.forEach(function(g,i){cacheChoiceCandidates(alts[okKs[i]],okModels[i],g);});if(scheduleCollecting)return;
     // cancelled: website discovery hands back what it finished (planned with, and noted); anything else stops here
     if (jobCancel && !(dbg.search.keyless && dbg.search.keyless.cancelled) && !webRefresh) throw new Error('cancelled while finding stations');
     if (rp) ga.cachedAgeMs = Date.now() - rp.t;
@@ -3777,6 +3880,8 @@
       'A <b>longer max detour</b> lets cheaper stations farther off the route count, but only if they save more money than the extra miles cost.</div></div>';
   }
   function renderResults() {
+    if(schedulePlanning){var target=$('tsResults')||$('taResults');if(target)target.innerHTML='<div class="card" aria-busy="true"><h3>Checking approved trips</h3><p class="lead keep">Recommendations appear after every approved combination has been checked.</p></div>';return;}
+
     if(queueWorking){compareRender();return;}
     var el = $('tsResults'), ea = $('taResults'); if (!el && !ea) return;
     if(autoPlanning){if(el)el.innerHTML='<div class="card"><h3>Choosing your trip</h3><p class="lead keep">Comparing approved routes, buffer and detour. Your speed settings stay unchanged.</p></div>';return;}
@@ -3879,6 +3984,14 @@
   var SHARE_ICON = '<svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.2 3.2 0 0 0 0-1.39l7.05-4.11A2.99 2.99 0 1 0 15 5c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z"/></svg>';
   function glue(t) { return String(t).replace(/(\d) (?=[a-z])/g, '$1\u00a0'); }   // "5 h 0 min" wraps as "5 h" / "0 min", never "5 h 0" / "min"
   var departScope='trip',departLeg=0,departOwner=null;
+  // flexible-time trips: when to leave on each leg and which road it was checked on (owner: "for each leg, tell the user when to leave and what route to take")
+  function scheduleHtml(r){
+    var rows=r&&r.schedule;if(!rows||!rows.length||!route)return '';
+    var when=function(t){return new Date(t).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});};
+    return '<div class="card dep-schedule"><h3>When to leave</h3>'+rows.map(function(t,i){var name=t.raw&&t.raw.description?t.raw.description:'Route '+((t.index||0)+1),wait=Math.round(t.waitMinutes||0);
+      return '<div class="dep-leg" data-schedule-leg="'+i+'"><b>'+(rows.length>1?'Leg '+(i+1)+' · ':'')+esc(legName(route,i))+'</b><div>Leave '+esc(when(t.depart))+'</div><div>Take '+esc(name)+'</div><div class="lead small keep">Arrive about '+esc(when(t.arrive))+(i&&wait>0?' · waits '+esc(fmtDur(wait*60))+' before leaving':'')+'</div></div>';}).join('')+
+      '<p class="lead small keep">Times are estimates from the forecast and your stops. Check conditions again before each leg.</p></div>';
+  }
   function departureHtml() {
     var r = result; if (!r || !model) return '<div class="card empty-res">Plan your stops first.</div>';
     if(priceRefreshActive)return skelStops('Refreshing saved prices');
@@ -3888,7 +4001,7 @@
     var byLeg=p.ok&&departScope==='leg'&&legCount>1,summary=byLeg?T.legSummaries(r.opts.model||model,p,r.startGal,r.startPrice,r.top,r.opts.fuelKind)[departLeg]:null;
     var chooser=legCount>1?'<div class="seg depart-scope" role="group" aria-label="Summary scope"><button type="button" data-depart-scope="trip" class="'+(departScope==='trip'?'on':'')+'">Whole trip</button><button type="button" data-depart-scope="leg" class="'+(departScope==='leg'?'on':'')+'">Per leg</button></div>'+(departScope==='leg'?'<label for="tDepartLeg">Summary for</label><select id="tDepartLeg">'+route.stops.slice(1).map(function(_,i){return '<option value="'+i+'"'+(i===departLeg?' selected':'')+'>Leg '+(i+1)+' · '+esc(legName(route,i))+'</option>';}).join('')+'</select>':''):'';
     var stops=summary?summary.stops:p.ok?p.totals.stops+(r.top?1:0):0,charging=summary?(KIND()==='ev'?summary.chargingMin:summary.refuelingMin):p.ok?serviceMin(p,r.opts.fuelKind)+(r.top?T.serviceMinutes(r.top,r.opts.fuelKind):0):0;
-    var h = '<div class="card dep-route">' + numList(route.stops)+chooser+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' +
+    var h = '<div class="card dep-route">' + numList(route.stops)+chooser+(rawRoute&&rawRoute.websiteApproximate?'<div class="lead small keep">Website route · approximate '+A.qBtn('Verify this route in Google Maps before driving. Website geometry and traffic-inclusive timing make fuel, detour and time estimates less precise than API routing.')+'</div>':'') + '</div>' + scheduleHtml(r) +
       // the trip at a glance, as tiles between the places and the costs
       '<div class="kpis dep-facts"><div><b>' + Math.round(summary?summary.miles:model.totalMi).toLocaleString() + '</b><span>miles</span></div>' +
       '<div><b>' + glue(fmtDur(summary?summary.drivingSec:(r.opts.model||model).durationSec)) + '</b><span>driving</span></div>' +
@@ -3962,8 +4075,9 @@
     if(traffic&&traffic.enabled())key+='|traffic|'+Math.round(model&&model.durationSec||0)+'|'+JSON.stringify(trafficStops(result&&result.plan,result&&result.opts).map(function(s){return [Math.round(s.d*10),Math.round(s.seconds/60)];}));
     if (!e || e.live !== live || e.timeKey!==key || (live ? Math.abs(e.d-d)>=10 : e.d!==d)) { e = { d: d, live:live, timeKey:key, st: null,energyTemperatures:e&&(e.reading&&e.reading.temperatures||e.energyTemperatures) }; hzCache.set(a, e); } return e; }
   function hzWarm() { if (aiCan() && Severity.state()==='idle') Severity.compare('warm up', {a:['warm up']}); }
-  async function hzPreload() { hzWarm();var owner=route,raw=rawRoute,next=0,count=hzLegs();if(traffic&&traffic.enabled()&&raw&&model)try{var m=await trafficPrepare(raw,model,departAt().getTime(),{stops:trafficStops(result&&result.plan,result&&result.opts),waitAt:trafficWait(model),valid:function(){return route===owner&&rawRoute===raw;}});if(route===owner&&rawRoute===raw)model=m;}catch(e){LG.warn('traffic','Hazard timing forecast unavailable',{reason:e.message});}async function lane(){while(next<count&&route===owner)await hzLoadLeg(next++);}await Promise.all([lane(),lane(),lane()]); }
+  async function hzPreload() { if(windows&&windows.enabled())return;hzWarm();var owner=route,raw=rawRoute,next=0,count=hzLegs();if(traffic&&traffic.enabled()&&raw&&model)try{var m=await trafficPrepare(raw,model,departAt().getTime(),{stops:trafficStops(result&&result.plan,result&&result.opts),waitAt:trafficWait(model),valid:function(){return route===owner&&rawRoute===raw;}});if(route===owner&&rawRoute===raw)model=m;}catch(e){LG.warn('traffic','Hazard timing forecast unavailable',{reason:e.message});}async function lane(){while(next<count&&route===owner)await hzLoadLeg(next++);}await Promise.all([lane(),lane(),lane()]); }
   async function hzLoad(a, i) {
+    if(windows&&windows.enabled())return {st:'done',hz:[],stats:{},reading:{}};
     var e = hzEntry(a, i); if (e.st) return e.promise || e;
     e.st = 'loading'; var t0 = Date.now();
     e.promise = (async function () {
@@ -4108,6 +4222,7 @@
     return h;
   }
   function renderHz() {
+    if(windows&&windows.enabled()){var host=$('tHz');if(host){host.innerHTML='<div class="card"><h3>Routes and hourly conditions</h3><p class="lead keep">'+(windows.ready()?'Approved route and departure-hour options are ready for planning.':'Choose acceptable roads, then review their hourly conditions.')+'</p><button class="btn tonal" id="twReviewResume">'+(windows.ready()?'Review choices':'Review routes and times')+'</button></div>';host.querySelector('button').onclick=function(){windows.review();};}return;}
     hereTolls();
     var el = $('tHz'); if (!el) return;
     var n = hzLegs(); if (hzLeg >= n) hzLeg = Math.max(0, n - 1);
@@ -4199,6 +4314,8 @@
   /** Departure: the chosen routes' hazards on the route, no labels (looked up now if they weren't yet). */
   function drawDepHaz() {
     hzDepLayer.clearLayers(); if (!map.hasLayer(hzDepLayer)) hzDepLayer.addTo(map);
+    // flexible-time trips: the conditions each leg was checked in at its planned time (hzLoad skips them; asking it here looped)
+    if(windows&&windows.enabled()){(result&&result.schedule||[]).forEach(function(t,i){var a=hzAlts(i)[hzSel(i)];if(!a)return;((t.reading&&t.reading.hazards)||[]).forEach(function(x){var seg=hzSlice(a,x.fromMi,x.toMi);if(seg.length>1)L.polyline(seg,{pane:'hzpane',color:RouteWx.COLORS[x.kind],weight:6,opacity:0.95,lineCap:'butt',interactive:false}).addTo(hzDepLayer);});});return;}
     for (var i = 0; i < hzLegs(); i++) (function (i) {
       var a = hzAlts(i)[hzSel(i)]; if (!a) return;
       var e = hzEntry(a, i);
@@ -4369,7 +4486,7 @@
       route: { stops: route.stops.map(keepStop), avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
       alts: alts, altSel: altSel, altSure: altSure,
-      trip: { trafficForecast:!!S.trip.trafficForecast,link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,evChargers:S.trip.evChargers,evNetworksOff:S.trip.evNetworksOff,evDestinations:S.trip.evDestinations,arrive:S.trip.arrive,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave,propulsionOffset:S.trip.propulsionOffset,propulsionRoads:S.trip.propulsionRoads },
+      trip: { windowPlan:S.trip.windowPlan,legDepartures:S.trip.legDepartures,trafficForecast:!!S.trip.trafficForecast,link: S.trip.link, from: S.trip.from, to: S.trip.to, via: (S.trip.via || []).filter(Boolean), avoid: S.trip.avoid, milesLeft: S.trip.milesLeft, fuel: S.trip.fuel,evChargers:S.trip.evChargers,evNetworksOff:S.trip.evNetworksOff,evDestinations:S.trip.evDestinations,arrive:S.trip.arrive,altCompare:S.trip.altCompare,altMinSave:S.trip.altMinSave,propulsionOffset:S.trip.propulsionOffset,propulsionRoads:S.trip.propulsionRoads },
       routeChoicesByVehicle:choices,
       comparison:previousComparison&&previousComparison.v&&previousComparison.v.comparison,
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
@@ -4433,8 +4550,9 @@
   function closePicker() { var bg = $('tripPick'); if (!bg) return false; bg.remove(); return true; }
   /** A fresh trip: keep the car and your settings, forget the route. */
   /** Another trip (new, saved or shared from Maps) while a search runs would pull its route away from under it. */
-  function jobBlocks() { if(compareCalculating){A.toast('Wait for the vehicle recalculation to finish.');return true;}if (!busy || loadingTrip) return false; A.toast('Finish or cancel the station search first (the bar at the top).'); return true; }
+  function jobBlocks() { if(schedulePlanning){A.toast('Finish or cancel flexible-time planning first.');return true;}if(compareCalculating){A.toast('Wait for the vehicle recalculation to finish.');return true;}if (!busy || loadingTrip) return false; A.toast('Finish or cancel the station search first (the bar at the top).'); return true; }
   function newTrip(link) {
+    if(windows)windows.invalidate();
     if (jobBlocks()) return;
     compareReset();
     resetChoices();adjustError='';evRecovery=null;
@@ -4449,7 +4567,7 @@
   async function openSaved(id) {
     if (jobBlocks()) return;
     if (busy) return;
-    resetAdjust();
+    resetAdjust();if(windows)windows.invalidate();
     var o = A.KV.get('trips', 'trip|' + id), v = o && o.v;
     if (!v || !v.alts || !v.alts.length) { LG.error('history','Saved trip record missing or unreadable',{id:id,indexPresent:histIndex().some(function(x){return x.id===id;})});toastMsg('Saved route data is missing or damaged. Recreate this trip; its history entry alone cannot restore the route.'); return; }
     compareReset();
@@ -4462,7 +4580,7 @@
     S.trip.depart = ''; S.trip.departNow = false; S.trip.backAt = '';   // a trip opened again: when you're leaving this time, asked again
     S.trip.propulsionOffset=v.trip.propulsionOffset;S.trip.propulsionRoads=VehicleCompare.clone(v.trip.propulsionRoads);
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
-    S.trip.trafficForecast=v.trip.trafficForecast===true;S.trip.evChargers=v.trip.evChargers||null;if(v.trip.evNetworksOff)S.trip.evNetworksOff=v.trip.evNetworksOff;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
+    S.trip.windowPlan=v.trip.windowPlan||null;S.trip.legDepartures=v.trip.legDepartures||null;S.trip.trafficForecast=v.trip.trafficForecast===true;S.trip.evChargers=v.trip.evChargers||null;if(v.trip.evNetworksOff)S.trip.evNetworksOff=v.trip.evNetworksOff;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;
     routeReview=null;choiceComplete=false;choicePool=null;
     if (!hasFuel() && (v.trip.fuel || v.trip.milesLeft)) { S.trip.fuel = v.trip.fuel || { mode: 'miles', miles: String(v.trip.milesLeft) }; syncMilesLeft(); }
     A.save();
@@ -4854,7 +4972,7 @@
   }
   function closeTrip() {
     if(queueWorking){queueCancel();return;}
-    if(autoPlanning)autoPlanning.cancelled=true;
+    if(autoPlanning)autoPlanning.cancelled=true;if(schedulePlanning)schedulePlanning.cancelled=true;
     collectSafe();compareCapture();if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     hzRiskAcks=new WeakMap();
     closePage();mapLoaded();
@@ -4896,7 +5014,7 @@
   function compareReviewContext(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip)]);}
   function compareSafetyKey(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip),choiceLists().map(function(l,i){return altSig(l[hzSel(i)]);})]);}
   function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices'].map(function(k){return S[k];}));}
-  function compareLocked(){return !!(queueWorking||busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
+  function compareLocked(){return !!(schedulePlanning||queueWorking||busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
   function queueNotify(action,text,car){var payload={title:action==='finish'?'Vehicle comparisons updated':'Gasket trip planning',text:text,car:car||'',trip:route&&route.histId||''};return window.TripNotify?TripNotify.send(action,payload):Promise.resolve({unavailable:true});}
   function queueReviewStep(s,c){
     if(!c||!Garage.ok(c))return ST_GARAGE;
@@ -4904,7 +5022,7 @@
     if(!s)return ST_PARAMS;
     var kd=Garage.kind(c),f=FuelGauge.math.norm(s.trip.fuel,kd,s.trip.milesLeft);
     if(!(FuelGauge.math.miles(f,+c.tank,Garage.carModel(c).comb)>0)||FuelGauge.math.empty(f,+c.tank,Garage.carModel(c).comb)||kd==='ev'&&EVCharging.errors(s.trip,s.route&&s.route.stops||[],c,S.evPrice).length)return ST_PARAMS;
-    return comparePrepared(s)?null:ST_HAZ;
+    if(s.trip.windowPlan&&s.trip.windowPlan.enabled&&windows&&!windows.readyFor(s))return ST_HAZ;return comparePrepared(s)?null:ST_HAZ;
   }
   function queuePrepared(s){return !!s&&queueReviewStep(s,S.cars.find(function(c){return c.id===s.id;}))==null;}
   function queuePricesFresh(s){return !!(s&&s.result)&&(S.batchPrices===false||s.kind==='h2'||s.result.cands.every(function(c){return s.kind==='ev'?P.priceFresh({updated:c.calc&&c.calc.updated},S.evPriceAgeHours||24):!KeylessGas.needsPriceRefresh(c.station,s.result.grade||'regular',S.staleHours);}));}
@@ -4956,7 +5074,7 @@
         return autoPriority()?'Ready':'Adjustments ready';
       },
       restore:function(){compareCapture();queueSwitching=true;try{if(queueViewCar)compareSwitch(queueViewCar,true);}finally{queueSwitching=false;}step=ST_COMPARE;},
-      cancel:function(){cancelSearch();if(autoPlanning)autoPlanning.cancelled=true;if(evRecovery&&evRecovery.state==='running'){evRecovery.state='cancelled';choicePlanning=false;if(window.EVPrices)EVPrices.cancel();if(window.EVGuest)EVGuest.cancel();if(window.Tasks)Tasks.remove('ev-recovery');}},
+      cancel:function(){cancelSearch();if(autoPlanning)autoPlanning.cancelled=true;if(schedulePlanning)schedulePlanning.cancelled=true;if(evRecovery&&evRecovery.state==='running'){evRecovery.state='cancelled';choicePlanning=false;if(window.EVPrices)EVPrices.cancel();if(window.EVGuest)EVGuest.cancel();if(window.Tasks)Tasks.remove('ev-recovery');}},
       notify:function(j){queueNotify('ready',Garage.shortName(S.cars.find(function(c){return c.id===j.id;}))+(j.status==='Ready'?' is ready for final stop review.':' has a route ready for slider adjustments.'),j.id);},
       failed:function(j){LG.warn('compare','Queue vehicle needs input',{id:j.id,error:j.error});queueNotify('ready','A vehicle needs input. Other queued vehicles will continue.',j.id);},
       finished:function(s){queueWorking=false;clearInterval(queueTick);queueTick=null;resetSteps();step=ST_COMPARE;A.save();queueNotify(s.paused?'stop':'finish',s.paused?'Queue stopped.':'Queued vehicles processed. Review results and any vehicles needing input.',queueViewCar);renderStep();}
@@ -4975,7 +5093,7 @@
   function queueSelect(id,on){if(compareLocked())return;compareCapture();if(!compareEntries.has(id)){var seed=compareEntries.get(S.carId),s=VehicleCompare.portable(seed);s.id=id;s.profile=VehicleCompare.profile(S.cars.find(function(c){return c.id===id;}));s.kind=null;s.trip.fuel=null;s.trip.milesLeft='';s.trip.evDestinations=null;s.replay=null;s.reviewedAt=0;s.needsReview=true;['tankPrice','evTankPrice','h2TankPrice'].forEach(function(k){s.trip[k]='';});compareEntries.set(id,s);comparePersist();}
     var ids=comparisonQueue().state().jobs.map(function(j){return j.id;}).filter(function(x){return x!==id;});if(on)ids.push(id);comparisonQueue().select(ids);
   }
-  window.onTripQueueTimeout=function(){if(queueEngine)queueEngine.cancel();LG.warn('compare','Android ended background planning; checkpoints retained');};
+  window.onTripQueueTimeout=function(){if(queueEngine)queueEngine.cancel();if(schedulePlanning)schedulePlanning.cancelled=true;LG.warn('compare','Android ended background planning; checkpoints retained');};
   window.onTripQueueOpen=async function(d){if(d.site){var button=$('wmCheckGo');if(button&&window.TripNotify&&TripNotify.pendingSite()===d.site&&!$('wmCheck').classList.contains('hidden'))button.click();else A.toast('This website check is no longer pending.');return;}
     if(queueWorking){queueOpen(d.car||queueViewCar);return;}if((!route||d.trip&&route.histId!==d.trip)&&d.trip)await openSaved(d.trip);if(d.car&&compareEntries.has(d.car))queueOpen(d.car);else openTrip(ST_COMPARE);
   };

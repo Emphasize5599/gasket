@@ -11,7 +11,7 @@
     function clean(v){if(Array.isArray(v))return v.map(clean);if(v&&typeof v==='object'){var out={};Object.keys(v).forEach(function(k){var x=clean(v[k]);if(x!=null&&x!==''&&!(typeof x==='object'&&!Object.keys(x).length))out[k]=x;});return out;}return v;}
     return key(clean(o));
   }
-  function journey(route,trip){return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret];}),trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.backAt||'',!!trip.trafficForecast]);}
+  function journey(route,trip){return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret];}),trip.windowPlan&&trip.windowPlan.enabled?trip.windowPlan:trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.windowPlan&&trip.windowPlan.enabled?'':trip.backAt||'',!!trip.trafficForecast]);}
   function sum(rows,k){return rows.reduce(function(n,r){return n+(r[k]||0);},0);}
   function toll(t){return t&&t.has===false?0:t&&Number.isFinite(t.cost)&&t.cost>=0?t.cost:null;}
   function metrics(s,leg,adapters){

@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.274 - 2026-10-26
+- Flexible trip timing: give a window to leave in (or to arrive in), and choose lowest cost or shortest time. The app first asks which roads you'd take in clear weather, then shows each road's forecast hour by hour (hours that look the same share a screen) for a yes or no. It checks every approved road and hour, with your stops and any waits at your destinations, and Departure tells you when to leave and which route to take on each leg.
+- Bug fixes.
+
 ## 0.0.273 - 2026-10-26
 - Unavailable traffic forecasts no longer block hazard checks, comparison or trip planning. Normal route estimates remain available and are labeled.
 - Departure exploration keeps arrival deadlines optional and reports the actual forecast failure. Rejected lookups are briefly remembered to avoid repeated HERE calls; explicit exploration retries can try again.

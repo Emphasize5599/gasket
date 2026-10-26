@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.274 — flexible trip timing (Codex's patch, finished)
+
+Codex's uncommitted time-window patch applied on 0.0.273 (timewindows.js pure + windowplanning.js UI + tripui wiring; trip.js `scheduleTimeline` / `travelClock`, waits passed to propulsion / tariffs). Owner spec and flow: docs/TIME_WINDOWS.md. Finished here: Departure's "When to leave" card (`scheduleHtml`: per leg leave time, route `raw.description`, arrival, wait) from `result.schedule`; `drawDepHaz` with windows on draws each leg's checked `schedule[i].reading` hazards instead of calling `hzLoad` (which returns a placeholder when windows are on, so the old `hzLoad().then(drawDepHaz)` looped forever and crashed the renderer on Departure). timewindows + windowplanning-ui added to the release list (the UI test now checks the Departure card). Approvals are memory-only, 1 h. Phone: set a 3–4 h leave window on a 2-leg trip, decline one road, decline a rainy hour, plan, check Departure's per-leg times / routes; repeat with an arrival window and a destination wait.
+
 ## 0.0.273 — unavailable traffic must not block planning
 
 Owner log gasket-log-2026-10-26-15-27-21.txt (D:/Working) has current15:24–15:26 repeated HERE geometry mismatches / one critical restriction. They propagated into hzLoad -> error (no approval) and findStops -> error, blocking Compare. Fix trafficPrepare to fall back to original Google route model on forecast failure; preserve speed-limit metadata, tag trafficUnavailable and label normal route estimates in trip notices. Cancellation still propagates. Failed raw profiles are removed so an old successful profile cannot silently be reapplied. Hazard reading now runs independently of forecast availability. Successful overlay clears fallback marker. A logged null-route/legs race after multi-leg await now checks route ownership before rebuilding alts.

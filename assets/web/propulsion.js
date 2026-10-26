@@ -86,6 +86,7 @@
     (plan&&plan.stops||[]).forEach(function(s){events.push({d:s.c.d,stop:s});});
     (plan&&plan.destinationCharges||[]).forEach(function(s){events.push({d:s.d,destination:s});});
     if(ctx.waitAt)events.push({d:ctx.waitAt.d,waitUntil:ctx.waitAt.at});
+    (ctx.waits||[]).forEach(function(w){events.push({d:w.d,waitUntil:w.at});});
     if(plan)(model.legEnds||[]).slice(0,-1).forEach(function(d){events.push({d:d,boundary:true});});
     events.sort(function(a,b){return a.d-b.d||Number(!!a.waitUntil)-Number(!!b.waitUntil);});var ei=0,ok=true,reason='',mismatch=0,stopSeconds=0,chargingMinutes=0;
     function wait(minutes,mi){for(var s=0;s<minutes*60;s+=dt){var dt=Math.min(60,minutes*60-s),ta=weather(ctx.weather,mi,initialTime+(seconds+stopSeconds+s)*1000,flags);temperature=ta+(temperature-ta)*Math.exp(-dt/(6*3600));}stopSeconds+=minutes*60;}

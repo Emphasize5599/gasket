@@ -757,7 +757,7 @@
       applied=EP.project(base,o.propulsion,ctx,p);
       priceChanged=false;
       if(ET&&o.propulsion.kind==='ev')tariffCands=tariffCands.map(function(c){if(!c.tariffOffer)return c;
-        var delay=p.stops.filter(function(s){return s.c.d<c.d;}).reduce(function(sum,s){return sum+stopDelay(o,s)*60;},0),at=(ctx.departAt||Date.now())+(m.timeTo(c.d)+delay+(c.detourMin||0)*30)*1000,q=ET.quote(c.tariffOffer,at);
+        var delay=p.stops.filter(function(s){return s.c.d<c.d;}).reduce(function(sum,s){return sum+stopDelay(o,s)*60;},0),at=(ctx.departAt||Date.now())+(m.timeTo(c.d)+delay+(c.detourMin||0)*30)*1000,q=ET.quote(c.tariffOffer,ctx.waits&&ctx.waits.length?travelClock(m,c.d,ctx.departAt||Date.now(),p.stops,ctx.waits,o,p.destinationCharges)+(c.detourMin||0)*30000:at);
         if(!q)return c;var changed=Math.abs(c.price-q.rate)>1e-8;priceChanged=priceChanged||changed;return Object.assign({},c,{price:q.rate,sessionFee:q.fee});});
       if(!priceChanged&&applied.ok&&applied.mismatch<=Math.max(.01,2*(o.step||.1))&&Math.abs(applied.arriveGal-p.arriveGal)<=Math.max(.01,2*(o.step||.1))&&applied.arriveGal>=o.arriveGal-1e-7)break;
       m=makeModel(applied.model);
@@ -1154,6 +1154,22 @@
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
     optimize: optimize, plan: plan, topUps: topUps, account: account, legSummaries:legSummaries, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
+  /** Absolute stop-aware clock, with destination departure constraints kept out of driving time. */
+  function travelClock(m,d,depart,stops,waits,options,charges){
+    var before=function(at,inclusive){return ((stops||[]).filter(function(s){return s.c.d<at||inclusive&&s.c.d===at;}).reduce(function(n,s){return n+stopDelay(options||{},s);},0)+(charges||[]).filter(function(s){return s.d<at||inclusive&&s.d===at;}).reduce(function(n,s){return n+s.minutes;},0))*60000;},extra=0;
+    function drive(at){return m.timeTo(at)*1000+((options&&options.drivingRates)||[]).reduce(function(n,r){return n+Math.max(0,Math.min(at,r.to)-r.from)*r.rate*3600000;},0);}
+    (waits||[]).filter(function(w){return w.d<=d;}).slice().sort(function(a,b){return a.d-b.d;}).forEach(function(w){extra+=Math.max(0,w.at-(depart+drive(w.d)+before(w.d,true)+extra));});
+    return depart+drive(d)+before(d)+extra;
+  }
+  function scheduleTimeline(o,p){
+    var m=o.model,depart=o.rewardDepartAt,ends=m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi],clock=depart,from=0,rows=[];
+    ends.forEach(function(to,i){var requested=(o.legDepartures||[])[i],start=Math.max(clock,Number.isFinite(requested)?requested:clock),service=(p.stops||[]).filter(function(s){return s.c.d>from&&s.c.d<=to;}).reduce(function(n,s){return n+stopDelay(o,s);},0),driving=(m.timeTo(to)-m.timeTo(from))/60;
+      (o.drivingRates||[]).forEach(function(r){driving+=Math.max(0,Math.min(to,r.to)-Math.max(from,r.from))*r.rate*60;});
+      var arrival=start+(driving+service)*60000,destination=(p.destinationCharges||[]).filter(function(c){return c.index===i;}).reduce(function(n,c){return n+c.minutes;},0),ready=arrival+destination*60000;
+      rows.push({depart:start,arrive:arrival,ready:ready,drivingMinutes:driving,serviceMinutes:service,destinationMinutes:destination,waitMinutes:(start-clock)/60000,from:from,to:to});clock=ready;from=to;
+    });return rows;
+  }
+  api.travelClock=travelClock;api.scheduleTimeline=scheduleTimeline;
   api.restoreModel=makeModel;api.destinationCharge=destinationCharge;api.purchases=purchases;api.purchasePrice=purchasePrice;api.serviceMinutes=serviceMinutes;api.stopDelay=stopDelay;
   api.workerSource='('+initTrip.toString()+')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Trip = api;
