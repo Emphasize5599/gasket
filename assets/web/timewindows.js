@@ -9,9 +9,24 @@
     var out=[];for(var t=start;t<=end;t+=HOUR)out.push(t);return out;
   }
   function stable(x){if(Array.isArray(x))return '['+x.map(stable).join(',')+']';if(x&&typeof x==='object')return '{'+Object.keys(x).sort().map(function(k){return JSON.stringify(k)+':'+stable(x[k]);}).join(',')+'}';return JSON.stringify(x);}
+  function coverageIssues(reading){
+    if(!reading||reading.error)return [{code:'unavailable',text:reading&&reading.error||'Forecast unavailable.'}];
+    var s=reading.stats,out=[];
+    if(!s||!(s.points>0)||!(s.weather>=s.points)||s.beyondWeather)out.push({code:'weather',text:'Weather forecasts do not cover the entire route and time.'});
+    if(s&&(s.beyondAir||s.air!=null&&s.air<s.points))out.push({code:'air',text:'Air-quality forecasts do not cover the entire route and time.'});
+    if(s&&s.errors)out.push({code:'errors',text:'Some forecast or warning data could not be read.'});
+    if(s&&s.aiPending||(reading.hazards||[]).some(function(h){return h.aiPending;}))out.push({code:'rating',text:'A weather warning still needs its AI rating.'});
+    if((reading.hazards||[]).some(function(h){return h.areaUncertain;}))out.push({code:'area',text:'A warning area could not be verified.'});
+    return out;
+  }
+  function autoReasons(reading,rules,kinds){
+    var out=coverageIssues(reading);if(!rules||rules.enabled!==true)return out.concat([{code:'disabled',text:'Automatic approval is off.'}]);
+    (reading&&reading.hazards||[]).forEach(function(h){if(!kinds[h.kind])out.push({code:'unknown',text:'An unrecognized hazard needs review.'});else if(!Array.isArray(rules.ask)||rules.ask.indexOf(h.kind)>=0)out.push({code:'rule',text:(Array.isArray(kinds[h.kind])?kinds[h.kind][0]:h.kind)+' is checked in your approval rules.'});});
+    return out;
+  }
   function signature(reading){
     if(!reading||reading.error)return stable({unknown:true,error:reading&&reading.error||'Forecast unavailable'});
-    return stable({unknown:!!(reading.stats&&reading.stats.errors),hazards:(reading.hazards||[]).map(function(h){return {kind:h.kind,level:h.level,event:h.event||'',id:h.id||'',source:h.src||'',from:Math.round((+h.fromMi||0)*10)/10,to:Math.round((+h.toMi||0)*10)/10,start:h.from,end:h.to};}).sort(function(a,b){return stable(a).localeCompare(stable(b));})});
+    return stable({coverage:coverageIssues(reading).map(function(x){return x.code;}),hazards:(reading.hazards||[]).map(function(h){return {kind:h.kind,level:h.level,event:h.event||'',id:h.id||'',source:h.src||'',from:Math.round((+h.fromMi||0)*10)/10,to:Math.round((+h.toMi||0)*10)/10,start:h.from,end:h.to};}).sort(function(a,b){return stable(a).localeCompare(stable(b));})});
   }
   function group(rows){
     var groups=[];rows.slice().sort(function(a,b){return a.leg-b.leg||String(a.routeKey).localeCompare(String(b.routeKey))||a.depart-b.depart;}).forEach(function(row){var last=groups[groups.length-1],sig=row.signature||signature(row.reading);
@@ -21,10 +36,7 @@
   }
   // User opt-in only. Incomplete forecasts and new/unclassified hazards always need review.
   function autoAllowed(reading,rules,kinds){
-    if(!rules||rules.enabled!==true||!reading||reading.error||!Array.isArray(reading.hazards))return false;
-    var s=reading.stats;
-    if(!s||!(s.points>0)||!(s.weather>=s.points)||s.errors||s.beyondWeather||s.beyondAir||s.aiPending)return false;
-    return reading.hazards.every(function(h){return !!kinds[h.kind]&&!h.aiPending&&!h.areaUncertain&&Array.isArray(rules.ask)&&rules.ask.indexOf(h.kind)<0;});
+    return !!reading&&Array.isArray(reading.hazards)&&autoReasons(reading,rules,kinds).length===0;
   }
   // A no-stop timeline is a lower bound. Reject only missed upper deadlines;
   // early arrivals and long apparent waits may still be made valid by real stops/charging.
@@ -70,6 +82,6 @@
     return valid()?{best:best,checked:checked,review:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
-  var api={HOUR:HOUR,hours:hours,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,create:create,readings:readings,better:better,search:search,count:count};
+  var api={HOUR:HOUR,hours:hours,coverageIssues:coverageIssues,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,create:create,readings:readings,better:better,search:search,count:count};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimeWindows=api;
 })(typeof window==='undefined'?globalThis:window);

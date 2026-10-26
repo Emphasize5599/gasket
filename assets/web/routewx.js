@@ -476,6 +476,9 @@
       if (stillLeft.length) stillLeft = await om(stillLeft, null);
       stats.beyondWeather = stillLeft.length;
     }
+    // Failed preferred-provider attempts are recovered when fallback covers every point.
+    // Keep their diagnostic count without treating complete forecasts as missing data.
+    if(stats.weather===stats.points&&!stats.beyondWeather&&stats.errors){stats.recoveredWeatherErrors=stats.errors;stats.errors=0;}
     var airDays = Math.min(5, days);
     await pool(groups, 3, async function (ps) {
       var body = await get('https://air-quality-api.open-meteo.com/v1/air-quality?' + coords(ps) + '&hourly=us_aqi,us_aqi_pm2_5,us_aqi_ozone,dust&timezone=GMT&forecast_days=' + airDays);

@@ -42,3 +42,12 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
  assert(!W.canFit([{depart:0,arrive:W.HOUR},{depart:2*W.HOUR,arrive:5*W.HOUR}],path,end),'already misses arrival deadline before adding stops');
  assert(W.canFit([{depart:0,arrive:W.HOUR},{depart:2*W.HOUR,arrive:4*W.HOUR}],path,end),'inclusive arrival deadline');
 }
+
+{
+ const fog={kind:'fog',level:1,fromMi:0,toMi:20},make=extra=>({hazards:[fog],stats:{points:2,weather:2,errors:0,...extra}}),rows=[make({}),make({beyondAir:1}),make({aiPending:1}),make({errors:1}),make({weather:1}),make({})].map((reading,i)=>({leg:0,routeKey:'fog',depart:start+i*h,reading}));
+ const rules={enabled:true,ask:['rain']},kinds={fog:['Fog'],rain:['Rain']};
+ assert(W.autoAllowed(rows[0].reading,rules,kinds));assert(W.autoAllowed(rows[5].reading,rules,kinds));
+ assert.equal(W.group(rows).length,6,'identical fog with different coverage/rating states must not share a representative screen');
+ assert.equal(W.autoReasons(rows[1].reading,rules,kinds)[0].code,'air');assert.equal(W.autoReasons(rows[2].reading,rules,kinds)[0].code,'rating');
+ assert(!W.autoAllowed(rows[3].reading,rules,kinds));assert(!W.autoAllowed(rows[4].reading,rules,kinds));
+}
