@@ -12,6 +12,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal scroll');
  await p.click('#gDcYes');await p.waitForSelector('.dc-guess',{state:'detached'});assert.match(await p.evaluate(()=>Garage.car().dcKwSrc),/you confirmed/);
  // a different trim: the Brave figure is replaced by that trim's
+ await p.waitForFunction(()=>!Garage.trimBusy()&&Array.from(document.querySelectorAll('#gTrimSel option')).some(o=>o.value==='Standard'));
  await p.evaluate(()=>{const s=document.getElementById('gTrimSel');if(s){s.value='Standard';s.dispatchEvent(new Event('change',{bubbles:true}));}else{const t=document.getElementById('gTrim');t.value='Standard';t.dispatchEvent(new Event('change',{bubbles:true}));}});
  await p.waitForFunction(()=>+Garage.car().dcKw===170,null,{timeout:10000});
  // a typed number is never replaced

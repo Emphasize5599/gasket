@@ -101,6 +101,7 @@
     (stretches || []).forEach(function (s) {
       if (!s.cruise || !(s.mi > 0)) return;
       var v0 = s.limit, v1 = Math.max(lo || 40, Math.min(hi || 90, v0 + offset));
+      if(s.trafficMph>0){v0=Math.min(v0,s.trafficMph);v1=Math.min(v1,s.trafficMph);}
       mi += s.mi; w0 += s.mi * v0; w1 += s.mi * v1;
       minSaved += s.mi * (1 / v0 - 1 / v1) * 60;
       extraGal += s.mi * (1 / mpg(v1) - 1 / mpg(v0));

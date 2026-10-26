@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.272 - 2026-10-26
+- Optional HERE traffic forecasts now inform route timing and energy estimates, with shared usage limits and reusable forecasts.
+- Explore departure windows on traffic-colored sliders with added driving minutes at major points. Choose outbound and return times separately, or compare the whole immediate round trip.
+
 ## 0.0.271 - 2026-10-25
 - The Walmart+ check for Exxon and Mobil stations works again: ExxonMobil's station finder refused the app's requests, so it's now asked from a hidden exxon.com page, a few areas at a time. If ExxonMobil asks for a check, the usual banner opens it, and finishing it retries the areas that failed.
 - Bug fixes.

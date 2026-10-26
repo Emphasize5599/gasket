@@ -1740,7 +1740,7 @@ public class MainActivity extends Activity {
                         synchronized (MainActivity.this) {
                             int used = prefs().getInt(hereMonthKey(), 0);
                             if (monthlyCap > 0 && used >= monthlyCap) {
-                                o.put("error", "Monthly HERE toll lookup cap reached (" + used + "/" + monthlyCap + ").");
+                                o.put("error", "Monthly HERE routing lookup cap reached (" + used + "/" + monthlyCap + ").");
                                 o.put("code", "here_cap"); reply(reqId, o); return;
                             }
                             if (!prefs().edit().putInt(hereMonthKey(), used + 1).commit()) throw new Exception("Could not save HERE usage; request stopped");

@@ -11,7 +11,7 @@
     function clean(v){if(Array.isArray(v))return v.map(clean);if(v&&typeof v==='object'){var out={};Object.keys(v).forEach(function(k){var x=clean(v[k]);if(x!=null&&x!==''&&!(typeof x==='object'&&!Object.keys(x).length))out[k]=x;});return out;}return v;}
     return key(clean(o));
   }
-  function journey(route,trip){return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret];}),trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.backAt||'']);}
+  function journey(route,trip){return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret];}),trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.backAt||'',!!trip.trafficForecast]);}
   function sum(rows,k){return rows.reduce(function(n,r){return n+(r[k]||0);},0);}
   function toll(t){return t&&t.has===false?0:t&&Number.isFinite(t.cost)&&t.cost>=0?t.cost:null;}
   function metrics(s,leg,adapters){
@@ -23,7 +23,7 @@
     var driving=(row?row.drivingSec:m.durationSec)/60,detour=chosen.reduce(function(n,x){return n+(x.c.detourMin||0);},0),setup=chosen.length*(r.opts.stopMinutes||0);
     // Clip each selected-speed road stretch to this leg; do not distribute time savings
     // from one leg over unrelated legs just because their durations are similar.
-    if(s.speedTiming){var from=row?row.from:0,to=row?row.to:m.totalMi;driving-=s.speedTiming.reduce(function(n,x){var mi=Math.max(0,Math.min(to,x.to)-Math.max(from,x.from));return n+(x.offset&&x.limit>0?mi*(1/x.limit-1/Math.max(x.lo,Math.min(x.hi,x.limit+x.offset)))*60:0);},0);}
+    if(s.speedTiming){var from=row?row.from:0,to=row?row.to:m.totalMi;driving-=s.speedTiming.reduce(function(n,x){if(!x.offset||!(x.limit>0))return n;return n-T.speedRates([x],[x.offset],function(v){return v;},x.lo,x.hi).reduce(function(total,r){return total+Math.max(0,Math.min(to,r.to)-Math.max(from,r.from))*r.rate*60;},0);},0);}
     else {var speedSaved=r.speedState&&r.speedState.minSaved||0;driving-=i==null?speedSaved:speedSaved*(m.durationSec?row.drivingSec/m.durationSec:0);}
     var overlap=0,turn=rows.length-2,back=s.trip&&s.trip.returnTrip&&!s.trip.backAuto&&Date.parse(s.trip.backAt),depart=r.opts.rewardDepartAt;
     if(back&&depart&&turn>=0&&(i==null||i===turn)){

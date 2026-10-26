@@ -4,8 +4,8 @@ const S = require('../assets/web/speed.js');
 // Alternative-route fuel models must follow vehicle changes, not only route identity.
 {
  const fs=require('node:fs'),vm=require('node:vm'),src=fs.readFileSync('assets/web/tripui.js','utf8');
- const body=src.match(/  function hzModel\(a\) \{[^\n]+/)[0];let car={city:3,hwy:3,comb:3,kind:'ev'},builds=0;
- const ctx={hzModels:new WeakMap(),carModel:()=>({...car}),T:{buildRoute:(a,c)=>({route:a,car:c,n:++builds})}};
+ const body=src.match(/  function hzModel\(a,i\) \{[^\n]+/)[0];let car={city:3,hwy:3,comb:3,kind:'ev'},builds=0;
+ const ctx={hzModels:new WeakMap(),carModel:()=>({...car}),traffic:null,departAt:()=>new Date(0),buildModel:(a,c)=>({route:a,car:c,n:++builds})};
  vm.runInNewContext(body,ctx);const route={},first=ctx.hzModel(route);
  assert.strictEqual(ctx.hzModel(route),first,'unchanged profile reuses route work');
  car={city:55,hwy:53,comb:54,kind:'gas'};const prius=ctx.hzModel(route);

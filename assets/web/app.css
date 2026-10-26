@@ -2083,3 +2083,13 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .vc-add {display:flex;flex-direction:column;gap:12px;}
 .vc-add .btn,.vc-pick {width:100%;white-space:normal;}
 .vc-pick {margin-bottom:10px;}
+
+/* Keep the time-window color scale visible under a native, accessible range control. */
+.traffic-window-slider { appearance:none; -webkit-appearance:none; width:100%; height:8px; margin:16px 0; border:0; border-radius:5px; padding:0; }
+.traffic-window-slider::-webkit-slider-runnable-track { height:8px; border-radius:5px; background:transparent; }
+.traffic-window-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:24px; height:24px; margin-top:-8px; border:2px solid var(--surface); border-radius:50%; background:var(--accent); box-shadow:0 1px 4px #0006; }
+.traffic-window-slider:focus-visible { outline:2px solid var(--accent); outline-offset:6px; }
+
+.traffic-picker details { margin:12px 0; padding:10px 12px; border-radius:14px; background:var(--surface-2); }
+.traffic-picker summary { color:var(--accent); font-weight:600; cursor:pointer; }
+.traffic-picker .lbl { margin-top:8px; }

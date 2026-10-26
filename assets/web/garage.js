@@ -1677,7 +1677,7 @@
     var cost = function (r, off) {          // each piece at its own limit and at the gas price in the tank there
       var o = { mi: 0, minSaved: 0, extraGal: 0, cost: 0, w0: 0, w1: 0 };
       r.pieces.forEach(function (pc) {
-        var x = SP.leg([{ mi: pc.mi, limit: pc.limit, cruise: true }], off, f, pc.price, lo, hi);
+        var x = SP.leg([{ mi: pc.mi, limit: pc.limit, trafficMph:pc.trafficMph, cruise: true }], off, f, pc.price, lo, hi);
         o.mi += x.mi; o.minSaved += x.minSaved; o.extraGal += x.extraGal; o.cost += x.cost; o.w0 += x.avgLimit * x.mi; o.w1 += x.avgSpeed * x.mi;
       });
       o.avgLimit = o.mi ? o.w0 / o.mi : 0; o.avgSpeed = o.mi ? o.w1 / o.mi : 0;

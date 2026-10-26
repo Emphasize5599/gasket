@@ -256,6 +256,7 @@
     return {
       pts: pts, cum: cum, totalMi: totalMi, durationSec: m.durationSec,
       segs: segs, legEnds: m.legEnds, cityGpm: m.cityGpm, hwyGpm: m.hwyGpm, combGpm: m.combGpm,
+      traffic: m.traffic,
       /** gallons burned driving the route from mile 0 to mile d */
       galTo: function (d) {
         if (d <= 0) return 0;
@@ -1082,10 +1083,11 @@
    * slower). secs: [{from, to, limit}], offsets: [mph], mpg(v): the car's curve.
    */
   function speedRates(secs, offsets, mpg, lo, hi) {
-    return secs.map(function (sc, i) {
-      var off = offsets[i] || 0, v0 = sc.limit, v1 = Math.max(lo || 25, Math.min(hi || 90, v0 + off));
-      return { from: sc.from, to: sc.to, rate: off ? 1 / mpg(v1) - 1 / mpg(v0) : 0 };
+    var out=[];secs.forEach(function (sc, i) {
+      var cuts=[sc.from,sc.to];(sc.traffic||[]).forEach(function(r){if(r.from>sc.from&&r.from<sc.to)cuts.push(r.from);if(r.to>sc.from&&r.to<sc.to)cuts.push(r.to);});cuts.sort(function(a,b){return a-b;});
+      for(var k=1;k<cuts.length;k++){if(cuts[k]<=cuts[k-1])continue;var mid=(cuts[k]+cuts[k-1])/2,r=(sc.traffic||[]).filter(function(r){return mid>=r.from&&mid<r.to;})[0],off=offsets[i]||0,v0=sc.limit,v1=Math.max(lo||25,Math.min(hi||90,v0+off));if(r&&r.trafficMph>0){v0=Math.min(v0,r.trafficMph);v1=Math.min(v1,r.trafficMph);}out.push({from:cuts[k-1],to:cuts[k],rate:off?1/mpg(v1)-1/mpg(v0):0});}
     });
+    return out;
   }
   function extraBetween(rates, a, b) {
     var g = 0;
