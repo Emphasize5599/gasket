@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.276 — large hourly candidate counts
+
+New 19:14 backup (274) has round-trip, arrival Oct28 22:00–Oct29 02:00, blank earliestLeave. No saved routes survive in its trips KV and log contains no hourly-search diagnostics, so exact reported ~20k cannot be reconstructed. Root mechanism: arrival bounds include +24h lookback; count/search multiply approved route-hour rows per leg with only monotonic departure pruning. Count includes impossible combinations and is not unique physical routes. Preserve exhaustive valid-combination requirement. Added no-stop lower-bound timeline rejection before EV reprojection / AutoTrip sweeps: only reject if departure misses chosen hour or arrival already exceeds its deadline. Never reject an early arrival or apparent excessive wait from this lower bound (stops/charging could fill them). Session caches per-leg/hour timing preparation 10min instead of rebuilding/refetching for every cross-product entry. Status calls these route/hour combinations; logs include per-leg approved hour/road counts and timing-rejected count. Window config explains blank-earliest arrival lookback. Still enumerates every candidate; not a beam/capped/early-best search.
+
 ## 0.0.275 — discount reader and hourly screening
 
 Synced to 454bf80; interrupted local work remains stashed. New log showed two XOM native 90s timeouts (18:41:08 / 18:42:39), not successful verification. Still uses Exxon's official locator API through its signed-out page (direct 403s in 269). Worker now bounds headers/body to 6s, batch to 25s, retains completed cells, rejects malformed responses; native page deadline 35s and reuses ready page. Session circuit breaker avoids repeated stalled batches until explicit Retry/check completion; weekly successful cells still shared. Batch logs carry read counts/stage/timing; summary distinguishes unavailable cells. Log cannot distinguish a stalled page from hung fetch in the old build.

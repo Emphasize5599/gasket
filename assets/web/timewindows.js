@@ -26,6 +26,11 @@
     if(!s||!(s.points>0)||!(s.weather>=s.points)||s.errors||s.beyondWeather||s.beyondAir||s.aiPending)return false;
     return reading.hazards.every(function(h){return !!kinds[h.kind]&&!h.aiPending&&!h.areaUncertain&&Array.isArray(rules.ask)&&rules.ask.indexOf(h.kind)<0;});
   }
+  // A no-stop timeline is a lower bound. Reject only missed upper deadlines;
+  // early arrivals and long apparent waits may still be made valid by real stops/charging.
+  function canFit(earliest,path,arrivals){
+    return earliest.every(function(t,i){var r=path[i],a=arrivals&&arrivals[i];return !r||!(t.depart>=r.depart+HOUR||a&&t.arrive>a.end);});
+  }
   function create(){
     var roads=new Map(),answers=new Map();
     function id(row){return row.leg+'|'+row.routeKey+'|'+row.depart;}
@@ -65,6 +70,6 @@
     return valid()?{best:best,checked:checked,review:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
-  var api={HOUR:HOUR,hours:hours,autoAllowed:autoAllowed,signature:signature,group:group,create:create,readings:readings,better:better,search:search,count:count};
+  var api={HOUR:HOUR,hours:hours,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,create:create,readings:readings,better:better,search:search,count:count};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimeWindows=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -30,3 +30,11 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
  assert(!W.autoAllowed(complete([]),{enabled:false,ask:[]},kinds));
  assert(!W.autoAllowed(complete([{kind:'rain'},{kind:'storm'}]),{enabled:true,ask:['storm']},kinds));
 }
+
+{
+ const path=[{depart:0},{depart:2*W.HOUR}],end=[null,{start:3*W.HOUR,end:4*W.HOUR}];
+ assert(W.canFit([{depart:0,arrive:W.HOUR},{depart:2*W.HOUR,arrive:2.5*W.HOUR}],path,end),'early arrival can become valid after stops; do not prune');
+ assert(!W.canFit([{depart:0,arrive:4*W.HOUR},{depart:4*W.HOUR,arrive:5*W.HOUR}],path,end),'cannot reach the selected next hour even without stops');
+ assert(!W.canFit([{depart:0,arrive:W.HOUR},{depart:2*W.HOUR,arrive:5*W.HOUR}],path,end),'already misses arrival deadline before adding stops');
+ assert(W.canFit([{depart:0,arrive:W.HOUR},{depart:2*W.HOUR,arrive:4*W.HOUR}],path,end),'inclusive arrival deadline');
+}
