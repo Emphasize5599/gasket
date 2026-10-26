@@ -15,6 +15,10 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
  const changed=await W.search({legs:[[loaded[0]]],consent:state,evaluate:async path=>({...await evaluate(path),legs:[{routeKey:'road',depart:start,arrive:start+20*60000,signature:W.signature(rain),reading:rain}]})});assert.equal(changed.best,null);assert.equal(changed.review.length,1,'new hazards need another explicit decision');state.answer(W.group(changed.review)[0],false);const refused=await W.search({legs:[[loaded[0]]],consent:state,evaluate:async path=>({...await evaluate(path),legs:[{routeKey:'road',depart:start,arrive:start+20*60000,signature:W.signature(rain)}]})});assert.equal(refused.best,null);assert.equal(refused.review.length,0,'declined changed conditions cannot reappear as repeated questions');
  const wrongWindow=await W.search({legs:[[loaded[0]]],consent:state,arrivals:[{start:start+h,end:start+2*h}],evaluate});assert.equal(wrongWindow.best,null,'actual arrival must fit destination window');
  let alive=true;assert.equal(await W.search({legs:[[loaded[0]]],consent:state,valid:()=>alive,evaluate:async path=>{alive=false;return evaluate(path);}}),null);
+ // Cached answers must still let input/cancel timers run between hourly jobs.
+ let responsive=true,cachedReads=0,timerRan=false;const cancelTimer=setTimeout(()=>{timerRan=true;responsive=false;},0);
+ const interrupted=await W.readings({rows:Array.from({length:100},(_,i)=>({...loaded[0],depart:start+i*h})),consent:state,valid:()=>responsive,read:async()=>{cachedReads++;return clear;}});
+ clearTimeout(cancelTimer);assert(timerRan,'cached hourly reads yield to input events');assert.equal(interrupted,null);assert(cachedReads<100,'cancellation stops queued hours');
  console.log('Hourly consent, grouped hazards, missing data, changed-condition screening, actual timing/arrival constraints, cost/time choice, destination waits and cancellation.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
 

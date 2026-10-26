@@ -42,7 +42,7 @@
   }
   async function readings(config){
     var out=[],next=0,jobs=config.rows.filter(function(r){return config.consent.roadAllowed(r.leg,r.routeKey);}),valid=config.valid||function(){return true;};
-    async function lane(){while(next<jobs.length&&valid()){var row=jobs[next++],reading;try{reading=await config.read(row);}catch(e){reading={error:String(e.message||e),hazards:[]};}if(!valid())return;out.push(Object.assign({},row,{reading:reading,signature:signature(reading)}));if(config.progress)config.progress(out.length,jobs.length);}}
+    async function lane(){while(next<jobs.length&&valid()){var row=jobs[next++],reading;await new Promise(function(done){setTimeout(done,0);});if(!valid())return;try{reading=await config.read(row,{valid:valid,progress:function(frac){if(config.detail)config.detail(out.length,jobs.length,row,frac);}});}catch(e){reading={error:String(e.message||e),hazards:[]};}if(!valid())return;out.push(Object.assign({},row,{reading:reading,signature:signature(reading)}));if(config.progress)config.progress(out.length,jobs.length);}}
     await Promise.all([lane(),lane()]);return valid()?out:null;
   }
   function better(a,b,priority){if(!a)return false;if(!b)return true;var keys=priority==='time'?['minutes','cost','waitMinutes']:['cost','minutes','waitMinutes'];for(var i=0;i<keys.length;i++){var av=Number.isFinite(a[keys[i]])?a[keys[i]]:Infinity,bv=Number.isFinite(b[keys[i]])?b[keys[i]]:Infinity,d=av-bv;if(Math.abs(d)>1e-7)return d<0;}return a.depart<b.depart;}

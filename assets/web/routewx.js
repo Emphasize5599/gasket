@@ -9,17 +9,25 @@
  */
 (function (root) {
   'use strict';
-  var HOUR = 3600e3;
+  var HOUR = 3600e3, sliceStarted=0;
+  async function cooperate(valid){
+    if(valid&&!valid())throw Error('Weather reading cancelled');
+    if(Date.now()-sliceStarted>=8){await new Promise(function(done){setTimeout(done,0);});sliceStarted=Date.now();}
+    if(valid&&!valid())throw Error('Weather reading cancelled');
+  }
+  function decode(body,opts){var cache=opts&&opts.parsed,hit=cache&&cache.get(body);if(hit)return hit;var v=JSON.parse(body);if(cache){if(cache.size>=256)cache.delete(cache.keys().next().value);cache.set(body,v);}return v;}
+  var temperatureSeries=new WeakMap();
+  function nwsTemperatures(hourly){var v=temperatureSeries.get(hourly);if(!v){v=hourly.map(function(x){return [Date.parse(x.startTime),x.temperatureUnit==='C'?x.temperature:(x.temperature-32)*5/9];}).filter(function(x){return Number.isFinite(x[0])&&Number.isFinite(x[1]);});temperatureSeries.set(hourly,v);}return v;}
+
 
   // ---------- where you'll be, and when ----------
   /** Seconds of driving from the start to mile mi (Google's time for each step, spread over its miles). */
   function timeAt(model, mi) {
     var segs = model.segs || [];
-    for (var i = 0; i < segs.length; i++) {
-      var s = segs[i];
-      if (mi <= s.to || i === segs.length - 1) return s.t0 + (s.t1 - s.t0) * Math.max(0, Math.min(1, (mi - s.from) / ((s.to - s.from) || 1)));
-    }
-    return 0;
+    if(!segs.length)return 0;
+    var lo=0,hi=segs.length-1;
+    while(lo<hi){var mid=(lo+hi)>>1;if(mi<=segs[mid].to)hi=mid;else lo=mid+1;}
+    var s=segs[lo];return s.t0+(s.t1-s.t0)*Math.max(0,Math.min(1,(mi-s.from)/((s.to-s.from)||1)));
   }
   /**
    * Points along the route: every ~20 miles (more apart on very long trips, at most `max`), each with when you'd be there.
@@ -36,6 +44,14 @@
     }
     return out;
   }
+
+  async function prepare(model,opts){
+    opts=opts||{};await cooperate(opts.valid);
+    var pts=samples(model,{depart:1}),dense=samples(model,{depart:1,everyMi:1,max:4000});
+    for(var i=0;i<dense.length;i++){await cooperate(opts.valid);if(opts.stateAt)dense[i].state=opts.stateAt(dense[i].lat,dense[i].lng);}
+    return {pts:pts,dense:dense,states:!!opts.stateAt};
+  }
+  function retime(pts,depart,stops){return pts.map(function(p){var wait=(stops||[]).reduce(function(n,s){return n+(s.mi<p.mi?(s.min||0):0);},0);return Object.assign({},p,{eta:depart+p.eta-1+wait*60000});});}
 
   // ---------- what the forecast means for driving ----------
   // [key, label, the climate situation it goes with (ClimateMath.WEATHER), icon]
@@ -345,22 +361,22 @@
     var t0 = Date.parse(times[0] + 'Z'), i = Math.floor((t - t0) / HOUR);
     return i >= 0 && i < times.length ? i : -1;
   }
-  function list(body) { var j = typeof body === 'string' ? JSON.parse(body) : body; return Array.isArray(j) ? j : [j]; }
-  async function pool(items, n, fn) {
+  function list(body,opts) { var j = typeof body === 'string' ? decode(body,opts) : body; return Array.isArray(j) ? j : [j]; }
+  async function pool(items, n, fn, valid) {
     var i = 0, ws = [];
-    async function w() { while (i < items.length) { var k = i++; await fn(items[k], k); } }
+    async function w() { while (i < items.length) { var k = i++; await cooperate(valid); await fn(items[k], k); } }
     for (var q = 0; q < Math.min(n, items.length); q++) ws.push(w());
     await Promise.all(ws);
   }
   /** "10 to 15 mph" -> 15 (the most it says). */
   function windMph(s) { var m = String(s || '').match(/\d+/g); return m ? Math.max.apply(null, m.map(Number)) : null; }
   /** A point's NWS hourly forecast periods: /points (which grid square, kept 30 days) then that square's hourly forecast. */
-  async function nwsHourly(p, getJson, stats) {
+  async function nwsHourly(p, getJson, stats, opts) {
     try {
       var r = await getJson('https://api.weather.gov/points/' + p.lat.toFixed(4) + ',' + p.lng.toFixed(4));
-      var url = r && r.body && JSON.parse(r.body).properties.forecastHourly; if (!url) throw new Error('no grid');
+      var url = r && r.body && decode(r.body,opts).properties.forecastHourly; if (!url) throw new Error('no grid');
       var h = await getJson(url); if (!h || !h.body) throw new Error('no forecast');
-      return JSON.parse(h.body).properties.periods || null;
+      return decode(h.body,opts).properties.periods || null;
     } catch (e) { stats.nwsErrors = (stats.nwsErrors || 0) + 1; return null; }
   }
   /** The NWS forecast's words for an hour -> {kind: level}: thunderstorms, freezing rain / sleet, snow, rain, fog, wind. */
@@ -424,10 +440,10 @@
     total += near.length; tell();
     stats.nws = 0;
     await pool(near, 4, async function (p) {
-      var hourly = await nwsHourly(p, getJson, stats); done++; tell(); if (!hourly) return;
+      var hourly = await nwsHourly(p, getJson, stats, opts); done++; tell(); if (!hourly) return;
       var per = hourly.filter(function (x) { return Date.parse(x.startTime) <= p.eta && p.eta < Date.parse(x.endTime); })[0];
       if (!per) return;
-      p.temperatureHours=hourly.map(function(x){return [Date.parse(x.startTime),x.temperatureUnit==='C'?x.temperature:(x.temperature-32)*5/9];}).filter(function(x){return Number.isFinite(x[0])&&Number.isFinite(x[1]);});
+      p.temperatureHours=nwsTemperatures(hourly);
       p.wx = { src: 'nws', text: per.shortForecast || '', pop: per.probabilityOfPrecipitation ? per.probabilityOfPrecipitation.value : null,
         tF: per.temperatureUnit === 'C' ? per.temperature * 9 / 5 + 32 : per.temperature, wind: windMph(per.windSpeed) };
       stats.weather++; stats.nws++;
@@ -440,7 +456,7 @@
           '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch' + (model ? '&models=' + model : '') + '&timezone=GMT&forecast_days=' + days);
         if (!body) { left = left.concat(qs); return; }
         try {
-          list(body).forEach(function (d, k) {
+          list(body,opts).forEach(function (d, k) {
             var p = qs[k], h = d && d.hourly; if (!p || !h) return;
             var i = hourIdx(h.time, p.eta);
             if (i < 0 || (h.weather_code[i] == null && h.precipitation[i] == null)) { left.push(p); return; }
@@ -465,7 +481,7 @@
       var body = await get('https://air-quality-api.open-meteo.com/v1/air-quality?' + coords(ps) + '&hourly=us_aqi,us_aqi_pm2_5,us_aqi_ozone,dust&timezone=GMT&forecast_days=' + airDays);
       if (!body) return;
       try {
-        list(body).forEach(function (d, k) {
+        list(body,opts).forEach(function (d, k) {
           var p = ps[k], h = d && d.hourly; if (!p || !h) return;
           var i = hourIdx(h.time, p.eta);
           if (i < 0 || h.us_aqi[i] == null) { stats.beyondAir++; return; }
@@ -478,21 +494,21 @@
     var alerts = [];
     if (opts.stateAt && opts.dense) {
       var byState = {};
-      opts.dense.forEach(function (p) { var st = opts.stateAt(p.lat, p.lng); if (st) (byState[st] = byState[st] || []).push(p); });
+      for(var di=0;di<opts.dense.length;di++){await cooperate(opts.valid);var p=opts.dense[di],st=opts.prepared&&opts.prepared.states?p.state:opts.stateAt(p.lat,p.lng);if(st)(byState[st]=byState[st]||[]).push(p);}
       var states = Object.keys(byState); stats.alertStates = states.length; total += states.length - 1; tell();
       var seen = {};
       await pool(states, 4, async function (st) {
         var body = await get('https://api.weather.gov/alerts/active?area=' + st); if (!body) return;
         try {
           var ps = byState[st], a = ps[0].eta - HOUR, b = ps[ps.length - 1].eta + HOUR;
-          (JSON.parse(body).features || []).map(alertOf).forEach(function (x) { if (x && x.from <= b && x.to >= a && !seen[x.id]) { seen[x.id] = 1; alerts.push(x); } });
+          (decode(body,opts).features || []).map(alertOf).forEach(function (x) { if (x && x.from <= b && x.to >= a && !seen[x.id]) { seen[x.id] = 1; alerts.push(x); } });
         } catch (e) { stats.errors++; }
       });
       stats.alerts = alerts.length;
       if (alerts.some(function (x) { return !(x.polys && x.polys.length); }) && opts.counties) await opts.counties();   // load the county outlines only when needed
       await locateAlerts(alerts,getJson,stats,opts);
       total += alerts.length; tell();
-      for (var q = 0; q < alerts.length; q++) { await digest(alerts[q], opts.compare, opts.digestMs); done++; tell(); }
+      for (var q = 0; q < alerts.length; q++) { await cooperate(opts.valid); await digest(alerts[q], opts.compare, opts.digestMs); done++; tell(); }
     }
     pts.forEach(function (p) { p.flags = classify(p.wx, p.aq); });
     return { pts: pts, stats: stats, alerts: alerts };
@@ -505,11 +521,12 @@
    */
   async function forRoute(model, getJson, opts) {
     opts = opts || {};
-    var pts = samples(model, { depart: opts.depart, stops: opts.stops }), dense = samples(model, { depart: opts.depart, stops: opts.stops, everyMi: 1, max: 4000 });
+    await cooperate(opts.valid);var prepared=opts.prepared||await prepare(model,opts),depart=opts.depart||Date.now();opts=Object.assign({},opts,{prepared:prepared});
+    var pts=retime(prepared.pts,depart,opts.stops),dense=retime(prepared.dense,depart,opts.stops);
     var half = pts.length > 1 ? (pts[1].mi - pts[0].mi) / 2 : 0;
     var res = await lookup(pts, getJson, Object.assign({}, opts, { dense: dense }));
     var wx = stretches(res.pts).map(function (x) { x.src = x.kind === 'air' ? 'air' : 'forecast'; x.fromMi = Math.max(0, x.fromMi - half); x.toMi = Math.min(model.totalMi, x.toMi + half); return x; });
-    var al = alertStretches(dense, res.alerts || [], opts.countyOf);
+    var al=[];for(var ai=0;ai<(res.alerts||[]).length;ai++){await cooperate(opts.valid);al=al.concat(alertStretches(dense,[res.alerts[ai]],opts.countyOf));}await cooperate(opts.valid);
     var hz = wx.concat(al).sort(function (a, b) { return a.fromMi - b.fromMi || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind); });
     res.stats.hazards = hz.length;
     res.stats.aiPending = al.filter(function (x) { return x.aiPending; }).length;   // warnings on this road the model hasn't read yet
@@ -534,7 +551,7 @@
     if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : pk.wind ? ' (up to ' + Math.round(pk.wind) + ' mph)' : '');
     return KINDS[x.kind][0];
   }
-  var api = { vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
+  var api = { prepare:prepare, vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
     forRoute: forRoute, rerate:rerate, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;

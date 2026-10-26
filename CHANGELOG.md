@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.277 - 2026-10-26
+- Keeps hourly weather reading responsive, reuses route geography and cached forecasts, and shows progress within each hour.
+- Adds hourly-reading diagnostics and makes cancellation stop queued work.
+
 ## 0.0.276 - 2026-10-26
 - Hourly planning reuses leg forecasts and rejects impossible timing combinations before costly stop optimization.
 - Clarified route/hour candidate counts and arrival-window search bounds.

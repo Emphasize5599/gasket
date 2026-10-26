@@ -77,7 +77,7 @@
     key:function(){return windowStateKey({id:S.carId,trip:S.trip,speed:S.speed,route:route,alts:alts});},keyFor:windowStateKey,routes:windowRoutes,
     destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
     changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();renderStep();},
-    rows:windowRows,read:windowRead,forecastHtml:function(){return traffic?traffic.html():'';},
+    rows:windowRows,read:function(row,control){return windowRead(row,null,control);},forecastHtml:function(){return traffic?traffic.html():'';},
     canAuto:function(row){return !RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]).tires.length;},
     reviewed:function(s){windowReviewComplete(s);step=ST_COMPARE;renderStep();},
     confirm:async function(row){var risk=RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]);return !risk.tires.length||await A.confirmDel({always:true,title:'Low tread in these conditions',body:hzRiskHtml({risk:risk},row.raw,row.leg),no:'Choose another time',action:'I understand',goClass:'primary'});},
@@ -94,10 +94,16 @@
       min+=Math.min.apply(null,list.map(function(r){return r.model.durationSec/120;}));max+=Math.max.apply(null,list.map(function(r){return r.model.durationSec/60*3;}))+(KIND()==='ev'?240:60)+(+windowDestination(i).wait||0);
     });return out;
   }
-  async function windowRead(row,stops){
+  async function windowRead(row,stops,control){
     hzWarm();var m=row.model||T.buildRoute(row.raw,carModel()),p=traffic&&traffic.profile(row.raw,row.depart);if(p&&!row.actual)m=Traffic.overlay(m,p);
     var session=windows.current();if(!session.wx)session.wx=new Map();function get(url){var hit=session.wx.get(url);if(!hit||Date.now()-hit.at>600000){hit={at:Date.now(),value:wxGet(url)};session.wx.set(url,hit);}return hit.value;}
-    var r=await RouteWx.forRoute(m,get,{depart:row.depart,stops:stops||[],stateAt:window.Limits&&Limits.stateAt,counties:loadCounties,countyOf:function(f){return window.US_COUNTIES&&US_COUNTIES[f];},compare:aiCan()&&Severity.state()==='ready'?Severity.compare:null});
+    var control=control||{},sourceValid=control.valid||function(){return windows.current()===session;},validatedAt=0,stillValid=true;
+    function valid(){var now=Date.now();if(!validatedAt||now-validatedAt>=50){validatedAt=now;stillValid=sourceValid();}return stillValid;}
+    if(!session.geometry)session.geometry=new WeakMap();var geometry=session.geometry.get(m);
+    if(!geometry){geometry=RouteWx.prepare(m,{stateAt:window.Limits&&Limits.stateAt,valid:valid});session.geometry.set(m,geometry);geometry.catch(function(){session.geometry.delete(m);});}
+    var prepared=await geometry;if(!session.parsed)session.parsed=new Map();
+    async function checkedGet(url){if(!valid())throw Error('Weather reading cancelled');var r=await get(url);if(!valid())throw Error('Weather reading cancelled');return r;}
+    var r=await RouteWx.forRoute(m,checkedGet,{depart:row.depart,stops:stops||[],prepared:prepared,parsed:session.parsed,valid:valid,onProg:control.progress,stateAt:window.Limits&&Limits.stateAt,counties:loadCounties,countyOf:function(f){return window.US_COUNTIES&&US_COUNTIES[f];},compare:aiCan()&&Severity.state()==='ready'?Severity.compare:null});
     if(!session.climate)session.climate=new Map();if(r.temperatures)session.climate.set(row.routeKey,r.temperatures);return {hazards:r.hazards,stats:r.stats,error:r.error};
   }
   function windowReviewComplete(s){
