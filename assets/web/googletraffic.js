@@ -63,10 +63,15 @@
   return {rows:filled,seconds:filled.reduce(function(n,r){return n+r.seconds;},0),baseSeconds:m.durationSec,coverage:matched/m.totalMi,low:p.low,high:p.high,source:'Google Maps website forecast',match:{coverage:matched/m.totalMi,pointsOff:on.length-good,routePoints:m.pts.length},clock:p.clock};
  }
  function read(body,clock,m){var best=null;parse(body,clock).forEach(function(p){var x=match(p,m);if(!best||x.coverage>best.coverage)best=x;});if(!best||best.coverage<.7){var e=Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');e.details=best&&best.match;throw e;}return best;}
- async function readAsync(body,clock,m,valid){var sources=parse(body,clock),best=null;
+ function mismatch(best){var e=Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');e.details=best&&best.match;e.mismatch=true;return e;}
+ // minCover 0 keeps a partly matched profile: its unmatched stretches are already forecast:false gaps at the route's own time.
+ async function readAsync(body,clock,m,valid,minCover){var sources=parse(body,clock),best=null;if(minCover==null)minCover=.7;
   for(var i=0;i<sources.length;i++){var p=sources[i],projected=[];for(var k=0;k<p.pts.length;k++){if(k%128===0&&valid&&!valid())throw Error('Traffic lookup cancelled');projected.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}var x=match(p,m,projected);if(!best||x.coverage>best.coverage)best=x;}
-  if(!best||best.coverage<.7)throw Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');return best;
+  if(!best||best.coverage<minCover||!(best.coverage>0))throw mismatch(best);return best;
  }
+ // A stretch Google routes on other roads keeps the route's own time; the whole forecast fails only below MIN_COVER.
+ var MIN_COVER=.5;
+ function unmatched(m,why){var t=m.durationSec;return {rows:[{from:0,to:m.totalMi,seconds:t,baseSeconds:t,forecast:false,trafficMph:null,freeMph:null}],seconds:t,baseSeconds:t,coverage:0,low:t,high:t,source:'Google Maps website forecast',match:{coverage:0,why:why},unmatched:true};}
  function boundaries(m){var out=[];for(var i=1;i<m.pts.length;i++){var a=m.pts[i-1],b=m.pts[i];['lat','lng'].forEach(function(k){var lo=Math.min(a[k],b[k]),hi=Math.max(a[k],b[k]);for(var edge=Math.floor(lo)+1;edge<hi;edge++){var f=(edge-a[k])/(b[k]-a[k]);out.push(m.cum[i-1]+f*(m.cum[i]-m.cum[i-1]));}});}return out;}
  async function reuse(ob,m,t,valid){
   if(!ob||!ob.pts||!ob.rows||!Number.isFinite(ob.depart))return null;
@@ -83,10 +88,10 @@
   function get(k,ttl){var r=io.get&&io.get(k,ttl);return r&&r.v||r;}
   async function piece(m,t,o){
    var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid),clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),identity=q+'|'+T.encodePolyline(m.pts),key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(t-now)<3600000?10*MINUTE:6*3600000,held=get(key,ttl);
-   if(held&&held.identity===identity)return Object.assign({},held.profile,{cached:true});if(!valid())throw Error('Traffic lookup cancelled');
+   if(held&&held.identity===identity)return held.unmatched?Object.assign(unmatched(m,held.unmatched),{at:held.at,depart:t,cached:true}):Object.assign({},held.profile,{cached:true});if(!valid())throw Error('Traffic lookup cancelled');
    if(io.observations){var candidates=io.observations(m,t,ttl)||[];for(var ci=0;ci<candidates.length;ci++){var shared=await reuse(candidates[ci].observation,m,t,valid);if(!valid())throw Error('Traffic lookup cancelled');if(shared)return Object.assign(shared,{at:candidates[ci].profile.at,depart:t,cached:true,sharedRoads:true});}}
 
-   if(!pending.has(identity)){var generation=epoch;pending.set(identity,limited(async function(){if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,valid);if(r.error)throw Error(r.error);var p=await readAsync(r.body||r,clock,m,valid);p.at=now;p.depart=t;p.originZone=zone;p.cached=false;if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');if(io.put)io.put(key,{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t}});return p;}).finally(function(){pending.delete(identity);}));}
+   if(!pending.has(identity)){var generation=epoch;pending.set(identity,limited(async function(){if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,valid);if(r.error)throw Error(r.error);var p;try{p=await readAsync(r.body||r,clock,m,valid,0);}catch(e){if(!e.mismatch&&!/No usable time-specific/.test(e.message))throw e;if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var why=String(e.message).slice(0,120);if(io.put)io.put(key,{identity:identity,unmatched:why,at:now});return Object.assign(unmatched(m,why),{at:now,depart:t,cached:false});}p.at=now;p.depart=t;p.originZone=zone;p.cached=false;if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');if(io.put)io.put(key,p.coverage>=.95?{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t}}:{identity:identity,profile:p});return p;}).finally(function(){pending.delete(identity);}));}
    var p=await pending.get(identity);if(!valid())throw Error('Traffic lookup cancelled');return p;
   }
   async function forecast(m,depart,options){
@@ -97,12 +102,14 @@
    var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,seconds=0,low=0,high=0;
    for(var i=0;i<breaks.length;i++){
     if(o.valid&&!o.valid())throw Error('Traffic lookup cancelled');var end=breaks[i],base=F.slice(m,start,end),p=await piece(base,clock,o);if(o.progress)o.progress(i,breaks.length);
-    p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});clock+=p.seconds*1000;seconds+=p.seconds;low+=p.low||p.seconds;high+=p.high||p.seconds;oldest=Math.min(oldest,p.at);cached=cached&&p.cached;
+    p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});if(!p.unmatched)oldest=Math.min(oldest,p.at);clock+=p.seconds*1000;seconds+=p.seconds;low+=p.low||p.seconds;high+=p.high||p.seconds;cached=cached&&p.cached;
     stops.forEach(function(s){if(Math.abs(s.d-end)<.0001)clock+=Math.max(0,s.seconds||0)*1000;});waits.forEach(function(w){if(Math.abs(w.d-end)<.0001)clock=Math.max(clock,w.at);});if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before arrival');clock=Math.max(clock,o.waitAt.at);}start=end;
    }
-   if(o.progress)o.progress(breaks.length,breaks.length);return {source:'Google Maps website forecast',estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
+   if(o.progress)o.progress(breaks.length,breaks.length);var covered=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi;
+   if(covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
+   return {source:'Google Maps website forecast',estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
   return {forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();}};
  }
- var api={wall:wall,query:query,parse:parse,match:match,read:read,readAsync:readAsync,reuse:reuse,boundaries:boundaries,create:create,hash:hash};if(node)module.exports=api;else root.GoogleTraffic=api;
+ var api={MIN_COVER:MIN_COVER,unmatched:unmatched,wall:wall,query:query,parse:parse,match:match,read:read,readAsync:readAsync,reuse:reuse,boundaries:boundaries,create:create,hash:hash};if(node)module.exports=api;else root.GoogleTraffic=api;
 })(typeof window!=='undefined'?window:this);

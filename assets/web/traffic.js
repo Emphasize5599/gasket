@@ -87,7 +87,10 @@
   }
   function overlay(m,p){
     if(!p||!p.rows||!p.rows.length)return m;var segs=[],time=0,j=0,stops=0;
-    m.segs.forEach(function(s){var at=s.from;while(at<s.to-1e-8){while(j<p.rows.length-1&&p.rows[j].to<=at+1e-8)j++;var r=p.rows[j],end=Math.min(s.to,r.to);if(end<=at)throw Error('Invalid traffic coverage');var dt=(end-at)/(r.to-r.from)*r.seconds,mph=(end-at)/dt*3600,w=Math.max(0,Math.min(1,(mph-25)/30)),gpm=m.cityGpm*(1-w)+m.hwyGpm*w,extra=congestion(m,r,end-at,dt);if(extra){gpm=extra.gpm;stops+=extra.stops;}
+    m.segs.forEach(function(s){var at=s.from;while(at<s.to-1e-8){while(j<p.rows.length-1&&p.rows[j].to<=at+1e-8)j++;var r=p.rows[j],end=Math.min(s.to,r.to);
+        // A gap between forecast rows (or rows ending a hair before the route) keeps the route's own time for that stretch.
+        if(end<=at+1e-8||r.from>at+1e-6){var gapEnd=r.from>at+1e-6?Math.min(s.to,r.from):s.to,gt=(gapEnd-at)/Math.max(1e-9,s.to-s.from)*(s.t1-s.t0);if(!(gapEnd>at)||!(gt>0)&&s.t1>s.t0)throw Error('Invalid traffic coverage');segs.push(Object.assign({},s,{from:at,to:gapEnd,t0:time,t1:time+gt,trafficMph:null,freeMph:null}));time+=gt;at=gapEnd;continue;}
+        var dt=(end-at)/(r.to-r.from)*r.seconds,mph=(end-at)/dt*3600,w=Math.max(0,Math.min(1,(mph-25)/30)),gpm=m.cityGpm*(1-w)+m.hwyGpm*w,extra=congestion(m,r,end-at,dt);if(extra){gpm=extra.gpm;stops+=extra.stops;}
       segs.push(Object.assign({},s,{from:at,to:end,t0:time,t1:time+dt,mph:mph,trafficMph:r.forecast===false?null:mph,freeMph:r.forecast===false?null:r.freeMph,gpm:gpm},extra?{stoppedSec:extra.stoppedSec,trafficCat:extra.cat}:{}));time+=dt;at=end;}});
     var out=T.restoreModel(Object.assign({},m,{segs:segs,durationSec:time,traffic:p,trafficUnavailable:null,trafficStops:stops}));if(m._lim)out._lim=m._lim;return out;
   }
