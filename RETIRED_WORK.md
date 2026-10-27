@@ -20,3 +20,6 @@ The 0.0.224 **app-local GPU texture-layer compatibility experiment** is retired 
 ## Out of current scope
 
 Direct Vela code/template reuse is not planned; none is currently bundled. Revisit license compatibility, notices and corresponding-source obligations only if direct reuse is proposed. See [KEYLESS_EXPERIMENT.md](KEYLESS_EXPERIMENT.md#license-decision).
+
+
+**iOverlander campsite integration.** Excluded at the owner's request, 2026-10-27. Do not include it in active campsite discovery/provider suggestions unless reopened.
