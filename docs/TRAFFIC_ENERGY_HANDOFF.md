@@ -9,8 +9,11 @@ Branch: `feature/traffic-rest-integration` (the same commits are also pushed to 
 | Round | Status | What |
 | --- | --- | --- |
 | 0 | done | This handoff committed to `docs/`. |
+| 1 | done | Pure modules, not loaded by the app yet: `assets/web/trafficmodel.js` (`TrafficModel`: section 4 priors with freeway/arterial halves, `section()` → seconds / tStopped / vMoving / nStops, D2 `coverage()` guard rails, `calibrate()` = box-bounded least squares with a weak prior pull and the section 4.3 rejections, `Calibration` running posterior with save/restore, `restart()` kinetic restart energy). `assets/web/auxload.js` (`AuxLoad`: section 5.2 heat-pump / resistive tables (unknown → resistive), `warmup()`, `presetScale()` (setpoint ±40%, recirc −15%, A/C off, seat/wheel/defrost), warm-up **state** via `start` / `energy` / `park` (≥ 20 min park re-arms; preconditioned skips)). `assets/web/idlefuel.js` (`IdleFuel`: section 7 formula, `idleRpm()` by cylinders, `acAdd()`, `idle()` with cold ×1.6, start-stop rule, hybrid engine-off share + charge-neutral battery repay, `fromText()` for the EPA engine string). Test `tests/traffic-energy.test.js` (in the release list): priors, timing, guard rails, calibration recovers synthetic ratios within 0.02 and rejects the five bad cases, warm-up once per cold start, idle table rows within 5%, measured rows in range, Sienna/Prius. |
 
-**Next:** round 1 = pure modules with Node tests (section 9, step 1): `assets/web/trafficmodel.js`, `assets/web/auxload.js`, `assets/web/idlefuel.js`.
+Decisions taken in round 1 (fill-ins, all labeled in code): heat-pump −25 °C mid 4.2 kW (2.5–5.9 range); warm-up seconds = lerp(−18 °C 14 min, −7 °C 10 min, 10 °C 4 min), hot ≥ 30 °C 2.3 kW for 15 min; diesel k 0.28 (0.23–0.33); hybrid repay 0.1 gal/kWh; restart regen gas 0 / hybrid 30% / EV 60% (EV drivetrain 90%).
+
+**Next:** round 2 = wire into `propulsion.js` / `trip.js` behind a flag (section 9 step 2). Climate preset field names: check `climate.js` (`ClimateMath`) before mapping into `AuxLoad.presetScale` (it currently expects `{temp, unit, recirc|air:'recirc', ac, seatHeat, wheelHeat, defrost}`). Replace `propulsion.js` `hvac(t,p)` (a relative curve) with `AuxLoad.energy` per hour; don't add both. Green / uncoloured sections must reproduce today's estimates (regression test). Gas side: add idle + restart only for SLOW / JAM / HEAVY sections on top of the existing EPA interpolation (section 6.4).
 
 ## 0. How to use this document (instructions to the implementing agent)
 
