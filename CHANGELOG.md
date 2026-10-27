@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.285 - 2026-10-27
+- Rest stops are now the first card in Stops: every rest area, campground and store along the whole route, numbered in green in route order, with driving time since the last stop and in total. Searched area by area like gas stations, so other trips reuse it.
+- Google traffic forecasts keep the stretches they match instead of failing the whole trip, and no longer re-ask stretches Google routes differently.
+- Flexible-time planning can start inside the current hour and says why checked trips were set aside.
+- Bug fixes.
+
 ## 0.0.284 - 2026-10-27
 - Traffic forecasts without a key: future traffic comes from Google Maps' own typical-traffic answer, matched road by road. HERE traffic is now opt-in (tolls unchanged).
 - Rest stops: find rest areas, campgrounds and other places to stop along a trip, check parking rules and timing, and add one as a stop.

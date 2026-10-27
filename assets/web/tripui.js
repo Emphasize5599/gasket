@@ -1080,7 +1080,7 @@ return conditions;
       '<div class="field"><div class="lbl">Go over the speed limit by default<small>Off: every road starts at its limit. On: +N over the limit, but never above a top speed — roads already at that limit or higher stay at the limit.</small></div>' + sw('tRule', !!(S.speed.rule && S.speed.rule.on)) + '</div>' +
       '<div class="grid2' + (S.speed.rule && S.speed.rule.on ? '' : ' hidden') + '" id="tRuleBox">' + num('tRuleOver', 'Over the limit by (mph)', S.speed.rule&&S.speed.rule.over!=null?S.speed.rule.over:0, 1) + num('tRuleCap', '…but no faster than (mph)', Garage.ruleCap(), 1) + '</div>' +
       '<div class="field"><div class="lbl">Keep me as slow as the trucks<small>Uses the large-truck limit where a state sets one lower than for cars — e.g. 70 on Arkansas Interstates (like I-57) posted 75. From state law as compiled by IIHS; no road database lists truck limits. Not covered: Illinois\' county truck limits.</small></div>' + sw('tTruck', !!S.speed.truck) + '</div>' +
-      '</div>'+(restUI?restUI.tile():'');
+      '</div>';
     }
     if (k === ST_HAZ) return '<div id="tHz"></div>';
     if (k === ST_ADJ) return '<div id="taResults"></div>';
@@ -1110,7 +1110,7 @@ return conditions;
     }
     if (k === ST_ROUTE) { bindRoute(); return; }
     if (k === ST_HAZ) { renderHz();if(windows&&windows.enabled()){if(!windows.ready())setTimeout(function(){windows.review();},0);}else hzPreload();return; }
-    if (k === ST_PARAMS) { bindSettings();if(restUI)restUI.bind(stepEl(k)); return; }
+    if (k === ST_PARAMS) { bindSettings(); return; }
     if (k === ST_COMPARE) { compareRender(); return; }
     if (onPlan(k)) {
       renderResults();
@@ -4052,7 +4052,7 @@ return conditions;
     bindBuf(); bindDet();
     if (p.ok) {renderTripSpeed();startDetSweep();}
     if ($('tsStopsH')) $('tsStopsH').onclick = function () { r.stopsShut = r.stopsShut === false; keepScroll(showResult); };
-    bindStops();if(restUI){var restHost=$('tsResults');if(restHost&&!restHost.querySelector('[data-rest-tile]')){restHost.insertAdjacentHTML('beforeend',restUI.tile());restUI.bind(restHost);}}
+    bindStops();if(restUI){var restHost=$('tsResults');if(restHost&&!restHost.querySelector('[data-rest-tile]')){restHost.insertAdjacentHTML('afterbegin',restUI.tile());restUI.bind(restHost);}}
     if (A.qify) { if (el) A.qify(el); if (ea) A.qify(ea); }
     sheetSize();
     routeGate();
