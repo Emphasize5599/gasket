@@ -3,7 +3,7 @@
  * Focus 2.0 0.30, Fusion 2.5 0.40, Crown Vic 4.6 0.32), 0.28 diesel (measured Jetta 2.0 TDI). Cylinder count only
  * picks the default idle rpm: no independent effect was found (VT-CPFM with real cylinder counts contradicts the
  * measured V6/V8 data). Every value is DERIVED unless `measured` is set; owner OBD idle logs should replace it. */
-(function (root) {
+(function initIdleFuel(root) {
   'use strict';
   var L_PER_GAL = 3.785411784, KWH_REPAY_L = .1 * L_PER_GAL;   // hybrid battery repaid at ~0.1 gal/kWh (33.7 kWh/gal × ~30%)
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
@@ -53,5 +53,6 @@
     if (/diesel/i.test(t) && !e.fuel) e.fuel = 'diesel'; return e;
   }
   var api = { MEASURED: MEASURED, idleRpm: idleRpm, acAdd: acAdd, warm: warm, idle: idle, fromText: fromText, L_PER_GAL: L_PER_GAL };
+  api.workerSource = '(' + initIdleFuel.toString() + ')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.IdleFuel = api;
 })(typeof window !== 'undefined' ? window : this);

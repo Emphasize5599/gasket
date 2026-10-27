@@ -3,7 +3,7 @@
  * PRIOR from published ground-truth studies (Ecuador 2020, Wagner 2020, Bangkok/Toronto idle shares) or a labeled
  * fill-in, refined only by self-calibration against Google's own durations for the selected route. Never present the
  * result as a measured speed. Owner decision D2: an uncoloured road inside a successful read is free flow. */
-(function (root) {
+(function initTrafficModel(root) {
   'use strict';
   // r = speed / free-flow speed; s = stopped share of section time. [low, high, default]
   var PRIORS = {
@@ -104,6 +104,10 @@
     var eff = kind === 'hybrid' || kind === 'diesel' ? .35 : .25, regen = kind === 'hybrid' ? .3 : 0, mjPerL = kind === 'diesel' ? 38.6 : 34.2;
     return { litres: j * (1 - regen) / eff / (mjPerL * 1e6) };
   }
-  var api = { PRIORS: PRIORS, STOPS_KM: STOPS_KM, prior: prior, key: key, section: section, coverage: coverage, check: check, calibrate: calibrate, Calibration: Calibration, restart: restart };
+  /** Category from a numeric forecast ratio (HERE traffic / free-flow speed): the midpoints between the default
+   *  priors. An inference for stop counts and stopped share only; the forecast's own speed stays the speed. */
+  function fromRatio(r) { r = +r; if (!(r > 0)) return 'NONE'; return r >= .8 ? 'NORMAL' : r >= .5 ? 'SLOW' : r >= .27 ? 'TRAFFIC_JAM' : 'TRAFFIC_JAM_HEAVY'; }
+  var api = { PRIORS: PRIORS, fromRatio: fromRatio, STOPS_KM: STOPS_KM, prior: prior, key: key, section: section, coverage: coverage, check: check, calibrate: calibrate, Calibration: Calibration, restart: restart };
+  api.workerSource = '(' + initTrafficModel.toString() + ')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TrafficModel = api;
 })(typeof window !== 'undefined' ? window : this);

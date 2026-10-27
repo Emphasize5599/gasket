@@ -53,3 +53,27 @@ const sienna=I.fromText('Auto (S6), 6 cyl, 3.5 L');assert.deepEqual([sienna.disp
 const prius={displ:1.8,cyl:4,hybrid:true},pm=I.idle(prius,{ambientC:20}),pc=I.idle(prius,{ambientC:-5}),ph=I.idle(prius,{ambientC:35,acFrac:1});
 assert(pm.lph<pc.lph,'cold hybrid runs its engine more');assert(ph.lph>=.45&&ph.lph<=.85,'hybrid with A/C 0.5–0.8 L/h effective: '+ph.lph);near(pm.engineOnShare,.2,1e-9);assert(pm.batteryKw>0,'battery drain counted (charge-neutral)');
 console.log('Traffic energy modules: priors / timing / D2 guard rails, calibration recovers ratios and rejects bad fits, persisted posterior, EV aux per hour with warm-up state and presets, idle table / measured rows / start-stop / hybrids');
+// ---- round 2: wired into Propulsion behind p.auxModel ----
+{const T=require('../assets/web/trip'),P=require('../assets/web/propulsion');global.AuxLoad=A;global.TrafficModel=M;
+ const pts=Array.from({length:21},(_,i)=>({lat:35,lng:-92+i*.05})),mi=T.hav(pts[0],pts[20]);
+ const model=(parts,traffic)=>{const m=T.buildRoute({distanceMeters:mi*1609.344,duration:Math.round(mi/60*3600)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:[]},{city:4,hwy:3.4,comb:3.7});const seg=m.segs[0],out=[];
+  for(let i=0;i<parts;i++){const f=mi*i/parts,t=mi*(i+1)/parts;out.push(Object.assign({},seg,{from:f,to:t,mph:60},traffic?{trafficMph:traffic,freeMph:65}:{}));}return T.restoreModel(Object.assign({},m,{segs:out}));};
+ const t0=Date.UTC(2026,0,10,12),wx=c=>[{mi:0,hours:Array.from({length:48},(_,h)=>[t0+h*3600000,c])}];
+ const run=(m,c,spec)=>P.project(m,Object.assign({kind:'ev',capacity:80},spec),{startGal:80,weather:wx(c),departAt:t0});
+ const used=r=>80-r.arriveGal;
+ // flag off = today's model exactly; green at 20 °C with the flag on = the same estimate
+ near(used(run(model(1),20,{})),used(run(model(1),20,{auxModel:true})),1e-9,'mild green section unchanged');
+ // warm-up is applied once per cold start, not per section boundary
+ near(used(run(model(1),-8.5,{auxModel:true})),used(run(model(12),-8.5,{auxModel:true})),1e-6,'section boundaries never restart warm-up');
+ assert(used(run(model(1),-8.5,{auxModel:true}))>used(run(model(1),-8.5,{auxModel:true,preconditionedStart:true})),'preconditioning removes the warm-up');
+ // crawl: the old road-load ratio dropped traction toward ~13% of highway; the floor holds it at the city rate (section 5.3)
+ const crawlOff=run(model(1,10),20,{}),crawlOn=run(model(1,10),20,{auxModel:true});
+ assert(used(crawlOn)/mi>=.25-1e-9,'crawl traction never below the EPA city rate: '+(used(crawlOn)/mi).toFixed(3));assert(used(crawlOn)>used(crawlOff));assert(crawlOn.flags.includes('crawl_city_baseline'));
+ // dark-red-like forecast ratio (10/65): inferred stops add restart energy; cold crawl costs more per mile than mild (Leaf 342 vs 167 Wh/mi)
+ assert(crawlOn.trafficStops>0&&crawlOn.flags.includes('traffic_stops_estimated'));assert(used(run(model(1,10),-8.5,{auxModel:true}))/used(crawlOn)>1.5,'cold crawl much worse per mile');
+ assert.equal(M.fromRatio(10/65),'TRAFFIC_JAM_HEAVY');assert.equal(M.fromRatio(.9),'NORMAL');assert.equal(M.fromRatio(0),'NONE');
+ // presets feed the aux power: recirculation in heat lowers it
+ assert(used(run(model(1,20),35,{auxModel:true,heatPump:true,preset:{air:'recirc',ac:'on'}}))<used(run(model(1,20),35,{auxModel:true,heatPump:true,preset:{ac:'on'}})));
+ // the planner worker gets both modules
+ assert(A.workerSource.startsWith('(function initAuxLoad')&&M.workerSource.startsWith('(function initTrafficModel'));
+ console.log('Round 2: flag off unchanged, mild green unchanged, warm-up once, crawl floor, inferred stops, presets, worker sources');}

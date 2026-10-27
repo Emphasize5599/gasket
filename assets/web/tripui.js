@@ -3586,7 +3586,7 @@ return conditions;
     var options={ step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * (S.trip.fillUp?0.8:1) : null,preferredFillCap:kd==='ev'&&!S.trip.fillUp?cap*.8:null,
       priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
-      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:curve?curve.peak:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2},curve?{curve:curve.points}:{}),
+      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:curve?curve.peak:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2},curve?{curve:curve.points}:{},S.trafficEnergy?{auxModel:true,preset:window.Climate&&Climate.current?Climate.current(Garage.car()):null}:{}),
       chargeCurve:curve?{points:curve.points,acKw:+Garage.car().acKw||7.2,src:curve.src}:null,propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
       destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,S.evPrice):[],
       arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,

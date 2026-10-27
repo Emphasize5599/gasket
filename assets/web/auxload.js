@@ -4,7 +4,7 @@
  * 2020 Model 3), Seo 2025, ADAC standstill tests and Applied Energy 2026; the 5–15 °C band is interpolated (less
  * measured). Climate-preset scaling (setpoint gap ±40%, recirculation −15%, seat/wheel heat, defrost) is a labeled
  * fill-in. Warm-up is a STATE carried across sections: a new section never restarts it; a long parked stop does. */
-(function (root) {
+(function initAuxLoad(root) {
   'use strict';
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
   function lerp(x, xs, ys) { if (x <= xs[0]) return ys[0]; for (var i = 1; i < xs.length; i++) if (x <= xs[i]) return ys[i - 1] + (ys[i] - ys[i - 1]) * (x - xs[i - 1]) / (xs[i] - xs[i - 1]); return ys[ys.length - 1]; }
@@ -29,9 +29,10 @@
   function presetScale(preset, tC) {
     preset = preset || {}; var sp = +preset.temp, f = 1, add = 0;
     if (Number.isFinite(sp)) { var spC = preset.unit === 'C' || sp < 40 ? sp : (sp - 32) * 5 / 9, ref = Math.abs(22 - tC); if (ref > 1) f = clamp(Math.abs(spC - tC) / ref, .6, 1.4); }
+    // Garage climate presets (climate.js): temp °F, ac 'on' | 'off', air 'fresh' | 'recirc', seatD 0–3, wheel, frontDef, flow
     if (preset.recirc === true || preset.air === 'recirc') f *= .85;
-    if (preset.ac === false && tC > 24) f = 0;            // no cooling asked for: blower / electronics only
-    if (preset.seatHeat) add += .075; if (preset.wheelHeat) add += .075; if (preset.defrost) add += .5;
+    if ((preset.ac === false || preset.ac === 'off') && tC > 24) f = 0;   // no cooling asked for: blower / electronics only
+    if (preset.seatHeat || preset.seatD > 0) add += .075; if (preset.wheelHeat || preset.wheel === true) add += .075; if (preset.defrost || preset.frontDef || preset.flow === 'defrost') add += .5;
     return { f: f, add: add };
   }
   /** Settled power with the preset applied: base + scaled HVAC part + add-ons. */
@@ -52,5 +53,6 @@
     return { kWh: mid * s / 3600 + extra, lo: lo * s / 3600 + extra * .7, hi: hi * s / 3600 + extra * 1.3, kw: mid, state: st };
   }
   var api = { settled: settled, warmup: warmup, presetScale: presetScale, power: power, start: start, park: park, energy: energy, PARK_COOL_S: PARK_COOL_S, BASE: BASE };
+  api.workerSource = '(' + initAuxLoad.toString() + ')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.AuxLoad = api;
 })(typeof window !== 'undefined' ? window : this);
