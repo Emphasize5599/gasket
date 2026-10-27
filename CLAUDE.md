@@ -1,5 +1,9 @@
 # Gasket
 
+## Rest/traffic research — 2026-10-27 (no app change)
+
+Owner asked for rest-area data, five-minute Google experiments and rest timing logic; production work left in TODO53/55/56. docs/REST_PLANNING.md has primary sources, measured limitations and integration plan. Public NTAD REST seed returned1915 records/48states in730ms,405808rawbytes,68514gzip-equivalent; compact60654gzipbytes. Historical2019compilation/2024edits, no current permissions/amenity quality proof. Walmart corporate policy is RV-specific and store/local-law dependent, not blanket passenger-car sleeping permission. Browser verified5min clocks; keys sometimes skip10min, tiny drags often no-op, viewport resized;43–63ms control/ARIA latency is NOT data extraction/render latency. Asset inventories showed no new nontelemetry resources on nearby time changes, not proof entire weekly profile is cached. Numeric speed extraction remains open. Pure research/rest-traffic/rest_timing.py scans supplied samples (no Google fetch), tests7 cases: nonmonotonic feasibility, distinct low-traffic/latest/earliest-arrival, bounds, caps/closure, charging overlap, missing/permission, midnight. Reproducible standard-library NTAD downloader/benchmark included; raw sample outside repo, not APK. No version bump/build for research-only changes.
+
 ## 0.0.282 — Exxon domain and traffic failures
 
 Synced281 without discarding other work. Owner log27 Oct: XOM batches0/read timeout; live old exxon.com/en redirects to exxonmobilfuels.com/en, preventing native origin-gated reader injection. Updated XOM page/origin/allowlist/desktop endpoint and disclosure to current official domain, kept strict URL gating. Verified new locator in browser:5 Searcy stations and actual Walmartplus flags. Batch budget now reports more=true and requeues only unread cells; real restrictions/errors retain circuit breaker. Native XOM timeout reports readerDispatched and page URL without query/cookies.
