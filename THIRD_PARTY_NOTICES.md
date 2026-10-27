@@ -418,6 +418,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Runtime map data and online services
 
+### Traffic-energy research references
+
+Experimental traffic and cabin-energy parameters are derived estimates, not copied provider software or bundled raw test archives. Argonne National Laboratory, Downloadable Dynamometer Database (D3), Advanced Mobility Technology Laboratory, U.S. Department of Energy: https://www.anl.gov/taps/downloadable-dynamometer-database . Additional published study references and measured-versus-assumed limitations are retained in docs/TRAFFIC_ENERGY_HANDOFF.md and docs/TRAFFIC_ENERGY_EVIDENCE.md. Google traffic-category assumptions are not Google-published numerical speeds.
+
 None of this data is bundled in the repository. The app fetches it while it runs, and each source's own terms apply.
 
 - **OpenStreetMap:** map tiles and place names (Nominatim). © OpenStreetMap contributors. The data is available under the Open Database License: https://www.openstreetmap.org/copyright

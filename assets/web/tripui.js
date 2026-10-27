@@ -65,7 +65,7 @@
   });
   function trafficWait(m){var ends=m&&m.legEnds||[];return S.trip.returnTrip&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null;}
   function trafficStops(plan,opts){if(!plan||!plan.ok||!opts)return [];return (plan.stops||[]).map(function(s){return {d:s.c.d,seconds:Math.max(0,T.stopDelay(opts,s)*60)};}).concat((plan.destinationCharges||[]).map(function(c){return {d:(opts.model.legEnds||[])[c.index],seconds:Math.max(0,c.minutes*60)};})).filter(function(s){return Number.isFinite(s.d)&&Number.isFinite(s.seconds)&&s.seconds>0;});}
-  function trafficInvalidate(){result=null;compareReviewed=0;hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();resetChoices(choiceSavedId);if(rawRoute)model=T.buildRoute(rawRoute,carModel());A.save();renderStep();}
+  function trafficInvalidate(){result=null;compareReviewed=0;hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();resetChoices(choiceSavedId);if(rawRoute)model=T.buildRoute(rawRoute,carModel());A.save();if(!$('trip').classList.contains('hidden'))renderStep();}
   function buildModel(raw,car,depart){var m=T.buildRoute(raw,car);return traffic?traffic.model(raw,m,depart==null?departAt().getTime():depart):m;}
   async function trafficPrepare(raw,base,depart,options){
     if(!traffic||!traffic.enabled())return base;
@@ -1957,7 +1957,7 @@ return conditions;
   // Traffic energy (experimental, S.trafficEnergy): engine facts for idle / restart fuel in congestion (Traffic.overlay).
   // A/C share comes from this season's climate preset (on = half load: a fill-in); start-stop isn't known yet (off).
   function engineFacts(c){if(!window.IdleFuel)return null;var info=c.info||{},kd=Garage.carModel(c).kind;if(kd==='ev'||kd==='h2')return {kind:kd};
-    var e=IdleFuel.fromText(info.engine,{kind:kd,hybrid:/hybrid/i.test(String(c.power||c.type||''))&&!/plug/i.test(String(c.power||'')),fuel:c.grade==='diesel'||/diesel/i.test(String(c.epa&&c.epa.fuel||''))?'diesel':'gas'}),pre=window.Climate&&Climate.current?Climate.current(c):null;e.acFrac=pre&&pre.ac==='on'?.5:0;return e;}
+    var e=IdleFuel.fromText(info.engine,{kind:kd,hybrid:/hybrid/i.test(String(c.power||c.type||''))&&!/plug/i.test(String(c.power||'')),fuel:c.grade==='diesel'||/diesel/i.test(String(c.epa&&c.epa.fuel||''))?'diesel':'gas'}),pre=window.Climate&&Climate.current?Climate.current(c):null;e.acFrac=pre&&pre.ac==='on'?.5:0;e.defrost=!!(pre&&(pre.frontDef||pre.flow==='defrost'));e.startStop=(info.features||[]).indexOf('Start-stop')>=0;return e;}
   function carModel() { var m=Garage.carModel();if(S.trafficEnergy){var e=engineFacts(Garage.car());if(e)m=Object.assign({},m,{engine:e});}return m; }
 
   // ---------- every route option Google Maps shows ----------
@@ -3950,6 +3950,7 @@ return conditions;
     if(!p.ok&&KIND()==='ev'){startEVRecovery();evFailureNotice();if(step===ST_STOPS&&evRecovery&&evRecovery.base===result){if(el)el.innerHTML=evRecoveryHtml();bindEVRecovery();routeGate();return;}}
     // warnings first: what could go wrong on this trip
     var w = [];
+    if(S.trafficEnergy)w.push({t:'Experimental energy estimates use assumed stop-and-go patterns and cabin loads. Actual fuel use and range may differ.'});
     if(p.propulsion){var ef=p.propulsion.flags||[];w.push({t:KIND()==='h2'?'Hydrogen speed estimates are unvalidated; weather effects on consumption are unknown.':'EV energy, charging time and losses are estimates. '+(ef.some(function(x){return /^weather_/.test(x);})?'Hourly temperatures are missing for part of this trip; those sections use 20°C. ':'' )+'Confirm charging access and rates before travel.'});}
     if(p.higherChargeFallback)w.push({t:'This route needs charging above the preferred '+p.higherChargeFallback.preferredPct+'% at '+p.higherChargeFallback.stops+' stop(s), up to '+p.higherChargeFallback.maxPct+'%. Near-full charging is slower; the estimate includes that extra charging time. Confirm your car and the stations allow the required charge level.'});
     if (!p.ok) {
@@ -5060,7 +5061,7 @@ return conditions;
   function compareReset(){if(!queueWorking){queueEngine=null;queueViewCar=null;}compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareReviewProof=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
   function compareReviewContext(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip)]);}
   function compareSafetyKey(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip),choiceLists().map(function(l,i){return altSig(l[hzSel(i)]);})]);}
-  function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices'].map(function(k){return S[k];}));}
+  function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices','trafficEnergy'].map(function(k){return S[k];}));}
   function compareLocked(){return !!(schedulePlanning||queueWorking||busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
   function queueNotify(action,text,car){var payload={title:action==='finish'?'Vehicle comparisons updated':'Gasket trip planning',text:text,car:car||'',trip:route&&route.histId||''};return window.TripNotify?TripNotify.send(action,payload):Promise.resolve({unavailable:true});}
   function queueReviewStep(s,c){

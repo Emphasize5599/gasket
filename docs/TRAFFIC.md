@@ -1,5 +1,9 @@
 # Traffic forecasts and departure windows
 
+## 0.0.283 experimental energy opt-in
+
+Settings → Trip defaults adds **Estimate traffic energy (experimental)**, off by default. HERE's matched numeric speeds can inform inferred stop/go losses; enabled EV/H2 projections also use estimated cabin loads and seasonal Garage presets. Turning the setting on/off clears active planning and comparison results, preserving station storage. This does not enable Google Typical traffic extraction or change HERE toll/traffic defaults. The website reader still needs the geometry/time validation documented below. Rest inventory/search and rest-aware windows remain separate unimplemented features; their prototypes/research are preserved in this repository.
+
 ## Implemented in 0.0.272
 
 Route → **Forecast traffic** uses the optional HERE key. **Explore departure times** checks selected roads within user-entered windows and presents colored sliders. All congestion levels remain selectable. Gray means no usable forecast, an unmet arrival deadline, or a return departure before reaching the destination. No time changes until **Use these times** is pressed.

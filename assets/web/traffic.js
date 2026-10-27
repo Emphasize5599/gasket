@@ -82,7 +82,7 @@
     if(!e||!TM||!IF||!(len>0)||r.forecast===false||!(r.freeMph>0)||e.kind==='ev'||e.kind==='h2')return null;
     var c=TM.fromRatio(len/dt*3600/r.freeMph);if(c==='NORMAL'||c==='NONE')return null;
     var sp=TM.split(len,dt,r.freeMph,c,r.freeMph>=50?'freeway':'arterial'),v=Math.max(15,sp.vMoving),w=Math.max(0,Math.min(1,(v-25)/30));
-    var idleGal=IF.idle(e,{acFrac:e.acFrac||0,ambientC:e.ambientC}).lph/IF.L_PER_GAL*sp.tStopped/3600,restartGal=sp.nStops*TM.restart(e.hybrid?'hybrid':e.fuel==='diesel'?'diesel':'gas',e.massKg||1600,v).litres/IF.L_PER_GAL;
+    var idleGal=IF.idle(e,{acFrac:e.acFrac||0,ambientC:e.ambientC,defrost:e.defrost}).lph/IF.L_PER_GAL*sp.tStopped/3600,restartGal=sp.nStops*TM.restart(e.hybrid?'hybrid':e.fuel==='diesel'?'diesel':'gas',e.massKg||1600,v).litres/IF.L_PER_GAL;
     return {gpm:(m.cityGpm*(1-w)+m.hwyGpm*w)+(idleGal+restartGal)/len,stops:sp.nStops,stoppedSec:sp.tStopped,cat:c};
   }
   function overlay(m,p){

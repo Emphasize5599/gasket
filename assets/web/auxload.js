@@ -1,5 +1,6 @@
 /* Time-based auxiliary load for EVs and fuel-cell cars (pure; Node + browser). docs/TRAFFIC_ENERGY_HANDOFF.md section 5.
- * P_aux = cabin HVAC + 12 V / electronics + battery thermal, in kW, integrated over ELAPSED time (queueing included),
+ * P_aux = cabin HVAC + 12 V / electronics, in kW, integrated over ELAPSED time (queueing included).
+ * Pack thermal management remains in Propulsion.thermal and is never included a second time here,
  * so a crawl or a standstill costs energy per hour, not per mile. Settled values come from Argonne D3 (2019 Leaf e+,
  * 2020 Model 3), Seo 2025, ADAC standstill tests and Applied Energy 2026; the 5–15 °C band is interpolated (less
  * measured). Climate-preset scaling (setpoint gap ±40%, recirculation −15%, seat/wheel heat, defrost) is a labeled
@@ -28,11 +29,11 @@
    *  preset fields {temp (°F or °C), unit, recirc, ac, seatHeat, wheelHeat, defrost}. */
   function presetScale(preset, tC) {
     preset = preset || {}; var sp = +preset.temp, f = 1, add = 0;
-    if (Number.isFinite(sp)) { var spC = preset.unit === 'C' || sp < 40 ? sp : (sp - 32) * 5 / 9, ref = Math.abs(22 - tC); if (ref > 1) f = clamp(Math.abs(spC - tC) / ref, .6, 1.4); }
+    if (preset.temp !== '' && preset.temp != null && Number.isFinite(sp)) { var spC = preset.unit === 'C' ? sp : (sp - 32) * 5 / 9, ref = Math.abs(22 - tC); if (ref > 1) f = clamp(Math.abs(spC - tC) / ref, .6, 1.4); }
     // Garage climate presets (climate.js): temp °F, ac 'on' | 'off', air 'fresh' | 'recirc', seatD 0–3, wheel, frontDef, flow
     if (preset.recirc === true || preset.air === 'recirc') f *= .85;
     if ((preset.ac === false || preset.ac === 'off') && tC > 24) f = 0;   // no cooling asked for: blower / electronics only
-    if (preset.seatHeat || preset.seatD > 0) add += .075; if (preset.wheelHeat || preset.wheel === true) add += .075; if (preset.defrost || preset.frontDef || preset.flow === 'defrost') add += .5;
+    if (preset.seatHeat || preset.seatD > 0) add += .075; if (preset.seatP > 0) add += .075; if (preset.wheelHeat || preset.wheel === true) add += .075; if (preset.defrost || preset.frontDef || preset.flow === 'defrost') add += .5; if (preset.rearDef) add += .15;
     return { f: f, add: add };
   }
   /** Settled power with the preset applied: base + scaled HVAC part + add-ons. */
@@ -48,8 +49,11 @@
   function energy(state, seconds, tC, p, preset) {
     var st = Object.assign({}, state || start()), s = Math.max(0, +seconds || 0), w = warmup(tC, p);
     if (st.warmLeft == null) st.warmLeft = w.seconds;     // first section after a cold start arms the transient once
-    var inWarm = Math.min(s, st.warmLeft), extra = inWarm * w.kw / 3600; st.warmLeft -= inWarm;
     var mid = power(tC, p, preset, 'mid'), lo = power(tC, p, preset, 'lo'), hi = power(tC, p, preset, 'hi');
+    // warmup.kw is TOTAL initial power, not an extra load on top of settled demand.
+    // Scale the HVAC portion by the same preset, including zero cooling when A/C is off.
+    var sc = presetScale(preset, tC), peak = BASE + Math.max(0, w.kw - BASE) * sc.f + sc.add;
+    var inWarm = Math.min(s, st.warmLeft), extra = inWarm * Math.max(0, peak - mid) / 3600; st.warmLeft -= inWarm;
     return { kWh: mid * s / 3600 + extra, lo: lo * s / 3600 + extra * .7, hi: hi * s / 3600 + extra * 1.3, kw: mid, state: st };
   }
   var api = { settled: settled, warmup: warmup, presetScale: presetScale, power: power, start: start, park: park, energy: energy, PARK_COOL_S: PARK_COOL_S, BASE: BASE };

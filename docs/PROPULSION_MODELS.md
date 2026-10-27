@@ -58,6 +58,14 @@ The 45°C cooling threshold, COP 2, generic thermal mass/6-hour soak, generic HV
 
 ## Sources and rights
 
+### Experimental traffic energy (0.0.283)
+
+Settings → Trip defaults → **Estimate traffic energy (experimental)** is off by default. Enabling it adds estimated engine-on idle and acceleration losses to gas/diesel/full-hybrid congestion, and estimated cabin loads/cold-start transients to EV projections. Hydrogen receives an explicitly unvalidated conversion of additional cabin electrical energy at assumed 55% fuel-cell efficiency. HERE supplies numeric traffic speed; stopped share and stop counts are inferred, not measured. Google color calibration is a pure research module, not an enabled website provider.
+
+Garage seasonal climate settings affect cabin power; this release does not automatically switch special-weather presets along a route. Heat pump, A/C, setpoint, recirculation, seats, wheel and defrost inputs use documented approximate factors. Starting cabin preconditioning is an internal profile input, distinct from fast-charge pack preconditioning; it is not guessed from the latter toggle. Warm-up power is a total initial level, so only the increment above settled demand is added. State persists across segment boundaries and active charging; a long unconditioned parked wait re-arms it. Charging uses the same cabin estimate, allocated within inlet power, and keeps pack cooling separate. EPA/observed reference demand is retained at mild baseline conditions; no second full HVAC demand is added to it while driving.
+
+The setting invalidates active plans and comparison results without deleting station/price storage. Stops shows one experimental-estimate notice. Priors and interpolations are not per-model validation or a confidence interval for the whole trip. Cold/hot extreme demand, traffic patterns and hydrogen remain uncertain. Sources/limits: [TRAFFIC_ENERGY_HANDOFF.md](TRAFFIC_ENERGY_HANDOFF.md), [TRAFFIC_ENERGY_EVIDENCE.md](TRAFFIC_ENERGY_EVIDENCE.md).
+
 - Rosenberger et al., Technical University of Munich: driving/charging and dyno datasets, [DOI 10.14459/2024mp1735494](https://doi.org/10.14459/2024mp1735494), [DOI 10.14459/2024mp1735471](https://doi.org/10.14459/2024mp1735471), CC BY 4.0. Derived/fitted/cleaned fixtures imported from the owner's v3 report, not a fresh reproduction of all raw fits. LODO validation is across drives of one car only.
 - DESL, EPFL: [Level-3 EV charging dataset](https://github.com/DESL-EPFL/Level-3-EV-charging-dataset), MIT. Generic normalized taper/AC-to-DC assumptions are not Tesla-specific validation.
 - The owner's v3 report corrects the former research document's obsolete description of shipped behavior. Its simulator and app implementation are separate, with separate regression tests.

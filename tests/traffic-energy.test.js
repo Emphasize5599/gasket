@@ -39,6 +39,11 @@ near(A.energy(A.start({preconditioned:true}),3600,-8.5,{}).kWh,A.power(-8.5,{}),
 near(A.energy(A.start({preconditioned:true}),1800,35,{}).kWh,A.power(35,{})/2,1e-9);assert.equal(A.energy(A.start(),0,-20,{}).kWh,0);
 // presets: recirculation and A/C off lower the load, defrost adds
 const hot={heatPump:true};assert(A.power(32.5,hot,{recirc:true})<A.power(32.5,hot,{}));near(A.power(32.5,hot,{ac:false}),A.BASE,1e-9);near(A.power(-8.5,hot,{defrost:true})-A.power(-8.5,hot,{}),.5,1e-9);
+// Initial HVAC readings are total power, not a second heater added to the settled load.
+near(A.energy(A.start(),60,-8.5,{heatPump:true}).kWh,3.8/60,1e-9,'initial total is 3.8 kW, not 5.6');
+near(A.energy(A.start(),60,35,{}, {ac:'off'}).kWh,A.BASE/60,1e-9,'A/C off suppresses cooling transient too');
+assert(A.power(-8.5,{}, {seatP:2})>A.power(-8.5,{},{}),'passenger heated seat counted');
+near(A.presetScale({temp:32},0).f,.6,1e-9,'Garage temperature remains Fahrenheit even below 40');
 // ---- idle fuel ----
 // derived table rows (handoff 7.3): displacement mid, cylinders -> warm L/h within 5%
 for(const [d,c,v] of [[1.1,3,.40],[1.5,4,.51],[1.9,4,.65],[2.45,4,.80],[2.7,6,.80],[3,6,.89],[3.55,6,1.04],[4,6,1.19],[4.8,8,1.32],[5.5,8,1.45],[6.3,8,1.66]])near(I.warm({displ:d,cyl:c}).lph,v,v*.05,`${d} L ${c} cyl`);
@@ -91,3 +96,14 @@ console.log('Traffic energy modules: priors / timing / D2 guard rails, calibrati
  const hy={city:54,hwy:50,comb:52},h=build(Object.assign({engine:{kind:'gas',displ:1.8,cyl:4,hybrid:true}},hy)),hd=gpm(h,11.7)/(1/54);assert(hd>=1&&hd<=2,'hybrid dark red inside Zhang 1–2× best: '+hd.toFixed(2));
  const ev=build(Object.assign({engine:{kind:'ev'}},{city:4,hwy:3.4,comb:3.7}));near(gpm(ev,11.7),1/4,1e-12,'EVs are handled by Propulsion, not here');
  console.log('Round 3: gas green unchanged, dark red '+(dark/best).toFixed(2)+'× best (Zhang 1.7–3), hybrid '+hd.toFixed(2)+'× (1–2), EV untouched');}
+// Cabin settings affect purchased electricity as well as driving; pack cooling stays separate.
+{const P=require('../assets/web/propulsion'),profile={kind:'ev',capacity:60,auxModel:true,preconditionedStart:true,heatPump:true};
+ const input={soc:.3,target:.4,temperature:25,kw:7.2,level:'2',basis:'ac_meter',ambient:()=>35};
+ const on=P.charge({...input,profile:{...profile,preset:{ac:'on'}}}),off=P.charge({...input,profile:{...profile,preset:{ac:'off'}}});
+ assert(on.ok&&off.ok);assert(on.minutes>off.minutes&&on.billedKWh>off.billedKWh,'cabin energy uses inlet power and increases metered energy');
+ near(on.storedKWh,off.storedKWh,1e-8,'same target retains the same stored energy');
+ assert(on.auxState.warmLeft===0,'conditioned cabin state survives charging');
+ const flags=[],h={kind:'h2',auxModel:true,heatPump:true};
+ assert(P.drivePower(h,10,-8.5,1/65,60,flags,0).gpm>P.drivePower({...h,auxModel:false},10,-8.5,1/65,60,[],0).gpm,'hydrogen converts extra cabin kWh to kg');
+ assert(flags.includes('hydrogen_auxiliary_estimated'));
+}

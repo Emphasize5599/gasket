@@ -1,10 +1,10 @@
 # Traffic-aware speed and energy model: research handoff for implementation
 
-Prepared 27 October 2026 for a Claude Code or Codex session working in the Gasket repo, branch `feature/traffic-rest-integration` or its successor. It consolidates research rounds 2–5 and the owner's decisions. **This file is research and specification only. Nothing here has been implemented, and no app code was changed while preparing it.**
+Prepared 27 October 2026 for a Claude Code or Codex session working in the Gasket repo, branch `feature/traffic-rest-integration` or its successor. It consolidates research rounds 2–5 and the owner's decisions. The research specification below is preserved for reference; the progress log records what has actually been implemented. Google website extraction/calibration and production rest planning are not enabled by the energy-model release.
 
 ## Implementation progress (update after every round of commits)
 
-Branch: `feature/traffic-rest-integration` (the same commits are also pushed to `claude/blissful-mccarthy-s8spue`). Main is untouched until the model is wired up and tested, so nothing half-built ships in a release. Next agent: `git fetch && git checkout feature/traffic-rest-integration`, read this section, continue at **Next**.
+Branch: `feature/traffic-rest-integration` (the same commits are also pushed to `claude/blissful-mccarthy-s8spue`). Both branches have identical ancestry. The experimental energy integration is prepared for merge to main as 0.0.283 after release checks; sync main before continuing the remaining gates.
 
 | Round | Status | What |
 | --- | --- | --- |
@@ -17,7 +17,16 @@ Decisions taken in round 1 (fill-ins, all labeled in code): heat-pump −25 °C 
 
 | 3 | done | Gas / diesel / hybrid congestion (section 6.4) in `Traffic.overlay` → `congestion(m, r, len, dt)`, active only when the route model has `engine` (tripui `carModel()` adds `engineFacts(car)` when `S.trafficEnergy`; `trip.js` `buildRoute` / `makeModel` carry `engine` and `trafficStops`). Per forecast row with `freeMph`: `TrafficModel.fromRatio` → category (NORMAL / NONE untouched), `TrafficModel.split(len, seconds, vff, cat, cls)` (stopped share from the prior, capped so moving speed ≤ free flow) → moving gpm = EPA city/highway blend at max(15 mph, moving speed) + `IdleFuel.idle` × stopped time + `nStops` × `restart(gas | diesel | hybrid)`; segs get `trafficCat` / `stoppedSec`. `engineFacts`: `IdleFuel.fromText(car.info.engine)` (now reads "3.5L V6", "Inline 4", "4 Cyl"), hybrid from `power` / `type` (not plug-in), diesel from grade / EPA fuel, `acFrac` 0.5 when this season's preset has A/C on (fill-in), start-stop unknown → off. Measured outcome on the test model: gas 25/33 mpg dark red = 1.86× its highway best (Zhang 1.7–3×), Prius-like hybrid 1.35× (1–2×), green unchanged, EV untouched (Propulsion handles it). |
 
-**Next:** round 4 = Settings toggle "Estimate traffic energy (experimental)" in Settings → Trip (default off; `S.trafficEnergy`), docs/PROPULSION_MODELS.md + docs/TRAFFIC.md notes, then version bump + CHANGELOG + CLAUDE.md note, full release suite, merge to main. After that: section 9 step 3 (Google website traffic reader + calibration persistence using `TrafficModel.calibrate` / `Calibration`), step 4 UI ranges / labels.
+### Round 4 — 0.0.283 integration
+
+Settings → Trip defaults now exposes **Estimate traffic energy (experimental)**, off by default. Toggling invalidates active/comparison plans and hazard review without removing shared station inventories or reopening a closed trip. Energy projections use existing matched numeric HERE traffic, with inferred stop/go patterns; no Google-derived numeric speeds are claimed. Added one centralized experimental-estimate notice in Stops.
+
+Corrected HVAC accounting: warm-up kW is total peak power, not an extra load above settled power; Garage temperatures are Fahrenheit unless explicitly Celsius; A/C-off suppresses cooling transients; passenger seat/rear defrost are included. Charging uses and advances the same cabin state rather than rearming warm-up after every charge. Hydrogen cabin increments use an explicitly estimated 55% fuel-cell efficiency and retain unvalidated warnings. Pack thermal stays in the existing propulsion model. Recognized start/stop and defrost facts now reach the ICE idle model. Special-weather preset switching and fully validated fleetwide coefficients remain open.
+
+Regression coverage includes numeric priors, split timing, warm-up-once/peak accounting, charging power/time/energy, H2 cabin increments, Settings persistence/invalidation and 320/448 px layouts with enlarged text. Release validation results are recorded in CLAUDE.md.
+
+**Next (separate implementation gates, not delivered by 283):** Google website geometry/time extraction with verification and persistent calibration; only then change HERE traffic defaults. Production rest inventory, candidate search/filter UI and route-integrated rest timing remain in `TRAFFIC_REST_HANDOFF.md` / `REST_PLANNING.md`. Existing Python prototypes are preserved, not shipped as app functionality. Do not describe this release as completing those features.
+
 
 ## 0. How to use this document (instructions to the implementing agent)
 

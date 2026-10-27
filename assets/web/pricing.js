@@ -31,6 +31,7 @@
   };
 
   var DEFAULTS = {
+    trafficEnergy: false,        // experimental congestion/cabin energy estimates; explicit opt-in
     apiKey: '',
     blacklist: [],               // CITGO stations where Walmart+ didn't work: [{id, name, address, brand, lat, lng, t}]
     dieselRisk: {},              // station id -> true: count Walmart+ on CITGO diesel here anyway (your own risk)

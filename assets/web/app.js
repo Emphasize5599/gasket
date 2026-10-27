@@ -1201,6 +1201,7 @@
     });
     h += '</div>';
     h += '<div class="card"><h3>Trip planner</h3>' +
+      '<div class="field"><div class="lbl">Estimate traffic energy (experimental)<small>Estimates stop-and-go fuel use and EV cabin energy using your Garage climate settings. Requires a traffic forecast for congestion effects. Values are estimates, not measured vehicle performance.</small></div>' + sw('trafficEnergy', S.trafficEnergy === true).replace('<input ', '<input id="trafficEnergy" ') + '</div>' +
       '<div class="field"><div class="lbl">Show cities when a route is imported<small>Free lookup from OpenStreetMap using each stop\'s spot (sends those coordinates to OpenStreetMap). No Google lookups.</small></div>' + sw('osmPreview', S.osmPreview !== false) + '</div>' +
       '<div class="field"><div class="lbl">Check which Exxon and Mobil stations take Walmart+<small>Free, from ExxonMobil\'s own station finder (sends the map area or route area to exxonmobilfuels.com). Stations it lists without Walmart+ don\'t get the 10¢. No Google lookups.</small></div>' + sw('xomCheck', S.xomCheck !== false) + '</div>' +
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
@@ -1345,6 +1346,7 @@
   function fmtSha(s) { return String(s).replace(/(..)(?!$)/g, '$1:'); }
   function closeSettings(apply) {
     var previousHereTraffic = S.hereTraffic !== false;
+    var previousTrafficEnergy = S.trafficEnergy === true;
     var pg = $('settings'); if (pg.classList.contains('hidden')) return false;
     var hadKey = !!S.apiKey;
     S.apiKey = $('apiKey').value.trim(); apiCount();
@@ -1375,7 +1377,7 @@
     });
     save();
     pg.classList.add('hidden');
-    if(previousHereTraffic !== (S.hereTraffic !== false))window.dispatchEvent(new Event('trafficsettingschange'));
+    if(previousHereTraffic !== (S.hereTraffic !== false) || previousTrafficEnergy !== (S.trafficEnergy === true))window.dispatchEvent(new Event('trafficsettingschange'));
     if(pg.dataset.discountKey!==discountKey()&&window.__trip&&__trip.discountsChanged)__trip.discountsChanged();
     stations = stations.filter(function (s) { return S.brands[s.brand]; });
     render();

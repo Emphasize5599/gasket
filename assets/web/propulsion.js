@@ -41,7 +41,9 @@
     if(p.kind==='h2'){
       mark(flags,'hydrogen_speed_unvalidated');mark(flags,'hydrogen_temperature_unknown');
       function h(vv){var w=vv/3.6,power=(182+2.46*w+.26*w*w)*w/900+ .4;return power/(clamp(.64-.0018*power,.45,.64)*33.32)/vv;}
-      return {power:baseGpm*speed*(h(kmh)/h(Math.max(1,baseMph)*1.609344)),gpm:baseGpm*(h(kmh)/h(Math.max(1,baseMph)*1.609344))};
+      var kg=baseGpm*speed*(h(kmh)/h(Math.max(1,baseMph)*1.609344));
+      if(p.auxModel){kg+=Math.max(0,auxKw(ta,p)-auxKw(20,Object.assign({},p,{preset:null})))/(.55*33.32);mark(flags,'hydrogen_auxiliary_estimated');}
+      return {power:kg,gpm:kg/speed};
     }
     if(p.measured&&mph>=30){var c=DATA.poly;base=(c[0]+c[1]*v+c[2]*v*v+c[3]*v*v*v)/1000*.97*(1+.12*clamp((15-ta)/15,0,4/3))+(p.auxModel?auxKw(ta,p):hvac(ta,p));}
     else {
@@ -51,7 +53,7 @@
       // weather HVAC demand modify it; EPA labels are not steady-speed test points.
       base=baseGpm*speed*road(speed)/road(Math.max(1,baseMph));
       if(p.auxModel&&speed<25&&p.cityGpm>0&&p.kind==='ev'){var floor=p.cityGpm*speed;if(floor>base){base=floor;mark(flags,'crawl_city_baseline');}}
-      base+=p.auxModel?Math.max(0,auxKw(ta,p)-auxKw(20,p)):Math.max(0,hvac(ta,p)-hvac(20,p));
+      base+=p.auxModel?Math.max(0,auxKw(ta,p)-auxKw(20,Object.assign({},p,{preset:null}))) : Math.max(0,hvac(ta,p)-hvac(20,p));
     }
     if(mph*1.609344<15||mph*1.609344>160)mark(flags,'speed_outside_measurements');
     var g=1750*9.81*(grade||0)*v/1000;g=g>0?g/.9:g*.8;
@@ -67,6 +69,8 @@
   }
   function charge(input){
     var p=config(input.profile),flags=[],soc=input.soc,target=input.target,t=input.temperature,seconds=0,terminal=0,auxE=0,stored=0,billed=0,cap=input.cap==null?1:input.cap;
+    var AL=p.auxModel?mod('AuxLoad','./auxload.js'):null,auxState=AL?(input.auxState||AL.start({preconditioned:!!p.preconditionedStart})):null;
+    if(AL)mark(flags,'cabin_load_estimated');
     if(!Number.isFinite(soc)||!Number.isFinite(target)||soc<0||soc>1||target<0||target>1)return {ok:false,reason:'invalid_soc',flags:flags};
     if(target>cap+1e-8)return {ok:false,reason:'target_above_cap',flags:flags};
     var maxSeconds=input.timeout==null?14400:input.timeout,level=input.level||'dc_fast',eta=level==='dc_fast'?(p.measured?.933:.93):level==='1'?.82:.9;
@@ -74,20 +78,22 @@
     if(input.basis!=='dc_meter'&&input.basis!=='ac_meter')mark(flags,'billing_basis_estimated');
     while(soc<target-1e-10){
       if(seconds>=maxSeconds-1e-8){if(input.allowPartial)break;return {ok:false,reason:'charge_timeout',flags:flags};}
-      var ta=input.ambient?input.ambient(seconds,flags):20,aux=.37+hvac(ta,p),inlet=kw*share*cable,hi=Math.min(accept(p,soc,t,flags,level),Math.max(0,inlet-aux)),lo=0;
+      var ta=input.ambient?input.ambient(seconds,flags):20,aux=AL?AL.energy(auxState,Math.min(10,maxSeconds-seconds),ta,p,p.preset).kWh*3600/Math.min(10,maxSeconds-seconds):.37+hvac(ta,p),inlet=kw*share*cable,hi=Math.min(accept(p,soc,t,flags,level),Math.max(0,inlet-aux)),lo=0;
       for(var k=0;k<24;k++){var mid=(hi+lo)/2,dt=Math.min(10,maxSeconds-seconds,(target-soc)*p.capacity*3600/Math.max(mid*eta,1e-12)),th=thermal(p,t,ta,mid,dt,false,0,flags);if(mid+aux+th.cool*3600/dt<=inlet+1e-10)lo=mid;else hi=mid;}
       if(lo<1e-6)return {ok:false,reason:'charger_power_insufficient',flags:flags};
       var dt=Math.min(10,maxSeconds-seconds,(target-soc)*p.capacity*3600/(lo*eta)),th=thermal(p,t,ta,lo,dt,false,0,flags),et=lo*dt/3600,ea=aux*dt/3600+th.cool;
       t=th.temperature;terminal+=et;auxE+=ea;stored+=et*eta;soc=Math.min(target,soc+et*eta/p.capacity);seconds+=dt;
+      if(AL)auxState=AL.energy(auxState,dt,ta,p,p.preset).state;
       // EPFL conversion belongs only to an explicitly AC-metered DC dispenser.
       billed+=(et+ea)/cable/(input.basis==='ac_meter'&&level==='dc_fast'?.847:1);
     }
-    return {ok:true,minutes:seconds/60,terminalKWh:terminal,auxKWh:auxE,billedKWh:billed,storedKWh:stored,soc:soc,temperature:t,flags:flags,estimated:!p.measured||flags.length>0};
+    return {ok:true,minutes:seconds/60,terminalKWh:terminal,auxKWh:auxE,billedKWh:billed,storedKWh:stored,soc:soc,temperature:t,auxState:auxState,flags:flags,estimated:!p.measured||flags.length>0};
   }
   function project(model,spec,context,plan){
-    var p=config(spec);if(p.auxModel&&!(p.cityGpm>0))p.cityGpm=model.cityGpm;var AL=p.auxModel&&p.kind==='ev'?mod('AuxLoad','./auxload.js'):null,TM=AL?mod('TrafficModel','./trafficmodel.js'):null,aux=AL?AL.start({preconditioned:!!p.preconditionedStart}):null,trafficStops=0;
+    var p=config(spec);if(p.auxModel&&!(p.cityGpm>0))p.cityGpm=model.cityGpm;var AL=p.auxModel?mod('AuxLoad','./auxload.js'):null,TM=AL?mod('TrafficModel','./trafficmodel.js'):null,aux=AL?AL.start({preconditioned:!!p.preconditionedStart}):null,trafficStops=0;
     var ctx=context||{},flags=[],segments=[],events=[],at=0,seconds=0,gal=Number(ctx.startGal)||0,temperature,initialTime=ctx.departAt||Date.now(),capacity=p.capacity,limits=ctx.limits||[];
     var firstTa=weather(ctx.weather,0,initialTime,flags);temperature=Number.isFinite(p.initialTempC)?p.initialTempC:firstTa;
+    if(AL)mark(flags,'cabin_load_estimated');
     if(!Number.isFinite(p.initialTempC))mark(flags,'initial_pack_temperature_estimated');
     if(p.parkHours>0&&Number.isFinite(p.previousTempC)){temperature=p.previousTempC;for(var h=0;h<p.parkHours;h+=Math.min(1,p.parkHours-h)){var dt=Math.min(1,p.parkHours-h),ta=weather(ctx.weather,0,initialTime-(p.parkHours-h)*3600000,flags);temperature=ta+(temperature-ta)*Math.exp(-dt/6);}}
     if(!p.measured)mark(flags,p.kind==='h2'?'hydrogen_speed_unvalidated':'vehicle_profile_estimated');
@@ -105,20 +111,20 @@
       if(e.destination){
         if(gal<(ctx.reserve||0)-1e-7&&!(plan.firstDip&&e===events[0])){ok=false;reason='weather_reserve_violated';return;}
         var d=e.destination,policy=(ctx.destinations||[]).find(function(x){return x.index===d.index;}),arrival=clamp(gal/capacity,0,1),target=policy?(policy.mode==='time'?policy.limit:Math.min(policy.limit,policy.target))/capacity:d.departGal/capacity,before=seconds+stopSeconds;
-        var cr=charge({profile:p,soc:arrival,target:Math.max(arrival,Math.min(1,target)),cap:1,temperature:temperature,kw:d.kw,level:d.level==='l1'?'1':'2',basis:'ac_meter',timeout:policy&&policy.mode==='time'?policy.minutes*60:7*86400,allowPartial:!!policy&&policy.mode==='time',ambient:function(dt,f){return weather(ctx.weather,e.d,initialTime+(before+dt)*1000,f);}});
+        var cr=charge({profile:p,auxState:aux,soc:arrival,target:Math.max(arrival,Math.min(1,target)),cap:1,temperature:temperature,kw:d.kw,level:d.level==='l1'?'1':'2',basis:'ac_meter',timeout:policy&&policy.mode==='time'?policy.minutes*60:7*86400,allowPartial:!!policy&&policy.mode==='time',ambient:function(dt,f){return weather(ctx.weather,e.d,initialTime+(before+dt)*1000,f);}});
         if(!cr.ok){ok=false;reason=cr.reason;return;}
-        mismatch=Math.max(mismatch,Math.abs(gal-d.arriveGal));d.arriveGal=gal;d.buyGal=cr.storedKWh;d.departGal=gal+d.buyGal;d.gridKWh=cr.billedKWh;d.cost=cr.billedKWh*d.price;d.minutes=Math.max(cr.minutes,policy&&policy.mode==='time'?policy.minutes:0);gal=d.departGal;temperature=cr.temperature;chargingMinutes+=cr.minutes;stopSeconds+=cr.minutes*60;wait(d.minutes-cr.minutes,e.d);cr.flags.forEach(function(f){mark(flags,f);});return;
+        mismatch=Math.max(mismatch,Math.abs(gal-d.arriveGal));d.arriveGal=gal;d.buyGal=cr.storedKWh;d.departGal=gal+d.buyGal;d.gridKWh=cr.billedKWh;d.cost=cr.billedKWh*d.price;d.minutes=Math.max(cr.minutes,policy&&policy.mode==='time'?policy.minutes:0);gal=d.departGal;temperature=cr.temperature;if(aux)aux=cr.auxState;chargingMinutes+=cr.minutes;stopSeconds+=cr.minutes*60;wait(d.minutes-cr.minutes,e.d);cr.flags.forEach(function(f){mark(flags,f);});return;
       }
       var s=e.stop,det=(s.c.detourMi||0)*model.cityGpm/2;gal-=det;stopSeconds+=(s.c.detourMin||0)*30;s.etaSec=seconds+stopSeconds;mismatch=Math.max(mismatch,Math.abs(gal-s.arriveGal));
       if(plan&&gal<ctx.reserve-1e-7&&!(plan.firstDip&&e===events[0])){ok=false;reason='weather_reserve_violated';}
       if(p.kind==='h2'){var amount=Math.max(0,Math.min(capacity,s.departGal)-gal);s.arriveGal=gal;s.buyGal=amount;s.departGal=gal+amount;s.propulsion={minutes:amount,flags:['hydrogen_fill_estimated']};gal=s.departGal-det;chargingMinutes+=amount;stopSeconds+=(ctx.stopMinutes||3)*60+amount*60+(s.c.detourMin||0)*30;return;}
       var before=seconds+stopSeconds,arrival=clamp(gal/capacity,0,1),target=s.departGal/capacity;
-      var r=charge({profile:p,soc:arrival,target:Math.min(1,target),cap:Math.min(1,ctx.fillCap/capacity||1),timeout:s.c.chargeLevel&&s.c.chargeLevel!=='dc_fast'?86400:14400,temperature:temperature,kw:s.c.stationKw||s.c.kw||50,level:s.c.chargeLevel||'dc_fast',share:s.c.powerShare,basis:s.c.billingBasis,ambient:function(dt,f){return weather(ctx.weather,e.d,initialTime+(before+dt)*1000,f);}});
+      var r=charge({profile:p,auxState:aux,soc:arrival,target:Math.min(1,target),cap:Math.min(1,ctx.fillCap/capacity||1),timeout:s.c.chargeLevel&&s.c.chargeLevel!=='dc_fast'?86400:14400,temperature:temperature,kw:s.c.stationKw||s.c.kw||50,level:s.c.chargeLevel||'dc_fast',share:s.c.powerShare,basis:s.c.billingBasis,ambient:function(dt,f){return weather(ctx.weather,e.d,initialTime+(before+dt)*1000,f);}});
       if(!r.ok){ok=false;reason=r.reason;s.propulsion=r;return;}
       var tariffs=root.EVTariffs||(typeof module!=='undefined'&&module.exports?require('./evtariffs.js'):null),quote=tariffs&&s.c.tariffOffer?tariffs.sessionQuote(s.c.tariffOffer,initialTime+before*1000,r.minutes,r.billedKWh):null;
       if(tariffs&&s.c.tariffOffer&&!quote){ok=false;reason='No published tariff covers the estimated charging time. Review departure or charging settings.';return;}
       if(quote){s.c=Object.assign({},s.c,{price:quote.rate,sessionFee:quote.fee,calc:Object.assign({},s.c.calc,{final:quote.rate,est:quote.estimated||quote.fee>0,steps:[{label:quote.conservative?'Published guest upper estimate; charging crosses or lacks a verified price window':quote.complete?'Published guest arrival-time rate':'Published energy price; fees unverified',kind:'base',amount:quote.rate}]})});if(quote.conservative)mark(r.flags,'charging_price_upper_estimate');if(!quote.complete)mark(r.flags,'charging_fees_unverified');}
-      s.arriveGal=gal;s.buyGal=r.storedKWh;s.departGal=gal+r.storedKWh;s.propulsion=r;r.price=s.c.price;r.cost=quote?quote.cost:s.c.price*r.billedKWh+(r.billedKWh>0?(+s.c.sessionFee||0):0);r.flags.forEach(function(x){mark(flags,x);});temperature=r.temperature;gal=s.departGal-det;chargingMinutes+=r.minutes;if(aux)aux=AL.park(aux,r.minutes*60);stopSeconds+=r.minutes*60+(s.buyGal>1e-8?(ctx.stopMinutes||5)*60:0)+(s.c.detourMin||0)*30;
+      s.arriveGal=gal;s.buyGal=r.storedKWh;s.departGal=gal+r.storedKWh;s.propulsion=r;r.price=s.c.price;r.cost=quote?quote.cost:s.c.price*r.billedKWh+(r.billedKWh>0?(+s.c.sessionFee||0):0);r.flags.forEach(function(x){mark(flags,x);});temperature=r.temperature;gal=s.departGal-det;chargingMinutes+=r.minutes;if(aux)aux=r.auxState;stopSeconds+=r.minutes*60+(s.buyGal>1e-8?(ctx.stopMinutes||5)*60:0)+(s.c.detourMin||0)*30;
     }
     (model.segs||[]).forEach(function(seg){
       var x=seg.from,baseMph=seg.mph||(seg.to-seg.from)/Math.max(1,(seg.t1-seg.t0))*3600;
@@ -134,8 +140,8 @@
         var power=v.power+pre;if(power<0){power=-Math.min(-power,p.regenKw||50,Math.max(0,capacity-gal)*3600/dt);mark(flags,'regeneration_not_credited_to_range');}
         var th=p.kind==='ev'?thermal(p,temperature,ta,power,dt,true,pre*800,flags):{temperature:temperature,cool:0};temperature=th.temperature;
         var extra=0;if(aux){var ae=AL.energy(aux,dt,ta,p,p.preset);extra=Math.max(0,ae.kWh-ae.kw*dt/3600);aux=ae.state;
-          if(TM&&seg.trafficMph>0&&seg.freeMph>0){var cat=TM.fromRatio(seg.trafficMph/seg.freeMph),sec=TM.section({len:end-x,vff:seg.freeMph,cat:cat,cls:seg.freeMph>=50?'freeway':'arterial'});if(sec.nStops>0){extra+=sec.nStops*TM.restart('ev',p.massKg||1900,sec.vMoving).kWh;trafficStops+=sec.nStops;mark(flags,'traffic_stops_estimated');}}}
-        var burn=p.kind==='ev'?Math.max(0,power*dt/3600+th.cool+extra):Math.max(0,v.gpm*(end-x));gal-=burn;if(plan&&gal< -1e-7){ok=false;reason='energy_exhausted';}
+          if(TM&&p.kind==='ev'&&seg.trafficMph>0&&seg.freeMph>0){var cat=TM.fromRatio(seg.trafficMph/seg.freeMph),sec=TM.split(end-x,dt,seg.freeMph,cat,seg.freeMph>=50?'freeway':'arterial');if(sec.nStops>0){extra+=sec.nStops*TM.restart('ev',p.massKg||1900,sec.vMoving).kWh;trafficStops+=sec.nStops;mark(flags,'traffic_stops_estimated');}}}
+        var burn=p.kind==='ev'?Math.max(0,power*dt/3600+th.cool+extra):Math.max(0,v.gpm*(end-x)+(p.auxModel?extra/(.55*33.32):0));gal-=burn;if(plan&&gal< -1e-7){ok=false;reason='energy_exhausted';}
         segments.push(Object.assign({},seg,{from:x,to:end,gpm:burn/(end-x),t0:seconds,t1:seconds+dt,mph:mph}));seconds+=dt;x=end;at=end;
       }
     });while(ei<events.length&&events[ei].d<=at+1e-7)event(events[ei++]);
