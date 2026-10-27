@@ -10,20 +10,22 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{window.Native=__app.N;__app.S.xomCheck=true;__app.KV.clear('xom');window.__reads=[];window.__direct=0;window.__mode='ok';
   __app.N.fetchJson=(id)=>{__direct++;onNativeResult(id,{error:'HTTP 403'});};
   __app.N.siteRead=(id,key,json)=>{if(key!=='xom')return setTimeout(()=>onNativeResult(id,{error:'mock skip'}),1);const a=JSON.parse(json);__reads.push(a);
-   setTimeout(()=>{if(__mode==='timeout')return onNativeResult(id,{error:'Site lookup timed out',code:'timeout'});if(__mode==='blocked')return onNativeResult(id,{blocked:true,status:403,boxes:[]});
+   setTimeout(()=>{if(__mode==='partial'){__mode='ok';return onNativeResult(id,{more:true,boxes:[[[30.25,-95.25,1,'Exxon A']]]});}if(__mode==='timeout')return onNativeResult(id,{error:'Site lookup timed out',code:'timeout'});if(__mode==='blocked')return onNativeResult(id,{blocked:true,status:403,boxes:[]});
     onNativeResult(id,{boxes:a.boxes.map(bx=>{const lat=(bx[0]+bx[1])/2,lng=(bx[2]+bx[3])/2,big=__mode==='big'&&bx[1]-bx[0]>0.4;
      return big?Array.from({length:100},(_,i)=>[bx[0]+i/1000,bx[2]+i/1000,0,'Filler']):[[lat,lng,Math.round(lat*10)%2,'Exxon '+lat.toFixed(2)]];}),read:a.boxes.length});},5);};
  });
  // 45 squares' worth of stations: two page reads (40 + 5), the exxon.com page, no direct locator request
  const marks=await p.evaluate(async()=>{const st=[];for(let i=0;i<45;i++){const lat=30.25+Math.floor(i/9)*.5,lng=-95.25+(i%9)*.5;st.push({id:'x'+i,brand:i%2?'mobil':'exxon',lat,lng,name:'Exxon'});}
   await __xom(st);return {reads:__reads.length,boxes:__reads.map(r=>r.boxes.length),urls:[...new Set(__reads.map(r=>r.url))],direct:__direct,wplus:st.filter(s=>s.wplus===true).length,not:st.filter(s=>s.wplus===false).length};});
- assert.deepEqual(marks.boxes,[40,5],'squares batched 40 a read');assert.deepEqual(marks.urls,['https://www.exxon.com/en']);assert.equal(marks.direct,0,'never the refused direct request');
+ assert.deepEqual(marks.boxes,[40,5],'squares batched 40 a read');assert.deepEqual(marks.urls,['https://www.exxonmobilfuels.com/en']);assert.equal(marks.direct,0,'never the refused direct request');
  assert.equal(marks.wplus+marks.not,45,'every station marked');assert(marks.wplus>0&&marks.not>0);
  // cached for a week: asking again reads nothing
  assert.equal(await p.evaluate(async()=>{__reads=[];await __xom([{id:'again',brand:'exxon',lat:30.25,lng:-95.25}]);return __reads.length;}),0);
  // a capped (100) answer is split into four squares, read in the next batch
  const split=await p.evaluate(async()=>{__app.KV.clear('xom');__reads=[];__mode='big';const st=[{id:'big',brand:'exxon',lat:40.25,lng:-80.25}];await __xom(st);return __reads.map(r=>r.boxes.length);});
  assert.deepEqual(split,[1,4],'capped square split and asked again');
+ // A batch time budget is continuation, not an outage: retain completed cells and request only the remainder.
+ const partial=await p.evaluate(async()=>{__app.KV.clear('xom');__reads=[];__mode='partial';const st=[{brand:'exxon',lat:30.25,lng:-95.25},{brand:'mobil',lat:30.25,lng:-94.75}];await __xom(st);return {sizes:__reads.map(r=>r.boxes.length),marked:st.every(s=>s.wplus!==undefined)};});assert.deepEqual(partial.sizes,[2,1]);assert(partial.marked);
  // ExxonMobil asks for a check: the batch stops, the check banner shows, nothing else is read
  const blocked=await p.evaluate(async()=>{__app.KV.clear('xom');__reads=[];__mode='blocked';const st=[{id:'b1',brand:'exxon',lat:41.25,lng:-81.25},{id:'b2',brand:'mobil',lat:42.25,lng:-82.25}];
   await __xom(st);const first=__reads.length;await __xom([{id:'b3',brand:'exxon',lat:43.25,lng:-83.25}]);return {first,after:__reads.length,banner:!document.getElementById('wmCheck').classList.contains('hidden'),title:document.getElementById('wmCheckTitle').textContent,marked:st.some(s=>s.wplus!==undefined)};});
@@ -49,7 +51,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const page=await run([{status:200,body:'{}'}],'Access Denied');assert.equal(page.out.blocked,true);assert.equal(page.urls.length,0,'a refused page asks nothing');
  const timeout=await run([{status:200,body:'{"Locations":[]}'},{stall:true}]);assert.match(timeout.out.error,/Timed out/);assert.equal(timeout.out.boxes.length,1,'retain completed cells on timeout');assert.equal(timeout.out.detail.read,1);assert(timeout.out.detail.elapsedMs<2000);
  const invalid=await run([{status:200,body:'{}'}]);assert.match(invalid.out.error,/locations missing/,'missing payload never cached as empty coverage');
- const java=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(java,/"xom"\.equals\(key\) && url\.equals\("https:\/\/www\.exxon\.com\/en"\)/,'only exxon.com/en may be read by the xom reader');
+ const java=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(java,/"xom"\.equals\(key\) && url\.equals\("https:\/\/www\.exxonmobilfuels\.com\/en"\)/,'only the current official domain may be read by the xom reader');
+ assert(java.includes('new SiteWorker("xom", "https://www.exxonmobilfuels.com/en", "https://www.exxonmobilfuels.com/")'),'native reader starts on current origin, not the redirected legacy domain');
+ assert(java.includes('readerDispatched'), 'timeout identifies whether reader started');
  assert.deepEqual(errors,[]);
  console.log('ExxonMobil Walmart+ check through the exxon.com page: batched 40 a read, no direct request, cached, capped squares split, refusal stops with the check banner, verification retries without a station search, worker on JSON / 403 / Access Denied');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

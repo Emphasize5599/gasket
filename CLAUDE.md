@@ -1,5 +1,15 @@
 # Gasket
 
+## 0.0.282 — Exxon domain and traffic failures
+
+Synced281 without discarding other work. Owner log27 Oct: XOM batches0/read timeout; live old exxon.com/en redirects to exxonmobilfuels.com/en, preventing native origin-gated reader injection. Updated XOM page/origin/allowlist/desktop endpoint and disclosure to current official domain, kept strict URL gating. Verified new locator in browser:5 Searcy stations and actual Walmartplus flags. Batch budget now reports more=true and requeues only unread cells; real restrictions/errors retain circuit breaker. Native XOM timeout reports readerDispatched and page URL without query/cookies.
+
+HERE281 now failed at single missing/zero speed span instead of geometry. Skip only incomplete spans; require50% matched forecast, keep gaps unforecast, log missing count/first sample, cachev4. Cannot prove exact log payload now succeeds (only error exported). Added global S.hereTraffic defaulttrue in Connections; off gates forecast calls, invalidates overlay/results/hazards, epoch-rejects in-flight answers, retains key and independent tolls. SettingsNav must move hereTraffic field explicitly.
+
+Google research: actual Typical traffic weekday/time controls programmable via keyboard; selected Tuesday5:15PM with feedback while URLunchanged; morning/evening colors changed. AX numeric50 is meaningless; use aria-valuetext. Three canvases/no DOM speed rows. Traffic tile requests observed, no structured typical-time geometry decoding yet. Google provider NOT integrated. See docs/TRAFFIC.md for numbered plan, calibration and direction/time/coverage/performance acceptance gates. Do not present guessed color ratios as numeric Google speeds.
+
+Tests: xom-reader batch continuation/current native origin, traffic missing/zero/allmissing spans, traffic-ui global switch persistence/no calls/old overlay removed, tolls unchanged; planning/settings flows. Phone: discount check should return verified areas; inspect traffic coverage/missing sample; disable HERE traffic and ensure tolls still work/counterdoesnotrise from forecast calls.
+
 ## 0.0.280 — unified objective and toll budgets
 
 Owner noticed window.priority versus car.autoTripPriority conflict; requested binary Cost/Time and optional toll allowance/caps for Time. Canonical car.planningPriority, separate car.autoTripEnabled checkbox (manual editing remains possible). Legacy autoTripPriority derived/read for compatibility. Window form C.priority/C.setPriority delegates canonical value; preserve selectedPriority across validation (config() sync otherwise overwrites the edit). Rebuild cached Route content after window/priority changes so selectors and summary stay synchronized. Comparison uses two-choice selector plus auto checkbox, disabled/on when windows require it. Mechanical VehicleCompare.profile excludes planning fields; journey ignores window.priority so per-car goals don't reset each other's comparison. Window keys include canonical objective/toll policy.

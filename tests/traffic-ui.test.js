@@ -12,5 +12,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  });
  await p.evaluate(()=>__trip.close());await p.click('#btnTrip');await p.click('[data-hist="traffic-main"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.departNow=true;__trip.step(5);});await p.waitForFunction(()=>__trip.state().model.traffic);assert(await p.evaluate(()=>__mainTrafficQueries.length>0));
  await p.evaluate(()=>__trip.find());await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);assert(await p.evaluate(()=>__trip.state().result.plan.ok));assert(await p.evaluate(()=>__trip.state().result.opts.model.segs.every(s=>s.mph<=20.01)));
+ // Global traffic switch is in Connections, persists, cancels application of old overlays and leaves the HERE key intact.
+ await p.evaluate(()=>__trip.close());await require('./settings-ui')(p,'connections');assert(await p.locator('#hereTraffic').isChecked());await p.uncheck('#hereTraffic');await p.click('#sDone');
+ assert.equal(await p.evaluate(()=>__app.S.hereTraffic),false);assert.equal(await p.evaluate(()=>__app.S.hereKey),'TEST-HERE');
+ const blockedQueries=await p.evaluate(async()=>{const A=__app;let calls=0;const flow=TrafficFlow.init(A,async()=>{calls++;throw Error('must not call');},{invalidate:()=>{}});const base=__trip.state().model;await flow.prepare({},base,Date.now());return {calls,enabled:flow.enabled(),traffic:!!base.traffic};});assert.equal(blockedQueries.calls,0);assert(!blockedQueries.enabled);assert(!blockedQueries.traffic,'settings discard the active traffic overlay');
+ await require('./settings-ui')(p,'connections');assert(!await p.locator('#hereTraffic').isChecked());await p.check('#hereTraffic');await p.click('#sDone');assert.equal(await p.evaluate(()=>__app.S.hereTraffic),true);
  assert.deepEqual(errors,[]);await p.close();
 }console.log('Forecast toggle precedes time windows; production traffic planning and obsolete picker removal.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

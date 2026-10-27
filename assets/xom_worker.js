@@ -1,5 +1,5 @@
-// Runs inside the app's off-screen copy of exxon.com, signed out. It asks ExxonMobil's own station locator (the
-// request exxon.com's station finder makes) for each square, from the page, so the site's own cookies come along:
+// Runs inside the app's off-screen copy of exxonmobilfuels.com, signed out. It asks ExxonMobil's own station locator (the
+// request exxonmobilfuels.com's station finder makes) for each square, from the page, so the site's own cookies come along:
 // asked from outside the page, the locator answers "Access Denied" (0.0.269 log: HTTP 403 on 130 of 131 squares).
 // args: {boxes: [[lat1, lat2, lng1, lng2], ...]} (at most 40 per read)
 // Reports {boxes: [[[lat, lng, walmartPlus 0|1, name], ...] | null, ...], read} or {blocked, boxes (those read)} or {error}.
@@ -17,7 +17,8 @@ async function (reqId, args) {
   try {
     for (let i = 0; i < boxes.length; i++) {
       if (i) await pause(350);   // one square at a time, like a person panning the finder
-      if(Date.now()-started>=25000) { send({error:'Locator batch deadline reached',boxes:out,detail:detail()});return; }
+      // Leave a full request timeout inside the batch deadline; remaining cells continue in the next read.
+      if(Date.now()-started>=19000) { send({more:true,boxes:out,detail:detail()});return; }
       stage='locator';
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(6000,25000-(Date.now()-started)));
       let r,txt;

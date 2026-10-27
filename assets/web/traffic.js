@@ -38,7 +38,7 @@
   // HERE's second point, 239 ft off at the start, so no traffic was ever applied.
   var TOL=.03,MIN_COVER=.5;
   function read(json,m){
-    var r=json&&json.routes&&json.routes[0],used=[],prev=0,misses=0,offMax=0,firstMiss=null,spansSkipped=0;
+    var r=json&&json.routes&&json.routes[0],used=[],prev=0,misses=0,offMax=0,firstMiss=null,spansSkipped=0,speedsMissing=0,firstMissing=null;
     if(!r||!r.sections||!r.sections.length)throw Error('No traffic route returned');
     r.sections.forEach(function(sec){
       if((sec.notices||[]).some(function(n){return n.severity==='critical';}))throw Error('Traffic route has a critical restriction');
@@ -49,7 +49,11 @@
         var next=i+1<spans.length?spans[i+1].offset:pts.length-1;
         if(!Number.isInteger(s.offset)||!Number.isInteger(next)||s.offset<0||next<=s.offset||next>=pts.length)throw Error('Invalid traffic span');
         var speed=s.dynamicSpeedInfo,seconds=Number(s.duration),length=Number(s.length);
-        if(!(seconds>0)||!speed||!(speed.trafficSpeed>0)||!(speed.baseSpeed>0)||!Number.isFinite(speed.trafficSpeed)||!Number.isFinite(speed.baseSpeed)||!(length>0))throw Error('Missing traffic speed');
+        // Zero-duration connector spans and locally absent speeds must not discard an otherwise usable forecast.
+        // Keep those stretches explicitly unforecast; never interpret a missing speed as free-flow or a closure.
+        if(!(seconds>0)||!Number.isFinite(seconds)||!speed||!(speed.trafficSpeed>0)||!(speed.baseSpeed>0)||!Number.isFinite(speed.trafficSpeed)||!Number.isFinite(speed.baseSpeed)||!(length>0)||!Number.isFinite(length)){
+          speedsMissing++;spansSkipped++;if(!firstMissing)firstMissing={offset:s.offset,length:s.length,duration:s.duration,dynamicSpeedInfo:speed||null};return;
+        }
         var ok=true;for(var k=s.offset;k<=next;k++)if(on[k]==null){ok=false;break;}
         var a=on[s.offset],b=on[next],mi=length/1609.344;
         // a span whose length disagrees with the stretch it spans took another road between matching points
@@ -66,8 +70,8 @@
     if(m.totalMi-at<=.04&&rows.length)rows[rows.length-1].to=m.totalMi;else gap(at,m.totalMi);
     if(rows.length)rows[0].from=0;
     var matched=rows.reduce(function(n,x){return n+(x.forecast===false?0:x.to-x.from);},0),coverage=m.totalMi>0?Math.min(1,matched/m.totalMi):0;
-    var details={coverage:Math.round(coverage*1000)/1000,stretchesOff:rows.filter(function(x){return x.forecast===false;}).length,spansSkipped:spansSkipped,pointsOff:misses,maxOffsetFeet:Math.round(offMax*5280),firstOffMile:firstMiss==null?null:Math.round(firstMiss*10)/10,routePoints:m.pts.length};
-    if(coverage<MIN_COVER){var error=Error('Traffic forecast matched only '+Math.round(coverage*100)+'% of this route');error.details=details;throw error;}
+    var details={coverage:Math.round(coverage*1000)/1000,stretchesOff:rows.filter(function(x){return x.forecast===false;}).length,spansSkipped:spansSkipped,speedsMissing:speedsMissing,firstMissing:firstMissing,pointsOff:misses,maxOffsetFeet:Math.round(offMax*5280),firstOffMile:firstMiss==null?null:Math.round(firstMiss*10)/10,routePoints:m.pts.length};
+    if(coverage+1e-6<MIN_COVER){var error=Error('Traffic forecast matched only '+Math.round(coverage*100)+'% of this route');error.details=details;throw error;}
     return {source:'HERE forecast',rows:rows,coverage:coverage,match:details,seconds:rows.reduce(function(n,x){return n+x.seconds;},0),baseSeconds:rows.reduce(function(n,x){return n+x.baseSeconds;},0)};
   }
   function overlay(m,p){
@@ -83,7 +87,7 @@
     function hash(s){var a=2166136261,b=5381;for(var i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),16777619);b=Math.imul(b,33)^s.charCodeAt(i);}return (a>>>0).toString(36)+(b>>>0).toString(36);}
     async function leg(m,depart,stops,avoid,valid){
       // Sub-minute route clocks share a forecast; round forward so "Now" never requests a past minute.
-      var q=query(m,Math.ceil(depart/60000)*60000,stops,avoid),geometry=T.encodePolyline(m.pts),identity=q+'|'+geometry,key='traffic-v3|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(depart-now)<3600000?10*60000:6*3600000;
+      var q=query(m,Math.ceil(depart/60000)*60000,stops,avoid),geometry=T.encodePolyline(m.pts),identity=q+'|'+geometry,key='traffic-v4|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(depart-now)<3600000?10*60000:6*3600000;
       var held=memory.get(key),hit=held&&now-held.at<ttl?held.value:io.get&&io.get(key,ttl);if(hit&&hit.identity===identity&&hit.profile)return Object.assign({},hit.profile,{cached:true});
       var failed=failures.get(key)||hit&&hit.identity===identity&&hit.failedAt>=ignoreFailuresBefore&&hit;if(failed&&now-failed.failedAt<300000){var cachedError=Error(failed.error);cachedError.details=failed.details;cachedError.cachedFailure=true;throw cachedError;}
       if(!valid())throw Error('Traffic lookup cancelled');

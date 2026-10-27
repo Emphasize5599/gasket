@@ -344,7 +344,7 @@ public class MainActivity extends Activity {
         workers.put("chargepoint", new SiteWorker("chargepoint", "https://driver.chargepoint.com/", "https://driver.chargepoint.com/"));
         // ExxonMobil's station locator, asked from its own page (asked from outside it answers Access Denied): which
         // Exxon / Mobil stations take Walmart+
-        workers.put("xom", new SiteWorker("xom", "https://www.exxon.com/en", "https://www.exxon.com/"));
+        workers.put("xom", new SiteWorker("xom", "https://www.exxonmobilfuels.com/en", "https://www.exxonmobilfuels.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -515,6 +515,7 @@ public class MainActivity extends Activity {
         WebView view;
         int completedReads = 0;
         boolean ready = false;
+        boolean readerDispatched = false;
         final List<String> queue = new ArrayList<String>();
 
         int showReq = -1;   // set while the page is shown to the user by siteShow
@@ -749,6 +750,7 @@ public class MainActivity extends Activity {
         /** A background read's reader, on the page as it is now (a page that reloads itself gets it again). */
         void runRead() {
             if (readCall == null || view == null) return;
+            readerDispatched = true;
             // The document guards by request ID. A previous request or a callback from the old document must not
             // consume the new request; a real page reload needs the reader again because its JS was destroyed.
             view.evaluateJavascript((isGasWorker(key) ? "window.__gasketLeanResources=" + leanGasResources + ";" : "") + readCall, null);
@@ -1169,7 +1171,7 @@ public class MainActivity extends Activity {
 
     // EPA mileage, OpenStreetMap places, FHWA speed limits, ExxonMobil's station finder, the DOE station finder (EV chargers,
     // hydrogen), NHTSA (VIN decoding, recalls), and the weather and air along a route (Open-Meteo, the National Weather Service)
-    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "overpass-api.de", "geo.dot.gov", "www.exxon.com",
+    private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "overpass-api.de", "geo.dot.gov", "www.exxon.com", "www.exxonmobilfuels.com",
             "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org", "en.wikipedia.org",
             "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov",
             // EV networks' own published prices: IONNA's site list page, Blink's map service
@@ -2373,14 +2375,14 @@ public class MainActivity extends Activity {
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
                             || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
                             || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
-                            || ("xom".equals(key) && url.equals("https://www.exxon.com/en"))
+                            || ("xom".equals(key) && url.equals("https://www.exxonmobilfuels.com/en"))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
                         return;
                     }
                     if (w.readReq >= 0) w.finishRead(w.readReq, "{\"error\":\"Lookup replaced by another request\",\"code\":\"cancelled\"}");
-                    w.readReq = reqId;
+                    w.readReq = reqId; w.readerDispatched = false;
                     w.leanGasResources = true; w.retriedGasResources = false; w.partialGasStores = null;
                     w.gasReadStarted = System.nanoTime() / 1000000L; w.gasRetryAt = 0; w.gasFirstStop = ""; w.gasFirstRows = 0;
                     try { w.gasRequestedGrade = new JSONObject(argsJson).optString("grade", "regular"); } catch (Exception ignored) { w.gasRequestedGrade = "regular"; }
@@ -2396,7 +2398,14 @@ public class MainActivity extends Activity {
                     fw.readDeadline = new Runnable() {
                         public void run() {
                             if (fw.readReq != fr) return;
-                            fw.finishRead(fr, "{\"error\":\"Site lookup timed out\",\"code\":\"timeout\"}");
+                            String detail = "";
+                            if ("xom".equals(key)) {
+                                // No query, cookies or credentials: distinguish a redirect from a stalled API reader.
+                                String at = fw.view == null ? "" : String.valueOf(fw.view.getUrl());
+                                String page = at.split("[?#]", 2)[0];
+                                detail = ",\"detail\":{\"readerDispatched\":" + fw.readerDispatched + ",\"page\":" + q(page) + "}";
+                            }
+                            fw.finishRead(fr, "{\"error\":\"Site lookup timed out\",\"code\":\"timeout\"" + detail + "}");
                             fw.ready = false; if (fw.view != null) fw.view.stopLoading();
                         }
                     };

@@ -1202,7 +1202,7 @@
     h += '</div>';
     h += '<div class="card"><h3>Trip planner</h3>' +
       '<div class="field"><div class="lbl">Show cities when a route is imported<small>Free lookup from OpenStreetMap using each stop\'s spot (sends those coordinates to OpenStreetMap). No Google lookups.</small></div>' + sw('osmPreview', S.osmPreview !== false) + '</div>' +
-      '<div class="field"><div class="lbl">Check which Exxon and Mobil stations take Walmart+<small>Free, from ExxonMobil\'s own station finder (sends the map area or route area to exxon.com). Stations it lists without Walmart+ don\'t get the 10¢. No Google lookups.</small></div>' + sw('xomCheck', S.xomCheck !== false) + '</div>' +
+      '<div class="field"><div class="lbl">Check which Exxon and Mobil stations take Walmart+<small>Free, from ExxonMobil\'s own station finder (sends the map area or route area to exxonmobilfuels.com). Stations it lists without Walmart+ don\'t get the 10¢. No Google lookups.</small></div>' + sw('xomCheck', S.xomCheck !== false) + '</div>' +
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
@@ -1210,6 +1210,7 @@
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
       (window.ChargerData?ChargerData.settingsHtml():'') +
       '<div class="field col"><div class="lbl">HERE routing key (optional)<small>HERE: optional traffic forecasts, departure comparisons and toll estimates share this key and monthly limiter. A departure comparison uses one uncached request per tested time per leg; final planning can refine forecasts for stop delays. Check your HERE plan and billing limits. Toll answers are kept 30 days; near-term traffic 10 minutes, future traffic 6 hours. Get one: <a href="#" data-url="https://platform.here.com/">platform.here.com</a> → Access Manager → Apps → Register new app → Credentials → API Keys. Never logged or exported.</small></div><input type="password" id="hereKey" autocomplete="off" spellcheck="false" value="' + esc(S.hereKey || '') + '"></div>' +
+      '<div class="field"><div class="lbl">Use HERE for traffic forecasts<small>Turn off to prevent traffic forecast calls. HERE toll estimates remain enabled. Without a usable forecast, Gasket uses normal route times.</small></div>' + sw('hereTraffic', S.hereTraffic !== false).replace('<input ', '<input id="hereTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">HERE routing lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); traffic forecasts and toll lookups share this cap. Check your HERE account allowance.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
       '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Fast-charging price estimate ($/kWh)<small>Used only if you allow chargers without published prices and the route has too few known rates. Also estimates your starting battery cost.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
@@ -1343,6 +1344,7 @@
   function opt(v, label, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>'; }
   function fmtSha(s) { return String(s).replace(/(..)(?!$)/g, '$1:'); }
   function closeSettings(apply) {
+    var previousHereTraffic = S.hereTraffic !== false;
     var pg = $('settings'); if (pg.classList.contains('hidden')) return false;
     var hadKey = !!S.apiKey;
     S.apiKey = $('apiKey').value.trim(); apiCount();
@@ -1373,6 +1375,7 @@
     });
     save();
     pg.classList.add('hidden');
+    if(previousHereTraffic !== (S.hereTraffic !== false))window.dispatchEvent(new Event('trafficsettingschange'));
     if(pg.dataset.discountKey!==discountKey()&&window.__trip&&__trip.discountsChanged)__trip.discountsChanged();
     stations = stations.filter(function (s) { return S.brands[s.brand]; });
     render();

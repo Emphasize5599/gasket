@@ -2422,7 +2422,7 @@ return conditions;
   // keeps it. CITGO has no such public list, so CITGO prices say the discount isn't confirmed.
   var XOM_CELL = 0.5, XOM_DAYS = 7;
   function xomUrl(b) {
-    return 'https://www.exxon.com/en/api/locator/Locations?Latitude1=' + b[0].toFixed(3) + '&Latitude2=' + b[1].toFixed(3) +
+    return 'https://www.exxonmobilfuels.com/en/api/locator/Locations?Latitude1=' + b[0].toFixed(3) + '&Latitude2=' + b[1].toFixed(3) +
       '&Longitude1=' + b[2].toFixed(3) + '&Longitude2=' + b[3].toFixed(3) + '&DataSource=RetailGasStations&Country=US&Customsort=False';
   }
   function xomRows(j) {
@@ -2458,11 +2458,11 @@ return conditions;
       var got = (r && r.boxes) || [];
       if(r&&r.error)xomUnavailable=true;
       LG.debug('stations','ExxonMobil locator batch',{requested:batch.length,read:got.filter(Array.isArray).length,error:r&&r.error||null,detail:r&&r.detail||null});
-      batch.forEach(function (q, i) { if (Array.isArray(got[i])) q.ok(got[i]); else q.fail(new Error(r && r.blocked ? 'ExxonMobil asked for a check' : r && r.error || 'no answer')); });
+      batch.forEach(function (q, i) { if (Array.isArray(got[i])) q.ok(got[i]); else if(r&&r.more&&got.length>0&&!r.error&&!r.blocked)xomQueue.push(q); else q.fail(new Error(r && r.blocked ? 'ExxonMobil asked for a check' : r && r.error || 'no answer')); });
       if (r && r.blocked && !xomBlocked) { xomBlocked = true; LG.warn('stations', 'ExxonMobil station finder wants a check', { status: r.status || null, squaresRead: got.length }); if (A.showSiteCheck) A.showSiteCheck('xom', 'ExxonMobil'); }
     }
   }
-  var XOM_PAGE = 'https://www.exxon.com/en';
+  var XOM_PAGE = 'https://www.exxonmobilfuels.com/en';
   // the finder caps its answer at 100: split the square (up to 3 times) and ask again, so nothing is cut off
   async function xomSquare(b, depth) {
     var list = await xomBox(b);
