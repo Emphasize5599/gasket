@@ -31,30 +31,44 @@
     var features=[];if(avoid&&avoid.tolls)features.push('tollRoad');if(avoid&&avoid.highways)features.push('controlledAccessHighway');if(avoid&&avoid.ferries)features.push('ferry');if(features.length)q.push('avoid%5Bfeatures%5D='+features.join(','));
     var out=q.join('&');if(out.length>3900)throw Error('Too many traffic stop points');return out;
   }
+  // HERE's line is matched to the selected route stretch by stretch. A HERE span is used only where every one of its
+  // points lies on our line (<= TOL), in order, and its length agrees with the stretch it covers; anything else (HERE
+  // leaving the origin by another street, a different interchange, coarse website geometry on a curve) keeps the
+  // route's own estimate there, marked forecast:false. 0.0.280 log: every long-trip forecast was rejected whole at
+  // HERE's second point, 239 ft off at the start, so no traffic was ever applied.
+  var TOL=.03,MIN_COVER=.5;
   function read(json,m){
-    var r=json&&json.routes&&json.routes[0],rows=[],prev=0,meters=0;
+    var r=json&&json.routes&&json.routes[0],used=[],prev=0,misses=0,offMax=0,firstMiss=null,spansSkipped=0;
     if(!r||!r.sections||!r.sections.length)throw Error('No traffic route returned');
     r.sections.forEach(function(sec){
       if((sec.notices||[]).some(function(n){return n.severity==='critical';}))throw Error('Traffic route has a critical restriction');
-      var pts=decode(sec.polyline),projections=pts.map(function(p,index){var x=T.project(m,p);if(!x||x.offset>.03||x.along<prev-.04){var error=Error('Traffic forecast does not match the selected route');error.details={point:index,offsetFeet:x&&Number.isFinite(x.offset)?Math.round(x.offset*5280):null,backtrackMiles:x?Math.round(Math.max(0,prev-x.along)*1000)/1000:null,routePoints:m.pts.length,forecastPoints:pts.length};throw error;}prev=Math.max(prev,x.along);return x.along;});
-      meters+=Number(sec.summary&&sec.summary.length)||0;
+      var pts=decode(sec.polyline),on=pts.map(function(p){var x=T.project(m,p);if(x&&x.offset<=TOL&&x.along>=prev-.04){prev=Math.max(prev,x.along);return x.along;}
+        misses++;if(x&&Number.isFinite(x.offset)&&x.offset>offMax)offMax=x.offset;if(firstMiss==null)firstMiss=x&&Number.isFinite(x.along)?prev:0;return null;});
       var spans=sec.spans;if(!spans||!spans.length||spans[0].offset!==0)throw Error('Incomplete traffic speeds');
       spans.forEach(function(s,i){
         var next=i+1<spans.length?spans[i+1].offset:pts.length-1;
         if(!Number.isInteger(s.offset)||!Number.isInteger(next)||s.offset<0||next<=s.offset||next>=pts.length)throw Error('Invalid traffic span');
-        var a=projections[s.offset],b=projections[next],speed=s.dynamicSpeedInfo,seconds=Number(s.duration),length=Number(s.length);
+        var speed=s.dynamicSpeedInfo,seconds=Number(s.duration),length=Number(s.length);
         if(!(seconds>0)||!speed||!(speed.trafficSpeed>0)||!(speed.baseSpeed>0)||!Number.isFinite(speed.trafficSpeed)||!Number.isFinite(speed.baseSpeed)||!(length>0))throw Error('Missing traffic speed');
-        if(b>a+.000001)rows.push({from:a,to:b,seconds:seconds,baseSeconds:length/speed.baseSpeed,trafficMph:(b-a)/seconds*3600,freeMph:speed.baseSpeed*2.2369362921});
+        var ok=true;for(var k=s.offset;k<=next;k++)if(on[k]==null){ok=false;break;}
+        var a=on[s.offset],b=on[next],mi=length/1609.344;
+        // a span whose length disagrees with the stretch it spans took another road between matching points
+        if(!ok||!(b>a+.000001)||Math.abs((b-a)-mi)>Math.max(.02,mi*.1)){spansSkipped++;return;}
+        used.push({from:a,to:b,seconds:seconds,baseSeconds:length/speed.baseSpeed,trafficMph:(b-a)/seconds*3600,freeMph:speed.baseSpeed*2.2369362921});
       });
     });
-    if(!rows.length||Math.abs(meters/1609.344-m.totalMi)>Math.max(.03,m.totalMi*.02)||rows[0].from>.03||m.totalMi-rows[rows.length-1].to>.03)throw Error('Traffic forecast does not cover this route');
-    rows[0].from=0;rows[rows.length-1].to=m.totalMi;
-    for(var j=1;j<rows.length;j++){if(Math.abs(rows[j].from-rows[j-1].to)>.04)throw Error('Gap in traffic forecast');rows[j].from=rows[j-1].to;}
-    // Check both directions: matching HERE vertices alone could miss a shortcut across our line.
-    var herePts=[];r.sections.forEach(function(s){herePts=herePts.concat(decode(s.polyline));});var hereCum=[0];for(var k=1;k<herePts.length;k++)hereCum.push(hereCum[k-1]+T.hav(herePts[k-1],herePts[k]));
-    var line={pts:herePts,cum:hereCum,totalMi:hereCum[hereCum.length-1]};
-    for(var d=0;d<m.totalMi;d+=Math.max(.1,m.totalMi/1000))if(T.project(line,m.pointAt(d)).offset>.03)throw Error('Traffic forecast skips selected roads');
-    return {source:'HERE forecast',rows:rows,seconds:rows.reduce(function(n,s){return n+s.seconds;},0),baseSeconds:rows.reduce(function(n,s){return n+s.baseSeconds;},0)};
+    used.sort(function(x,y){return x.from-y.from;});
+    // the full route: HERE's matched stretches, the route's own estimate in the gaps (small gaps close up)
+    var rows=[],at=0;
+    function gap(from,to){if(to-from<=1e-7)return;var sec=m.timeTo(to)-m.timeTo(from);rows.push({from:from,to:to,seconds:sec,baseSeconds:sec,trafficMph:null,freeMph:null,forecast:false});}
+    used.forEach(function(u){if(u.to<=at+1e-7)return;var from=Math.max(u.from,at);if(from-at<=.04){if(rows.length&&rows[rows.length-1].forecast!==false)rows[rows.length-1].to=from;else from=at;}else gap(at,from);
+      var share=(u.to-from)/(u.to-u.from);rows.push(Object.assign({},u,{from:from,seconds:u.seconds*share,baseSeconds:u.baseSeconds*share}));at=u.to;});
+    if(m.totalMi-at<=.04&&rows.length)rows[rows.length-1].to=m.totalMi;else gap(at,m.totalMi);
+    if(rows.length)rows[0].from=0;
+    var matched=rows.reduce(function(n,x){return n+(x.forecast===false?0:x.to-x.from);},0),coverage=m.totalMi>0?Math.min(1,matched/m.totalMi):0;
+    var details={coverage:Math.round(coverage*1000)/1000,stretchesOff:rows.filter(function(x){return x.forecast===false;}).length,spansSkipped:spansSkipped,pointsOff:misses,maxOffsetFeet:Math.round(offMax*5280),firstOffMile:firstMiss==null?null:Math.round(firstMiss*10)/10,routePoints:m.pts.length};
+    if(coverage<MIN_COVER){var error=Error('Traffic forecast matched only '+Math.round(coverage*100)+'% of this route');error.details=details;throw error;}
+    return {source:'HERE forecast',rows:rows,coverage:coverage,match:details,seconds:rows.reduce(function(n,x){return n+x.seconds;},0),baseSeconds:rows.reduce(function(n,x){return n+x.baseSeconds;},0)};
   }
   function overlay(m,p){
     if(!p||!p.rows||!p.rows.length)return m;var segs=[],time=0,j=0;
@@ -69,7 +83,7 @@
     function hash(s){var a=2166136261,b=5381;for(var i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),16777619);b=Math.imul(b,33)^s.charCodeAt(i);}return (a>>>0).toString(36)+(b>>>0).toString(36);}
     async function leg(m,depart,stops,avoid,valid){
       // Sub-minute route clocks share a forecast; round forward so "Now" never requests a past minute.
-      var q=query(m,Math.ceil(depart/60000)*60000,stops,avoid),geometry=T.encodePolyline(m.pts),identity=q+'|'+geometry,key='traffic-v2|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(depart-now)<3600000?10*60000:6*3600000;
+      var q=query(m,Math.ceil(depart/60000)*60000,stops,avoid),geometry=T.encodePolyline(m.pts),identity=q+'|'+geometry,key='traffic-v3|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(depart-now)<3600000?10*60000:6*3600000;
       var held=memory.get(key),hit=held&&now-held.at<ttl?held.value:io.get&&io.get(key,ttl);if(hit&&hit.identity===identity&&hit.profile)return Object.assign({},hit.profile,{cached:true});
       var failed=failures.get(key)||hit&&hit.identity===identity&&hit.failedAt>=ignoreFailuresBefore&&hit;if(failed&&now-failed.failedAt<300000){var cachedError=Error(failed.error);cachedError.details=failed.details;cachedError.cachedFailure=true;throw cachedError;}
       if(!valid())throw Error('Traffic lookup cancelled');
@@ -85,11 +99,12 @@
         if(o.progress)o.progress(i,ends.length);var legStart=clock,p=await leg(part,clock,stops,o.avoid,valid);oldest=Math.min(oldest,p.at);
         p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+at,to:r.to+at}));});seconds+=p.seconds;base+=p.baseSeconds;cached=cached&&!!p.cached;clock+=(p.seconds+stops.reduce(function(n,s){return n+s.seconds;},0))*1000;
         (o.stops||[]).filter(function(s){return Math.abs(s.d-end)<1e-7;}).forEach(function(s){clock+=s.seconds*1000;});
-        legs.push({from:at,to:end,depart:legStart,arrival:clock,seconds:p.seconds});
+        legs.push({from:at,to:end,depart:legStart,arrival:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});
         if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before you reach the destination');clock=Math.max(clock,o.waitAt.at);}at=end;
       }
       if(o.progress)o.progress(ends.length,ends.length);
-      return {source:'HERE forecast',rows:rows,legs:legs,seconds:seconds,baseSeconds:base,depart:depart,arrival:clock,at:oldest,cached:cached};
+      var matched=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0);
+      return {source:'HERE forecast',rows:rows,legs:legs,coverage:m.totalMi>0?Math.min(1,matched/m.totalMi):0,seconds:seconds,baseSeconds:base,depart:depart,arrival:clock,at:oldest,cached:cached};
     }
     return {forecast:forecast,retryFailures:function(){failures.clear();ignoreFailuresBefore=(io.now?io.now():Date.now())+1;},clear:function(){memory.clear();memoryRows=0;failures.clear();}};
   }

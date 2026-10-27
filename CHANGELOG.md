@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.281 - 2026-10-27
+- Traffic forecasts now apply on long trips: HERE's forecast is used wherever it follows your route, and only the stretches where it takes other roads (often the first block from your start) use normal route times. Route says how much of the trip the forecast covers, or why it wasn't used.
+
 ## 0.0.280 - 2026-10-26
 - One shared Cost/Time priority per vehicle across windows, Routes and comparison; automatic adjustment is a separate toggle.
 - Time-first planning can allow paid tolls with an optional per-leg or whole-trip budget. Unknown prices cannot satisfy a cap.
