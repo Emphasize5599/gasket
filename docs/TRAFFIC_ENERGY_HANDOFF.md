@@ -4,7 +4,7 @@ Prepared 27 October 2026 for a Claude Code or Codex session working in the Gaske
 
 ## Implementation progress (update after every round of commits)
 
-Branch: `feature/traffic-rest-integration` (the same commits are also pushed to `claude/blissful-mccarthy-s8spue`). Both branches have identical ancestry. The experimental energy integration is prepared for merge to main as 0.0.283 after release checks; sync main before continuing the remaining gates.
+Branch: `feature/traffic-rest-integration` (the same commits are also pushed to `claude/blissful-mccarthy-s8spue`). Both branches have identical ancestry. The experimental energy integration is merged to main and released as 0.0.283; sync main before continuing the remaining gates. Signed arm64-v8a/universal APKs published after successful GitHub run40564196346 (163 regressions plus native/build/signing checks). Both source branches are ancestors of main.
 
 | Round | Status | What |
 | --- | --- | --- |
