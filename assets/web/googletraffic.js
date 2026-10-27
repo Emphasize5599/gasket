@@ -68,7 +68,7 @@
   if(!best||best.coverage<.7)throw Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');return best;
  }
  function boundaries(m){var out=[];for(var i=1;i<m.pts.length;i++){var a=m.pts[i-1],b=m.pts[i];['lat','lng'].forEach(function(k){var lo=Math.min(a[k],b[k]),hi=Math.max(a[k],b[k]);for(var edge=Math.floor(lo)+1;edge<hi;edge++){var f=(edge-a[k])/(b[k]-a[k]);out.push(m.cum[i-1]+f*(m.cum[i]-m.cum[i-1]));}});}return out;}
- async function reuse(ob,m,t){
+ async function reuse(ob,m,t,valid){
   if(!ob||!ob.pts||!ob.rows||!Number.isFinite(ob.depart))return null;
   var elapsed=0,segs=ob.rows.map(function(r){var s=Object.assign({},r,{t0:elapsed,t1:elapsed+r.seconds,gpm:0,mph:(r.to-r.from)/r.seconds*3600});elapsed+=r.seconds;return s;}),cached=T.restoreModel({pts:ob.pts,cum:ob.cum,segs:segs,totalMi:ob.cum[ob.cum.length-1],durationSec:elapsed,legEnds:[],cityGpm:0,hwyGpm:0,combGpm:0});
   var a=T.project(cached,m.pts[0]),b=T.project(cached,m.pts[m.pts.length-1]);if(a.offset>.015||b.offset>.015||b.along<=a.along||Math.abs(t-ob.depart-cached.timeTo(a.along)*1000)>150000)return null;
@@ -84,7 +84,7 @@
   async function piece(m,t,o){
    var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid),clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),identity=q+'|'+T.encodePolyline(m.pts),key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(t-now)<3600000?10*MINUTE:6*3600000,held=get(key,ttl);
    if(held&&held.identity===identity)return Object.assign({},held.profile,{cached:true});if(!valid())throw Error('Traffic lookup cancelled');
-   if(io.observations){var candidates=io.observations(m,t,ttl)||[];for(var ci=0;ci<candidates.length;ci++){var shared=await reuse(candidates[ci].observation,m,t);if(!valid())throw Error('Traffic lookup cancelled');if(shared)return Object.assign(shared,{at:candidates[ci].profile.at,depart:t,cached:true,sharedRoads:true});}}
+   if(io.observations){var candidates=io.observations(m,t,ttl)||[];for(var ci=0;ci<candidates.length;ci++){var shared=await reuse(candidates[ci].observation,m,t,valid);if(!valid())throw Error('Traffic lookup cancelled');if(shared)return Object.assign(shared,{at:candidates[ci].profile.at,depart:t,cached:true,sharedRoads:true});}}
 
    if(!pending.has(identity)){var generation=epoch;pending.set(identity,limited(async function(){if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,valid);if(r.error)throw Error(r.error);var p=await readAsync(r.body||r,clock,m,valid);p.at=now;p.depart=t;p.originZone=zone;p.cached=false;if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');if(io.put)io.put(key,{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t}});return p;}).finally(function(){pending.delete(identity);}));}
    var p=await pending.get(identity);if(!valid())throw Error('Traffic lookup cancelled');return p;
