@@ -415,6 +415,7 @@
   window.onSiteVerified = function (key) {
     if(window.EVPrices&&EVPrices.onVerified(key))return;
     if(/^(tesla|chargepoint)$/.test(key))return;
+    if(key==='traffic'){window.dispatchEvent(new Event('trafficverified'));return;}
     if(key==='xom'){window.dispatchEvent(new Event('xomverified'));return;} // never a map search
     if(window.KeylessGas&&KeylessGas.onVerified&&KeylessGas.onVerified(key))return;
     if(/^(brave|nhtsa|tirerack)$/.test(key))return; // vehicle verification must never start station/API discovery
@@ -1211,7 +1212,8 @@
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
       (window.ChargerData?ChargerData.settingsHtml():'') +
       '<div class="field col"><div class="lbl">HERE routing key (optional)<small>HERE: optional traffic forecasts, departure comparisons and toll estimates share this key and monthly limiter. A departure comparison uses one uncached request per tested time per leg; final planning can refine forecasts for stop delays. Check your HERE plan and billing limits. Toll answers are kept 30 days; near-term traffic 10 minutes, future traffic 6 hours. Get one: <a href="#" data-url="https://platform.here.com/">platform.here.com</a> → Access Manager → Apps → Register new app → Credentials → API Keys. Never logged or exported.</small></div><input type="password" id="hereKey" autocomplete="off" spellcheck="false" value="' + esc(S.hereKey || '') + '"></div>' +
-      '<div class="field"><div class="lbl">Use HERE for traffic forecasts<small>Turn off to prevent traffic forecast calls. HERE toll estimates remain enabled. Without a usable forecast, Gasket uses normal route times.</small></div>' + sw('hereTraffic', S.hereTraffic !== false).replace('<input ', '<input id="hereTraffic" ') + '</div>' +
+      '<div class="field"><div class="lbl">Google website traffic forecasts<small>Keyless, estimated traffic at your projected arrival. Sends route sections and departure times to Google; origin timezone lookup uses Open-Meteo. Verification may be required. © Google.</small></div>' + sw('googleTraffic', S.googleTraffic !== false).replace('<input ', '<input id="googleTraffic" ') + '</div>' +
+      '<div class="field"><div class="lbl">Use HERE for traffic forecasts<small>Optional alternative to Google website forecasts. Uses the shared HERE allowance; toll estimates remain independent.</small></div>' + sw('hereTraffic', S.hereTraffic === true).replace('<input ', '<input id="hereTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">HERE routing lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); traffic forecasts and toll lookups share this cap. Check your HERE account allowance.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
       '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Fast-charging price estimate ($/kWh)<small>Used only if you allow chargers without published prices and the route has too few known rates. Also estimates your starting battery cost.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
@@ -1345,8 +1347,9 @@
   function opt(v, label, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>'; }
   function fmtSha(s) { return String(s).replace(/(..)(?!$)/g, '$1:'); }
   function closeSettings(apply) {
-    var previousHereTraffic = S.hereTraffic !== false;
+    var previousHereTraffic = S.hereTraffic === true;
     var previousTrafficEnergy = S.trafficEnergy === true;
+    var previousGoogleTraffic = S.googleTraffic !== false;
     var pg = $('settings'); if (pg.classList.contains('hidden')) return false;
     var hadKey = !!S.apiKey;
     S.apiKey = $('apiKey').value.trim(); apiCount();
@@ -1377,7 +1380,7 @@
     });
     save();
     pg.classList.add('hidden');
-    if(previousHereTraffic !== (S.hereTraffic !== false) || previousTrafficEnergy !== (S.trafficEnergy === true))window.dispatchEvent(new Event('trafficsettingschange'));
+    if(previousHereTraffic !== (S.hereTraffic === true) || previousTrafficEnergy !== (S.trafficEnergy === true) || previousGoogleTraffic !== (S.googleTraffic !== false))window.dispatchEvent(new Event('trafficsettingschange'));
     if(pg.dataset.discountKey!==discountKey()&&window.__trip&&__trip.discountsChanged)__trip.discountsChanged();
     stations = stations.filter(function (s) { return S.brands[s.brand]; });
     render();
@@ -1389,7 +1392,7 @@
 
   // ---------- buttons ----------
   $('wmCheckGo').onclick = function () { $('wmCheck').classList.add('hidden'); if (checkKey && N.siteVerify) N.siteVerify(checkKey); };
-  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');if(window.EVPrices)EVPrices.dismissCheck();if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
+  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');window.dispatchEvent(new Event('trafficcancel'));if(window.EVPrices)EVPrices.dismissCheck();if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
   $('btnSettings').onclick = function () { openSettings(false); };
   $('btnLocate').onclick = function () {
     if (me) { movedByUser = false; map.setView([me.lat, me.lng], Math.max(map.getZoom(), zoomForRadius(S.radiusMi))); $('btnArea').classList.add('hidden'); }

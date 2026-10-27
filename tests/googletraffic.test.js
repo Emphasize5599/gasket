@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict'),G=require('../assets/web/googletraffic'),T=require('../assets/web/trip');
+const clock=Date.UTC(2026,9,28,8)/1000,points=[{lat:34,lng:-92},{lat:34.04,lng:-92},{lat:34.1,lng:-92}],mi=T.hav(points[0],points[2]),meters=mi*1609.344;
+function fixture(pts=points,seconds=1200){const r=[],root=[];r[0]=[];r[0][1]='Generic highway';r[0][2]=[meters];r[0][10]=[[seconds],null,3,null,[seconds*.9,seconds*1.3]];r[1]=[[null,null,null,null,[null,null,null,null,'America/Chicago']]];r[3]=[[[0,0],[meters*.4,seconds*.4],[meters,seconds]]];root[1]=[r];let a=0,b=0;const la=[],lo=[];pts.forEach(p=>{const x=Math.round(p.lat*1e7),y=Math.round(p.lng*1e7);la.push(x-a);lo.push(y-b);a=x;b=y;});root[7]=[[la,lo]];root[11]='/dir/data=!4m6!4m5!2m3!6e0!7e2!8j'+clock+'!3e0';return [root];}
+const model=T.buildRoute({distanceMeters:meters,duration:'600s',polyline:{encodedPolyline:T.encodePolyline(points)},legs:[]},{city:30,hwy:40,comb:35});
+assert.equal(G.wall(Date.UTC(2026,0,1,12),'America/New_York'),Date.UTC(2026,0,1,7)/1000);
+assert.equal(G.wall(Date.UTC(2026,6,1,12),'America/New_York'),Date.UTC(2026,6,1,8)/1000,'DST comes from IANA rules, not a fixed offset');
+const q=G.query(points[0],points[2],clock,{tolls:true,ferries:true});assert(q.includes('!19m3!1e0!2e2!3j'+clock));assert(q.includes('!2b1'));assert(!/token|authuser|!15m/.test(q));assert.throws(()=>G.query({lat:NaN,lng:0},points[1],clock));
+const f=fixture(),p=G.read(f,clock,model);assert(p.coverage>.999);assert(Math.abs(p.seconds-1200)<.01);assert.equal(p.low,1080);assert.equal(p.high,1560);
+assert.throws(()=>G.read(f,clock+3600,model),/clock/);
+const wrong=fixture(points.slice().reverse());assert.throws(()=>G.read(wrong,clock,model),/different roads/,'reverse carriageway is never projected onto forward traffic');
+const bad=fixture();bad[0][1][0][3][0][1][1]=-5;assert.throws(()=>G.read(bad,clock,model),/profiles/);
+const other=fixture(points.map(p=>({...p,lng:p.lng+.1})));assert.throws(()=>G.read(other,clock,model),/different roads/);
+const ttlStore=new Map();let reads=0,put=0;const service=G.create({zone:async()=> 'UTC',get:k=>ttlStore.get(k),put:(k,v)=>{put++;ttlStore.set(k,v);},fetch:async()=>{reads++;return {body:fixture()};},now:()=>clock*1000});
+(async()=>{const a=await G.readAsync(f,clock,model);assert.equal(a.coverage,p.coverage);const first=await service.forecast(model,clock*1000,{valid:()=>true});assert(first.coverage>.999);assert.equal(reads,1);await service.forecast(model,clock*1000,{valid:()=>true});assert.equal(reads,1,'fresh persisted forecast reused across caller sessions');assert.equal(put,1);
+ const sub=require('../assets/web/traffic').slice(model,mi*.4,mi*.8),ob={pts:model.pts,cum:model.cum,rows:p.rows,depart:clock*1000};const shared=await G.reuse(ob,sub,clock*1000+480000);assert(shared&&shared.coverage>.999,'another trip can reuse an overlapping road section at its forecast arrival');assert.equal(await G.reuse(ob,sub,clock*1000+7200000),null,'different arrival buckets never reuse the wrong traffic');
+ await assert.rejects(service.forecast(model,clock*1000,{valid:()=>false}),/cancelled/);console.log('Google numeric profile: clocks, DST, geometry/direction, malformed/missing data, async matching, persistent and overlapping-road reuse, cancellation passed');})().catch(e=>{console.error(e);process.exitCode=1;});

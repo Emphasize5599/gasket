@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const p=await browser.newPage({viewport:{width,height:920},colorScheme:width===448?'dark':'light'}),errors=[];p.on('pageerror',e=>errors.push(e.message));p.setDefaultTimeout(10000);await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.click('#btnTrip');await p.evaluate(()=>__trip.step(3));assert.equal(await p.locator('#tFindDeparture').count(),0);assert(!await p.locator('#tTraffic').isChecked());await p.click('#tTraffic');assert(await p.evaluate(()=>__app.S.trip.trafficForecast));
  assert(await p.evaluate(()=>{const a=document.querySelector('#tTraffic'),b=document.querySelector('#twEnable');return a.closest('.card')===b.closest('.card')&&a.getBoundingClientRect().top<b.getBoundingClientRect().top;}));
- await p.evaluate(()=>{__app.S.hereKey='TEST-HERE';});
+ await p.evaluate(()=>{__app.S.hereKey='TEST-HERE';__app.S.hereTraffic=true;__app.S.googleTraffic=false;});
  await p.evaluate(()=>{
   const A=__app,pts=[{lat:34,lng:-92},{lat:34.1,lng:-92},{lat:34.2,lng:-92}],mi=Trip.hav(pts[0],pts[2]),raw={description:'Forecast fixture',distanceMeters:mi*1609.344,duration:(mi/40*3600)+'s',polyline:{encodedPolyline:Trip.encodePolyline(pts)},legs:[{distanceMeters:mi*1609.344,duration:(mi/40*3600)+'s',steps:[]}]};
   A.S.apiKey='TEST';A.S.keylessRegular=false;A.S.limitLookup=false;A.S.trip.trafficForecast=true;A.S.trip.departNow=true;A.S.trip.fuel={mode:'miles',miles:'250'};A.S.trip.milesLeft='250';A.S.trip.tankPrice='3.50';A.siteOn=()=>false;window.__mainTrafficQueries=[];

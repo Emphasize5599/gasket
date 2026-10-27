@@ -30,7 +30,8 @@
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if (fn === 'aiCommand') timeout = 15000;
       if (fn === 'visualSnapshot') timeout = 5000;
-      if (fn === 'fetchHere') timeout = 45000;
+      if (fn === 'fetchHere' || fn === 'fetchGoogleTraffic') timeout = 45000;
+      if (fn === 'siteRead' && args[0] === 'traffic') timeout = 60000;
       if (fn === 'tripQueue') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
         if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancelAdvice'); } catch (e) { }
@@ -5061,7 +5062,7 @@ return conditions;
   function compareReset(){if(!queueWorking){queueEngine=null;queueViewCar=null;}compareEntries.clear();compareOwner=null;compareReviewed=0;compareReviewKey=null;compareReviewProof=null;compareJourney=null;compareView={sort:'cost',scope:'trip',leg:0,open:{}};if(window.VehicleCompareUI)VehicleCompareUI.dispose();}
   function compareReviewContext(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip)]);}
   function compareSafetyKey(){return VehicleCompare.key([VehicleCompare.profile(Garage.car()),VehicleCompare.journey(route,S.trip),choiceLists().map(function(l,i){return altSig(l[hzSel(i)]);})]);}
-  function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices','trafficEnergy'].map(function(k){return S[k];}));}
+  function compareSettingsKey(){return VehicleCompare.key(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','brands','blacklist','dieselRisk','staleHours','evPrice','evPriceAgeHours','evAllowUnknownPrices','trafficEnergy','googleTraffic','hereTraffic'].map(function(k){return S[k];}));}
   function compareLocked(){return !!(schedulePlanning||queueWorking||busy||routing||choicePlanning||hzRiskBusy||compareEditing||compareCalculating);}
   function queueNotify(action,text,car){var payload={title:action==='finish'?'Vehicle comparisons updated':'Gasket trip planning',text:text,car:car||'',trip:route&&route.histId||''};return window.TripNotify?TripNotify.send(action,payload):Promise.resolve({unavailable:true});}
   function queueReviewStep(s,c){

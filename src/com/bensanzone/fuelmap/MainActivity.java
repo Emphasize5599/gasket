@@ -65,6 +65,7 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
+    private final java.util.concurrent.ExecutorService trafficRequests = java.util.concurrent.Executors.newFixedThreadPool(2);
     private static java.lang.ref.WeakReference<MainActivity> queueActivity=new java.lang.ref.WeakReference<>(null);
     public static void queueTimeout(){MainActivity a=queueActivity.get();if(a!=null)a.js("window.onTripQueueTimeout&&onTripQueueTimeout()");}
     private void handleQueueIntent(Intent i){
@@ -168,6 +169,7 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        trafficRequests.shutdownNow();
         main.removeCallbacks(frameTick);if(frameThread!=null)frameThread.quitSafely();
         if (aiFrames != null) { getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null; }
         synchronized (this) { if (gemma != null) { gemma.close(); gemma = null; } }
@@ -330,6 +332,7 @@ public class MainActivity extends Activity {
         workers.put("walmart", new SiteWorker("walmart", "https://www.walmart.com/store-finder", "https://www.walmart.com/"));
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
+        workers.put("traffic", new SiteWorker("traffic", "https://www.google.com/maps", "https://www.google.com/", true));
         // Dedicated gas reader: never replaces an in-progress directions import.
         // Gas readers are created lazily for the configured pool, not at startup.
         // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
@@ -347,7 +350,7 @@ public class MainActivity extends Activity {
         workers.put("xom", new SiteWorker("xom", "https://www.exxonmobilfuels.com/en", "https://www.exxonmobilfuels.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
-            if (sw.key.equals("gmaps") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
+            if (sw.key.equals("gmaps") || sw.key.equals("traffic") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
             else root.addView(sw.view, new FrameLayout.LayoutParams(-1, -1));
         }
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
@@ -534,6 +537,10 @@ public class MainActivity extends Activity {
 
         void finishRead(int reqId, String json) {
             if (readReq != reqId) return;
+            if ("traffic".equals(key)) try {
+                JSONObject answer = new JSONObject(json); String check = answer.optString("verificationUrl", "");
+                if (answer.optBoolean("blocked") && check.startsWith("https://www.google.com/sorry/")) verificationUrl = check;
+            } catch (Exception ignored) { }
             if (("chargepoint".equals(key) || "tesla".equals(key) || "xom".equals(key)) && view != null) {
                 try { if (new JSONObject(json).optBoolean("blocked")) {
                     String at = view.getUrl(); if (at != null && at.startsWith(origin)) verificationUrl = at;
@@ -791,7 +798,7 @@ public class MainActivity extends Activity {
             return fresh;
         }
         if (old.view != null) return old;
-        boolean desktop = isGasWorker(key) || "gmaps".equals(key);
+        boolean desktop = isGasWorker(key) || "gmaps".equals(key) || "traffic".equals(key);
         SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop);
         fresh.verificationUrl = old.verificationUrl;
         workers.put(key, fresh);
@@ -1465,6 +1472,39 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
+        /** Public anonymous website protocol: fixed endpoint, bounded response, two readers.
+         * No cookies, credentials, API key or app-client token are extracted or copied. */
+        @JavascriptInterface public void fetchGoogleTraffic(final int reqId, final String pb) {
+            if (pb == null || pb.length() > 5000 || !pb.matches("[A-Za-z0-9!.,_%-]+") || !pb.contains("!19m3!1e0!2e2!3j")) {
+                JSONObject e = new JSONObject(); try { e.put("error", "Invalid traffic request"); } catch (Exception ignored) { } reply(reqId, e); return;
+            }
+            trafficRequests.execute(new Runnable() { public void run() {
+                JSONObject out = new JSONObject(); HttpURLConnection c = null;
+                try {
+                    String url = "https://www.google.com/maps/preview/directions?hl=en&gl=us&pb=" + java.net.URLEncoder.encode(pb, "UTF-8");
+                    c = (HttpURLConnection) new URL(url).openConnection();
+                    c.setConnectTimeout(10000); c.setReadTimeout(25000); c.setInstanceFollowRedirects(false);
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36");
+                    c.setRequestProperty("Accept-Encoding", "gzip");
+                    int status = c.getResponseCode(); String location = c.getHeaderField("Location");
+                    InputStream raw = status >= 400 ? c.getErrorStream() : c.getInputStream();
+                    String body = "";
+                    if (raw != null) { if ("gzip".equalsIgnoreCase(c.getContentEncoding())) raw = new java.util.zip.GZIPInputStream(raw);
+                        try (InputStream in = ChargerInventory.bounded(raw, 6000000)) { body = readAll(in); }
+                    }
+                    String lower = body.substring(0, Math.min(body.length(), 16000)).toLowerCase(java.util.Locale.US);
+                    if (status == 429 || status == 403 || (location != null && location.contains("/sorry/")) || lower.contains("unusual traffic") || lower.contains("g-recaptcha")) {
+                        out.put("blocked", true);
+                        final String check = location != null && location.startsWith("https://www.google.com/") ? location : "https://www.google.com/maps";
+                        main.post(new Runnable() { public void run() { SiteWorker w = ensureWorker("traffic"); if (w != null) w.verificationUrl = check; } });
+                    } else if (status != 200) out.put("error", "Google traffic HTTP " + status);
+                    else if (!body.startsWith(")]}'") && !body.startsWith("[")) out.put("error", "Google traffic did not return route data");
+                    else out.put("body", body);
+                } catch (Exception e) { try { out.put("error", "Google traffic request failed: " + e.getClass().getSimpleName()); } catch (Exception ignored) { } }
+                finally { if (c != null) c.disconnect(); }
+                reply(reqId, out);
+            } });
+        }
         @JavascriptInterface public void tripQueue(final int id,final String action,final String payload){main.post(()->{
             try{
                 if(!java.util.Arrays.asList("start","progress","ready","check","finish","stop").contains(action))throw new IllegalArgumentException("Unknown queue action");
@@ -2376,6 +2416,7 @@ public class MainActivity extends Activity {
                             || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
                             || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
                             || ("xom".equals(key) && url.equals("https://www.exxonmobilfuels.com/en"))
+                            || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
