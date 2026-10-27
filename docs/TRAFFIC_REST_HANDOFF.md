@@ -16,6 +16,7 @@ Start here in a new session, then read the linked documents relevant to the next
 4. [CAMPSITE_FILTERS.md](CAMPSITE_FILTERS.md): verified RV Parky search and filter URLs, Campendium handoff, unsupported filter handling. RV Parky ignores reviews/stars; iOverlander is excluded.
 5. `research/rest-traffic/`: rest_timing.py, site_links.py, benchmark_ntad.py and 11 previously passing timing/link tests. These are research prototypes, not app adapters.
 6. [PROPULSION_MODELS.md](PROPULSION_MODELS.md): existing EV/hydrogen model assumptions and calibration limits. Current average-speed handling is not a complete traffic-cycle model.
+7. [TRAFFIC_ENERGY_EVIDENCE.md](TRAFFIC_ENERGY_EVIDENCE.md): October 27 library research, measured versus simulated fuel/EV cabin-load evidence, source limitations, current climate-preset wiring gap and proposed energy accounting contract. No fitted coefficients or production model changes yet.
 
 ## Agreed integration direction
 
