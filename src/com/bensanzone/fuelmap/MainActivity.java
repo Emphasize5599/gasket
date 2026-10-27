@@ -65,6 +65,7 @@ import java.util.Locale;
  * a monthly API-call guard, and the hand-off to Google Maps for directions.
  */
 public class MainActivity extends Activity {
+    private final java.util.concurrent.atomic.AtomicBoolean ridbCancel = new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.ExecutorService trafficRequests = java.util.concurrent.Executors.newFixedThreadPool(2);
     private static java.lang.ref.WeakReference<MainActivity> queueActivity=new java.lang.ref.WeakReference<>(null);
     public static void queueTimeout(){MainActivity a=queueActivity.get();if(a!=null)a.js("window.onTripQueueTimeout&&onTripQueueTimeout()");}
@@ -1879,6 +1880,22 @@ public class MainActivity extends Activity {
                     else throw new Exception("Unknown inventory action");
                 }catch(Exception e){out=new JSONObject();try{out=inventory().status();}catch(Exception ignored){}try{out.put("error",e.getMessage());}catch(Exception ignored){}}
                 reply(reqId,out);
+            }).start();
+        }
+
+        /** Recreation.gov RIDB campgrounds: user-started download of only the facilities file (RidbCampgrounds). */
+        @JavascriptInterface
+        public void restInventory(final int reqId, final String action) {
+            if ("cancel".equals(action)) { ridbCancel.set(true); reply(reqId, new JSONObject()); return; }
+            if (!"download".equals(action)) { JSONObject out = new JSONObject(); try { out.put("error", "Unknown rest inventory action"); } catch (Exception ignored) { } reply(reqId, out); return; }
+            ridbCancel.set(false);
+            new Thread(() -> {
+                JSONObject out = new JSONObject();
+                try {
+                    RidbCampgrounds.Result r = RidbCampgrounds.download(RidbCampgrounds.http(userAgent()), (done, total) -> js("window.onNativeProgress&&onNativeProgress(" + reqId + "," + done + "," + total + ")"), ridbCancel);
+                    out.put("rows", new JSONArray(r.rows)); out.put("count", r.count); out.put("bytes", r.bytes);
+                } catch (Exception e) { try { out.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                reply(reqId, out);
             }).start();
         }
 

@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.284 - 2026-10-27
+- Traffic forecasts without a key: future traffic comes from Google Maps' own typical-traffic answer, matched road by road. HERE traffic is now opt-in (tolls unchanged).
+- Rest stops: find rest areas, campgrounds and other places to stop along a trip, check parking rules and timing, and add one as a stop.
+- Download Recreation.gov's federal campgrounds once in Settings → Trip defaults, so rest planning has them on hand.
+- Bug fixes.
+
 ## 0.0.283 - 2026-10-27
 - Add an optional experimental traffic-energy model in Settings → Trip defaults: stop/go fuel use, EV cabin loads and cold-start estimates.
 - Bug fixes: correct HVAC warm-up accounting, carry cabin state through charging, and keep closed trips closed when changing traffic settings.

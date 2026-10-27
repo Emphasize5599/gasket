@@ -1,4 +1,4 @@
-# Broader traffic and rest integration — in progress
+# Broader traffic and rest integration — released in 0.0.284
 
 Owner explicitly requested completion after 0.0.283. Main synced at 737cd37. Preserve tmp/ (existing research) and do not remove branches.
 
@@ -35,3 +35,9 @@ Paired same-instant requests for Wednesday 02:00 and 08:00 have identical geomet
 End-to-end RestUI tests now also run actual fuel planning and verify accepted rest schedules, then retime without duplicating the stop. Passing320/448px with130% text. Fixed a real route-rebuild edge case for saved trips whose typed address fields are empty: keep the current exact stop coordinates. Hazard clocks carry rests through every later leg and distinguish charging overlap. Comparison duration includes scheduled waits; journey identity includes rest timing, not per-car permission acknowledgements. Parking acknowledgements are independent by vehicle/configuration/time so batch review does not overwrite another car. Focused Google/rest/window/vehicle comparison UI checks pass.
 
 RIDB: official download page exposes CSV/JSON full exports and states downloading accepts its access agreement. Approval question is pending in this chat before downloading for integration/testing. No RIDB export downloaded yet. Continue independent source integration/testing; do not treat silence as consent. NTAD/OSM work is not blocked. A same-origin Google cookie-copy proposal was rejected by automatic approval review; removed entirely. Native traffic remains anonymous, browser fallback retains sessions entirely within Google pages.
+
+## Release 0.0.284
+
+Owner approved RIDB ("have the user download all the data like they do for EV chargers") and the release. Settings → Trip defaults → Campgrounds for rest stops: user-started only. Native `RidbCampgrounds` asks the ~570 MB export's last 64 KB (suffix range), reads the zip's central directory, then streams only `Facilities_API_v1.json` (~35 MB, stored or deflated) with If-Range on the ETag (CloudFront serves mixed export versions; a 200 = "updated its export, try again"), CRC32-checked, cancellable, ZIP64 refused, no key. Keeps enabled campgrounds with coordinates (5,259 of 5,804 on the 2026-10-27 export; ~574 KB of rows, 0.8 s parse at 128 MB heap) as `[id, name, lat, lng, reservable, stay text, fee text]` in KV restplaces/ridb. `RestPlaces.ridb` turns them into campground places (permission unknown, fee text is never a price, only a plain "N days/nights" becomes a stay limit, link to the Recreation.gov page); searches merge them and drop OSM campgrounds within ~300 m of one. Tests ridb (JVM in CI: stored/deflated, filters, escapes, progress, 3 requests, CRC, version switch, cancel, no-range refusal) and ridb-ui (320/448, 130% text). Whether the phone's connection keeps the ranged stream steady is unverified.
+
+Still not verified live on a phone: Google future-traffic replay from the phone network, verification pause/resume, rest search → accept → retime on a real trip.

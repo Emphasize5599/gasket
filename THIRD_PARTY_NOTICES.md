@@ -14,6 +14,10 @@ DOE Alternative Fuels Data Center (AFDC), served by the NLR Developer Network: h
 
 Open Charge Map: https://openchargemap.org/ . Optional route queries request `opendata=true`; records retain the original data-provider attribution, applicable license, and OCM record link. OCM-contributor data is licensed under Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/); imported records can carry other licenses, shown with the record. Gasket does not copy OCM application code or treat its fair-use API as unlimited. See https://openchargemap.org/develop and https://github.com/openchargemap/ocm-export for source-specific terms and export guidance.
 
+## Recreation.gov campgrounds (RIDB)
+
+Recreation Information Database (RIDB), Recreation.gov / U.S. federal land-management agencies: https://ridb.recreation.gov/ . The optional campground download in Settings → Trip defaults reads only the facilities file of RIDB's public full export directly from Recreation.gov to the phone; it is not bundled or redistributed by Gasket. Starting the download accepts the RIDB data access agreement (https://ridb.recreation.gov/download). Fees, stay limits and reservation details are shown as the agency's own text and can be out of date.
+
 ## Open EV Data (EV charging curves)
 
 Gasket bundles DC charging curves (state of charge → kW) for 346 vehicles from Open EV Data (https://github.com/KilowattApp/open-ev-data), file `data/ev-data.json` dated 2025-04-12 (SHA-256 c1b6e45bad920b5c99c38b2e2eee0bad079e9080b3f2506f291895e2a1399b66), reduced by `tools/gen-ev-curves.js` into `assets/web/evcurves-data.js` (the dataset's default template curves and rows whose peak equals the battery size were left out). The car editor names the dataset whenever it supplies a car's curve. Curves are estimates; real charging also depends on battery temperature, the charger and the car's software.

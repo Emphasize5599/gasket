@@ -1208,7 +1208,7 @@
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
-      '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div></div>';
+      '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div>' + (window.RidbUI ? RidbUI.html() : '') + '</div>';
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
       (window.ChargerData?ChargerData.settingsHtml():'') +
       '<div class="field col"><div class="lbl">HERE routing key (optional)<small>HERE: optional traffic forecasts, departure comparisons and toll estimates share this key and monthly limiter. A departure comparison uses one uncached request per tested time per leg; final planning can refine forecasts for stop delays. Check your HERE plan and billing limits. Toll answers are kept 30 days; near-term traffic 10 minutes, future traffic 6 hours. Get one: <a href="#" data-url="https://platform.here.com/">platform.here.com</a> → Access Manager → Apps → Register new app → Credentials → API Keys. Never logged or exported.</small></div><input type="password" id="hereKey" autocomplete="off" spellcheck="false" value="' + esc(S.hereKey || '') + '"></div>' +
@@ -1299,7 +1299,7 @@
       closeSettings(false);if(window.Garage)Garage.installDemo();
     };
     if(window.SettingsNav)SettingsNav.attach(window.__app,pg);
-    if(window.ChargerData)ChargerData.attach(pg);
+    if(window.ChargerData)ChargerData.attach(pg);if(window.RidbUI)RidbUI.attach(pg);
   }
   function logHeader() {
     return 'Gasket ' + (N.appVersion ? N.appVersion() : '') + ' debug log · ' + new Date().toString() + ' · level ' + S.logLevel + '\n';

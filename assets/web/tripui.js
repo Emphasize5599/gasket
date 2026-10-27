@@ -5265,7 +5265,7 @@ return conditions;
     if(compareLocked())return;compareCapture();var previous=S.carId;compareEditing=true;
     Garage.render($('vcEditorHost'),null,function(){},call);Garage.addVehicle(function(saved){compareEditing=false;var id=S.carId;if(!compareEntries.size){S.carId=saved?id:previous;compareOwner=null;step=saved?ST_ADVISORY:ST_COMPARE;A.save();renderStep();return;}S.carId=previous;if(compareSwitch(saved?id:previous,true)){step=saved?ST_ADVISORY:ST_COMPARE;renderStep();}});
   }
-  window.__trip = { call: call, open: openTrip, steps:{COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:S.carId,rows:compareRows(),view:compareView};}, relogo: function () {
+  window.__trip = { call: call, callP: callP, open: openTrip, steps:{COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:S.carId,rows:compareRows(),view:compareView};}, relogo: function () {
       drawn = {};
       if (result && onPlan(step)) keepScroll(renderResults);
       if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();
