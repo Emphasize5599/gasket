@@ -69,6 +69,11 @@ on:
       - tests/run-node.js
       - tests/traffic-energy.test.js
       - tests/traffic-energy-ui.test.js
+      - tests/googletraffic.test.js
+      - tests/googletraffic-ui.test.js
+      - tests/restplaces.test.js
+      - tests/resttiming.test.js
+      - tests/restui.test.js
       - tests/propulsion.test.js
       - tests/propulsion-ui.test.js
       - tests/energygraph.test.js

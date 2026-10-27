@@ -1,0 +1,12 @@
+/* Rest departure guidance over supplied, verified forecasts. Absolute UTC ms;
+ * enumerate nonmonotonic options, never bridge missing samples or infer permission. */
+(function(root){'use strict';
+ function choose(samples,o){o=o||{};var nums=[o.reached,o.minimumRest,o.maximumStay,o.trafficTolerance||0];['arrivalStart','arrivalEnd','parkingCloses','chargeReady'].forEach(function(k){if(o[k]!=null)nums.push(o[k]);});if(nums.some(function(n){return !Number.isFinite(n);})||o.minimumRest<0||o.maximumStay<o.minimumRest||o.arrivalStart!=null&&o.arrivalEnd!=null&&o.arrivalEnd<o.arrivalStart)throw Error('Invalid rest time limits');
+  var charge=Math.max(o.reached,o.chargeReady||o.reached),ready=o.restDuringCharging===false?charge+o.minimumRest*60000:Math.max(o.reached+o.minimumRest*60000,charge),end=Math.min(o.reached+o.maximumStay*60000,o.parkingCloses==null?Infinity:o.parkingCloses),rows=[],unavailable=0;
+  if(o.permission===true)samples.slice().sort(function(a,b){return a.depart-b.depart;}).forEach(function(s){if(s.depart<ready||s.depart>end)return;if(!(s.drivingMinutes>0)||!Number.isFinite(s.drivingMinutes)){unavailable++;return;}var arrive=Number.isFinite(s.arrive)?s.arrive:s.depart+s.drivingMinutes*60000;if(o.arrivalStart!=null&&arrive<o.arrivalStart||o.arrivalEnd!=null&&arrive>o.arrivalEnd)return;rows.push({depart:s.depart,arrive:arrive,drivingMinutes:s.drivingMinutes,restMinutes:(s.depart-o.reached)/60000,profile:s.profile});});
+  var best=Math.min.apply(null,rows.map(function(s){return s.drivingMinutes;})),low=rows.filter(function(s){return s.drivingMinutes<=best+(o.trafficTolerance||0);}),earliest=rows.slice().sort(function(a,b){return a.arrive-b.arrive||a.depart-b.depart;})[0],intervals=[];rows.forEach(function(s){var last=intervals[intervals.length-1];if(last&&s.depart-last.end<=5*60000)last.end=s.depart;else intervals.push({start:s.depart,end:s.depart});});
+  return {soonestLowTraffic:low[0]||null,latestFeasible:rows[rows.length-1]||null,earliestArrival:earliest||null,feasible:rows,intervals:intervals,unavailable:unavailable,permissionRequired:o.permission!==true};
+ }
+ function samples(start,end){var out=[];if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>24*3600000)throw Error('Choose a rest window of at most 24 hours');for(var t=Math.ceil(start/300000)*300000;t<=end;t+=300000)out.push(t);return out;}
+ var api={choose:choose,samples:samples};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RestTiming=api;
+})(typeof window!=='undefined'?window:this);

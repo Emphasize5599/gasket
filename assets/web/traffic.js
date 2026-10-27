@@ -106,7 +106,7 @@
       var p;try{p=await pending.get(identity);}catch(e){var failure={identity:identity,error:String(e.message||e),details:e.details,failedAt:now};failures.set(key,failure);if(failures.size>128)failures.delete(failures.keys().next().value);if(io.put)io.put(key,failure);throw e;}if(!valid())throw Error('Traffic lookup cancelled');return p;
     }
     async function forecast(m,depart,options){
-      var o=options||{},valid=o.valid||function(){return true;},ends=m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi],rows=[],legs=[],at=0,clock=depart,seconds=0,base=0,cached=true,oldest=Infinity;
+      var o=options||{},valid=o.valid||function(){return true;},ends=Array.from(new Set((m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).concat((o.waits||[]).map(function(w){return w.d;})))).sort(function(a,b){return a-b;}),rows=[],legs=[],at=0,clock=depart,seconds=0,base=0,cached=true,oldest=Infinity;
       ends=ends.concat((o.stops||[]).filter(function(s){return s.seconds>=49900&&s.d>0&&s.d<m.totalMi;}).map(function(s){return s.d;})).sort(function(a,b){return a-b;}).filter(function(d,i,a){return !i||d-a[i-1]>1e-7;});
       (o.stops||[]).filter(function(s){return s.d===0;}).forEach(function(s){clock+=s.seconds*1000;});
       for(var i=0;i<ends.length;i++){
@@ -115,7 +115,7 @@
         p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+at,to:r.to+at}));});seconds+=p.seconds;base+=p.baseSeconds;cached=cached&&!!p.cached;clock+=(p.seconds+stops.reduce(function(n,s){return n+s.seconds;},0))*1000;
         (o.stops||[]).filter(function(s){return Math.abs(s.d-end)<1e-7;}).forEach(function(s){clock+=s.seconds*1000;});
         legs.push({from:at,to:end,depart:legStart,arrival:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});
-        if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before you reach the destination');clock=Math.max(clock,o.waitAt.at);}at=end;
+        if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before you reach the destination');clock=Math.max(clock,o.waitAt.at);}(o.waits||[]).forEach(function(w){if(Math.abs(w.d-end)<.001)clock=Math.max(clock,w.at);});at=end;
       }
       if(o.progress)o.progress(ends.length,ends.length);
       var matched=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0);

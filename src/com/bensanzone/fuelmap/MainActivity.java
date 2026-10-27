@@ -427,7 +427,7 @@ public class MainActivity extends Activity {
     // ---------------- the recall-rating model (severity.js): downloaded once, kept on the phone ----------------
     /** Where the small model and its runtime come from; each file is downloaded the first time and served from the phone after. */
     /** Key/value namespaces kept in storage (they cost a Google lookup, they're your saved trips, or the recall model's setup); the rest are cache. */
-    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "stationstore", "tolls", "chargerusage"));
+    static final java.util.Set<String> KV_STORAGE = new java.util.HashSet<String>(java.util.Arrays.asList("trips", "find", "routes", "routes2", "along", "ai", "carpics", "gasmeta", "pricehistory", "stationstore", "tolls", "chargerusage", "traffic", "restplaces"));
 
     /** Pictures are user data, including imported images. Upgrade the old cache without
      * overwriting a newer stored image or deleting the only copy if a move fails. */
@@ -1180,7 +1180,7 @@ public class MainActivity extends Activity {
     // hydrogen), NHTSA (VIN decoding, recalls), and the weather and air along a route (Open-Meteo, the National Weather Service)
     private static final String[] JSON_HOSTS = {"www.fueleconomy.gov", "fueleconomy.gov", "nominatim.openstreetmap.org", "overpass-api.de", "geo.dot.gov", "www.exxon.com", "www.exxonmobilfuels.com",
             "developer.nlr.gov", "developer.nrel.gov", "vpic.nhtsa.dot.gov", "api.nhtsa.gov", "commons.wikimedia.org", "en.wikipedia.org",
-            "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov",
+            "api.open-meteo.com", "air-quality-api.open-meteo.com", "api.weather.gov", "services.arcgis.com",
             // EV networks' own published prices: IONNA's site list page, Blink's map service
             "www.ionna.com", "chargermap.blinknetwork.com", "apigw.blinknetwork.com",
             // Electric Era's drivers page reads this public site list (prices, ports, availability)
@@ -1202,7 +1202,7 @@ public class MainActivity extends Activity {
         c.setRequestProperty("User-Agent", userAgent());
         int st = c.getResponseCode();
         String body;
-        if ("overpass-api.de".equals(new URL(url).getHost())) {
+        if ("overpass-api.de".equals(new URL(url).getHost()) || "services.arcgis.com".equals(new URL(url).getHost())) {
             // Bound shared-service responses before allocating a huge JSON string in the WebView.
             InputStream in = st >= 400 ? c.getErrorStream() : c.getInputStream();
             if (in == null) { c.disconnect(); throw new Exception("HTTP " + st); }

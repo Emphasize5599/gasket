@@ -4,6 +4,7 @@ function fixture(pts=points,seconds=1200){const r=[],root=[];r[0]=[];r[0][1]='Ge
 const model=T.buildRoute({distanceMeters:meters,duration:'600s',polyline:{encodedPolyline:T.encodePolyline(points)},legs:[]},{city:30,hwy:40,comb:35});
 assert.equal(G.wall(Date.UTC(2026,0,1,12),'America/New_York'),Date.UTC(2026,0,1,7)/1000);
 assert.equal(G.wall(Date.UTC(2026,6,1,12),'America/New_York'),Date.UTC(2026,6,1,8)/1000,'DST comes from IANA rules, not a fixed offset');
+assert.throws(()=>G.wall(Date.UTC(2026,10,1,5,30),'America/New_York'),/repeated daylight/,'a floating clock cannot choose one DST fold');
 const q=G.query(points[0],points[2],clock,{tolls:true,ferries:true});assert(q.includes('!19m3!1e0!2e2!3j'+clock));assert(q.includes('!2b1'));assert(!/token|authuser|!15m/.test(q));assert.throws(()=>G.query({lat:NaN,lng:0},points[1],clock));
 const f=fixture(),p=G.read(f,clock,model);assert(p.coverage>.999);assert(Math.abs(p.seconds-1200)<.01);assert.equal(p.low,1080);assert.equal(p.high,1560);
 assert.throws(()=>G.read(f,clock+3600,model),/clock/);

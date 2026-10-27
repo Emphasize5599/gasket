@@ -75,7 +75,7 @@
 
   // ---------- state ----------
   var S = Object.assign({}, P.DEFAULTS);
-  try { var saved = JSON.parse(N.loadSettings() || '{}'); S = Object.assign(S, saved); S.brands = Object.assign({}, P.DEFAULTS.brands, saved.brands || {}); } catch (e) {}
+  try { var saved = JSON.parse(N.loadSettings() || '{}'); S = Object.assign(S, saved); S.brands = Object.assign({}, P.DEFAULTS.brands, saved.brands || {});if(saved.trafficProviderVersion!==1){S.hereTraffic=false;S.googleTraffic=true;S.trafficProviderVersion=1;} } catch (e) {}
   S.blacklist = (S.blacklist || []).slice(); S.dieselRisk = Object.assign({}, S.dieselRisk || {});
   // Lookups that can simply be fetched again (recalls, the NHTSA VIN check, versions, Tire Rack's lists, Brave's answers,
   // recall ratings) live in the app's cache, not its settings: Android's "Clear cache" empties them and they load again.
@@ -976,7 +976,7 @@
     window.__erasing=true;
     if(N.evGuestConfig&&window.__trip){var cleared=await window.__trip.call('evGuestConfig','{"clear":true}');if(cleared.error){window.__erasing=false;toast('Could not erase private EV credentials. Please try again.');return;}}
     if(N.chargerInventory&&window.__trip){var erased=await window.__trip.call('chargerInventory','clear','');if(erased.error){window.__erasing=false;toast('Could not erase the charger inventory. Please try again.');return;}}
-    CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory','stationstore']).forEach(function (ns) { KV.clear(ns); });
+    CACHE_NS.concat(['trims', 'trips', 'logos', 'lookups', 'carpics', 'gasmeta', 'pricehistory','stationstore','restplaces']).forEach(function (ns) { KV.clear(ns); });
     if(window.StationStore)StationStore.reset();
     if(window.PriceHistory)PriceHistory.reset();
     try { N.saveCache(''); } catch (e) { }

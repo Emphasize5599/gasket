@@ -7,7 +7,8 @@
  var MI=1609.344,MINUTE=60000,DAY=86400000;
  function at(x,p){for(var i=0;i<p.length;i++){if(!Array.isArray(x))return null;x=x[p[i]];}return x;}
  function hash(s){var h=2166136261;for(var i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return (h>>>0).toString(36);}
- function wall(t,zone){var parts=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)),v={};parts.forEach(function(p){v[p.type]=p.value;});return Math.floor(Date.UTC(+v.year,+v.month-1,+v.day,+v.hour%24,+v.minute,+v.second)/1000);}
+ function wallValue(t,zone){var parts=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)),v={};parts.forEach(function(p){v[p.type]=p.value;});return Math.floor(Date.UTC(+v.year,+v.month-1,+v.day,+v.hour%24,+v.minute,+v.second)/1000);}
+ function wall(t,zone){var value=wallValue(t,zone);if(wallValue(t-3600000,zone)===value||wallValue(t+3600000,zone)===value||wallValue(t-1800000,zone)===value||wallValue(t+1800000,zone)===value)throw Error('Google cannot distinguish this repeated daylight-saving clock; choose another time or use HERE');return value;}
  // Captured request fields, with no session/auth tokens. Parent lengths count all
  // descendant fields; avoid flags and the floating origin-wall clock are explicit.
  function query(a,b,clock,avoid){
@@ -62,8 +63,8 @@
   return {rows:filled,seconds:filled.reduce(function(n,r){return n+r.seconds;},0),baseSeconds:m.durationSec,coverage:matched/m.totalMi,low:p.low,high:p.high,source:'Google Maps website forecast',match:{coverage:matched/m.totalMi,pointsOff:on.length-good,routePoints:m.pts.length},clock:p.clock};
  }
  function read(body,clock,m){var best=null;parse(body,clock).forEach(function(p){var x=match(p,m);if(!best||x.coverage>best.coverage)best=x;});if(!best||best.coverage<.7){var e=Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');e.details=best&&best.match;throw e;}return best;}
- async function readAsync(body,clock,m){var sources=parse(body,clock),best=null;
-  for(var i=0;i<sources.length;i++){var p=sources[i],projected=[];for(var k=0;k<p.pts.length;k++){projected.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}var x=match(p,m,projected);if(!best||x.coverage>best.coverage)best=x;}
+ async function readAsync(body,clock,m,valid){var sources=parse(body,clock),best=null;
+  for(var i=0;i<sources.length;i++){var p=sources[i],projected=[];for(var k=0;k<p.pts.length;k++){if(k%128===0&&valid&&!valid())throw Error('Traffic lookup cancelled');projected.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}var x=match(p,m,projected);if(!best||x.coverage>best.coverage)best=x;}
   if(!best||best.coverage<.7)throw Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');return best;
  }
  function boundaries(m){var out=[];for(var i=1;i<m.pts.length;i++){var a=m.pts[i-1],b=m.pts[i];['lat','lng'].forEach(function(k){var lo=Math.min(a[k],b[k]),hi=Math.max(a[k],b[k]);for(var edge=Math.floor(lo)+1;edge<hi;edge++){var f=(edge-a[k])/(b[k]-a[k]);out.push(m.cum[i-1]+f*(m.cum[i]-m.cum[i-1]));}});}return out;}
@@ -73,7 +74,7 @@
   var a=T.project(cached,m.pts[0]),b=T.project(cached,m.pts[m.pts.length-1]);if(a.offset>.015||b.offset>.015||b.along<=a.along||Math.abs(t-ob.depart-cached.timeTo(a.along)*1000)>150000)return null;
   var sub=F.slice(cached,a.along,b.along);if(sub.segs.some(function(s){return s.forecast===false;}))return null;
   var data=[[0,0]];sub.segs.forEach(function(s){data.push([s.to*MI,s.t1]);});var p={pts:sub.pts,cum:sub.cum,meters:sub.totalMi*MI,seconds:sub.durationSec,low:sub.durationSec,high:sub.durationSec,data:data},projected=[];
-  for(var k=0;k<p.pts.length;k++){projected.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}var result=match(p,m,projected);return result.coverage>=.95?result:null;
+  for(var k=0;k<p.pts.length;k++){if(k%128===0&&valid&&!valid())throw Error('Traffic lookup cancelled');projected.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}var result=match(p,m,projected);return result.coverage>=.95?result:null;
  }
  function create(io){
   var active=0,queue=[],pending=new Map(),epoch=0;
@@ -85,21 +86,21 @@
    if(held&&held.identity===identity)return Object.assign({},held.profile,{cached:true});if(!valid())throw Error('Traffic lookup cancelled');
    if(io.observations){var candidates=io.observations(m,t,ttl)||[];for(var ci=0;ci<candidates.length;ci++){var shared=await reuse(candidates[ci].observation,m,t);if(!valid())throw Error('Traffic lookup cancelled');if(shared)return Object.assign(shared,{at:candidates[ci].profile.at,depart:t,cached:true,sharedRoads:true});}}
 
-   if(!pending.has(identity)){var generation=epoch;pending.set(identity,limited(async function(){if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,valid);if(r.error)throw Error(r.error);var p=await readAsync(r.body||r,clock,m);p.at=now;p.depart=t;p.originZone=zone;p.cached=false;if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');if(io.put)io.put(key,{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t}});return p;}).finally(function(){pending.delete(identity);}));}
+   if(!pending.has(identity)){var generation=epoch;pending.set(identity,limited(async function(){if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,valid);if(r.error)throw Error(r.error);var p=await readAsync(r.body||r,clock,m,valid);p.at=now;p.depart=t;p.originZone=zone;p.cached=false;if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');if(io.put)io.put(key,{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t}});return p;}).finally(function(){pending.delete(identity);}));}
    var p=await pending.get(identity);if(!valid())throw Error('Traffic lookup cancelled');return p;
   }
   async function forecast(m,depart,options){
-   var o=options||{},ends=(m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).slice(),stops=(o.stops||[]).slice().sort(function(a,b){return a.d-b.d;}),breaks=ends.concat(stops.map(function(s){return s.d;}));
+   var o=options||{},waits=(options&&options.waits||[]).slice(),ends=(m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).slice(),stops=(o.stops||[]).slice().sort(function(a,b){return a.d-b.d;}),breaks=ends.concat(stops.map(function(s){return s.d;}),waits.map(function(w){return w.d;}),o.waitAt?[o.waitAt.d]:[]);
    // Each source profile evaluates its own roads at arrival. Split at destinations, stops and geographic cells to
    // reuse overlapping roads. Never spread a whole-trip delay over every mile.
    for(var d=100;d<m.totalMi;d+=100)breaks.push(d);breaks=breaks.concat(boundaries(m));breaks=Array.from(new Set(breaks.filter(function(d){return d>0&&d<=m.totalMi;}))).sort(function(a,b){return a-b;});
-   var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,seconds=0;
+   var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,seconds=0,low=0,high=0;
    for(var i=0;i<breaks.length;i++){
     if(o.valid&&!o.valid())throw Error('Traffic lookup cancelled');var end=breaks[i],base=F.slice(m,start,end),p=await piece(base,clock,o);if(o.progress)o.progress(i,breaks.length);
-    p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});clock+=p.seconds*1000;seconds+=p.seconds;oldest=Math.min(oldest,p.at);cached=cached&&p.cached;
-    stops.forEach(function(s){if(Math.abs(s.d-end)<.0001)clock+=Math.max(0,s.seconds||0)*1000;});if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before arrival');clock=Math.max(clock,o.waitAt.at);}start=end;
+    p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});clock+=p.seconds*1000;seconds+=p.seconds;low+=p.low||p.seconds;high+=p.high||p.seconds;oldest=Math.min(oldest,p.at);cached=cached&&p.cached;
+    stops.forEach(function(s){if(Math.abs(s.d-end)<.0001)clock+=Math.max(0,s.seconds||0)*1000;});waits.forEach(function(w){if(Math.abs(w.d-end)<.0001)clock=Math.max(clock,w.at);});if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before arrival');clock=Math.max(clock,o.waitAt.at);}start=end;
    }
-   if(o.progress)o.progress(breaks.length,breaks.length);return {source:'Google Maps website forecast',estimated:true,rows:rows,legs:legs,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
+   if(o.progress)o.progress(breaks.length,breaks.length);return {source:'Google Maps website forecast',estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
   return {forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();}};
  }

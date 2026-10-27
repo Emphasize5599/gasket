@@ -1163,7 +1163,7 @@
   }
   function scheduleTimeline(o,p){
     var m=o.model,depart=o.rewardDepartAt,ends=m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi],clock=depart,from=0,rows=[];
-    ends.forEach(function(to,i){var requested=(o.legDepartures||[])[i],start=Math.max(clock,Number.isFinite(requested)?requested:clock),service=(p.stops||[]).filter(function(s){return s.c.d>from&&s.c.d<=to;}).reduce(function(n,s){return n+stopDelay(o,s);},0),driving=(m.timeTo(to)-m.timeTo(from))/60;
+    ends.forEach(function(to,i){var requested=(o.legDepartures||[])[i],wait=(o.waits||[]).find(function(w){return Math.abs(w.d-from)<.001;}),start=Math.max(clock,Number.isFinite(requested)?requested:clock,wait?wait.at:clock),service=(p.stops||[]).filter(function(s){return s.c.d>from&&s.c.d<=to;}).reduce(function(n,s){return n+stopDelay(o,s);},0),driving=(m.timeTo(to)-m.timeTo(from))/60;
       (o.drivingRates||[]).forEach(function(r){driving+=Math.max(0,Math.min(to,r.to)-Math.max(from,r.from))*r.rate*60;});
       var arrival=start+(driving+service)*60000,destination=(p.destinationCharges||[]).filter(function(c){return c.index===i;}).reduce(function(n,c){return n+c.minutes;},0),ready=arrival+destination*60000;
       rows.push({depart:start,arrive:arrival,ready:ready,drivingMinutes:driving,serviceMinutes:service,destinationMinutes:destination,waitMinutes:(start-clock)/60000,from:from,to:to});clock=ready;from=to;

@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),R=require('../assets/web/resttiming'),T=require('../assets/web/trip');
+const reached=Date.UTC(2026,9,28,10),minute=60000,o={reached,minimumRest:10,maximumStay:80,permission:true},samples=[[10,90],[15,140],[30,50],[35,45],[40,45],[45,null],[50,55]].map(([m,v])=>({depart:reached+m*minute,drivingMinutes:v})),r=R.choose(samples,o);
+assert.equal(r.soonestLowTraffic.depart,reached+35*minute);assert.equal(r.latestFeasible.depart,reached+50*minute);assert.equal(r.earliestArrival.depart,reached+30*minute);assert.equal(r.unavailable,1);assert(r.intervals.length>1,'do not bridge missing forecast samples');
+assert(R.choose(samples,{...o,permission:false}).permissionRequired);assert.equal(R.choose(samples,{...o,permission:false}).feasible.length,0);
+assert(R.choose(samples,{...o,arrivalStart:reached+85*minute,arrivalEnd:reached+95*minute}).feasible.every(x=>x.arrive>=reached+85*minute&&x.arrive<=reached+95*minute));
+assert.equal(R.choose(samples,{...o,maximumStay:20}).feasible.length,2);assert.equal(R.choose(samples,{...o,parkingCloses:reached+20*minute}).feasible.length,2);
+const charging={...o,chargeReady:reached+30*minute};assert.equal(R.choose(samples,charging).feasible[0].depart,reached+30*minute);assert.equal(R.choose(samples,{...charging,restDuringCharging:false}).feasible[0].depart,reached+40*minute);
+assert.equal(R.choose([{depart:reached+10*minute,drivingMinutes:30,arrive:reached+120*minute}],{...o,arrivalEnd:reached+60*minute}).feasible.length,0,'whole-trip waiting affects deadline even when driving time is short');
+assert.throws(()=>R.samples(reached,reached+25*3600000));assert.equal(R.samples(reached+minute,reached+15*minute).length,3);
+const model={legEnds:[10,20],totalMi:20,timeTo:d=>d*60,durationSec:1200},timeline=T.scheduleTimeline({model,rewardDepartAt:reached,waits:[{d:10,at:reached+60*minute}]},{stops:[]});assert.equal(timeline[1].depart,reached+60*minute);assert.equal(timeline[1].arrive,reached+70*minute);assert.equal(timeline[1].waitMinutes,50);
+console.log('Rest timing: distinct choices, nonmonotonic times, missing samples, permission, windows, limits, charging overlap and multi-leg waits passed');
