@@ -169,11 +169,15 @@ var timeline=T.scheduleTimeline(o,p),cfg=windows.config(),conditions=[];
         }
 return conditions;
   }
-  function windowTimelineFits(timeline){var arrivals=windows.arrivals();return timeline.every(function(t,i){var a=arrivals[i],d=windowDestination(i-1);return !(a&&(t.arrive<a.start||t.arrive>a.end)||i&&(d.leaveStart&&d.leaveEnd?(t.depart<+new Date(d.leaveStart)||t.depart>+new Date(d.leaveEnd)):t.waitMinutes>(+d.wait||0)+1e-7));});}
+  function windowTimelineFits(timeline){return !windowMiss(timeline);}
+  /** The first way a planned timeline misses the windows: {why: early | late | leave | wait, leg, ms}; null when it fits. */
+  function windowMiss(timeline){var arrivals=windows.arrivals();for(var i=0;i<timeline.length;i++){var t=timeline[i],a=arrivals[i],d=windowDestination(i-1);
+    if(i&&d.leaveStart&&d.leaveEnd){var ls=+new Date(d.leaveStart),le=+new Date(d.leaveEnd);if(t.depart>le)return {why:'leave',leg:i};}else if(i&&t.waitMinutes>(+d.wait||0)+1e-7)return {why:'wait',leg:i};
+    if(a&&t.arrive<a.start)return {why:'early',leg:i,ms:a.start-t.arrive};if(a&&t.arrive>a.end)return {why:'late',leg:i};}return null;}
   function windowAlign(path,timeline){var session=windows.current(),rows=session.rows;return path.map(function(r,i){return rows.find(function(x){return x.leg===i&&x.routeKey===r.routeKey&&timeline[i].depart>=x.depart&&timeline[i].depart<x.depart+TimeWindows.HOUR&&session.consent.allowed(x);});});}
   // Why checked trips were set aside, so a failed search can say which constraint stopped it (and the log can too).
   var windowRejects={};function windowReject(why){windowRejects[why]=(windowRejects[why]||0)+1;return null;}
-  var WINDOW_WHY={passed:'its departure hour had already passed',tolls:'it used paid tolls your toll setting does not allow',stations:'station coverage for that road was missing',limits:'speed limits did not load',tollPrice:'a toll price was unknown',plan:'no fuel plan worked',reserve:'it started below your reserve',windows:'arrival or departure fell outside your time windows',hours:'stops or waits moved it out of the approved hours',conditions:'conditions changed and need your review'};
+  var WINDOW_WHY={passed:'its departure hour had already passed',tolls:'it used paid tolls your toll setting does not allow',stations:'station coverage for that road was missing',limits:'speed limits did not load',tollPrice:'a toll price was unknown',plan:'no fuel plan worked',reserve:'it started below your reserve',windows:'arrival or departure fell outside your time windows',early:'it reached a destination before its arrival window even when leaving as late as allowed',late:'it reached a destination after its arrival window',leave:'it reached a stop after the time you need to leave it',wait:'it waited longer than you allow at a destination',hours:'stops or waits moved it out of the approved hours',conditions:'conditions changed and need your review'};
   function windowRejectText(){var keys=Object.keys(windowRejects).sort(function(a,b){return windowRejects[b]-windowRejects[a];}).slice(0,2);return keys.length?' Most checked trips were set aside because '+keys.map(function(k){return (WINDOW_WHY[k]||k)+' ('+windowRejects[k]+')';}).join('; ')+'.':'';}
   async function windowEvaluate(originalPath,valid,changed,optimize,attempt){
     var path=originalPath.slice();if(!valid())return null;
@@ -186,8 +190,13 @@ return conditions;
     if(!tollPolicyCheck(bundle.raw).ok)return windowReject('tolls');var priority=planningPriority(Garage.car()),toll=tripTolls(bundle.raw);if(priority==='cost'&&toll.cost==null)return windowReject('tollPrice');
     async function params(x){
       var o=windowOptions(bundle,g,path,start);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=!!optimize;
-      var p=await planAsync(o,valid,10);if(!valid())return null;if(!p.ok)return windowReject('plan');if(p.firstDip)return windowReject('reserve');var timeline=T.scheduleTimeline(o,p);if(!windowTimelineFits(timeline))return windowReject('windows');
-      var finish=timeline[timeline.length-1].ready,cost=choiceCost({plan:p,startGal:o.startGal});return {cost:cost==null||toll.cost==null?null:cost+toll.cost,minutes:(finish-start)/60000,weather:path.reduce(function(n,r){return n+TimeWindows.weatherScore(r.reading);},0),waitMinutes:timeline.reduce(function(n,t){return n+t.waitMinutes;},0),depart:start,legs:timeline,plan:p,opts:o,bundle:bundle,candidates:g,buffer:x.buffer,detour:x.detour};
+      var p=await planAsync(o,valid,10);if(!valid())return null;if(!p.ok)return windowReject('plan');if(p.firstDip)return windowReject('reserve');var timeline=T.scheduleTimeline(o,p),miss=windowMiss(timeline);
+      // Arriving before a destination's window: leave later instead (the start moves; later legs follow it). Traffic,
+      // reserves and stops come from this approved hour; a start pushed into another hour is re-planned on that hour's
+      // forecast by the alignment below. Never past the trip's latest departure.
+      for(var shift=0;miss&&miss.why==='early'&&shift<4;shift++){var later=o.rewardDepartAt+Math.ceil(miss.ms/60000)*60000,bound=null;try{bound=windows.bounds().depart;}catch(e){}if(bound&&Number.isFinite(bound.end)&&later>bound.end)break;o.rewardDepartAt=later;o.legDepartures[0]=later;timeline=T.scheduleTimeline(o,p);miss=windowMiss(timeline);}
+      if(miss)return windowReject(miss.why);var leave=o.rewardDepartAt;
+      var finish=timeline[timeline.length-1].ready,cost=choiceCost({plan:p,startGal:o.startGal});return {cost:cost==null||toll.cost==null?null:cost+toll.cost,minutes:(finish-leave)/60000,weather:path.reduce(function(n,r){return n+TimeWindows.weatherScore(r.reading);},0),waitMinutes:timeline.reduce(function(n,t){return n+t.waitMinutes;},0),depart:leave,legs:timeline,plan:p,opts:o,bundle:bundle,candidates:g,buffer:x.buffer,detour:x.detour};
     }
     var best=optimize?await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,evaluate:params}):await params({buffer:bufFloor(),detour:30});
     if(!best||!valid())return null;
@@ -1115,7 +1124,7 @@ return conditions;
     if (onPlan(k)) {
       renderResults();
       built[k].result = result;
-      if (model && !result && !busy && hasFuel()) findStops();
+      if (model && !result && !busy && hasFuel() && !(adjustError && windows && windows.enabled())) findStops();
       return;
     }
     bindDeparture();

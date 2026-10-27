@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.286 - 2026-10-27
+- Flexible-time planning leaves later when a trip would reach a destination before its arrival window, instead of rejecting it, and says exactly which window a trip missed.
+- After flexible-time planning finds nothing, the app no longer starts ordinary planning (and its traffic lookups) on its own.
+- Bug fixes.
+
 ## 0.0.285 - 2026-10-27
 - Rest stops are now the first card in Stops: every rest area, campground and store along the whole route, numbered in green in route order, with driving time since the last stop and in total. Searched area by area like gas stations, so other trips reuse it.
 - Google traffic forecasts keep the stretches they match instead of failing the whole trip, and no longer re-ask stretches Google routes differently.
