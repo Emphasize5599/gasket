@@ -49,7 +49,7 @@
   /** Engine facts from the app's EPA engine text, e.g. "Auto (S6), 6 cyl, 3.5 L" (the same pattern garage.js reads). */
   function fromText(text, extra) {
     var t = String(text || ''), m, e = Object.assign({}, extra || {});
-    if ((m = /([\d.]+)\s*L\b/.exec(t))) e.displ = +m[1]; if ((m = /(\d+)\s*cyl/i.exec(t))) e.cyl = +m[1];
+    if ((m = /([\d.]+)\s*L\b/.exec(t))) e.displ = +m[1]; if ((m = /(\d+)\s*cyl/i.exec(t)) || (m = /\b[VW](\d{1,2})\b/.exec(t)) || (m = /\b(?:Inline|I|H|Flat)[\s-]?(\d)\b/i.exec(t))) e.cyl = +m[1];
     if (/diesel/i.test(t) && !e.fuel) e.fuel = 'diesel'; return e;
   }
   var api = { MEASURED: MEASURED, idleRpm: idleRpm, acAdd: acAdd, warm: warm, idle: idle, fromText: fromText, L_PER_GAL: L_PER_GAL };

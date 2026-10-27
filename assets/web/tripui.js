@@ -1954,7 +1954,11 @@ return conditions;
     renderInfo();
     if (model) hzPreload();
   }
-  function carModel() { return Garage.carModel(); }
+  // Traffic energy (experimental, S.trafficEnergy): engine facts for idle / restart fuel in congestion (Traffic.overlay).
+  // A/C share comes from this season's climate preset (on = half load: a fill-in); start-stop isn't known yet (off).
+  function engineFacts(c){if(!window.IdleFuel)return null;var info=c.info||{},kd=Garage.carModel(c).kind;if(kd==='ev'||kd==='h2')return {kind:kd};
+    var e=IdleFuel.fromText(info.engine,{kind:kd,hybrid:/hybrid/i.test(String(c.power||c.type||''))&&!/plug/i.test(String(c.power||'')),fuel:c.grade==='diesel'||/diesel/i.test(String(c.epa&&c.epa.fuel||''))?'diesel':'gas'}),pre=window.Climate&&Climate.current?Climate.current(c):null;e.acFrac=pre&&pre.ac==='on'?.5:0;return e;}
+  function carModel() { var m=Garage.carModel();if(S.trafficEnergy){var e=engineFacts(Garage.car());if(e)m=Object.assign({},m,{engine:e});}return m; }
 
   // ---------- every route option Google Maps shows ----------
   // The Routes API often returns fewer alternatives than the Maps app. So: read the options from Google Maps itself

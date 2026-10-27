@@ -77,3 +77,17 @@ console.log('Traffic energy modules: priors / timing / D2 guard rails, calibrati
  // the planner worker gets both modules
  assert(A.workerSource.startsWith('(function initAuxLoad')&&M.workerSource.startsWith('(function initTrafficModel'));
  console.log('Round 2: flag off unchanged, mild green unchanged, warm-up once, crawl floor, inferred stops, presets, worker sources');}
+// ---- round 3: gas / diesel / hybrid in congestion (Traffic.overlay with m.engine) ----
+{const T=require('../assets/web/trip'),Tr=require('../assets/web/traffic');
+ const pts=[{lat:35,lng:-92},{lat:35,lng:-91.8}],mi=T.hav(pts[0],pts[1]);
+ const build=(car)=>T.buildRoute({distanceMeters:mi*1609.344,duration:Math.round(mi/65*3600)+'s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:[]},car);
+ const prof=(mph,free=65)=>({rows:[{from:0,to:mi,seconds:mi/mph*3600,baseSeconds:mi/free*3600,trafficMph:mph,freeMph:free}]});
+ const gpm=(m,mph)=>Tr.overlay(m,prof(mph)).galTo(mi)/mi;
+ const gas={city:25,hwy:33,comb:28},plain=build(gas),eng=build(Object.assign({engine:I.fromText('2.5L Inline 4 Cyl',{kind:'gas',fuel:'gas'})},gas));
+ assert.equal(eng.engine.cyl,4);assert.deepEqual([I.fromText('3.5L V6 (2GR-FE)').cyl,I.fromText('1.8L 4 Cyl').cyl],[6,4]);
+ near(gpm(plain,60),gpm(eng,60),1e-12,'green: unchanged');near(gpm(plain,12),1/25,1e-12,'without the setting: the city rate as before');
+ const best=1/33,dark=gpm(eng,11.7),red=gpm(eng,65*.38);assert(dark/best>=1.7&&dark/best<=3,'gas dark red inside Zhang 1.7–3× best: '+(dark/best).toFixed(2));assert(red/best>=1.1&&red<dark,'red between');
+ const ov=Tr.overlay(eng,prof(11.7));assert(ov.trafficStops>0&&ov.segs[0].trafficCat==='TRAFFIC_JAM_HEAVY'&&ov.segs[0].stoppedSec>0);
+ const hy={city:54,hwy:50,comb:52},h=build(Object.assign({engine:{kind:'gas',displ:1.8,cyl:4,hybrid:true}},hy)),hd=gpm(h,11.7)/(1/54);assert(hd>=1&&hd<=2,'hybrid dark red inside Zhang 1–2× best: '+hd.toFixed(2));
+ const ev=build(Object.assign({engine:{kind:'ev'}},{city:4,hwy:3.4,comb:3.7}));near(gpm(ev,11.7),1/4,1e-12,'EVs are handled by Propulsion, not here');
+ console.log('Round 3: gas green unchanged, dark red '+(dark/best).toFixed(2)+'× best (Zhang 1.7–3), hybrid '+hd.toFixed(2)+'× (1–2), EV untouched');}

@@ -104,10 +104,17 @@
     var eff = kind === 'hybrid' || kind === 'diesel' ? .35 : .25, regen = kind === 'hybrid' ? .3 : 0, mjPerL = kind === 'diesel' ? 38.6 : 34.2;
     return { litres: j * (1 - regen) / eff / (mjPerL * 1e6) };
   }
+  /** Split a section whose time is already known (a numeric forecast): stopped share from the category prior, capped
+   *  so the moving speed never beats free flow; stops from the per-km fill-ins. */
+  function split(len, seconds, vff, c, k) {
+    c = cat(c); k = cls(k); var p = prior(c, k), r = seconds > 0 ? Math.min(1, len / seconds * 3600 / Math.max(1, vff)) : 1, s = Math.max(0, Math.min(p.s, 1 - r)), tStopped = s * seconds, moving = seconds - tStopped;
+    var per = STOPS_KM[c], perKm = typeof per === 'number' ? per : per[k];
+    return { cat: c, cls: k, s: s, tStopped: tStopped, vMoving: moving > 0 ? len / moving * 3600 : 0, nStops: perKm * len * 1.609344 };
+  }
   /** Category from a numeric forecast ratio (HERE traffic / free-flow speed): the midpoints between the default
    *  priors. An inference for stop counts and stopped share only; the forecast's own speed stays the speed. */
   function fromRatio(r) { r = +r; if (!(r > 0)) return 'NONE'; return r >= .8 ? 'NORMAL' : r >= .5 ? 'SLOW' : r >= .27 ? 'TRAFFIC_JAM' : 'TRAFFIC_JAM_HEAVY'; }
-  var api = { PRIORS: PRIORS, fromRatio: fromRatio, STOPS_KM: STOPS_KM, prior: prior, key: key, section: section, coverage: coverage, check: check, calibrate: calibrate, Calibration: Calibration, restart: restart };
+  var api = { PRIORS: PRIORS, fromRatio: fromRatio, split: split, STOPS_KM: STOPS_KM, prior: prior, key: key, section: section, coverage: coverage, check: check, calibrate: calibrate, Calibration: Calibration, restart: restart };
   api.workerSource = '(' + initTrafficModel.toString() + ')(self);';
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TrafficModel = api;
 })(typeof window !== 'undefined' ? window : this);

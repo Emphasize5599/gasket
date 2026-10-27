@@ -245,7 +245,7 @@
     legEnds = legEnds.map(function (x) { return x * ks; });
     var combGpm = 1 / (car.comb ? car.comb * adj : 1 / (0.55 / city + 0.45 / hwy));
     return makeModel({ pts: pts, cum: cum, totalMi: totalMi, durationSec: parseDur(r.duration) || (segs.length ? segs[segs.length - 1].t1 : 0),
-      segs: segs, legEnds: legEnds, cityGpm: 1 / city, hwyGpm: 1 / hwy, combGpm: combGpm });
+      segs: segs, legEnds: legEnds, cityGpm: 1 / city, hwyGpm: 1 / hwy, combGpm: combGpm, engine: car.engine || null });
   }
 
   function makeModel(m) {
@@ -255,8 +255,8 @@
     function segment(d){var lo=0,hi=segs.length-1;while(lo<hi){var mid=(lo+hi)>>>1;if(d<=segs[mid].to)hi=mid;else lo=mid+1;}return lo;}
     return {
       pts: pts, cum: cum, totalMi: totalMi, durationSec: m.durationSec,
-      segs: segs, legEnds: m.legEnds, cityGpm: m.cityGpm, hwyGpm: m.hwyGpm, combGpm: m.combGpm,
-      traffic: m.traffic, trafficUnavailable:m.trafficUnavailable,
+      segs: segs, legEnds: m.legEnds, cityGpm: m.cityGpm, hwyGpm: m.hwyGpm, combGpm: m.combGpm, engine: m.engine || null,
+      traffic: m.traffic, trafficUnavailable:m.trafficUnavailable, trafficStops:m.trafficStops,
       /** gallons burned driving the route from mile 0 to mile d */
       galTo: function (d) {
         if (d <= 0) return 0;

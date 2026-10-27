@@ -74,11 +74,22 @@
     if(coverage+1e-6<MIN_COVER){var error=Error('Traffic forecast matched only '+Math.round(coverage*100)+'% of this route');error.details=details;throw error;}
     return {source:'HERE forecast',rows:rows,coverage:coverage,match:details,seconds:rows.reduce(function(n,x){return n+x.seconds;},0),baseSeconds:rows.reduce(function(n,x){return n+x.baseSeconds;},0)};
   }
+  // Gas / diesel / hybrid in congestion (docs/TRAFFIC_ENERGY_HANDOFF.md 6.4), only with m.engine (the traffic-energy
+  // setting): moving part at the EPA city/highway blend at its moving speed (never below 15 mph), plus engine-on idle
+  // for the inferred stopped share (IdleFuel) and restarts (TrafficModel.restart). Estimates, labeled in the docs.
+  function congestion(m,r,len,dt){
+    var e=m.engine,TM=root.TrafficModel||(typeof module!=='undefined'&&module.exports?require('./trafficmodel.js'):null),IF=root.IdleFuel||(typeof module!=='undefined'&&module.exports?require('./idlefuel.js'):null);
+    if(!e||!TM||!IF||!(len>0)||r.forecast===false||!(r.freeMph>0)||e.kind==='ev'||e.kind==='h2')return null;
+    var c=TM.fromRatio(len/dt*3600/r.freeMph);if(c==='NORMAL'||c==='NONE')return null;
+    var sp=TM.split(len,dt,r.freeMph,c,r.freeMph>=50?'freeway':'arterial'),v=Math.max(15,sp.vMoving),w=Math.max(0,Math.min(1,(v-25)/30));
+    var idleGal=IF.idle(e,{acFrac:e.acFrac||0,ambientC:e.ambientC}).lph/IF.L_PER_GAL*sp.tStopped/3600,restartGal=sp.nStops*TM.restart(e.hybrid?'hybrid':e.fuel==='diesel'?'diesel':'gas',e.massKg||1600,v).litres/IF.L_PER_GAL;
+    return {gpm:(m.cityGpm*(1-w)+m.hwyGpm*w)+(idleGal+restartGal)/len,stops:sp.nStops,stoppedSec:sp.tStopped,cat:c};
+  }
   function overlay(m,p){
-    if(!p||!p.rows||!p.rows.length)return m;var segs=[],time=0,j=0;
-    m.segs.forEach(function(s){var at=s.from;while(at<s.to-1e-8){while(j<p.rows.length-1&&p.rows[j].to<=at+1e-8)j++;var r=p.rows[j],end=Math.min(s.to,r.to);if(end<=at)throw Error('Invalid traffic coverage');var dt=(end-at)/(r.to-r.from)*r.seconds,mph=(end-at)/dt*3600,w=Math.max(0,Math.min(1,(mph-25)/30));
-      segs.push(Object.assign({},s,{from:at,to:end,t0:time,t1:time+dt,mph:mph,trafficMph:r.forecast===false?null:mph,freeMph:r.forecast===false?null:r.freeMph,gpm:m.cityGpm*(1-w)+m.hwyGpm*w}));time+=dt;at=end;}});
-    var out=T.restoreModel(Object.assign({},m,{segs:segs,durationSec:time,traffic:p,trafficUnavailable:null}));if(m._lim)out._lim=m._lim;return out;
+    if(!p||!p.rows||!p.rows.length)return m;var segs=[],time=0,j=0,stops=0;
+    m.segs.forEach(function(s){var at=s.from;while(at<s.to-1e-8){while(j<p.rows.length-1&&p.rows[j].to<=at+1e-8)j++;var r=p.rows[j],end=Math.min(s.to,r.to);if(end<=at)throw Error('Invalid traffic coverage');var dt=(end-at)/(r.to-r.from)*r.seconds,mph=(end-at)/dt*3600,w=Math.max(0,Math.min(1,(mph-25)/30)),gpm=m.cityGpm*(1-w)+m.hwyGpm*w,extra=congestion(m,r,end-at,dt);if(extra){gpm=extra.gpm;stops+=extra.stops;}
+      segs.push(Object.assign({},s,{from:at,to:end,t0:time,t1:time+dt,mph:mph,trafficMph:r.forecast===false?null:mph,freeMph:r.forecast===false?null:r.freeMph,gpm:gpm},extra?{stoppedSec:extra.stoppedSec,trafficCat:extra.cat}:{}));time+=dt;at=end;}});
+    var out=T.restoreModel(Object.assign({},m,{segs:segs,durationSec:time,traffic:p,trafficUnavailable:null,trafficStops:stops}));if(m._lim)out._lim=m._lim;return out;
   }
   function cuts(secs,rows){var out=[];(secs||[]).forEach(function(s,i){var points=[s.from,s.to];(rows||[]).forEach(function(r){if(r.from>s.from&&r.from<s.to)points.push(r.from);if(r.to>s.from&&r.to<s.to)points.push(r.to);});points.sort(function(a,b){return a-b;});for(var k=1;k<points.length;k++)if(points[k]>points[k-1]){var mid=(points[k]+points[k-1])/2,r=(rows||[]).filter(function(r){return mid>=r.from&&mid<r.to;})[0];out.push(Object.assign({},s,{from:points[k-1],to:points[k],index:i,trafficMph:r&&r.trafficMph}));}});return out;}
   function times(start,end,stepMinutes){if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>48*3600000)throw Error('Choose a window of up to 48 hours');var n=Math.ceil((end-start)/(stepMinutes*60000));if(!(stepMinutes>=15)||n>24)throw Error('Choose a wider sampling interval (maximum 25 times)');var out=[];for(var t=start;t<end;t+=stepMinutes*60000)out.push(t);out.push(end);return out;}
