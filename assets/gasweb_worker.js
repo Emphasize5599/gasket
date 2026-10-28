@@ -1,12 +1,13 @@
 // Independently implemented reader of a Google Maps page's own gas-search response.
 // No Vela code, protobuf templates, calibration files or libraries are included.
 async function (reqId, args) {
-  let sent = false;
-  const send = (r) => { if (!sent) { sent = true; GasketSite.result(reqId, JSON.stringify(r)); } };
+  let sent = false,feedObserver=null,observedFeed=null,cardsParsed=0,cardsSkipped=0,scrollEvents=0;
+  const seenCards=new WeakMap(),dirtyCards=new WeakSet();
+  const send = (r) => { if (!sent) { sent = true; if(feedObserver)feedObserver.disconnect(); GasketSite.result(reqId, JSON.stringify(r)); } };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const started = Date.now(), rows = new Map(), prices = new Map();
   const discovery=args.mode==='discover',deadline=discovery?180000:30000;
-  let exhausted=false,stopReason='deadline',lastGrowth=Date.now(),firstFeedAt=0,firstReplyAt=0,replies=0;   // timings for the debug log
+  let bulkAttempted=false,bulkPages=0,bulkRows=0,bulkMs=0,bulkFallback='',exhausted=false,stopReason='deadline',lastGrowth=Date.now(),firstFeedAt=0,firstReplyAt=0,replies=0;   // timings for the debug log
   let loaded = false, responseRead = false, limited = false, rejected = 0;
   let targetsComplete = false;
   const requested=['regular','midgrade','premium','diesel'].includes(args.grade)?args.grade:'regular';
@@ -99,20 +100,23 @@ async function (reqId, args) {
     }
     walk(tree, 0);
     for (const [id, p] of candidates){const old=prices.get(id)||{};Object.assign(old,p);prices.set(id,old);}
+    return tree;
   };
   const readRows = () => {
     const feed = document.querySelector('[role="feed"]');
     if (!feed) return null;
+    if(feed!==observedFeed){if(feedObserver)feedObserver.disconnect();observedFeed=feed;feedObserver=new MutationObserver(records=>{for(const r of records){const el=r.target.nodeType===3?r.target.parentElement:r.target,card=el&&el.closest&&el.closest('[role="article"]');if(card)dirtyCards.add(card);if(r.addedNodes)for(const n of r.addedNodes){if(n.nodeType!==1)continue;if(n.matches('[role="article"]'))dirtyCards.add(n);n.querySelectorAll('[role="article"]').forEach(c=>dirtyCards.add(c));}}});feedObserver.observe(feed,{subtree:true,childList:true,characterData:true,attributes:true});}
     loaded = true; if (!firstFeedAt) firstFeedAt = Date.now();
     for (const a of feed.querySelectorAll('a[href*="/maps/place/"][aria-label]')) {
       const href = a.href, id = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i.exec(href), point = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(href);
       const name = a.getAttribute('aria-label'), card = a.closest('[role="article"]');
       if (!id || !point || !card || !name) { rejected++; continue; }
+      if(seenCards.get(card)===href&&!dirtyCards.has(card)){cardsSkipped++;continue;}dirtyCards.delete(card);seenCards.set(card,href);cardsParsed++;
       const lat = +point[1], lng = +point[2];
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
       const t = card.innerText || '';
-      if (/permanently closed|temporarily closed/i.test(t)) continue;
-      const lines=t.split('\n'),visible = lines.map(price).filter((p)=>p!==null),vp={};
+      if (/permanently closed|temporarily closed/i.test(t)) {rows.delete(id[1].toLowerCase());continue;}
+      const lines=t.split('\n').map(s=>s.trim()).filter(Boolean),visible = lines.map(price).filter((p)=>p!==null),vp={};
       // Maps also renders the explicit grade and price on adjacent lines.
       // Never infer a grade from an unlabeled dollar amount.
       for(let i=0;i<lines.length-1;i++){const p=price(lines[i]+' '+lines[i+1]);if(p)visible.push(p);}
@@ -126,11 +130,20 @@ async function (reqId, args) {
     }
     return feed;
   };
+  // Command the current page's own request, retaining its bounds and filters.
+  // Only regular discovery uses this path; other grades keep their UI selection.
+  // Completion requires an explicit empty page, never a short page or silence.
+  const bulkUrl=(name,offset)=>{const u=new URL(name),pb=u.searchParams.get('pb')||'',cut=pb.indexOf('!12m'),head=pb.slice(0,cut);if(u.origin!=='https://www.google.com'||u.pathname!=='/search'||u.searchParams.get('tbm')!=='map'||u.searchParams.get('q')!=='gas stations'||cut<0||!/^!/.test(head)||!head.includes('!7i20'))return null;u.searchParams.set('pb',head.replace('!7i20','!7i100!8i'+offset).replace(/!8i\d+!8i\d+/,'!8i'+offset)+pb.slice(cut));return u.href;};
+  const fetchSearch=async name=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(name,{credentials:'include',cache:'force-cache',signal:controller.signal});if(r.status===403||r.status===429||/\/sorry\/|consent\.google/.test(r.url))throw Object.assign(Error('Google restricted the search'),{blocked:true});if(!r.ok)throw Error('HTTP '+r.status);const raw=await r.text();if(raw.length>5000000)throw Error('Search response too large');if(/unusual traffic|g-recaptcha|before you continue to Google/i.test(raw.slice(0,16000)))throw Object.assign(Error('Google needs verification'),{blocked:true});return raw;}finally{clearTimeout(timer);}};
+  const readBulk=async name=>{if(!bulkUrl(name,0))return false;const begin=Date.now();let unique=0;const bulkSeen=new Set();try{for(let offset=0;offset<5000&&Date.now()-started<deadline;offset+=100){const raw=await fetchSearch(bulkUrl(name,offset)),tree=readPrices(raw);let page=tree&&tree[64];if(page==null&&unique>0&&Array.isArray(tree)&&tree.length===72&&tree[0]&&tree[0][0]==='gas stations'&&Array.isArray(tree[1])&&Array.isArray(tree[1][0])&&tree[1][0].length===3&&tree[1][0].every(Number.isFinite)&&Array.isArray(tree[58])&&tree[58].length===1&&tree[58][0]===0&&Array.isArray(tree[71])&&tree[71].length===1&&tree[71][0]===1)page=[];if(!Array.isArray(page)||page.length>100)throw Error('Bulk result schema unavailable');bulkPages++;responseRead=true;replies++;if(!firstReplyAt)firstReplyAt=Date.now();if(!page.length){if(!unique)throw Error('Empty command answer disagrees with the visible feed');exhausted=true;stopReason='command_end';return true;}let added=0,newPage=0;for(const item of page){const r=item&&item[1],id=r&&r[10],point=r&&r[9],name=r&&r[11];if(!Array.isArray(r)||!/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(id)||typeof name!=='string'||!name.trim()||name.length>300||!Array.isArray(point)||!Number.isFinite(point[2])||!Number.isFinite(point[3])||Math.abs(point[2])>90||Math.abs(point[3])>180)throw Error('Bulk station identity schema changed');const feature=id.toLowerCase();if(!bulkSeen.has(feature)){bulkSeen.add(feature);newPage++;}let closed=false,nodes=0;const check=x=>{if(++nodes>250000)throw Error('Bulk station too complex');if(typeof x==='string'&&/^(permanently|temporarily) closed$/i.test(x.trim()))closed=true;else if(Array.isArray(x))x.forEach(check);};check(r);if(closed){rows.delete(feature);continue;}if(!rows.has(feature))added++;const placeId=typeof r[78]==='string'&&/^[A-Za-z0-9_-]{10,200}$/.test(r[78])?r[78]:'',website=Array.isArray(r[7])&&typeof r[7][0]==='string'&&/^https?:\/\//.test(r[7][0])?r[7][0]:'',mapsUri=placeId?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(name)+'&query_place_id='+encodeURIComponent(placeId):'https://www.google.com/maps?cid='+BigInt(feature.split(':')[1]).toString();rows.set(feature,{id:'web:'+feature,featureId:feature,placeId:placeId,name:name,lat:point[2],lng:point[3],mapsUri:mapsUri,website:website,address:typeof r[39]==='string'?r[39]:Array.isArray(r[2])?r[2].filter(x=>typeof x==='string').join(', '):'',prices:{},google:true,source:'Google Maps web'});}
+      bulkRows+=page.length;if(offset&&newPage===0)throw Error('Bulk pagination repeated a page');unique=bulkSeen.size;lastGrowth=Date.now();await sleep(0);
+    }throw Error('Bulk pagination did not confirm its end');}catch(e){if(e.blocked)throw e;bulkFallback=String(e.message).slice(0,120);return false;}finally{bulkMs=Date.now()-begin;}};
   const readReply = async () => {
     const entry = performance.getEntriesByType('resource').filter((r) => {
       try {const u=new URL(r.name);return u.origin==='https://www.google.com' && u.pathname==='/search' && u.searchParams.get('tbm')==='map' && /gas stations/i.test(u.searchParams.get('q')||'');} catch (_) {return false;}
     }).pop();
     if (!entry || entry.name === readReply.last) return;
+    if(discovery&&requested==='regular'&&!bulkAttempted){bulkAttempted=true;if(await readBulk(entry.name)){readReply.last=entry.name;return;}}
     readReply.last = entry.name;
     const controller = new AbortController(); let timer;
     try {
@@ -164,6 +177,7 @@ async function (reqId, args) {
       // neither a response replay nor another scroll. Discovery never skips pages.
       if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
       await readReply();
+      if(exhausted)break;
       if(!discovery&&!selecting&&complete()){targetsComplete=true;stopReason='targets';break;}
       // the feed growing counts too (an end marker or a spinner arriving is the page answering, not quiet)
       const now=JSON.stringify([Array.from(rows.keys()),Array.from(prices),feed&&feed.scrollHeight]);
@@ -181,6 +195,9 @@ async function (reqId, args) {
         if(discovery&&Date.now()-lastGrowth>(wasBottom&&scrolls>=1?4000:12000)){stopReason=wasBottom?'quiet':'stalled';break;}   // Quiet is not proof of exhaustion; don't cache a possibly stalled page as complete.
         const before=feed.scrollTop;
         feed.scrollTop=feed.scrollHeight;
+        // A direct scroll event wakes late-installed pagination listeners even when
+        // the feed is already at its bottom. Keep the nudge for pages requiring motion.
+        feed.dispatchEvent(new Event('scroll',{bubbles:true}));scrollEvents++;
         // Maps may attach its pagination listener after the first scroll. Writing
         // the same bottom position again emits no scroll event; nudge only a
         // stalled, scrollable discovery feed so a late listener gets another chance.
@@ -193,7 +210,7 @@ async function (reqId, args) {
         if(discovery){const more=Array.from(feed.querySelectorAll('button')).find(b=>b.getClientRects().length&&/^(load|show) more(?: results)?$/i.test((b.innerText||b.getAttribute('aria-label')||'').trim()));if(more)more.click();}
         scrolls++;stable=0;
       }
-      await sleep(150);
+      await sleep(discovery?75:150);
     }
     for (const row of rows.values()) row.prices=rowPrices(row.featureId);
     const stores=Array.from(rows.values());
@@ -204,6 +221,6 @@ async function (reqId, args) {
     const paginationStalled=!!(unconfirmed&&lastFeed&&(moreVisible||lastFeed.scrollHeight>lastFeed.clientHeight&&lastFeed.querySelectorAll('[role="article"]').length>=20&&replies<=1));
     send({stores,partial:true,code:!loaded?'unreadable':paginationStalled?'pagination_stalled':unconfirmed?'incomplete_feed':!priced?'no_prices':'limited',
       error:!loaded?'Google gas results could not be read':!priced&&!discovery?'Google provided no matching '+requested+' prices; existing prices are retained':null,
-      detail:{read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,paginationStalled,feedHeight:lastFeed?lastFeed.clientHeight:0,feedScrollHeight:lastFeed?lastFeed.scrollHeight:0,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,firstFeedMs:firstFeedAt?firstFeedAt-started:null,firstReplyMs:firstReplyAt?firstReplyAt-started:null,lastGrowthMs:lastGrowth-started,replies,coverage:'Search results, not an exhaustive station catalog'}});
+      detail:{bulkPages,bulkRows,bulkMs,bulkFallback,cardsParsed,cardsSkipped,scrollEvents,read:stores.length,priced,responseRead,targetsComplete,exhausted,stopReason,scrolls,paginationStalled,feedHeight:lastFeed?lastFeed.clientHeight:0,feedScrollHeight:lastFeed?lastFeed.scrollHeight:0,priceLabels:prices.size,limitedView:limited,rejected,elapsedMs:Date.now()-started,firstFeedMs:firstFeedAt?firstFeedAt-started:null,firstReplyMs:firstReplyAt?firstReplyAt-started:null,lastGrowthMs:lastGrowth-started,replies,coverage:'Search results, not an exhaustive station catalog'}});
   } catch (e) {send({stores:[],blocked:!!e.blocked,error:e.message,code:e.blocked?'blocked':'reader'});}
 }

@@ -66,7 +66,13 @@ import java.util.Locale;
  */
 public class MainActivity extends Activity {
     private final java.util.concurrent.atomic.AtomicBoolean ridbCancel = new java.util.concurrent.atomic.AtomicBoolean();
-    private final java.util.concurrent.ExecutorService trafficRequests = java.util.concurrent.Executors.newFixedThreadPool(2);
+    private static java.util.concurrent.ExecutorService trafficExecutor() {
+        java.util.concurrent.ThreadPoolExecutor pool=(java.util.concurrent.ThreadPoolExecutor)java.util.concurrent.Executors.newFixedThreadPool(50);
+        pool.setKeepAliveTime(30, java.util.concurrent.TimeUnit.SECONDS);
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
+    private final java.util.concurrent.ExecutorService trafficRequests = trafficExecutor();
     private static java.lang.ref.WeakReference<MainActivity> queueActivity=new java.lang.ref.WeakReference<>(null);
     public static void queueTimeout(){MainActivity a=queueActivity.get();if(a!=null)a.js("window.onTripQueueTimeout&&onTripQueueTimeout()");}
     private void handleQueueIntent(Intent i){
@@ -1477,7 +1483,7 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
-        /** Public anonymous website protocol: fixed endpoint, bounded response, two readers.
+        /** Public anonymous website protocol: fixed endpoint, bounded response, at most50 readers (RAM default/user cap enforced by JS queue).
          * No cookies, credentials, API key or app-client token are extracted or copied. */
         @JavascriptInterface public void fetchGoogleTraffic(final int reqId, final String pb) {
             if (pb == null || pb.length() > 5000 || !pb.matches("[A-Za-z0-9!.,_%-]+") || !pb.contains("!19m3!1e0!2e2!3j")) {

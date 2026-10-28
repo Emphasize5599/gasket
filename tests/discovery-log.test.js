@@ -54,3 +54,5 @@ assert.equal(recovered.pageLoadMs.total,3000,'do not mislabel first-attempt reco
   assert.equal(logs2.find(l=>l[0]==='Discovery finished')[1].done,40,'the first four finish every area');
   console.log('Discovery log: report math, start/progress/finish entries and a '+tables.length+'-entry area table that fits passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+const commands=K.discoveryReport([{i:0,lane:0,at:0,ms:5000,d:{elapsedMs:4500,lastGrowthMs:4000,stopReason:'command_end',read:100,bulkPages:2,bulkRows:100,bulkMs:3000,cardsParsed:10,cardsSkipped:40}}],{elapsedMs:5000,areas:1,lanes:1,stations:100,priced:40,officialMs:0,errors:[]});assert.equal(commands.commandReads.pages,2);assert.equal(commands.commandReads.totalMs,3000);assert.equal(commands.commandReads.cardsSkipped,40);

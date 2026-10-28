@@ -39,8 +39,8 @@ async function worker(pg,body,raw,status=200,args={},realMs=0){
   await pg.setContent(body);
   await pg.evaluate(({raw,status})=>{
     window.answers=[];window.GasketSite={result:(_,s)=>answers.push(JSON.parse(s))};
-    performance.getEntriesByType=()=>[{name:'https://www.google.com/search?tbm=map&q=gas+stations'}];
-    window.fetch=async()=>({ok:status===200,status,url:'https://www.google.com/search',text:async()=>raw});
+    performance.getEntriesByType=()=>[{name:raw&&raw.bulk?'https://www.google.com/search?tbm=map&q=gas+stations&pb=!4m8!1m3!1d1000!2d-92.29!3d34.745!3m2!1i1280!2i900!4f13.1!7i20!10b1!12m1!1b1':'https://www.google.com/search?tbm=map&q=gas+stations'}];
+    window.fetch=async u=>{const offset=+(new URL(u).searchParams.get('pb')?.match(/!8i(\d+)/)?.[1]||0),code=raw&&raw.bulk&&raw.statuses&&raw.statuses[offset]||status,body=raw&&raw.bulk?JSON.stringify(raw.pages[offset]||raw.pages[0]):raw;return {ok:code===200,status:code,url:'https://www.google.com/search',text:async()=>body};};
   },{raw,status});
   await pg.evaluate(({s,args})=>{(0,eval)('('+s+')')(1,args);},{s:nativeScript,args});
   for(let i=0;i<650&&!(await pg.evaluate(()=>answers.length));i++){await pg.clock.fastForward(300);if(realMs)await pg.waitForTimeout(realMs);}   // realMs: Chrome delivers scroll events on real frames, not the fake clock
@@ -66,6 +66,14 @@ async function worker(pg,body,raw,status=200,args={},realMs=0){
   const lateScroll=await worker(pg,late,JSON.stringify([]),200,{mode:'discover'},20);
   assert.equal(lateScroll.detail.stopReason,'end','late pagination listener receives a fresh bottom scroll event');
   assert.equal(lateScroll.detail.exhausted,true);
+  function bulkPage(start,n,closed){const tree=[];tree[64]=Array.from({length:n},(_,j)=>{const i=start+j,r=[];r[9]=[null,null,34.745,-92.29];r[10]='0xaa:0x'+(i+1).toString(16);r[11]='Exxon '+i;r[13]=['Gas station'];r[39]='100 Main Street';r[78]='ChIJSyntheticStation'+i;r[88]=[i===closed?'Permanently closed':'$3.19/Regular'];return [null,r];});return tree;}
+  const terminal=Array(72).fill(null);terminal[0]=['gas stations'];terminal[1]=[[1000,-92.29,34.745]];terminal[58]=[0];terminal[71]=[1];
+  const protocolBody='<div role="feed">'+link('0xaa:0x1')+'</div>',pages={0:bulkPage(0,100),100:bulkPage(100,2,101),200:terminal};
+  const bulk=await worker(pg,protocolBody,{bulk:true,pages},200,{mode:'discover'});assert.equal(bulk.detail.stopReason,'command_end');assert.equal(bulk.detail.bulkPages,3);assert.equal(bulk.detail.scrolls,0,'commands finish without scrolling');assert.equal(bulk.stores.length,101,'all command pages merge and explicitly closed station is excluded');assert(bulk.stores.every(s=>s.prices.regular.price===3.19&&s.placeId),'typed identities and explicit prices retained');
+  const denied=await worker(pg,protocolBody,{bulk:true,pages,statuses:{100:429}},200,{mode:'discover'});assert.equal(denied.blocked,true,'bulk requests stop for site checks');
+  const malformed=bulkPage(0,1);malformed[64][0][1][9][2]=95;const fallback=await worker(pg,protocolBody+'End of the list',{bulk:true,pages:{0:malformed}},200,{mode:'discover'});assert.match(fallback.detail.bulkFallback,/identity schema/);assert.equal(fallback.stores.length,1,'invalid command coordinates cannot enter the station list');
+  const changing='<div role="feed">'+link('0x1:0x2')+'</div><script>const card=document.querySelector("article");card.insertAdjacentHTML("beforeend","<p>Regular</p><p>$3.12</p>");setTimeout(()=>{card.remove();card.querySelector("p:last-child").textContent="$4.12";document.querySelector("[role=feed]").appendChild(card);},450);setTimeout(()=>document.querySelector("[role=feed]").append("End of the list"),1000);</script>';
+  const changed=await worker(pg,changing,JSON.stringify([]),200,{mode:'discover'});assert.equal(changed.stores[0].prices.regular.price,4.12,'reinserted/changed cards invalidate incremental parsing');assert(changed.detail.cardsSkipped>0,'unchanged cards avoid repeated layout/text parsing');assert(lateScroll.detail.scrollEvents>0,'bottom pagination is explicitly signaled');
   for(const grade of ['regular','midgrade','premium','diesel']){
     const label={regular:'Regular',midgrade:'Midgrade',premium:'Premium',diesel:'Diesel'}[grade];
     const r=await worker(pg,html,JSON.stringify(['0x1:0x2','$4.12/'+label]),200,{grade});

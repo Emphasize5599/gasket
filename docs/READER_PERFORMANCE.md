@@ -202,3 +202,24 @@ remain 4–20; admission still ramps up and retreats under pressure, with the
 existing four-reader floor when enough work exists. Real-phone 50-reader stress,
 Android WebView cache hit/miss tracing, and broader coverage equivalence remain
 open work 16/17. Desktop/CDP transfer figures are not Android-cache measurements.
+
+
+## 2026-10-28: result commands and incremental list parsing (293)
+
+Tested fresh desktop Edge,1280×900 desktop UA, identical GasReaderResources omission policy, no user login. Current Maps gas /search?tbm=map responses expose typed station records at field64; normal request head uses !7i20 and pagination !8i<offset>. Changing only these top-level fields on the current page's observed request to100results/page worked. No static request template/session token is bundled. Existing query, bounds and filters are retained. Records require explicit feature ID, name and valid coordinates; prices use the existing unique-ID/explicit-grade evidence parser. Explicit closure labels are excluded. Completion needs a verified empty result response, not a short page. Observed terminal scaffold:72-field array, query heading gas stations, finite3-value viewport, absent64,58=[0],71=[1]. Changed/missing schema, repeated page, timeout or size limits cause scrolling fallback;403/429/consent/challenge stops for existing verification flow.
+
+| Live experiment | Candidate | Baseline | Coverage comparison |
+|---|---:|---:|---|
+| Searcy direct scroll event,150→75ms poll |11.77s|14.65s|119 IDs/59 priced, identical|
+| Searcy scrollTo command + event |12.28s|14.65s|119 IDs/59 priced, identical|
+| Reverse incremental-card run |11.96s|13.36s|Exact IDs/prices;120 parses,4240 unchanged-card skips|
+| Searcy100-result commands |4.89s|14.27s|145vs119; broad rankings differ, needs area clipping|
+| Searcy20-result commands |6.68s|14.87s|8mi40/40,12mi48/47,15mi57/56; no missing baseline ID or price differences|
+| JFK100-result commands |7.60s|15.29s|225vs120; within8mi210/120,12–15mi216/120; no missing IDs/price differences|
+| Searcy diesel UI |12.15s|13.51s|Both pages provide0explicit diesel prices; no invented regular-to-diesel fallback|
+
+A missing far-away Maverik in the first100-result trial was near Little Rock (~50mi away), outside any app scan cell radius. This is why raw counts are insufficient. Google can expand its own returned viewport and change ranking with page size; Gasket's existing area clipping and station deduplication remain required. More records do not mean a full station catalog. No phone throughput, RAM or multi-reader speedup claim is established here.
+
+Regular discovery ships with commands and verified scrolling fallback. Price updates and non-regular grades retain UI grade selection and incremental scrolling. Existing unknown/incomplete feed states stay incomplete. Added regression cases:100+2+empty pagination without scrolling, explicit closed exclusion, identity/schema fallback,429pause, DOM detach/change/reinsert price invalidation, blank-line price labels; existing all-grade/ambiguity/cache/retry checks retained. Mutation observer disconnects after each job.
+
+Traffic is separately adjustable1–50 using the same RAM-based defaults as station readers. Native pool expires idle threads after30seconds; JavaScript semaphore and hourly allowance lanes respect the selected count. Human-verification browser recovery remains serialized. High overrides use the existing memory/site-restriction warning rule.

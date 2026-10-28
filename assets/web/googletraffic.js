@@ -84,7 +84,7 @@
  function create(io){
   var active=0,queue=[],pending=new Map(),epoch=0;
   function limited(fn){return new Promise(function(resolve,reject){queue.push({fn:fn,resolve:resolve,reject:reject});pump();});}
-  function pump(){while(active<2&&queue.length){var x=queue.shift();active++;(function(x){Promise.resolve().then(x.fn).then(x.resolve,x.reject).finally(function(){active--;pump();});})(x);}}
+  function pump(){while(active<Math.max(1,Math.min(50,Math.round(io.concurrency?io.concurrency():2)||2))&&queue.length){var x=queue.shift();active++;(function(x){Promise.resolve().then(x.fn).then(x.resolve,x.reject).finally(function(){active--;pump();});})(x);}}
   function get(k,ttl){var r=io.get&&io.get(k,ttl);return r&&r.v||r;}
   async function piece(m,t,o){
    var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid),clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),identity=q+'|'+T.encodePolyline(m.pts),key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(t-now)<3600000?10*MINUTE:6*3600000,held=get(key,ttl);

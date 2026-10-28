@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.293 - 2026-10-28
+- Faster regular-fuel discovery using result-page commands, with scrolling fallback.
+- Adjustable Google traffic readers: RAM-based default, up to 50.
+- Includes the rest-stop fixes from292 and updates the Settings regression check.
+
 ## 0.0.292 - 2026-10-28
 - Separate indented rest-stop lists, clearer expandable tiles, and quieter stop details.
 - Configure each rest source and its supported filters in Settings.
