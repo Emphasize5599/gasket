@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.234**, 2026-10-22, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 57 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 58 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 Latest research additions: **2026-10-27**, after 0.0.282; older entries were not re-audited in this pass.
 
@@ -48,6 +48,8 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 ### Onboarding and visual explanations
 
 46. [ ] **Simpler UI flow for everyday users.** Assume users will read very little: make the next action obvious, group related inputs where users expect them, and use concise labels, progressive disclosure and visual feedback instead of explanation walls. Validate common setup and trip tasks with people unfamiliar with Gasket.
+
+57. [ ] **More intentional UI design after placement and flow are correct.** Once features are located in the right menus and the user flow works correctly, refine the app's visual hierarchy, spacing, typography, colors, controls and transitions into a cohesive design. Coordinate with item 46; establish the layout and flow before this visual design pass.
 
 42. [ ] **Tire rules submenu and acknowledged issue alerts.** Put all tire configuration rules in a dedicated submenu instead of explaining every rule in a text wall. When a tire configuration issue occurs, show a compact, initially collapsed alert that expands to explain the specific problem and affected tires. Require the user to acknowledge that they understand the issue; do not treat dismissing it as acknowledgment. Keep this rules-based experience useful without the larger AI.
 44. [ ] **How to read a tire size code.** An interactive lesson on a size like `265/45R21 101V`: tap each part (section width, aspect ratio, construction, rim diameter, load index, speed rating, and the DOT date code) to see it on an animated tire drawn to scale, with the app's character (item 45) standing beside it for size. Reach it from the tire size box's (?) and Tire details. Keep a short text explanation for accessibility.
