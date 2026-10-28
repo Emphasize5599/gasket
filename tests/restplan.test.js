@@ -26,3 +26,6 @@ assert.equal(P.changedHazards([rain],m,[{...rain,level:3}],nm).length,1,'worse c
 assert.equal(P.changedHazards([rain],m,[{kind:'snow',level:2,fromMi:2,toMi:10}],nm).length,1,'a different hazard is asked about');
 assert.equal(P.changedHazards([rain],m,[{...rain,fromMi:15,toMi:19}],nm).length,1,'a new place is asked about');
 console.log('RestPlan: local insertion/removal, free-flow colors with gray unknowns, changed-only hazard review');
+
+// Pending dwell starts after actual arrival, including a fuel stop before the rest.
+{const opts={model:nm,rewardDepartAt:1700000000000,stopMinutes:8,waits:[{d:nm.legEnds[0],at:1700000000000+nm.timeTo(nm.legEnds[0])*1000+30*60000}]},plan={stops:[{c:{d:1,detourMin:5},buyGal:2}]},stops=ins.route.stops.map(p=>({...p,rest:p.rest?{...p.rest,minimumRest:30,maximumStay:120}:undefined})),waits=P.alignWaits(opts,plan,stops),t=T.scheduleTimeline({...opts,waits},plan);assert(t[1].depart>=t[0].arrive+30*60000);assert(waits[0].at>opts.waits[0].at,'refueling delays shift the minimum departure');assert.deepEqual(P.alignWaits({...opts,waits},plan,stops),waits,'alignment settles');}

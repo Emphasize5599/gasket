@@ -1,5 +1,15 @@
 # Gasket
 
+## 0.0.299 — repair casual rest insertion
+
+Owner20:15 log (phone297):20:14:17 normal Find stops started during addition,20:14:18 CT Darien NB inserted (leg3,+49min,1646stored),20:14:21 cached quick plan false,20:14:30 normal planner undefined[0] exception,20:14:44 whole136hour hazard review restarted. Root renderStep sees result=null and automatically starts findStops while restReplan runs; compareCapture treats rest destination as new journey and revokes review; routeGate overrides Calculate with failed-plan navigation. Pending rest wait used pre-fuel nominal arrival. Earlier log lacks stack, so exact undefined[0] site unknown; added stack/phase diagnostics.
+
+During restPending, normal discovery/planner entry is suppressed and only cached restReplan owns updates. Draft UI shows rough per-rest driving+dwell, remembered-fuel status/errors and rest inventory/management, not rich stop cards requiring full-plan fields. Calculate stays the main action even if preliminary plan failed. Comparison capture deferred until commit; original verified hazard baseline reused with proper per-leg offsets; physical starting fuel retained, cached price timestamps retained, stale route-only detour annotations cleared. Splice may use current timing model to preserve rough timing on unchanged roads.
+
+RestPlan.alignWaits includes real fuel/charging service before minimum rest, bounded cached replan until settled. Calculate updates approach traffic, then samples departure times; restSetTime waits for cached recalculation before sampling later rests. Duplicate Calculate guarded, closing trip prevents async timing page reopening. Final commit validates opening/parking, arrival and departure windows, rereads actual hazard timing, asks only new/worse/moved hazards, and rebases approved chosen hourly rows with actual clocks after approval; no fresh all-route screening. Other vehicle plans cleared when finalized journey changes. Added-rest management lists every added rest even when inventory empty. Endpoints pruned before access checks, so the just-added place is not a new candidate to verify.
+
+Tests: windowplanning-ui new rest mode uses approved2-leg window trip, low starting fuel, real refueling from2remembered stations, adds2rests before calculation, zero paid discovery, no full approach forecast during addition, same physical fuel, all added rests manageable, both timing screens, no repeated clear-condition approval and no hourly screening after commit. RestPlan unit covers fuel service shifting minimum dwell; restui covers changed-only rain review/retime/closed-site removal. Run affected rest/window/saved-price/comparison checks and monitor CI. Phone: add Darien and another rest, remain in Stops, cached fuel update, Calculate once after additions, each departure slider, final review, no whole-route reapproval; check actual fuel/detour failures remain explained.
+
 ## 0.0.298 — standard hazard presentation for time windows
 
 Verified release: run40758953144/job123065348309 succeeded through full regressions, native compilation, signing, verification and arm64/universal APK publication.

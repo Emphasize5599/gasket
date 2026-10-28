@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.299 - 2026-10-28
+- Keep adding rest stops without restarting route planning or repeating all hazard approvals.
+- Correct rest timing after fuel stops and improve added-stop management.
+- Bug fixes.
+
 ## 0.0.298 - 2026-10-28
 - Map-first hourly hazard review with standard hazard cards, route colors and expandable details.
 - Bug fixes.
