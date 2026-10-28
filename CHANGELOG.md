@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.289 - 2026-10-27
+- Rest stops are listed in a separate submenu for each leg, with the source beneath each name.
+- Open matched Google Maps places externally, or tap the green + to choose rest time before adding.
+- Places without a matched Maps page have editable details and a mapped-data lookup.
+- Bug fixes.
+
 ## 0.0.288 - 2026-10-27
 - Choose an earlier departure within your whole-trip traffic-delay allowance instead of always waiting for the quietest hour.
 - Rest stops open a place view with illustrated surroundings, available photos, amenities and local arrival times.

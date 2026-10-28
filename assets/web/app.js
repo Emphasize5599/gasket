@@ -415,6 +415,7 @@
   window.onSiteVerified = function (key) {
     if(window.EVPrices&&EVPrices.onVerified(key))return;
     if(/^(tesla|chargepoint)$/.test(key))return;
+    if(key==='restmaps'){window.dispatchEvent(new Event('restmapsverified'));return;}
     if(key==='traffic'){window.dispatchEvent(new Event('trafficverified'));return;}
     if(key==='xom'){window.dispatchEvent(new Event('xomverified'));return;} // never a map search
     if(window.KeylessGas&&KeylessGas.onVerified&&KeylessGas.onVerified(key))return;
@@ -1392,7 +1393,7 @@
 
   // ---------- buttons ----------
   $('wmCheckGo').onclick = function () { $('wmCheck').classList.add('hidden'); if (checkKey && N.siteVerify) N.siteVerify(checkKey); };
-  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');window.dispatchEvent(new Event('trafficcancel'));if(window.EVPrices)EVPrices.dismissCheck();if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
+  $('wmCheckX').onclick = function () { $('wmCheck').classList.add('hidden');if(checkKey==='restmaps')window.dispatchEvent(new Event('restmapscancel'));window.dispatchEvent(new Event('trafficcancel'));if(window.EVPrices)EVPrices.dismissCheck();if(window.KeylessGas&&KeylessGas.isPaused&&KeylessGas.isPaused())KeylessGas.cancel(); };
   $('btnSettings').onclick = function () { openSettings(false); };
   $('btnLocate').onclick = function () {
     if (me) { movedByUser = false; map.setView([me.lat, me.lng], Math.max(map.getZoom(), zoomForRadius(S.radiusMi))); $('btnArea').classList.add('hidden'); }

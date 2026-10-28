@@ -2145,3 +2145,21 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rp-place #rpArrival > span { display:inline; }
 
 .rp-place #rpArrival > small { display:block; margin-top:4px; color:var(--ink-2); }
+
+/* Per-leg rest directories: source under the name; external link and add stay separate. */
+.rest-leg-entry { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; margin-top:10px; }
+.rest-leg-entry > span:first-child { min-width:0; }
+.rest-leg-entry b, .rest-leg-entry small { display:block; white-space:normal; }
+.rest-leg-entry small { font-size:12.5px; color:var(--ink-2); margin-top:4px; }
+.rest-name { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; }
+.rest-name .rest-text { min-width:0; }
+.rest-name > .rest-kind, .rest-name > small { grid-column:1 / -1; }
+.rest-info-entrance { border:0; background:none; color:inherit; font:inherit; padding:0; margin:0; text-align:left; cursor:pointer; width:100%; }
+.rest-source { display:block; font-size:12px; font-weight:400; color:var(--ink-2); line-height:1.35; margin:3px 0 0; overflow-wrap:anywhere; }
+.rest-row-actions { display:flex; align-items:flex-start; gap:6px; }
+.rest-row-actions .rest-add, .rest-row-actions .rest-external { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; text-decoration:none; }
+.rest-row-actions .rest-add { border-radius:50%; background:var(--save,#238657); color:#fff; }
+.rest-row-actions .rest-external { border-radius:12px; color:var(--ink); background:var(--surface-2); }
+.rest-row-actions svg { width:23px; height:23px; fill:currentColor; }
+.rest-row-actions button:focus-visible, .rest-row-actions a:focus-visible, .rest-info-entrance:focus-visible { outline:2px solid var(--blue,#7fb0ff); outline-offset:3px; }
+[data-rest-list] { min-width:0; }

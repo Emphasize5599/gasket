@@ -31,7 +31,7 @@
       if (fn === 'aiCommand') timeout = 15000;
       if (fn === 'visualSnapshot') timeout = 5000;
       if (fn === 'fetchHere' || fn === 'fetchGoogleTraffic') timeout = 45000;
-      if (fn === 'siteRead' && args[0] === 'traffic') timeout = 60000;
+      if (fn === 'siteRead' && args[0] === 'traffic') timeout = 60000;if(fn==='siteRead'&&args[0]==='restmaps')timeout=40000;
       if (fn === 'tripQueue') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
         if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancelAdvice'); } catch (e) { }

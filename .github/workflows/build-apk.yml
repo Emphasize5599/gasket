@@ -73,6 +73,8 @@ on:
       - tests/googletraffic-ui.test.js
       - tests/restplaces.test.js
       - tests/restplace.test.js
+      - tests/restmaps.test.js
+      - tests/restmaps-reader.test.js
       - tests/resttiming.test.js
       - tests/stopclock.test.js
       - tests/restui.test.js
