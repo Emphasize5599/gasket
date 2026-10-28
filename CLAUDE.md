@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.290 — include native rest Maps integration
+
+289 CI40627320527 failed the new RestMaps integration assertion: MainActivity changes were present in the working file but accidentally omitted from git add, so commit e5e05d6 did not contain the lazy worker/gating/lean resources/timeout changes. No289APK published. Stage MainActivity explicitly and verify the committed blob contains restmaps before pushing. Version290 preserves the existing empty289tag instead of rewriting it. No test weakened or deterministic failure retried unchanged. All289UI/source behaviors are retained.
+
 ## 0.0.289 — per-leg rest directory, external Maps and editable fallback
 
 Owner superseded288 place-page-first flow. Main Stops Rest stops tile now contains one submenu entrance per leg. Each directory contains only that leg’s candidates and its endpoints, retaining Since stop / Local arrival / Total. Round-trip/shared-road candidates project onto each leg independently, with per-leg deduplication; adjacent direction-opposed facilities are not collapsed. Source is small text immediately below each rest-place name (U.S.DOT/BTS, Recreation.gov, OSM; plus Google Maps/user-reviewed details when applicable). Confirmed Maps rows show external-open icon then green circular +; unmatched/unknown rows have an editable-details entrance plus the same +. + opens existing permission/rest-time flow; route changes only after an explicit departure option is accepted. Back from timing returns to that leg.

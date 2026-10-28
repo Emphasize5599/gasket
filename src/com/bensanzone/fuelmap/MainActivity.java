@@ -547,6 +547,9 @@ public class MainActivity extends Activity {
                     String at = view.getUrl(); if (at != null && at.startsWith(origin)) verificationUrl = at;
                 } } catch (Exception ignored) { }
             }
+            if ("restmaps".equals(key) && view != null) try {
+                if (new JSONObject(json).optBoolean("blocked")) {String at=view.getUrl();if(at!=null&&(at.startsWith("https://www.google.com/")||at.startsWith("https://consent.google.com/")))verificationUrl=at;}
+            } catch (Exception ignored) { }
             if (isGasWorker(key)) {
                 try {
                     JSONObject answer = new JSONObject(json);
@@ -628,13 +631,13 @@ public class MainActivity extends Activity {
             WebSettings ws = view.getSettings();
             ws.setJavaScriptEnabled(true);
             ws.setDomStorageEnabled(true);
-            if(isGasWorker(key)) {
+            if(isGasWorker(key) || "restmaps".equals(key)) {
                 ws.setAllowFileAccess(false); ws.setAllowContentAccess(false);
                 ws.setGeolocationEnabled(false); ws.setMediaPlaybackRequiresUserGesture(true);
                 ws.setJavaScriptCanOpenWindowsAutomatically(false); ws.setSupportMultipleWindows(false);
             }
             // Station results/prices are text. Do not download map/photo tiles for invisible readers.
-            if (isGasWorker(key)) ws.setBlockNetworkImage(true);
+            if (isGasWorker(key) || "restmaps".equals(key)) ws.setBlockNetworkImage(true);
             if (desktop) {
                 // Google Maps' desktop page is the one that spells out every stop's coordinates in its address
                 ws.setUserAgentString("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
@@ -659,7 +662,7 @@ public class MainActivity extends Activity {
                 public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
                     // Keep page JS, CSS, DOM/storage, fetch/XHR and pagination intact.
                     // Visible human-verification pages retain all resources.
-                    if(isGasWorker(key)) {
+                    if(isGasWorker(key) || "restmaps".equals(key)) {
                         String host=String.valueOf(req.getUrl().getHost()).toLowerCase(Locale.US);
                         String path=String.valueOf(req.getUrl().getPath()).toLowerCase(Locale.US);
                         int omitted = GasReaderResources.omission(host,path,req.getMethod(),req.isForMainFrame(),verifying == SiteWorker.this,leanGasResources);
@@ -678,7 +681,7 @@ public class MainActivity extends Activity {
                 public void onPageFinished(WebView v, String url) {
                     if (readReq >= 0 && !url.equals(v.getUrl())) return; // a callback from the page we just left
                     String title = String.valueOf(v.getTitle()).toLowerCase(Locale.US);
-                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || (isGasWorker(key) && url.startsWith("https://consent.google.")) || title.contains("robot") || title.contains("access denied")
+                    boolean blocked = url.contains("/blocked") || url.contains("/sorry/") || ((isGasWorker(key) || "restmaps".equals(key)) && url.startsWith("https://consent.google.")) || title.contains("robot") || title.contains("access denied")
                             || title.contains("captcha") || title.contains("unusual traffic");
                     ready = !blocked && url.startsWith(SiteWorker.this.origin);
                     if (verifying == SiteWorker.this && showReq >= 0) {
@@ -792,14 +795,14 @@ public class MainActivity extends Activity {
     private SiteWorker ensureWorker(String key) {
         SiteWorker old = workers.get(key);
         if (old == null) {
-            if (!isGasWorker(key)) return null;
+            if (!isGasWorker(key) && !"restmaps".equals(key)) return null;
             SiteWorker fresh = new SiteWorker(key, "https://www.google.com/maps", "https://www.google.com/", true);
             workers.put(key, fresh);
             root.addView(fresh.view, 0, new FrameLayout.LayoutParams(1280, 900));
             return fresh;
         }
         if (old.view != null) return old;
-        boolean desktop = isGasWorker(key) || "gmaps".equals(key) || "traffic".equals(key);
+        boolean desktop = isGasWorker(key) || "gmaps".equals(key) || "traffic".equals(key) || "restmaps".equals(key);
         SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop);
         fresh.verificationUrl = old.verificationUrl;
         workers.put(key, fresh);
@@ -890,7 +893,7 @@ public class MainActivity extends Activity {
             wmDone.setText("Done \u2014 back to the map");
         }
         String key = verifying != null ? verifying.key : "";
-        if (verifying != null) { verifying.verificationUrl=null;showMargins(verifying, false); if(isGasWorker(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
+        if (verifying != null) { verifying.verificationUrl=null;showMargins(verifying, false); if(isGasWorker(verifying.key)||"restmaps".equals(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
         verifying = null;
         wmDone.setVisibility(View.GONE);
         web.setVisibility(View.VISIBLE);
@@ -2419,6 +2422,7 @@ public class MainActivity extends Activity {
                 public void run() {
                     SiteWorker w = ensureWorker(key);
                     String script = w != null ? asset((isGasWorker(key) ? "gasweb" : key) + "_worker.js") : "";
+                    if ("restmaps".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/restmaps.js") + "\nreturn (" + script + ")(reqId,args);}";
                     if ("brave".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
                     // Reuse the exact application matcher, not a weaker price/coordinate heuristic.
                     if (isGasWorker(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/pricing.js") + "\n" + asset("web/keylessgas.js") + "\nreturn (" + script + ")(reqId,args);}";
@@ -2434,6 +2438,7 @@ public class MainActivity extends Activity {
                             || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
                             || ("xom".equals(key) && url.equals("https://www.exxonmobilfuels.com/en"))
                             || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
+                            || ("restmaps".equals(key) && url.startsWith("https://www.google.com/maps/search/?api=1&query="))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");
@@ -2469,7 +2474,7 @@ public class MainActivity extends Activity {
                     };
                     boolean discoveryRead = false;
                     try { discoveryRead = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : 90000);
+                    main.postDelayed(fw.readDeadline, "restmaps".equals(key) ? 35000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;
