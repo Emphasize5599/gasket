@@ -637,7 +637,8 @@ public class MainActivity extends Activity {
                 ws.setJavaScriptCanOpenWindowsAutomatically(false); ws.setSupportMultipleWindows(false);
             }
             // Station results/prices are text. Do not download map/photo tiles for invisible readers.
-            if (isGasWorker(key) || "restmaps".equals(key)) ws.setBlockNetworkImage(true);
+            if (isGasWorker(key)) ws.setBlockNetworkImage(true);
+            if ("restmaps".equals(key)) ws.setBlockNetworkImage(true);
             if (desktop) {
                 // Google Maps' desktop page is the one that spells out every stop's coordinates in its address
                 ws.setUserAgentString("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");

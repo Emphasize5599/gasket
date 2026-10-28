@@ -83,3 +83,5 @@ Owner requested per-leg rest submenus, external Google Maps page icon with green
 Per-leg follow-up: found prior RestPlaces.onRoute projected/deduplicated a physical site only once across the entire trip. Switched to existing Trip.projectLegs and per-leg/direction-aware dedup, so shared-road return legs retain their stops without rescanning source cells. Added a round-trip regression.
 
 289 release gate failed correctly because native MainActivity wiring was unintentionally left unstaged. Local UI/reader tests saw the working file; CI saw committed source. Include native file explicitly and verify commit blob. No289APK published; replacement290 retains289tag unchanged.
+
+290 full CI: only keyless-parallel failed, due its exact gas-only image-blocking source guard. Preserve that original statement and add restmaps separately; no test relaxed. Replacement291 includes the same user-facing flow. No289/290APKs were published.

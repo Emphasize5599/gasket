@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.bensanzone.fuelmap"
-    android:versionCode="290"
-    android:versionName="0.0.290">
+    android:versionCode="291"
+    android:versionName="0.0.291">
     <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.291 — preserve gas guard while enabling rest reader
+
+290 CI40628032967 included native wiring and passed RestMaps, but keyless-parallel’s existing source-shape guard expected `if (isGasWorker(key)) ws.setBlockNetworkImage(true)` exactly. Combined OR condition was behaviorally correct but failed that check. Retain the original gas-only statement and add an independent restmaps statement; no test weakened. All other290 regressions passed. Local keyless-parallel/RestMaps pass after correction; replacement291 preserves prior tags and published assets. Final signed CI pending.
+
 ## 0.0.290 — include native rest Maps integration
 
 289 CI40627320527 failed the new RestMaps integration assertion: MainActivity changes were present in the working file but accidentally omitted from git add, so commit e5e05d6 did not contain the lazy worker/gating/lean resources/timeout changes. No289APK published. Stage MainActivity explicitly and verify the committed blob contains restmaps before pushing. Version290 preserves the existing empty289tag instead of rewriting it. No test weakened or deterministic failure retried unchanged. All289UI/source behaviors are retained.

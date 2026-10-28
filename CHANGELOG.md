@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.291 - 2026-10-27
+- Per-leg rest-stop lists with source labels, external Maps links and green add buttons.
+- Editable details for places without a matched Maps page; rest time is confirmed before adding.
+- Resolves release checks that prevented289 and290 APKs from being published.
+
 ## 0.0.290 - 2026-10-27
 - Includes the per-leg rest-stop menus, source labels and green add buttons from289.
 - Fixes the Android Maps reader integration;289’s build stopped before publishing an APK.
