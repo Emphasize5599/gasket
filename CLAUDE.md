@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.297 — fix release296 CI and rest management
+
+296 signed build40754757985 failed2/177: reader-resources Java harness extracts finishRead and lacked new NHTSA Android types/state; isolate recoverNhtsa immediately before finishRead and stub that Android-only boundary in the gas-specific harness. No gas recovery test weakened. CI must still compile actual MainActivity. restui failed waiting for a candidate directory after all sites filtered: added rests need independent management. Added Manage added rest stops button even with empty inventory; test removes closed added rest via that entry. Targeted restui/nhtsa-reader/resource checks pass locally (local lacks JDK, native harness enforced CI). Local duplicate full run stopped once CI identified exact failures; Windows known VIN fixture and vehicle-catalog timing also failed locally but both passed pinned CI. Do not weaken those tests.
+
 ## 0.0.296 — lookup recovery, shared coverage and onboarding
 
 Owner19:12 log/backup: primary22cell scan55s then alternatives2cells10s after discount work; all24now share the first discovery queue (primary-first ordering, free lanes take alternatives immediately). Alternate projection later reuses those cells. Cached rerun22cells2.4s/2cells.23s confirmed station storage works. Failed window search screened7of73approved rows, shortlisted0/planned0 despite57verified forecasts across4roads: cheap screening must explain missing forecasts/traffic allowance per blocked leg, not invent reserve/toll failures. TimeWindows shortlist now returns rejection counts/blockedLeg; UI errors actionable before fuel/toll planning. Strict geometry matching retained.

@@ -544,8 +544,8 @@ public class MainActivity extends Activity {
         String verificationUrl = null;
         final java.util.concurrent.atomic.AtomicIntegerArray omittedGasResources = new java.util.concurrent.atomic.AtomicIntegerArray(4);
 
-        void finishRead(int reqId, String json) {
-            if (readReq != reqId) return;
+        // Isolate the NHTSA platform-data reset from the gas-reader completion path.
+        boolean recoverNhtsa(int reqId, String json) {
             if ("nhtsa".equals(key) && !nhtsaRecovered && verifying != this && view != null && readCall != null) try {
                 JSONObject answer = new JSONObject(json);
                 int status = answer.optInt("status");
@@ -575,10 +575,16 @@ public class MainActivity extends Activity {
                         if (deletes.isEmpty()) reload.run();
                         else for (String[] cookie : deletes) cm.setCookie(cookie[0],cookie[1],new android.webkit.ValueCallback<Boolean>() { public void onReceiveValue(Boolean ignored) { if (pending.decrementAndGet()==0) reload.run(); }});
                         js("window.FLog&&FLog.info('recalls','Retrying NHTSA once after resetting only NHTSA website data')");
-                        return;
+                        return true;
                     }
                 }
             } catch (Exception ignored) { }
+            return false;
+        }
+
+        void finishRead(int reqId, String json) {
+            if (readReq != reqId) return;
+            if (recoverNhtsa(reqId, json)) return;
             if ("traffic".equals(key)) try {
                 JSONObject answer = new JSONObject(json); String check = answer.optString("verificationUrl", "");
                 if (answer.optBoolean("blocked") && check.startsWith("https://www.google.com/sorry/")) verificationUrl = check;
