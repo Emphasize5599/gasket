@@ -2,6 +2,8 @@
 
 ## 0.0.293 — traffic reader cap and measured gas-page commands
 
+Release source ef810fc738b1c5f4805fc25cb6f7b9a94ba66162 pushed to main and feature/traffic-rest-completion. GitHub signed-APK run40708071599/job122885493054 passed all174 release regressions and advanced through Android platform preparation to the native reservation gate. Signing/publication still pending at this handoff; monitor it for native/build failures. Latest focused8checks pass, including new command statistics in packed phone logs. Source production working tree clean; preserve all preexisting tmp artifacts.
+
 Includes292. Its CI40702815769 failed ui-flow's obsolete seven-section expectation (Rest stops is an eighth Settings section) and an ev-feasibility timeout. Updated assertion to8; full local release run now passes ui-flow and ev-feasibility,173/174 overall. Only known Windows Edge tiny-QR vinscan-ui fixture fails (previously established on main too); do not weaken it. Pinned CI browser is authoritative. No292APK published and its tag is preserved.
 
 Settings → Map & stations → Traffic readers: independent1–50 slider + auto reset, same KeylessGas.autoWorkers RAM defaults/warnings. S.trafficWorkers persists normally. WorkerSettings.trafficCount feeds GoogleTraffic's dynamic semaphore and hourly earlier-departure candidate lanes. Native executor supports50 demanded threads, reclaims idle threads after30s; JS cap controls actual request admission. Human-verification browser recovery deliberately remains one serialized reader; no HERE quota bypass or increase. Unit concurrency1/4/50/clamp99 passes, settings persistence and reset tested.
