@@ -444,3 +444,9 @@ None of this data is bundled in the repository. The app fetches it while it runs
 - **Station operators' own websites:** prices and station details from walmart.com and murphyusa.com, and the ExxonMobil station finder.
 - **FLO public charging map:** station-specific tariff and connector facts read at runtime from the public FLO Network map service (`emobility.flo.ca`). FLO and station-host content remains theirs; no map code, tiles, credentials or bulk dataset is bundled. See `docs/EV_PRICE_SOURCES.md` for limitations.
 - **Brand logos:** fetched from each brand's own website or icon services at run time. The logos are trademarks of their owners.
+
+### Rest-place media and interpreted scenes
+
+Rest-place enrichment queries nearby OpenStreetMap features and Wikimedia Commons with the opened site's coordinates. Nearby facilities are labeled separately from confirmed site facts. © OpenStreetMap contributors, https://www.openstreetmap.org/copyright (ODbL). Interpreted vector artwork is Gasket-authored decoration, not satellite imagery or an access map. No generative AI is required.
+
+Commons images are accepted only with nearby geolocation, relevant subject and supported reusable license metadata (CC BY, CC BY-SA, CC0 or public domain). Each displayed photo links its file page and gives the supplied author/license/date when available; image cropping is disclosed. Images are not bundled in the APK. Source metadata is stored in the restplaces app-storage namespace and full backups. Official DOT/tourism photo pages were researched, but photographs with unresolved individual reuse rights are not automatically embedded.

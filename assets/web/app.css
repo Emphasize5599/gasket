@@ -2126,3 +2126,22 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
  .rest-cols > span:nth-child(5), .rest-list .rest-t:last-child { grid-column:4; }
  .rest-list .rest-t { white-space:normal; }
 }
+
+/* Rest place: an interpreted scene, concise facts and an attributed photo strip. */
+.rp-place { display:grid; gap:12px; min-width:0; }
+.rp-place > p, .rp-place h3, .rp-place h4 { margin:0; }
+.rp-scene { overflow:hidden; border-radius:var(--radius,20px); }
+.rp-scene svg { display:block; width:100%; height:auto; max-height:240px; }
+.rp-caption { font-size:12px; color:var(--ink-2); }
+.rp-amenities, #rpFacilities { display:flex; flex-wrap:wrap; gap:8px; }
+.rp-amenity { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; background:var(--surface-2); border-radius:12px; font-size:13px; }
+.rp-amenity.unavailable { opacity:.65; }
+.rp-amenity b { font-size:17px; }
+.rp-gallery { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x proximity; padding-bottom:8px; }
+.rp-gallery figure { margin:0; flex:0 0 90%; min-width:0; scroll-snap-align:start; }
+.rp-gallery img { width:100%; aspect-ratio:3/2; object-fit:cover; border-radius:18px; display:block; }
+.rp-gallery figcaption { font-size:12px; color:var(--ink-2); overflow-wrap:anywhere; margin-top:6px; }
+.rp-place a.btn { display:block; text-align:center; margin-top:8px; }
+.rp-place #rpArrival > span { display:inline; }
+
+.rp-place #rpArrival > small { display:block; margin-top:4px; color:var(--ink-2); }

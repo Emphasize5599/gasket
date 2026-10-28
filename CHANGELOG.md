@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.288 - 2026-10-27
+- Choose an earlier departure within your whole-trip traffic-delay allowance instead of always waiting for the quietest hour.
+- Rest stops open a place view with illustrated surroundings, available photos, amenities and local arrival times.
+- Visitor-center and store opening hours no longer stand in for parking hours.
+- Bug fixes.
+
 ## 0.0.287 - 2026-10-27
 - Rest stops show local arrival dates and times beside “Since stop,” including the timezone.
 - Reported opening hours flag closed sites and exclude stays that cross a closure. Missing or complex hours remain unverified.

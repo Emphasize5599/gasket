@@ -1,0 +1,44 @@
+/* Small, persistent place enrichment and interpreted vector scenes. A scene is
+ * decoration based on mapped surroundings, never an access map or amenity claim. */
+(function(root){'use strict';
+ var node=typeof module!=='undefined'&&module.exports,T=node?require('./trip'):root.Trip;
+ function text(x){return String(x||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();}
+ function safe(u,hosts){try{var v=new URL(u);return v.protocol==='https:'&&hosts.includes(v.hostname)?v.href:null;}catch(e){return null;}}
+ function scene(site,elements){var flags={parking:false,trees:false,grass:false,camp:site.kind==='campground',building:false},amenities={},hours={},images=site.imageRef&&/^File:/i.test(site.imageRef)?[site.imageRef]:[],article=site.wikipedia||null;
+  (elements||[]).forEach(function(e){var t=e.tags||{},p=e.center||e,near=Number.isFinite(+p.lat)&&Number.isFinite(+p.lon)?T.hav(site,{lat:+p.lat,lng:+p.lon}):Infinity;if(near>.2)return;
+   if(t.amenity==='parking')flags.parking=true;if(t.natural==='wood'||t.landuse==='forest')flags.trees=true;if(t.landuse==='grass'||t.leisure==='park'||t.tourism==='picnic_site')flags.grass=true;if(t.building&&t.building!=='no')flags.building=true;
+   var k={toilets:'restrooms',drinking_water:'drinking_water',shower:'showers',picnic_table:'picnic',charging_station:'charging'}[t.amenity]||(t.leisure==='picnic_table'?'picnic':null);if(k&&near<.12){amenities[k]=true;if(t.opening_hours)hours[k]=t.opening_hours;}
+   if(t.amenity==='parking'&&near<.12&&t.opening_hours)hours.parking=t.opening_hours;
+   var img=t.wikimedia_commons||t.image;if(img&&/^File:/i.test(img)&&near<.08)images.push(img);if(t.wikipedia&&near<.04)article=t.wikipedia;
+  });return {flags:flags,amenities:amenities,hours:hours,images:Array.from(new Set(images)),article:article};
+ }
+ function svg(f,id){f=f||{};var n=0;String(id||'').split('').forEach(function(c){n=(n*31+c.charCodeAt(0))>>>0;});var out='<svg viewBox="0 0 480 230" role="img" aria-label="Illustrated setting, not a site map" xmlns="http://www.w3.org/2000/svg"><rect width="480" height="230" rx="24" fill="#e9f1e8"/><ellipse cx="240" cy="135" rx="207" ry="79" fill="#c5dbac"/><path d="M28 177Q155 156 235 184T458 174" fill="none" stroke="#d8cbb0" stroke-width="18" stroke-linecap="round"/>';
+  function tree(x,y,size){return '<g transform="translate('+x+' '+y+') scale('+size+')"><ellipse cy="23" rx="23" ry="9" fill="#507c5c" opacity=".16"/><path d="M-3 5v23h7V5" fill="#866749"/><path d="M0-35C-30-36-38 2-18 12C-4 21 29 15 29-7C28-24 14-39 0-35" fill="#427e61"/><path d="M-8-30C-28-22-26-3-15 1C-3 8 7-5 5-18" fill="#63a374"/></g>';}
+  if(f.parking)out+='<g transform="translate(77 112) rotate(-8)"><rect width="180" height="68" rx="12" fill="#737f8a"/><path d="M20 4v22m28-22v22m28-22v22m28-22v22m28-22v22m28-22v22M20 44v20m28-20v20m28-20v20m28-20v20m28-20v20m28-20v20" stroke="#e9ebda" stroke-width="2"/><rect x="31" y="7" width="17" height="29" rx="5" fill="#8db8d0"/></g>';
+  if(f.camp)out+='<path d="m252 158 36-48 38 48z" fill="#e2a35f"/><path d="m288 110 4 48h34z" fill="#c98650"/><path d="m281 158 9-25 10 25" fill="#79634d"/>';
+  if(f.building)out+='<rect x="315" y="97" width="72" height="49" rx="5" fill="#e9d5b9"/><path d="m307 99 44-26 44 26z" fill="#6c8d99"/><rect x="340" y="119" width="14" height="27" rx="2" fill="#856e59"/>';
+  if(f.trees){[[73,89,.9],[146,62,.7],[221,73,.8],[390,163,.8],[412,91,.65]].forEach(function(p,i){out+=tree(p[0]+(n%(i+5)),p[1],p[2]);});}else if(f.grass)out+=tree(387,115,.7);
+  if(!f.parking&&!f.trees&&!f.grass&&!f.camp&&!f.building)out+='<circle cx="240" cy="112" r="33" fill="#86a6a0"/><path d="M250 89a25 25 0 1 0 4 40a23 23 0 0 1-4-40" fill="#fff5cf"/>';
+  out+='<path d="m326 176 12-9 17 6 5 13h-36z" fill="#a3ada3"/><path d="m93 194 5-9m0 9 6-6m59-1 4-9" stroke="#79a469" stroke-width="3" stroke-linecap="round"/></svg>';return out;
+ }
+ function photos(json,site){if(json.error)throw Error('Photo service unavailable: '+String(json.error.code||'unknown'));var pages=json.query&&json.query.pages||{},out=[];Object.keys(pages).forEach(function(k){var p=pages[k],ii=p.imageinfo&&p.imageinfo[0],coord=p.coordinates&&p.coordinates[0];if(!ii||!coord||!Number.isFinite(+coord.lat)||!Number.isFinite(+coord.lon)||Math.abs(+coord.lat)>90||Math.abs(+coord.lon)>180||T.hav(site,{lat:+coord.lat,lng:+coord.lon})>.2)return;var md=ii.extmetadata||{},v=function(k){return text(md[k]&&md[k].value);},title=text(p.title),desc=v('ImageDescription'),license=v('LicenseShortName'),licenseUrl=safe(v('LicenseUrl'),['creativecommons.org','www.creativecommons.org']),url=safe(ii.thumburl||ii.url,['upload.wikimedia.org']),page=safe(ii.descriptionurl,['commons.wikimedia.org']);
+   var words=String(site.name||'').toLowerCase().match(/[a-z]{4,}/g)||[],subject=(title+' '+desc).toLowerCase(),matched=words.filter(function(w){return !['rest','area','welcome','center','northbound','southbound','eastbound','westbound','unnamed','services'].includes(w)&&subject.includes(w);}).length;
+   if(!url||!page||!(ii.width>=320&&ii.height>=180)||!/^(CC BY(?:-SA)?(?: |$)|CC0|Public domain)/i.test(license)||!licenseUrl&& !/public domain/i.test(license)||!(/rest area|welcome cent[er]+|campground|camp.?site|picnic (area|site)/i.test(subject)||matched>=2)||/\b(logo|coat of arms|map of|diagram|plan of)\b|\.svg$/i.test(title))return;
+   var direction=site.direction,opposite={N:'southbound',S:'northbound',E:'westbound',W:'eastbound'};if(direction&&subject.includes(opposite[direction]))return;
+   out.push({url:url,page:page,title:title.replace(/^File:/,''),artist:v('Artist')||'See source',license:license,licenseUrl:licenseUrl,date:v('DateTimeOriginal')||null,distance:T.hav(site,{lat:+coord.lat,lng:+coord.lon})});
+  });return out.sort(function(a,b){return a.distance-b.distance;}).slice(0,4);}
+ function create(io){var flights=new Map();
+  async function load(site,valid){valid=valid||function(){return true;};var key='place-v1|'+site.id+'|'+site.lat.toFixed(5)+','+site.lng.toFixed(5),held=io.get(key,7*86400000);if(held&&Array.isArray(held.photos)&&(held.photos.length||Date.now()-held.at<6*3600000))return held;if(flights.has(key))return flights.get(key);
+   var promise=(async function(){var notes=[],local;try{var q='[out:json][timeout:12];(nwr(around:220,'+site.lat+','+site.lng+')[amenity~"^(parking|toilets|drinking_water|shower|picnic_table|charging_station)$"];nwr(around:220,'+site.lat+','+site.lng+')[landuse~"^(forest|grass)$"];nwr(around:220,'+site.lat+','+site.lng+')[natural=wood];nwr(around:220,'+site.lat+','+site.lng+')[leisure~"^(park|picnic_table)$"];nwr(around:100,'+site.lat+','+site.lng+')[building];nwr(around:100,'+site.lat+','+site.lng+')[highway~"^(rest_area|services)$"];);out center tags 80;';var j=await io.fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q));if(j.remark||!Array.isArray(j.elements))throw Error('Map details unavailable');local=scene(site,j.elements);}catch(e){notes.push('Mapped surroundings unavailable');local=scene(site,[]);}
+    var images=[],base='https://commons.wikimedia.org/w/api.php?',common={action:'query',format:'json',prop:'imageinfo|coordinates',iiprop:'url|size|extmetadata',iiurlwidth:960,iiextmetadatafilter:'Artist|LicenseShortName|LicenseUrl|ImageDescription|DateTimeOriginal',colimit:'max',origin:'*'};
+    function append(j){photos(j,site).forEach(function(im){if(!images.some(function(x){return x.page===im.page;}))images.push(im);});}
+    if(local.article&&/^en:/.test(local.article)){try{var article=await io.fetch('https://en.wikipedia.org/w/api.php?'+new URLSearchParams({action:'query',format:'json',prop:'pageimages',piprop:'name',pilicense:'free',titles:local.article.slice(3),origin:'*'}));Object.values(article.query&&article.query.pages||{}).forEach(function(a){if(a.pageimage)local.images.push('File:'+a.pageimage);});}catch(e){notes.push('Linked photo lookup unavailable');}}
+    if(local.images.length){try{append(await io.fetch(base+new URLSearchParams(Object.assign({},common,{titles:local.images.slice(0,4).join('|')}))));}catch(e){notes.push('Linked photo lookup unavailable');}}
+    if(images.length<4){try{append(await io.fetch(base+new URLSearchParams(Object.assign({},common,{generator:'geosearch',ggscoord:site.lat+'|'+site.lng,ggsradius:320,ggsnamespace:6,ggslimit:30}))));}catch(e){notes.push('Photo search unavailable');}}images=images.slice(0,4);
+
+    var result={scene:local.flags,amenities:local.amenities,hours:local.hours,photos:images,notes:notes,at:Date.now()};if(!notes.length||images.length)io.put(key,result);return result;
+   })().finally(function(){flights.delete(key);});flights.set(key,promise);return promise;
+  }return {load:load};
+ }
+ var api={scene:scene,svg:svg,photos:photos,create:create};if(node)module.exports=api;else root.RestPlace=api;
+})(typeof window!=='undefined'?window:this);
