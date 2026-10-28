@@ -9,3 +9,5 @@ assert.equal(R.choose([{depart:reached+10*minute,drivingMinutes:30,arrive:reache
 assert.throws(()=>R.samples(reached,reached+25*3600000));assert.equal(R.samples(reached+minute,reached+15*minute).length,3);
 const model={legEnds:[10,20],totalMi:20,timeTo:d=>d*60,durationSec:1200},timeline=T.scheduleTimeline({model,rewardDepartAt:reached,waits:[{d:10,at:reached+60*minute}]},{stops:[]});assert.equal(timeline[1].depart,reached+60*minute);assert.equal(timeline[1].arrive,reached+70*minute);assert.equal(timeline[1].waitMinutes,50);
 console.log('Rest timing: distinct choices, nonmonotonic times, missing samples, permission, windows, limits, charging overlap and multi-leg waits passed');
+
+assert.equal(R.choose(samples,{...o,available:t=>t<reached+20*minute}).feasible.length,2,'closed-at-arrival or during stay options excluded');

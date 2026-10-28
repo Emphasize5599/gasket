@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.287 - 2026-10-27
+- Rest stops show local arrival dates and times beside “Since stop,” including the timezone.
+- Reported opening hours flag closed sites and exclude stays that cross a closure. Missing or complex hours remain unverified.
+- Bug fixes.
+
 ## 0.0.286 - 2026-10-27
 - Flexible-time planning leaves later when a trip would reach a destination before its arrival window, instead of rejecting it, and says exactly which window a trip missed.
 - After flexible-time planning finds nothing, the app no longer starts ordinary planning (and its traffic lookups) on its own.
