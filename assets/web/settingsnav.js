@@ -1,6 +1,6 @@
 /* Keep live settings controls in the DOM: submenu navigation never discards a draft. */
 (function(root){'use strict';
- var groups=[['map','Map & stations','Display, discovery and refresh'],['trip','Trip defaults','Routes, speed limits and energy prices'],['savings','Savings','Memberships and rewards'],['connections','Connections & usage','Optional keys and API budgets'],['ai','Local AI','Download and manage the larger model'],['data','Data & privacy','Backups, exports and deletion'],['help','Help & troubleshooting','Setup guide, logs and app information']];
+ var groups=[['map','Map & stations','Display, discovery and refresh'],['rest','Rest stops','Sources and source-specific filters'],['trip','Trip defaults','Routes, speed limits and energy prices'],['savings','Savings','Memberships and rewards'],['connections','Connections & usage','Optional keys and API budgets'],['ai','Local AI','Download and manage the larger model'],['data','Data & privacy','Backups, exports and deletion'],['help','Help & troubleshooting','Setup guide, logs and app information']];
  var current='',page=null;
  function attach(A,pg){
   page=pg;current='';var body=pg.querySelector('.settings-body'),bar=pg.querySelector('.settings-bar'),views={};
@@ -12,6 +12,7 @@
   // These are connections, not EV driving preferences. Found in the views: they aren't in the page yet, so A.$ found nothing and these keys sat in EV & hydrogen.
   var keys=document.createElement('div');keys.className='card';keys.innerHTML='<h3>Other optional keys</h3>';
   ['hereKey','googleTraffic','hereTraffic','hereMonthlyCap','nrelKey','fuelKey'].forEach(function(id){var e=null;Object.keys(views).forEach(function(k){e=e||views[k].querySelector('#'+id);});if(e)keys.appendChild(e.closest('.field'));});views.connections.appendChild(keys);
+  views.rest.innerHTML=root.RestSettings?RestSettings.html(A):'';if(root.RestSettings)RestSettings.bind(A,views.rest);
   var t=A.S.trip||{},defaults=document.createElement('div');defaults.className='card';defaults.innerHTML='<h3>Planning defaults</h3><div class="grid2">'+[['prefBuffer','Buffer (miles)',t.bufferMi,1],['prefMinSave','Minimum savings ($)',t.minSave,.01],['prefDetour','Max. extra time (min)',t.maxDetourMin,.5],['prefAltSave','Worth switching for ($)',t.altMinSave,.01]].map(function(x){return '<label class="nf"><span>'+x[1]+'</span><input type="number" inputmode="decimal" min="0" step="'+x[3]+'" id="'+x[0]+'" value="'+A.esc(x[2]==null?'':x[2])+'"></label>';}).join('')+'</div>';views.trip.prepend(defaults);
   var tour=document.createElement('button');tour.type='button';tour.className='btn tonal';tour.id='settingsTour';tour.textContent='Show setup walkthrough';tour.onclick=function(){A.$('sDone').click();if(root.Onboarding)Onboarding.start(true);};views.help.prepend(tour);
   // Hide long descriptions, not values, counters, warnings or controls.

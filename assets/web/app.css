@@ -396,6 +396,10 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary::after { content: ''; position: absolute; right: 8px; top: 50%; width: 8px; height: 8px; margin-top: -6px;
   border-right: 2px solid var(--ink-2); border-bottom: 2px solid var(--ink-2); transform: rotate(45deg); transition: transform .2s, margin-top .2s; }
 details[open] > summary::after { transform: rotate(225deg); margin-top: -2px; }
+/* Menu entrances retain a full tile-sized target, including nested disclosures. */
+details:not(.epa):not(.g-info):not(.g-tires):not(.rc-tile) > summary { min-height:48px; padding-top:14px; padding-bottom:14px; font-size:15px; font-weight:650; color:var(--accent); }
+details.disclosure-tile, .sub-body > details, .settings-group details:not(.settings-help) { border:1px solid var(--line); border-radius:18px; background:var(--surface); padding:0 16px; margin:10px 0; }
+details.disclosure-tile[open] { padding-bottom:14px; }
 .rc-tile > summary::after { top: 20px; }     /* a tall tile: the chevron by its first line */
 
 /* ---- garage ---- */
@@ -2107,6 +2111,12 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-cols { font-size: 11.5px; font-weight: 700; color: var(--ink-2); padding: 0 0 4px; }
 .rest-cols span:nth-child(n+3), .rest-list .rest-t { text-align: right; }
 .rest-list { margin-top: 4px; }
+.rest-list > .rest-candidates { padding-left:32px; }
+.rest-list > li.rest-candidates::before { top:0; bottom:0; }
+.rest-candidate-list { margin:0; }
+.rest-candidate-list > li::before { background:color-mix(in srgb, var(--save) 35%, transparent); }
+.rest-detail-group { display:grid; gap:10px; margin:16px 0; }
+.rest-detail-group > details { margin:0; }
 .rest-list li { display: block; }
 .rest-list .rest-row { width: 100%; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .rest-list .rest-site .nn { background: var(--save); color: #fff; }
@@ -2163,3 +2173,6 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-row-actions svg { width:23px; height:23px; fill:currentColor; }
 .rest-row-actions button:focus-visible, .rest-row-actions a:focus-visible, .rest-info-entrance:focus-visible { outline:2px solid var(--blue,#7fb0ff); outline-offset:3px; }
 [data-rest-list] { min-width:0; }
+
+/* Collapsible submenus use the same tile affordance throughout the app. */
+.tp-body details:not(.epa):not(.g-info):not(.g-tires):not(.rc-tile), .sub-body details:not(.epa):not(.settings-help) { border:1px solid var(--line); border-radius:18px; background:var(--surface); padding-left:14px; padding-right:14px; margin-top:10px; margin-bottom:10px; }

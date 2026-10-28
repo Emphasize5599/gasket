@@ -19,3 +19,9 @@ const pts=[{lat:34,lng:-92},{lat:34.2,lng:-92}],mi=T.hav(...pts),m=T.buildRoute(
 assert.equal(R.direction('West Memphis Truck Parking (A) I-40'),null,'city name is not carriageway direction');assert.equal(R.direction('north'),'N');
 
 const loop=T.buildRoute({distanceMeters:mi*1609.344*2,duration:'2400s',polyline:{encodedPolyline:T.encodePolyline([pts[0],pts[1],pts[0]])},legs:[{distanceMeters:mi*1609.344,duration:'1200s'},{distanceMeters:mi*1609.344,duration:'1200s'}]},{city:30,hwy:40,comb:35});const both=R.onRoute(loop,[row],{});assert.equal(both.length,2,'same physical rest stop is offered on outgoing and return legs');assert.deepEqual(both.map(x=>x.leg),[0,1]);assert(both[1].d>loop.legEnds[0]);
+
+const scoped={sources:{ntad:{required:['showers'],freeOnly:true},osm:{required:['showers'],unknown:false,overnightOnly:true},rvparky:{required:['showers'],radius:25},campendium:{required:['pets']}}};
+assert(R.check(row,scoped).ok,'OSM/website filters do not leak into government inventory');assert(!R.check({...osm,carAccess:true},scoped).ok,'unknown overnight permission is excluded');
+const permitted={...osm,carAccess:true,nonCommercialOvernight:true,amenities:{showers:true}};assert(R.check(permitted,scoped).ok);assert(!R.check(permitted,{sources:{osm:{enabled:false}}}).ok);
+const nativeLinks=R.links('Sample',pts[0],scoped);assert.equal(new URL(nativeLinks[0].url).searchParams.get('d'),'25');assert(nativeLinks[1].url,'separate Campendium preferences do not inherit showers');assert.equal(R.links('Sample',pts[0],{sources:{rvparky:{enabled:false},campendium:{enabled:false}}}).length,0);
+assert.equal(R.osm({elements:[{type:'node',id:3,lat:34,lon:-92,tags:{highway:'rest_area','overnight:motorcar':'yes'}}]},1)[0].nonCommercialOvernight,true);

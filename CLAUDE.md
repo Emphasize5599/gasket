@@ -1,5 +1,16 @@
 # Gasket
 
+## 0.0.292 — rest directory corrections before reader experiments
+
+Owner requested this push before gas-reader experiments. Independent indented per-leg green rest numbering sits between blue connected route endpoints. Rest source label retained. Name/phone/website editor inputs removed; facility/hour/source disclosures grouped; global disclosure targets restored to tile sizes. Settings → Rest stops exposes five independent providers (NTAD, OSM, downloaded RIDB, RV Parky, Campendium), only controls that adapter supports, source enablement, independent radii and external filter URLs. Explicit OSM overnight motorcar/general tags can qualify the optional non-commercial overnight filter; unknown is excluded, confirmation still required. Source inventory and filters remain in permanent storage/full backups.
+
+Ardsley reproduced with actual federal coordinates40.9824,-73.854 and Maps page40.984875,-73.852596. Displacement exceeded old0.15mi gate. Exact names with>=2 words now allow0.5mi; ordinary matches retain0.15mi, direction/ambiguity/fuel-vs-store restrictions retained. maps-v2 key retries old negatives. Live lean-reader search and direct page returned correct name/coords.
+
+Directory visible rows check actual outgoing+return road access before showing Add; known over-limit detours are excluded, temporary failures remain explicitly unverified and checked again before insertion. Two access jobs, memoized by route, minute, detour limit and site. Exact depart milliseconds initially caused repeated checks in a test; minute key fixed and regression run passes. Log supplied2026-10-28-13-56-27 shows latest11sites/10OSM cells all failed; old logger dropped individual errors. Added per-cell reasons and road-limit diagnostic records. Cannot infer a separate between-rest driving limit from that log.
+
+Focused9tests passed including real itinerary insertion,320/448phone layouts, settings controls, independent filter URLs, overnight unknown rejection, Ardsley identity and native reader guards. Await CI/device acceptance. Next authorized work: adjustable RAM-default traffic concurrency up to50, then measured Google gas feed command/scroll experiments. Do not claim those are in292.
+
+
 ## 0.0.291 — preserve gas guard while enabling rest reader
 
 290 CI40628032967 included native wiring and passed RestMaps, but keyless-parallel’s existing source-shape guard expected `if (isGasWorker(key)) ws.setBlockNetworkImage(true)` exactly. Combined OR condition was behaviorally correct but failed that check. Retain the original gas-only statement and add an independent restmaps statement; no test weakened. All other290 regressions passed. Local keyless-parallel/RestMaps pass after correction; replacement291 preserves prior tags and published assets. Release291 verified: signed APK workflow40628546992 succeeded at source8f23786. All174 release regressions, native compile/signing and APK verification passed; arm64-v8a and universal APKs published. Prior289/290tags were preserved without APK assets; no released asset overwritten. Phone checks are in the289 section below.

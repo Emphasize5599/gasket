@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.292 - 2026-10-28
+- Separate indented rest-stop lists, clearer expandable tiles, and quieter stop details.
+- Configure each rest source and its supported filters in Settings.
+- Fix Ardsley Maps matching; check rest-stop road detours and log incomplete searches.
+
 ## 0.0.291 - 2026-10-27
 - Per-leg rest-stop lists with source labels, external Maps links and green add buttons.
 - Editable details for places without a matched Maps page; rest time is confirmed before adding.
