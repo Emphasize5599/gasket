@@ -24,7 +24,14 @@
   function queue() { if (!doc || frame) return; frame = root.requestAnimationFrame(function () { frame = 0; draw(); }); }
   function etaKey(t){return t.etaKey||String(t.id).replace(/\d+/g,'*');}
   function rates(){if(etaRates)return etaRates;try{var r=root.__app&&root.__app.KV.get('traffic','task-durations');etaRates=r&&r.v||{};}catch(e){etaRates={};}return etaRates;}
-  function taskText(t){var text=t.cancelling?'Cancelling…':t.text||'Working…';if(t.cancelling||/remaining|\bleft\b|estimated total|about (?:a|\d)|~\d|waiting for.*verif|paused/i.test(text))return text;var elapsed=Math.max(0,Date.now()-t.started),prior=rates()[etaKey(t)],duration=Number.isFinite(t.estimateMs)?t.estimateMs:prior||30000,ms=Number.isFinite(t.frac)&&t.frac>0&&t.frac<1?Math.max(1000,elapsed/t.frac*(1-t.frac)):Math.max(1000,duration-elapsed);if(t.state==='pending')ms=duration;var sec=Math.max(1,Math.ceil(ms/1000));return text+' · ~'+(sec<90?sec+' sec':Math.ceil(sec/60)+' min')+(t.state==='pending'?' estimated':' remaining');}
+  // Time left only from evidence: the task's own progress (after a few seconds and some of it done) or how long the
+  // same kind of task took before. Never a made-up default, and nothing once a task outlasts what it took last time.
+  function taskText(t){var text=t.cancelling?'Cancelling…':t.text||'Working…';if(t.cancelling||/remaining|\bleft\b|estimated total|about (?:a|\d)|~\d|waiting for.*verif|paused|pending/i.test(text))return text;
+    var elapsed=Math.max(0,Date.now()-t.started),prior=Number.isFinite(t.estimateMs)?t.estimateMs:rates()[etaKey(t)],ms=null;
+    if(t.state==='pending'){if(prior>0)return text+' · about '+span(prior)+' once started';return text;}
+    if(Number.isFinite(t.frac)&&t.frac>=.05&&t.frac<1&&elapsed>=3000)ms=elapsed/t.frac*(1-t.frac);else if(prior>0&&elapsed<prior)ms=prior-elapsed;
+    return ms==null||ms<1500?text:text+' · about '+span(ms)+' left';}
+  function span(ms){var sec=Math.ceil(ms/1000);return sec<90?sec+' s':Math.round(sec/60)+' min';}
   function upsert(id, value) {
     if (!tasks.has(id)) tasks.set(id, { id: id, started: Date.now() });
     Object.assign(tasks.get(id), value); completion = null; clearTimeout(completionTimer); queue();

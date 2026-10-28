@@ -100,7 +100,7 @@
    var o=options||{},waits=(options&&options.waits||[]).slice(),ends=(m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).slice(),stops=(o.stops||[]).slice().sort(function(a,b){return a.d-b.d;}),breaks=ends.concat(stops.map(function(s){return s.d;}),waits.map(function(w){return w.d;}),o.waitAt?[o.waitAt.d]:[]);
    // Each source profile evaluates its own roads at arrival. Split at destinations, stops and geographic cells to
    // reuse overlapping roads. Never spread a whole-trip delay over every mile.
-   for(var d=100;d<m.totalMi;d+=100)breaks.push(d);breaks=breaks.concat(boundaries(m));breaks=Array.from(new Set(breaks.filter(function(d){return d>0&&d<=m.totalMi;}))).sort(function(a,b){return a-b;});
+   for(var d=100;d<m.totalMi;d+=100)breaks.push(d);breaks=breaks.concat(boundaries(m));breaks=Array.from(new Set(breaks.map(function(d){return Math.abs(d-m.totalMi)<1e-6?m.totalMi:d;}).filter(function(d){return d>0&&d<=m.totalMi;}).concat([m.totalMi]))).sort(function(a,b){return a-b;});
    if(o.progress)o.progress(0,breaks.length);var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,seconds=0,low=0,high=0;
    for(var i=0;i<breaks.length;i++){
     if(o.valid&&!o.valid())throw Error('Traffic lookup cancelled');var end=breaks[i],base=F.slice(m,start,end),p=await piece(base,clock,o);if(o.progress)o.progress(i+1,breaks.length,{cached:!!p.cached});

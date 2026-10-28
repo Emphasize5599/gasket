@@ -25,3 +25,19 @@ assert(R.check(row,scoped).ok,'OSM/website filters do not leak into government i
 const permitted={...osm,carAccess:true,nonCommercialOvernight:true,amenities:{showers:true}};assert(R.check(permitted,scoped).ok);assert(!R.check(permitted,{sources:{osm:{enabled:false}}}).ok);
 const nativeLinks=R.links('Sample',pts[0],scoped);assert.equal(new URL(nativeLinks[0].url).searchParams.get('d'),'25');assert(nativeLinks[1].url,'separate Campendium preferences do not inherit showers');assert.equal(R.links('Sample',pts[0],{sources:{rvparky:{enabled:false},campendium:{enabled:false}}}).length,0);
 assert.equal(R.osm({elements:[{type:'node',id:3,lat:34,lon:-92,tags:{highway:'rest_area','overnight:motorcar':'yes'}}]},1)[0].nonCommercialOvernight,true);
+
+// Per-source radius and slider maximum: default max 50 (website 100), RV Parky keeps its discrete radii.
+assert.equal(R.sourceFilter('osm',{sources:{}}).radiusMax,50);assert.equal(R.sourceFilter('osm',{sources:{osm:{radius:80}}}).radius,50,'radius never exceeds the slider maximum');assert.equal(R.sourceFilter('osm',{sources:{osm:{radius:80,radiusMax:120}}}).radius,80,'a raised maximum allows a wider radius');
+assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:30}}}).radius,50,'RV Parky snaps up to a radius it supports');assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:500,radiusMax:500}}}).radius,100,'RV Parky maximum is 100');assert.equal(R.sourceFilter('campendium',{sources:{}}).radius,5,'no radius is sent to Campendium');
+(async()=>{// a 25-mile OSM radius widens the cells asked and the sites kept; 4×4 cells (1°) share one request; a 429 cools the source down without remembering the failed cells
+ const far={type:'node',id:9,lat:34.1,lon:-92+20/(69*Math.cos(34.1*Math.PI/180)),tags:{highway:'rest_area',name:'Twenty miles off'}};
+ const wide={sources:{osm:{radius:25}}},narrow={sources:{osm:{radius:5}}};assert(R.cellsFor(m,25).length>R.cellsFor(m,5).length);
+ const memA=new Map(),asks=[];let mode='ok';const ioA={get:k=>memA.get(k),put:(k,v)=>memA.set(k,v),fetch:async url=>{if(url.includes('arcgis'))return {features:[]};asks.push(url);if(mode==='429')throw Error('HTTP 429');return {elements:[far]};}};
+ const near=await R.create(ioA).corridor(m,narrow,{});assert(!near.sites.some(x=>x.site.name==='Twenty miles off'),'5-mile radius excludes it');
+ const groups=new Set(R.cellsFor(m,25).map(c=>Math.floor(c.i/4)+'|'+Math.floor(c.j/4)));const before=asks.length;const got=await R.create(ioA).corridor(m,wide,{});
+ assert(got.sites.some(x=>x.site.name==='Twenty miles off'),'25-mile OSM radius keeps a site 20 miles away');assert(asks.length-before<=groups.size,'one request per one-degree group, not per cell');
+ const memB=new Map();mode='429';const ioB={...ioA,get:k=>memB.get(k),put:(k,v)=>memB.set(k,v)};const cool=await R.create(ioB).corridor(m,wide,{});assert(cool.failed>0);assert(memB.get('osm-cooldown').until>Date.now(),'429 starts a cooldown');assert(![...memB.keys()].some(k=>k.startsWith('osmcell|')),'failed cells are not remembered');
+ const n=asks.length;mode='ok';await R.create(ioB).corridor(m,wide,{});assert.equal(asks.length,n,'no requests during the cooldown');
+ memB.set('osm-cooldown',{until:Date.now()-1});const again=await R.create(ioB).corridor(m,wide,{});assert(asks.length>n,'asked again after the cooldown');assert(again.sites.some(x=>x.site.name==='Twenty miles off'));
+ const ctl={valid:()=>false};await assert.rejects(R.create(ioB).corridor(m,wide,ctl),/cancelled/);
+ console.log('Per-source rest radii, one-degree grouped OSM requests, cooldown and retry passed');})().catch(e=>{console.error(e);process.exitCode=1;});

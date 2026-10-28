@@ -78,6 +78,8 @@ on:
       - tests/resttiming.test.js
       - tests/stopclock.test.js
       - tests/restui.test.js
+      - tests/restplan.test.js
+      - tests/trafficflow-cache.test.js
       - tests/ridb.test.js
       - tests/ridb-ui.test.js
       - tests/propulsion.test.js

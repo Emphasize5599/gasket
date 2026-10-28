@@ -74,3 +74,8 @@ Linux CI installs pinned Chromium automatically; inspect workflow for environmen
 ## Release instructions
 
 User wants full implementation, merge to main and signed APK release. Finish WIP first; increment version beyond293 (likely294, but fetch current main to avoid collisions). Keep short release notes. Monitor build/regression failures and fix before claiming APK publication. User doesn't require waiting for a successful build to finish, but keep an eye on it and report accurate state. Include a short phone checklist. Never overwrite released APKs or expose keys.
+
+
+## Completed in 0.0.294
+
+The unfinished wiring above (casual add/remove, calculate wizard and colored sliders, restCommit changed-hazard review and rest waits in hazard timing) is implemented and tested; see CLAUDE.md 0.0.294 and CHANGELOG. Tasks ETA no longer shows a default guess.
