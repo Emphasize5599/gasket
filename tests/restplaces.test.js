@@ -13,7 +13,7 @@ const pts=[{lat:34,lng:-92},{lat:34.2,lng:-92}],mi=T.hav(...pts),m=T.buildRoute(
  const io2={get:k=>mem2.get(k),put:(k,v)=>mem2.set(k,v),fetch:async url=>{if(url.includes('arcgis'))return seed;osmAsk.push(url);if(fail){fail=false;throw Error('busy');}return {elements:[{type:'node',id:5,lat:m.pointAt(mi*.8).lat,lon:m.pointAt(mi*.8).lng+.01,tags:{highway:'rest_area',name:'Late rest'}},{type:'node',id:6,lat:m.pointAt(mi*.1).lat+.3,lon:m.pointAt(mi*.1).lng,tags:{highway:'rest_area',name:'Too far'}}]};}};
  const c1=await R.create(io2).corridor(m,{},{});assert.equal(c1.asked,cells.length);assert.equal(c1.failed,1);const ask1=osmAsk.length;const c2=await R.create(io2).corridor(m,{},{});assert.equal(osmAsk.length-ask1,1,'only the failed cell is asked again');const c3=await R.create(io2).corridor(m,{},{});assert.equal(c3.asked,0,'all cells remembered');
  assert(c3.sites.every((x,i,a)=>!i||a[i-1].d<=x.d),'route order');assert(!c3.sites.some(x=>x.site.name==='Too far'),'outside the distance');assert(c3.sites.some(x=>x.site.name==='Late rest'));
- assert.equal(R.defaults({radius:25}).radius,5,'old near-mile radius is replaced by a route distance');
+ assert.equal(R.defaults({radius:25}).radius,25,'custom route radius is retained');
  console.log('Rest inventories, restrictions, unknowns, filter-bearing links, persistent route-independent reuse and route-wide cell search passed');})().catch(e=>{console.error(e);process.exitCode=1;});
 
 assert.equal(R.direction('West Memphis Truck Parking (A) I-40'),null,'city name is not carriageway direction');assert.equal(R.direction('north'),'N');

@@ -65,8 +65,10 @@
  function read(body,clock,m){var best=null;parse(body,clock).forEach(function(p){var x=match(p,m);if(!best||x.coverage>best.coverage)best=x;});if(!best||best.coverage<.7){var e=Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');e.details=best&&best.match;throw e;}return best;}
  function mismatch(best){var e=Error('Google forecast follows different roads ('+Math.round((best?best.coverage:0)*100)+'% matched)');e.details=best&&best.match;e.mismatch=true;return e;}
  // minCover 0 keeps a partly matched profile: its unmatched stretches are already forecast:false gaps at the route's own time.
+ var projections=new Map();
+ async function projectShared(m,p,valid){var key=T.encodePolyline(m.pts)+'|'+m.totalMi+'|'+T.encodePolyline(p.pts),job=projections.get(key);if(!job){job=(async function(){var rows=[];for(var k=0;k<p.pts.length;k++){rows.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}return rows;})();projections.set(key,job);job.catch(function(){if(projections.get(key)===job)projections.delete(key);});while(projections.size>128)projections.delete(projections.keys().next().value);}return job;}
  async function readAsync(body,clock,m,valid,minCover){var sources=parse(body,clock),best=null;if(minCover==null)minCover=.7;
-  for(var i=0;i<sources.length;i++){var p=sources[i],projected=[];for(var k=0;k<p.pts.length;k++){if(k%128===0&&valid&&!valid())throw Error('Traffic lookup cancelled');projected.push(T.project(m,p.pts[k]));if(k%128===127)await new Promise(function(r){setTimeout(r,0);});}var x=match(p,m,projected);if(!best||x.coverage>best.coverage)best=x;}
+  for(var i=0;i<sources.length;i++){var p=sources[i],projected=await projectShared(m,p,valid);if(valid&&!valid())throw Error('Traffic lookup cancelled');var x=match(p,m,projected);if(!best||x.coverage>best.coverage)best=x;}
   if(!best||best.coverage<minCover||!(best.coverage>0))throw mismatch(best);return best;
  }
  // A stretch Google routes on other roads keeps the route's own time; the whole forecast fails only below MIN_COVER.
@@ -99,9 +101,9 @@
    // Each source profile evaluates its own roads at arrival. Split at destinations, stops and geographic cells to
    // reuse overlapping roads. Never spread a whole-trip delay over every mile.
    for(var d=100;d<m.totalMi;d+=100)breaks.push(d);breaks=breaks.concat(boundaries(m));breaks=Array.from(new Set(breaks.filter(function(d){return d>0&&d<=m.totalMi;}))).sort(function(a,b){return a-b;});
-   var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,seconds=0,low=0,high=0;
+   if(o.progress)o.progress(0,breaks.length);var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,seconds=0,low=0,high=0;
    for(var i=0;i<breaks.length;i++){
-    if(o.valid&&!o.valid())throw Error('Traffic lookup cancelled');var end=breaks[i],base=F.slice(m,start,end),p=await piece(base,clock,o);if(o.progress)o.progress(i,breaks.length);
+    if(o.valid&&!o.valid())throw Error('Traffic lookup cancelled');var end=breaks[i],base=F.slice(m,start,end),p=await piece(base,clock,o);if(o.progress)o.progress(i+1,breaks.length,{cached:!!p.cached});
     p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});if(!p.unmatched)oldest=Math.min(oldest,p.at);clock+=p.seconds*1000;seconds+=p.seconds;low+=p.low||p.seconds;high+=p.high||p.seconds;cached=cached&&p.cached;
     stops.forEach(function(s){if(Math.abs(s.d-end)<.0001)clock+=Math.max(0,s.seconds||0)*1000;});waits.forEach(function(w){if(Math.abs(w.d-end)<.0001)clock=Math.max(clock,w.at);});if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(o.strictWait&&clock>o.waitAt.at)throw Error('Return departure is before arrival');clock=Math.max(clock,o.waitAt.at);}start=end;
    }
@@ -109,7 +111,7 @@
    if(covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
    return {source:'Google Maps website forecast',estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
-  return {forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();}};
+  return {request:function(q,valid){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;});});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();}};
  }
  var api={MIN_COVER:MIN_COVER,unmatched:unmatched,wall:wall,query:query,parse:parse,match:match,read:read,readAsync:readAsync,reuse:reuse,boundaries:boundaries,create:create,hash:hash};if(node)module.exports=api;else root.GoogleTraffic=api;
 })(typeof window!=='undefined'?window:this);

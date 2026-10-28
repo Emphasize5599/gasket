@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   var tasks = new Map(), expanded = false, messageExpanded=false, primaryId='', frame = 0, completion = null, completionTimer = 0;
-  var doc = root.document;
+  var doc = root.document, etaTimer=null, etaRates=null;
   var notice = null, noticeTimer = 0;
   function dismissNotice(id){if(!notice||id&&notice.id!==id)return;notice=null;clearTimeout(noticeTimer);queue();}
   function showNotice(id,text){if(notice&&notice.id===id)return;clearTimeout(noticeTimer);var current=notice={id:id,text:String(text)};noticeTimer=setTimeout(function(){if(notice===current)dismissNotice(id);},10000);queue();}
@@ -22,13 +22,16 @@
   if(doc){root.addEventListener('resize',layout);new MutationObserver(function(changes){if(changes.some(function(c){return c.oldValue!==doc.body.className;}))queue();}).observe(doc.body,{attributes:true,attributeFilter:['class'],attributeOldValue:true});}
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function queue() { if (!doc || frame) return; frame = root.requestAnimationFrame(function () { frame = 0; draw(); }); }
+  function etaKey(t){return t.etaKey||String(t.id).replace(/\d+/g,'*');}
+  function rates(){if(etaRates)return etaRates;try{var r=root.__app&&root.__app.KV.get('traffic','task-durations');etaRates=r&&r.v||{};}catch(e){etaRates={};}return etaRates;}
+  function taskText(t){var text=t.cancelling?'Cancelling…':t.text||'Working…';if(t.cancelling||/remaining|\bleft\b|estimated total|about (?:a|\d)|~\d|waiting for.*verif|paused/i.test(text))return text;var elapsed=Math.max(0,Date.now()-t.started),prior=rates()[etaKey(t)],duration=Number.isFinite(t.estimateMs)?t.estimateMs:prior||30000,ms=Number.isFinite(t.frac)&&t.frac>0&&t.frac<1?Math.max(1000,elapsed/t.frac*(1-t.frac)):Math.max(1000,duration-elapsed);if(t.state==='pending')ms=duration;var sec=Math.max(1,Math.ceil(ms/1000));return text+' · ~'+(sec<90?sec+' sec':Math.ceil(sec/60)+' min')+(t.state==='pending'?' estimated':' remaining');}
   function upsert(id, value) {
     if (!tasks.has(id)) tasks.set(id, { id: id, started: Date.now() });
     Object.assign(tasks.get(id), value); completion = null; clearTimeout(completionTimer); queue();
     if(root.VisualDiagnostics)VisualDiagnostics.redraw('task_status_update');
   }
   function remove(id, done) {
-    tasks.delete(id);
+    var task=tasks.get(id);if(task&&task.state!=='pending'&&!task.cancelling&&Date.now()-task.started>100){var key=etaKey(task),r=rates(),elapsed=Date.now()-task.started;r[key]=r[key]?r[key]*.7+elapsed*.3:elapsed;try{if(root.__app)root.__app.KV.put('traffic','task-durations',r);}catch(e){}}tasks.delete(id);
     if (done && done.text && !tasks.size) { completion = done; clearTimeout(completionTimer); completionTimer = setTimeout(function(){completion=null;queue();}, 10000); }
     queue();
   }
@@ -47,7 +50,7 @@
   }
   function row(t, main) {
     var progress = Number.isFinite(t.frac) ? Math.max(0,Math.min(1,t.frac)) : null;
-    var text = t.cancelling ? 'Cancelling…' : t.text || 'Working…';
+    var text = taskText(t);
     if (main && (doc.body.classList.contains('trip-full') || doc.querySelector('#settings:not(.hidden),.sub-page')) && root.__app && root.__app.jobShort) text = root.__app.jobShort(text);
     return (main?messageButton():'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(text)+'</span><span class="pbar'+(progress==null?' indeterminate':'')+'" role="progressbar" aria-label="'+esc(text)+'" aria-valuemin="0" aria-valuemax="100"'+(progress==null?'':' aria-valuenow="'+Math.round(progress*100)+'"')+'><i style="width:'+(progress==null?'35':Math.round(progress*100))+'%"></i></span>'+
       '<span class="pct">'+(progress==null?'':Math.round(progress*100)+'%')+'</span>'+(t.cancel?'<button class="jb-x" data-cancel="'+esc(t.id)+'" aria-label="Cancel '+esc(text)+'"'+(t.cancelling?' disabled':'')+'>✕</button>':'');
@@ -55,12 +58,12 @@
   function paintRow(el,t,main) {
     if(t.state==='pending'){
       el.dataset.taskId=t.id;el.dataset.taskState='pending';el.dataset.fullText=t.text||'Pending';
-      el.innerHTML=(main?messageButton():'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(t.text)+'</span><span class="task-state">Pending</span>';return;
+      el.innerHTML=(main?messageButton():'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(taskText(t))+'</span><span class="task-state">Pending</span>';return;
     }
     el.dataset.taskState='running';
     if(el.dataset.taskId!==t.id||!el.querySelector('.pbar')||!!el.querySelector('.jb-x')!==!!t.cancel){el.innerHTML=row(t,main);el.dataset.taskId=t.id;}
     var progress=Number.isFinite(t.frac)?Math.max(0,Math.min(1,t.frac)):null;
-    var text=t.cancelling?'Cancelling…':t.text||'Working…';
+    var text=taskText(t);
     if(main&&(doc.body.classList.contains('trip-full')||doc.querySelector('#settings:not(.hidden),.sub-page'))&&root.__app&&root.__app.jobShort)text=root.__app.jobShort(text);
     var label=el.querySelector('.jb-t');if(label.textContent!==text)label.textContent=text;
     var bar=el.querySelector('.pbar');bar.classList.toggle('indeterminate',progress==null);bar.setAttribute('aria-label',text);
@@ -69,7 +72,7 @@
     el.querySelector('.pct').textContent=progress==null?'':Math.round(progress*100)+'%';
     var cancelButton=el.querySelector('.jb-x');if(cancelButton){cancelButton.disabled=!!t.cancelling;cancelButton.setAttribute('aria-label','Cancel '+text);}
     el.title=t.text||'Background task';
-    if(main)el.dataset.fullText=t.cancelling?'Cancelling…':t.text||'Working…';
+    if(main)el.dataset.fullText=taskText(t);
   }
   function draw() {
     if(root.VisualDiagnostics)VisualDiagnostics.redraw('task_draw');
@@ -86,7 +89,7 @@
       doc.addEventListener('click',function(e){if(messageExpanded&&!e.target.closest('.jb-expand,#taskMore,#taskList')){messageExpanded=false;layout();}},true);
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
-    var all=visible(), multiple=all.length>1;
+    var all=visible(), multiple=all.length>1;if(all.length&&!etaTimer)etaTimer=setInterval(queue,1000);else if(!all.length&&etaTimer){clearInterval(etaTimer);etaTimer=null;}
     var hint=doc.getElementById('taskNotice');if(!hint){hint=doc.createElement('div');hint.id='taskNotice';hint.className='task-notice hidden';hint.setAttribute('role','status');hint.setAttribute('aria-live','polite');hint.innerHTML='<span></span><button type="button" aria-label="Dismiss screen flicker tip">✕</button>';hub.insertBefore(hint,doc.getElementById('taskList'));hint.querySelector('button').onclick=function(){dismissNotice(hint.dataset.noticeId);};if(root.ResizeObserver)new ResizeObserver(layout).observe(hint);}
     hint.classList.toggle('hidden',!notice);if(notice){hint.dataset.noticeId=notice.id;var noticeText=hint.querySelector('span');if(noticeText.textContent!==notice.text)noticeText.textContent=notice.text;}
     var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};if(root.ResizeObserver)new ResizeObserver(layout).observe(marker);}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
