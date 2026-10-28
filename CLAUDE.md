@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.300 — release regression follow-up
+
+299 APK run40766128155 failed only ev-discovery-ui: expected selected -5 offset but got0. Local isolated test passes. Automatic graph callbacks queued before a graph finishes could restart completed work and reset the selected point. Revalidate graph key/cache at callback execution; completed cached graph is not recalculated by stale automatic callbacks. Explicit Refresh still works. Test waits until graph completion and asserts selected slider before applying. 299 source release exists, no APK assets overwritten; ship300 and watch full CI.
+
 ## 0.0.299 — repair casual rest insertion
 
 Owner20:15 log (phone297):20:14:17 normal Find stops started during addition,20:14:18 CT Darien NB inserted (leg3,+49min,1646stored),20:14:21 cached quick plan false,20:14:30 normal planner undefined[0] exception,20:14:44 whole136hour hazard review restarted. Root renderStep sees result=null and automatically starts findStops while restReplan runs; compareCapture treats rest destination as new journey and revokes review; routeGate overrides Calculate with failed-plan navigation. Pending rest wait used pre-fuel nominal arrival. Earlier log lacks stack, so exact undefined[0] site unknown; added stack/phase diagnostics.
