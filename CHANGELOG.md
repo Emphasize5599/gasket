@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.296 - 2026-10-28
+- Expanded setup: traffic readers, rest stops, trip defaults, hazard approval and data downloads. Traffic energy defaults on.
+- Shared discovery queue for approved routes and clearer planning failure explanations.
+- More patient spare lookup and improved NHTSA/HERE recovery.
+- Bug fixes.
+
 ## 0.0.295 - 2026-10-28
 - Faster screening of promising trips.
 - Independent rest-stop detour limit and clearer explanations when no stops qualify.

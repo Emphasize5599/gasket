@@ -6,6 +6,7 @@ async function read(text,value){let answer,now=0;const ctx={GasketSite:{result:(
  assert.equal((await read('2 Unrepaired Recalls Found\n11V123000\n12V456000','mock-vin')).campaigns.length,2);
  assert.equal((await read('0 Unrepaired Recalls Found','another-car')).open,undefined,'stale different-VIN result is not recorded');
  assert.equal((await read('You will see the message: "0 unrepaired recalls associated with this VIN"')).open,undefined,'help text is not a result');
+ assert.equal((await read('The foreign server responded with an error.')).code,'server');assert((await read('The foreign server responded with an error.')).retryable);
  assert.equal((await read('An unknown error occurred')).refused,true);
  assert.equal((await read('Verify you are human')).blocked,true);
  console.log('NHTSA reader: valid counts, stale-VIN/help rejection and explicit restriction/failure results passed');

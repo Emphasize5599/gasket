@@ -28,6 +28,7 @@ import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
+import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
@@ -526,6 +527,7 @@ public class MainActivity extends Activity {
         int completedReads = 0;
         boolean ready = false;
         boolean readerDispatched = false;
+        boolean nhtsaRecovered = false;
         final List<String> queue = new ArrayList<String>();
 
         int showReq = -1;   // set while the page is shown to the user by siteShow
@@ -544,6 +546,39 @@ public class MainActivity extends Activity {
 
         void finishRead(int reqId, String json) {
             if (readReq != reqId) return;
+            if ("nhtsa".equals(key) && !nhtsaRecovered && verifying != this && view != null && readCall != null) try {
+                JSONObject answer = new JSONObject(json);
+                int status = answer.optInt("status");
+                if (!answer.optBoolean("blocked") && !answer.optBoolean("refused") && (answer.optBoolean("retryable") || status >= 500 && status <= 599 || "network".equals(answer.optString("code")))) {
+                    nhtsaRecovered = true;
+                    final int retryReq = reqId; final String at = view.getUrl();
+                    if (at != null && at.startsWith("https://www.nhtsa.gov/recalls")) {
+                        WebStorage.getInstance().deleteOrigin("https://www.nhtsa.gov");
+                        WebStorage.getInstance().deleteOrigin("https://nhtsa.gov");
+                        final Runnable reload = new Runnable() { public void run() {
+                            if (readReq != retryReq || view == null || verifying == SiteWorker.this) return;
+                            view.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+                            view.evaluateJavascript("try{localStorage.clear();sessionStorage.clear();}catch(e){}", new android.webkit.ValueCallback<String>() { public void onReceiveValue(String ignored) {
+                                if (readReq == retryReq && view != null && verifying != SiteWorker.this) { ready = false; view.loadUrl(at); }
+                            }});
+                        }};
+                        java.util.List<String[]> deletes = new ArrayList<String[]>();
+                        CookieManager cm = CookieManager.getInstance();
+                        for (String host : new String[]{"https://www.nhtsa.gov", "https://nhtsa.gov"}) {
+                            String header = cm.getCookie(host);
+                            if (header != null) for (String part : header.split(";")) {
+                                String name = part.trim().split("=",2)[0]; if (name.length() == 0) continue;
+                                for (String domain : new String[]{"", "; Domain=nhtsa.gov", "; Domain=.nhtsa.gov"}) deletes.add(new String[]{host,name+"=; Max-Age=0; Path=/"+domain});
+                            }
+                        }
+                        final java.util.concurrent.atomic.AtomicInteger pending = new java.util.concurrent.atomic.AtomicInteger(deletes.size());
+                        if (deletes.isEmpty()) reload.run();
+                        else for (String[] cookie : deletes) cm.setCookie(cookie[0],cookie[1],new android.webkit.ValueCallback<Boolean>() { public void onReceiveValue(Boolean ignored) { if (pending.decrementAndGet()==0) reload.run(); }});
+                        js("window.FLog&&FLog.info('recalls','Retrying NHTSA once after resetting only NHTSA website data')");
+                        return;
+                    }
+                }
+            } catch (Exception ignored) { }
             if ("traffic".equals(key)) try {
                 JSONObject answer = new JSONObject(json); String check = answer.optString("verificationUrl", "");
                 if (answer.optBoolean("blocked") && check.startsWith("https://www.google.com/sorry/")) verificationUrl = check;
@@ -2452,7 +2487,7 @@ public class MainActivity extends Activity {
                         return;
                     }
                     if (w.readReq >= 0) w.finishRead(w.readReq, "{\"error\":\"Lookup replaced by another request\",\"code\":\"cancelled\"}");
-                    w.readReq = reqId; w.readerDispatched = false;
+                    w.readReq = reqId; w.readerDispatched = false; w.nhtsaRecovered = false;
                     w.leanGasResources = true; w.retriedGasResources = false; w.partialGasStores = null;
                     w.gasReadStarted = System.nanoTime() / 1000000L; w.gasRetryAt = 0; w.gasFirstStop = ""; w.gasFirstRows = 0;
                     try { w.gasRequestedGrade = new JSONObject(argsJson).optString("grade", "regular"); } catch (Exception ignored) { w.gasRequestedGrade = "regular"; }
@@ -2481,7 +2516,7 @@ public class MainActivity extends Activity {
                     };
                     boolean discoveryRead = false;
                     try { discoveryRead = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "restmaps".equals(key) ? 35000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : 90000);
+                    main.postDelayed(fw.readDeadline, "restmaps".equals(key) ? 35000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;

@@ -2188,3 +2188,6 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .key-secret input { width:100%; box-sizing:border-box; padding-right:48px; }
 .key-secret .key-eye { right:6px; width:40px; height:40px; }
 .key-eye .key-slash { position:absolute; }
+
+.key-secret.has-key-help .key-eye { right:40px; }
+.key-secret.has-key-help input { padding-right:84px; }

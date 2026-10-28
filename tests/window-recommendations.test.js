@@ -17,5 +17,6 @@ const assert=require('node:assert/strict'),W=require('../assets/web/timewindows'
  assert.equal(early.best.depart,start+3*h,'earliest start whose outgoing15 plus return5 fits20, rather than cheapest last hour');
  const normal=await W.recommend({legs:options,consent:earlyConsent,priority:'cost',estimate:r=>({cost:50-(r.depart-start)/h,minutes:30}),plan:async path=>({path,depart:path[0].depart,cost:100-(path[0].depart-start)/h,minutes:60,weather:0})});assert.equal(normal.best.depart,start+6*h,'off preserves cheapest-window behavior');
  options[0].forEach(r=>r.trafficDelay=null);assert.equal((await W.shortlist({legs:options,consent:earlyConsent,earlyEnabled:true,delayMinutes:20,estimate:()=>({cost:1,minutes:30})})).candidates.length,0,'missing forecasts are not zero traffic');
+ const missing=await W.shortlist({legs:options,consent:earlyConsent,earlyEnabled:true,delayMinutes:20,estimate:()=>({cost:1,minutes:30})});assert.equal(missing.blockedLeg,1);assert.equal(missing.rejected.forecast,7);assert.equal(missing.rejected.trafficDelay,undefined);
  console.log('Over 19,620 combinations reduced to bounded full plans; all hourly options ranked, UI yielding, fallback bounds, cost/time/weather order and grouped declines verified.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

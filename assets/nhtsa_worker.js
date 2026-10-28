@@ -40,6 +40,7 @@ async function (reqId, args) {
     }
     // NHTSA's own error under the VIN box: its lookup turned the request down (in a hidden window, usually its
     // invisible reCAPTCHA deciding nobody's there). Nothing is retried or worked around; the app offers the page instead.
+    if(/foreign server.*error|remote server.*error|service (?:is )?unavailable|internal server error|bad gateway|gateway timeout/i.test(txt)){send({error:'NHTSA server could not answer the lookup.',code:'server',retryable:true});return;}
     if (/an unknown error occurred/i.test(txt)) {
       send({ error: 'NHTSA couldn\'t check that VIN right now. Try again in a little while.', refused: true });
       return;

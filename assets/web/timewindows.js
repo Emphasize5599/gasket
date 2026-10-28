@@ -91,15 +91,16 @@
   function rankLabel(a,b,priority,early){var keys=['penalty'].concat(early?['depart']:[]).concat(priority==='time'?['minutes','weather','cost']:['cost','weather','minutes']);for(var i=0;i<keys.length;i++){var d=(a[keys[i]]||0)-(b[keys[i]]||0);if(Math.abs(d)>1e-7)return d;}return a.depart-b.depart;}
   function keepLabels(rows,limit,priority,early){rows.sort(function(a,b){return rankLabel(a,b,priority,early);});var keep=[],used=new Set(),routes=new Set();rows.forEach(function(r){var key=r.path.map(function(x){return x.routeKey;}).join('|');if(!routes.has(key)&&keep.length<limit){routes.add(key);used.add(r);keep.push(r);}});for(var i=0;i<rows.length&&keep.length<limit;i++)if(!used.has(rows[i]))keep.push(rows[i]);return keep.sort(function(a,b){return rankLabel(a,b,priority,early);});}
   async function shortlist(c){
-    var valid=c.valid||function(){return true;},previous=[],screened=0,total=c.legs.reduce(function(n,l){return n+l.filter(function(r){return c.consent.allowed(r);}).length;},0),slice=Date.now();
+    var valid=c.valid||function(){return true;},previous=[],screened=0,rejected={},byLeg=[],total=c.legs.reduce(function(n,l){return n+l.filter(function(r){return c.consent.allowed(r);}).length;},0),slice=Date.now();
     for(var i=0;i<c.legs.length;i++){
+      var counts={};byLeg.push(counts);function reject(why){counts[why]=(counts[why]||0)+1;rejected[why]=(rejected[why]||0)+1;}
       var next=[],rows=c.legs[i].filter(function(r){return c.consent.allowed(r);});
       for(var j=0;j<rows.length;j++){
         if(!valid())return null;if(Date.now()-slice>8){await new Promise(function(done){setTimeout(done,0);});slice=Date.now();}
         var row=rows[j],estimate=c.estimate(row),candidates=[],parents=i?previous:[{path:[],arrive:row.depart,depart:row.depart,cost:0,weather:0,penalty:0,delay:0}];
         for(var k=0;k<parents.length;k++){
-          if(k%256===0&&Date.now()-slice>8){await new Promise(function(done){setTimeout(done,0);});slice=Date.now();if(!valid())return null;}var p=parents[k];if(i&&row.depart+HOUR<=p.path[p.path.length-1].depart)continue;
-          var delay=(p.delay||0)+(Number.isFinite(row.trafficDelay)?row.trafficDelay:0);if(c.earlyEnabled&&(!Number.isFinite(row.trafficDelay)||delay>c.delayMinutes+1e-7))continue;var dw=c.departWindows&&c.departWindows[i],start=i?Math.max(p.arrive,row.depart):row.depart,arrival=start+estimate.minutes*60000,window=c.arrivals&&c.arrivals[i],wait=i?Math.max(0,start-p.arrive)/60000:0,allow=c.waits&&c.waits[i-1]||0;
+          if(k%256===0&&Date.now()-slice>8){await new Promise(function(done){setTimeout(done,0);});slice=Date.now();if(!valid())return null;}var p=parents[k];if(i&&row.depart+HOUR<=p.path[p.path.length-1].depart){reject('chronology');continue;}
+          var delay=(p.delay||0)+(Number.isFinite(row.trafficDelay)?row.trafficDelay:0);if(c.earlyEnabled&&!Number.isFinite(row.trafficDelay)){reject('forecast');continue;}if(c.earlyEnabled&&delay>c.delayMinutes+1e-7){reject('trafficDelay');continue;}var dw=c.departWindows&&c.departWindows[i],start=i?Math.max(p.arrive,row.depart):row.depart,arrival=start+estimate.minutes*60000,window=c.arrivals&&c.arrivals[i],wait=i?Math.max(0,start-p.arrive)/60000:0,allow=c.waits&&c.waits[i-1]||0;
           var penalty=p.penalty+Math.max(0,start-(row.depart+HOUR-1))/60000+(dw?Math.max(0,dw.start-start,start-dw.end)/60000:Math.max(0,wait-allow));if(window)penalty+=Math.max(0,window.start-arrival,arrival-window.end)/60000;
           candidates.push({path:p.path.concat([row]),depart:p.depart,arrive:arrival,cost:p.cost+estimate.cost,minutes:(arrival-p.depart)/60000,weather:p.weather+weatherScore(row.reading),penalty:penalty,delay:delay});
         }
@@ -107,7 +108,7 @@
       }
       previous=next;if(!previous.length)break;
     }
-    return {candidates:keepLabels(previous,c.limit||48,c.priority,c.earlyEnabled),screened:screened,total:total};
+    return {candidates:keepLabels(previous,c.limit||48,c.priority,c.earlyEnabled),screened:screened,total:total,rejected:rejected,byLeg:byLeg,blockedLeg:previous.length?null:byLeg.length};
   }
   async function recommend(c){
     var ranked=await shortlist(c);if(!ranked)return null;var valid=c.valid||function(){return true;},best=null,verified=[],checked=0,review=[],seenPlans=new Set();
@@ -118,7 +119,7 @@
     }
     verified.sort(function(a,b){return better(a,b,c.priority,c.earlyEnabled)?-1:better(b,a,c.priority,c.earlyEnabled)?1:0;});
     if(c.refine){best=null;for(var j=0;j<Math.min(2,verified.length)&&valid();j++){var refined=await c.refine(verified[j].path);if(refined&&!refined.review&&better(refined,best,c.priority,c.earlyEnabled))best=refined;else if(refined&&refined.review)review=review.concat(refined.review);}}
-    return valid()?{best:best,checked:checked,screened:ranked.screened,shortlisted:ranked.candidates.length,review:best?[]:review}:null;
+    return valid()?{best:best,checked:checked,screened:ranked.screened,shortlisted:ranked.candidates.length,screening:ranked,review:best?[]:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
   var api={HOUR:HOUR,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};

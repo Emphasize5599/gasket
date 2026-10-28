@@ -33,7 +33,7 @@
   var DEFAULTS = {
     googleTraffic: true,        // anonymous time-specific website forecasts
     hereTraffic: false,         // explicit opt-in; HERE tolls remain independent
-    trafficEnergy: false,        // experimental congestion/cabin energy estimates; explicit opt-in
+    trafficEnergy: true,         // congestion/cabin estimates on by default; may be disabled in Settings
     apiKey: '',
     blacklist: [],               // CITGO stations where Walmart+ didn't work: [{id, name, address, brand, lat, lng, t}]
     dieselRisk: {},              // station id -> true: count Walmart+ on CITGO diesel here anyway (your own risk)

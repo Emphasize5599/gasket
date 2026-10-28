@@ -21,6 +21,7 @@ async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url=''}){
  r=await run({kind:'tank',url,text:'Ask Brave '+q+' Thinking...'});assert(!r.gal,'the echoed question alone is no answer: '+JSON.stringify(r));
  r=await run({url:'https://search.brave.com/ask?q='+encodeURIComponent('What are all the trim levels of the 2024 Toyota Corolla Hybrid? Answer with "Trims:" then each trim name, separated by commas.'),text:'What are all the trim levels of the 2024 Toyota Corolla Hybrid? Answer with "Trims:" then each trim name, separated by commas. Trims: LE, SE, XLE'});
  assert.deepEqual(r,{text:'Trims: LE, SE, XLE',src:'ai'});
+ assert.equal((await run({kind:'spare',text:'Search results about a spare tire',ai:'Compact spare. Location: under the vehicle. AI-generated answer',aiAt:55000})).src,'ai');assert(run.elapsed>=55000,'spare lookup waits for a slow AI answer near one minute');
  // the spare question names every answer: its echo alone (still "Thinking") is never the answer, even in another case
  const sq='Does the 2020 Toyota Sienna LE gas come with a spare tire as standard? Only this version. Start with: Full-size spare, Compact spare, Repair kit, Run-flat tires, or No spare. Then Location: inside or under vehicle. Say if a spare is optional or can be added (size).';
  const surl='https://search.brave.com/ask?q='+encodeURIComponent(sq)+'&source=llmSuggest';

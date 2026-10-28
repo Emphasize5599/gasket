@@ -1388,6 +1388,7 @@
     stations = stations.filter(function (s) { return S.brands[s.brand]; });
     render();
     if (selectedId) openDetail(selectedId);
+    if(window.__onboardingSettings)return true;
     var firstSetup = !S.setupDone; S.setupDone = true; save();
     if (apply && !demo && ((S.apiKey && !hadKey) || (firstSetup && !lastFetch))) { var c = me || map.getCenter(); fetchAround(c.lat, c.lng); }
     return true;
@@ -1546,7 +1547,10 @@
   // Hint text under labels and explanatory paragraphs become a circled ? that shows the text when tapped.
   // Warnings (.msg, .note, .warn) and anything marked .keep stay on screen.
   function qBtn(html) { return '<button type="button" class="qi" aria-label="More info" data-q="' + encodeURIComponent(html) + '">?</button>'; }
+  function cleanNumber(input){if(!input||!input.matches||!input.matches('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"]'))return;var value=input.value,next=value.replace(/^([+-]?)\.(?=\d)/,'$10.');if(next!==value){var at=input.selectionStart;input.value=next;if(at!=null)try{input.setSelectionRange(at+1,at+1);}catch(e){}}}
+  ['input','change','blur'].forEach(function(type){document.addEventListener(type,function(e){cleanNumber(e.target);},true);});
   function qify(root) {
+    if(root&&root.querySelectorAll)root.querySelectorAll('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"]').forEach(cleanNumber);
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('.lbl > small, .nf > span > small, .sub-h > small, .switch-row small').forEach(function (sm) {
       if (sm.closest('.keep') || sm.dataset.qd || !sm.textContent.trim() || /&nbsp;/.test(sm.innerHTML) && !sm.textContent.trim()) return;
@@ -1554,6 +1558,7 @@
       sm.dataset.qd = 1;
       // a label over a text box: the (?) goes inside the box, on the right
       var box = host.closest('.nf, .field.col'), ctl = box && box.querySelector('input:not([type=checkbox]):not([type=range]):not([type=datetime-local]), textarea');
+      if(ctl&&ctl.closest('.key-secret')){var secret=ctl.closest('.key-secret');secret.classList.add('in-q','has-key-help');secret.insertAdjacentHTML('beforeend',qBtn(sm.innerHTML));sm.remove();return;}
       if (ctl && !ctl.closest('.in-q')) {
         var wrap = document.createElement('span'); wrap.className = 'in-q' + (ctl.tagName === 'TEXTAREA' ? ' ta' : '');
         ctl.parentNode.insertBefore(wrap, ctl); wrap.appendChild(ctl);

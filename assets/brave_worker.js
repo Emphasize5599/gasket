@@ -91,7 +91,7 @@ async function (reqId, args) {
     return { gal: pick.gal, text: pick.text, src: 'results' };
   };
   const bg = !!(args && args.bg);
-  const t0 = Date.now(), AI_WAIT = 25000, LIMIT = bg ? 36000 : 120000;   // Give both Search and Ask AI 25 seconds before falling back.
+  const t0 = Date.now(), AI_WAIT = spare ? 60000 : 25000, LIMIT = bg ? (spare ? 75000 : 36000) : 120000;   // Spare answers get a full minute before results fallback; other lookups retain 25 seconds.
   let last = '', same = 0;
   while (Date.now() - t0 < LIMIT) {
     const t = unask(text());

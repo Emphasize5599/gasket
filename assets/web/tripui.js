@@ -263,7 +263,7 @@ return conditions;
           planKey:function(path){return JSON.stringify(path.map(function(r,i){var d=windowDestination(i-1);return [r.routeKey,!i||d.leaveStart&&d.leaveEnd||(+d.wait||0)>0?r.depart:null];}));},
           plan:async function(path){var began=Date.now(),local=new Map(),r=await windowEvaluate(path,valid,local,false);LG.debug("timing","Candidate screened",{ms:Date.now()-began,ok:!!r,changed:local.size,legs:path.length});return r||local.size? r||{review:Array.from(local.values())}:null;},
           refine:async function(path){progress('Optimizing the best verified trips');return windowEvaluate(path,valid,new Map(),true);}});
-        if(!found||!valid())return;LG.info('timing','Hourly recommendations finished',{screened:found.screened,shortlisted:found.shortlisted,planned:found.checked,found:!!found.best,changedConditions:found.review.length,setAside:windowRejects});best=found.best;var reviews=Array.from(changed.values()).concat(found.review);if(reviews.length){progress('Review changed conditions after planned stops');if(!await windows.reviewChanges(reviews)){state.cancelled=true;return;}pass++;continue;}if(best){var finalConditions=await windowConditions(best.path,best.opts,best.plan,changed,valid);if(!finalConditions){var more=Array.from(changed.values());if(more.length&&!await windows.reviewChanges(more)){state.cancelled=true;return;}pass++;continue;}best.legs=finalConditions;}break;
+        if(!found||!valid())return;LG.info('timing','Hourly recommendations finished',{screened:found.screened,shortlisted:found.shortlisted,planned:found.checked,found:!!found.best,changedConditions:found.review.length,setAside:windowRejects,screeningRejected:found.screening.rejected,blockedLeg:found.screening.blockedLeg});if(!found.shortlisted){var why=found.screening.rejected||{},leg=found.screening.blockedLeg;throw Error("No approved hourly trip could be screened"+(leg?" through leg "+leg:"")+". "+(why.forecast?"Some approved roads have no matched traffic forecast. Retry Forecast traffic, choose another approved road, or turn off the earlier-departure traffic allowance. ":"")+(why.trafficDelay?"Some combinations exceed your "+cfg.delayMinutes+" min whole-trip traffic allowance. Increase it or choose different roads/hours. ":"")+(!why.forecast&&!why.trafficDelay?"Check that every leg has an approved route and compatible hours. ":"")+"Fuel reserve and toll eligibility were not evaluated.");}best=found.best;var reviews=Array.from(changed.values()).concat(found.review);if(reviews.length){progress('Review changed conditions after planned stops');if(!await windows.reviewChanges(reviews)){state.cancelled=true;return;}pass++;continue;}if(best){var finalConditions=await windowConditions(best.path,best.opts,best.plan,changed,valid);if(!finalConditions){var more=Array.from(changed.values());if(more.length&&!await windows.reviewChanges(more)){state.cancelled=true;return;}pass++;continue;}best.legs=finalConditions;}break;
       }
       if(!valid())return;if(!best)throw Error('No checked recommendation fits your windows, reserve, charging and toll constraints.'+(cfg.earlyEnabled?' Traffic must also fit your '+cfg.delayMinutes+' min allowance; try increasing it or disabling the earlier-departure option.':'')+windowRejectText()+' Adjust Parameters or widen your time windows.');
       var full=best.plan;if(!valid())return;
@@ -2144,7 +2144,7 @@ return conditions;
   }
   // tolls of no known amount, or an option nobody has said anything about (a route saved before tolls were checked:
   // HERE answers $0 for a toll-free road, so that's still one request, kept like any other)
-  function hereWanted(a) { var t = tollsOf(a); return (t.has === true && t.cost == null || t.has === null) && !a.tollFree && !a.hereTolls && !hereSeen.has(a); }
+  function hereWanted(a) { var t = tollsOf(a); return (t.has === true && t.cost == null || t.has === null) && !a.tollFree && (!a.hereTolls||!a.hereTolls.ok) && !hereSeen.has(a); }
   var hereSkip = null;
   async function hereTolls() {
     if (S.hereKey && window.Tolls && model && !tollPricing()) {
@@ -2165,15 +2165,17 @@ return conditions;
         if (pts.length < 2) continue;
         var key = 'v1|' + Tolls.sig(a) + '|' + [pts[0], pts[pts.length - 1]].map(function (p) { return p.lat.toFixed(3) + ',' + p.lng.toFixed(3); }).join('>') + '|' + vk;
         var o = A.KV.get('tolls', key, 30 * 24 * 3600e3);
-        if (o) { a.hereTolls = o.v; cached++; continue; }
+        if (o&&o.v&&o.v.ok) { a.hereTolls = o.v; cached++; continue; }
+        if(o)A.KV.put('tolls',key,null);
         asked++;
         var res = await call('fetchHere', S.hereKey, Tolls.hereQuery(pts, veh), S.hereMonthlyCap == null ? 2000 : Math.max(0, parseInt(S.hereMonthlyCap, 10) || 0));
+        if(res.error&&res.code!=='here_cap'&&!/\b(?:401|403|429)\b|key|quota|limit|credential/i.test(res.error)&&route===owner){LG.info('route','Retrying transient HERE toll failure');asked++;res=await call('fetchHere', S.hereKey,Tolls.hereQuery(pts,veh),S.hereMonthlyCap==null?2000:Math.max(0,parseInt(S.hereMonthlyCap,10)||0));}
         if (window.__apiCount) window.__apiCount();
         if (res.code === 'here_cap') { LG.warn('route', res.error); toastMsg(res.error); break; }
         var j = null; try { j = res.body ? JSON.parse(res.body) : null; } catch (e) { }
         if (res.error || !j) { a.hereTolls = { ok: false, why: res.error || 'unreadable', at: Date.now() }; LG.warn('route', 'HERE toll price failed', { via: a.description, error: res.error || 'unreadable', detail: j && (j.title || j.cause) }); continue; }
         a.hereTolls = Object.assign(Tolls.hereRead(j, mi), { at: Date.now() });
-        A.KV.put('tolls', key, a.hereTolls);
+        A.KV.put('tolls', key, a.hereTolls.ok?a.hereTolls:null);
       }
     } finally { hereBusy = false; end(); }
     LG.info('route', 'HERE toll prices', { options: todo.length, fromCache: cached, asked: asked, month: N.hereCallsThisMonth ? N.hereCallsThisMonth() : null,
@@ -2348,9 +2350,11 @@ return conditions;
     });
     var hereUsed = lists.some(function (l) { return l.some(function (a) { return tollsOf(a).src === 'here'; }); });
     if (hereUsed) rows += '<div class="lead small keep here-attr">Toll prices © HERE</div>';
-    return '<div class="card" id="tTolls"><h3>Tolls</h3><p class="lead small keep">Counted in the route comparisons. Type an amount to use your own (a toll pass, or no price found); leave it blank for the one shown.</p>' + rows + '</div>';
+    var failed=lists.some(function(l){return l.some(function(a){return a.hereTolls&&!a.hereTolls.ok;});});
+    return '<div class="card" id="tTolls"><h3>Tolls</h3><p class="lead small keep">Counted in the route comparisons. Type an amount to use your own (a toll pass, or no price found); leave it blank for the one shown.</p>' + rows + (failed&&S.hereKey?'<button class="btn tonal" id="tTollRetry">Retry missing HERE toll prices</button>':'') + '</div>';
   }
   function bindTolls() {
+    var retry=$('tTollRetry');if(retry)retry.onclick=function(){if(hereBusy)return;choiceLists().forEach(function(list){list.forEach(function(a){if(a.hereTolls&&!a.hereTolls.ok){delete a.hereTolls;hereSeen.delete(a);}});});hereTolls();};
     document.querySelectorAll('#tTolls .toll-in').forEach(function (inp) {
       inp.onchange = function () {
         var v = parseFloat(inp.value), all = S.trip.tollAmounts = Object.assign({}, S.trip.tollAmounts), was = all[inp.dataset.toll];
@@ -3861,7 +3865,8 @@ return conditions;
       var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
       var coverage=discovering?KeylessGas.discoveryPhases([okModels[0]],extraModels,T,P):null;
       if(coverage)LG.info('keyless','Shared primary/alternative coverage',{primaryAreas:coverage.primary.length,alternativeAreas:coverage.alternatives.length,reusedPrimaryAreas:coverage.alternatives.plan.reusedPrimaryAreas});
-      var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Primary routes · '+l);},firstDebug,force,altReplay,[okKs[0]],coverage&&coverage.primary);
+      var sharedAreas=coverage&&coverage.primary.concat(coverage.alternatives);if(sharedAreas)finishScanPending('alternatives');if(sharedAreas)sharedAreas.plan=Object.assign({},coverage.primary.plan,{cells:sharedAreas.length,alternativeAreas:coverage.alternatives.length});
+      var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Approved routes · '+l);},firstDebug,force,altReplay,[okKs[0]],sharedAreas);
       var rest;
       if(jobCancel||firstDebug.keyless&&firstDebug.keyless.blocked){rest={per:okModels.slice(1).map(function(){return {cands:[],notes:['Alternative search not started after cancellation or restriction.'],unpriced:0,stale:0,grade:gradeOf()};}),raw:{official:[],google:okModels.slice(1).map(function(){return [];})}};}
       else {

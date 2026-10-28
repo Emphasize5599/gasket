@@ -10,7 +10,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   const saved={route:{stops:[{label:'Start',lat:34,lng:-92},{label:'Middle',lat:34.7,lng:-92},{label:'End',lat:35.4,lng:-92}],legs},alts,altSel:0,altSure:true,trip:{from:'100 Main St, Testville',to:'200 Main St, Testville',fuel:A.S.trip.fuel,altCompare:true,altMinSave:.1,routeChoices:{}},stations:{official:[],google:[]},savedT:Date.now()};
   A.KV.put('trips','trip|choice-test',saved);A.KV.put('trips','index',[{id:'choice-test',title:'Synthetic two-leg route',t:saved.savedT,mi:100,n:3}]);
   window.__paid=0;A.N.search=A.N.computeRoute=A.N.routeSearch=()=>__paid++;
-  window.__phases=[];window.__scanGate=new Promise(r=>window.__continueScan=r);const discover=KeylessGas.discover;KeylessGas.discover=async function(...args){__phases.push('start');args[1](.1,'Discovering stations…');await __scanGate;const r=await discover(...args);__phases.push('end');return r;};
+  window.__phases=[];window.__scanGate=new Promise(r=>window.__continueScan=r);const discover=KeylessGas.discover;KeylessGas.discover=async function(...args){__phases.push('start');window.__firstScanAreas=window.__firstScanAreas||args[0].length;args[1](.1,'Discovering stations…');await __scanGate;const r=await discover(...args);__phases.push('end');return r;};
   A.N.siteRead=(id,key,json)=>{if(!/^gasweb/.test(key))return setTimeout(()=>onNativeResult(id,{stores:[]}),0);const a=JSON.parse(json),m=/@(-?[\d.]+),(-?[\d.]+)/.exec(a.url),lat=+m[1],lng=+m[2];setTimeout(()=>onNativeResult(id,{stores:[{id:'web:'+lat+':'+lng,name:'Exxon',brand:'exxon',lat,lng,address:'100 Test St',source:'Google Maps web',prices:{regular:{price:3.25}}}],detail:{exhausted:true}}),0);};
  });
  await p.click('#btnTrip');await p.click('[data-hist="choice-test"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__app.S.trip.departNow=true);
@@ -92,11 +92,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await p.evaluate(()=>{__app.S.trip.bufferFloor=10;});
  await p.evaluate(()=>{__trip.state().route.legs.forEach((l,i)=>l.alts.forEach((a,k)=>{if(k!==l.sel)__app.S.trip.routeChoices[RouteChoices.key(i,a)]={consider:true};}));window.__pipelineSearch=__trip.find('discover');});
- await p.waitForFunction(()=>__trip.state().busy&&Tasks.list().some(t=>t.id==='trip-pending:alternatives'));
+ await p.waitForFunction(()=>__trip.state().busy&&__phases.indexOf('start')>=0);
  await p.waitForSelector('#taskMore:not(.hidden)');await p.click('#taskMore');
- assert.match(await p.innerText('#jobBar'),/Primary routes/);assert.equal(await p.locator('#taskList [data-task-id="trip-draw"]').count(),0,'station progress has only one producer');
+ assert.match(await p.innerText('#jobBar'),/Approved routes/);assert.equal(await p.locator('#taskList [data-task-id="trip-draw"]').count(),0,'station progress has only one producer');
  assert.doesNotMatch(await p.innerText('#taskList'),/Discovering stations/,'primary discovery stays in its bar, never duplicated in the list');
- assert.match(await p.innerText('#taskList'),/Choosing stops/);assert.match(await p.innerText('#taskList'),/Searching approved alternative routes/);
+ assert.match(await p.innerText('#taskList'),/Choosing stops/);assert.doesNotMatch(await p.innerText('#taskList'),/Searching approved alternative routes/,'alternative cells are already in the shared active queue');assert(await p.evaluate(()=>{const legs=__trip.state().route.legs,primary=Trip.buildRoute(Trip.joinRoutes(legs.map(l=>l.alts[l.sel])),Garage.carModel()),others=legs.flatMap(l=>l.alts.filter((a,i)=>i!==l.sel).map(a=>Trip.buildRoute(a,Garage.carModel())));return __firstScanAreas===KeylessGas.discoveryAreas([primary].concat(others),Trip,__app.P).length;}),'one discovery queue includes approved primary and alternative cells');
  await p.evaluate(()=>__continueScan());await p.waitForFunction(()=>!__trip.state().busy);
  assert.equal(await p.evaluate(()=>Tasks.list().filter(t=>t.id.startsWith('trip-pending:')||t.id.startsWith('station-source:')).length),0,'completed pipeline leaves no pending or provider tasks');
  // A previously approved replacement does not lose this vehicle's current review.
