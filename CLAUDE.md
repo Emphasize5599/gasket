@@ -2,6 +2,8 @@
 
 ## 0.0.298 — standard hazard presentation for time windows
 
+Verified release: run40758953144/job123065348309 succeeded through full regressions, native compilation, signing, verification and arm64/universal APK publication.
+
 Hourly/road-interest approval is now a full map with a bottom details sheet (38% normally,82% expanded) and fixed Back/No/Yes footer. Reuses hzListHtml for standard hazard advice, vehicle/climate context, source headlines, AI classification/pending labels. Standard non-window hazards also show retained NWS headlines/AI classification. Shared hzPoints follows actual intermediate road geometry; hourly map uses RouteWx.COLORS, A/B pins and standard collision-placed hazard labels. Labels ignore callbacks after map disposal; resize observer cleans up on close. No consent/grouping/ranking or AI-model changes. Sources remain credited. Unknown hazard display guarded without changing consent data.
 
 Onboarding charger-download shortcut previously opened Trip while SettingsNav moved chargerSettings (including download button) to Connections. configure now resolves the target owning settings view before navigating. Regression asserts evDownload is visible, not merely in hidden DOM.
