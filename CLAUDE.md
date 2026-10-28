@@ -2,6 +2,8 @@
 
 ## 0.0.297 — fix release296 CI and rest management
 
+Verified: replacement run40755954714/job123054780783 succeeded. All177 pinned regressions passed in174.8s; native build and both APK signature/ABI/version/alignment checks passed. Direct arm64-v8a30.36MB and universal56.73MB assets published on v0.0.297.
+
 296 signed build40754757985 failed2/177: reader-resources Java harness extracts finishRead and lacked new NHTSA Android types/state; isolate recoverNhtsa immediately before finishRead and stub that Android-only boundary in the gas-specific harness. No gas recovery test weakened. CI must still compile actual MainActivity. restui failed waiting for a candidate directory after all sites filtered: added rests need independent management. Added Manage added rest stops button even with empty inventory; test removes closed added rest via that entry. Targeted restui/nhtsa-reader/resource checks pass locally (local lacks JDK, native harness enforced CI). Local duplicate full run stopped once CI identified exact failures; Windows known VIN fixture and vehicle-catalog timing also failed locally but both passed pinned CI. Do not weaken those tests.
 
 ## 0.0.296 — lookup recovery, shared coverage and onboarding
