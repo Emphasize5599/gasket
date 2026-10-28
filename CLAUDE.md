@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.298 — standard hazard presentation for time windows
+
+Hourly/road-interest approval is now a full map with a bottom details sheet (38% normally,82% expanded) and fixed Back/No/Yes footer. Reuses hzListHtml for standard hazard advice, vehicle/climate context, source headlines, AI classification/pending labels. Standard non-window hazards also show retained NWS headlines/AI classification. Shared hzPoints follows actual intermediate road geometry; hourly map uses RouteWx.COLORS, A/B pins and standard collision-placed hazard labels. Labels ignore callbacks after map disposal; resize observer cleans up on close. No consent/grouping/ranking or AI-model changes. Sources remain credited. Unknown hazard display guarded without changing consent data.
+
+Onboarding charger-download shortcut previously opened Trip while SettingsNav moved chargerSettings (including download button) to Connections. configure now resolves the target owning settings view before navigating. Regression asserts evDownload is visible, not merely in hidden DOM.
+
+Focused windowplanning-ui now includes a visual all-hazard-type fixture at320px, checking all map colors, majority map space, shared detail cards/escaped special alert headline/AI label, expansion, anchored decision buttons and close/back cleanup. Normal depart/arrive/grouped consent/decline tests still pass. Also pass onboarding-preferences, hourly-approval-ui, tile-hazards, hazard-prefetch, routewx and ui-flow. Native unchanged; monitor CI/release. Phone: hourly route approval map/colors/details/expander and footer; special alerts; standard Hazards unchanged; onboarding charger download shortcut visible under Connections.
+
 ## 0.0.297 — fix release296 CI and rest management
 
 Verified: replacement run40755954714/job123054780783 succeeded. All177 pinned regressions passed in174.8s; native build and both APK signature/ABI/version/alignment checks passed. Direct arm64-v8a30.36MB and universal56.73MB assets published on v0.0.297.

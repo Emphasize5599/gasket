@@ -131,7 +131,17 @@
     canAuto:function(row){return !RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]).tires.length;},
     reviewed:function(s){windowReviewComplete(s);step=ST_COMPARE;renderStep();},
     confirm:async function(row){var risk=RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]);return !risk.tires.length||await A.confirmDel({always:true,title:'Low tread in these conditions',body:hzRiskHtml({risk:risk},row.raw,row.leg),no:'Choose another time',action:'I understand',goClass:'primary'});},
-    map:function(el,r,reading){var mini=L.map(el,{zoomControl:false,attributionControl:true,scrollWheelZoom:false});L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'osm-tiles',attribution:'© OpenStreetMap'}).addTo(mini);var pts=r.model.pts.map(function(p){return [p.lat,p.lng];});L.polyline(pts,{color:'#7fb0ff',weight:5}).addTo(mini);(reading&&reading.hazards||[]).forEach(function(h){var a=r.model.pointAt(h.fromMi||0),b=r.model.pointAt(h.toMi||r.model.totalMi);L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:'#ffb35c',weight:7}).addTo(mini);});if(pts.length)mini.fitBounds(L.latLngBounds(pts),{padding:[12,12]});return mini;}
+    conditions:function(reading){return hzListHtml(reading.hazards||[],reading.stats||{})+'<p class="wx-src">Weather and warnings: National Weather Service · Weather and air: Open-Meteo / Copernicus</p>';},
+    map:function(el,r,reading){
+      var mini=L.map(el,{zoomControl:false,attributionControl:true,scrollWheelZoom:false}),pts=r.model.pts.map(function(p){return [p.lat,p.lng];}),tips=[],leaders=L.layerGroup().addTo(mini);
+      mini.attributionControl.setPosition('topright');L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'osm-tiles',attribution:'© OpenStreetMap'}).addTo(mini);
+      L.polyline(pts,{color:'#fff',weight:10,interactive:false}).addTo(mini);L.polyline(pts,{color:'#1a73e8',weight:6,interactive:false}).addTo(mini);
+      (reading&&reading.hazards||[]).forEach(function(h){var known=RouteWx.KINDS[h.kind],color=RouteWx.COLORS[h.kind]||RouteWx.COLORS.alert,seg=hzPoints(r.model,h.fromMi,h.toMi);if(seg.length<2)return;L.polyline(seg,{color:color,weight:6,lineCap:'butt',interactive:false}).addTo(mini);var cands=[.5,.3,.7,.15,.85].map(function(f){var p=seg[Math.min(seg.length-1,Math.floor(f*(seg.length-1)))];return L.latLng(p[0],p[1]);}),tip=L.tooltip({permanent:true,direction:'top',offset:[0,-6],className:'hzbub',interactive:false,opacity:1}).setLatLng(cands[0]).setContent('<i style="background:'+color+'"></i>'+(known?known[2]:'⚠')+'<span>'+esc(known?RouteWx.title(h):h.event||h.kind)+'</span>').addTo(mini);tips.push({k:tips.length,cands:cands,tip:tip,color:color});});
+      if(pts.length){[pts[0],pts[pts.length-1]].forEach(function(p,i){L.marker(p,{icon:L.divIcon({className:'pin',html:'<div class="tend">'+(i?'B':'A')+'</div>',iconSize:null}),interactive:false}).addTo(mini);});}
+      function sheetHeight(){var sheet=el.parentElement.querySelector('.time-review-sheet');return sheet?sheet.getBoundingClientRect().height:0;}
+      function labels(){if(!el.isConnected||!mini._loaded||!mini._mapPane||!mini._mapPane.isConnected)return;var size=mini.getSize(),h=sheetHeight();placeLabels(mini,tips,-1,[{pts:pts}],[{x:0,y:size.y-h,w:size.x,h:h}],{leaders:leaders});}
+      mini.reviewResize=function(){if(!el.isConnected)return;mini.invalidateSize();if(pts.length)mini.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[24,28],paddingBottomRight:[24,sheetHeight()+24],animate:false});setTimeout(labels,30);};mini.on('zoomend moveend',labels);mini.reviewResize();return mini;
+    }
   });
   function windowLocal(t){var d=new Date(t);return new Date(t-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
   function windowStateKey(s){var c=S.cars.find(function(c){return c.id===s.id;}),lists=s.route&&s.route.legs?s.route.legs.map(function(l){return l.alts;}):[s.alts||[]];return VehicleCompare.key([VehicleCompare.profile(c),s.speed,s.trip.windowPlan,s.trip.trafficForecast,s.trip.avoid,planningPriority(c),c&&c.tollPreference,s.trip.returnTrip,s.trip.backAuto,lists.map(function(list){return list.map(function(a){return a.polyline;});})]);}
@@ -4175,6 +4185,7 @@ return conditions;
     var pending=call('fetchJson', url).then(function (r) { if (r && r.body) {var valid=true;if(/weather\.gov\/zones\//.test(url))try{var g=JSON.parse(r.body).geometry;valid=!!(g&&/^(?:Multi)?Polygon$/.test(g.type)&&g.coordinates&&g.coordinates.length);}catch(e){valid=false;}if(valid)A.KV.put('wx', url, r);} return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
   }
   function wxWhen(a, b) {
+    if(!Number.isFinite(a)||!Number.isFinite(b))return 'Forecast time unavailable';
     var day = function (t) { return new Date(t).toDateString(); }, multi = day(a) !== day(Date.now()) || day(b) !== day(a);
     var f = function (t, wd) { return new Date(t).toLocaleString([], wd ? { weekday: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' }); };
     return b - a < 10 * 60e3 ? 'around ' + f(a, multi) : f(a, multi) + '–' + f(b, day(b) !== day(a));
@@ -4328,7 +4339,11 @@ return conditions;
   function hzGoLeg(j) { collectSafe(); hzLeg = j; hzFitKey = null; userMoved = false; renderHz(); drawHaz(); hzPill(); tpBody().scrollTop = 0; hzLoadLeg(j); }
   /** The part of a route between two miles, as map points. */
   function hzSlice(a, from, to) {
-    var m = hzModel(a), out = [], p0 = m.pointAt(from), last = -1;
+    return hzPoints(hzModel(a),from,to);
+  }
+  function hzPoints(m,from,to){
+    from=Math.max(0,Math.min(m.totalMi,Number.isFinite(from)?from:0));to=Math.max(from,Math.min(m.totalMi,Number.isFinite(to)?to:m.totalMi));
+    var out = [], p0 = m.pointAt(from), last = -1;
     out.push([p0.lat, p0.lng]);
     for (var k = 0; k < m.pts.length; k++) { var c = m.cum[k]; if (c <= from || c >= to) continue; if (c - last >= 0.1) { out.push([m.pts[k].lat, m.pts[k].lng]); last = c; } }
     var p1 = m.pointAt(to); out.push([p1.lat, p1.lng]);
@@ -4342,8 +4357,10 @@ return conditions;
     var ctx = { tread: depths.length?Math.min.apply(null,depths):e ? e.depth : null, tireType: tt.type, towing: profile.towing,acUnavailable:profile.acUnavailable }, h = '';
     if (!xs.length) h += '<p class="lead small keep">' + (st.weather ? 'Nothing to watch for: no storms, rain, snow, ice, fog, strong wind, extreme heat or cold, warnings or bad air forecast where and when you\'ll be.' : 'No forecast reaches that far ahead yet.') + '</p>';
     h += xs.map(function (x) {
+      x=Object.assign({peak:{},events:[]},x);if(!RouteWx.KINDS[x.kind])x=Object.assign({},x,{kind:'alert',label:x.event||x.kind,events:[x.event||x.kind]});
       var sit = RouteWx.KINDS[x.kind][1], pr = sit && window.Climate && Climate.presetFor ? Climate.presetFor(c, sit, new Date(x.from)) : null;
       var lines = RouteWx.advice(x, Object.assign({ preset: pr }, ctx));
+      if(x.src==='nws'&&x.headline)lines.unshift(x.headline);if(x.by==='ai')lines.unshift('On-device AI: '+RouteWx.title(x)+'.');
       var where = (x.toMi - x.fromMi < 1 ? 'around mile ' + Math.round(x.fromMi) : 'miles ' + Math.round(x.fromMi) + '–' + Math.round(x.toMi)) + ' · ' + wxWhen(x.from, x.to);
       var notice = x.src === 'nws' && x.event !== RouteWx.title(x) ? '<small class="wx-ev">' + esc(x.event) + '</small>' : '';
       return '<details class="wx-x lv' + x.level + '"' + (x.level >= 2 ? ' open' : '') + '><summary><span class="wx-ic" style="--hz:' + RouteWx.COLORS[x.kind] + '">' + RouteWx.KINDS[x.kind][2] + '</span><span class="wx-t"><b>' + esc(RouteWx.title(x)) + '</b>' + (x.aiPending ? '<small class="wx-ai">AI still summarizing…</small>' : '') + notice + '<small>' + esc(where) + '</small></span></summary>' +
