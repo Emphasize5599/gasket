@@ -6,6 +6,8 @@ Synced main 6c722b3 (286); prior RIDB/traffic/rest implementation already shippe
 
 Conservative regular hours support: 24/7, weekdays/ranges/lists, split shifts, overnight and off. Holiday/seasonal/prose/ambiguous override rules unknown. Check whole stay including DST changes, not just arrival; filter known-closed stays BEFORE traffic forecasts and recheck after the itinerary rebuild. Permission confirmation remains required and is separate from business hours. Missing hours do not become an invented 24-hour schedule. Local dates/times also used for rest departure options and final-destination arrival. Optional manual parking closure is still explicitly phone-time input.
 
+Release verified: signed APK workflow40608418799 succeeded at source2b5122f; full regression suite, Android compile/signing and APK verification passed. Both arm64-v8a and universal direct APKs published for v0.0.287. Targeted local rest/timing/trip/window/legal checks pass, including320/448px and130% text. Rest UI timezone assertion accepts CDT or CST because that fixture uses the current date.
+
 Phone checks: rest list on a timezone-crossing/overnight trip; timezone labels/date changes; open/closed site and stay crossing closing time; accepted stop still passes updated schedule or requests another time. Unknown/unavailable timezone must say so.
 
 ## 0.0.286 — early arrivals in flexible-time planning
