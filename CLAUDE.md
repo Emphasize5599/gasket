@@ -10,6 +10,8 @@ Hours: RestPlaces.stayHours uses explicit parking hours, otherwise ordinary rest
 
 Live research: exact Commons photo metadata endpoint returned Old US67 Rest Area JPEG4928px wide, CC BY-SA3.0 and matching coordinates. Geographic search twice returned cirrussearch-too-busy-error; direct-file fallback verified independently. No unlicensed official photos embedded. Tests cover whole-trip cumulative allowance (15out+5return fits20), missing forecast exclusion, setting persistence, complete numeric Google forecast→earlier-hour plan, place-page attribution/flow/phone widths, regular-hour revalidation, source failures and persistent reuse. Local release suite171/172 (180s): only the previously established Windows Edge tiny-QR vinscan-ui timeout failed; no test weakened. Final focused rest/place/window/form checks pass after cancellation/UI polish. Pinned Chromium CI remains the release gate.
 
+Release288 verified: Build signed APK workflow40619296137 succeeded at sourcef2684c6. Full pinned-Chromium release regressions, native checks, signing and APK verification passed; arm64-v8a and universal APKs published on v0.0.288. No released assets overwritten.
+
 Phone checks: Routes → time windows → enable Leave earlier…20min; compare with it off on a2–8PM congested departure window. Verify earlier candidate, total return delay and arrival/hazard constraints. Stops → green site: scene/photo/source credits/local arrival; compare rest times, permission, accept and retime; unavailable photos keep the scene and website link.
 
 ## 0.0.287 — rest-site local arrivals and hours
