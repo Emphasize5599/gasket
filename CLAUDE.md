@@ -2,7 +2,7 @@
 
 ## 0.0.291 — preserve gas guard while enabling rest reader
 
-290 CI40628032967 included native wiring and passed RestMaps, but keyless-parallel’s existing source-shape guard expected `if (isGasWorker(key)) ws.setBlockNetworkImage(true)` exactly. Combined OR condition was behaviorally correct but failed that check. Retain the original gas-only statement and add an independent restmaps statement; no test weakened. All other290 regressions passed. Local keyless-parallel/RestMaps pass after correction; replacement291 preserves prior tags and published assets. Final signed CI pending.
+290 CI40628032967 included native wiring and passed RestMaps, but keyless-parallel’s existing source-shape guard expected `if (isGasWorker(key)) ws.setBlockNetworkImage(true)` exactly. Combined OR condition was behaviorally correct but failed that check. Retain the original gas-only statement and add an independent restmaps statement; no test weakened. All other290 regressions passed. Local keyless-parallel/RestMaps pass after correction; replacement291 preserves prior tags and published assets. Release291 verified: signed APK workflow40628546992 succeeded at source8f23786. All174 release regressions, native compile/signing and APK verification passed; arm64-v8a and universal APKs published. Prior289/290tags were preserved without APK assets; no released asset overwritten. Phone checks are in the289 section below.
 
 ## 0.0.290 — include native rest Maps integration
 
