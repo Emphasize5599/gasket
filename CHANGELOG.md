@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.295 - 2026-10-28
+- Faster screening of promising trips.
+- Independent rest-stop detour limit and clearer explanations when no stops qualify.
+- Show/hide buttons for API keys in Settings and onboarding.
+- Bug fixes.
+
 ## 0.0.294 - 2026-10-28
 - Add rest stops casually: minimum rest and parking permission only, a rough added time, no trip restart; fuel stops update in the background. Remove a rest the same way.
 - Calculate rest timing: choose each departure on a traffic-colored slider (green free flow, yellow within your tolerance, red beyond it but still choosable, gray unknown), then review all rests together. Only new or changed road conditions are asked about afterwards.

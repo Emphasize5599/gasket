@@ -1244,6 +1244,7 @@
     h += '<p class="lead" style="margin-top:16px;font-size:12.5px">Prices: Google Maps (crowd/partner-sourced, not guaranteed). Discount rules as published by Walmart and CITGO, Oct 2026 — the Walmart app\'s Gas Savings page is the final word on which locations participate.</p>';
     var pg = $('settings'),oldBody=pg.querySelector('.settings-body');if(oldBody&&oldBody._hint)oldBody._hint._dispose();pg.classList.add('settings-layout');pg.innerHTML='<header class="settings-bar">'+heading+'</header><div class="settings-body">'+h+'</div>'; pg.classList.remove('hidden');pg.querySelector('.settings-body').scrollTop=0;scrollHint(pg.querySelector('.settings-body'));
     pg.querySelectorAll('a[data-url]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); N.openUrl(a.dataset.url); }; });
+    if(window.KeySetup)KeySetup.reveal(pg);
     $('sDone').onclick = function () { closeSettings(true); };
     if (window.Gemma) Gemma.bindSettings();
     WorkerSettings.bind({S:S,N:N});

@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.295 — planning overhead and independent rest limits
+
+Synced 51eea26. Owner 18:20 log: traffic allowance done17:44:52, promising trips done17:54:42; repeat17:57:50–18:07:53 (16 plans), hourly weather2–10s. windowEvaluate used full plans for preliminary candidates (`o.lite=!!optimize`), computing baseline/alternative-stop explanations needlessly. Now candidates and parameter sweeps use lite; finalists still get full plans and all existing timeline/hazard checks. TimeWindows.recommend selects only fully refined results, even if worse than the preliminary score; failed refinements cannot return preliminary winners. Candidate elapsed times now logged without locations. No on-phone speedup measurement yet.
+
+Rest exclusions reused automatically optimized gas detour3min (not7.5min divided). Owner explicitly requested separate rest limit. Settings → Rest stops now has global restDetourMin, default30, range1–180min total access driving; independent of trip fuel detour. Included in rest search invalidation/access cache. Empty tile reports detour/closed/unverified access and incomplete sources. Backup had7.5min at export but log exclusions3min earlier; OSM timeout also occurred. Do not conflate scan radius and driving detour. Shared KeySetup.reveal adds eye controls to all five keys in onboarding and Settings, masked initially, accessible pressed state, no value/save/log changes.
+
+Validation: targeted timewindows/window-recommendations/trip/planning-policy and browser onboarding-connections/restui/windowplanning-ui; tests assert lite candidate/full final, refinement failure rejection, gas limit.01 does not exclude rests, separate rest preference persistence, empty reasons/incomplete inventory, keys toggle at320/448px. Phone: rerun NYC promising trips and compare timing; vary fuel detour independently of Settings rest limit; inspect empty explanations and show/hide every key. No private log/backup committed.
+
 ## 0.0.294 — casual rests, rest timing wizard, cache fixes
 
 Finished Codex's WIP checkpoint a1c0e26 (origin/wip/rest-planning-handoff-20261028; requirements/log findings in docs/CLAUDE_REST_HANDOFF_2026-10-28.md, docs/REST_PLANNING_294.md). Owner's 16:27 log/backup: 226 stored cells but only 20 with coverage; areas whose result-page commands returned 146–311 stations but whose visible feed never rendered ended `error` (gasweb `loaded` stayed false), so later trips re-read them. Fixed (`loaded=true` per command page); keylessgas asserts `K.searched(commandNoFeed)==='end'`.

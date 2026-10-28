@@ -2183,3 +2183,8 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 .rest-legend .z-green::before { background: var(--save); } .rest-legend .z-yellow::before { background: #e0a800; } .rest-legend .z-red::before { background: #c62828; } .rest-legend .z-unknown::before { background: #9e9e9e; }
 .rest-zone { font-weight: 650; } .rest-zone-red { color: #c62828; } .rest-zone-green { color: var(--save); } .rest-zone-unknown { color: var(--ink-2); }
+
+.key-secret { display:block; position:relative; min-width:0; width:100%; }
+.key-secret input { width:100%; box-sizing:border-box; padding-right:48px; }
+.key-secret .key-eye { right:6px; width:40px; height:40px; }
+.key-eye .key-slash { position:absolute; }
