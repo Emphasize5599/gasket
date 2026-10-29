@@ -54,14 +54,15 @@ public class ReaderTest {
   JSONObject(){} JSONObject(String raw){data=answers.get(raw).data;}
   JSONArray optJSONArray(String k){return (JSONArray)data.get(k);} JSONObject optJSONObject(String k){return (JSONObject)data.get(k);}
   String optString(String k){return optString(k,"");}String optString(String k,String d){return String.valueOf(data.getOrDefault(k,d));} boolean optBoolean(String k){return Boolean.TRUE.equals(data.get(k));}double optDouble(String k,double d){Object x=data.get(k);return x instanceof Number?((Number)x).doubleValue():d;}
+  boolean isNull(String k){return data.get(k)==null;}
   void put(String k,Object v){data.put(k,v);} public String toString(){return "result";}
  }
- static class View {String at="https://www.google.com/maps/search/gas+stations/@35,-91,13z";int loads=0;String getUrl(){return at;}void stopLoading(){}void loadUrl(String u){at=u;loads++;}void clearHistory(){}void destroy(){}}
+ static class View {String at="https://www.google.com/maps/search/gas+stations/@35,-91,13z";int loads=0;String getUrl(){return at;}void stopLoading(){}void loadUrl(String u){at=u;loads++;}void clearHistory(){}void destroy(){}void evaluateJavascript(String s,Object callback){}}
  static class Main {int removed=0;void removeCallbacks(Runnable r){removed++;}void post(Runnable r){r.run();}}
  static class Root {void removeView(View v){}}
  class SiteWorker {
   int readReq=1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
-  long gasReadStarted=System.nanoTime()/1000000L,gasRetryAt;String gasFirstStop="";int gasFirstRows;AtomicIntegerArray omittedGasResources=new AtomicIntegerArray(4);View view=new View();Runnable readDeadline=()->{};JSONArray partialGasStores=null;String gasRequestedGrade="regular",verificationUrl=null;
+  long gasReadStarted=System.nanoTime()/1000000L,gasRetryAt;String gasFirstStop="";int gasFirstRows;AtomicIntegerArray omittedGasResources=new AtomicIntegerArray(4);View view=new View();Runnable readDeadline=()->{};JSONArray partialGasStores=null;String gasRequestedGrade="regular",verificationUrl=null,gasTargetUrl=null;boolean gasCommandReady=false,gasCommandReusing=false;
   // Android-only NHTSA storage recovery is outside this gas-reader harness.
   boolean recoverNhtsa(int reqId,String json){return false;}
   ${finish}
@@ -69,6 +70,13 @@ public class ReaderTest {
  SiteWorker verifying=null;Main main=new Main();Root root=new Root();int gasReaderRecycles=0,replies=0;Map<String,SiteWorker> workers=new HashMap<>();
  boolean isGasWorker(String k){return k.equals("gasweb");}String q(String s){return s;}void js(String s){replies++;}
  static JSONObject answer(String key,String code,int count,boolean blocked,boolean cancelled){JSONObject a=new JSONObject();a.put("stores",new JSONArray(count));a.put("code",code);a.put("blocked",blocked);a.put("cancelled",cancelled);JSONObject.answers.put(key,a);return a;}
+ static void laneWarmTests(ReaderTest app){
+  SiteWorker lane=app.new SiteWorker();JSONObject a=answer("warm","limited",2,false,false),d=new JSONObject();d.put("commandReusable",true);a.put("detail",d);lane.finishRead(1,"warm");check(lane.view.loads==0&&lane.gasCommandReady&&lane.ready&&app.replies==1,"successful command page was not retained");
+  lane.readReq=2;lane.readCall="reader";lane.readDeadline=()->{};Runnable deadline=lane.readDeadline;lane.gasCommandReusing=true;lane.gasTargetUrl="https://www.google.com/maps/search/gas+stations/@36,-92,12z";answer("reload","command_reload",0,false,false);lane.finishRead(2,"reload");check(lane.view.at.equals(lane.gasTargetUrl)&&lane.readReq==2&&lane.readDeadline==deadline&&app.replies==1&&!lane.gasCommandReusing,"command fallback lost target, request or deadline");
+  lane.finishRead(2,"warm");check(app.replies==2&&lane.gasCommandReady,"reloaded command did not settle");
+  ReaderTest cycle=new ReaderTest();lane=cycle.new SiteWorker();cycle.workers.put(lane.key,lane);lane.completedReads=15;lane.finishRead(1,"warm");check(!lane.gasCommandReady&&lane.view==null&&cycle.gasReaderRecycles==1,"sixteenth command must recycle the reader");
+  ReaderTest blocked=new ReaderTest();lane=blocked.new SiteWorker();lane.gasCommandReady=true;lane.gasCommandReusing=true;answer("warm-bot","blocked",0,true,false);lane.finishRead(1,"warm-bot");check(blocked.replies==1&&!lane.gasCommandReady&&lane.view.loads==1,"reused command restriction must clear the page and report once");
+ }
  public static void main(String[] args)throws Exception {
   ${cases.map(([url,method,expected])=>`{URI u=new URI(${JSON.stringify(url)});String h=u.getHost().toLowerCase(Locale.US),p=u.getPath().toLowerCase(Locale.US);check(GasReaderResources.omission(h,p,${JSON.stringify(method)},false,false,true)==${expected},"policy mismatch");check(GasReaderResources.omission(h,p,${JSON.stringify(method)},true,false,true)==0,"main frame filtered");check(GasReaderResources.omission(h,p,${JSON.stringify(method)},false,true,true)==0,"visible check filtered");check(GasReaderResources.omission(h,p,${JSON.stringify(method)},false,false,false)==${expected===1?1:0},"fallback policy mismatch");}`).join('\n')}
   ReaderTest app=new ReaderTest();SiteWorker w=app.new SiteWorker();Runnable deadline=w.readDeadline;answer("empty","unreadable",0,false,false);
@@ -78,6 +86,7 @@ public class ReaderTest {
    ReaderTest x=new ReaderTest();SiteWorker lane=x.new SiteWorker();answer("case",code,0,blocked,cancelled);lane.finishRead(2,"case");check(lane.view.loads==0&&x.replies==0,"late reply changed current request");lane.finishRead(1,"case");boolean retry=(code.equals("unreadable")||code.equals("pagination_stalled"))&&!blocked&&!cancelled;check(lane.view.loads==1&&x.replies==(retry?0:1),"unexpected retry/reply");
    if(retry){lane.finishRead(1,"case");check(x.replies==1&&!lane.leanGasResources,"fallback looped");}
   }
+  ReaderTest warm=new ReaderTest();laneWarmTests(warm);
   ReaderTest visible=new ReaderTest();SiteWorker lane=visible.new SiteWorker();visible.verifying=lane;lane.finishRead(1,"empty");check(lane.view.loads==0&&visible.replies==1,"visible verification retried");
   ReaderTest bot=new ReaderTest();lane=bot.new SiteWorker();lane.view.at="https://www.google.com/sorry/index";answer("bot","blocked",0,true,false);lane.finishRead(1,"bot");check("https://www.google.com/sorry/index".equals(lane.verificationUrl),"lost actual check URL before blanking reader");
   ReaderTest charger=new ReaderTest();lane=charger.new SiteWorker();lane.key="chargepoint";lane.origin="https://driver.chargepoint.com/";lane.view.at=lane.origin+"stations/987654";answer("cpbot","blocked",0,true,false);lane.finishRead(1,"cpbot");check(lane.view.at.equals(lane.verificationUrl)&&charger.replies==1,"charger check must reopen the blocked station page");

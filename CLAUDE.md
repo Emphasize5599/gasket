@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.309 - Java lifecycle regression harness
+
+308 run40930529358/job123647436264 stopped in regressions: all other180tests passed, reader-resources harness lacked new SiteWorker fields and Android JSONObject/View method stubs. Update harness to compile actual finishRead plus test warm retention, same-request correct-cell fallback and unchanged deadline,16-read recycle, restriction cleanup. Source308 exists without APK; publish309 without overwriting it. Same measured scan changes. Downloaded official Microsoft OpenJDK21 into tmp/test-jdk (untracked, never package); set PATH to its bin and GASKET_NATIVE_TESTS=1. Actual Java lifecycle harness passes locally including added tests.
+
 ## 0.0.308 - reduce cold scan overhead
 
 Owner306 log18:09:197/784areas in576s canceled;50selected/aggressive, actual peak18/cap4-15,85.8%command records outside cells. See docs/READER_PERFORMANCE.md for evidence and live paired browser measurements. Reuse successful regular-command documents up to16jobs; recenter/scale captured request to existing cell URL. Failed reuse reloads correct cell under same request/deadline; no old DOM merged, no skipped pagination or coverage changes. Discovery drops unneeded matcher reinjection; scoped price parsing avoids out-of-cell evidence allocations. Network feedback uses actual bulk request work rather than navigation waits. Added reuse/native timings, periodic recycle and existing pressure/bot/cancel safeguards retained. Focused scan/cache/merge/all-grade tests pass. Monitor308 full native/regression/sign/publication before completion.
