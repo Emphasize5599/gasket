@@ -154,7 +154,7 @@
       areaMs:{p50:q(ms,0.5),p90:q(ms,0.9),max:q(ms,1)},
       pageLoadMs:{p50:q(load,0.5),p90:q(load,0.9),total:sum(load)},           // before the reader starts (page load, injection)
       resourceRecovery:{areas:work.filter(function(r){return r.d.fullResourceRetry;}).length,totalMs:sum(work.map(function(r){return r.d.retryElapsedMs||0;})),omittedGraphics:sum(work.map(function(r){return r.d.omittedGraphics||0;})),omittedTelemetry:sum(work.map(function(r){return r.d.omittedTelemetry||0;}))},
-      commandReads:{areas:work.filter(function(r){return r.d.bulkPages>0;}).length,pages:sum(work.map(function(r){return r.d.bulkPages||0;})),rows:sum(work.map(function(r){return r.d.bulkRows||0;})),totalMs:sum(work.map(function(r){return r.d.bulkMs||0;})),fallbacks:work.filter(function(r){return !!r.d.bulkFallback;}).length,cardsParsed:sum(work.map(function(r){return r.d.cardsParsed||0;})),cardsSkipped:sum(work.map(function(r){return r.d.cardsSkipped||0;}))},
+      commandReads:{outside:sum(work.map(function(r){return r.d.bulkOutside||0;})),areas:work.filter(function(r){return r.d.bulkPages>0;}).length,pages:sum(work.map(function(r){return r.d.bulkPages||0;})),rows:sum(work.map(function(r){return r.d.bulkRows||0;})),totalMs:sum(work.map(function(r){return r.d.bulkMs||0;})),fallbacks:work.filter(function(r){return !!r.d.bulkFallback;}).length,cardsParsed:sum(work.map(function(r){return r.d.cardsParsed||0;})),cardsSkipped:sum(work.map(function(r){return r.d.cardsSkipped||0;}))},
       firstListMs:q(work.map(function(r){return r.d.firstFeedMs;}).filter(function(v){return v!=null;}),0.5),
       afterLastRowMs:{p50:q(after,0.5),total:sum(after),share:+(sum(after)/(busy||1)).toFixed(2)},   // waiting for more rows that never came
       stops:stops,scrollsAvg:work.length?+(sum(work.map(function(r){return r.d.scrolls||0;}))/work.length).toFixed(1):null,
@@ -197,6 +197,7 @@
    * (every 8 s at most), never below 4. tests/slow-link.test.js simulates links from 6 to 200 Mbps and picked these:
    * within ~15% of the best fixed reader count at each. ok = the page loaded, ms = its time.
    */
+  function networkDuration(ms,d){return d&&d.bulkPages>0&&!d.bulkFallback?ms/Math.max(1,Math.min(4,d.bulkPages)):ms;}
   function netStep(state,ok,now,max,ms){
     var floor=Math.min(4,max),since=now-(state.cut==null?-1e9:state.cut);if(state.cap==null)state.cap=Math.min(max,8);
     if(!ok){if(since>=8000&&state.cap>floor){state.cap=Math.max(floor,Math.floor(state.cap*0.6));state.cut=now;return 'cut';}return null;}
@@ -229,12 +230,12 @@
     if(previous&&previous.v&&previous.v.status==='running'&&LG)LG.info('keyless','Previous scan was unfinished',{id:previous.v.id,kind:previous.v.kind,completed:previous.v.completed,total:previous.v.total,elapsedMs:previous.v.elapsedMs});
     function sampleMemory(){sampleAt=Date.now();sample=memNow(A);if(sample){peak=Math.max(peak,sample.appHeapMB);min=min==null?sample.availMB:Math.min(min,sample.availMB);}}
     function snapshot(status){sampleMemory();var oldest=0;active.forEach(function(t){oldest=Math.max(oldest,Date.now()-t);});return {id:id,kind:kind,status:status,elapsedMs:Date.now()-started,completed:done,total:total,readers:lanes.length,manual:!!(A.S&&Number(A.S.keylessWorkers)>=1),active:active.size,maxActive:maxActive,oldestActiveMs:oldest,retired:retired,cached:cached,checkpoints:checkpoints,persistMs:persistMs,minSystemAvailableMB:min,peakAppJavaHeapMB:peak,memory:sample};}
-    function write(status){var s=snapshot(status);s.targetReaders=control.pool&&control.pool.target!=null?control.pool.target:null;s.aggressive=!!(control.pool&&control.pool.aggressive);try{A.KV.put('gasmeta','last-scan',s);}catch(e){}if(LG)LG.info('keyless',status==='running'?'Scan heartbeat':'Scan diagnostics',s);return s;}
+    function write(status){var s=snapshot(status);s.targetReaders=control.pool&&control.pool.target!=null?control.pool.target:null;s.aggressive=!!(control.pool&&control.pool.aggressive);s.networkCap=control.pool&&control.pool.net&&control.pool.net.cap;s.effectiveReaderTarget=Math.min(s.targetReaders||lanes.length,s.networkCap||lanes.length);s.searchMethod=A.S.keylessSearchMethod||'commands100';try{A.KV.put('gasmeta','last-scan',s);}catch(e){}if(LG)LG.info('keyless',status==='running'?'Scan heartbeat':'Scan diagnostics',s);return s;}
     write('running');last=Date.now();
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={netStep:netStep,retryable:function(r){return retryable(r);},searched:function(r){return searched(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={networkDuration:networkDuration,netStep:netStep,retryable:function(r){return retryable(r);},searched:function(r){return searched(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;
@@ -390,12 +391,12 @@
         if(cache)r=cache.v;
         else{
           loads++;audit.begin(key);var stopped=new Promise(function(resolve){wake=function(){resolve({cancelled:true});};control.wake.push(wake);});
-          try{r=await Promise.race([scanRead(control,key,{url:webUrl(a),mode:'discover',grade:grade}),stopped]);}catch(e){r={error:e.message};}finally{audit.end(key);control.wake=control.wake.filter(function(f){return f!==wake;});}
+          try{r=await Promise.race([scanRead(control,key,{url:webUrl(a),mode:'discover',grade:grade,area:{lat:a.lat,lng:a.lng,radius:a.radius},searchMethod:A.S.keylessSearchMethod||'commands100'}),stopped]);}catch(e){r={error:e.message};}finally{audit.end(key);control.wake=control.wake.filter(function(f){return f!==wake;});}
           if(r.cancelled){if(r.code==='renderer'){errors.push(r.error||'Website renderer stopped');cancel();}recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,cancelled:true});break;}
           var at=Date.now();(r.stores||[]).forEach(function(s){Object.keys(s.prices||{}).forEach(function(g){s.prices[g].observedAt=at;});});
           if(!r.blocked&&!r.error&&r.detail&&r.detail.exhausted)A.KV.put('gasweb',cacheKey,r);
         }
-        if(!cache&&!r.blocked)pool.outcome(!retryable(r),Date.now()-t0);
+        if(!cache&&!r.blocked)pool.outcome(!retryable(r),networkDuration(Date.now()-t0,r.detail));
         if(!cache&&retryable(r)&&(tries[idx]||0)<RETRIES){tries[idx]=(tries[idx]||0)+1;again.push(idx);recs.push({i:idx,lane:lanes.indexOf(key),at:t0-started,ms:Date.now()-t0,d:r.detail||null,found:0,added:0,err:r.error||null,retry:true});continue;}
         if(r.blocked){blocked=true;control.blocked=true;control.blockedSite=control.blockedSite||'gasweb';errors.push(r.error||'Website restricted discovery');}
         // a page that read its stations and then timed out on the slower full-page retry keeps them: not a failure

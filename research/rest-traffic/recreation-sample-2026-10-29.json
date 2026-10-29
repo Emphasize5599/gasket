@@ -1,0 +1,507 @@
+{
+  "date": "2026-10-29",
+  "facilities": [
+    {
+      "id": "232447",
+      "name": "Upper Pines Campground",
+      "state": "California",
+      "org": "NPS"
+    },
+    {
+      "id": "10000305",
+      "name": "Burro Creek Campground ",
+      "state": "Arizona",
+      "org": "BLM"
+    },
+    {
+      "id": "10001419",
+      "name": "Cold Brook Campground",
+      "state": "South Dakota",
+      "org": "USACE"
+    },
+    {
+      "id": "10001451",
+      "name": "Steel Creek Campground",
+      "state": "Arkansas",
+      "org": "NPS"
+    },
+    {
+      "id": "10003362",
+      "name": "Chinamen's Campground",
+      "state": "",
+      "org": "BOR"
+    },
+    {
+      "id": "10003508",
+      "name": "Eagleview Park",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10004152",
+      "name": "Camp 4",
+      "state": "California",
+      "org": "NPS"
+    },
+    {
+      "id": "10004594",
+      "name": "Horace King Park",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10004657",
+      "name": "Bay View House",
+      "state": "",
+      "org": "NPS"
+    },
+    {
+      "id": "10004919",
+      "name": "Lake Powhatan Glamping",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10004932",
+      "name": "Gorge Lake Campground",
+      "state": "Washington",
+      "org": "NPS"
+    },
+    {
+      "id": "10005253",
+      "name": "(Lake Alpine) West Shore",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10005351",
+      "name": "Blue Lake Campground Group Site - Modoc NF (CA)",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10005354",
+      "name": "Cave Run Dam Tailwater",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10005358",
+      "name": "Somerfield North Recreation Area",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10006204",
+      "name": "Beaver Creek A-Frame Cabin (ID)",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10006206",
+      "name": "Moon Lake Guard Station ",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10007130",
+      "name": "Cabin Camp 3",
+      "state": "Virginia",
+      "org": "NPS"
+    },
+    {
+      "id": "10007156",
+      "name": "Chellberg Farm Picnic Shelters",
+      "state": "Indiana",
+      "org": "NPS"
+    },
+    {
+      "id": "10007181",
+      "name": "Oak Creek Rec Site (Boulder, UT)",
+      "state": "Utah",
+      "org": "FS"
+    },
+    {
+      "id": "10009273",
+      "name": "Brushkana Creek Campground ",
+      "state": "",
+      "org": "BLM"
+    },
+    {
+      "id": "10009517",
+      "name": "Vedauwoo Gazebo",
+      "state": "Wyoming",
+      "org": "FS"
+    },
+    {
+      "id": "10010172",
+      "name": "Skunk Point Group Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10020625",
+      "name": "Black Canyon Of The Gunnison North Rim Campground",
+      "state": "Colorado",
+      "org": "NPS"
+    },
+    {
+      "id": "10028875",
+      "name": "Big Bend Backcountry Camping",
+      "state": "",
+      "org": "NPS"
+    },
+    {
+      "id": "10028991",
+      "name": "Fenwick Mines Pavilion",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10038733",
+      "name": "Doris Campground",
+      "state": "",
+      "org": "FWS"
+    },
+    {
+      "id": "10038994",
+      "name": "Reynolds Creek Group Camp (ID) ",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10039857",
+      "name": "Anvil Lake Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10039922",
+      "name": "",
+      "state": "",
+      "org": null
+    },
+    {
+      "id": "10040524",
+      "name": "Brush Creek Public Use Area",
+      "state": "Oklahoma",
+      "org": "USACE"
+    },
+    {
+      "id": "10040547",
+      "name": "Grout Pond Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10045243",
+      "name": "Highland Beach Suites, Unit 1",
+      "state": "Massachusetts",
+      "org": "NPS"
+    },
+    {
+      "id": "10046288",
+      "name": "Pat's Bluff",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10046933",
+      "name": "Hobo Campground",
+      "state": "California",
+      "org": "FS"
+    },
+    {
+      "id": "10047013",
+      "name": "Botts Campground",
+      "state": "Utah",
+      "org": "FS"
+    },
+    {
+      "id": "10048964",
+      "name": "Boulder Beach Group Campsites",
+      "state": "",
+      "org": "NPS"
+    },
+    {
+      "id": "10049020",
+      "name": "Upper Manistee River Backcountry Campsites",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10049434",
+      "name": "Clear Creek - Ozark Lake (AR)",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10050273",
+      "name": "West End Tent and Trailer Campground",
+      "state": "Montana",
+      "org": "USACE"
+    },
+    {
+      "id": "10060948",
+      "name": "Cavitt Creek Falls Recreation Site",
+      "state": "",
+      "org": "BLM"
+    },
+    {
+      "id": "10064530",
+      "name": "Panther Bay Park",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10064643",
+      "name": " Evans Campground",
+      "state": "Washington",
+      "org": "NPS"
+    },
+    {
+      "id": "10092282",
+      "name": "Beaver Point",
+      "state": "Oklahoma",
+      "org": "USACE"
+    },
+    {
+      "id": "10098538",
+      "name": "Dorr Skeels Campground",
+      "state": "Montana",
+      "org": "FS"
+    },
+    {
+      "id": "10101398",
+      "name": "Picnic Vista",
+      "state": "Washington",
+      "org": "USACE"
+    },
+    {
+      "id": "10107536",
+      "name": "Jubilee Lake Campground (OR)",
+      "state": "Oregon",
+      "org": "FS"
+    },
+    {
+      "id": "10122572",
+      "name": "Outlet Channel Day Use",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10130529",
+      "name": "Congaree Picnic Shelter",
+      "state": "South Carolina",
+      "org": "NPS"
+    },
+    {
+      "id": "10130532",
+      "name": "North Park",
+      "state": "Texas",
+      "org": "USACE"
+    },
+    {
+      "id": "10134015",
+      "name": "CCC Campground (ND)",
+      "state": "North Dakota",
+      "org": "FS"
+    },
+    {
+      "id": "10145539",
+      "name": "Katahdin Woods & Waters National Monument Camping",
+      "state": "Maine",
+      "org": "NPS"
+    },
+    {
+      "id": "10158668",
+      "name": "Boykin Springs Camping",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10158683",
+      "name": "Clear Springs Recreation Area (MS)",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10165135",
+      "name": "Bertha Creek Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10165200",
+      "name": "Caribou Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10165215",
+      "name": "Childs Glacier Recreation Area and Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10168529",
+      "name": "Blueberry Patch Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10169583",
+      "name": "Hopkins Prairie Campground",
+      "state": "Florida",
+      "org": "FS"
+    },
+    {
+      "id": "10171274",
+      "name": "Apgar Campground",
+      "state": "Montana",
+      "org": "NPS"
+    },
+    {
+      "id": "10177495",
+      "name": "Central Avenue Walk-in Sites",
+      "state": "Indiana",
+      "org": "NPS"
+    },
+    {
+      "id": "10182617",
+      "name": "San Pedro Group Campground",
+      "state": "Texas",
+      "org": "NPS"
+    },
+    {
+      "id": "10191070",
+      "name": "East Seelye Bay",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10211940",
+      "name": "Apache (NM)",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10214365",
+      "name": "Gabions Campground",
+      "state": "Michigan",
+      "org": "FS"
+    },
+    {
+      "id": "10214380",
+      "name": "Virgin Island National Park Overnight Mooring",
+      "state": "",
+      "org": "NPS"
+    },
+    {
+      "id": "10214622",
+      "name": "Pink Jeep Campground ",
+      "state": "",
+      "org": "NPS"
+    },
+    {
+      "id": "10227410",
+      "name": "Outlet Park (Tuttle Creek Lake)",
+      "state": "Kansas",
+      "org": "USACE"
+    },
+    {
+      "id": "10009939",
+      "name": "Woodring Branch Primitive Campground",
+      "state": "Georgia",
+      "org": "USACE"
+    },
+    {
+      "id": "10011396",
+      "name": "Wolf Ford Horse Camp",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10046915",
+      "name": "Mortimer Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10049272",
+      "name": "Oak Grove (MS)",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10053759",
+      "name": "Hurricane Landing",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10056245",
+      "name": "Paint Creek Campground",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10060248",
+      "name": "Cliffside Lake Shelters",
+      "state": "",
+      "org": "FS"
+    },
+    {
+      "id": "10064579",
+      "name": "Udall Park ",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10067302",
+      "name": "Oakland Park",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10075391",
+      "name": "Deep Hole Recreation Area",
+      "state": "Georgia",
+      "org": "FS"
+    },
+    {
+      "id": "10098548",
+      "name": "Big Acres",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10098551",
+      "name": "Cypress Point",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10098553",
+      "name": "Engineer Point",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10098555",
+      "name": "Paradise Point",
+      "state": "",
+      "org": "USACE"
+    },
+    {
+      "id": "10098558",
+      "name": "Outlet Channel (Sardis)",
+      "state": "",
+      "org": "USACE"
+    }
+  ],
+  "seasonRows": 976,
+  "siteRecords": 592,
+  "failedFacilityEndpoints": 24,
+  "note": "Public federal campground metadata only; full responses and page bundles are not shipped."
+}

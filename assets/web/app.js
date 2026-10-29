@@ -1358,6 +1358,7 @@
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
     S.trafficWorkers=$('trafficWorkers').dataset.manual==='yes'?Math.min(50,Math.max(1,parseInt($('trafficWorkers').value,10)||1)):null;
+    S.keylessSearchMethod=$('keylessSearchMethod').value;
     S.keylessWorkers=$('keylessWorkers').dataset.manual==='yes'?Math.min(50,Math.max(1,parseInt($('keylessWorkers').value,10)||4)):null;
     S.citgoTier = $('citgoTier').value;
     S.samsMode = $('samsMode').value;
