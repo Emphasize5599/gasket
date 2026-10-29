@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.302 - 2026-10-29
+- Accelerate traffic-aware finalist planning and station arrival pricing.
+- Reuse speed calculations across parameter trials and skip impossible starting reserves.
+
 ## 0.0.301 - 2026-10-28
 - Faster long-trip recommendations with compact parallel previews and full verification of finalists.
 - Reuse completed planning after hazard review and accelerate speed-based fuel calculations.

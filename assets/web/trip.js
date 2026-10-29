@@ -1106,9 +1106,15 @@
    * slower). secs: [{from, to, limit}], offsets: [mph], mpg(v): the car's curve.
    */
   function speedRates(secs, offsets, mpg, lo, hi) {
-    var out=[];secs.forEach(function (sc, i) {
-      var cuts=[sc.from,sc.to];(sc.traffic||[]).forEach(function(r){if(r.from>sc.from&&r.from<sc.to)cuts.push(r.from);if(r.to>sc.from&&r.to<sc.to)cuts.push(r.to);});cuts.sort(function(a,b){return a-b;});
-      for(var k=1;k<cuts.length;k++){if(cuts[k]<=cuts[k-1])continue;var mid=(cuts[k]+cuts[k-1])/2,r=(sc.traffic||[]).filter(function(r){return mid>=r.from&&mid<r.to;})[0],off=offsets[i]||0,v0=sc.limit,v1=Math.max(lo||25,Math.min(hi||90,v0+off));if(r&&r.trafficMph>0){v0=Math.min(v0,r.trafficMph);v1=Math.min(v1,r.trafficMph);}out.push({from:cuts[k-1],to:cuts[k],rate:off?1/mpg(v1)-1/mpg(v0):0});}
+    var out=[],indexes=new WeakMap();secs.forEach(function (sc, i) {
+      var off=offsets[i]||0;
+      if(!off){out.push({from:sc.from,to:sc.to,rate:0});return;}
+      var source=sc.traffic||[],index=indexes.get(source),traffic=source;
+      if(!index){var ordered=true;for(var j=1;j<source.length;j++)if(source[j].from<source[j-1].to){ordered=false;break;}index={ordered:ordered};indexes.set(source,index);}
+      if(index.ordered){var a=0,b=source.length;while(a<b){var mid=(a+b)>>>1;if(source[mid].to<=sc.from)a=mid+1;else b=mid;}traffic=[];while(a<source.length&&source[a].from<sc.to)traffic.push(source[a++]);}
+
+      var cuts=[sc.from,sc.to];traffic.forEach(function(r){if(r.from>sc.from&&r.from<sc.to)cuts.push(r.from);if(r.to>sc.from&&r.to<sc.to)cuts.push(r.to);});cuts.sort(function(a,b){return a-b;});var ti=0;
+      for(var k=1;k<cuts.length;k++){if(cuts[k]<=cuts[k-1])continue;var mid=(cuts[k]+cuts[k-1])/2,r;if(index.ordered){while(ti<traffic.length&&traffic[ti].to<=mid)ti++;if(traffic[ti]&&mid>=traffic[ti].from&&mid<traffic[ti].to)r=traffic[ti];}else r=traffic.filter(function(r){return mid>=r.from&&mid<r.to;})[0];var off=offsets[i]||0,v0=sc.limit,v1=Math.max(lo||25,Math.min(hi||90,v0+off));if(r&&r.trafficMph>0){v0=Math.min(v0,r.trafficMph);v1=Math.min(v1,r.trafficMph);}out.push({from:cuts[k-1],to:cuts[k],rate:off?1/mpg(v1)-1/mpg(v0):0});}
     });
     return out;
   }
@@ -1137,8 +1143,12 @@
   }
 
   /** The route as you'll drive it: gas used includes the extra for your cruising speeds (rates from speedRates). */
-  function withSpeeds(model, rates) {
-    if (!rates || !rates.some(function (r) { return r.rate; })) return model;
+  // These rate arrays are immutable snapshots. Share their cumulative integral
+  // across fuel queries and the thousands of arrival-clock/discount quotes.
+  var rateIndexes=new WeakMap();
+  function indexedRates(rates) {
+    var hit=rateIndexes.get(rates);if(hit)return hit;
+
     // Integrate once. Long traffic profiles contain thousands of speed sections;
     // scanning all of them at every station (and every optimizer retry) is quadratic.
     // Events also preserve the old additive behavior for overlapping sections.
@@ -1147,9 +1157,12 @@
     var xs=[],areas=[],slopes=[],area=0,slope=0,previous=events.length?events[0][0]:0;
     for(var i=0;i<events.length;){var x=events[i][0];area+=(x-previous)*slope;while(i<events.length&&events[i][0]===x)slope+=events[i++][1];xs.push(x);areas.push(area);slopes.push(slope);previous=x;}
     function integral(d){var lo=0,hi=xs.length;while(lo<hi){var mid=(lo+hi)>>>1;if(xs[mid]<=d)lo=mid+1;else hi=mid;}var j=lo-1;return j<0?0:areas[j]+(d-xs[j])*slopes[j];}
-    var zero=integral(0);
-    var m = Object.create(model);
-    m.galTo = function (d) { return model.galTo(d) + (d>0?integral(d)-zero:0); };
+    var zero=integral(0),value=function(d){return d>0?integral(d)-zero:0;};rateIndexes.set(rates,value);return value;
+  }
+  function withSpeeds(model,rates){
+    if(!rates||!rates.some(function(r){return r.rate;}))return model;
+    var extra=indexedRates(rates),m=Object.create(model);
+    m.galTo=function(d){return model.galTo(d)+extra(d);};
     m.speedRates = rates;
     return m;
   }
@@ -1189,7 +1202,7 @@
   /** Absolute stop-aware clock, with destination departure constraints kept out of driving time. */
   function travelClock(m,d,depart,stops,waits,options,charges){
     var before=function(at,inclusive){return ((stops||[]).filter(function(s){return s.c.d<at||inclusive&&s.c.d===at;}).reduce(function(n,s){return n+stopDelay(options||{},s);},0)+(charges||[]).filter(function(s){return s.d<at||inclusive&&s.d===at;}).reduce(function(n,s){return n+s.minutes;},0))*60000;},extra=0;
-    function drive(at){return m.timeTo(at)*1000+((options&&options.drivingRates)||[]).reduce(function(n,r){return n+Math.max(0,Math.min(at,r.to)-r.from)*r.rate*3600000;},0);}
+    var rates=options&&options.drivingRates,driving=rates&&indexedRates(rates);function drive(at){return m.timeTo(at)*1000+(driving?driving(at)*3600000:0);}
     (waits||[]).filter(function(w){return w.d<=d;}).slice().sort(function(a,b){return a.d-b.d;}).forEach(function(w){extra+=Math.max(0,w.at-(depart+drive(w.d)+before(w.d,true)+extra));});
     return depart+drive(d)+before(d)+extra;
   }

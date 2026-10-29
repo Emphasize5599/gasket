@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.302 — exact traffic-clock and parameter setup acceleration
+
+Owner latest log Oct29 14:46 phone301: focus13:31–13:50 and14:31 onward, not historical300lines. First finalist~16minwall,36plans,2679770ms aggregate worker runtime,636868ms aggregate queue wait, only3488mshazard verification. Previews460–473stations still20–31seckernels,23–26secmain preparation not separately logged. Older25minoutlier may be phone off, do not use.
+
+Identified two traffic-specific quadratic paths: speedRates rescans entire12000row forecast for every road/cut; calendar arrival quotes call travelClock, rescanning all drivingRates for every station and every pricing pass. Implement exact ordered interval intersection with binary start/linear sweep; preserve old first-match semantics for unordered/overlap inputs. Zero offset produces one equivalent zero-rate section. Reuse301event-prefix integral via WeakMap keyed immutable rate array for BOTH fuel integration and travelClock driving time. Retain all waits/service/monthly eligibility. Window finalist now prepares speed/weather options ONCE per evaluated route/hour; clone departure/wait/context state per parameter, recreate its reward callback for correct shifted clocks. Skip buffer>physical starting fuel before worker dispatch (such first-dip plans were always rejected anyway), no greedy approximate feasibility shortcut. Add optionsMs and skippedReserve diagnostics; kernelMs remains aggregate across lanes, not wall time. Final all-station DP/hazards/constraints unchanged.
+
+Before/after local synthetic2600mi,12000traffic rows,1000roadsections,3600stations,19parameter plans + full all-station final/reward pricing:28550ms=>2530ms (91.1pctreduction), SAME165.107cost, same19trial count, templates19=>1. Direct traffic setup1347=>12ms,4000arrival clocks1167=>12ms with identical final timestamp. These are local fixtures, NOT measured phone guarantee; repeat real trip. Benchmark scripts private tmp, no owner data committed. Tests deterministic complexity counters and numeric parity across stops/waits/traffic, alongside existing rewards/window/worker/EV tests. New trafficRows read bound200k vs oldmillions; actual166593 deterministicfieldreads. Monitor302full CI and APK publication; record result. Phone: repeat long trip, compare finalist wall time and options/kernel phase logs; verify discounts, clocks, reserve, changed hazards and arrival windows.
+
 ## 0.0.301 — long-trip recommendation performance
 
 Release verified: commit940e8f6, run40807004158/job123228240176 succeeded through full regressions, native checks, signing and arm64/universal APK publication. Direct version301assets confirmed via GitHub release API.

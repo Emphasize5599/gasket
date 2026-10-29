@@ -15,3 +15,12 @@ const rewards=cands.map((c,i)=>i===50?{...c,citgo:{bit:1,extra:.2,cap:30}}:c);as
 const chargers=cands.map((c,i)=>({...c,priceKnown:true,kw:i===123?350:50,calc:{updated:1000}}));assert(T.previewCandidates({...o,cands:chargers,fuelKind:'ev',priceNow:2000,priceAgeHours:72}).includes(chargers[123]),'fast charging option retained');
 const detours=T.previewCandidates({...o,maxDetourMin:1});assert(detours.every(c=>c.detourMin<=1));
 console.log(JSON.stringify({miles:2600,input:cands.length,preview:subset.length,fullMs:Math.round(fullMs),previewMs:Math.round(previewMs),speedLookupRateReads:reads}));
+
+// Dense traffic must be intersected once, not rescanned for every road and cut.
+let trafficReads=0;const rows=Array.from({length:12000},(_,i)=>({get from(){trafficReads++;return i*.25;},get to(){trafficReads++;return (i+1)*.25;},trafficMph:20+i%50})),roads=Array.from({length:1000},(_,i)=>({from:i*3,to:(i+1)*3,limit:65,traffic:rows}));
+const offsets=roads.map(()=>5),drive=T.speedRates(roads,offsets,v=>v,15,90);assert(trafficReads<200000,'road/traffic intersection uses an index, not every road times every traffic section');
+const zero=T.speedRates(roads,roads.map(()=>0),v=>v,15,90);assert(zero.every(r=>r.rate===0));
+const clockOpts={drivingRates:drive,fuelKind:'gas',stopMinutes:3},depart=1900000000000,stops=[{c:{d:500,detourMin:2},buyGal:4}],waits=[{d:1500,at:depart+110000000}];
+function slowClock(d){const service=(at,inclusive)=>stops.filter(s=>s.c.d<at||inclusive&&s.c.d===at).reduce((n,s)=>n+T.stopDelay(clockOpts,s)*60000,0),driving=at=>base.timeTo(at)*1000+T.extraBetween(drive,0,at)*3600000;let extra=0;for(const w of waits.filter(w=>w.d<=d))extra+=Math.max(0,w.at-depart-driving(w.d)-service(w.d,true)-extra);return depart+driving(d)+service(d,false)+extra;}
+for(const d of [0,100,500,501,1499,1500,1700,2999])assert(Math.abs(T.travelClock(base,d,depart,stops,waits,clockOpts)-slowClock(d))<.01,'indexed clock matches traffic, fuel service and destination waits');
+let rateReads=0;const measured=drive.map(r=>({from:r.from,to:r.to,get rate(){rateReads++;return r.rate;}})),options={drivingRates:measured};for(let i=0;i<4000;i++)T.travelClock(base,i*.75,depart,[],[],options);assert(rateReads<measured.length*5,'all station-arrival quotes share one immutable rate index');
