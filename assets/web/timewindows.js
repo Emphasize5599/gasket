@@ -23,10 +23,11 @@
   function screeningIssues(reading){return coverageIssues(reading).filter(function(x){return x.code!=='air'&&(x.code!=='errors'||!reading.stats||reading.stats.errors>(reading.stats.airErrors||0));});}
   function dataNotices(legs){var missing=[];(legs||[]).forEach(function(t,i){if(coverageIssues(t.reading).some(function(x){return x.code==='air';})||t.reading&&t.reading.stats&&t.reading.stats.airErrors)missing.push(i+1);});return missing.length?['Air-quality forecast unavailable for part of leg'+(missing.length>1?'s ':' ')+missing.join(', ')+'. Smoke and unhealthy air could not be checked everywhere.']:[];}
   function weatherScore(reading){var weights={tornado:10,tropical:8,flood:10,alert:7,storm:5,ice:6,snow:5,rain:3,fog:3,wind:4,heat:3,cold:3,air:3};return (reading&&reading.hazards||[]).reduce(function(n,h){return n+(weights[h.kind]||5)*(h.level>=2?2:1)*Math.max(1,(h.toMi||0)-(h.fromMi||0));},0)+(screeningIssues(reading).length?100000:0);}
-  function approvalRules(value){var allow=value&&value.version===2&&Array.isArray(value.allow)?Array.from(new Set(value.allow.filter(function(k){return typeof k==='string';}))):[];return {version:2,allow:allow,enabled:allow.length>0};}
-  function autoReasons(reading,rules,kinds){
+  function approvalRules(value){var v=value&&value.version===2?value:{},list=function(x){return Array.isArray(x)?Array.from(new Set(x.filter(function(k){return typeof k==='string';}))):[];},allow=list(v.allow),endpointAllow=list(v.endpointAllow),n=v.endpointMiles==null?50:Number(v.endpointMiles),endpointMiles=Number.isFinite(n)&&n>=0?n:0;return {version:2,allow:allow,endpointAllow:endpointAllow,endpointMiles:endpointMiles,enabled:allow.length>0||endpointAllow.length>0&&endpointMiles>0};}
+  function nearEndpoints(h,total,miles){if(!Number.isFinite(total)||total<=0||!(miles>0)||!Number.isFinite(h.fromMi)||!Number.isFinite(h.toMi)||h.fromMi<0||h.toMi<h.fromMi||h.toMi>total)return false;return miles*2>=total||h.toMi<=miles||h.fromMi>=total-miles;}
+  function autoReasons(reading,rules,kinds,totalMi){
     var out=screeningIssues(reading);rules=approvalRules(rules);if(!rules.enabled)return out.concat([{code:'disabled',text:'Automatic approval is off.'}]);
-    (reading&&reading.hazards||[]).forEach(function(h){if(!kinds[h.kind])out.push({code:'unknown',text:'An unrecognized hazard needs review.'});else if(rules.allow.indexOf(h.kind)<0)out.push({code:'rule',text:(Array.isArray(kinds[h.kind])?kinds[h.kind][0]:h.kind)+' needs your approval.'});});
+    (reading&&reading.hazards||[]).forEach(function(h){if(!kinds[h.kind])out.push({code:'unknown',text:'An unrecognized hazard needs review.'});else if(rules.allow.indexOf(h.kind)<0&&!(rules.endpointAllow.indexOf(h.kind)>=0&&nearEndpoints(h,totalMi,rules.endpointMiles)))out.push({code:'rule',text:(Array.isArray(kinds[h.kind])?kinds[h.kind][0]:h.kind)+' needs your approval.'});});
     return out;
   }
   function signature(reading){
@@ -41,8 +42,8 @@
   }
   function groupDecision(g,consent){var answers=g.rows.map(function(r){return consent.decision(r,g.signature);});return answers.some(function(a){return a===false;})?false:answers.every(function(a){return a===true;})?true:undefined;}
   // User opt-in only. Incomplete forecasts and new/unclassified hazards always need review.
-  function autoAllowed(reading,rules,kinds){
-    return !!reading&&Array.isArray(reading.hazards)&&autoReasons(reading,rules,kinds).length===0;
+  function autoAllowed(reading,rules,kinds,totalMi){
+    return !!reading&&Array.isArray(reading.hazards)&&autoReasons(reading,rules,kinds,totalMi).length===0;
   }
   // A no-stop timeline is a lower bound. Reject only missed upper deadlines;
   // early arrivals and long apparent waits may still be made valid by real stops/charging.

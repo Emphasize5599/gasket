@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.311 - endpoint-only hazard opt-in
+
+Shared HazardApproval controls in Settings/Trip defaults, onboarding shortcut and hourly hazard review. Anywhere allow-list retains existing version2 allow selections; new endpointAllow starts empty, endpointMiles defaults50 driving miles, no blanket switch. Whole hazard interval must lie within first/last N miles of the individual leg; if zones overlap they cover that entire short leg. Mixed/middle/cross-boundary hazard remains manual unless its kind opted in anywhere. Invalid or missing interval/leg length fails closed. Radius0/invalid disables endpoint approval. Unknown hazards, AI/incomplete/uncertain readings, prior explicit No and tire-risk gating unchanged.
+
+Pass exact row.model.totalMi in hourly screening/diagnostic reasons and actual sliced lm.totalMi in final window verification. No linear-distance approximation or new weather reads. hazardapproval.js shares markup/serialization so editing one list preserves the other. Both lists are independently collapsible blue tiles. Tests cover all kinds, start/end/overlap/boundaries/mixed/invalids, settings persistence at320/448 and real hourly auto-skip start/end with manual middle No. Existing hourly/window/onboarding tests pass. Monitor311 through signed APK publication.
+
 ## 0.0.310 - await map rendering in regression
 
 Verified publication: commit0db5dd0, run40932672226 attempt2/job123658444689 SUCCESS through181regressions, Android build/native checks, signing and both ARM64/universal APK assets. Attempt1 timed out at existing vehiclecompare-ui Add vehicle step; three parallel local repeats passed and one CI retry passed. No assertions bypassed. Both asset URLs confirmed via release API.

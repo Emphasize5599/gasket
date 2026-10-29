@@ -204,7 +204,7 @@ var timeline=T.scheduleTimeline(o,p),cfg=windows.config(),conditions=[];
           var arrival=windows.arrivals()[i];if(arrival&&(t.arrive<arrival.start||t.arrive>arrival.end))return null;
           var lm=Traffic.slice(o.model,t.from,t.to),stops=p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-t.from,min:T.stopDelay(o,s)};}),reading=await windowRead(Object.assign({},row,{depart:t.depart,model:lm,actual:true}),stops),sig=TimeWindows.signature(reading),decision=windows.current().consent.decision(row,sig);
           conditions.push(Object.assign({},t,{routeKey:row.routeKey,signature:sig,reading:reading,raw:row.raw,model:row.model,index:row.index}));
-          if(decision==null&&(TimeWindows.autoAllowed(reading,S.hourlyHazardApproval,RouteWx.KINDS)||!(reading.hazards||[]).length&&!TimeWindows.screeningIssues(reading).length)&&!RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),reading.hazards||[]).tires.length){windows.current().consent.answer({rows:[row],signature:sig},true);decision=true;}
+          if(decision==null&&(TimeWindows.autoAllowed(reading,S.hourlyHazardApproval,RouteWx.KINDS,lm.totalMi)||!(reading.hazards||[]).length&&!TimeWindows.screeningIssues(reading).length)&&!RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),reading.hazards||[]).tires.length){windows.current().consent.answer({rows:[row],signature:sig},true);decision=true;}
           if(decision!==true){if(decision==null)changed.set(TimeWindows.signature({hazards:[]})+'|'+i+'|'+row.routeKey+'|'+row.depart+'|'+sig,Object.assign({},conditions[conditions.length-1],{leg:i,depart:row.depart,actualDepart:t.depart}));return null;}
         }
 return conditions;
