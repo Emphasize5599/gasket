@@ -2,6 +2,8 @@
 
 ## 0.0.310 - await map rendering in regression
 
+Verified publication: commit0db5dd0, run40932672226 attempt2/job123658444689 SUCCESS through181regressions, Android build/native checks, signing and both ARM64/universal APK assets. Attempt1 timed out at existing vehiclecompare-ui Add vehicle step; three parallel local repeats passed and one CI retry passed. No assertions bypassed. Both asset URLs confirmed via release API.
+
 309 run40931792298/job123651846535 passed Java reader lifecycle and all but map-zoom; its existing40ms sleeps raced rAF sizing under parallel CI. Wait two actual frames after nonanimated zoom changes, preserving every geometry assertion. Same product source as309 apart from version. Neither308nor309 published APKs; do not overwrite those source tags. Monitor310 to actual assets.
 
 ## 0.0.309 - Java lifecycle regression harness
