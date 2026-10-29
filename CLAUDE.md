@@ -2,6 +2,8 @@
 
 ## 0.0.306 - conditional campground hours
 
+Verified publication: commit b3d16f2, run40922011528/job123619170423 completed successfully through full regressions, native/signing/APK verification and ARM64/universal publication. Both306assets confirmed via release API. Preceding304 and305 actions also succeeded;303 was stopped by the missing-preferences regression and has no APK. Point owner to306.
+
 A daily-looking park/gate notice may continue with summer/winter or weekday/holiday variants. Do not apply its first interval year-round. Explicitly withhold these unparsed conditional schedules, including park/campground hours as well as gate rules. Added regression for summer10pm/winter6pm. Keep305actual routed arrival and304safe defaults. No other scope expansion. Monitor306throughpublication; older305maycomplete but point owner to306.
 
 ## 0.0.305 - actual campground arrival
