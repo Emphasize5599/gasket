@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.306 - conditional campground hours
+
+A daily-looking park/gate notice may continue with summer/winter or weekday/holiday variants. Do not apply its first interval year-round. Explicitly withhold these unparsed conditional schedules, including park/campground hours as well as gate rules. Added regression for summer10pm/winter6pm. Keep305actual routed arrival and304safe defaults. No other scope expansion. Monitor306throughpublication; older305maycomplete but point owner to306.
+
 ## 0.0.305 - actual campground arrival
 
 Final source check must include outbound routed access seconds. A campground can be open as driver passes the highway exit but closed on actual arrival. Recheck after C.access using actual time, refresh correct local calendar month, show actual local/drive arrival columns and use that clock in the add dialog. Early gate-closed checks defer until routing so an arrival after opening can still qualify. New third UI fixture closes one minute after road arrival, with a two-minute detour; it must not count/list. 304 replacement build may finish independently; publish305 without overwriting assets.

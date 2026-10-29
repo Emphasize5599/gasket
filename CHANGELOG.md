@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.306 - 2026-10-29
+- Recreation.gov filters, closure checks and website/Maps links.
+- Improve scan scheduling; add command/scroll choices and cautious access-hour checks.
+
 ## 0.0.305 - 2026-10-29
 - Recreation.gov filters, closure checks and website/Maps links.
 - Check campground hours after access-road driving; improve scan scheduling and search choices.
