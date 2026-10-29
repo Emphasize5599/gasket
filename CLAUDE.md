@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.304 - scan diagnostic default
+
+303 run40919550271/job123608744586 stopped at regressions: only fuel-grades and walmart-keyless failed because diagnostic write assumed A.S exists in their minimal scan harnesses. Guard optional settings for scan diagnostics and worker HTML; keep safe commands100 fallback. No test weakened. New Recreation and UI regressions passed in full suite. 303 source release exists with no APK; do not overwrite it. Ship304 with same source/campground features and monitor through publication.
+
 ## 0.0.303 - scan efficiency and Recreation.gov
 
 The owner's latest 16:43 log/backup is a cold 302 Searcy/Bristol scan: 781 cells, 38m22 wall, 17,228 unique stations, 175,787 command rows, 90% identity overlap, about 6 active versus 50 selected readers. 779 explicit command ends plus 2 quiet fallbacks; not proof of exhaustive Google coverage. Existing controller already clips geographically before durable cell completion. Add earlier reader clipping plus bulkOutside diagnostics; an all-outside command answer falls back to scrolling. The network throttle mistook a multi-page cell's total time for a single request: normalize successful commands by min(4, page count), preserving raw failure/fallback time and all memory/site-check/retry rules. Log network cap and effective target. Settings/onboarding offer 100-result commands (existing default), original 20-result commands, and scrolling. Same durable cache; use Rediscover for fair A/B. Phone throughput still needs measurement.
