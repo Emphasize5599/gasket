@@ -2,6 +2,8 @@
 
 ## 0.0.302 — exact traffic-clock and parameter setup acceleration
 
+Verified release: a6de5f7, run40896942722/job123528542969 succeeded through full regressions, native checks, signing and ARM64/universal publication. Both302APK assets confirmed with release API.
+
 Owner latest log Oct29 14:46 phone301: focus13:31–13:50 and14:31 onward, not historical300lines. First finalist~16minwall,36plans,2679770ms aggregate worker runtime,636868ms aggregate queue wait, only3488mshazard verification. Previews460–473stations still20–31seckernels,23–26secmain preparation not separately logged. Older25minoutlier may be phone off, do not use.
 
 Identified two traffic-specific quadratic paths: speedRates rescans entire12000row forecast for every road/cut; calendar arrival quotes call travelClock, rescanning all drivingRates for every station and every pricing pass. Implement exact ordered interval intersection with binary start/linear sweep; preserve old first-match semantics for unordered/overlap inputs. Zero offset produces one equivalent zero-rate section. Reuse301event-prefix integral via WeakMap keyed immutable rate array for BOTH fuel integration and travelClock driving time. Retain all waits/service/monthly eligibility. Window finalist now prepares speed/weather options ONCE per evaluated route/hour; clone departure/wait/context state per parameter, recreate its reward callback for correct shifted clocks. Skip buffer>physical starting fuel before worker dispatch (such first-dip plans were always rejected anyway), no greedy approximate feasibility shortcut. Add optionsMs and skippedReserve diagnostics; kernelMs remains aggregate across lanes, not wall time. Final all-station DP/hazards/constraints unchanged.
