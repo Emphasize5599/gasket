@@ -2,6 +2,8 @@
 
 ## 0.0.312 - persistent future traffic forecasts
 
+Verified publication: commitb2a3e16, run40974418247/job123798799170 SUCCESS on first attempt through full regressions/native/signing and both ARM64/universal APK uploads. Assets confirmed through release API. Phone check: repeat identical saved route/date/time after restart, compare traffic cachedPieces/fetchedPieces; check Connections reuse-days persistence; change departure and confirm new reads.
+
 See docs/TRAFFIC_FORECAST_CACHE.md for source research and exact policy. Google does not promise weather-independent/unchanging forecasts. Existing persistent cache had6hour future TTL and1024FIFO cap. New Google policy: >=24h away7days default configurable1-30inConnections;1-24h6hours;within1h10minutes; negative mismatch results10minutes. HERE unchanged. New TrafficCache8192record/256MiB payload LRU with128hot records, legacy slot/index compatibility, eviction tombstones, lazy size accounting and original observation-age validation. No weather data or final fuel calculations reused as traffic.
 
 Keep exact date/minute/road/avoid key and geometry/time-validated overlap rules; new shared observations tag avoid settings. Direct flow.forecast inherits trip avoids, which was inconsistent before. Settingsnav moves trafficCacheDays toConnections; closing settings invalidates derived in-memory profiles when retention changes. Added cache/fetch/shared-piece log counts. Tests: bounded persistence/restarts/1030records, virtual-day expiry/horizon tightening, current-car energy recomputation, different time/avoid cache misses, settings persistence and bot-check flow. Full windowplanning tests pass. Monitor312 through signed APK assets; phone speedup still unmeasured.
