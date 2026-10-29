@@ -1214,6 +1214,7 @@
       (window.ChargerData?ChargerData.settingsHtml():'') +
       '<div class="field col"><div class="lbl">HERE routing key (optional)<small>HERE: optional traffic forecasts, departure comparisons and toll estimates share this key and monthly limiter. A departure comparison uses one uncached request per tested time per leg; final planning can refine forecasts for stop delays. Check your HERE plan and billing limits. Toll answers are kept 30 days; near-term traffic 10 minutes, future traffic 6 hours. Get one: <a href="#" data-url="https://platform.here.com/">platform.here.com</a> → Access Manager → Apps → Register new app → Credentials → API Keys. Never logged or exported.</small></div><input type="password" id="hereKey" autocomplete="off" spellcheck="false" value="' + esc(S.hereKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Google website traffic forecasts<small>Keyless, estimated traffic at your projected arrival. Sends route sections and departure times to Google; origin timezone lookup uses Open-Meteo. Verification may be required. © Google.</small></div>' + sw('googleTraffic', S.googleTraffic !== false).replace('<input ', '<input id="googleTraffic" ') + '</div>' +
+      '<label class="field"><span class="lbl">Reuse future Google forecasts (days)<small>For departures at least 24 hours away. Trips within 24 hours refresh after 6 hours; within an hour, after 10 minutes. Weather and hazards are checked separately. 1–30 days.</small></span><input type="number" id="trafficCacheDays" min="1" max="30" step="1" value="'+Math.max(1,Math.min(30,Number(S.trafficCacheDays)||7))+'"></label>' +
       '<div class="field"><div class="lbl">Use HERE for traffic forecasts<small>Optional alternative to Google website forecasts. Uses the shared HERE allowance; toll estimates remain independent.</small></div>' + sw('hereTraffic', S.hereTraffic === true).replace('<input ', '<input id="hereTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">HERE routing lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); traffic forecasts and toll lookups share this cap. Check your HERE account allowance.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
       '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
@@ -1349,12 +1350,14 @@
   function opt(v, label, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>'; }
   function fmtSha(s) { return String(s).replace(/(..)(?!$)/g, '$1:'); }
   function closeSettings(apply) {
+    var previousTrafficCacheDays = S.trafficCacheDays||7;
     var previousHereTraffic = S.hereTraffic === true;
     var previousTrafficEnergy = S.trafficEnergy === true;
     var previousGoogleTraffic = S.googleTraffic !== false;
     var pg = $('settings'); if (pg.classList.contains('hidden')) return false;
     var hadKey = !!S.apiKey;
     S.apiKey = $('apiKey').value.trim(); apiCount();
+    S.trafficCacheDays=Math.max(1,Math.min(30,parseInt($('trafficCacheDays').value,10)||7));
     S.monthlyCap = Math.max(0, parseInt($('monthlyCap').value, 10) || 0);
     S.routesMonthlyCap = Math.max(0, parseInt($('routesMonthlyCap').value, 10) || 0);
     S.trafficWorkers=$('trafficWorkers').dataset.manual==='yes'?Math.min(50,Math.max(1,parseInt($('trafficWorkers').value,10)||1)):null;
@@ -1384,7 +1387,7 @@
     });
     save();
     pg.classList.add('hidden');
-    if(previousHereTraffic !== (S.hereTraffic === true) || previousTrafficEnergy !== (S.trafficEnergy === true) || previousGoogleTraffic !== (S.googleTraffic !== false))window.dispatchEvent(new Event('trafficsettingschange'));
+    if(previousTrafficCacheDays !== S.trafficCacheDays || previousHereTraffic !== (S.hereTraffic === true) || previousTrafficEnergy !== (S.trafficEnergy === true) || previousGoogleTraffic !== (S.googleTraffic !== false))window.dispatchEvent(new Event('trafficsettingschange'));
     if(pg.dataset.discountKey!==discountKey()&&window.__trip&&__trip.discountsChanged)__trip.discountsChanged();
     stations = stations.filter(function (s) { return S.brands[s.brand]; });
     render();
