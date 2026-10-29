@@ -23,9 +23,10 @@
   function screeningIssues(reading){return coverageIssues(reading).filter(function(x){return x.code!=='air'&&(x.code!=='errors'||!reading.stats||reading.stats.errors>(reading.stats.airErrors||0));});}
   function dataNotices(legs){var missing=[];(legs||[]).forEach(function(t,i){if(coverageIssues(t.reading).some(function(x){return x.code==='air';})||t.reading&&t.reading.stats&&t.reading.stats.airErrors)missing.push(i+1);});return missing.length?['Air-quality forecast unavailable for part of leg'+(missing.length>1?'s ':' ')+missing.join(', ')+'. Smoke and unhealthy air could not be checked everywhere.']:[];}
   function weatherScore(reading){var weights={tornado:10,tropical:8,flood:10,alert:7,storm:5,ice:6,snow:5,rain:3,fog:3,wind:4,heat:3,cold:3,air:3};return (reading&&reading.hazards||[]).reduce(function(n,h){return n+(weights[h.kind]||5)*(h.level>=2?2:1)*Math.max(1,(h.toMi||0)-(h.fromMi||0));},0)+(screeningIssues(reading).length?100000:0);}
+  function approvalRules(value){var allow=value&&value.version===2&&Array.isArray(value.allow)?Array.from(new Set(value.allow.filter(function(k){return typeof k==='string';}))):[];return {version:2,allow:allow,enabled:allow.length>0};}
   function autoReasons(reading,rules,kinds){
-    var out=screeningIssues(reading);if(!rules||rules.enabled!==true)return out.concat([{code:'disabled',text:'Automatic approval is off.'}]);
-    (reading&&reading.hazards||[]).forEach(function(h){if(!kinds[h.kind])out.push({code:'unknown',text:'An unrecognized hazard needs review.'});else if(!Array.isArray(rules.ask)||rules.ask.indexOf(h.kind)>=0)out.push({code:'rule',text:(Array.isArray(kinds[h.kind])?kinds[h.kind][0]:h.kind)+' is checked in your approval rules.'});});
+    var out=screeningIssues(reading);rules=approvalRules(rules);if(!rules.enabled)return out.concat([{code:'disabled',text:'Automatic approval is off.'}]);
+    (reading&&reading.hazards||[]).forEach(function(h){if(!kinds[h.kind])out.push({code:'unknown',text:'An unrecognized hazard needs review.'});else if(rules.allow.indexOf(h.kind)<0)out.push({code:'rule',text:(Array.isArray(kinds[h.kind])?kinds[h.kind][0]:h.kind)+' needs your approval.'});});
     return out;
   }
   function signature(reading){
@@ -125,6 +126,6 @@
     return valid()?{best:best,checked:checked,screened:ranked.screened,shortlisted:ranked.candidates.length,screening:ranked,review:best?[]:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
-  var api={HOUR:HOUR,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};
+  var api={HOUR:HOUR,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,approvalRules:approvalRules,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimeWindows=api;
 })(typeof window==='undefined'?globalThis:window);

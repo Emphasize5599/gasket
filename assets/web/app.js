@@ -1644,9 +1644,9 @@
     var label=control.closest('label,.field'),title=label&&(label.querySelector('span,.lbl')||label).textContent.split('*')[0].trim()||control.getAttribute('aria-label')||'Choose';
     var overlay=document.createElement('div');overlay.className='app-picker';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',title);
     overlay.innerHTML='<div class="app-picker-card"><div class="app-picker-head"><b>'+esc(title)+'</b><button type="button" aria-label="Close">✕</button></div><div class="app-picker-body"></div></div>';
-    var body=overlay.querySelector('.app-picker-body'),prior=document.activeElement,optionObserver=null;
-    var close=function(){if(optionObserver)optionObserver.disconnect();document.removeEventListener('keydown',keys,true);overlay.remove();window.__pickerClose=null;if(prior&&prior.isConnected)prior.focus({preventScroll:true});};window.__pickerClose=close;
-    function keys(e){if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){var list=Array.from(overlay.querySelectorAll('button:not(:disabled),input:not(:disabled)')),i=list.indexOf(document.activeElement);e.preventDefault();list[(i+(e.shiftKey?-1:1)+list.length)%list.length].focus();}}
+    var body=overlay.querySelector('.app-picker-body'),prior=document.activeElement,optionObserver=null,pickerCleanup=null;
+    var close=function(){if(pickerCleanup)pickerCleanup();if(optionObserver)optionObserver.disconnect();document.removeEventListener('keydown',keys,true);overlay.remove();window.__pickerClose=null;if(prior&&prior.isConnected)prior.focus({preventScroll:true});};window.__pickerClose=close;
+    function keys(e){if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){var list=Array.from(overlay.querySelectorAll('button:not(:disabled),input:not(:disabled),[tabindex="0"]')),i=list.indexOf(document.activeElement);e.preventDefault();list[(i+(e.shiftKey?-1:1)+list.length)%list.length].focus();}}
     overlay.addEventListener('click',function(e){if(e.target===overlay)close();});overlay.querySelector('.app-picker-head button').onclick=close;document.addEventListener('keydown',keys,true);
     function commit(value){var target=control.isConnected?control:control.id&&document.getElementById(control.id);if(!target){close();return;}target.value=value;target.dispatchEvent(new Event('input',{bubbles:true}));target.dispatchEvent(new Event('change',{bubbles:true}));close();}
     if(control.tagName==='SELECT'){
@@ -1657,14 +1657,11 @@
       filter=body.querySelector('input');if(filter){filter.value=query;filter.oninput();}body.scrollTop=scroll;var focus=filter||body.querySelector('.chosen,button');if(hadFocus&&focus)focus.focus({preventScroll:true});}
       renderOptions();optionObserver=new MutationObserver(function(){if(overlay.isConnected)renderOptions();});optionObserver.observe(control,{childList:true,subtree:true,attributes:true,characterData:true,attributeFilter:['disabled','label','value','selected']});
     }else{
-      var date=new Date(control.value||Date.now()),fields=control.type==='datetime-local'?['Year','Month','Day','Hour','Minute']:['Year','Month','Day'];
-      var values=[date.getFullYear(),date.getMonth()+1,date.getDate(),date.getHours(),date.getMinutes()];
-      body.innerHTML='<div class="picker-date">'+fields.map(function(name,i){return '<label class="nf"><span>'+name+'</span><input type="number" data-date="'+i+'" value="'+values[i]+'" min="'+(i===0?1900:i<3?1:0)+'" max="'+[2200,12,31,23,59][i]+'"></label>';}).join('')+'</div><p class="picker-error"></p><button type="button" class="btn primary" data-apply>Apply</button><button type="button" class="btn tonal" data-clear>Clear</button>';
-      body.querySelector('[data-clear]').onclick=function(){commit('');};body.querySelector('[data-apply]').onclick=function(){var v=Array.from(body.querySelectorAll('[data-date]')).map(function(input){return Number(input.value);}),d=new Date(v[0],v[1]-1,v[2],v[3]||0,v[4]||0),pad=function(n){return String(n).padStart(2,'0');};if(d.getFullYear()!==v[0]||d.getMonth()!==v[1]-1||d.getDate()!==v[2]||(fields.length===5&&(d.getHours()!==v[3]||d.getMinutes()!==v[4]))){body.querySelector('.picker-error').textContent='Enter a valid date and time.';return;}commit(v[0]+'-'+pad(v[1])+'-'+pad(v[2])+(fields.length===5?'T'+pad(v[3])+':'+pad(v[4]):''));};
+      pickerCleanup=DateTimePicker.mount(body,control,{get24:function(){return !!S.clock24;},set24:function(on){S.clock24=!!on;save();},commit:commit});
     }
-    document.body.appendChild(overlay);(overlay.querySelector('.chosen,input,button')||overlay).focus();
+    document.body.appendChild(overlay);(overlay.querySelector('.cal-day[aria-selected="true"],.chosen')||overlay.querySelector('input,button,[tabindex="0"]')||overlay).focus();
   }
-  function pickerTarget(e){return e.target.closest('select,input[type="date"],input[type="datetime-local"]');}
+  function pickerTarget(e){return e.target.closest('select,input[type="date"],input[type="datetime-local"],input[type="time"]');}
   document.addEventListener('pointerdown',function(e){var control=pickerTarget(e);if(control&&!control.disabled){e.preventDefault();}},true);
   document.addEventListener('click',function(e){var control=pickerTarget(e);if(control&&!control.disabled){e.preventDefault();e.stopPropagation();appPicker(control);}},true);
   document.addEventListener('keydown',function(e){var control=pickerTarget(e);if(control&&['Enter',' ','ArrowDown'].includes(e.key)){e.preventDefault();appPicker(control);}},true);

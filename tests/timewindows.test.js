@@ -25,14 +25,14 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
 // Every supported hazard obeys the user's exclusions; incomplete readings never auto-approve.
 {
  const W=require('../assets/web/timewindows.js'),kinds=Object.fromEntries(['alert','tornado','tropical','flood','storm','ice','snow','rain','fog','wind','heat','cold','air'].map(k=>[k,true]));
- const complete=hazards=>({hazards,stats:{points:2,weather:2,errors:0}}),rules={enabled:true,ask:Object.keys(kinds)};
+ const complete=hazards=>({hazards,stats:{points:2,weather:2,errors:0}}),rules={version:2,allow:Object.keys(kinds)};
  assert(W.autoAllowed(complete([]),rules,kinds));
- for(const kind of Object.keys(kinds)){assert(!W.autoAllowed(complete([{kind}]),rules,kinds));assert(W.autoAllowed(complete([{kind}]),{enabled:true,ask:[]},kinds));}
- assert(!W.autoAllowed(complete([{kind:'unknown'}]),{enabled:true,ask:[]},kinds));
+ for(const kind of Object.keys(kinds)){assert(!W.autoAllowed(complete([{kind}]),{version:2,allow:[]},kinds));assert(W.autoAllowed(complete([{kind}]),{version:2,allow:[kind]},kinds));assert(!W.autoAllowed(complete([{kind}]),{enabled:true,ask:[]},kinds));}
+ assert(!W.autoAllowed(complete([{kind:'unknown'}]),{version:2,allow:['rain']},kinds));
  for(const flag of ['errors','beyondWeather','aiPending']){const r=complete([]);r.stats[flag]=1;assert(!W.autoAllowed(r,rules,kinds));}
- for(const r of [null,{hazards:[]},Object.assign(complete([]),{error:'unavailable'}),{hazards:[],stats:{points:2,weather:1}},complete([{kind:'rain',aiPending:true}]),complete([{kind:'rain',areaUncertain:true}])])assert(!W.autoAllowed(r,{enabled:true,ask:[]},kinds));
+ for(const r of [null,{hazards:[]},Object.assign(complete([]),{error:'unavailable'}),{hazards:[],stats:{points:2,weather:1}},complete([{kind:'rain',aiPending:true}]),complete([{kind:'rain',areaUncertain:true}])])assert(!W.autoAllowed(r,{version:2,allow:['rain']},kinds));
  assert(!W.autoAllowed(complete([]),{enabled:false,ask:[]},kinds));
- assert(!W.autoAllowed(complete([{kind:'rain'},{kind:'storm'}]),{enabled:true,ask:['storm']},kinds));
+ assert(!W.autoAllowed(complete([{kind:'rain'},{kind:'storm'}]),{version:2,allow:['rain']},kinds));
 }
 
 {
@@ -45,7 +45,7 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
 
 {
  const fog={kind:'fog',level:1,fromMi:0,toMi:20},make=extra=>({hazards:[fog],stats:{points:2,weather:2,errors:0,...extra}}),rows=[make({}),make({beyondAir:1}),make({aiPending:1}),make({errors:1}),make({weather:1}),make({})].map((reading,i)=>({leg:0,routeKey:'fog',depart:start+i*h,reading}));
- const rules={enabled:true,ask:['rain']},kinds={fog:['Fog'],rain:['Rain']};
+ const rules={version:2,allow:['fog']},kinds={fog:['Fog'],rain:['Rain']};
  assert(W.autoAllowed(rows[0].reading,rules,kinds));assert(W.autoAllowed(rows[5].reading,rules,kinds));
  assert.equal(W.group(rows).length,5,'air-only gaps do not create new screening questions; weather/rating changes still do');
  assert.equal(W.autoReasons(rows[1].reading,rules,kinds).length,0);assert.match(W.dataNotices([{reading:rows[1].reading}])[0],/Air-quality/);assert.equal(W.autoReasons(rows[2].reading,rules,kinds)[0].code,'rating');
@@ -53,4 +53,4 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
 }
 
 // Missing air-quality requests are reported after planning, not treated as a weather approval.
-{const r={hazards:[],stats:{points:2,weather:2,air:0,errors:1,airErrors:1}};assert.equal(W.screeningIssues(r).length,0);assert(W.autoAllowed(r,{enabled:true,ask:[]},{}));assert.equal(W.dataNotices([{reading:r}]).length,1);}
+{const r={hazards:[],stats:{points:2,weather:2,air:0,errors:1,airErrors:1}};assert.equal(W.screeningIssues(r).length,0);assert(W.autoAllowed(r,{version:2,allow:['rain']},{}));assert.equal(W.dataNotices([{reading:r}]).length,1);}

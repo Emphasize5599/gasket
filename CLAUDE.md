@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.307 - hazard opt-in and date/time controls
+
+Hazard approval now uses TimeWindows.approvalRules: version2 explicit allow-list; no editable master switch. Missing/legacy enabled+ask settings normalize to empty so inverse checkbox meanings cannot grant consent. All hazard types unchecked initially. Existing clear-weather handling, explicit declines, unknown/incomplete/AI-pending readings and tire-risk gates retained. Settings and hourly screens use the same meaning.
+
+App-owned DateTimePicker replaces numeric date-entry dialogs globally for date/datetime-local/time inputs: month grid, month/year selection, native CSS scroll-snap hour/minute/AM-PM wheels, keyboard controls, persisted S.clock24 checkbox (also Trip defaults). ISO values stay local and display changes preserve the absolute hour. No third-party code or dependency bundled; design research references: https://github.com/uvarov-frontend/vanilla-calendar-pro and https://github.com/TahaSh/loopem . StopClock and window labels respect 24-hour preference. Window configure pairs (primary, opposite and every destination arrival/departure) clamp the unedited endpoint to the edited datetime when ordering becomes invalid; blanks still require explicit completion.
+
+Focused tests cover all hazard kinds and legacy reset, prior declines/AI gating, paired live correction both directions, calendar leap-year clamping, time wheels/noon/24-hour persistence/cancel/clear, existing select/tire dialogs, onboarding and narrow layouts. Screenshots reviewed at320 and448 widths. Monitor307 workflow through signed APK publication; do not assume physical-phone wheel feel verified.
+
 ## 0.0.306 - conditional campground hours
 
 Verified publication: commit b3d16f2, run40922011528/job123619170423 completed successfully through full regressions, native/signing/APK verification and ARM64/universal publication. Both306assets confirmed via release API. Preceding304 and305 actions also succeeded;303 was stopped by the missing-preferences regression and has no APK. Point owner to306.
