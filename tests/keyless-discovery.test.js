@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const P=require('../assets/web/pricing.js'),K=require('../assets/web/keylessgas.js');
 const T=require('../assets/web/trip.js');
-assert.equal(K.networkDuration(24000,{bulkPages:4}),6000);assert.equal(K.networkDuration(24000,{bulkPages:4,bulkFallback:'failed'}),24000);
+assert.equal(K.networkDuration(24000,{bulkPages:4}),6000);assert.equal(K.networkDuration(240000,{bulkPages:4,bulkMs:16000}),4000,'navigation/bridge wait is not command network latency');assert.equal(K.networkDuration(24000,{bulkPages:4,bulkFallback:'failed'}),24000);
 const webRoute={polyline:{encodedPolyline:T.encodePolyline([{lat:34,lng:-92},{lat:34.1,lng:-92}])},websiteApproximate:true,distanceMeters:10000,duration:'600s'};
 assert.equal(T.joinRoutes([webRoute,webRoute]).websiteApproximate,true,'multi-leg website routes retain the approximation label');
 const base={id:'a',name:'Local Fuel',lat:34,lng:-92,address:'100 Main Street, Testville',prices:{regular:{price:3}}};

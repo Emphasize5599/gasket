@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.308 - 2026-10-29
+- Reuse loaded Maps readers between station search areas.
+- Reduce station parsing work and correct scan throttling measurements.
+
 ## 0.0.307 - 2026-10-29
 - Make automatic hazard approval opt-in for each hazard.
 - Add calendar and scrolling time pickers with a 24-hour preference.

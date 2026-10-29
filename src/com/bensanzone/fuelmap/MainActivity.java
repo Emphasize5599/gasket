@@ -541,6 +541,8 @@ public class MainActivity extends Activity {
         int gasFirstRows;
         JSONArray partialGasStores = null;
         String gasRequestedGrade = "regular";
+        boolean gasCommandReady = false, gasCommandReusing = false;
+        String gasTargetUrl = null;
         String verificationUrl = null;
         final java.util.concurrent.atomic.AtomicIntegerArray omittedGasResources = new java.util.concurrent.atomic.AtomicIntegerArray(4);
 
@@ -585,6 +587,15 @@ public class MainActivity extends Activity {
         void finishRead(int reqId, String json) {
             if (readReq != reqId) return;
             if (recoverNhtsa(reqId, json)) return;
+            // Reused command lost its schema/session: reload THIS cell under the same request/deadline.
+            if (isGasWorker(key) && gasCommandReusing && view != null) try {
+                JSONObject reply = new JSONObject(json);
+                if ("command_reload".equals(reply.optString("code")) && gasTargetUrl != null) {
+                    gasCommandReusing = false; gasCommandReady = false; ready = false;
+                    view.stopLoading(); view.loadUrl(gasTargetUrl); return;
+                }
+            } catch (Exception ignored) { }
+            boolean keepGasPage = false;
             if ("traffic".equals(key)) try {
                 JSONObject answer = new JSONObject(json); String check = answer.optString("verificationUrl", "");
                 if (answer.optBoolean("blocked") && check.startsWith("https://www.google.com/sorry/")) verificationUrl = check;
@@ -641,6 +652,11 @@ public class MainActivity extends Activity {
                         answer.put("stores", merged); detail.put("retainedPartialStores", partialGasStores.length());
                         detail.put("read", merged.length()); detail.put("priced", priced);
                     }
+                    keepGasPage = !answer.optBoolean("blocked") && !answer.optBoolean("cancelled")
+                            && answer.isNull("error") && detail.optBoolean("commandReusable") && "regular".equals(gasRequestedGrade);
+                    gasCommandReady = keepGasPage;
+                    detail.put("nativeCommandReused", gasCommandReusing);
+                    detail.put("nativeReadMs", Math.max(0, System.nanoTime()/1000000L-gasReadStarted));
                     detail.put("leanResources", leanGasResources); detail.put("fullResourceRetry", retriedGasResources);
                     detail.put("retryElapsedMs", retriedGasResources ? Math.max(0, gasRetryAt - gasReadStarted) : 0);
                     detail.put("firstAttemptStopReason", gasFirstStop); detail.put("firstAttemptRows", gasFirstRows);
@@ -654,9 +670,16 @@ public class MainActivity extends Activity {
             if (readDeadline != null) main.removeCallbacks(readDeadline);
             readDeadline = null;
             if (isGasWorker(key) && view != null && verifying != this) {
-                view.stopLoading(); view.loadUrl("about:blank"); view.clearHistory(); ready = false;
                 completedReads++;
-                if (completedReads % 4 == 0) {
+                // One stable document per lane; periodically recycle, or immediately clear failed/grade-specific reads.
+                if (keepGasPage && completedReads % 16 != 0) {
+                    ready = true;
+                    view.evaluateJavascript("performance.clearResourceTimings();", null);
+                } else {
+                    gasCommandReady = false; ready = false;
+                    view.stopLoading(); view.loadUrl("about:blank"); view.clearHistory();
+                }
+                if (!gasCommandReady && completedReads % 4 == 0) {
                     final SiteWorker old = this;
                     main.post(new Runnable() { public void run() {
                         if (old.readReq >= 0 || verifying == old || workers.get(old.key) != old || old.view == null) return;
@@ -2472,8 +2495,10 @@ public class MainActivity extends Activity {
                     String script = w != null ? asset((isGasWorker(key) ? "gasweb" : key) + "_worker.js") : "";
                     if ("restmaps".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/restmaps.js") + "\nreturn (" + script + ")(reqId,args);}";
                     if ("brave".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
-                    // Reuse the exact application matcher, not a weaker price/coordinate heuristic.
-                    if (isGasWorker(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/pricing.js") + "\n" + asset("web/keylessgas.js") + "\nreturn (" + script + ")(reqId,args);}";
+                    boolean gasDiscovery = false;
+                    try { gasDiscovery = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
+                    // Only saved-station refresh needs the application matcher; discovery has no target list.
+                    if (isGasWorker(key) && !gasDiscovery && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/pricing.js") + "\n" + asset("web/keylessgas.js") + "\nreturn (" + script + ")(reqId,args);}";
                     String url;
                     try { url = new JSONObject(argsJson).optString("url", ""); } catch (Exception e) { url = ""; }
                     // only these pages may be read this way
@@ -2500,9 +2525,20 @@ public class MainActivity extends Activity {
                     for (int i = 0; i < 4; i++) w.omittedGasResources.set(i, 0);
                     // once per page load (the page keeps a flag; a reload clears it and gets the reader again)
                     w.readCall = "if(window.__gasketRead!==" + reqId + "){window.__gasketRead=" + reqId + ";Promise.resolve((" + script + ")(" + reqId + "," + argsJson + ")).catch(function(){GasketSite.result(" + reqId + ",JSON.stringify({error:'Page reader failed',code:'reader'}));});}";
+                    w.gasTargetUrl = url;
+                    boolean reuseGas = false;
+                    if (isGasWorker(key) && w.gasCommandReady && w.ready) try {
+                        JSONObject arguments = new JSONObject(argsJson);
+                        reuseGas = "discover".equals(arguments.optString("mode")) && "regular".equals(arguments.optString("grade","regular")) && !"scroll".equals(arguments.optString("searchMethod"));
+                        if (reuseGas) {
+                            arguments.put("reuseCommands",true);
+                            w.readCall = "if(window.__gasketRead!==" + reqId + "){window.__gasketRead=" + reqId + ";Promise.resolve((" + script + ")(" + reqId + "," + arguments.toString() + ")).catch(function(){GasketSite.result(" + reqId + ",JSON.stringify({error:'Page reader failed',code:'reader'}));});}";
+                        }
+                    } catch (Exception ignored) { reuseGas = false; }
+                    w.gasCommandReusing = reuseGas;
                     w.queue.clear();
                     // Picker steps share the same page and cookies. Reuse it instead of racing same-URL reload callbacks.
-                    if (("tirerack".equals(key) || "xom".equals(key)) && w.ready && url.equals(w.view.getUrl())) w.runRead();
+                    if (reuseGas || (("tirerack".equals(key) || "xom".equals(key)) && w.ready && url.equals(w.view.getUrl()))) w.runRead();
                     else { w.ready = false; w.view.loadUrl(url); }
                     // and if the page never says it's drawn or finished, start the reader anyway after a few seconds
                     final SiteWorker fw = w; final int fr = reqId;

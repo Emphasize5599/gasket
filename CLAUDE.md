@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.308 - reduce cold scan overhead
+
+Owner306 log18:09:197/784areas in576s canceled;50selected/aggressive, actual peak18/cap4-15,85.8%command records outside cells. See docs/READER_PERFORMANCE.md for evidence and live paired browser measurements. Reuse successful regular-command documents up to16jobs; recenter/scale captured request to existing cell URL. Failed reuse reloads correct cell under same request/deadline; no old DOM merged, no skipped pagination or coverage changes. Discovery drops unneeded matcher reinjection; scoped price parsing avoids out-of-cell evidence allocations. Network feedback uses actual bulk request work rather than navigation waits. Added reuse/native timings, periodic recycle and existing pressure/bot/cancel safeguards retained. Focused scan/cache/merge/all-grade tests pass. Monitor308 full native/regression/sign/publication before completion.
+
+307 calendar/hazard build verified: run40927875520/job123638135144 success; both ARM64 and universal APKs present.
+
 ## 0.0.307 - hazard opt-in and date/time controls
 
 Hazard approval now uses TimeWindows.approvalRules: version2 explicit allow-list; no editable master switch. Missing/legacy enabled+ask settings normalize to empty so inverse checkbox meanings cannot grant consent. All hazard types unchecked initially. Existing clear-weather handling, explicit declines, unknown/incomplete/AI-pending readings and tire-risk gates retained. Settings and hourly screens use the same meaning.

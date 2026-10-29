@@ -38,9 +38,9 @@ async function worker(pg,body,raw,status=200,args={},realMs=0){
   if(!pg.__fixtureClock){await pg.clock.install();pg.__fixtureClock=true;}
   await pg.setContent(body);
   await pg.evaluate(({raw,status})=>{
-    window.answers=[];window.GasketSite={result:(_,s)=>answers.push(JSON.parse(s))};
+    window.commandUrls=[];window.answers=[];window.GasketSite={result:(_,s)=>answers.push(JSON.parse(s))};
     performance.getEntriesByType=()=>[{name:raw&&raw.bulk?'https://www.google.com/search?tbm=map&q=gas+stations&pb=!4m8!1m3!1d1000!2d-92.29!3d34.745!3m2!1i1280!2i900!4f13.1!7i20!10b1!12m1!1b1':'https://www.google.com/search?tbm=map&q=gas+stations'}];
-    window.fetch=async u=>{const offset=+(new URL(u).searchParams.get('pb')?.match(/!8i(\d+)/)?.[1]||0),code=raw&&raw.bulk&&raw.statuses&&raw.statuses[offset]||status,body=raw&&raw.bulk?JSON.stringify(raw.pages[offset]||raw.pages[0]):raw;return {ok:code===200,status:code,url:'https://www.google.com/search',text:async()=>body};};
+    window.fetch=async u=>{commandUrls.push(String(u));const offset=+(new URL(u).searchParams.get('pb')?.match(/!8i(\d+)/)?.[1]||0),code=raw&&raw.bulk&&raw.statuses&&raw.statuses[offset]||status,body=raw&&raw.bulk?JSON.stringify(raw.pages[offset]||raw.pages[0]):raw;return {ok:code===200,status:code,url:'https://www.google.com/search',text:async()=>body};};
   },{raw,status});
   await pg.evaluate(({s,args})=>{(0,eval)('('+s+')')(1,args);},{s:nativeScript,args});
   for(let i=0;i<650&&!(await pg.evaluate(()=>answers.length));i++){await pg.clock.fastForward(300);if(realMs)await pg.waitForTimeout(realMs);}   // realMs: Chrome delivers scroll events on real frames, not the fake clock
@@ -70,7 +70,15 @@ async function worker(pg,body,raw,status=200,args={},realMs=0){
   const terminal=Array(72).fill(null);terminal[0]=['gas stations'];terminal[1]=[[1000,-92.29,34.745]];terminal[58]=[0];terminal[71]=[1];
   const protocolBody='<div role="feed">'+link('0xaa:0x1')+'</div>',pages={0:bulkPage(0,100),100:bulkPage(100,2,101),200:terminal};
   const bulk=await worker(pg,protocolBody,{bulk:true,pages},200,{mode:'discover'});assert.equal(bulk.detail.stopReason,'command_end');assert.equal(bulk.detail.bulkPages,3);assert.equal(bulk.detail.scrolls,0,'commands finish without scrolling');assert.equal(bulk.stores.length,101,'all command pages merge and explicitly closed station is excluded');assert(bulk.stores.every(s=>s.prices.regular.price===3.19&&s.placeId),'typed identities and explicit prices retained');
-  const clippedPages=JSON.parse(JSON.stringify(pages));clippedPages[0][64][0][1][9][2]=35;const clipped=await worker(pg,protocolBody,{bulk:true,pages:clippedPages},200,{mode:'discover',area:{lat:34.745,lng:-92.29,radius:.005}});assert(clipped.stores.every(s=>P.haversineMi(34.745,-92.29,s.lat,s.lng)<=.005),'command records outside the search cell are rejected inside the reader');assert(clipped.detail.bulkOutside>0);
+  assert(bulk.detail.commandReusable,'explicit command end can retain its page');
+  const moved=bulkPage(0,2);moved[64].forEach(x=>{x[1][9][2]=35.745;x[1][9][3]=-93.29;});
+  const reuseArgs={mode:'discover',grade:'regular',reuseCommands:true,url:'https://www.google.com/maps/search/gas+stations/@35.74500,-93.29000,12z?hl=en',area:{lat:35.745,lng:-93.29,radius:8}};
+  const reused=await worker(pg,protocolBody,{bulk:true,pages:{0:moved,100:terminal}},200,reuseArgs);
+  assert.equal(reused.stores.length,2);assert(reused.detail.commandReused&&reused.detail.commandReusable);assert(reused.stores.every(s=>s.lat===35.745),'never leak old DOM stations into a new cell');
+  const command=await pg.evaluate(()=>new URL(commandUrls[0]).searchParams.get('pb'));assert.match(command,/!2d-93.29!3d35.745/);assert.match(command,/!4f12\.1/);assert.equal(reused.detail.cardsParsed,0,'warm document needs neither DOM scan nor rendering');
+  const reuseBad=await worker(pg,protocolBody,{bulk:true,pages:{0:['changed schema']}},200,reuseArgs);assert.equal(reuseBad.code,'command_reload');assert.equal(reuseBad.stores.length,0);assert.equal(K.searched(reuseBad),null,'failed command reuse cannot mark a cell covered');
+  const reuseBlocked=await worker(pg,protocolBody,{bulk:true,pages:{0:moved},statuses:{0:429}},200,reuseArgs);assert(reuseBlocked.blocked,'warm pages must surface bot checks');
+  const clippedPages=JSON.parse(JSON.stringify(pages));clippedPages[0][64][0][1][9][2]=35;const clipped=await worker(pg,protocolBody,{bulk:true,pages:clippedPages},200,{mode:'discover',area:{lat:34.745,lng:-92.29,radius:.005}});assert(clipped.stores.every(s=>P.haversineMi(34.745,-92.29,s.lat,s.lng)<=.005),'command records outside the search cell are rejected inside the reader');assert(clipped.detail.bulkOutside>0);assert(clipped.detail.priceLabels<=clipped.stores.length+1,'out-of-cell records must not allocate price-evidence collections');
   const smallPages={0:bulkPage(0,20),20:bulkPage(20,2),40:terminal};const small=await worker(pg,protocolBody,{bulk:true,pages:smallPages},200,{mode:'discover',searchMethod:'commands20'});assert.equal(small.stores.length,22);assert.equal(small.detail.bulkPageSize,20);
   const scrollOnly=await worker(pg,protocolBody+'End of the list',JSON.stringify([]),200,{mode:'discover',searchMethod:'scroll'});assert.equal(scrollOnly.detail.bulkPages,0);
   const commandNoFeed=await worker(pg,'<p>Map loading</p>',{bulk:true,pages},200,{mode:'discover'});assert.equal(commandNoFeed.error,null,'valid command results do not require a rendered feed');assert.equal(commandNoFeed.code,'limited');assert.equal(commandNoFeed.detail.exhausted,true);assert.equal(commandNoFeed.stores.length,101);assert.equal(K.searched(commandNoFeed),'end','a command-complete reply with no rendered feed certifies its cell for StationStore');
