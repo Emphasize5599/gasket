@@ -670,6 +670,29 @@
   function median(xs) { var a = xs.slice().sort(function (x, y) { return x - y; }); return a.length ? a[Math.floor(a.length / 2)] : 0; }
 
   /** Full plan: optimized + a "convenient" baseline (fewest stops, least detour, fill up) for comparison. */
+  // Recommendation previews only: keep geographic coverage and useful price,
+  // access and charging choices without optimizing every nearby pump each hour.
+  // This is not an exact dominance rule. The winner is replanned with ALL stations.
+  function previewCandidates(o) {
+    var all=o.cands;if(all.length<=300)return all;
+    var usable=Math.max(.001,o.capGal-Math.max(o.bufferGal||0,o.arriveGal||0)),
+      span=Math.max(1,Math.min(20,usable/Math.max(.001,o.model.combGpm)/12)),bins=new Map(),keep=new Set();
+    all.forEach(function(c){
+      var policy=legPolicy(o,c.d);if(c.d<0||c.d>o.model.totalMi||policy.maxDetourMin!=null&&(c.detourMin||0)>policy.maxDetourMin)return;
+      var key=(c.leg||0)+'|'+Math.floor(c.d/span),b=bins.get(key);if(!b){b={};bins.set(key,b);}
+      function choose(name,score){if(!b[name]||score<b[name].score)b[name]={c:c,score:score};}
+      choose('first',c.d);choose('last',-c.d);
+      choose('price',c.price+Math.max(0,c.sessionFee||0)/Math.max(1,usable));
+      choose('access',(c.detourMin||0)+(c.detourMi||0)*.01);
+      if(c.citgo&&(c.citgo.bit||c.citgo.extra))choose('reward'+(c.citgo.bit||0),c.price-(c.citgo.extra||0));
+      if(o.fuelKind==='ev'){
+        choose('power',-Math.max(0,c.kw||c.stationKw||0));
+        if(c.priceKnown===true&&c.calc&&Number.isFinite(+c.calc.updated)&&o.priceNow-(+c.calc.updated)<=o.priceAgeHours*3600e3)choose('fresh',c.price);
+      }
+    });
+    bins.forEach(function(b){Object.keys(b).forEach(function(k){keep.add(b[k].c);});});
+    return all.filter(function(c){return keep.has(c);});
+  }
   function plan(o) {
     if(o.preferredFillCap>0&&o.fillCap>o.preferredFillCap+1e-8&&!o.preferredChargePass)return preferredChargePlan(o);
     if(EP&&o.propulsion&&!o.propulsionPass)return propulsionPlan(o);
@@ -1116,8 +1139,17 @@
   /** The route as you'll drive it: gas used includes the extra for your cruising speeds (rates from speedRates). */
   function withSpeeds(model, rates) {
     if (!rates || !rates.some(function (r) { return r.rate; })) return model;
+    // Integrate once. Long traffic profiles contain thousands of speed sections;
+    // scanning all of them at every station (and every optimizer retry) is quadratic.
+    // Events also preserve the old additive behavior for overlapping sections.
+    var events=[];rates.forEach(function(r){if(r.to>r.from&&r.rate){events.push([r.from,r.rate],[r.to,-r.rate]);}});
+    events.sort(function(a,b){return a[0]-b[0];});
+    var xs=[],areas=[],slopes=[],area=0,slope=0,previous=events.length?events[0][0]:0;
+    for(var i=0;i<events.length;){var x=events[i][0];area+=(x-previous)*slope;while(i<events.length&&events[i][0]===x)slope+=events[i++][1];xs.push(x);areas.push(area);slopes.push(slope);previous=x;}
+    function integral(d){var lo=0,hi=xs.length;while(lo<hi){var mid=(lo+hi)>>>1;if(xs[mid]<=d)lo=mid+1;else hi=mid;}var j=lo-1;return j<0?0:areas[j]+(d-xs[j])*slopes[j];}
+    var zero=integral(0);
     var m = Object.create(model);
-    m.galTo = function (d) { return model.galTo(d) + extraBetween(rates, 0, d); };
+    m.galTo = function (d) { return model.galTo(d) + (d>0?integral(d)-zero:0); };
     m.speedRates = rates;
     return m;
   }
@@ -1153,7 +1185,7 @@
 
   var api = { withSpeeds: withSpeeds, reachable: reachable, speedRates: speedRates, extraBetween: extraBetween, fuelCheck: fuelCheck, projectLegs: projectLegs, coveredBefore: coveredBefore, legModels: legModels, joinRoutes: joinRoutes, exportLegs: exportLegs, fullAddress: fullAddress, parseData: parseData, shortLabel: shortLabel, extractUrl: extractUrl, isShortLink: isShortLink, parseMapsUrl: parseMapsUrl, decodePolyline: decodePolyline,
     encodePolyline: encodePolyline, buildRoute: buildRoute, project: project, chunks: chunks, samplePoints: samplePoints,
-    optimize: optimize, plan: plan, topUps: topUps, account: account, legSummaries:legSummaries, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
+    optimize: optimize, previewCandidates:previewCandidates, plan: plan, topUps: topUps, account: account, legSummaries:legSummaries, mirror: mirror, reverseModel: reverseModel, exportUrl: exportUrl, hav: hav, bufferSweep: bufferSweep, marks: marks, idealStart: idealStart };
   /** Absolute stop-aware clock, with destination departure constraints kept out of driving time. */
   function travelClock(m,d,depart,stops,waits,options,charges){
     var before=function(at,inclusive){return ((stops||[]).filter(function(s){return s.c.d<at||inclusive&&s.c.d===at;}).reduce(function(n,s){return n+stopDelay(options||{},s);},0)+(charges||[]).filter(function(s){return s.d<at||inclusive&&s.d===at;}).reduce(function(n,s){return n+s.minutes;},0))*60000;},extra=0;

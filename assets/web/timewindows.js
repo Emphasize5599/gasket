@@ -112,13 +112,16 @@
   }
   async function recommend(c){
     var ranked=await shortlist(c);if(!ranked)return null;var valid=c.valid||function(){return true;},best=null,verified=[],checked=0,review=[],seenPlans=new Set();
-    for(var i=0;i<ranked.candidates.length&&valid();i++){
-      if(best&&checked>=(c.initial||16))break;var key=c.planKey?c.planKey(ranked.candidates[i].path):ranked.candidates[i].path.map(function(r){return r.routeKey+'|'+r.depart;}).join(';');if(seenPlans.has(key))continue;seenPlans.add(key);var candidate=await c.plan(ranked.candidates[i].path);checked++;
+    var next=0,width=Math.max(1,Math.min(3,c.width||1)),initial=c.initial||16;
+    async function lane(){while(next<ranked.candidates.length&&valid()){
+      if(best&&next>=initial)break;var path=ranked.candidates[next++].path,key=c.planKey?c.planKey(path):path.map(function(r){return r.routeKey+'|'+r.depart;}).join(';');if(seenPlans.has(key))continue;seenPlans.add(key);var candidate=await c.plan(path);checked++;if(!valid())return;
       if(candidate&&candidate.review){if(!review.length)review=candidate.review;}else if(candidate){verified.push(candidate);if(better(candidate,best,c.priority,c.earlyEnabled))best=candidate;}
       if(c.planProgress)c.planProgress(checked,best,ranked.candidates.length);
-    }
+    }}
+    await Promise.all(Array.from({length:width},lane));
+    if(!valid())return null;
     verified.sort(function(a,b){return better(a,b,c.priority,c.earlyEnabled)?-1:better(b,a,c.priority,c.earlyEnabled)?1:0;});
-    if(c.refine){best=null;for(var j=0;j<Math.min(2,verified.length)&&valid();j++){var refined=await c.refine(verified[j].path);if(refined&&!refined.review&&better(refined,best,c.priority,c.earlyEnabled))best=refined;else if(refined&&refined.review)review=review.concat(refined.review);}}
+    if(c.refine){best=null;for(var j=0;j<Math.min(c.finalists||2,verified.length)&&valid();j++){var refined=await c.refine(verified[j].path);if(refined&&!refined.review&&better(refined,best,c.priority,c.earlyEnabled))best=refined;else if(refined&&refined.review){review=review.concat(refined.review);if(!best)break;}if(c.refineProgress)c.refineProgress(j+1);}}
     return valid()?{best:best,checked:checked,screened:ranked.screened,shortlisted:ranked.candidates.length,screening:ranked,review:best?[]:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
