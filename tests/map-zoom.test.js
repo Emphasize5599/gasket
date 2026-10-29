@@ -6,16 +6,16 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href+'#restored');
  await p.waitForSelector('#btnLocate.live');
  const result=await p.evaluate(async()=>{
-  const map=__app.map,wait=ms=>new Promise(r=>setTimeout(r,ms));map.setView([35,-119],13,{animate:false});
+  const map=__app.map,wait=ms=>new Promise(r=>setTimeout(r,ms)),paint=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));map.setView([35,-119],13,{animate:false});
   const canvas=L.canvas();
   const dots=['gas','ev','h2','chosen'].map((k,i)=>L.circleMarker([35+i*.1,-119],{renderer:i===1||i===2?canvas:undefined,radius:k==='chosen'?5:6,weight:2,color:'#fff',fillColor:k==='h2'?'#0e7fc0':'#18a957'}).addTo(map));
   const pts=[[35,-119],[36,-120]],route=L.polyline(pts,{weight:5}).addTo(map),road=L.polyline(pts,{weight:8}).addTo(map),halo=L.polyline(pts,{weight:13}).addTo(map),hit=L.polyline(pts,{weight:22,opacity:.001}).addTo(map),coverage=L.circle([35,-119],{radius:1000}).addTo(map);
   const snap=()=>({r:dots.map(d=>d.getRadius()),border:dots[0].options.weight,line:route.options.weight,road:road.options.weight,halo:halo.options.weight,hit:hit.options.weight,coverage:coverage.getRadius()});
-  const near=snap();map.setZoom(7,{animate:false});await wait(40);const far=snap();
+  const near=snap();map.setZoom(7,{animate:false});await paint();const far=snap();
   // Removed/re-added paths must retain their original widths, not shrink twice or lose registration.
-  map.removeLayer(route);route.addTo(map);map.setZoom(13,{animate:false});await wait(40);const restored=snap();
-  MapVisuals.style(route,{weight:6});map.setZoom(8,{animate:false});await wait(40);const selected=route.options.weight;
-  map.setZoom(13,{animate:false});await wait(40);
+  map.removeLayer(route);route.addTo(map);map.setZoom(13,{animate:false});await paint();const restored=snap();
+  MapVisuals.style(route,{weight:6});map.setZoom(8,{animate:false});await paint();const selected=route.options.weight;
+  map.setZoom(13,{animate:false});await paint();
   const samples=[];map.on('zoom',()=>requestAnimationFrame(()=>{const d=dots[2],renderer=d._renderer,rect=renderer._container.getBoundingClientRect(),mr=map.getContainer().getBoundingClientRect(),scale=map.getZoomScale(map.getZoom(),renderer._zoom),screen=map.latLngToContainerPoint(d.getLatLng()),drawn=rect.top-mr.top+(d._point.y-renderer._bounds.min.y)*scale;samples.push({z:map.getZoom(),r:d.getRadius()*scale,error:Math.abs(drawn-screen.y)});}));map.flyTo([35,-119],5,{duration:.55});await wait(850);
   return {near,far,restored,selected,expected:6*MapVisuals.scale(8),samples};
  });

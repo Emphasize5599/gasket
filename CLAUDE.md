@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.310 - await map rendering in regression
+
+309 run40931792298/job123651846535 passed Java reader lifecycle and all but map-zoom; its existing40ms sleeps raced rAF sizing under parallel CI. Wait two actual frames after nonanimated zoom changes, preserving every geometry assertion. Same product source as309 apart from version. Neither308nor309 published APKs; do not overwrite those source tags. Monitor310 to actual assets.
+
 ## 0.0.309 - Java lifecycle regression harness
 
 308 run40930529358/job123647436264 stopped in regressions: all other180tests passed, reader-resources harness lacked new SiteWorker fields and Android JSONObject/View method stubs. Update harness to compile actual finishRead plus test warm retention, same-request correct-cell fallback and unchanged deadline,16-read recycle, restriction cleanup. Source308 exists without APK; publish309 without overwriting it. Same measured scan changes. Downloaded official Microsoft OpenJDK21 into tmp/test-jdk (untracked, never package); set PATH to its bin and GASKET_NATIVE_TESTS=1. Actual Java lifecycle harness passes locally including added tests.
