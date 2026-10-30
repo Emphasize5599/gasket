@@ -1554,7 +1554,7 @@ public class MainActivity extends Activity {
                 JSONObject e = new JSONObject(); try { e.put("error", "Invalid traffic request"); } catch (Exception ignored) { } reply(reqId, e); return;
             }
             trafficRequests.execute(new Runnable() { public void run() {
-                JSONObject out = new JSONObject(); HttpURLConnection c = null;
+                JSONObject out = new JSONObject(); HttpURLConnection c = null; boolean reusable = false;
                 try {
                     String url = "https://www.google.com/maps/preview/directions?hl=en&gl=us&pb=" + java.net.URLEncoder.encode(pb, "UTF-8");
                     c = (HttpURLConnection) new URL(url).openConnection();
@@ -1567,6 +1567,7 @@ public class MainActivity extends Activity {
                     if (raw != null) { if ("gzip".equalsIgnoreCase(c.getContentEncoding())) raw = new java.util.zip.GZIPInputStream(raw);
                         try (InputStream in = ChargerInventory.bounded(raw, 6000000)) { body = readAll(in); }
                     }
+                    reusable = true; // fully read and closed: Android keeps the connection for the next read
                     String lower = body.substring(0, Math.min(body.length(), 16000)).toLowerCase(java.util.Locale.US);
                     if (status == 429 || status == 403 || (location != null && location.contains("/sorry/")) || lower.contains("unusual traffic") || lower.contains("g-recaptcha")) {
                         out.put("blocked", true);
@@ -1576,7 +1577,7 @@ public class MainActivity extends Activity {
                     else if (!body.startsWith(")]}'") && !body.startsWith("[")) out.put("error", "Google traffic did not return route data");
                     else out.put("body", body);
                 } catch (Exception e) { try { out.put("error", "Google traffic request failed: " + e.getClass().getSimpleName()); } catch (Exception ignored) { } }
-                finally { if (c != null) c.disconnect(); }
+                finally { if (c != null && !reusable) c.disconnect(); }
                 reply(reqId, out);
             } });
         }

@@ -21,3 +21,20 @@ Identity includes captured dated local minute, geometry and avoid settings. No w
 ## Verification
 
 trafficpolicy covers threshold edges, explicit overrides, outward round trips with rest stops and bounded/cancelled stop refinement. traffic-presets-ui at320/448 covers saved20-hour outward classification despite short slices/overlays, forced refresh, no station/price calls, old-plan preservation on error, changed-hazard decline/confirmation/export block, override and impossible arrival window. trafficflow-cache covers1030 retained profiles, restart/no-query reuse after2days,7-day expiry, explicit2-hour override, no departure-horizon tightening, changed time/avoid misses and current-car energy recomputation. Existing Google/HERE traffic, window planning, rest and comparison tests pass. Physical-phone speedup remains to be measured.
+
+## 0.0.320 read speed (simulated)
+
+`tools/simulate-traffic-reads.cjs` (opt-in, no network) runs the real GoogleTraffic code against a fake Google that answers each piece of a synthetic 1,300-mile route with a time-dependent profile (rush-hour slowdowns near towns, work zones) after a 0.9–2.3 s delay (5% three times longer), 8 reader slots. Three seeds:
+
+| | one route | 12 departure hours, 8 lanes | rest timing, 25 departures in a row | replans 1–12 min later |
+|---|---|---|---|---|
+| before | 73–76 s, 41 reads | 145–155 s, 492 reads | 1,230–1,274 s, 700 reads | 160–164 reads |
+| 0.0.320 | 34–43 s, 50–59 reads | 130–132 s, 518–553 reads | 531–573 s, 709–725 reads | 111–123 reads |
+
+Worst trip-time difference from the exact integration: 1.2 min on a ~21 h drive (before: 0.3 min); rest timing picked the same best departure in every run.
+
+- Lookahead: while piece *i* is read from Google (not when it comes from storage), the next two pieces are read at departures guessed from the traffic seen so far, using only reader slots that no route is waiting on (one slot reserved per route being read). A piece whose real departure is within 2 minutes of its guess uses that answer; a guess that drifts is replaced before it starts. When as many routes as readers are being read (hourly screening) there is no idle slot, so nothing changes there.
+- A stored piece read up to 2 minutes from the wanted departure is reused. Rest timing samples every 5 minutes, so its samples never borrow each other.
+- Matching follows Google's points in road order (identical result, about 3× less work on dense lines).
+- The native reader keeps the connection open between reads (no `disconnect()` after a fully read answer).
+- Not changed: longer pieces (150 mi / 2° cells, or no cells) were 2–3× faster with no simulated accuracy loss, but the simulation can't model Google choosing other roads between farther-apart endpoints or the loss of cross-route sharing; the next phone logs' per-piece `coverage` would show whether that's safe.

@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.320 - 2026-10-30
+- Forecast traffic reads about twice as fast for a single route and for rest timing: later stretches of the route are read ahead in idle readers, nearby departures reuse stored readings and connections stay open between reads.
+- Bug fixes.
+
 ## 0.0.319 - 2026-10-30
 - Hazard review shows the leg's other routes at the same hours, in lighter blue on the map and in a short list, so you can tell whether a route is better or worse than the alternatives.
 - Weather warnings are rated by the on-phone AI before you can approve them; each unique warning is rated once and the verdict applies everywhere it appears.
