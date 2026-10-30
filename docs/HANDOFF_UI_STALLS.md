@@ -1,10 +1,9 @@
-# Handoff: UI stalls and rest-flow blockers (unreleased, branch claude/blissful-mccarthy-s8spue)
+# Handoff: UI stalls and rest-flow blockers (released in 0.0.323)
 
-State: committed on the session branch, NOT pushed to main (main would release 0.0.323). Manifest/CHANGELOG/CLAUDE.md already
-say 0.0.323. Run `node tests/run-node.js --release` before merging; the last full run (before the later perf commits) was 191/191
-except one hazard-zones flake that passed on 4 reruns. Focused tests after the latest changes pass: restui, rest-leg-choices,
-windowplanning-ui, overnight-ui, recreation-ui, tasks, api-meter-ui, ui-flow, background-search, vehiclecompare-ui,
-planner-worker, planner-queue, ev-feasibility, autotrip-ui, citgo-trip-ui.
+State: Claude's branch through484ee68 merged into main with Codex follow-up ce86413. Published0.0.323:
+signed build41128759986/job124313970606 succeeded, all191 release regressions (including VIN) and native/runtime/
+propulsion/signing checks passed on GitHub. Local full suite190/191; owner confirmed VIN tiny-QR camera timeout is a
+known local-environment failure. Both ARM64 and universal direct APKs verified in the release API.
 
 Fixed (see CLAUDE.md 0.0.323 for detail): leg renumbering kept road answers (shiftChoices), every leg gets a rest list entrance +
 need button, rest access without a traffic provider, `raw._sel` crash in Stops, paint-before-work (afterPaint) for rest add/remove
