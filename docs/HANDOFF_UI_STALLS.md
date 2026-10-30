@@ -17,9 +17,12 @@ Audit: `tools/ui-stall-audit.cjs` (THROTTLE=8 for phone-like; PROFILE_ALL=1 TOP=
 PROFILE='label|label'; walks Next, reports STUCK; cancel scenario with ✕ after 1 s). Last clean 8x run: 25 s blocked over 29
 actions before the comparePersist / Tasks RO / markRequired / enriched changes (not re-measured since).
 
-Next step found but not done: every planner result posts `plan.cands` back (3.6 MB per plan, measured) — the biggest remaining
-main-thread cost (worker onmessage ~3.3 s at 8x). tripui uses `p.cands` only in topUps (tripui ~4051, `T.topUps(... cands:
-p.cands ...)`) and a citgo `.some` (~4147); both could use `r.cands`/`o.cands` instead. Strip `cands` from the posted plan in
-planner.js boot (`plan.cands=undefined` before postMessage, restore main-side from p.opts.cands if needed). Other remaining:
-gatherAll pricing (Pricing.compute per station per replan, ~3 s at 8x), reconcileStations/mergeSites in restSeedRows,
-renderStep/renderList costs. Owner wants less total work, not just shorter longest tasks, and ✕ must leave the app responsive.
+Codex follow-up: planner results now send candidate positions plus changed fields instead of returning the full station
+records for every plan. The main page reconstructs the exact filtered list, preserving calendar rewards, tariff prices and
+candidate order for top-up advice. Unknown/ambiguous candidates fall back to complete records. Worker input templates are
+cloned on first use too, and the page only records a cached list after postMessage succeeds. Actual-worker tests cover gas,
+hydrogen, EV and CITGO parity, concurrent plans, filtered candidates and repeated large-list runs. A synthetic 3.8 MB input
+produces a ~77 KB result (about 98% smaller); this is transport evidence, not a measured phone speedup.
+
+Remaining: gatherAll pricing (Pricing.compute per station per replan), reconcileStations/mergeSites in restSeedRows,
+renderStep/renderList costs, and cancellation work. Full release results and audit limitations will be recorded in CLAUDE.md.

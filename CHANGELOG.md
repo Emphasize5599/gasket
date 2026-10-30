@@ -9,6 +9,7 @@ Dates are when each build's source was archived (America/Chicago).
 - Every leg has a rest-stop list, including one with nothing found yet, and the overnight-rest notice opens the leg that needs it.
 - Rest stops can be added with traffic forecasts turned off.
 - Adding a rest stop and opening rest-stop lists stay responsive: the screen updates first, and road access is checked only for the places you look at.
+- Fuel-planning sweeps reuse station data with much smaller result messages to reduce screen stalls.
 - Bug fixes.
 
 ## 0.0.322 - 2026-10-30

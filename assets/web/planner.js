@@ -13,7 +13,12 @@
       var d=event.data,o=d.options,c=d.context;
       try{
         // a sweep sends the same candidate list for every plan: it comes once per worker and is reused by id
-        if(d.candsId){if(o.cands){self.__cands=self.__cands||new Map();self.__cands.set(d.candsId,o.cands);while(self.__cands.size>4)self.__cands.delete(self.__cands.keys().next().value);}else{var kept=self.__cands&&self.__cands.get(d.candsId);if(!kept)throw Error('Planner candidate list missing; retry.');o.cands=kept.map(function(x){return Object.assign({},x);});}}
+        if(d.candsId){if(o.cands){self.__cands=self.__cands||new Map();self.__cands.set(d.candsId,o.cands);while(self.__cands.size>4)self.__cands.delete(self.__cands.keys().next().value);}else{o.cands=self.__cands&&self.__cands.get(d.candsId);if(!o.cands)throw Error('Planner candidate list missing; retry.');}}
+        // Keep the cached templates unchanged, including on their first use. Calendar pricing can write arrivalAt.
+        var originals=o.cands;o.cands=originals.map(function(x){return Object.assign({},x);});
+        var positions=new Map(),keys=new Map();
+        function key(x){return JSON.stringify([x.id,x.d]);}
+        o.cands.forEach(function(x,i){positions.set(x,i);var k=key(x);keys.set(k,keys.has(k)?-1:i);});
         o.model=Trip.restoreModel(o.model);if(d.rates)o.model=Trip.withSpeeds(o.model,d.rates);
         if(c){
           function arrival(m,at,stops){
@@ -25,7 +30,21 @@
           }
           o.rewardPriceAt=function(candidate,m,stops){var at=arrival(m,candidate.d,stops);if(candidate.est||!candidate.station||candidate.station.brand!=='citgo')return Object.assign({},candidate,{rewardMonth:Pricing.monthKey(at)});var price=Pricing.tripPrice(candidate.station,c.grade,c.discounts,new Date(c.now),at);return price?Object.assign({},candidate,price):candidate;};
         }
-        var plan=Trip.plan(o);self.postMessage({id:d.id,plan:plan,refPrice:o.refPrice});
+        var plan=Trip.plan(o),candidates;
+        if(Array.isArray(plan.cands)){
+          // Send positions and changed fields, not another multi-MB copy of every station. Preserve filtered order
+          // and calendar/tariff adjustments: restoring the unfiltered input list would change top-up advice.
+          candidates=plan.cands.map(function(x){
+            var i=positions.has(x)?positions.get(x):keys.get(key(x));
+            if(i==null||i<0)return {value:x}; // ambiguous/new candidates retain the complete result
+            var base=originals[i],patch={},removed=[];
+            Object.keys(x).forEach(function(k){if(!Object.prototype.hasOwnProperty.call(base,k)||!Object.is(x[k],base[k]))patch[k]=x[k];});
+            Object.keys(base).forEach(function(k){if(!Object.prototype.hasOwnProperty.call(x,k))removed.push(k);});
+            return Object.keys(patch).length||removed.length?{index:i,patch:patch,removed:removed}:i;
+          });
+          plan.cands=null;
+        }
+        self.postMessage({id:d.id,plan:plan,candidates:candidates,refPrice:o.refPrice});
       }catch(error){self.postMessage({id:d.id,error:error.message||String(error)});}
     };
   }
@@ -34,7 +53,7 @@
   function spawn(){
     if(!url)url=URL.createObjectURL(new Blob([root.EVTariffs?root.EVTariffs.workerSource:'',root.AuxLoad?root.AuxLoad.workerSource:'',root.TrafficModel?root.TrafficModel.workerSource:'',root.Propulsion?root.Propulsion.workerSource:'',root.Trip.workerSource,root.Pricing.workerSource,'('+boot.toString()+')();'],{type:'text/javascript'}));
     var w={worker:new Worker(url),busy:0,ids:new Set(),cands:[]};
-    w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);if(d.error)p.reject(new Error(d.error));else{p.opts.refPrice=d.refPrice;if(d.plan.propulsionModel){if(!p.opts.propulsionBase){p.opts.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){p.opts.propulsionBase[k]=p.opts.model[k];});}p.opts.model=root.Trip.restoreModel(Object.assign({},p.opts.model,d.plan.propulsionModel));}p.resolve(d.plan);}requestDrain();};
+    w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);if(d.error)p.reject(new Error(d.error));else{if(d.candidates)d.plan.cands=d.candidates.map(function(x){if(typeof x==='number')return p.opts.cands[x];if(Object.prototype.hasOwnProperty.call(x,'value'))return x.value;var c=Object.assign({},p.opts.cands[x.index],x.patch);x.removed.forEach(function(k){delete c[k];});return c;});p.opts.refPrice=d.refPrice;if(d.plan.propulsionModel){if(!p.opts.propulsionBase){p.opts.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){p.opts.propulsionBase[k]=p.opts.model[k];});}p.opts.model=root.Trip.restoreModel(Object.assign({},p.opts.model,d.plan.propulsionModel));}p.resolve(d.plan);}requestDrain();};
     w.worker.onerror=function(){
       w.worker.terminate();workers.splice(workers.indexOf(w),1);if(!workers.length)disabled=true;
       w.ids.forEach(function(id){var p=pending.get(id);if(p){pending.delete(id);p.reject(new Error('Background planner unavailable. Please reopen this trip.'));}});
@@ -60,8 +79,8 @@
       if(!w){(function(job){setTimeout(function(){try{if(job.valid&&!job.valid()){dropped++;job.resolve({ok:false,cancelled:true});}else{job.resolve(root.Trip.plan(job.opts));finished++;timing(job);}}catch(e){job.reject(e);}finally{pending.delete(job.id);}},0);})(p);continue;}
       var m=p.opts.model,data={pts:[],cum:[]};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){data[k]=m[k];});
       var clean=Object.assign({},p.opts,{model:data}),context=p.context&&Object.assign({},p.context);delete clean.rewardPriceAt;if(context){delete context.valid;delete context.priority;}
-      var candsId=null;if(Array.isArray(clean.cands)&&clean.cands.length>50){candsId=candIds.get(p.opts.cands);if(!candsId){candsId=++candSeq;candIds.set(p.opts.cands,candsId);}if(w.cands.indexOf(candsId)>=0)clean.cands=null;else{w.cands.push(candsId);if(w.cands.length>4)w.cands.shift();}}
-      w.busy=1;w.ids.add(p.id);try{w.worker.postMessage({id:p.id,options:clean,rates:m.speedRates,context:context,candsId:candsId});}catch(e){pending.delete(p.id);w.busy=0;w.ids.delete(p.id);p.reject(e);}
+      var candsId=null;if(Array.isArray(clean.cands)&&clean.cands.length>50){candsId=candIds.get(p.opts.cands);if(!candsId){candsId=++candSeq;candIds.set(p.opts.cands,candsId);}if(w.cands.indexOf(candsId)>=0)clean.cands=null;}
+      w.busy=1;w.ids.add(p.id);try{w.worker.postMessage({id:p.id,options:clean,rates:m.speedRates,context:context,candsId:candsId});if(candsId&&clean.cands){w.cands.push(candsId);if(w.cands.length>4)w.cands.shift();}}catch(e){pending.delete(p.id);w.busy=0;w.ids.delete(p.id);p.reject(e);}
     }
   }
   root.Planner={size:size,workers:function(){return workers.length;},stats:stats,run:function(options,context){
