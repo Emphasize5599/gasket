@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.314 - overnight-rest planning
+
+New optional planningMode=overnight in windowPlan; old windows remain default. Shared time-window form adds repeating nightly local hours, minimum/preferred durations and local-date overrides. Overnight/OvernightUI generate hourly selected-road proposals from stored filtered rest locations, then verify selected road access, exact dwell sequence, detour and Recreation structured availability/closures/fees/amenities. Explicit permission per site. No route mutation on verification failure/cancel. Apply transactionally inserts verified RestPlan paths, remaps destination/EV indices and records fixed rest departures; normal hourly hazards/fuel/traffic planning follows. Required approval gates Route tabs/review/planning. Generated rest replacement reconstructs original paths and refuses to overwrite later changed roads. Saved-trip storage includes config/approval/rests.
+
+Read docs/OVERNIGHT_REST_PLANNING.md for exact semantics and limits: selected roads, hourly timing, greedy forward site proposals; counts/timings estimated until selected checks and full planner succeed. Not an exhaustive optimum or booking. Final restPlanIssues enforces nighttime/minimum dwell despite traffic/fuel changes. Tests new overnight + overnight-ui (320 final-arrival20h /448 departure40h two-night), rollback, overrides, permission and replacement; existing window/rest/traffic tests pass. Monitor314 to signed assets; no claim of phone validation yet.
+
 ## 0.0.313 - trip traffic cache presets and Depart refresh
 
 Verified publication: commit fc59ccd, run40981571127/job123822628163 SUCCESS on first attempt through all release regressions, Android/native checks, signing and both APK uploads. Release API confirms ARM6430,389,489 bytes and universal56,755,516 bytes. Phone checks: Auto on20-hour outward trip => Road28days; restart/repeat unchanged trip => cached pieces; explicit Commute override =>2h; Depart refresh => fresh traffic without station/price scan; changed hazards reviewed.
