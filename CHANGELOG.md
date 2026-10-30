@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.315 - 2026-10-29
+- Arrange time windows in a numbered journey, with optional tiles at each stop.
+- Move trip and nightly-rest preferences above the journey.
+
 ## 0.0.314 - 2026-10-29
 - Add overnight-rest planning with nightly hours, rest durations and individual-night overrides.
 - Suggest stops and departure times for approval before normal trip planning.

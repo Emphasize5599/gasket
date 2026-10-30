@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.315 - chronological time-window form
+
+WindowPlanning.configure now renders shared nlist/nn 123 journey with full blue disclosure tiles: origin departure only, intermediates arrival+departure, final arrival only. Cost/time, traffic-delay and optional nightly preferences precede list. Each window has its own opt-in, both ends required when enabled, live pair ordering, collapsed range summary; no invented default window on new setup. Need at least origin departure or final arrival; intermediate windows optional. Normalizes to existing mode/start/end/otherEnabled/destinations schema, including legacy final destination windows. Configuring before roads has placeholder start/final points. Final-before-start and intermediate-leave-before-arrive rejected. Explicit intermediate departure windows override head-back-right-away for window planning (windowDestination no longer silently discards them). Optional waiting allowance stays inside intermediate departure tile. Disabled windows cleared on save, input times/device timezone and DateTimePicker unchanged.
+
+Focused tests: chronological structure/controls/global order, optional anchors and required pairs, arrival-only→both roundtrip serialization, immediate return override, no overflow320/448, field pair live sanity, overnight one/two-night flow and full old hourly planning modes, shared planning priority and saved traffic refresh. Policy fixture now supplies explicit start anchor rather than depending on invented defaults. Monitor315 through signed assets.
+
 ## 0.0.314 - overnight-rest planning
 
 Verified publication: commit dcf16df, run40988876566/job123846200950 SUCCESS on first attempt through full regressions, native checks, signing and both APK uploads. Release API confirms ARM6430,401,917 bytes / universal56,763,848 bytes. Phone checks: Route overnight mode, departure/final-arrival anchor, nightly override, choose/confirm campsites, complete normal hazards/planning, save/reopen and replace without duplicates.

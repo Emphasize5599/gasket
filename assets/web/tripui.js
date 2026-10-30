@@ -128,7 +128,7 @@
   var windows=window.WindowPlanning&&WindowPlanning.init(A,{
     key:function(){return windowStateKey({id:S.carId,trip:S.trip,speed:S.speed,route:route,alts:alts});},keyFor:windowStateKey,routes:windowRoutes,selected:function(i){return hzSel(i);},
     immediateAfter:function(i){return !!(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2);},
-    destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
+    origin:function(){var p=route&&route.stops[0];return p&&(p.label||p.address)||'Start';},destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
     changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();built[ST_ROUTE]=null;renderStep();},
     priority:function(){return planningPriority(Garage.car());},setPriority:function(p){var c=Garage.car(),old=planningPriority(c);if(old==='cost')S.trip.costAvoidTolls=!!S.trip.avoid.tolls;c.planningPriority=p;c.autoTripPriority=AutoTrip.enabled(c,S.autoTripPriority)?p:'manual';S.trip.avoid.tolls=p==='time'?!tollPreference().allowPaid:!!S.trip.costAvoidTolls;},
     overnightReady:function(){return !overnight||overnight.ready();},overnight:function(){overnight.open();},enableForecast:function(){if(S.googleTraffic===false&&!(S.hereTraffic===true&&S.hereKey))return false;S.trip.trafficForecast=true;return true;},rows:windowRows,read:function(row,control){return windowRead(row,null,control);},forecastHtml:function(){return traffic?traffic.html():'';},
@@ -157,7 +157,7 @@
   });
   function windowLocal(t){var d=new Date(t);return new Date(t-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
   function windowStateKey(s){var c=S.cars.find(function(c){return c.id===s.id;}),lists=s.route&&s.route.legs?s.route.legs.map(function(l){return l.alts;}):[s.alts||[]];return VehicleCompare.key([VehicleCompare.profile(c),s.speed,s.trip.windowPlan,s.trip.trafficForecast,s.trip.avoid,planningPriority(c),c&&c.tollPreference,s.trip.returnTrip,s.trip.backAuto,lists.map(function(list){return list.map(function(a){return a.polyline;});})]);}
-  function windowDestination(i){if(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2)return {};return windows.config().destinations&&windows.config().destinations[i]||{};}
+  function windowDestination(i){return windows.config().destinations&&windows.config().destinations[i]||{};}
   function windowRoutes(){return choiceLists().map(function(list,i){return list.map(function(a,k){var m=T.buildRoute(a,carModel());return {key:RouteChoices.key(i,a),index:k,raw:a,name:a.description||'Route '+(k+1),model:m};});});}
   function windowRows(roads,bounds){
     var lists=windowRoutes(),out=[],policies=[];if(KIND()==='ev'&&window.EVCharging&&model)try{policies=EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),S.evPrice);}catch(e){}

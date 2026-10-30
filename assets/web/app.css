@@ -2230,3 +2230,9 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .picker-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .picker-actions button { width:100%; }
 @media (prefers-reduced-motion:reduce) { .time-wheel { scroll-behavior:auto; } }
+
+.tw-journey .tw-window { margin:12px 0; }
+.tw-journey .tw-window summary small { display:block; margin:6px 20px 0 0; font-size:12px; line-height:1.4; font-weight:400; color:var(--ink-2); }
+.tw-journey .nn { width:28px; height:28px; font-size:14px; }
+.tw-journey li:not(:last-child)::before { left:13px; top:28px; }
+.tw-journey .nl-a > b { display:block; margin:2px 0 10px; }
