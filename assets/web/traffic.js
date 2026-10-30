@@ -99,22 +99,22 @@
   function create(io){
     var pending=new Map(),memory=new Map(),memoryRows=0,failures=new Map(),ignoreFailuresBefore=0;
     function hash(s){var a=2166136261,b=5381;for(var i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),16777619);b=Math.imul(b,33)^s.charCodeAt(i);}return (a>>>0).toString(36)+(b>>>0).toString(36);}
-    async function leg(m,depart,stops,avoid,valid){
+    async function leg(m,depart,stops,avoid,valid,o){
       // Sub-minute route clocks share a forecast; round forward so "Now" never requests a past minute.
-      var q=query(m,Math.ceil(depart/60000)*60000,stops,avoid),geometry=T.encodePolyline(m.pts),identity=q+'|'+geometry,key='traffic-v4|'+hash(identity),now=io.now?io.now():Date.now(),ttl=Math.abs(depart-now)<3600000?10*60000:6*3600000;
-      var held=memory.get(key),hit=held&&now-held.at<ttl?held.value:io.get&&io.get(key,ttl);if(hit&&hit.identity===identity&&hit.profile)return Object.assign({},hit.profile,{cached:true});
-      var failed=failures.get(key)||hit&&hit.identity===identity&&hit.failedAt>=ignoreFailuresBefore&&hit;if(failed&&now-failed.failedAt<300000){var cachedError=Error(failed.error);cachedError.details=failed.details;cachedError.cachedFailure=true;throw cachedError;}
+      var q=query(m,Math.ceil(depart/60000)*60000,stops,avoid),geometry=T.encodePolyline(m.pts),identity=q+'|'+geometry,key='traffic-v4|'+hash(identity),now=io.now?io.now():Date.now(),ttl=o.cachePolicy?o.cachePolicy.ttl:Math.abs(depart-now)<3600000?10*60000:6*3600000,fresh=o.freshAfter||0,pendingKey=identity+(fresh?'|after|'+fresh:o.force?'|force':'');
+      var held=memory.get(key),hit=held&&now-held.at<ttl?held.value:io.get&&io.get(key,ttl);if(!o.force&&hit&&hit.identity===identity&&hit.profile&&hit.profile.at>=fresh)return Object.assign({},hit.profile,{cached:true});
+      var failed=failures.get(key)||hit&&hit.identity===identity&&hit.failedAt>=ignoreFailuresBefore&&hit;if(!o.force&&failed&&failed.failedAt>=fresh&&now-failed.failedAt<300000){var cachedError=Error(failed.error);cachedError.details=failed.details;cachedError.cachedFailure=true;throw cachedError;}
       if(!valid())throw Error('Traffic lookup cancelled');
-      if(!pending.has(identity))pending.set(identity,(async function(){var response=await io.fetch(q);if(response.error)throw Error(response.error);var json=typeof response.body==='string'?JSON.parse(response.body):response,profile=Object.assign(read(json,m),{depart:depart,at:now}),record={identity:identity,profile:profile};if(memory.has(key))memoryRows-=memory.get(key).value.profile.rows.length;memory.set(key,{at:now,value:record});memoryRows+=profile.rows.length;while(memory.size>128||memoryRows>100000){var oldestKey=memory.keys().next().value;memoryRows-=memory.get(oldestKey).value.profile.rows.length;memory.delete(oldestKey);}if(io.put)io.put(key,record);return profile;})().finally(function(){pending.delete(identity);}));
-      var p;try{p=await pending.get(identity);}catch(e){var failure={identity:identity,error:String(e.message||e),details:e.details,failedAt:now};failures.set(key,failure);if(failures.size>128)failures.delete(failures.keys().next().value);if(io.put)io.put(key,failure);throw e;}if(!valid())throw Error('Traffic lookup cancelled');return p;
+      if(!pending.has(pendingKey))pending.set(pendingKey,(async function(){var response=await io.fetch(q);if(response.error)throw Error(response.error);var json=typeof response.body==='string'?JSON.parse(response.body):response,profile=Object.assign(read(json,m),{depart:depart,at:now}),record={identity:identity,profile:profile};if(memory.has(key))memoryRows-=memory.get(key).value.profile.rows.length;memory.set(key,{at:now,value:record});memoryRows+=profile.rows.length;while(memory.size>128||memoryRows>100000){var oldestKey=memory.keys().next().value;memoryRows-=memory.get(oldestKey).value.profile.rows.length;memory.delete(oldestKey);}if(io.put)io.put(key,record);return profile;})().finally(function(){pending.delete(pendingKey);}));
+      var p;try{p=await pending.get(pendingKey);}catch(e){var failure={identity:identity,error:String(e.message||e),details:e.details,failedAt:now};failures.set(key,failure);if(failures.size>128)failures.delete(failures.keys().next().value);if(io.put)io.put(key,failure);throw e;}if(!valid())throw Error('Traffic lookup cancelled');return p;
     }
     async function forecast(m,depart,options){
-      var o=options||{},valid=o.valid||function(){return true;},ends=Array.from(new Set((m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).concat((o.waits||[]).map(function(w){return w.d;})))).sort(function(a,b){return a-b;}),rows=[],legs=[],at=0,clock=depart,seconds=0,base=0,cached=true,oldest=Infinity;
+      var o=Object.assign({},options||{});if(io.policy)o.cachePolicy=io.policy(m,o);var valid=o.valid||function(){return true;},ends=Array.from(new Set((m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).concat((o.waits||[]).map(function(w){return w.d;})))).sort(function(a,b){return a-b;}),rows=[],legs=[],at=0,clock=depart,seconds=0,base=0,cached=true,oldest=Infinity;
       ends=ends.concat((o.stops||[]).filter(function(s){return s.seconds>=49900&&s.d>0&&s.d<m.totalMi;}).map(function(s){return s.d;})).sort(function(a,b){return a-b;}).filter(function(d,i,a){return !i||d-a[i-1]>1e-7;});
       (o.stops||[]).filter(function(s){return s.d===0;}).forEach(function(s){clock+=s.seconds*1000;});
       for(var i=0;i<ends.length;i++){
         if(!valid())throw Error('Traffic lookup cancelled');var end=ends[i],part=slice(m,at,end),stops=(o.stops||[]).filter(function(s){return s.d>at&&s.d<end;}).map(function(s){return {d:s.d-at,seconds:s.seconds};});
-        if(o.progress)o.progress(i,ends.length);var legStart=clock,p=await leg(part,clock,stops,o.avoid,valid);oldest=Math.min(oldest,p.at);
+        if(o.progress)o.progress(i,ends.length);var legStart=clock,p=await leg(part,clock,stops,o.avoid,valid,o);oldest=Math.min(oldest,p.at);
         p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+at,to:r.to+at}));});seconds+=p.seconds;base+=p.baseSeconds;cached=cached&&!!p.cached;clock+=(p.seconds+stops.reduce(function(n,s){return n+s.seconds;},0))*1000;
         (o.stops||[]).filter(function(s){return Math.abs(s.d-end)<1e-7;}).forEach(function(s){clock+=s.seconds*1000;});
         legs.push({from:at,to:end,depart:legStart,arrival:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});
@@ -122,7 +122,7 @@
       }
       if(o.progress)o.progress(ends.length,ends.length);
       var matched=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0);
-      return {source:'HERE forecast',rows:rows,legs:legs,coverage:m.totalMi>0?Math.min(1,matched/m.totalMi):0,seconds:seconds,baseSeconds:base,depart:depart,arrival:clock,at:oldest,cached:cached};
+      return {source:'HERE forecast',cachePolicy:o.cachePolicy,rows:rows,legs:legs,coverage:m.totalMi>0?Math.min(1,matched/m.totalMi):0,seconds:seconds,baseSeconds:base,depart:depart,arrival:clock,at:oldest,cached:cached};
     }
     return {forecast:forecast,retryFailures:function(){failures.clear();ignoreFailuresBefore=(io.now?io.now():Date.now())+1;},clear:function(){memory.clear();memoryRows=0;failures.clear();}};
   }

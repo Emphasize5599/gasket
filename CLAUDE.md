@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.313 - trip traffic cache presets and Depart refresh
+
+Supersedes312 proximity-based TTL/settings. Auto: outward baseline <=90min=2h, <=5h=7d, >5h=28d. Whole outward journey frozen by original non-rest stop identity, not reader pieces/return/rest stops; Route override auto/commute/weekend/road persists with saved trip. Exact date/road/avoid identity unchanged. Google and optional HERE share policy; negative failures remain short-lived. No departure-proximity tightening. See docs/TRAFFIC_FORECAST_CACHE.md for rationale and limitations.
+
+Depart shows original oldest traffic observation age and Refresh traffic. Force first pass, refinement only uses observations recorded since refresh began; max2 stop-aware passes. Existing station inventory/price data, speed offsets and destination waits retained. No gather/discovery/price update. Full normal planner recalculates fuel/timing. Network failure retains original result. Newly changed/incomplete hazards or prior hourly No require review; incompatible windows go back to Route. Preserve pending result during hazard render (ordinary Back still resets unremembered route answers). Exports blocked until review. Focused browser tests at320/448 exercise actual success, failure preservation, no station calls, changed-hazard confirmation/decline and missed arrival window. Pure/cache/window/rest/comparison regressions pass. Monitor signed build through assets before claiming publication.
+
 ## 0.0.312 - persistent future traffic forecasts
 
 Verified publication: commitb2a3e16, run40974418247/job123798799170 SUCCESS on first attempt through full regressions/native/signing and both ARM64/universal APK uploads. Assets confirmed through release API. Phone check: repeat identical saved route/date/time after restart, compare traffic cachedPieces/fetchedPieces; check Connections reuse-days persistence; change departure and confirm new reads.

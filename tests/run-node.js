@@ -55,7 +55,7 @@ release.push('chargepoint-loading');
 release.push('startup-ui');
 release.push('kv-store','traffic','traffic-ui','timewindows','windowplanning-ui','traffic-energy','traffic-energy-ui','hourly-weather','hourly-approval-ui','window-recommendations','window-performance','window-form-ui','planning-policy','planning-policy-ui');
 release.push('datetimepicker','endpoint-approval');
-release.push('googletraffic','googletraffic-ui','restplaces','restplace','restmaps','restmaps-reader','resttiming','stopclock','restui','restplan','recreation','recreation-ui','trafficflow-cache','trafficcache','ridb','ridb-ui');
+release.push('googletraffic','googletraffic-ui','restplaces','restplace','restmaps','restmaps-reader','resttiming','stopclock','restui','restplan','recreation','recreation-ui','trafficflow-cache','trafficcache','trafficpolicy','traffic-presets-ui','ridb','ridb-ui');
 const args=process.argv.slice(2),all=args.includes('--all'),names=all?fs.readdirSync(__dirname).filter(f=>f.endsWith('.test.js')).map(f=>f.slice(0,-8)):args.includes('--release')?release:args;
 if(!names.length){console.error('Use --release, --all, or test names without .test.js');process.exit(2);}
 for(const name of names)if(!/^[a-z0-9-]+$/.test(name)||!fs.existsSync(path.join(__dirname,name+'.test.js'))){console.error('Unknown test: '+name);process.exit(2);}

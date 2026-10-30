@@ -6,10 +6,10 @@ function load(store,at){
   const clock=()=>at==null?Date.now():at;class Clock extends Date{static now(){return clock();}}
   const listeners={},ctx={console,Intl,Date:Clock,Math,JSON,Promise,setTimeout,clearTimeout,setInterval,clearInterval,Map,Set,WeakMap,Error,Number,String,Array,Object,BigInt};
   ctx.window=ctx;ctx.root=ctx;ctx.document={hidden:false};ctx.addEventListener=(n,f)=>{(listeners[n]=listeners[n]||[]).push(f);};ctx.dispatch=n=>(listeners[n]||[]).forEach(f=>f({}));
-  vm.createContext(ctx);['trip.js','traffic.js','googletraffic.js','trafficcache.js','trafficflow.js'].forEach(f=>vm.runInContext(fs.readFileSync(path.join(web,f),'utf8'),ctx,{filename:f}));
+  vm.createContext(ctx);['trip.js','trafficpolicy.js','traffic.js','googletraffic.js','trafficcache.js','trafficflow.js'].forEach(f=>vm.runInContext(fs.readFileSync(path.join(web,f),'utf8'),ctx,{filename:f}));
   ctx.WorkerSettings={trafficCount:()=>4};
   const KV={get:(ns,k,ttl)=>{const r=store.get(ns+'|'+k);return r&&(!ttl||clock()-r.t<ttl)?r:null;},put:(ns,k,v)=>store.set(ns+'|'+k,{v,t:clock()})};
-  const A={KV,S:{trip:{trafficForecast:true,avoid:{}},googleTraffic:true},esc:String,showSiteCheck(){throw Error('no check expected');}};
+  const A={KV,S:{trip:{trafficForecast:true,trafficPreset:'weekend',avoid:{}},googleTraffic:true},esc:String,showSiteCheck(){throw Error('no check expected');}};
   const calls={google:0,zone:0};
   async function call(name,q){
     if(name==='fetchJson'){calls.zone++;await new Promise(r=>setTimeout(r,5));return {body:JSON.stringify({timezone:'America/Chicago'})};}
@@ -38,12 +38,12 @@ function load(store,at){
   let y=load(days,initial);await y.flow.forecast(m,depart);y.ctx.dispatch('pagehide');
   y=load(days,initial+2*D);const reused=await y.flow.forecast(m,depart);assert(reused.cachedPieces>0&&reused.fetchedPieces===0);assert.equal(y.calls.google,0,'two-day-old distant-future forecast remains reusable');
   const raw={description:'same roads'},second=T.restoreModel(Object.assign({},m,{cityGpm:1/15,hwyGpm:1/20}));const a=await y.flow.prepare(raw,m,depart),b=await y.flow.prepare(raw,second,depart);assert.equal(y.calls.google,0,'different vehicle/energy setup needs no new traffic read');assert.equal(a.durationSec,b.durationSec);assert(b.segs[0].gpm>a.segs[0].gpm,'energy is recalculated from current vehicle, not cached fuel use');
-  const isolated=new Map([...days].map(([k,v])=>[k,JSON.parse(JSON.stringify(v))]));let short=load(isolated,initial+2*D);short.settings.trafficCacheDays=1;await short.flow.forecast(m,depart);assert(short.calls.google>0,'configured one-day retention is honored');short.ctx.dispatch('pagehide');
+  const isolated=new Map([...days].map(([k,v])=>[k,JSON.parse(JSON.stringify(v))]));let short=load(isolated,initial+2*D);short.settings.trip.trafficPreset='commute';await short.flow.forecast(m,depart);assert(short.calls.google>0,'commute retention is honored');short.ctx.dispatch('pagehide');
   y.settings.trip.avoid={tolls:true};await y.flow.forecast(m,depart);assert(y.calls.google>0,'changed avoid settings do not borrow incompatible shared observations');y.ctx.dispatch('pagehide');
   y=load(days,initial+8*D);await y.flow.forecast(m,depart);assert(y.calls.google>0,'future forecast refreshes after seven days');y.ctx.dispatch('pagehide');
-  y=load(days,depart-12*H);await y.flow.forecast(m,depart);assert(y.calls.google>0,'approaching departure applies the shorter six-hour limit');y.ctx.dispatch('pagehide');
-  y=load(days,depart-30*60000);await y.flow.forecast(m,depart);assert(y.calls.google>0,'near departure applies ten-minute freshness');y.ctx.dispatch('pagehide');
-  y=load(days,depart-25*60000);await y.flow.forecast(m,depart);assert.equal(y.calls.google,0,'a five-minute-old near-term answer is reused');
+  y=load(days,depart-12*H);await y.flow.forecast(m,depart);assert.equal(y.calls.google,0,'weekend retention does not shorten as departure approaches');y.ctx.dispatch('pagehide');
+  y=load(days,depart-30*60000);await y.flow.forecast(m,depart);assert.equal(y.calls.google,0,'near-term pieces retain the same weekend policy');y.ctx.dispatch('pagehide');
+  y=load(days,depart-25*60000);await y.flow.forecast(m,depart);assert.equal(y.calls.google,0,'the same planning snapshot is reused');
   await y.flow.forecast(m,depart+600000);assert(y.calls.google>0,'different planned time cannot borrow another hour/date');y.ctx.dispatch('pagehide');
   console.log('Traffic forecast cache: restart reuse, larger bounded index and shared timezone lookup passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

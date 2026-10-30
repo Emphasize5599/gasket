@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.313 - 2026-10-29
+- Reuse traffic forecasts by trip type: 2 hours, 7 days or 28 days.
+- Add per-trip cache overrides and a traffic refresh button in Depart.
+
 ## 0.0.312 - 2026-10-29
 - Retain future traffic forecasts longer across trips and app restarts.
 - Enlarge forecast storage and add adjustable future-forecast reuse days.
