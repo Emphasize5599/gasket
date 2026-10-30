@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.318 - 2026-10-30
+- Overnight rests are chosen in Stops → Rest stops instead of before leaving Route. Your nightly hours show which places you reach in time for your minimum rest, where a night's rest is needed, and prefill the rest when you add it.
+- Bug fixes.
+
 ## 0.0.317 - 2026-10-29
 - Support arrival-deadline-only planning with departure defaulting to now.
 - Use stop-local time zones and preserve saved times across device-zone changes.
