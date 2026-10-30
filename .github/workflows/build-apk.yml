@@ -104,6 +104,7 @@ on:
       - tests/limits.test.js
       - tests/discovery-log.test.js
       - tests/routewx.test.js
+      - tests/weathernet.test.js
       - tests/speed-nokey.test.js
       - tests/tile-hazards.test.js
       - tests/vin-trim.test.js

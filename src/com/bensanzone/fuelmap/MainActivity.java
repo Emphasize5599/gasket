@@ -1267,6 +1267,10 @@ public class MainActivity extends Activity {
     // brand icons: Google's favicon service, or each brand's own site
     private static final String[] ICON_HOSTS = {"www.google.com", "icons.duckduckgo.com", "www.walmart.com", "www.murphyusa.com", "www.samsclub.com", "www.exxon.com", "www.mobil.com", "www.citgo.com"};
 
+    private static class JsonHttpException extends Exception {
+        final int status; final String retryAfter, reason;
+        JsonHttpException(int status, String retryAfter, String reason) { super("HTTP " + status); this.status=status; this.retryAfter=retryAfter; this.reason=reason; }
+    }
     private String getJson(String url) throws Exception {
         if (!hostAllowed(url, JSON_HOSTS)) throw new Exception("Host not allowed");
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -1276,6 +1280,7 @@ public class MainActivity extends Activity {
         // OpenStreetMap's usage policy asks apps to identify themselves
         c.setRequestProperty("User-Agent", userAgent());
         int st = c.getResponseCode();
+        String retryAfter = c.getHeaderField("Retry-After");
         String body;
         if ("overpass-api.de".equals(new URL(url).getHost()) || "services.arcgis.com".equals(new URL(url).getHost())) {
             // Bound shared-service responses before allocating a huge JSON string in the WebView.
@@ -1290,8 +1295,12 @@ public class MainActivity extends Activity {
                 }
                 body = bytes.toString("UTF-8");
             } finally { try { in.close(); } finally { c.disconnect(); } }
-        } else body = readAll(st >= 400 ? c.getErrorStream() : c.getInputStream());
-        if (st >= 400) throw new Exception("HTTP " + st);
+        } else { InputStream in=st >= 400 ? c.getErrorStream() : c.getInputStream(); body=in==null?"":readAll(in); }
+        if (st >= 400) {
+            String reason = "";
+            if (new URL(url).getHost().endsWith("open-meteo.com")) try { reason = new JSONObject(body).optString("reason", ""); if (reason.length() > 300) reason=reason.substring(0,300); } catch (Exception ignored) { }
+            throw new JsonHttpException(st,retryAfter,reason);
+        }
         return body;
     }
 
@@ -2119,7 +2128,7 @@ public class MainActivity extends Activity {
             new Thread(new Runnable() {
                 public void run() {
                     JSONObject o = new JSONObject();
-                    try { o.put("body", getJson(url)); } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { } }
+                    try { o.put("body", getJson(url)); } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); if (e instanceof JsonHttpException) { JsonHttpException h=(JsonHttpException)e; o.put("status",h.status); if(h.retryAfter!=null)o.put("retryAfter",h.retryAfter); if(h.reason!=null&&!h.reason.isEmpty())o.put("reason",h.reason); } } catch (Exception ignored) { } }
                     reply(reqId, o);
                 }
             }).start();

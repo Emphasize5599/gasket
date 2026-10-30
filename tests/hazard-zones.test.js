@@ -29,12 +29,13 @@ const opts={stateAt:()=> 'CA',dense,countyOf:()=>county,counties:async()=>{}};
  const unsafe=W.alertOf({properties:{...feature.properties,geocode:{},affectedZones:['https://example.invalid/zones/forecast/CAZ999']}});assert.equal(unsafe.zones.length,0,'only official zone endpoints accepted');
  // The persistent geometry cache must not keep HTML/errors for 30 days.
  const fs=require('node:fs'),vm=require('node:vm'),src=fs.readFileSync('assets/web/tripui.js','utf8');let saved=0,ttl=0,body='<html>temporary error</html>';
- const ctx={wxFlight:new Map(),A:{KV:{get:(ns,key,age)=>{ttl=age;return null;},put:()=>saved++}},call:async()=>({body})};
- vm.runInNewContext(src.slice(src.indexOf('  var wxActive=0'),src.indexOf('  function wxWhen(')),ctx);
+ const transport=require('../assets/web/weathernet');const bridge={WeatherNet:{create:io=>transport.create({...io,sleep:async()=>{}})},window:{addEventListener:()=>{}}};
+ const ctx={...bridge,wxFlight:new Map(),A:{KV:{get:(ns,key,age)=>{if(key===zone)ttl=age;return null;},put:()=>saved++}},call:async()=>({body})};
+ vm.runInNewContext(src.slice(src.indexOf('  var weatherTransport='),src.indexOf('  function wxWhen(')),ctx);
  await ctx.wxGet(zone);assert.equal(saved,0);body=JSON.stringify({geometry:mountains});await ctx.wxGet(zone);assert.equal(saved,1);assert.equal(ttl,30*864e5);
  {// a request that still fails after its retries is remembered for a few minutes (hourly screening asks it every hour)
-  let asks=0;const warns=[];const c2={wxFlight:new Map(),LG:{warn:(...a)=>warns.push(a)},setTimeout:(f)=>setTimeout(f,0),A:{KV:{get:()=>null,put:()=>{}}},call:async()=>{asks++;return {error:'HTTP 503'};}};
-  vm.runInNewContext(src.slice(src.indexOf('  var wxActive=0'),src.indexOf('  function wxWhen(')),c2);
+  let asks=0;const warns=[];const c2={...bridge,wxFlight:new Map(),LG:{warn:(...a)=>warns.push(a)},setTimeout:(f)=>setTimeout(f,0),A:{KV:{get:()=>null,put:()=>{}}},call:async()=>{asks++;return {error:'HTTP 503'};}};
+  vm.runInNewContext(src.slice(src.indexOf('  var weatherTransport='),src.indexOf('  function wxWhen(')),c2);
   const u='https://api.weather.gov/gridpoints/AAA/1,2/forecast/hourly';await c2.wxGet(u);const first=asks;assert.equal(first,3,'retried twice');
   for(let i=0;i<5;i++){const r=await c2.wxGet(u);assert(r&&r.error);}assert.equal(asks,first,'later hours get the failure at once');
   assert.equal(warns.length,1);assert.equal(warns[0][2].source,'api.weather.gov/gridpoints','logged without coordinates');}

@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.322 - 2026-10-30
+- Reuse weather forecasts across changing location batches and route hours.
+- Pace weather requests and respect provider-wide rate-limit cooldowns.
+- Improve weather-request diagnostics and skip unavailable forecast horizons.
+
 ## 0.0.321 - 2026-10-30
 - Hourly forecasts for flexible trip timing no longer stall: a weather request that keeps failing is remembered for a few minutes instead of being retried for every departure hour.
 - Traffic forecasts work for the repeated hour when daylight saving ends.

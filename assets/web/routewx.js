@@ -439,7 +439,7 @@
     for (var g = 0; g < pts.length; g += 50) groups.push(pts.slice(g, g + 50));
     var coords = function (ps) { return 'latitude=' + ps.map(function (p) { return r2(p.lat); }).join(',') + '&longitude=' + ps.map(function (p) { return r2(p.lng); }).join(','); };
     var done = 0, total = groups.length + 1, tell = function () { if (opts.onProg) opts.onProg(Math.min(0.97, done / total)); };
-    var get = async function (url) { var r;try{r=await getJson(url);}catch(e){if(opts.valid&&!opts.valid())throw e;r={error:String(e.message||e)};}done++; tell(); if (!r || !r.body) { stats.errors++;if(/air-quality/.test(url))stats.airErrors=(stats.airErrors||0)+1;else if(/weather\.gov\/alerts/.test(url))stats.alertErrors=(stats.alertErrors||0)+1;return null; } return r.body; };
+    var get = async function (url) { var r;try{r=await getJson(url);}catch(e){if(opts.valid&&!opts.valid())throw e;r={error:String(e.message||e)};}done++; tell();if(r&&r.partialError){stats.errors++;if(/air-quality/.test(url))stats.airErrors=(stats.airErrors||0)+1;} if (!r || !r.body) { stats.errors++;if(/air-quality/.test(url))stats.airErrors=(stats.airErrors||0)+1;else if(/weather\.gov\/alerts/.test(url))stats.alertErrors=(stats.alertErrors||0)+1;return null; } return r.body; };
     tell();
     // weather: the National Weather Service's hourly forecast (its forecasters' own, about 6.5 days) at each point;
     // later than that, or where it fails, Open-Meteo: the National Blend of Models (what NWS starts from), else its default
@@ -464,11 +464,11 @@
         if (!body) { left = left.concat(qs); return; }
         try {
           list(body,opts).forEach(function (d, k) {
-            var p = qs[k], h = d && d.hourly; if (!p || !h) return;
+            var p = qs[k], h = d && d.hourly; if (!p) return;if(!h){left.push(p);return;}
             var i = hourIdx(h.time, p.eta);
             if (i < 0 || (h.weather_code[i] == null && h.precipitation[i] == null)) { left.push(p); return; }
             // Open-Meteo's snowfall is in inches of snow (not water) when precipitation_unit=inch
-            p.temperatureHours=h.time.map(function(t,j){return [Date.parse(/Z$|[+-]\d\d:\d\d$/.test(t)?t:t+'Z'),h.temperature_2m[j]==null?NaN:(h.temperature_2m[j]-32)*5/9];}).filter(function(x){return Number.isFinite(x[0])&&Number.isFinite(x[1]);});
+            var temperatures=temperatureSeries.get(h);if(!temperatures){temperatures=h.time.map(function(t,j){return [Date.parse(/Z$|[+-]\d\d:\d\d$/.test(t)?t:t+'Z'),h.temperature_2m[j]==null?NaN:(h.temperature_2m[j]-32)*5/9];}).filter(function(x){return Number.isFinite(x[0])&&Number.isFinite(x[1]);});temperatureSeries.set(h,temperatures);}p.temperatureHours=temperatures;
             p.wx = { src: model ? 'nbm' : 'om', code: h.weather_code[i], tF: h.temperature_2m[i], precip: h.precipitation[i], snow: h.snowfall ? h.snowfall[i] : null, visM: h.visibility ? h.visibility[i] : null, gust: h.wind_gusts_10m ? h.wind_gusts_10m[i] : null };
             stats.weather++;
           });
@@ -476,23 +476,23 @@
       });
       return left;
     };
-    var rest = pts.filter(function (p) { return !p.wx; });
+    var horizonEnd=Math.floor(now/864e5)*864e5+16*864e5,outside=pts.filter(function(p){return !p.wx&&p.eta>=horizonEnd;}),rest = pts.filter(function (p) { return !p.wx&&p.eta<horizonEnd; });stats.beyondWeather=outside.length;
     if (rest.length) {
       total += Math.ceil(rest.length / 50) * 2; tell();
       var stillLeft = await om(rest, 'ncep_nbm_conus');
       if (stillLeft.length) stillLeft = await om(stillLeft, null);
-      stats.beyondWeather = stillLeft.length;
+      stats.beyondWeather = stillLeft.length+outside.length;
     }
     // Failed preferred-provider attempts are recovered when fallback covers every point.
     // Keep their diagnostic count without treating complete forecasts as missing data.
     if(stats.weather===stats.points&&!stats.beyondWeather&&stats.errors){stats.recoveredWeatherErrors=stats.errors;stats.errors=0;}
     var airDays = 5;
     await pool(groups, 3, async function (ps) {
-      var body = await get('https://air-quality-api.open-meteo.com/v1/air-quality?' + coords(ps) + '&hourly=us_aqi,us_aqi_pm2_5,us_aqi_ozone,dust&timezone=GMT&forecast_days=' + airDays);
+      var airEnd=Math.floor(now/864e5)*864e5+airDays*864e5,eligible=ps.filter(function(p){return p.eta<airEnd;});stats.beyondAir+=ps.length-eligible.length;ps=eligible;if(!ps.length){done++;tell();return;}var body = await get('https://air-quality-api.open-meteo.com/v1/air-quality?' + coords(ps) + '&hourly=us_aqi,us_aqi_pm2_5,us_aqi_ozone,dust&timezone=GMT&forecast_days=' + airDays);
       if (!body) return;
       try {
         list(body,opts).forEach(function (d, k) {
-          var p = ps[k], h = d && d.hourly; if (!p || !h) return;
+          var p = ps[k], h = d && d.hourly; if (!p) return;if(!h){stats.beyondAir++;return;}
           var i = hourIdx(h.time, p.eta);
           if (i < 0 || h.us_aqi[i] == null) { stats.beyondAir++; return; }
           p.aq = { aqi: h.us_aqi[i], pm25: h.us_aqi_pm2_5[i], ozone: h.us_aqi_ozone[i], dust: h.dust ? h.dust[i] : null };

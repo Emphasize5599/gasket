@@ -933,7 +933,7 @@
     $('dBlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) { BL.remove(e); $('dClose').onclick(); } }); };
   }
 
-  var CACHE_NS = ['traffic', 'aiexplanations', 'along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb', 'evprices', 'evguest'];
+  var CACHE_NS = ['wx', 'traffic', 'aiexplanations', 'along', 'murphy', 'wmnodes', 'wmprice', 'limits', 'routes', 'routes2', 'mapsopts', 'find', 'xom', 'afdc', 'vin', 'osm-fuel', 'gasweb', 'evprices', 'evguest'];
   function askDeleteBl() {
     var n = BL.list().length; if (!n) { deleteBl(); return Promise.resolve(false); }
     return confirmDel({ title: 'Delete your bad CITGO list?', body: 'All ' + n + ' station' + (n === 1 ? '' : 's') + ' will get the Walmart+ discount again.', action: 'Delete' })

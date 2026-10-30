@@ -135,7 +135,7 @@
     origin:function(){var p=route&&route.stops[0];return p&&(p.label||p.address)||'Start';},destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
     changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();built[ST_ROUTE]=null;renderStep();},
     priority:function(){return planningPriority(Garage.car());},setPriority:function(p){var c=Garage.car(),old=planningPriority(c);if(old==='cost')S.trip.costAvoidTolls=!!S.trip.avoid.tolls;c.planningPriority=p;c.autoTripPriority=AutoTrip.enabled(c,S.autoTripPriority)?p:'manual';S.trip.avoid.tolls=p==='time'?!tollPreference().allowPaid:!!S.trip.costAvoidTolls;},
-    enableForecast:function(){if(S.googleTraffic===false&&!(S.hereTraffic===true&&S.hereKey))return false;S.trip.trafficForecast=true;return true;},rows:windowRows,rerate:windowRerate,legMinutes:function(){if(!route||!model)return null;var n=hzLegs();if(!n)return null;var out=[];for(var i=0;i<n;i++){var secs=hzAlts(i).map(function(a){return parseInt(a&&a.duration,10);}).filter(function(x){return x>0;});if(!secs.length)return null;out.push(Math.min.apply(null,secs)/60);}return out;},needRoutes:function(){var b=$('tGetRoutes');if(b)flag(b,'pick');},read:function(row,control){return windowRead(row,null,control);},forecastHtml:function(){return traffic?traffic.html():'';},
+    enableForecast:function(){if(S.googleTraffic===false&&!(S.hereTraffic===true&&S.hereKey))return false;S.trip.trafficForecast=true;return true;},rows:windowRows,rerate:windowRerate,legMinutes:function(){if(!route||!model)return null;var n=hzLegs();if(!n)return null;var out=[];for(var i=0;i<n;i++){var secs=hzAlts(i).map(function(a){return parseInt(a&&a.duration,10);}).filter(function(x){return x>0;});if(!secs.length)return null;out.push(Math.min.apply(null,secs)/60);}return out;},needRoutes:function(){var b=$('tGetRoutes');if(b)flag(b,'pick');},read:function(row,control){return windowRead(row,null,control);},weatherStats:function(){return weatherTransport.counts();},forecastHtml:function(){return traffic?traffic.html():'';},
     canAuto:function(row){return !RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]).tires.length;},
     reviewed:function(s){windowReviewComplete(s);step=ST_COMPARE;renderStep();},
     confirm:async function(row){var risk=RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]);return !risk.tires.length||await A.confirmDel({always:true,title:'Low tread in these conditions',body:hzRiskHtml({risk:risk},row.raw,row.leg),no:'Choose another time',action:'I understand',goClass:'primary'});},
@@ -175,7 +175,7 @@
     // never infer that a different departure has the same forecast.
     var run=schedulePlanning,memo=run&&row.actual&&(run.readings||(run.readings=new Map())),memoKey=memo&&JSON.stringify([row.routeKey,row.depart,m.totalMi,m.segs.map(function(s){return [s.from,s.to,s.t0,s.t1];}),stops||[]]),prior=memo&&memo.get(memoKey);
     if(prior&&Date.now()-prior.at<600000)return prior.value;
-    var session=windows.current();if(!session.wx)session.wx=new Map();function get(url){var hit=session.wx.get(url);if(!hit||Date.now()-hit.at>600000){var mine={at:Date.now(),value:wxGet(url)};hit=mine;session.wx.set(url,mine);mine.value.then(function(r){if(!(r&&r.body)&&session.wx.get(url)===mine)session.wx.delete(url);},function(){if(session.wx.get(url)===mine)session.wx.delete(url);});}return hit.value;}
+    var session=windows.current();if(!session.wx)session.wx=new Map();function get(url){var hit=session.wx.get(url);if(!hit||Date.now()-hit.at>600000){var mine={at:Date.now(),value:wxGet(url)};hit=mine;session.wx.set(url,mine);mine.value.then(function(r){if((!(r&&r.body)||r.partialError)&&session.wx.get(url)===mine)session.wx.delete(url);},function(){if(session.wx.get(url)===mine)session.wx.delete(url);});}return hit.value;}
     var control=control||{},sourceValid=control.valid||function(){return windows.current()===session;},validatedAt=0,stillValid=true;
     function valid(){var now=Date.now();if(!validatedAt||now-validatedAt>=50){validatedAt=now;stillValid=sourceValid();}return stillValid;}
     if(!session.geometry)session.geometry=new WeakMap();var geometry=session.geometry.get(m);
@@ -4227,23 +4227,25 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   // Every option for the leg is drawn; each hazard is a colored stretch where and when you'd be in it (RouteWx.forRoute),
   // labeled on the chosen route only. Departure shows the chosen routes' stretches, without labels.
   var wxFlight=new Map();
-  // Weather requests share one gate (8 at a time across every hourly reading) and retry a refusal / server error /
-  // timeout twice (2 s, 6 s): 1,000+ departure hours fired at once got rate-limited, and each failure blocked an hour.
-  var wxActive=0,wxWait=[];
-  function wxSlot(){return new Promise(function(r){if(wxActive<8){wxActive++;r();}else wxWait.push(r);});}
-  function wxDone(){var n=wxWait.shift();if(n)n();else wxActive--;}
-  async function wxFetch(url){for(var k=0;;k++){await wxSlot();var r;try{r=await call('fetchJson',url);}catch(e){r={error:String(e&&e.message||e)};}finally{wxDone();}if(r&&r.body||k>=2||!/429|50[0-9]|timed? ?out|timeout|network|unavailable/i.test(String(r&&r.error||'')))return r;await new Promise(function(res){setTimeout(res,k?6000:2000);});}}
+  var weatherTransport=WeatherNet.create({get:function(k,ttl){var r=A.KV.get('wx',k,ttl);return r&&r.v;},put:function(k,v){A.KV.put('wx',k,v);},fetch:function(url){return call('fetchJson',url);},event:function(kind,data){
+    if(kind==='rate-limited'){LG.warn('weather','Weather provider rate-limited; using saved forecasts and other sources',data);}
+    if(kind==='budget-wait'&&window.Tasks)Tasks.upsert('weather-budget',{text:'Weather forecast allowance · resumes in about '+Math.max(1,Math.ceil((data.retryAt-Date.now())/1000))+' sec',estimateMs:Math.max(1,data.retryAt-Date.now()),priority:21});
+    if(kind==='budget-ready'&&window.Tasks)Tasks.remove('weather-budget');
+  }});
+  function wxFetch(url){return weatherTransport.get(url);}
+  window.addEventListener('pagehide',function(){weatherTransport.flush();});
+  window.addEventListener('cacheclear',function(){weatherTransport.clear();wxFailed.clear();wxFlight.clear();});
   var wxFailed=new Map(),WX_FAIL_MS=3*60e3,wxFailSeen={};
   // host and first path part only (no coordinates), one line per kind a minute
   function wxFailWarn(url,r){var m=/^https?:\/\/([^/?]+)\/?([^/?]*)/.exec(url)||[],kind=(m[1]||'?')+'/'+(m[2]||''),err=String(r&&r.error||'no answer').slice(0,120),k=kind+'|'+err,seen=wxFailSeen[k];if(seen&&Date.now()-seen.t<60e3){seen.n++;return;}LG.warn('weather','Weather request failed',seen&&seen.n?{source:kind,error:err,suppressedBefore:seen.n}:{source:kind,error:err});wxFailSeen[k]={t:Date.now(),n:0};}
   function wxGet(url) {       // forecasts 45 min, warnings 10 min, NWS grid/zone geography 30 days
     var o = A.KV.get('wx', url, /weather\.gov\/(?:points|zones)\//.test(url) ? 30 * 864e5 : /weather\.gov\/alerts/.test(url) ? 10 * 60e3 : 45 * 60e3);
-    if (o) return Promise.resolve(o.v);
+    if (o) {if(weatherTransport.handles(url)){weatherTransport.seed(url,o.v,o.t);return weatherTransport.get(url);}return Promise.resolve(o.v);}
     if(wxFlight.has(url))return wxFlight.get(url);
     // A request that still fails after its retries is remembered for a few minutes: hourly screening asks the same
     // forecast for every departure hour, and waiting out the retries each time took ~8 s per hour (owner's 10-30 log).
-    var failed=wxFailed.get(url);if(failed&&Date.now()-failed.t<WX_FAIL_MS)return Promise.resolve(failed.r);
-    var pending=wxFetch(url).then(function (r) { if(!(r&&r.body)){wxFailed.set(url,{t:Date.now(),r:r});if(wxFailed.size>400)wxFailed.delete(wxFailed.keys().next().value);wxFailWarn(url,r);} if (r && r.body) {var valid=true;if(/weather\.gov\/zones\//.test(url))try{var g=JSON.parse(r.body).geometry;valid=!!(g&&/^(?:Multi)?Polygon$/.test(g.type)&&g.coordinates&&g.coordinates.length);}catch(e){valid=false;}if(valid)A.KV.put('wx', url, r);} return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
+    var failed=wxFailed.get(url);if(failed&&Date.now()<(failed.r&&failed.r.rateLimited?failed.r.retryAt:failed.t+WX_FAIL_MS))return Promise.resolve(failed.r);
+    var pending=wxFetch(url).then(function (r) { if(r&&r.partialError)wxFailWarn(url,{error:r.partialError});if(!(r&&r.body)){wxFailed.set(url,{t:Date.now(),r:r});if(wxFailed.size>400)wxFailed.delete(wxFailed.keys().next().value);wxFailWarn(url,r);} if (r && r.body) {var valid=true;if(/weather\.gov\/zones\//.test(url))try{var g=JSON.parse(r.body).geometry;valid=!!(g&&/^(?:Multi)?Polygon$/.test(g.type)&&g.coordinates&&g.coordinates.length);}catch(e){valid=false;}if(valid&&!weatherTransport.handles(url))A.KV.put('wx', url, r);} return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
   }
   function wxWhen(a, b) {
     if(!Number.isFinite(a)||!Number.isFinite(b))return 'Forecast time unavailable';
