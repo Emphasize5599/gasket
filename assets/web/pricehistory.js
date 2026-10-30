@@ -91,7 +91,7 @@
   var db=null;
   function current(){return db||(db=create(root.__app.KV));}
   root.PriceHistoryRecovery=function(stations){return current().recover(stations);};
-  root.PriceHistory={stamp:stamp,observe:function(s,t){if(root.__app)try{current().observe(s,t);}catch(e){if(root.FLog)root.FLog.error('history',e.message);root.__app.status(e.message,true);}},stations:function(){return current().stations();},near:function(b){return current().near(b);},history:function(s,o){return current().history(s,o);},reset:function(){db=null;},seed:async function(){
+  root.PriceHistory={stamp:stamp,observe:function(s,t){root.__stationRev=(root.__stationRev||0)+1;if(root.__app)try{current().observe(s,t);}catch(e){if(root.FLog)root.FLog.error('history',e.message);root.__app.status(e.message,true);}},stations:function(){return current().stations();},near:function(b){return current().near(b);},history:function(s,o){return current().history(s,o);},reset:function(){db=null;},seed:async function(){
     var A=root.__app;if(!A)return;current().observe(A.stations(),null);
     var idx=(A.KV.get('trips','index')||{}).v||[];
     for(var i=0;i<idx.length;i++){

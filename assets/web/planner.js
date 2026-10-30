@@ -4,7 +4,7 @@
  * phone log). Dispatch to idle workers (up to 6, cores - 1), prioritizing interactive changes and discarding stale queued previews. */
 (function(root){
   'use strict';
-  var workers=[],pending=new Map(),queue=[],seq=0,disabled=false,scheduled=false,finished=0,dropped=0;
+  var candIds=new WeakMap(),candSeq=0,workers=[],pending=new Map(),queue=[],seq=0,disabled=false,scheduled=false,finished=0,dropped=0;
   function stats(){return {active:workers.filter(function(w){return !!w.busy;}).length,queued:queue.length,finished:finished,dropped:dropped};}
   function requestDrain(){if(scheduled)return;scheduled=true;Promise.resolve().then(function(){scheduled=false;drain();});}
   function timing(p){Object.defineProperty(p.opts,'_plannerTiming',{configurable:true,value:{waitMs:(p.started||Date.now())-p.at,runMs:p.started?Date.now()-p.started:0}});}
@@ -12,6 +12,8 @@
     self.onmessage=function(event){
       var d=event.data,o=d.options,c=d.context;
       try{
+        // a sweep sends the same candidate list for every plan: it comes once per worker and is reused by id
+        if(d.candsId){if(o.cands){self.__cands=self.__cands||new Map();self.__cands.set(d.candsId,o.cands);while(self.__cands.size>4)self.__cands.delete(self.__cands.keys().next().value);}else{var kept=self.__cands&&self.__cands.get(d.candsId);if(!kept)throw Error('Planner candidate list missing; retry.');o.cands=kept.map(function(x){return Object.assign({},x);});}}
         o.model=Trip.restoreModel(o.model);if(d.rates)o.model=Trip.withSpeeds(o.model,d.rates);
         if(c){
           function arrival(m,at,stops){
@@ -31,7 +33,7 @@
   var url=null;
   function spawn(){
     if(!url)url=URL.createObjectURL(new Blob([root.EVTariffs?root.EVTariffs.workerSource:'',root.AuxLoad?root.AuxLoad.workerSource:'',root.TrafficModel?root.TrafficModel.workerSource:'',root.Propulsion?root.Propulsion.workerSource:'',root.Trip.workerSource,root.Pricing.workerSource,'('+boot.toString()+')();'],{type:'text/javascript'}));
-    var w={worker:new Worker(url),busy:0,ids:new Set()};
+    var w={worker:new Worker(url),busy:0,ids:new Set(),cands:[]};
     w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);if(d.error)p.reject(new Error(d.error));else{p.opts.refPrice=d.refPrice;if(d.plan.propulsionModel){if(!p.opts.propulsionBase){p.opts.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){p.opts.propulsionBase[k]=p.opts.model[k];});}p.opts.model=root.Trip.restoreModel(Object.assign({},p.opts.model,d.plan.propulsionModel));}p.resolve(d.plan);}requestDrain();};
     w.worker.onerror=function(){
       w.worker.terminate();workers.splice(workers.indexOf(w),1);if(!workers.length)disabled=true;
@@ -58,7 +60,8 @@
       if(!w){(function(job){setTimeout(function(){try{if(job.valid&&!job.valid()){dropped++;job.resolve({ok:false,cancelled:true});}else{job.resolve(root.Trip.plan(job.opts));finished++;timing(job);}}catch(e){job.reject(e);}finally{pending.delete(job.id);}},0);})(p);continue;}
       var m=p.opts.model,data={pts:[],cum:[]};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){data[k]=m[k];});
       var clean=Object.assign({},p.opts,{model:data}),context=p.context&&Object.assign({},p.context);delete clean.rewardPriceAt;if(context){delete context.valid;delete context.priority;}
-      w.busy=1;w.ids.add(p.id);try{w.worker.postMessage({id:p.id,options:clean,rates:m.speedRates,context:context});}catch(e){pending.delete(p.id);w.busy=0;w.ids.delete(p.id);p.reject(e);}
+      var candsId=null;if(Array.isArray(clean.cands)&&clean.cands.length>50){candsId=candIds.get(p.opts.cands);if(!candsId){candsId=++candSeq;candIds.set(p.opts.cands,candsId);}if(w.cands.indexOf(candsId)>=0)clean.cands=null;else{w.cands.push(candsId);if(w.cands.length>4)w.cands.shift();}}
+      w.busy=1;w.ids.add(p.id);try{w.worker.postMessage({id:p.id,options:clean,rates:m.speedRates,context:context,candsId:candsId});}catch(e){pending.delete(p.id);w.busy=0;w.ids.delete(p.id);p.reject(e);}
     }
   }
   root.Planner={size:size,workers:function(){return workers.length;},stats:stats,run:function(options,context){

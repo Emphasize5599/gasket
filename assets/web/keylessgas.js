@@ -99,7 +99,11 @@
     var unique=Array.from(new Map(known.filter(function(s){return typeof s.lat==='number'&&typeof s.lng==='number';}).map(function(s){return [knownKey(s),s];})).values());
     unique.sort(function(a,b){return (priority||[]).includes(b.id)-(priority||[]).includes(a.id);});
     var groups=[];
-    unique.forEach(function(s){var group=groups.find(function(g){return P.haversineMi(g.lat,g.lng,s.lat,s.lng)<6;});if(!group){group={lat:s.lat,lng:s.lng,radius:8,stations:[]};groups.push(group);}group.stations.push(s);});
+    // the first group (in creation order) within 6 mi, found through 0.1° cells (6.9 mi tall; enough columns either side for
+    // 6 mi at that latitude): same groups as scanning every group, without 3,000 × 150 distance checks
+    var cells=new Map(),cy=function(v){return Math.floor(v/.1);};
+    unique.forEach(function(s){var y=cy(s.lat),x=cy(s.lng),best=null,kx=Math.ceil(6/(6.9*Math.max(.05,Math.cos(s.lat*Math.PI/180))))+1;for(var dy=-1;dy<=1;dy++)for(var dx=-kx;dx<=kx;dx++){var c=cells.get((y+dy)+'|'+(x+dx));if(c)c.forEach(function(g){if((!best||g.n<best.n)&&P.haversineMi(g.lat,g.lng,s.lat,s.lng)<6)best=g;});}
+     var group=best;if(!group){group={lat:s.lat,lng:s.lng,radius:8,stations:[]};Object.defineProperty(group,'n',{value:groups.length});groups.push(group);var k=y+'|'+x;(cells.get(k)||cells.set(k,[]).get(k)).push(group);}group.stations.push(s);});
     return groups;
   }
   // 8-mile searches every 10 miles: still overlapping (a 2,600-mile trip at 6 had 57% repeat rows and 74 areas adding nothing)

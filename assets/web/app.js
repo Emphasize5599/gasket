@@ -476,7 +476,13 @@
   }
 
   // ---------- computing & rendering ----------
+  // the same view, filters and stored data give the same list: redraws after closing a trip / Settings re-read and
+  // re-merged every stored station in view (about 0.6 s per redraw on an 8x-throttled CPU)
+  var visibleMemo=null;
   function visibleStations() {
+    var b0=map.getBounds();if(!b0.isValid())return stations;var memoKey=[b0.toBBoxString(),stations.length,JSON.stringify(S.brands),demo,window.__stationRev||0].join('|');if(visibleMemo&&visibleMemo.key===memoKey&&visibleMemo.list===stations)return visibleMemo.out;var result=visibleStations0();visibleMemo={key:memoKey,list:stations,out:result};return result;
+  }
+  function visibleStations0() {
     var b=map.getBounds();if(!b.isValid())return stations;
     var sw=b.getSouthWest(),ne=b.getNorthEast(),box=[sw.lat,sw.lng,ne.lat,ne.lng],out=[];
     function add(s){if(!s||!S.brands[s.brand]||!Number.isFinite(s.lat)||!Number.isFinite(s.lng)||s.lat<box[0]||s.lat>box[2]||s.lng<box[1]||s.lng>box[3])return;out.push(s);}
@@ -486,9 +492,15 @@
     if(!demo&&window.__app&&window.StationStore)StationStore.query(box,'gas').forEach(add);
     return P.mergeSites(P.reconcileStations(out));
   }
+  // same stations, settings, position and minute: same prices (redraws when closing Settings or a trip repeated it all)
+  var enrichedMemo=null;
   function enriched() {
-    var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null);
-    return visibleStations().map(function (s) {
+    var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null),vis=visibleStations(),key=[S.grade,JSON.stringify(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].map(function(k){return S[k];})),ref?ref.lat+','+ref.lng:'',Math.floor(Date.now()/60000)].join('|');
+    if(enrichedMemo&&enrichedMemo.vis===vis&&enrichedMemo.key===key)return enrichedMemo.out;
+    var out=enriched0(vis,ref);enrichedMemo={vis:vis,key:key,out:out};return out;
+  }
+  function enriched0(vis,ref) {
+    return vis.map(function (s) {
       var c = P.compute(s, S.grade, S, new Date());
       return { s: s, c: c, dist: ref ? P.haversineMi(ref.lat, ref.lng, s.lat, s.lng) : null };
     });
@@ -1628,7 +1640,10 @@
   document.addEventListener('scroll', function () { closeQ(); }, true);
   window.addEventListener('resize', closeQ);
   window.__closeQ = closeQ;
-  new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) qify(n.parentElement || n); }); }); })
+  // added nodes are (?)-ified once per frame, never inside the map: every station marker the map draws was a full
+  // qify pass (0.4 s of a cancelled trip's map redraw on an 8x-throttled CPU)
+  var qifyRoots=new Set(),qifyFrame=0;
+  new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType !== 1) return; var host=n.parentElement||n; if (host.closest&&host.closest('.leaflet-container')) return; qifyRoots.add(host); }); }); if(qifyRoots.size&&!qifyFrame)qifyFrame=requestAnimationFrame(function(){qifyFrame=0;var roots=Array.from(qifyRoots);qifyRoots.clear();roots.forEach(function(r){if(r.isConnected&&!roots.some(function(o){return o!==r&&o.contains(r);}))qify(r);});}); })
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
@@ -1667,6 +1682,7 @@
   document.addEventListener('keydown',function(e){var control=pickerTarget(e);if(control&&['Enter',' ','ArrowDown'].includes(e.key)){e.preventDefault();appPicker(control);}},true);
   var nativeBack=window.onBack;window.onBack=function(){if(window.__pickerClose){window.__pickerClose();return true;}return nativeBack();};
   var markRequired=function(){document.querySelectorAll('.need,input[required],select[required]').forEach(function(control){var parent=control.closest('label,.nf,.field'),label=parent&&parent.querySelector('span:first-child,.lbl');if(label&&!label.querySelector('.req')){var star=document.createElement('span');star.className='req';star.textContent='*';star.setAttribute('aria-label','required');label.appendChild(star);}});};
-  new MutationObserver(markRequired).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','required']});markRequired();
+  // once per frame: every DOM change (map markers included) used to re-scan the whole page
+  var requiredFrame=0;new MutationObserver(function(){if(!requiredFrame)requiredFrame=requestAnimationFrame(function(){requiredFrame=0;markRequired();});}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','required']});markRequired();
   if(window.PriceHistory)setTimeout(function(){PriceHistory.seed().catch(function(e){if(window.FLog)FLog.warn('history','Price history seed failed',e.message);});},0);
 })();

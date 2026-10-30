@@ -8,20 +8,27 @@
   function showNotice(id,text){if(notice&&notice.id===id)return;clearTimeout(noticeTimer);var current=notice={id:id,text:String(text)};noticeTimer=setTimeout(function(){if(notice===current)dismissNotice(id);},10000);queue();}
   function fullMenu(){return doc.body.classList.contains('trip-full')||!!doc.querySelector('#settings:not(.hidden),.sub-page:not(.hidden)');}
   function messageButton(){return '<button type="button" class="jb-expand hidden" aria-label="Show full status message" aria-controls="jobMessage" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button>';}
+  // Measuring the bar forces a layout of the whole page, so it's measured only when its size or visibility changes
+  // (a ResizeObserver says so), not on every progress update.
+  var insetSig='',insetValue=12,spaceDirty=true,sizeWatch=null,lastHidden=null,watched=new Set();
+  function watchSize(hub){var hidden=hub.classList.contains('hidden')+'|'+messageExpanded;if(hidden!==lastHidden){lastHidden=hidden;spaceDirty=true;}if(!root.ResizeObserver){spaceDirty=true;return;}if(!sizeWatch)sizeWatch=new ResizeObserver(function(){spaceDirty=true;layout();});[hub.querySelector('.task-top'),doc.getElementById('taskNotice'),doc.getElementById('visualMarkerRow')].forEach(function(el){if(el&&!watched.has(el)){watched.add(el);sizeWatch.observe(el);spaceDirty=true;}});}
   function layout(){
     if(!doc)return;var hub=doc.getElementById('taskHub'),meter=doc.getElementById('apiCount'),inset=12;
-    if(hub&&doc.body.classList.contains('trip-full')&&doc.body.classList.contains('trip-on')&&meter){var r=meter.getBoundingClientRect();if(r.width&&r.height)inset=Math.min(Math.ceil(r.right)+8,Math.max(12,root.innerWidth-180));}
+    var tripFull=hub&&doc.body.classList.contains('trip-full')&&doc.body.classList.contains('trip-on')&&meter,sig=[!!tripFull,root.innerWidth,meter&&meter.className,meter&&meter.textContent].join('|');if(sig!==insetSig){insetSig=sig;insetValue=12;if(tripFull){var r=meter.getBoundingClientRect();if(r.width&&r.height)insetValue=Math.min(Math.ceil(r.right)+8,Math.max(12,root.innerWidth-180));}}inset=insetValue;
     if(hub){hub.style.left=inset+'px';var list=doc.getElementById('taskList');if(list)list.style.marginLeft=(12-inset)+'px';var full=fullMenu(),bar=doc.getElementById('jobBar'),button=bar.querySelector('.jb-expand');if(!full)messageExpanded=false;
       hub.classList.toggle('compact',full);hub.classList.toggle('full-message',full&&messageExpanded);
       if(button){button.classList.toggle('hidden',!full);button.setAttribute('aria-expanded',String(messageExpanded));button.setAttribute('aria-label',messageExpanded?'Collapse status message':'Show full status message');button.querySelector('.chev').classList.toggle('up',messageExpanded);}
       var label=bar.querySelector('.jb-t'),text=bar.dataset.fullText||'';if(label)label.textContent=full&&!messageExpanded&&root.__app&&root.__app.jobShort?root.__app.jobShort(text):text;
-      var hint=doc.getElementById('taskNotice'),marker=doc.getElementById('visualMarkerRow');var space=hub.classList.contains('hidden')?0:Math.ceil(hub.querySelector('.task-top').getBoundingClientRect().height)+(hint&&!hint.classList.contains('hidden')?Math.ceil(hint.getBoundingClientRect().height)+4:0)+(marker&&!marker.classList.contains('hidden')?Math.ceil(marker.getBoundingClientRect().height):0)+10;
+      watchSize(hub);if(!spaceDirty)return;spaceDirty=false;var hint=doc.getElementById('taskNotice'),marker=doc.getElementById('visualMarkerRow');var space=hub.classList.contains('hidden')?0:Math.ceil(hub.querySelector('.task-top').getBoundingClientRect().height)+(hint&&!hint.classList.contains('hidden')?Math.ceil(hint.getBoundingClientRect().height)+4:0)+(marker&&!marker.classList.contains('hidden')?Math.ceil(marker.getBoundingClientRect().height):0)+10;
       if(doc.body.style.getPropertyValue('--task-space')!==space+'px')doc.body.style.setProperty('--task-space',space+'px');
     }
   }
   if(doc){root.addEventListener('resize',layout);new MutationObserver(function(changes){if(changes.some(function(c){return c.oldValue!==doc.body.className;}))queue();}).observe(doc.body,{attributes:true,attributeFilter:['class'],attributeOldValue:true});}
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
-  function queue() { if (!doc || frame) return; frame = root.requestAnimationFrame(function () { frame = 0; draw(); }); }
+  // progress-only updates redraw at most ~4 times a second: each redraw measures the bar (a forced layout of the whole page), and progress updates
+  // arrive every frame while work runs (1.6 s of an 8x-throttled rest-stop session went here)
+  var lastDraw=0,later=0;
+  function queue(progressOnly) { if (!doc || frame) return; if (!progressOnly) { if (later) { clearTimeout(later); later = 0; } } else if (later) return; var wait=progressOnly?250-(Date.now()-lastDraw):0; if (wait>0) { later=setTimeout(function(){later=0;queue();},wait); return; } frame = root.requestAnimationFrame(function () { frame = 0; lastDraw=Date.now(); draw(); }); }
   function etaKey(t){return t.etaKey||String(t.id).replace(/\d+/g,'*');}
   function rates(){if(etaRates)return etaRates;try{var r=root.__app&&root.__app.KV.get('traffic','task-durations');etaRates=r&&r.v||{};}catch(e){etaRates={};}return etaRates;}
   // Time left only from evidence: the task's own progress (after a few seconds and some of it done) or how long the
@@ -33,8 +40,8 @@
     return ms==null||ms<1500?text:text+' · about '+span(ms)+' left';}
   function span(ms){var sec=Math.ceil(ms/1000);return sec<90?sec+' s':Math.round(sec/60)+' min';}
   function upsert(id, value) {
-    if (!tasks.has(id)) tasks.set(id, { id: id, started: Date.now() });
-    Object.assign(tasks.get(id), value); completion = null; clearTimeout(completionTimer); queue();
+    var fresh=!tasks.has(id);if (fresh) tasks.set(id, { id: id, started: Date.now() });
+    var t=tasks.get(id),same=!fresh&&value&&Object.keys(value).every(function(k){return /^(frac|text|estimateMs|detail)$/.test(k)||t[k]===value[k];});Object.assign(t, value); completion = null; clearTimeout(completionTimer); queue(same);
     if(root.VisualDiagnostics)VisualDiagnostics.redraw('task_status_update');
   }
   function remove(id, done) {

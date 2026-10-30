@@ -84,7 +84,10 @@
   var restGeneration=0,restPlanPromise=null,restSession=null;
   function restRows(){return route?(route.stops||[]).map(function(p,i){return p.rest?{index:i,point:p,rest:p.rest}:null;}).filter(Boolean):[];}
   function restPending(){return !!(route&&route.restEditing)||restRows().some(function(x){return x.rest.pendingTiming;});}
-  function restSeedRows(previous){var rows=previous?(previous.cands||[]).map(function(c){return c.station;}):[];if(replay&&replay.stations){rows=rows.concat(replay.stations.official||[]);(replay.stations.google||[]).forEach(function(g){rows=rows.concat(g.list||[]);});}if(window.StationStore&&model)rows=rows.concat(StationStore.routeRows([model],T,8,KIND(),KIND()==='ev'?StationStore.priceScope(Garage.car()):undefined));return mergeRouteStations(rows.filter(Boolean).map(function(s){var copy=Object.assign({},s);['detourExact','detourMi','detourMin','detourRange'].forEach(function(k){delete copy[k];});return copy;}));}
+  // the same plan, saved stations and road give the same merged list: rest add / timing / commit each asked for it
+  var seedMemo=null;
+  function restSeedRows(previous){var stamp=[previous,replay,model,KIND()];if(seedMemo&&seedMemo.stamp.every(function(v,i){return v===stamp[i];}))return seedMemo.rows.map(function(s){return Object.assign({},s);});var out=restSeedRows0(previous);seedMemo={stamp:stamp,rows:out};return out.map(function(s){return Object.assign({},s);});}
+  function restSeedRows0(previous){var rows=previous?(previous.cands||[]).map(function(c){return c.station;}):[];if(replay&&replay.stations){rows=rows.concat(replay.stations.official||[]);(replay.stations.google||[]).forEach(function(g){rows=rows.concat(g.list||[]);});}if(window.StationStore&&model)rows=rows.concat(StationStore.routeRows([model],T,8,KIND(),KIND()==='ev'?StationStore.priceScope(Garage.car()):undefined));return mergeRouteStations(rows.filter(Boolean).map(function(s){var copy=Object.assign({},s);['detourExact','detourMi','detourMin','detourRange'].forEach(function(k){delete copy[k];});return copy;}));}
   function restBaseline(){if(restSession&&restSession.owner===route)return restSession;var m=model,raw=rawRoute,t=departAt().getTime(),known=[],verified=result&&result.schedule&&result.schedule.every(function(t){return !!t.reading;});if(verified)result.schedule.forEach(function(t){(t.reading.hazards||[]).forEach(function(h){known.push(Object.assign({},h,{fromMi:(t.from||0)+h.fromMi,toMi:(t.from||0)+h.toMi}));});});if(!verified)choiceLists().forEach(function(list,i){var e=hzCache.get(list[hzSel(i)]);if(e&&e.st==='done')(e.hz||[]).forEach(function(h){var offset=i?(m.legEnds||[])[i-1]||0:0;known.push(Object.assign({},h,{fromMi:offset+h.fromMi,toMi:offset+h.toMi}));});});var holder=restSession={owner:route,baseModel:m,baseRaw:raw,baseDepart:t,major:false,previous:known,baseline:null};holder.baseline=verified?Promise.resolve(known):RouteWx.forRoute(m,wxGet,{depart:t,stateAt:window.Limits&&Limits.stateAt,counties:loadCounties,countyOf:function(f){return window.US_COUNTIES&&US_COUNTIES[f];}}).then(function(r){holder.previous=r.hazards||known;return holder.previous;}).catch(function(){return known;});return holder;}
   // Adding or removing a rest splits or joins a leg, so later legs change number: their road answers (keyed by leg)
   // must move with them, or every reviewed alternative looks unanswered and the trip stops at Hazards (owner report).
@@ -3752,6 +3755,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
   async function planAsync(opts,valid,priority){
+    // a closed trip (✕ / Cancel search) drops its queued plans: sweeps used to keep the workers and the page busy
+    var wanted=valid;valid=function(){return (document.body.classList.contains('trip-on')||bgJob||queueWorking)&&(!wanted||wanted());};
     var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
     var context={departAt:opts.rewardDepartAt,waits:opts.waits,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority};
     async function forecast(stops){var raw=opts._trafficRaw,old=opts.model,base=T.buildRoute(raw,carModel()),m=await trafficPrepare(raw,base,opts.rewardDepartAt,{stops:stops,waits:opts.waits,waitAt:trafficWait(base),valid:valid||function(){return !jobCancel;}});if(old._lim)m._lim=old._lim;if(raw===rawRoute)model=m;opts.model=m;if(opts.propulsionContext)opts.propulsionContext=Object.assign(propulsionContext(m,raw),{waits:opts.waits||[]});else{var secs=flatSecs(m),sf=Garage.speedFn&&Garage.speedFn();if(sf&&secs.length){var state=result&&result.speedState&&result.speedState.offsets||{};opts.model=T.withSpeeds(m,T.speedRates(secs,secs.map(function(s,i){return state[i]==null?Garage.ruleOff(s.limit):state[i];}),sf.f,sf.lo,sf.hi));}}}
@@ -4825,6 +4830,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
   }
   async function openSaved(id) {
+    comparePersistNow();   // a draft waiting to be written goes in before the record is read
     if (jobBlocks()) return;
     if (busy) return;
     resetAdjust();if(windows)windows.invalidate();
@@ -5360,10 +5366,16 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(queueWorking){queueOpen(d.car||queueViewCar);return;}if((!route||d.trip&&route.histId!==d.trip)&&d.trip)await openSaved(d.trip);if(d.car&&compareEntries.has(d.car))queueOpen(d.car);else openTrip(ST_COMPARE);
   };
   if(window.__pendingQueueOpen){var queueIntent=window.__pendingQueueOpen;delete window.__pendingQueueOpen;setTimeout(function(){window.onTripQueueOpen(queueIntent);},0);}
+  // Written once things settle (1.5 s after the last change, or when the app goes to the background): every step change
+  // re-read and re-wrote the whole saved trip (tens of MB on a long trip) to keep the comparison drafts.
+  var persistTimer=0,persistJob=null;
   function comparePersist(){
-    if(!route||!route.histId)return;var o=A.KV.get('trips','trip|'+route.histId);if(!o||!o.v)return;
-    o.v.comparison=Array.from(compareEntries.values()).map(function(s){return VehicleCompare.portable(s);});A.KV.put('trips','trip|'+route.histId,o.v);
+    if(!route||!route.histId)return;persistJob={id:route.histId,entries:Array.from(compareEntries.values())};clearTimeout(persistTimer);persistTimer=setTimeout(comparePersistNow,1500);
   }
+  function comparePersistNow(){clearTimeout(persistTimer);persistTimer=0;var job=persistJob;persistJob=null;if(!job)return;var o=A.KV.get('trips','trip|'+job.id);if(!o||!o.v)return;
+    o.v.comparison=job.entries.map(function(s){return VehicleCompare.portable(s);});A.KV.put('trips','trip|'+job.id,o.v);
+  }
+  window.addEventListener('pagehide',comparePersistNow);document.addEventListener('visibilitychange',function(){if(document.hidden)comparePersistNow();});
   function compareCapture(){
     if(restPending())return; // Draft rests are reviewed at commit, not by restarting the old trip workflow.
     if(compareEditing||compareSwitching||!route||!model)return;

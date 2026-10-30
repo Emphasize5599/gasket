@@ -22,7 +22,7 @@
   function indexCell(id){var p=id.split('|'),y=+p[1],x=+p[2],ys=indexRows(),xs=columns(y);if(!ys.has(y)){var updated=Array.from(ys).concat(y);if(KV.put(NS,'index-v1',updated)===false)return false;ys.add(y);}if(!xs.has(x)){if(KV.put(NS,'row|'+y,Array.from(xs).concat(x))===false)return false;xs.add(x);}return true;}
   function load(id){if(memo.has(id)){var r=memo.get(id);memo.delete(id);memo.set(id,r);return r;}var p=id.split('|'),o=indexRows().has(+p[1])&&columns(+p[1]).has(+p[2])?KV.get(NS,id):null,r=o&&o.v;if(r&&r.schema===VERSION&&Array.isArray(r.stations)&&r.coverage&&typeof r.coverage==='object')r.stations=r.stations.filter(valid);else r={schema:VERSION,stations:[],coverage:{}};return remember(id,r);}
   function remember(id,r){memo.set(id,r);while(memo.size>64)memo.delete(memo.keys().next().value);return r;}
-  function write(id,r){if(!indexCell(id)||KV.put(NS,id,r)===false){memo.delete(id);return false;}remember(id,r);return true;}
+  function write(id,r){root.__stationRev=(root.__stationRev||0)+1;if(!indexCell(id)||KV.put(NS,id,r)===false){memo.delete(id);return false;}remember(id,r);return true;}
   function clean(s){var c=JSON.parse(JSON.stringify(s));['detourExact','detourMi','detourMin','detourRange','calc','leg','_priceVariants','_kind'].forEach(function(k){delete c[k];});return c;}
   function stamp(p){return p&&(Number(p.observedAt)||Number(p.t)||Number(p.updated)||Date.parse(p.updated)||0)||0;}
   function observe(rows,kind,scope){kind=kind||'gas';var grouped=new Map();(rows||[]).filter(valid).forEach(function(s){var c=at(s);if(!grouped.has(c.id))grouped.set(c.id,[]);grouped.get(c.id).push(s);});var ok=true;
