@@ -278,10 +278,15 @@
    *  or add the official station if Google didn't return it. Never mutates its inputs. */
   function mergeOfficial(googleStations, official) {
     var out = reconcileStations(googleStations);
+    // brand + 0.05° cells (≥ 1.7 mi, wider than any MATCH_MI): the same nearest match as scanning every station, in
+    // the same order, without comparing thousands of stations with thousands (a 3,000-station trip froze ~1.5 s here)
+    var CELL = 0.05, grid = new Map();
+    out.forEach(function (s, i) { if (!s || !Number.isFinite(s.lat) || !Number.isFinite(s.lng)) return; var k = s.brand + '|' + Math.floor(s.lat / CELL) + '|' + Math.floor(s.lng / CELL); (grid.get(k) || grid.set(k, []).get(k)).push(i); });
+    function near(w) { if (!Number.isFinite(w.lat) || !Number.isFinite(w.lng)) return []; var a = Math.floor(w.lat / CELL), b = Math.floor(w.lng / CELL), ids = []; for (var x = a - 1; x <= a + 1; x++) for (var y = b - 1; y <= b + 1; y++) { var c = grid.get(w.brand + '|' + x + '|' + y); if (c) ids = ids.concat(c); } return ids.sort(function (p, q) { return p - q; }).map(function (i) { return out[i]; }); }
     official.forEach(function (w) {
       if (!w || !Object.keys(w.prices).length) return;
       var best = null, bestD = MATCH_MI[w.brand] || 0.3;
-      out.forEach(function (s) {
+      near(w).forEach(function (s) {
         if (s.brand !== w.brand || s._official || ['wmStoreId','murphyStore'].some(function(k){return s[k]!=null&&w[k]!=null&&String(s[k])!==String(w[k]);})) return;
         var d = haversineMi(s.lat, s.lng, w.lat, w.lng);
         if (d < bestD) { bestD = d; best = s; }

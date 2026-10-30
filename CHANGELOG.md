@@ -4,6 +4,13 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.323 - 2026-10-30
+- Adding a rest stop no longer locks the steps after Hazards: road choices you already reviewed stay with their leg when legs are renumbered.
+- Every leg has a rest-stop list, including one with nothing found yet, and the overnight-rest notice opens the leg that needs it.
+- Rest stops can be added with traffic forecasts turned off.
+- Adding a rest stop and opening rest-stop lists stay responsive: the screen updates first, and road access is checked only for the places you look at.
+- Bug fixes.
+
 ## 0.0.322 - 2026-10-30
 - Reuse weather forecasts across changing location batches and route hours.
 - Pace weather requests and respect provider-wide rate-limit cooldowns.

@@ -81,6 +81,7 @@ on:
       - tests/restplan.test.js
       - tests/trafficflow-cache.test.js
       - tests/traffic-lookahead.test.js
+      - tests/rest-leg-choices.test.js
       - tests/ridb.test.js
       - tests/ridb-ui.test.js
       - tests/propulsion.test.js
