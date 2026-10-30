@@ -166,3 +166,20 @@ assert.equal(W.alertOf({ properties: { event: 'Special Weather Statement', geoco
   assert.match(W.advice(r2, {}).join(' '), /National Weather Service forecast: Heavy Rain \(90% chance\)/);
   console.log('route hazards: ' + urls.length + ' requests (' + states.join(', ') + '); ' + res.hazards.map((x) => x.kind + ' ' + Math.round(x.fromMi) + '–' + Math.round(x.toMi)).join(', '));
 })().catch((e) => { console.error(e); process.exitCode = 1; });
+
+// One AI verdict per unique warning: readings at other hours/routes reuse it, and an answer that arrives after a reading
+// timed out is used by the next reading at once (no second model call).
+(async()=>{const W=require('../assets/web/routewx.js');let calls=0,release;const slow=()=>{calls++;return new Promise(r=>{release=()=>r({fog:.8,rain:.1});});};
+ const mk=()=>W.alertOf({properties:{id:'urn:test:dedupe',event:'Special Weather Statement',headline:'Statement',description:'Areas of dense fog until late morning near the river.'}});
+ const a1=mk(),a2=mk();await W.digest(a1,slow,50);assert.equal(a1.aiPending,true,'first reading timed out');const p2=W.digest(a2,slow,50);await p2;assert.equal(calls,1,'the same warning is not sent to the model twice');
+ release();await new Promise(r=>setTimeout(r,0));const a3=mk();await W.digest(a3,slow,50);assert.equal(calls,1);assert.equal(a3.aiPending,false,'the late verdict applies to the next reading');assert.equal(a3.by,'ai');
+ const other=W.alertOf({properties:{id:'urn:test:other',event:'Special Weather Statement',headline:'Statement',description:'Gusty winds this afternoon.'}});await W.digest(other,slow,50);assert.equal(calls,2,'a different warning gets its own rating');release();
+ console.log('Unique-warning AI verdicts shared across readings');})().catch(e=>{console.error(e);process.exitCode=1;});
+
+// Every departure hour of a window search asks Open-Meteo the same URLs (stable 3/7/16-day horizons), so the cached
+// answer is shared instead of one request per hour.
+(async()=>{const W=require('../assets/web/routewx.js'),T=require('../assets/web/trip.js'),pts=[{lat:34,lng:-92},{lat:34.6,lng:-92}],mi=T.hav(...pts);
+ const m=T.buildRoute({distanceMeters:mi*1609.344,duration:'3600s',polyline:{encodedPolyline:T.encodePolyline(pts)},legs:[]},{city:30,hwy:40,comb:35});
+ const seen=hour=>{const urls=new Set();return W.forRoute(m,async u=>{if(/open-meteo/.test(u))urls.add(u.replace(/latitude=[^&]*&longitude=[^&]*/,''));return {error:'offline'};},{depart:Date.now()+hour*3600000}).then(()=>urls);};
+ const a=await seen(200),b=await seen(203),c=await seen(260);assert.deepEqual([...a],[...b],'hours of the same window share URLs');assert.deepEqual([...a],[...c]);assert(([...a].join(' ')).includes('forecast_days=16'));
+ console.log('Stable forecast horizons shared across departure hours');})().catch(e=>{console.error(e);process.exitCode=1;});

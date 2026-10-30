@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),W=require('../assets/web/timewindows'
 const h=W.HOUR,start=Date.UTC(2026,9,27,12),clear={hazards:[],stats:{errors:0}},rain={hazards:[{kind:'rain',level:2,fromMi:2,toMi:8,event:'Rain'}],stats:{errors:0}};
 assert.deepEqual(W.hours(start,start+2*h+15*60000),[start,start+h,start+2*h]);assert.throws(()=>W.hours(start,start-1));
 const rows=[0,1,2,4].map(i=>({leg:0,routeKey:'road',depart:start+i*h,arrive:start+i*h+20*60000,reading:i<2?clear:rain})).map(r=>({...r,signature:W.signature(r.reading)}));
-const groups=W.group(rows);assert.equal(groups.length,3);assert.equal(groups[0].rows.length,2,'only consecutive identical conditions group');assert.notEqual(W.signature(clear),W.signature({hazards:[],stats:{errors:1}}),'missing forecasts are not clear conditions');
+const groups=W.group(rows);assert.equal(groups.length,3);assert.equal(groups[0].rows.length,2,'only consecutive identical conditions group');const partial={hazards:[],stats:{points:10,weather:6,beyondWeather:4,errors:1}};assert.equal(W.screeningIssues(partial).length,0,'missing forecast data alone does not ask for a manual review');assert.match(W.dataNotices([{reading:partial}])[0],/don’t cover all of leg 1/,'it becomes a notice on the plan');assert.deepEqual(W.screeningIssues({hazards:[{kind:'alert',aiPending:true}],stats:{points:1,weather:1,aiPending:1}}).map(x=>x.code),['rating'],'an unrated warning still blocks approval');
 const consent=W.create();consent.answer(groups[0],true);assert(!consent.allowed(rows[0]),'time approval cannot substitute for road approval');consent.road(0,'road',true);assert(consent.allowed(rows[0]));assert(!consent.allowed(rows[2]));consent.answer(groups[1],false);assert(!consent.allowed(rows[2]));
 const raw={distanceMeters:120*1609.344,duration:'7200s',polyline:{encodedPolyline:T.encodePolyline([{lat:35,lng:-92},{lat:36,lng:-92}])},legs:[]},m=T.buildRoute(raw,{city:30,hwy:40,comb:35});m.legEnds=[60,120];
 const o={model:m,rewardDepartAt:start,stopMinutes:3,fuelKind:'gas',legDepartures:[start,start+3*h]},p={stops:[],destinationCharges:[]};const timeline=T.scheduleTimeline(o,p);assert.equal(timeline[0].arrive,start+h);assert.equal(timeline[1].depart,start+3*h);assert.equal(timeline[1].waitMinutes,120);assert.equal(timeline[1].arrive,start+4*h);assert.equal(m.durationSec,7200,'waiting never becomes driving time');
@@ -29,8 +29,8 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
  assert(W.autoAllowed(complete([]),rules,kinds));
  for(const kind of Object.keys(kinds)){assert(!W.autoAllowed(complete([{kind}]),{version:2,allow:[]},kinds));assert(W.autoAllowed(complete([{kind}]),{version:2,allow:[kind]},kinds));assert(!W.autoAllowed(complete([{kind}]),{enabled:true,ask:[]},kinds));}
  assert(!W.autoAllowed(complete([{kind:'unknown'}]),{version:2,allow:['rain']},kinds));
- for(const flag of ['errors','beyondWeather','aiPending']){const r=complete([]);r.stats[flag]=1;assert(!W.autoAllowed(r,rules,kinds));}
- for(const r of [null,{hazards:[]},Object.assign(complete([]),{error:'unavailable'}),{hazards:[],stats:{points:2,weather:1}},complete([{kind:'rain',aiPending:true}]),complete([{kind:'rain',areaUncertain:true}])])assert(!W.autoAllowed(r,{version:2,allow:['rain']},kinds));
+ for(const flag of ['errors','beyondWeather']){const r=complete([]);r.stats[flag]=1;assert(W.autoAllowed(r,rules,kinds),'missing forecast data ('+flag+') is a notice, not a review');}{const r=complete([]);r.stats.aiPending=1;assert(!W.autoAllowed(r,rules,kinds),'an unrated warning blocks approval');}
+ for(const r of [null,complete([{kind:'rain',aiPending:true}]),complete([{kind:'rain',areaUncertain:true}])])assert(!W.autoAllowed(r,{version:2,allow:['rain']},kinds));for(const r of [{hazards:[]},Object.assign(complete([]),{error:'unavailable'}),{hazards:[],stats:{points:2,weather:1}}])assert(W.autoAllowed(r,{version:2,allow:['rain']},kinds),'incomplete forecasts alone do not need a manual review');
  assert(!W.autoAllowed(complete([]),{enabled:false,ask:[]},kinds));
  assert(!W.autoAllowed(complete([{kind:'rain'},{kind:'storm'}]),{version:2,allow:['rain']},kinds));
 }
@@ -47,9 +47,9 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
  const fog={kind:'fog',level:1,fromMi:0,toMi:20},make=extra=>({hazards:[fog],stats:{points:2,weather:2,errors:0,...extra}}),rows=[make({}),make({beyondAir:1}),make({aiPending:1}),make({errors:1}),make({weather:1}),make({})].map((reading,i)=>({leg:0,routeKey:'fog',depart:start+i*h,reading}));
  const rules={version:2,allow:['fog']},kinds={fog:['Fog'],rain:['Rain']};
  assert(W.autoAllowed(rows[0].reading,rules,kinds));assert(W.autoAllowed(rows[5].reading,rules,kinds));
- assert.equal(W.group(rows).length,5,'air-only gaps do not create new screening questions; weather/rating changes still do');
+ assert.equal(W.group(rows).length,3,'air and weather gaps do not create new screening questions; rating changes still do');
  assert.equal(W.autoReasons(rows[1].reading,rules,kinds).length,0);assert.match(W.dataNotices([{reading:rows[1].reading}])[0],/Air-quality/);assert.equal(W.autoReasons(rows[2].reading,rules,kinds)[0].code,'rating');
- assert(!W.autoAllowed(rows[3].reading,rules,kinds));assert(!W.autoAllowed(rows[4].reading,rules,kinds));
+ assert(W.autoAllowed(rows[3].reading,rules,kinds));assert(W.autoAllowed(rows[4].reading,rules,kinds));assert.match(W.dataNotices([{reading:rows[4].reading}])[0],/Weather forecasts don’t cover/);
 }
 
 // Missing air-quality requests are reported after planning, not treated as a weather approval.

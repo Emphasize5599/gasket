@@ -30,7 +30,7 @@ const opts={stateAt:()=> 'CA',dense,countyOf:()=>county,counties:async()=>{}};
  // The persistent geometry cache must not keep HTML/errors for 30 days.
  const fs=require('node:fs'),vm=require('node:vm'),src=fs.readFileSync('assets/web/tripui.js','utf8');let saved=0,ttl=0,body='<html>temporary error</html>';
  const ctx={wxFlight:new Map(),A:{KV:{get:(ns,key,age)=>{ttl=age;return null;},put:()=>saved++}},call:async()=>({body})};
- vm.runInNewContext(src.slice(src.indexOf('  function wxGet('),src.indexOf('  function wxWhen(')),ctx);
+ vm.runInNewContext(src.slice(src.indexOf('  var wxActive=0'),src.indexOf('  function wxWhen(')),ctx);
  await ctx.wxGet(zone);assert.equal(saved,0);body=JSON.stringify({geometry:mountains});await ctx.wxGet(zone);assert.equal(saved,1);assert.equal(ttl,30*864e5);
  console.log('NWS forecast-zone vs county footprints, concurrent lookups, explicit polygons, UGC fallback and honest unavailable-area warnings passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

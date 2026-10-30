@@ -4,6 +4,14 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.319 - 2026-10-30
+- Hazard review shows the leg's other routes at the same hours, in lighter blue on the map and in a short list, so you can tell whether a route is better or worse than the alternatives.
+- Weather warnings are rated by the on-phone AI before you can approve them; each unique warning is rated once and the verdict applies everywhere it appears.
+- Hours whose forecasts don't cover the whole route no longer need a manual approval; the trip says which legs couldn't be fully checked.
+- Time windows need your routes first and refuse windows the fastest route can't make.
+- Adding rest stops re-checks the hazards on the legs after them at their new times.
+- Bug fixes.
+
 ## 0.0.318 - 2026-10-30
 - Overnight rests are chosen in Stops → Rest stops instead of before leaving Route. Your nightly hours show which places you reach in time for your minimum rest, where a night's rest is needed, and prefill the rest when you add it.
 - Bug fixes.

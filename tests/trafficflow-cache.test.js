@@ -45,5 +45,9 @@ function load(store,at){
   y=load(days,depart-30*60000);await y.flow.forecast(m,depart);assert.equal(y.calls.google,0,'near-term pieces retain the same weekend policy');y.ctx.dispatch('pagehide');
   y=load(days,depart-25*60000);await y.flow.forecast(m,depart);assert.equal(y.calls.google,0,'the same planning snapshot is reused');
   await y.flow.forecast(m,depart+600000);assert(y.calls.google>0,'different planned time cannot borrow another hour/date');y.ctx.dispatch('pagehide');
+  {// the status total is the caller's queue (time-window screening), not a count that grows as routes start
+   const q=load(new Map());const texts=[];q.ctx.Tasks={upsert:(id,o)=>{if(id==='traffic-work')texts.push(o.text);},begin:()=>()=>{}};const raw=i=>({description:'Route '+i,polyline:{encodedPolyline:T.encodePolyline(pts)}});
+   const t0=Date.UTC(2027,1,1,15),jobs=[];for(let i=0;i<4;i++)jobs.push(q.flow.prepare(raw(i),m,t0+i*3600000,{queue:{index:i,total:10},label:'Route '+i}));await Promise.all(jobs);
+   const totals=texts.map(t=>+(/ \/ (\d+) routes checked/.exec(t)||[])[1]).filter(Number.isFinite);assert(totals.length&&totals.every(n=>n===10),'every status names the queue total of 10: '+totals.join(','));}
   console.log('Traffic forecast cache: restart reuse, larger bounded index and shared timezone lookup passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

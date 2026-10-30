@@ -278,13 +278,18 @@
   var AI_LABEL = { tropical: 'Tropical storm', storm: 'Strong storms', tornado: 'Tornado threat', flood: 'Flooding', rain: 'Heavy rain', snow: 'Snow', ice: 'Ice', fog: 'Dense fog', wind: 'High wind', heat: 'Extreme heat', cold: 'Extreme cold', air: 'Smoke or dust' };
   /** Read a vague alert: compare(text, groups) -> Promise<{group: score}|null> (Severity.compare), else its words. */
   var DIGEST_MS = 4000;
+  // One AI verdict per unique warning (its id and text): every hourly reading, route and leg that meets the same
+  // warning shares it, and an answer that arrives after a reading timed out is used by the next reading at once.
+  var byModel=new WeakMap(),VERDICTS=4000,verdictTotal=0;
+  function verdictKey(a,txt){var h=2166136261;for(var i=0;i<txt.length;i++)h=Math.imul(h^txt.charCodeAt(i),16777619);return (a.id||'')+'|'+(h>>>0).toString(36);}
+  function verdict(a,txt,compare){if(!compare)return null;var verdicts=byModel.get(compare);if(!verdicts){verdicts=new Map();byModel.set(compare,verdicts);}var key=verdictKey(a,txt),v=verdicts.get(key);if(v)return v;verdictTotal++;v={done:false,sc:null};v.promise=Promise.resolve().then(function(){return compare(txt,ALERT_EX);}).then(function(sc){v.sc=sc||null;v.done=true;if(!sc)verdicts.delete(key);return v.sc;},function(){verdicts.delete(key);return null;});if(verdicts.size>=VERDICTS)verdicts.delete(verdicts.keys().next().value);verdicts.set(key,v);return v;}
   async function digest(a, compare, ms) {
     if (!a.vague) return a;
     // the model gets a few seconds at most (it may be busy rating recalls); its words read the alert otherwise
     var fullText=a.headline+'. '+a.text, words=digestWords(fullText);
-    var txt = fullText.slice(0, 600), sc = compare ? await Promise.race([
-      compare(txt, ALERT_EX).catch(function () { return null; }),
-      new Promise(function (r) { setTimeout(function () { r(null); }, ms || DIGEST_MS); })]) : null;
+    var txt = fullText.slice(0, 600), v = verdict(a, txt, compare), sc = !v ? null : v.done ? v.sc : await Promise.race([
+      v.promise,
+      new Promise(function (r) { setTimeout(function () { r(null); }, ms || DIGEST_MS); })]);
     // no answer from the model (not loaded yet, busy or failed): its words for now, marked so it can be read again
     a.aiPending = !sc;
     if (sc) {
@@ -426,7 +431,9 @@
   async function lookup(pts, getJson, opts) {
     opts = opts || {};
     var now = Date.now(), last = Math.max.apply(null, pts.map(function (p) { return p.eta; }));
-    var days = Math.max(1, Math.min(16, Math.ceil((last - now) / 864e5) + 1));
+    // Stable horizons (3, 7 or 16 days) so every departure hour of a time-window search asks the same URL and shares one
+    // cached answer, instead of one Open-Meteo request per hour (which ran into its request limits).
+    var need = Math.ceil((last - now) / 864e5) + 1, days = need <= 3 ? 3 : need <= 7 ? 7 : 16;
     var stats = { points: pts.length, weather: 0, air: 0, alertStates: 0, alertPoints: 0, errors: 0, beyondWeather: 0, beyondAir: 0 };
     var r2 = function (v) { return v.toFixed(2); }, groups = [];
     for (var g = 0; g < pts.length; g += 50) groups.push(pts.slice(g, g + 50));
@@ -479,7 +486,7 @@
     // Failed preferred-provider attempts are recovered when fallback covers every point.
     // Keep their diagnostic count without treating complete forecasts as missing data.
     if(stats.weather===stats.points&&!stats.beyondWeather&&stats.errors){stats.recoveredWeatherErrors=stats.errors;stats.errors=0;}
-    var airDays = Math.min(5, days);
+    var airDays = 5;
     await pool(groups, 3, async function (ps) {
       var body = await get('https://air-quality-api.open-meteo.com/v1/air-quality?' + coords(ps) + '&hourly=us_aqi,us_aqi_pm2_5,us_aqi_ozone,dust&timezone=GMT&forecast_days=' + airDays);
       if (!body) return;
@@ -536,6 +543,7 @@
     return { hazards: hz, stats: res.stats, alerts: res.alerts || [], dense:dense, forecast:wx,temperatures:res.pts.map(function(p){return {mi:p.mi,hours:p.temperatureHours||[]};}) };
   }
   /** Rate only retained warning text, with no forecast, air or alert requests. */
+  function verdictCount(){return verdictTotal;}
   async function rerate(reading,compare,countyOf,ms){
     var alerts=(reading.alerts||[]).map(function(a){return Object.assign({},a);});
     await pool(alerts.filter(function(a){return a.aiPending;}),2,function(a){return digest(a,compare,ms);});
@@ -555,7 +563,7 @@
     return KINDS[x.kind][0];
   }
   var api = { prepare:prepare, vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
-    forRoute: forRoute, rerate:rerate, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
+    forRoute: forRoute, rerate:rerate, verdictCount:verdictCount, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;
 })(typeof window !== 'undefined' ? window : globalThis);

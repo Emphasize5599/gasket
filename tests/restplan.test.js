@@ -24,6 +24,10 @@ const c=P.compact(Object.assign({profile:{rows:new Array(1000)}},z[1]));assert(!
 const rain={kind:'rain',level:2,fromMi:2,toMi:10},known=P.changedHazards([rain],m,[{...rain,fromMi:2.5,toMi:10.5}],nm);assert.equal(known.length,0,'same rain on the same road, shifted by the spur');
 assert.equal(P.changedHazards([rain],m,[{...rain,level:3}],nm).length,1,'worse conditions are asked about');
 assert.equal(P.changedHazards([rain],m,[{kind:'snow',level:2,fromMi:2,toMi:10}],nm).length,1,'a different hazard is asked about');
+{const H=3600000,t=Date.UTC(2027,0,5,12),then={...rain,from:t,to:t+H},later={...rain,fromMi:2.5,toMi:10.5,from:t+5*H,to:t+6*H};
+ assert.equal(P.changedHazards([then],m,[later],nm,5,{after:1}).length,1,'after a rest, the same rain met hours later needs a new look');
+ assert.equal(P.changedHazards([then],m,[{...later,from:t+10*60000,to:t+H}],nm,5,{after:1}).length,0,'met at about the same time it stays reviewed');
+ assert.equal(P.changedHazards([then],m,[later],nm,5,{after:50}).length,0,'before the first rest, timing is unchanged and place alone matches');}
 assert.equal(P.changedHazards([rain],m,[{...rain,fromMi:15,toMi:19}],nm).length,1,'a new place is asked about');
 console.log('RestPlan: local insertion/removal, free-flow colors with gray unknowns, changed-only hazard review');
 
