@@ -4,28 +4,33 @@ Gasket's release key lives on the owner's PC, never in this repository. Claude's
 
 | What | Where |
 |---|---|
-| Keystore | `D:\Personal\Working\Gasket\gasket-release.jks` (PKCS12, RSA 4096, alias `gasket`, `CN=Gasket`) |
+| Keystore | `%USERPROFILE%\AppData\Local\GasketBuild\signing\gasket-release.jks` (PKCS12, RSA 4096, alias `gasket`, `CN=Gasket`) |
 | Password | The owner's password manager, plus `gasket-release.password.dpapi` next to the keystore (encrypted for the owner's Windows account) |
 | Cloud sessions | Environment variables `KS_PASS` (the password) and `GASKET_KEYSTORE_B64` (the keystore, base64) in the cloud environment's settings |
 
-## Making the key (once)
+## Local Windows builds
 
-On the PC, run:
+The local setup is installed and verified on the owner's PC. Run from the repository:
 
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build-local.ps1
 ```
-powershell -ExecutionPolicy Bypass -File tools\new-signing-key.ps1
+
+This builds ARM64 and universal release APKs, signs with the registered original key, verifies their certificate/package/version, and copies them to Desktop. Use `-OutputDir C:\path\to\output` to choose another folder. Existing Desktop APKs are preserved with timestamped filenames. These are local release builds, not Android debug-key builds; they can update the published app.
+
+For a new Windows machine, install the pinned, checksum-verified Java 21, Gradle 8.13 and Android SDK 35 toolchain after reviewing the SDK agreement:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\setup-local-android.ps1 -AcceptSdkLicense
+powershell -ExecutionPolicy Bypass -File tools\register-local-signing.ps1 -KeystoreBase64File C:\private\keystore.txt -PasswordFile C:\private\password.txt
+powershell -ExecutionPolicy Bypass -File tools\build-local.ps1
 ```
 
-The script:
-- finds Java's `keytool`, or downloads a portable Java to a temp folder and deletes it afterwards;
-- creates the key with a random password that is never shown;
-- saves the encrypted password backup;
-- puts the password, then the keystore, on the clipboard for you to paste into the environment settings, and clears the clipboard at the end;
-- prints the certificate's SHA-1 for the Google API key restriction.
+Registration also accepts `-KeystoreFile` for an existing `.jks` and `-PasswordDpapiFile` for a Windows encrypted password. It verifies the key against a published signed APK (optional `-ReferenceApk`) and never creates a key. Credential file contents are not printed. The password is retained using Windows DPAPI for this Windows account; original input files are untouched. DPAPI files cannot be moved to a different Windows account as a substitute for a portable password backup.
 
-It refuses to overwrite an existing keystore. `tools\show-signing-password.ps1` copies the password back to the clipboard from the backup.
+Toolchain, dependency caches and signing files live outside the repository in `%USERPROFILE%\AppData\Local\GasketBuild`. All three commands accept `-ToolchainRoot` when a custom location is needed. Setup is repeatable and skips installed components. The first build downloads dependencies; later builds reuse them. Java networking prefers IPv4 to avoid the routing failures observed on this PC.
 
-Back up the keystore and the password together. Without them, no update can ever be installed over a build signed with this key.
+Back up the original keystore and password securely. Do not generate a replacement for normal updates: a new key changes the app's signing identity. `tools\new-signing-key.ps1` is only for a deliberately new app identity.
 
 ## Building
 
