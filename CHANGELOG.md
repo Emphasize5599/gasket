@@ -4,6 +4,12 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.321 - 2026-10-30
+- Hourly forecasts for flexible trip timing no longer stall: a weather request that keeps failing is remembered for a few minutes instead of being retried for every departure hour.
+- Traffic forecasts work for the repeated hour when daylight saving ends.
+- Station discount eligibility is kept in app storage, and the status says when it's matching stations to your routes.
+- Bug fixes.
+
 ## 0.0.320 - 2026-10-30
 - Forecast traffic reads about twice as fast for a single route and for rest timing: later stretches of the route are read ahead in idle readers, nearby departures reuse stored readings and connections stay open between reads.
 - Bug fixes.

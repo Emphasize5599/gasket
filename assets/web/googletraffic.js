@@ -11,7 +11,11 @@
  function at(x,p){for(var i=0;i<p.length;i++){if(!Array.isArray(x))return null;x=x[p[i]];}return x;}
  function hash(s){var h=2166136261;for(var i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return (h>>>0).toString(36);}
  function wallValue(t,zone){var parts=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)),v={};parts.forEach(function(p){v[p.type]=p.value;});return Math.floor(Date.UTC(+v.year,+v.month-1,+v.day,+v.hour%24,+v.minute,+v.second)/1000);}
- function wall(t,zone){var value=wallValue(t,zone);if(wallValue(t-3600000,zone)===value||wallValue(t+3600000,zone)===value||wallValue(t-1800000,zone)===value||wallValue(t+1800000,zone)===value)throw Error('Google cannot distinguish this repeated daylight-saving clock; choose another time or use HERE');return value;}
+ // Google takes a local wall clock, so the repeated hour when daylight saving ends can't say which of the two it means;
+ // it gets the wall clock anyway (traffic an hour apart in the middle of the night is nearly the same). wall.repeated tells.
+ function repeated(t,zone){var value=wallValue(t,zone);return wallValue(t-3600000,zone)===value||wallValue(t+3600000,zone)===value||wallValue(t-1800000,zone)===value||wallValue(t+1800000,zone)===value;}
+ function wall(t,zone){return wallValue(t,zone);}
+ wall.repeated=repeated;
  // Captured request fields, with no session/auth tokens. Parent lengths count all
  // descendant fields; avoid flags and the floating origin-wall clock are explicit.
  function query(a,b,clock,avoid){

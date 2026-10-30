@@ -32,5 +32,11 @@ const opts={stateAt:()=> 'CA',dense,countyOf:()=>county,counties:async()=>{}};
  const ctx={wxFlight:new Map(),A:{KV:{get:(ns,key,age)=>{ttl=age;return null;},put:()=>saved++}},call:async()=>({body})};
  vm.runInNewContext(src.slice(src.indexOf('  var wxActive=0'),src.indexOf('  function wxWhen(')),ctx);
  await ctx.wxGet(zone);assert.equal(saved,0);body=JSON.stringify({geometry:mountains});await ctx.wxGet(zone);assert.equal(saved,1);assert.equal(ttl,30*864e5);
+ {// a request that still fails after its retries is remembered for a few minutes (hourly screening asks it every hour)
+  let asks=0;const warns=[];const c2={wxFlight:new Map(),LG:{warn:(...a)=>warns.push(a)},setTimeout:(f)=>setTimeout(f,0),A:{KV:{get:()=>null,put:()=>{}}},call:async()=>{asks++;return {error:'HTTP 503'};}};
+  vm.runInNewContext(src.slice(src.indexOf('  var wxActive=0'),src.indexOf('  function wxWhen(')),c2);
+  const u='https://api.weather.gov/gridpoints/AAA/1,2/forecast/hourly';await c2.wxGet(u);const first=asks;assert.equal(first,3,'retried twice');
+  for(let i=0;i<5;i++){const r=await c2.wxGet(u);assert(r&&r.error);}assert.equal(asks,first,'later hours get the failure at once');
+  assert.equal(warns.length,1);assert.equal(warns[0][2].source,'api.weather.gov/gridpoints','logged without coordinates');}
  console.log('NWS forecast-zone vs county footprints, concurrent lookups, explicit polygons, UGC fallback and honest unavailable-area warnings passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

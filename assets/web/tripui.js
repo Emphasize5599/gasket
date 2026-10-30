@@ -2954,6 +2954,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     finishScanPending('discounts');
     if(!(replay&&replay.localOnly))try { var allSt = official.slice(); perModel.forEach(function (l) { allSt = allSt.concat(l); });if(S.xomCheck!==false)pg(.94,'Checking station discount eligibility');await xomCheck(allSt); } catch (e) { LG.warn('stations', 'Walmart+ check', String(e)); }
     var grade = gradeOf(), per = [], t0 = Date.now(), nowD = new Date(), goD = departAt();
+    // a label of its own: matching thousands of saved stations kept "Checking station discount eligibility" up for ~25 s
+    var matchLabel='Matching stations to '+(models.length>1?'your '+models.length+' routes':'your route');pg(.95,matchLabel);
     for (var mi = 0; mi < models.length; mi++) {
       var model = models[mi];
       var merged = P.mergeOfficial(dedupe(perModel[mi]), official), cands = [], unpriced = 0, stale = 0, unknownTimes=0,oldObservations=0, unp = [];
@@ -2968,7 +2970,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
           price: price, calc: calc, station: s, lat: s.lat, lng: s.lng, leg: pr.leg }, extra || {});
       };
       for (var si = 0; si < merged.length; si++) {
-        if (si % 25 === 24) await new Promise(function (r) { setTimeout(r, 0); });   // bound UI-thread chunks on big trips
+        if (si % 25 === 24) {await new Promise(function (r) { setTimeout(r, 0); });if(si%250===249)pg(.95+.04*(mi+si/merged.length)/models.length,matchLabel);}   // bound UI-thread chunks on big trips
         var s = merged[si];
         // once per leg it's near: on a round trip over the same roads a station is passed going and coming back
         var prs = T.projectLegs(model, { lat: s.lat, lng: s.lng }, maxOff);
@@ -4231,11 +4233,17 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function wxSlot(){return new Promise(function(r){if(wxActive<8){wxActive++;r();}else wxWait.push(r);});}
   function wxDone(){var n=wxWait.shift();if(n)n();else wxActive--;}
   async function wxFetch(url){for(var k=0;;k++){await wxSlot();var r;try{r=await call('fetchJson',url);}catch(e){r={error:String(e&&e.message||e)};}finally{wxDone();}if(r&&r.body||k>=2||!/429|50[0-9]|timed? ?out|timeout|network|unavailable/i.test(String(r&&r.error||'')))return r;await new Promise(function(res){setTimeout(res,k?6000:2000);});}}
+  var wxFailed=new Map(),WX_FAIL_MS=3*60e3,wxFailSeen={};
+  // host and first path part only (no coordinates), one line per kind a minute
+  function wxFailWarn(url,r){var m=/^https?:\/\/([^/?]+)\/?([^/?]*)/.exec(url)||[],kind=(m[1]||'?')+'/'+(m[2]||''),err=String(r&&r.error||'no answer').slice(0,120),k=kind+'|'+err,seen=wxFailSeen[k];if(seen&&Date.now()-seen.t<60e3){seen.n++;return;}LG.warn('weather','Weather request failed',seen&&seen.n?{source:kind,error:err,suppressedBefore:seen.n}:{source:kind,error:err});wxFailSeen[k]={t:Date.now(),n:0};}
   function wxGet(url) {       // forecasts 45 min, warnings 10 min, NWS grid/zone geography 30 days
     var o = A.KV.get('wx', url, /weather\.gov\/(?:points|zones)\//.test(url) ? 30 * 864e5 : /weather\.gov\/alerts/.test(url) ? 10 * 60e3 : 45 * 60e3);
     if (o) return Promise.resolve(o.v);
     if(wxFlight.has(url))return wxFlight.get(url);
-    var pending=wxFetch(url).then(function (r) { if (r && r.body) {var valid=true;if(/weather\.gov\/zones\//.test(url))try{var g=JSON.parse(r.body).geometry;valid=!!(g&&/^(?:Multi)?Polygon$/.test(g.type)&&g.coordinates&&g.coordinates.length);}catch(e){valid=false;}if(valid)A.KV.put('wx', url, r);} return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
+    // A request that still fails after its retries is remembered for a few minutes: hourly screening asks the same
+    // forecast for every departure hour, and waiting out the retries each time took ~8 s per hour (owner's 10-30 log).
+    var failed=wxFailed.get(url);if(failed&&Date.now()-failed.t<WX_FAIL_MS)return Promise.resolve(failed.r);
+    var pending=wxFetch(url).then(function (r) { if(!(r&&r.body)){wxFailed.set(url,{t:Date.now(),r:r});if(wxFailed.size>400)wxFailed.delete(wxFailed.keys().next().value);wxFailWarn(url,r);} if (r && r.body) {var valid=true;if(/weather\.gov\/zones\//.test(url))try{var g=JSON.parse(r.body).geometry;valid=!!(g&&/^(?:Multi)?Polygon$/.test(g.type)&&g.coordinates&&g.coordinates.length);}catch(e){valid=false;}if(valid)A.KV.put('wx', url, r);} return r; }).finally(function(){wxFlight.delete(url);});wxFlight.set(url,pending);return pending;
   }
   function wxWhen(a, b) {
     if(!Number.isFinite(a)||!Number.isFinite(b))return 'Forecast time unavailable';
