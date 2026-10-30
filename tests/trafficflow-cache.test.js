@@ -2,7 +2,7 @@
 // earlier routes rather than evicting them during a large departure-window scan, the hot layer stays bounded, and one timezone lookup is shared.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const web=path.join(__dirname,'..','assets','web');
-function load(store,at){
+function load(store,at,speed=50){
   const clock=()=>at==null?Date.now():at;class Clock extends Date{static now(){return clock();}}
   const listeners={},ctx={console,Intl,Date:Clock,Math,JSON,Promise,setTimeout,clearTimeout,setInterval,clearInterval,Map,Set,WeakMap,Error,Number,String,Array,Object,BigInt};
   ctx.window=ctx;ctx.root=ctx;ctx.document={hidden:false};ctx.addEventListener=(n,f)=>{(listeners[n]=listeners[n]||[]).push(f);};ctx.dispatch=n=>(listeners[n]||[]).forEach(f=>f({}));
@@ -10,15 +10,15 @@ function load(store,at){
   ctx.WorkerSettings={trafficCount:()=>4};
   const KV={get:(ns,k,ttl)=>{const r=store.get(ns+'|'+k);return r&&(!ttl||clock()-r.t<ttl)?r:null;},put:(ns,k,v)=>store.set(ns+'|'+k,{v,t:clock()})};
   const A={KV,S:{trip:{trafficForecast:true,trafficPreset:'weekend',avoid:{}},googleTraffic:true},esc:String,showSiteCheck(){throw Error('no check expected');}};
-  const calls={google:0,zone:0};
+  const calls={google:0,zone:0,queries:[]};
   async function call(name,q){
     if(name==='fetchJson'){calls.zone++;await new Promise(r=>setTimeout(r,5));return {body:JSON.stringify({timezone:'America/Chicago'})};}
-    if(name!=='fetchGoogleTraffic')throw Error('unexpected '+name);calls.google++;
-    const m=[...q.matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)],a={lat:+m[0][1],lng:+m[0][2]},b={lat:+m[1][1],lng:+m[1][2]},meters=ctx.Trip.hav(a,b)*1609.344,seconds=meters/1609.344/50*3600,clock=+(/!3j(\d+)/.exec(q)[1]),r=[],root=[];
+    if(name!=='fetchGoogleTraffic')throw Error('unexpected '+name);calls.google++;calls.queries.push(q);
+    const m=[...q.matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)],a={lat:+m[0][1],lng:+m[0][2]},b={lat:+m[1][1],lng:+m[1][2]},meters=ctx.Trip.hav(a,b)*1609.344,seconds=meters/1609.344/speed*3600,clock=+(/!3j(\d+)/.exec(q)[1]),r=[],root=[];
     r[0]=[];r[0][1]='Generic road';r[0][2]=[meters];r[0][10]=[[seconds],null,3,null,[seconds*.9,seconds*1.2]];r[3]=[[[0,0],[meters,seconds]]];root[1]=[r];
     root[7]=[[[Math.round(a.lat*1e7),Math.round((b.lat-a.lat)*1e7)],[Math.round(a.lng*1e7),Math.round((b.lng-a.lng)*1e7)]]];root[11]='!8j'+clock+'!3e0';return {body:JSON.stringify([root])};
   }
-  const flow=ctx.TrafficFlow.init(A,call,{invalidate(){}});return {flow,calls,ctx,settings:A.S};
+  const flow=ctx.TrafficFlow.init(A,call,{invalidate(){}});return {flow,calls,ctx,settings:A.S,KV};
 }
 (async()=>{
   const store=new Map(),T=require('../assets/web/trip.js'),pts=[{lat:34.01,lng:-92.01},{lat:34.06,lng:-92.01}],mi=T.hav(pts[0],pts[1]);
@@ -49,5 +49,43 @@ function load(store,at){
    const q=load(new Map());const texts=[];q.ctx.Tasks={upsert:(id,o)=>{if(id==='traffic-work')texts.push(o.text);},begin:()=>()=>{}};const raw=i=>({description:'Route '+i,polyline:{encodedPolyline:T.encodePolyline(pts)}});
    const t0=Date.UTC(2027,1,1,15),jobs=[];for(let i=0;i<4;i++)jobs.push(q.flow.prepare(raw(i),m,t0+i*3600000,{queue:{index:i,total:10},label:'Route '+i}));await Promise.all(jobs);
    const totals=texts.map(t=>+(/ \/ (\d+) routes checked/.exec(t)||[])[1]).filter(Number.isFinite);assert(totals.length&&totals.every(n=>n===10),'every status names the queue total of 10: '+totals.join(','));}
-  console.log('Traffic forecast cache: restart reuse, larger bounded index and shared timezone lookup passed');
+  {// New stop/leg boundaries can require several old profiles, with only an expired/missing middle fetched again.
+   const origin=Date.UTC(2027,0,4,12),when=origin+86400000,ps=[{lat:34.01,lng:-92.01},{lat:34.31,lng:-92.01}],distance=T.hav(ps[0],ps[1]);
+   const whole=T.buildRoute({distanceMeters:distance*1609.344,duration:'1500s',polyline:{encodedPolyline:T.encodePolyline(ps)},legs:[]},{city:30,hwy:40,comb:35});
+   const split=T.restoreModel({...whole,legEnds:[distance/3,distance*2/3,distance]}),data=new Map();let a=load(data,origin);
+   const original=await a.flow.forecast(split,when);a.ctx.dispatch('pagehide');assert.equal(a.calls.google,3);
+   let b=load(data,origin+3*3600000);const joined=await b.flow.forecast(whole,when);b.ctx.dispatch('pagehide');
+   assert.equal(b.calls.google,0,'all three persisted sections join after a restart and window/leg changes');assert.equal(joined.cachedSections,3);assert.equal(joined.fetchedSections,0);assert(Math.abs(joined.seconds-original.seconds)<.05);assert.equal(joined.at,origin,'stitching does not renew forecast age');
+   const notices=[],logs=[];b.ctx.Tasks={upsert:(_id,o)=>notices.push(o.text),begin:()=>()=>{}};b.ctx.FLog={debug:(_a,_m,d)=>logs.push(d),info:(_a,_m,d)=>logs.push(d),warn(){}};
+   await b.flow.prepare({description:'Reassembled roads'},whole,when);assert(notices.some(t=>/sections reused/.test(t)),'status distinguishes storage reuse from new reading');assert(logs.some(d=>d.cachedSections===3&&d.fetchedSections===0),'logs report actual reused/new sections');b.ctx.dispatch('pagehide');
+   const missing=new Map([...data].map(([k,v])=>[k,JSON.parse(JSON.stringify(v))])),index=missing.get('traffic|google-index').v;
+   const mid=index.slice().sort((a,b)=>a.start-b.start)[1];assert(mid,'middle section indexed');
+   missing.delete('traffic|google-slot|'+mid.slot);missing.get('traffic|google-index').v=index.filter(e=>e!==mid);
+   const delayed=new Map([...missing].map(([k,v])=>[k,JSON.parse(JSON.stringify(v))]));
+   b=load(missing,origin+4*3600000);const partial=await b.flow.forecast(whole,when);b.ctx.dispatch('pagehide');
+   assert.equal(b.calls.google,1,'only the missing middle section is requested');assert.equal(partial.cachedSections,2);assert.equal(partial.fetchedSections,1);assert(Math.abs(partial.seconds-original.seconds)<.05);
+   const requested=[...b.calls.queries[0].matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)];assert(Math.abs(+requested[0][1]-whole.pointAt(distance/3).lat)<.00002);assert(Math.abs(+requested[1][1]-whole.pointAt(distance*2/3).lat)<.00002,'request stops where stored traffic resumes');
+   b=load(delayed,origin+4*3600000,25);const slower=await b.flow.forecast(whole,when);b.ctx.dispatch('pagehide');assert.equal(b.calls.google,2,'a slower new middle invalidates the old tail arrival time');assert.equal(slower.cachedSections,1);assert.equal(slower.fetchedSections,2);
+   const expired=new Map([...data].map(([k,v])=>[k,JSON.parse(JSON.stringify(v))])),slot=expired.get('traffic|google-slot|'+mid.slot);slot.v.profile.at=origin-8*86400000;expired.get('traffic|google-index').v.find(e=>e.slot===mid.slot).observedAt=slot.v.profile.at;
+   b=load(expired,origin+4*3600000);await b.flow.forecast(whole,when);b.ctx.dispatch('pagehide');assert.equal(b.calls.google,1,'only an expired section is refreshed');
+   b=load(data,origin+4*3600000);await b.flow.forecast(whole,when+3600000);b.ctx.dispatch('pagehide');assert(b.calls.google>0,'another hour is not silently served the old forecast');
+   b=load(data,origin+4*3600000);await b.flow.forecast(whole,when,{force:true});b.ctx.dispatch('pagehide');assert(b.calls.google>0,'explicit refresh still bypasses all stored sections');
+  }
+  {// Four newer incompatible legacy observations used to hide a valid older shared-road record.
+   const data=new Map(),origin=Date.UTC(2027,0,4,12),when=origin+86400000;let a=load(data,origin);await a.flow.forecast(m,when);a.ctx.dispatch('pagehide');
+   const cache=a.ctx.TrafficCache.create(a.KV),e=cache.entries()[0],record=JSON.parse(JSON.stringify(cache.get(e.key).v));record.observation.avoidKey='false|true|false';
+   for(let i=0;i<6;i++)cache.put('decoy'+i,record);cache.flush();data.get('traffic|google-index').v.forEach(e=>{delete e.avoidKey;delete e.observedAt;});
+   a=load(data,origin+3*3600000);const short=require('../assets/web/traffic').slice(m,m.totalMi*.2,m.totalMi*.8);
+   // Use the actual forecast's 50 mph clock rather than the original route's normal time.
+   const result=await a.flow.forecast(short,when+m.totalMi*.2/50*3600000);a.ctx.dispatch('pagehide');assert.equal(a.calls.google,0,'valid older section found beyond the former four-entry cutoff');assert(result.cachedSections>0);
+  }
+  {// Turning off immediate return changes only the return's road/time forecasts, not the outward leg.
+   const data=new Map(),origin=Date.UTC(2027,0,4,12),when=origin+86400000;
+   const round=T.buildRoute({distanceMeters:mi*2*1609.344,duration:'600s',polyline:{encodedPolyline:T.encodePolyline([pts[0],pts[1],pts[0]])},legs:[{distanceMeters:mi*1609.344,duration:'300s',steps:[]},{distanceMeters:mi*1609.344,duration:'300s',steps:[]}]},{city:30,hwy:40,comb:35});
+   let a=load(data,origin);await a.flow.forecast(round,when);a.ctx.dispatch('pagehide');
+   a=load(data,origin+3*3600000);const moved=await a.flow.forecast(round,when,{waitAt:{d:mi,at:when+4*3600000}});a.ctx.dispatch('pagehide');
+   assert.equal(a.calls.google,1,'only the return leg at its new departure needs a forecast');assert.equal(moved.legs.length,2,'almost-identical wait/leg boundaries do not create a zero-length request');assert.equal(moved.cachedSections,1);assert.equal(moved.fetchedSections,1);
+   const q=[...a.calls.queries[0].matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)];assert(Math.abs(+q[0][1]-pts[1].lat)<.00002&&Math.abs(+q[1][1]-pts[0].lat)<.00002,'outward and return direction are not interchanged');
+  }
+  console.log('Traffic forecast cache: restart, mixed stored/missing/expired sections, changed boundaries/return time, older shared roads, bounded index and timezone lookup passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

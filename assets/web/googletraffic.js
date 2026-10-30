@@ -90,7 +90,7 @@
  function unmatched(m,why){var t=m.durationSec;return {rows:[{from:0,to:m.totalMi,seconds:t,baseSeconds:t,forecast:false,trafficMph:null,freeMph:null}],seconds:t,baseSeconds:t,coverage:0,low:t,high:t,source:'Google Maps website forecast',match:{coverage:0,why:why},unmatched:true};}
  function boundaries(m,cell){cell=cell||1;var out=[];for(var i=1;i<m.pts.length;i++){var a=m.pts[i-1],b=m.pts[i];['lat','lng'].forEach(function(k){var lo=Math.min(a[k],b[k]),hi=Math.max(a[k],b[k]);for(var edge=Math.floor(lo/cell)+1;edge*cell<hi;edge++){var f=(edge*cell-a[k])/(b[k]-a[k]);out.push(m.cum[i-1]+f*(m.cum[i]-m.cum[i-1]));}});}return out;}
  async function reuse(ob,m,t,valid){
-  if(!ob||!ob.pts||!ob.rows||!Number.isFinite(ob.depart))return null;
+  if(!ob||!ob.pts||!ob.rows||!Number.isFinite(ob.depart)||t<ob.depart-150000)return null;
   var elapsed=0,segs=ob.rows.map(function(r){var s=Object.assign({},r,{t0:elapsed,t1:elapsed+r.seconds,gpm:0,mph:(r.to-r.from)/r.seconds*3600});elapsed+=r.seconds;return s;}),cached=T.restoreModel({pts:ob.pts,cum:ob.cum,segs:segs,totalMi:ob.cum[ob.cum.length-1],durationSec:elapsed,legEnds:[],cityGpm:0,hwyGpm:0,combGpm:0});
   var a=T.project(cached,m.pts[0]),b=T.project(cached,m.pts[m.pts.length-1]);if(a.offset>.015||b.offset>.015||b.along<=a.along||Math.abs(t-ob.depart-cached.timeTo(a.along)*1000)>150000)return null;
   var sub=F.slice(cached,a.along,b.along);if(sub.segs.some(function(s){return s.forecast===false;}))return null;
@@ -110,13 +110,37 @@
   function purge(){low=low.filter(function(x){if(x.alive&&!x.alive()){x.reject(Error('Traffic lookup cancelled'));return false;}return true;});}
   function pump(){var n=cap();while(active<n){var x=null;if(queue.length)x=queue.shift();else if(low.length&&activeLow<n-chains)x=low.shift();else break;if(x.low&&x.alive&&!x.alive()){x.reject(Error('Traffic lookup cancelled'));continue;}var wasLow=x.low;active++;if(wasLow)activeLow++;(function(x,wasLow){Promise.resolve().then(x.fn).then(x.resolve,x.reject).finally(function(){active--;if(wasLow)activeLow--;pump();});})(x,wasLow);}}
   function get(k,ttl){var r=io.get&&io.get(k,ttl);return r&&r.v||r;}
+  function sections(p){return p.sections||{cached:p.cached?1:0,fetched:p.cached?0:1};}
+  function joined(a,b,cut,m,t){
+    var ac=sections(a),bc=sections(b),rows=a.rows.concat(b.rows.map(function(r){return Object.assign({},r,{from:r.from+cut,to:r.to+cut});})),coverage=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi;
+    return {rows:rows,seconds:a.seconds+b.seconds,baseSeconds:m.durationSec,low:(a.low||a.seconds)+(b.low||b.seconds),high:(a.high||a.seconds)+(b.high||b.seconds),at:Math.min(a.at,b.at),depart:t,cached:!!a.cached&&!!b.cached,sharedRoads:true,coverage:coverage,match:{coverage:coverage,joined:true},sections:{cached:ac.cached+bc.cached,fetched:ac.fetched+bc.fetched}};
+  }
   async function piece(m,t,o){
    var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid),clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),line=T.encodePolyline(m.pts),identity=q+'|'+line,key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=o.cachePolicy.ttl,held=get(key,ttl),fresh=o.freshAfter||0;
    function usable(hp){return hp&&Array.isArray(hp.rows)&&hp.rows.length&&Number.isFinite(hp.at)&&hp.at>=fresh&&now-hp.at<ttl&&hp.seconds>0;}
    if(!valid())throw Error('Traffic lookup cancelled');
    if(!o.force&&held&&held.identity===identity){if(held.unmatched&&Number.isFinite(held.at)&&held.at>=fresh&&now-held.at<10*MINUTE)return Object.assign(unmatched(m,held.unmatched),{at:held.at,depart:t,cached:true});var hp=held.profile;if(usable(hp))return Object.assign({},hp,{cached:true});}
    if(!o.force&&tune.tolerance>0)for(var dm=1;dm<=tune.tolerance;dm++)for(var sg=-1;sg<=1;sg+=2){var qd=query(m.pts[0],m.pts[m.pts.length-1],clock+sg*dm*60,o.avoid),hd=get('google-v1|'+hash(qd+'|'+line),ttl);if(hd&&hd.identity===qd+'|'+line&&usable(hd.profile))return Object.assign({},hd.profile,{cached:true,nearMinutes:sg*dm});}
-   if(!o.force&&io.observations){var candidates=io.observations(m,t,ttl)||[];for(var ci=0;ci<candidates.length;ci++){var ob=candidates[ci].observation;if(!ob||ob.avoidKey!==avoidKey(o.avoid)||!candidates[ci].profile||candidates[ci].profile.at<fresh)continue;var shared=await reuse(ob,m,t,valid);if(!valid())throw Error('Traffic lookup cancelled');if(shared)return Object.assign(shared,{at:candidates[ci].profile.at,depart:t,cached:true,sharedRoads:true});}}
+   if(!o.force&&io.observations){
+    var gap=null,checked=0,positions=new Map();
+    function position(p){var k=p.lat+'|'+p.lng,r=positions.get(k);if(!r){r=T.project(m,p);positions.set(k,r);}return r;}
+    for(var record of io.observations(m,t,ttl,o.avoid)||[]){
+      if(++checked%16===0){await new Promise(function(r){setTimeout(r,0);});if(!valid())throw Error('Traffic lookup cancelled');}
+      var ob=record.observation;if(!ob||!ob.pts||!ob.pts.length||ob.avoidKey!==avoidKey(o.avoid)||!usable(record.profile))continue;
+      var shared=await reuse(ob,m,t,valid);if(!valid())throw Error('Traffic lookup cancelled');
+      if(shared)return Object.assign(shared,{at:record.profile.at,depart:t,cached:true,sharedRoads:true});
+      // A previously queried stop/leg boundary can split this request. Reuse its verified prefix, then advance
+      // the clock using that actual forecast before checking the next stored section (or fetching the gap).
+      var end=position(ob.pts[ob.pts.length-1]);
+      if(end.offset<=.015&&end.along>.02&&end.along<m.totalMi-.02){
+        var prefix=F.slice(m,0,end.along),part=await reuse(ob,prefix,t,valid);
+        if(part){part=Object.assign(part,{at:record.profile.at,depart:t,cached:true,sharedRoads:true});var tail=await piece(F.slice(m,end.along,m.totalMi),t+part.seconds*1000,o);return joined(part,tail,end.along,m,t);}
+      }
+      var start=position(ob.pts[0]);
+      if(start.offset<=.015&&start.along>.02&&start.along<m.totalMi-.02&&end.along>start.along+.02&&ob.depart>=t-150000)gap=gap==null?start.along:Math.min(gap,start.along);
+    }
+    if(gap!=null){var left=await piece(F.slice(m,0,gap),t,o),right=await piece(F.slice(m,gap,m.totalMi),t+left.seconds*1000,o);return joined(left,right,gap,m,t);}
+   }
 
    var pendingKey=identity+(fresh?'|after|'+fresh:o.force?'|force':'');
    if(o.onQueue)o.onQueue();
@@ -129,8 +153,8 @@
    var o=Object.assign({},options||{});o.cachePolicy=io.policy?io.policy(m,o):P.resolve(o.trafficPreset,o.journeySeconds||m.durationSec);var waits=(options&&options.waits||[]).slice(),ends=(m.legEnds&&m.legEnds.length?m.legEnds:[m.totalMi]).slice(),stops=(o.stops||[]).slice().sort(function(a,b){return a.d-b.d;}),breaks=ends.concat(stops.map(function(s){return s.d;}),waits.map(function(w){return w.d;}),o.waitAt?[o.waitAt.d]:[]);
    // Each source profile evaluates its own roads at arrival. Split at destinations, stops and geographic cells to
    // reuse overlapping roads. Never spread a whole-trip delay over every mile.
-   for(var d=tune.pieceMi;d<m.totalMi;d+=tune.pieceMi)breaks.push(d);breaks=breaks.concat(boundaries(m,tune.cellDeg));breaks=Array.from(new Set(breaks.map(function(d){return Math.abs(d-m.totalMi)<1e-6?m.totalMi:d;}).filter(function(d){return d>0&&d<=m.totalMi;}).concat([m.totalMi]))).sort(function(a,b){return a-b;});
-   if(o.progress)o.progress(0,breaks.length);var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,cachedPieces=0,fetchedPieces=0,sharedPieces=0,seconds=0,low=0,high=0,lookahead=0,lookaheadUsed=0;
+   for(var d=tune.pieceMi;d<m.totalMi;d+=tune.pieceMi)breaks.push(d);breaks=breaks.concat(boundaries(m,tune.cellDeg));breaks=Array.from(new Set(breaks.map(function(d){return Math.abs(d-m.totalMi)<1e-6?m.totalMi:d;}).filter(function(d){return d>0&&d<=m.totalMi;}).concat([m.totalMi]))).sort(function(a,b){return a-b;}).filter(function(d,i,a){return !i||d-a[i-1]>1e-6;});
+   if(o.progress)o.progress(0,breaks.length);var rows=[],legs=[],clock=depart,start=0,oldest=Infinity,cached=true,cachedPieces=0,fetchedPieces=0,sharedPieces=0,cachedSections=0,fetchedSections=0,seconds=0,low=0,high=0,lookahead=0,lookaheadUsed=0;
    var began=io.now?io.now():Date.now(),bases=breaks.map(function(end,i){return F.slice(m,i?breaks[i-1]:0,end);}),specs=[],done=false,tolMs=tune.specTolerance*MINUTE,baseSum=0,trafficSum=0;
    function advance(i,c,secs,real){var end=breaks[i];c+=secs*1000;stops.forEach(function(s){if(Math.abs(s.d-end)<.0001)c+=Math.max(0,s.seconds||0)*1000;});waits.forEach(function(w){if(Math.abs(w.d-end)<.0001)c=Math.max(c,w.at);});if(o.waitAt&&Math.abs(o.waitAt.d-end)<.001){if(real&&o.strictWait&&c>o.waitAt.at)throw Error('Return departure is before arrival');c=Math.max(c,o.waitAt.at);}return c;}
    // Lookahead: guess later pieces' departures from the traffic seen so far and read them in idle reader slots.
@@ -142,13 +166,13 @@
     // Read ahead only while this piece goes to Google: a stored piece answers at once and the next departure is known.
     if(tune.speculate&&i+1<breaks.length){var quick=await Promise.race([job.then(function(){return true;},function(){return true;}),reading.then(function(){return false;})]);if(!quick)guess(i);}
     if(hit){try{p=await job;lookaheadUsed++;}catch(e){if(o.valid&&!o.valid())throw e;p=null;}}
-    if(!p)p=hit?await piece(base,clock,o):await job;if(p.cached&&!p.sharedRoads&&p.at>=began)p=Object.assign({},p,{cached:false});(specs[i]||[]).forEach(function(e){e.dead=true;});if(p.cached)cachedPieces++;else fetchedPieces++;if(p.sharedRoads)sharedPieces++;if(o.progress)o.progress(i+1,breaks.length,{cached:!!p.cached});
+    if(!p)p=hit?await piece(base,clock,o):await job;if(p.cached&&!p.sharedRoads&&p.at>=began)p=Object.assign({},p,{cached:false});(specs[i]||[]).forEach(function(e){e.dead=true;});if(p.cached)cachedPieces++;else fetchedPieces++;if(p.sharedRoads)sharedPieces++;var counts=sections(p);cachedSections+=counts.cached;fetchedSections+=counts.fetched;if(o.progress)o.progress(i+1,breaks.length,{cached:!!p.cached,cachedSections:cachedSections,fetchedSections:fetchedSections});
     p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});if(!p.unmatched)oldest=Math.min(oldest,p.at);baseSum+=base.durationSec;trafficSum+=p.seconds;clock=advance(i,clock,p.seconds,true);seconds+=p.seconds;low+=p.low||p.seconds;high+=p.high||p.seconds;cached=cached&&p.cached;start=end;
    }
    }finally{done=true;chains--;purge();pump();}
    if(o.progress)o.progress(breaks.length,breaks.length);var covered=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi;
    if(covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
-   return {source:'Google Maps website forecast',cachePolicy:o.cachePolicy,estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,cachedPieces:cachedPieces,fetchedPieces:fetchedPieces,sharedPieces:sharedPieces,lookaheadReads:lookahead,lookaheadUsed:lookaheadUsed,readMs:(io.now?io.now():Date.now())-began,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
+   return {source:'Google Maps website forecast',cachePolicy:o.cachePolicy,estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,cachedPieces:cachedPieces,fetchedPieces:fetchedPieces,sharedPieces:sharedPieces,cachedSections:cachedSections,fetchedSections:fetchedSections,lookaheadReads:lookahead,lookaheadUsed:lookaheadUsed,readMs:(io.now?io.now():Date.now())-began,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
   return {request:function(q,valid){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;});});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();items.clear();}};
  }

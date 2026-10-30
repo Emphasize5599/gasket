@@ -38,3 +38,13 @@ Worst trip-time difference from the exact integration: 1.2 min on a ~21 h drive 
 - Matching follows Google's points in road order (identical result, about 3× less work on dense lines).
 - The native reader keeps the connection open between reads (no `disconnect()` after a fully read answer).
 - Not changed: longer pieces (150 mi / 2° cells, or no cells) were 2–3× faster with no simulated accuracy loss, but the simulation can't model Google choosing other roads between farther-apart endpoints or the loss of cross-route sharing; the next phone logs' per-piece `coverage` would show whether that's safe.
+
+## 0.0.324 partial reuse
+
+A cache miss for a whole requested section no longer requires a whole-section Google read. Shared-road lookup lazily examines all compatible indexed observations rather than stopping at four records. Intersecting stored sections can form a verified prefix; the next section is evaluated at the arrival clock produced by that prefix. If the middle is missing or expired, only that gap is requested before checking the stored tail at the new arrival time. Changed traffic in the gap may require refreshing the tail; cached roads at a different time are not treated as valid. Geometry, direction, avoid tags, original observation age, preset TTL and the existing 2.5-minute shared-road alignment remain enforced. Explicit Depart refresh still bypasses old records. No cross-date/hour or weekday-only substitution was added.
+
+Index entries now include original observation time and avoid tags to skip incompatible records before loading payloads. Legacy entries remain usable through payload checks. Repeated endpoint projections are memoized per lookup, and long legacy searches yield to the UI. The existing byte/count/hot-cache budgets remain unchanged. A float tolerance coalesces nearly identical stop/leg boundaries, preventing a zero-distance Google request when return timing is edited.
+
+Status shows sections reused from storage. Forecast-ready logs include `cachedSections` and `fetchedSections` in addition to requested-piece counts, original age, preset and coverage. Joined profiles retain the oldest contributing observation timestamp; reuse does not extend retention.
+
+Regression tests simulate persisted forecasts across a restart and several hours of elapsed planning time: join three old sections; request only a missing middle; refresh only an expired middle; reject an old tail when a new gap delay shifts arrival; find a valid record beyond six incompatible legacy records; change immediate-return timing without refetching the outward leg; preserve explicit refresh, new-hour misses and current preset retention. These are deterministic provider simulations, not a diagnosis of an unprovided phone log.
