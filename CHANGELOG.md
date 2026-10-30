@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.325 - 2026-10-30
+- Skip provisional whole-trip traffic scans when window planning is only collecting stations.
+- Explain traffic updates for fuel-stop timing and keep cache diagnostics readable in long-trip logs.
+
 ## 0.0.324 - 2026-10-30
 - Reassemble stored traffic forecasts across changed leg and stop boundaries; fetch only missing or expired sections at the correct arrival time.
 - Show reused forecast sections in progress and improve traffic-cache diagnostics.

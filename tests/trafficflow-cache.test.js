@@ -87,5 +87,12 @@ function load(store,at,speed=50){
    assert.equal(a.calls.google,1,'only the return leg at its new departure needs a forecast');assert.equal(moved.legs.length,2,'almost-identical wait/leg boundaries do not create a zero-length request');assert.equal(moved.cachedSections,1);assert.equal(moved.fetchedSections,1);
    const q=[...a.calls.queries[0].matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)];assert(Math.abs(+q[0][1]-pts[1].lat)<.00002&&Math.abs(+q[1][1]-pts[0].lat)<.00002,'outward and return direction are not interchanged');
   }
-  console.log('Traffic forecast cache: restart, mixed stored/missing/expired sections, changed boundaries/return time, older shared roads, bounded index and timezone lookup passed');
+  {// Equivalent omitted/empty waits must not start another traversal/status task for the same prepared route.
+   const a=load(new Map()),logs=[],texts=[];a.ctx.FLog={debug:(_a,m,d)=>logs.push({m,d}),info:(_a,m,d)=>logs.push({m,d}),warn(){}};a.ctx.Tasks={upsert:(_id,o)=>texts.push(o.text),begin:()=>()=>{}};
+   const raw={description:'Saved route'};await a.flow.prepare(raw,m,t0);const count=logs.length,notices=texts.length;
+   await a.flow.prepare(raw,m,t0,{stops:[],waits:[],waitAt:null});assert.equal(logs.length,count,'no duplicate forecast completion for equivalent waits');assert.equal(texts.length,notices,'no duplicate progress pass');
+   await a.flow.prepare(raw,m,t0,{stops:[{d:m.totalMi/2,seconds:300}],phase:'fuel-stops'});assert(texts.some(t=>t.startsWith('Updating traffic for fuel-stop timing')),'genuine stop-aware update explains its purpose');
+   const summary=logs.findLast(x=>x.m==='Forecast ready').d;assert(JSON.stringify(summary).indexOf('cachedSections')<JSON.stringify(summary).indexOf('legs'),'cache counters precede potentially truncated road details');assert(summary.legCount>=1&&summary.legs.length<=6);a.ctx.dispatch('pagehide');
+  }
+  console.log('Traffic forecast cache: restart, mixed stored/missing/expired sections, changed boundaries/return time, older shared roads, normalized waits, bounded logs/index and timezone lookup passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

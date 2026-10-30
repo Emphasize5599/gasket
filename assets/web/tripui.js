@@ -312,7 +312,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       adjustError='';step=ST_STOPS;renderStep();if(!queueWorking)await queueNotify('start','Planning approved routes and hours',car);progress('Preparing shared station coverage');
       scheduleCollecting=true;try{await findStops();}finally{scheduleCollecting=false;}if(!valid())return;if(!choicePool)throw Error('Station coverage did not finish. Retry planning from your saved data.');
       session.planning=true;session.estimateCache=new Map();windowRejects={};var legs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i;});}),cfg=windows.config(),waits=choiceLists().map(function(_,i){return +windowDestination(i).wait||0;}),depWindows=[null].concat(choiceLists().map(function(_,i){var d=windowDestination(i);return d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null;})),pass=0;
-      if(cfg.earlyEnabled)await windowTrafficAllowance(legs,session,valid,progress);if(!valid())return;
+      if(cfg.earlyEnabled){progress('Checking traffic for approved roads and hours');await windowTrafficAllowance(legs,session,valid,progress);}if(!valid())return;
       while(valid()){
         var changed=new Map(),longTrip=model.totalMi>=500,previewLimit=longTrip?6:12;progress('Screening approved hourly routes');
         var found=await TimeWindows.recommend({legs:legs,consent:session.consent,priority:cfg.priority,earlyEnabled:!!cfg.earlyEnabled,delayMinutes:+cfg.delayMinutes,departures:windows.bounds().depart,arrivals:windows.arrivals(),waits:waits,departWindows:depWindows,valid:valid,estimate:windowEstimate,initial:previewLimit,width:Math.min(2,Planner.size()),
@@ -1225,7 +1225,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       renderResults();
       built[k].result = result;
       // the step paints first; the search (which reads the saved trip and every station) starts right after
-      if (model && !result && !busy && !restPending() && hasFuel() && !(adjustError && windows && windows.enabled())){var want=route;searchSoon=true;afterPaint(function(){searchSoon=false;if(route===want&&model&&!result&&!busy&&!restPending()&&onPlan(step))findStops();});}
+      if (model && !result && !busy && !schedulePlanning && !scheduleCollecting && !restPending() && hasFuel() && !(adjustError && windows && windows.enabled())){var want=route;searchSoon=true;afterPaint(function(){searchSoon=false;if(route===want&&model&&!result&&!busy&&!schedulePlanning&&!scheduleCollecting&&!restPending()&&onPlan(step))findStops();});}
       return;
     }
     bindDeparture();
@@ -3759,7 +3759,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     var wanted=valid;valid=function(){return (document.body.classList.contains('trip-on')||bgJob||queueWorking)&&(!wanted||wanted());};
     var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
     var context={departAt:opts.rewardDepartAt,waits:opts.waits,returnAt:S.trip.returnTrip&&!backAuto()&&S.trip.backAt?new Date(S.trip.backAt).getTime():null,grade:gradeOf(),discounts:discounts,now:Date.now(),valid:valid,priority:priority};
-    async function forecast(stops){var raw=opts._trafficRaw,old=opts.model,base=T.buildRoute(raw,carModel()),m=await trafficPrepare(raw,base,opts.rewardDepartAt,{stops:stops,waits:opts.waits,waitAt:trafficWait(base),valid:valid||function(){return !jobCancel;}});if(old._lim)m._lim=old._lim;if(raw===rawRoute)model=m;opts.model=m;if(opts.propulsionContext)opts.propulsionContext=Object.assign(propulsionContext(m,raw),{waits:opts.waits||[]});else{var secs=flatSecs(m),sf=Garage.speedFn&&Garage.speedFn();if(sf&&secs.length){var state=result&&result.speedState&&result.speedState.offsets||{};opts.model=T.withSpeeds(m,T.speedRates(secs,secs.map(function(s,i){return state[i]==null?Garage.ruleOff(s.limit):state[i];}),sf.f,sf.lo,sf.hi));}}}
+    async function forecast(stops){var raw=opts._trafficRaw,old=opts.model,base=T.buildRoute(raw,carModel()),m=await trafficPrepare(raw,base,opts.rewardDepartAt,{stops:stops,waits:opts.waits,waitAt:trafficWait(base),phase:stops.length?'fuel-stops':'route',valid:valid||function(){return !jobCancel;}});if(old._lim)m._lim=old._lim;if(raw===rawRoute)model=m;opts.model=m;if(opts.propulsionContext)opts.propulsionContext=Object.assign(propulsionContext(m,raw),{waits:opts.waits||[]});else{var secs=flatSecs(m),sf=Garage.speedFn&&Garage.speedFn();if(sf&&secs.length){var state=result&&result.speedState&&result.speedState.offsets||{};opts.model=T.withSpeeds(m,T.speedRates(secs,secs.map(function(s,i){return state[i]==null?Garage.ruleOff(s.limit):state[i];}),sf.f,sf.lo,sf.hi));}}}
     if(traffic&&traffic.enabled()&&opts._trafficRaw&&!opts._trafficExternal&&!opts.lite&&!opts.legDepartures)await forecast([]);
     var p=await Planner.run(opts,context),tm=opts._plannerTiming;
     // One stop-aware refinement uses existing candidates/prices. Slider sweeps never issue provider requests.
@@ -3867,7 +3867,9 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     dbg.search = {};
     var models = [model];
     others.forEach(function (k) { try { models.push(buildModel(alts[k], carModel())); } catch (e) { models.push(null); } });
-    if(traffic&&traffic.enabled())await Promise.all(models.map(async function(m,ti){if(!m)return;var traw=ti?alts[others[ti-1]]:rawRoute;models[ti]=await trafficPrepare(traw,m,departAt().getTime(),{queue:{index:ti,total:models.length},label:traw.description||'Route '+(ti+1)});if(ti===0)model=models[ti];}));
+    // Window planning needs station geometry here, not a forecast for a provisional whole-trip departure.
+    // Each approved leg/hour is forecast by windowTrafficAllowance/windowModel at its actual clock.
+    if(traffic&&traffic.enabled()&&!scheduleCollecting)await Promise.all(models.map(async function(m,ti){if(!m)return;var traw=ti?alts[others[ti-1]]:rawRoute;models[ti]=await trafficPrepare(traw,m,departAt().getTime(),{queue:{index:ti,total:models.length},label:traw.description||'Route '+(ti+1)});if(ti===0)model=models[ti];}));
     var okModels = models.filter(Boolean), okKs = [altSel].concat(others).filter(function (k, i) { return models[i]; });
     if(queueWorking&&!force&&!replay&&route&&route.histId){var shared=A.KV.get('trips','trip|'+route.histId),sv=shared&&shared.v,pick=VehicleCompare.sharedReplay(sv,S.carId,KIND());
       // 0.0.264 log: an EV saved the trip last, so both gas cars found no gas list at the top level and rescanned the route
