@@ -2236,3 +2236,10 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .tw-journey .nn { width:28px; height:28px; font-size:14px; }
 .tw-journey li:not(:last-child)::before { left:13px; top:28px; }
 .tw-journey .nl-a > b { display:block; margin:2px 0 10px; }
+
+.tw-now-wrap { position:relative; }
+.tw-now-wrap input { width:100%; }
+.tw-now-default { display:none; pointer-events:none; }
+.tw-now-wrap.empty input { min-height:64px; color:transparent; }
+.tw-now-wrap.empty input::-webkit-datetime-edit { color:transparent; }
+.tw-now-wrap.empty .tw-now-default { display:block; position:absolute; left:12px; right:36px; top:50%; transform:translateY(-50%); font-size:13px; line-height:1.3; color:var(--ink-2); }

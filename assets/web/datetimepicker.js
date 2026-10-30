@@ -4,7 +4,7 @@
  var pad=function(n){return String(n).padStart(2,'0');};
  function days(y,m){return new Date(y,m+1,0,12).getDate();}
  function mount(body,control,options){
-  var value=control.value||'',timeOnly=control.type==='time',withTime=control.type!=='date',now=new Date(),match=/^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?$/.exec(value),tm=/^(\d\d):(\d\d)/.exec(value),s={y:match?+match[1]:now.getFullYear(),m:match?+match[2]-1:now.getMonth(),d:match?+match[3]:now.getDate(),h:match?+match[4]||0:timeOnly&&tm?+tm[1]:now.getHours(),min:match?+match[5]||0:timeOnly&&tm?+tm[2]:now.getMinutes()},cursor={y:s.y,m:s.m},view='days',yearPage=Math.floor(s.y/12)*12,cleanups=[],alive=true;
+  var value=control.value||'',timeOnly=control.type==='time',withTime=control.type!=='date',now=new Date(),pointNow=root.WindowClock&&control.dataset.timeZone&&WindowClock.wall(Date.now(),control.dataset.timeZone),match=/^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d))?$/.exec(value||pointNow||''),tm=/^(\d\d):(\d\d)/.exec(value),s={y:match?+match[1]:now.getFullYear(),m:match?+match[2]-1:now.getMonth(),d:match?+match[3]:now.getDate(),h:match?+match[4]||0:timeOnly&&tm?+tm[1]:now.getHours(),min:match?+match[5]||0:timeOnly&&tm?+tm[2]:now.getMinutes()},cursor={y:s.y,m:s.m},view='days',yearPage=Math.floor(s.y/12)*12,cleanups=[],alive=true;
   function clear(){cleanups.splice(0).forEach(function(f){f();});}
   function iso(){return (timeOnly?'':s.y+'-'+pad(s.m+1)+'-'+pad(s.d))+(withTime?(timeOnly?'':'T')+pad(s.h)+':'+pad(s.min):'');}
   function month(y,m,format){return new Date(y,m,1,12).toLocaleString([],{month:format||'long'});}
@@ -30,7 +30,7 @@
    body.querySelector('[data-clear]').onclick=function(){options.commit('');};body.querySelector('[data-apply]').onclick=function(){// Commit the currently centered wheel even if its scroll debounce has not fired.
     body.querySelectorAll('.time-wheel').forEach(function(el){el.dispatchEvent(new Event('scroll'));});
     var lists=body.querySelectorAll('.time-wheel');if(withTime){var index=function(el){return el.dataset.ready?Math.round(el.scrollTop/44):+el.dataset.selected;},hour=index(lists[0])+(use24?0:1),minute=index(lists[1]),period=use24?0:index(lists[2]);s.h=use24?Math.min(23,hour):hour%12+(period?12:0);s.min=Math.max(0,Math.min(59,minute));}
-    var d=new Date(s.y,s.m,s.d,s.h,s.min);if(!timeOnly&&(d.getFullYear()!==s.y||d.getMonth()!==s.m||d.getDate()!==s.d)||withTime&&(d.getHours()!==s.h||d.getMinutes()!==s.min)){body.querySelector('.picker-error').textContent='This local time does not exist. Choose another time.';return;}var v=iso();if(control.min&&v<control.min||control.max&&v>control.max){body.querySelector('.picker-error').textContent='Choose a time within the allowed range.';return;}options.commit(v);
+    var pointZone=control.dataset.timeZone,v=iso(),d=pointZone?new Date(Date.UTC(s.y,s.m,s.d)):new Date(s.y,s.m,s.d,s.h,s.min),bad=pointZone?(!timeOnly&&(d.getUTCFullYear()!==s.y||d.getUTCMonth()!==s.m||d.getUTCDate()!==s.d)||withTime&&!timeOnly&&!WindowClock.candidates(v,pointZone).length):(!timeOnly&&(d.getFullYear()!==s.y||d.getMonth()!==s.m||d.getDate()!==s.d)||withTime&&(d.getHours()!==s.h||d.getMinutes()!==s.min));if(bad){body.querySelector('.picker-error').textContent='This local time does not exist. Choose another time.';return;}var v=iso();if(control.min&&v<control.min||control.max&&v>control.max){body.querySelector('.picker-error').textContent='Choose a time within the allowed range.';return;}options.commit(v);
    };
   }
   render();return function(){alive=false;clear();};

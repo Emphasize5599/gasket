@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.316 - deadline-only and location-local window clocks
+
+WindowClock handles IANA wall-time candidates, gap rejection, explicit first/second fold selection and finite deadline-only bounds. New windowPlan.clockVersion=2/windowTimes stores optional depart start/end, optional arrival start and required arrival end as ISO UTC, plus point zones. Intermediate arrival/departure may have one bound; canonical start/end are filled for existing planner with original optional inputs retained. Earliest origin defaults to now (live local placeholder); freeze the default in current session when hourly reading begins, then normal final planner clamps a passed approved hour as before. Maximum14 days from effective earliest departure to deadline; no search-range UI. Legacy device-local windows are anchored once to original session device zone, invalid/ambiguous legacy times require review.
+
+Trip source StopClock batches coordinates into persisted restplaces timezone namespace; unknown location zones block form save and expose Retry. New form labels each stop-local zone, DateTimePicker validates the control zone instead of phone-zone DST. Device zone/offset watcher runs on focus/visibility/30sec and logs changes; stored instants unaffected. windowLocal now emits ISO UTC, hidden tDepart cannot overwrite it during window collect; ordinary tDepart renders localStamp. Added stop-local Depart leg summaries and hazard-hour labels. RestSetTime writes UTC and updates optional leaveInput. Hourly candidate generation clips rows to final deadline.
+
+Tests new windowclock (Central/Eastern equality, gaps/folds, Phoenix, fractional offset, one-sided bounds), window-form-ui320/448 changes actual browser zone toTokyo and checks saved NY times, unknown-zone blocking, default-now and one-sided intermediate inputs. Calendar test uses NY device gap with UTC point (valid) vsNY point (invalid). New full windowplanning-ui deadline mode successfully plans from default-now through hazards/fuel to final deadline; existing13 modes and overnight/rest/cache/priority tests pass. Monitor316 through full regressions/native/signing/assets.
+
 ## 0.0.315 - chronological time-window form
 
 Verified publication: commit ca64306, run40993272369/job123860445417 SUCCESS on first attempt through full regressions, native checks, signing and both APK uploads. Release API confirms current-commit ARM64/universal assets and SHA256 digests. Phone checks: start/final-only controls and numbered chronology, globals above list, arrival-only setup, optional intermediate windows with both ends required, saved ranges after reopen, existing overnight flow.
