@@ -2263,11 +2263,14 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
    */
   async function tollFreeForSaved() {
     var r = route; if (!r || !tollPair() || !window.Tolls) return false;
-    var multi = !!(r.legs && r.legs.length && multiLeg(r)), lists = multi ? r.legs.map(function (L) { return L.alts; }) : [alts];
+    var multi = !!(r.legs && r.legs.length && multiLeg(r)), lists = multi ? r.legs.map(function (L, i) { return r.stops[i].rest || r.stops[i + 1].rest ? null : L.alts; }).filter(Boolean) : [alts];
+    if (!lists.length) return false;
     if (tollFreeChecked([].concat.apply([], lists))||lists.every(function(list){return list.some(function(a){return tollsOf(a).has===false;});})) return false;
     LG.info('route', 'Saved routes were never compared with toll-free ones: getting those', { legs: lists.length });
     if (multi) {
       for (var i = 0; i < r.legs.length && route === r; i++) {
+        // a leg to or from an added rest stop is the kept road spliced to the stop: no other routes for it
+        if (r.stops[i].rest || r.stops[i + 1].rest) continue;
         var sub = { stops: [r.stops[i], r.stops[i + 1]], avoid: r.avoid };
         r.legs[i].alts = await withTollFree(sub, r.legs[i].alts, S.apiKey ? plainBody(legBody(sub.stops[0], sub.stops[1])) : null);
       }
