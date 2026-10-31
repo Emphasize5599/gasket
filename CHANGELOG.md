@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.333 - 2026-10-31
+- The price and traffic questions now offer Refresh or Use on-device data (same choices in Settings → Trip defaults).
+
 ## 0.0.332 - 2026-10-31
 - A trip that reuses stored stations with old prices now asks first: update them, or plan with saved prices. Settings → Trip defaults → Old saved prices on a trip (Ask me / Update them / Use saved prices).
 - Before comparing traffic for many departure hours (the earlier-departure allowance), Gasket asks whether to read it or skip it this time.

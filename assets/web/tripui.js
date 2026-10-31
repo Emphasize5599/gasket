@@ -312,7 +312,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(queueWorking)return true;if(session.earlyAnswer!=null)return session.earlyAnswer;
     var forecasts=session.delayForecasts||new Map(),rows=[].concat.apply([],legs).filter(function(r){return session.consent.allowed(r);}),todo=rows.filter(function(r){return !forecasts.has(r.routeKey+'|'+r.depart);}).length;
     if(todo<=20)return true;
-    var ok=!!await A.confirmDel({always:true,title:'Compare traffic for each departure hour?',body:'Your earlier-departure allowance needs forecast traffic for '+todo+' approved road and hour combinations. Forecasts you already have are reused; reading the rest can take several minutes. Skip to plan without the allowance this time.',no:'Skip traffic check',action:'Read traffic',goClass:'primary'});
+    var ok=!!await A.confirmDel({always:true,title:'Refresh traffic for each departure hour?',body:'Your earlier-departure allowance needs forecast traffic for '+todo+' approved road and hour combinations. Forecasts already on your phone are reused; refreshing reads the rest and can take several minutes. With on-device data only, this plan skips the allowance.',no:'Use on-device data',action:'Refresh',goClass:'primary'});
     session.earlyAnswer=ok;LG.info('timing','Traffic allowance choice',{rows:rows.length,toRead:todo,read:ok});return ok;
   }
   async function windowTrafficAllowance(legs,session,valid,progress){
@@ -3831,7 +3831,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   async function askPriceRefresh(info){
     var mode=S.priceRefreshMode||'ask';if(queueWorking||mode==='always')return true;if(mode==='never')return false;
     if(priceAsk.owner&&priceAsk.owner===route)return priceAsk.answer;
-    var owner=route,ok=!!await A.confirmDel({always:true,title:'Update saved prices?',body:info.stations+' saved price'+(info.stations===1?' is':'s are')+' older than your '+(S.staleHours||24)+'-hour setting along this trip. Updating reads those areas from the Maps website again and can take several minutes. Saved prices keep their original times either way.',no:'Use saved prices',action:'Update prices',goClass:'primary'});
+    var owner=route,ok=!!await A.confirmDel({always:true,title:'Refresh saved prices?',body:info.stations+' saved price'+(info.stations===1?' is':'s are')+' older than your '+(S.staleHours||24)+'-hour setting along this trip. Refreshing reads those areas from the Maps website again and can take several minutes. On-device prices keep their original times.',no:'Use on-device data',action:'Refresh',goClass:'primary'});
     priceAsk={owner:owner,answer:ok};LG.info('stations','Saved price update choice',{expired:info.stations,update:ok});return ok;
   }
   if(window.KeylessGas&&KeylessGas.askRefresh)KeylessGas.askRefresh(askPriceRefresh);

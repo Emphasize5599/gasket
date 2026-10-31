@@ -30,7 +30,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  // brand-new trip, same route, the other car on premium: the saved trip and temporary caches are gone, only the store remains
  await fresh();await p.evaluate(()=>{const c=__app.S.cars[1];c.grade='premium';__app.S.carId=c.id;});
  await plan(null,'saved');assert.equal(await p.evaluate(()=>__reads.filter(r=>r==='discover').length),0,'new trip, other car, other grade: no discovery read');
- assert.deepEqual(__asked,['Update saved prices?'],'the new trip asked once before reading prices again');assert.equal(await p.evaluate(()=>__reads.filter(r=>r==='refresh').length),0,'Use saved prices: no price reads');
+ assert.deepEqual(__asked,['Refresh saved prices?'],'the new trip asked once before reading prices again');assert.equal(await p.evaluate(()=>__reads.filter(r=>r==='refresh').length),0,'Use saved prices: no price reads');
  assert(await p.evaluate(()=>__trip.state().result.notes.some(n=>/Price update skipped/.test(n))),'the plan says it used saved prices');
  // the same trip doesn't ask again; a new one does, and Update prices reads them
  await fresh();await p.evaluate(()=>{__app.S.trip.departNow=true;});await plan(null,'update');assert.equal(__asked.length,2,'a new trip asks again');assert(await p.evaluate(()=>__reads.filter(r=>r==='refresh').length)>0,'Update prices reads the old prices');
