@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.331 - 2026-10-31
+- Roads to and from rest stops you add no longer bring Google's other routes into the hazard review: those legs keep the road you were on. A new switch in Route → Other routes (Compare roads to and from added rest stops) turns the extra routes back on.
+
 ## 0.0.330 - 2026-10-30
 - Rest timing explains when an overnight stay can no longer fit, for example when the trip's planned departure has passed and the trip is now timed from leaving now, instead of showing a loading bar and a confusing 24-hour message.
 

@@ -1178,7 +1178,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
         '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
         '<div id="tRouteGo"></div></div>' + (windows?windows.html():'') +
-        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
+        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Compare roads to and from added rest stops<small>Off by default: legs to and from a rest stop you add keep the road you were on, with no other routes to review. Turn on, then Get routes, to review Google\'s other roads there too.</small></div>'+sw('tRestRoutes',!!t.restRoutes)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
         '<div class="card" id="tAutoTrip">'+planningCard()+'</div><div id="tRouteInfo"></div>';
     }
     if (k === ST_PARAMS) {
@@ -1249,6 +1249,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function bindRoute() {
     bindPlanningCard();var tollChip=document.querySelector('#tAvoid [data-av="tolls"]');if(tollChip)tollChip.classList.toggle('hidden',planningPriority(Garage.car())==='time');
     $('tTollCmp').onchange=function(){S.trip.tollCompare=this.checked;if(this.checked&&!S.trip.altCompare){S.trip.altCompare=true;$('tAltCmp').checked=true;$('tAltBox').classList.remove('hidden');}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
+    $('tRestRoutes').onchange=function(){S.trip.restRoutes=this.checked;if(!this.checked&&route&&route.legs&&trimRestLegs(route)){rebuildAlts();rawRoute=alts[0];}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
     $('tAltCmp').onchange=function(){$('tAltBox').classList.toggle('hidden',!this.checked);S.trip.altCompare=this.checked;routeReview=null;choiceComplete=false;result=null;A.save();gateTabs();};
     $('tRememberRoutes').onchange=function(){choiceOwnerSync();Garage.car().rememberRouteChoices=this.checked;saveChoices();A.save();};
     $('tAltSave').onchange=function(){S.trip.altMinSave=Math.max(0,Number(this.value)||0);A.save();};
@@ -1467,6 +1468,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (segOn('tSrc', 'src')) t.src = segOn('tSrc', 'src');
     if ((!windows||!windows.enabled())&&v('tDepart') != null) t.depart = v('tDepart') || '';
     if (on('tTollCmp') != null) t.tollCompare = on('tTollCmp');
+    if (on('tRestRoutes') != null) t.restRoutes = on('tRestRoutes');
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
     if (v('tTankPrice') != null) t[tankPriceKey()] = v('tTankPrice').trim();
     if (v('tBuffer') != null) t.bufferMi = Math.max(0, parseFloat(v('tBuffer')) || 0);
@@ -1931,19 +1933,25 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       computeAlternativeRoutes: true, routeModifiers: { avoidTolls: !!avoid.tolls, avoidHighways: !!avoid.highways, avoidFerries: !!avoid.ferries } }, tollPricing() ? { extraComputations: ['TOLLS'] } : {});
   }
   function legKey(r, i) { return [r.stops[i], r.stops[i + 1]].map(function (st) { return st.current ? 'here' : st.lat != null ? st.lat.toFixed(4) + ',' + st.lng.toFixed(4) : st.address; }).join('>') + '|' + JSON.stringify(S.trip.avoid) + (tollPricing() ? '|tolls' : ''); }
+  // A leg to or from an added rest stop keeps one road unless the trip opts in to comparing others there.
+  function restLegSolo(r, i) { return !S.trip.restRoutes && !!(r && r.stops && (r.stops[i] && r.stops[i].rest || r.stops[i + 1] && r.stops[i + 1].rest)); }
+  function trimRestLegs(r) { var changed = false; if (r && r.legs) r.legs.forEach(function (L, i) { if (L && L.alts && L.alts.length > 1 && restLegSolo(r, i)) { L.alts = [L.alts[L.sel || 0] || L.alts[0]]; L.sel = 0; changed = true; } }); return changed; }
   async function routeLeg(r, i) {
     var prev = r.legs && r.legs[i];
     if (prev && prev.key !== legKey(r, i)) prev = null;
+    if (restLegSolo(r, i) && prev && prev.alts && prev.alts.length) return { key: prev.key, alts: [prev.alts[prev.sel || 0] || prev.alts[0]], sel: 0, mapsRoutes: prev.mapsRoutes || null };
+    var solo = restLegSolo(r, i), want0 = prev && prev.alts && prev.alts[prev.sel] && prev.alts[prev.sel].description;
+    var only = function (list) { if (!solo || list.length < 2) return list; var k = want0 ? list.findIndex(function (a) { return a.description === want0; }) : -1; return [list[k >= 0 ? k : 0]]; };
     var sub = { stops: [r.stops[i], r.stops[i + 1]], avoid: r.avoid, mapsRoutes: prev && prev.mapsRoutes || null };
-    if(!S.apiKey){var wa=await withTollFree(sub,await websiteRoutes(sub));return {key:legKey(r,i),alts:wa,sel:Math.min(prev&&prev.sel||0,wa.length-1),mapsRoutes:sub.mapsRoutes};}
+    if(!S.apiKey){var wa=solo?only(await websiteRoutes(sub)):await withTollFree(sub,await websiteRoutes(sub));return {key:legKey(r,i),alts:wa,sel:Math.min(prev&&prev.sel||0,wa.length-1),mapsRoutes:sub.mapsRoutes};}
     var body = legBody(sub.stops[0], sub.stops[1]);
     var res = await routesCall(body);
     if (res.error) throw new Error('Leg ' + (i + 1) + ' (' + legName(r, i) + '): ' + res.error);
     var j = JSON.parse(res.body);
     if (!j.routes || !j.routes.length) throw new Error('Google found no driving route for leg ' + (i + 1) + ' (' + legName(r, i) + ').');
     var cx = { alts: j.routes };
-    await allMapsRoutes(sub, body, cx);
-    cx.alts = await withTollFree(sub, cx.alts, body);
+    if (solo) cx.alts = only(cx.alts);
+    else { await allMapsRoutes(sub, body, cx); cx.alts = await withTollFree(sub, cx.alts, body); }
     // same pick as before when this leg was routed already
     var sel = 0, want = prev && prev.alts && prev.alts[prev.sel] && prev.alts[prev.sel].description;
     if (want) cx.alts.forEach(function (a, k) { if (a.description === want) sel = k; });
@@ -1962,6 +1970,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   /** The trip as picked (alts[0]) plus each single-leg swap, closest in time first (those are what "other routes" checks). */
   function rebuildAlts() {
+    trimRestLegs(route);
     var cur = route.legs.map(function (L) { return L.sel; });
     var combo = function (sel, desc, leg) {
       var o = { _sel: sel, description: desc, distanceMeters: 0, duration: '0s' }, sec = 0, built = null;
@@ -4870,6 +4879,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     route = Object.assign({},v.route,{histId:id}); alts = v.alts;
     S.trip.returnTrip = route.stops.some(function (x) { return x.ret; }); altSel = Math.min(v.altSel || 0, alts.length - 1); altSure = !!v.altSure;
     rawRoute = alts[altSel]; result = null; parsing = null;
+    if (legsMode() && trimRestLegs(route)) { rebuildAlts(); rawRoute = alts[0]; }
     replay = { id: id, t: v.savedT || o.t, stations: v.stations, alts: v.alts };
     resetSteps(); routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {};
     // starts at the Garage (which car this time?); the route and the stops are ready behind it
