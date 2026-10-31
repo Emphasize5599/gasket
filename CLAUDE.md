@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.334 - rests that push a destination past its window
+
+Owner's 10-31 16:33 log (333): flexible-time plan left Nov 13 02:30Z, reached the destination 23:34Z and left it at once (waitMinutes 0), back Nov 14 19:54Z. Then the 430-minute overnight rest at Beaver Dam went in on the way out (leg 1); browsing leg 3 (destination → home) rests showed the return leaving 4+ h past the destination's departure window. Cause: destinationWaits times a windowed destination at its chosen departure / leaveStart, and travelClock can't leave before arriving, so the late arrival became the departure; restPlanIssues never compared the new timeline with the windows (only the final commit checks windows), so the cached plan stayed ok. Now `restWindowIssues(timeline)` (called from restPlanIssues when the route has added rests and windows are on): walks non-rest stops (window indices skip rests: destination j = j-th non-rest intermediate stop; `windows.arrivals()[j-1]`, `windowDestination(j-1)`) and reports reaching after the arrival window's end or leaving after leaveEnd (+1 min), with times in the stop's zone; the plan fails with that reason. The exact window setting in the owner's trip isn't in the log (assumed a destination departure window). `__trip.restIssues()` for tests. Test windowplanning-ui `restleave` (leave window moved before the planned departure → named; original window → no note). Not phone-verified.
+
+Phone checks: same trip with the outbound overnight rest → Stops says the destination departure window is missed; a shorter rest or changing the window clears it.
+
 ## 0.0.333 - popup wording
 
 Owner: the choices should be Refresh or Use on-device data. Price question "Refresh saved prices?" (Refresh / Use on-device data), traffic question "Refresh traffic for each departure hour?" (Refresh / Use on-device data: no new reads, plan skips the allowance), Settings select Ask me / Refresh / Use on-device data (values ask / always / never unchanged). cell-reuse-ui title updated. Not phone-verified.

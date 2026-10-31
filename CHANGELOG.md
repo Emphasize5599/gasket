@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.334 - 2026-10-31
+- When an added rest stop makes you reach or leave a destination after its time window, the plan now says so instead of quietly timing the rest of the trip from the late arrival.
+
 ## 0.0.333 - 2026-10-31
 - The price and traffic questions now offer Refresh or Use on-device data (same choices in Settings → Trip defaults).
 
