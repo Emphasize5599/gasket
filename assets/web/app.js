@@ -827,6 +827,24 @@
       if (!$('blPage').classList.contains('hidden')) drawBlPage();
     }
   };
+  // ---------- stations you don't want Gasket to use ----------
+  // A station with a price you don't trust (or that you just won't stop at): trip plans skip it. Kept in settings,
+  // listed on the same page as the bad CITGOs; Use again takes it off.
+  var IG = {
+    list: function () { return S.ignoredStations || (S.ignoredStations = []); },
+    has: function (st) { return !!st && IG.list().some(function (e) { return BL.same(e, st); }); },
+    add: function (st) {
+      if (!st || IG.has(st)) return;
+      var e = BL.entryOf(st);
+      IG.list().push(e); save(); FLog.info('stations', 'Station ignored', { brand: st.brand }); BL.changed();
+      undoToast('Gasket won\'t use ' + (st.name || 'this station'), function () { S.ignoredStations = IG.list().filter(function (x) { return x !== e; }); save(); BL.changed(); });
+    },
+    remove: function (st) {
+      var gone = IG.list().filter(function (x) { return BL.same(x, st); });
+      if (!gone.length) return;
+      S.ignoredStations = IG.list().filter(function (x) { return gone.indexOf(x) < 0; }); save(); BL.changed();
+    }
+  };
   /** A message with an Undo button for a few seconds. */
   var undoT;
   function undoToast(msg, undo) {
@@ -839,7 +857,8 @@
   window.undoToast = undoToast;
   /** Buttons for a station's details: mark / unmark a bad CITGO, and count Walmart+ on its diesel at your own risk. */
   function blButtons(st, idp, grade) {
-    if (st.brand !== 'citgo') return '';
+    var ig = IG.has(st), igh = ig ? '<div class="bl-on"><span>Gasket won\'t use this station.</span><button class="btn tonal sm" id="' + idp + 'IgRm">Use again</button></div>' : '<button class="btn tonal bl-add" id="' + idp + 'IgAdd">Don\'t use this station</button>';
+    if (st.brand !== 'citgo') return '<div class="bl-box">' + igh + '</div>';
     var bad = BL.has(st), h = '<div class="bl-box">';
     if (bad) h += '<div class="bl-on"><span>On your bad CITGO list — no Walmart+ here.</span><button class="btn tonal sm" id="' + idp + 'BlRm">Remove</button></div>';
     else h += '<button class="btn tonal bl-add" id="' + idp + 'BlAdd">Didn\'t get Walmart+ here</button>';
@@ -847,9 +866,11 @@
       var on = !!(S.dieselRisk && S.dieselRisk[st.id]);
       h += '<label class="bl-risk"><input type="checkbox" id="' + idp + 'BlRisk"' + (on ? ' checked' : '') + '><span>Count Walmart+ on diesel here <small>at your own risk — CITGO diesel pumps often can\'t take it</small></span></label>';
     }
-    return h + '</div>';
+    return h + igh + '</div>';
   }
   function bindBl(st, idp) {
+    if ($(idp + 'IgAdd')) $(idp + 'IgAdd').onclick = function () { IG.add(st); };
+    if ($(idp + 'IgRm')) $(idp + 'IgRm').onclick = function () { IG.remove(st); };
     if ($(idp + 'BlAdd')) $(idp + 'BlAdd').onclick = function () { BL.add(st); };
     if ($(idp + 'BlRm')) $(idp + 'BlRm').onclick = function () { confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(st.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(st); }); };
     if ($(idp + 'BlRisk')) $(idp + 'BlRisk').onchange = function () { BL.dieselRisk(st, this.checked); };
@@ -858,8 +879,13 @@
   function openBlPage() { drawBlPage(); $('blPage').classList.remove('hidden'); $('blPage').scrollTop = 0; }
   function drawBlPage() {
     var l = BL.list().slice().sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
-    var h = '<div class="pg-head"><button class="x" id="blBack" aria-label="Back">←</button><h1>Bad CITGO stations</h1></div>' +
-      '<p class="lead">CITGOs where Walmart+ didn\'t work. They don\'t get the 10¢ in prices or trip plans. Tap one to see it on the map.</p>';
+    var h = '<div class="pg-head"><button class="x" id="blBack" aria-label="Back">←</button><h1>Station lists</h1></div>';
+    var il = IG.list().slice().sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
+    h += '<div class="card"><h3>Stations Gasket won\'t use</h3><p class="lead small keep">Trip plans skip these, for example a price you know is wrong.</p>' + (il.length ? '<div class="bl-list">' + il.map(function (e, i) {
+      return '<div class="bl-row"><button class="bl-go" data-ig="' + i + '"><b>' + esc(e.name || 'Station') + '</b><small>' + esc(shortAddr(e.address || '')) + (e.t ? ' · added ' + new Date(e.t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '') + '</small></button>' +
+        '<button class="btn tonal sm" data-igrm="' + i + '">Use again</button></div>';
+    }).join('') + '</div>' : '<p class="small keep">None yet. Open a station\'s details or a trip stop and tap Don\'t use this station.</p>') + '</div>';
+    h += '<h3 class="sec">Bad CITGO stations</h3><p class="lead">CITGOs where Walmart+ didn\'t work. They don\'t get the 10¢ in prices or trip plans. Tap one to see it on the map.</p>';
     h += l.length ? '<div class="card bl-list">' + l.map(function (e, i) {
       return '<div class="bl-row"><button class="bl-go" data-bl="' + i + '"><b>' + esc(e.name || 'CITGO') + '</b><small>' + esc(shortAddr(e.address || '')) + (e.t ? ' · added ' + new Date(e.t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '') + '</small></button>' +
         '<button class="x sm" data-blrm="' + i + '" aria-label="Remove from the list">✕</button></div>';
@@ -870,6 +896,8 @@
     $('blExp').onclick = function () { exportData('blacklist'); };
     $('blImp').onclick = function () { importData('blacklist'); };
     if ($('blDel')) $('blDel').onclick = function () { askDeleteBl(); };
+    pg.querySelectorAll('[data-ig]').forEach(function (b) { b.onclick = function () { showBad(il[+b.dataset.ig]); }; });
+    pg.querySelectorAll('[data-igrm]').forEach(function (b) { b.onclick = function () { IG.remove(il[+b.dataset.igrm]); }; });
     pg.querySelectorAll('[data-bl]').forEach(function (b) { b.onclick = function () { showBad(l[+b.dataset.bl]); }; });
     pg.querySelectorAll('[data-blrm]').forEach(function (b) { b.onclick = function () { var e = l[+b.dataset.blrm]; confirmDel({ title: 'Take this CITGO off your bad list?', body: esc(e.name || 'This station') + ' will get the Walmart+ discount again.', action: 'Remove' }).then(function (ok) { if (ok) BL.remove(e); }); }; });
   }
@@ -1220,6 +1248,7 @@
       '<div class="field"><div class="lbl">Check which Exxon and Mobil stations take Walmart+<small>Free, from ExxonMobil\'s own station finder (sends the map area or route area to exxonmobilfuels.com). Stations it lists without Walmart+ don\'t get the 10¢. No Google lookups.</small></div>' + sw('xomCheck', S.xomCheck !== false) + '</div>' +
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
+      '<div class="field"><div class="lbl">Old saved prices on a trip<small>When a trip reuses stations whose prices are older than the hours above.</small></div><select id="priceRefreshMode">' + [['ask', 'Ask me'], ['always', 'Update them'], ['never', 'Use saved prices']].map(function (o) { return '<option value="' + o[0] + '"' + ((S.priceRefreshMode || 'ask') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div>' + (window.RidbUI ? RidbUI.html() : '') + '</div>';
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
@@ -1231,8 +1260,8 @@
       '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Fast-charging price estimate ($/kWh)<small>Used only if you allow chargers without published prices and the route has too few known rates. Also estimates your starting battery cost.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
       '<div class="field"><div class="lbl">Hydrogen price ($/kg)<small>What you expect to pay. California stations have been around $30–36.</small></div><input type="number" id="h2Price" min="0" max="100" step="0.5" value="' + (S.h2Price || 36) + '"></div></div>';
-    h += '<div class="card"><h3>Bad CITGO stations</h3>' +
-      '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div></div>';
+    h += '<div class="card"><h3>Station lists</h3>' +
+      '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div><div class="field"><div class="lbl">Stations Gasket won\'t use<small class="keep" id="igCount">' + IG.list().length + ' station' + (IG.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="igOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
       '<div class="field"><div class="lbl">Remembered stations & price history<small>Station locations, completed scan areas and price observations are shared across trips and map searches in app storage. Full backups include them. Clear cache keeps them; Rediscover checks an area again, while Update prices only checks known stations.</small></div></div>' +
       '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/Gasket you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
@@ -1262,6 +1291,7 @@
     WorkerSettings.bind({S:S,N:N});
     $('sLogView').onclick = function () { showLog(); };
     $('blOpen').onclick = openBlPage;
+    if ($('igOpen')) $('igOpen').onclick = openBlPage;
     $('licOpen').onclick = openLicPage;
     $('exAll').onclick = function () { exportData('all'); };
     $('exBl').onclick = function () { exportData('blacklist'); };
@@ -1377,6 +1407,7 @@
     S.cashbackPct = Math.min(10, Math.max(0, parseFloat($('cashbackPct').value) || 0));
     S.radiusMi = Math.min(25, Math.max(2, parseFloat($('radiusMi').value) || 8));
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
+    if ($('priceRefreshMode')) S.priceRefreshMode = $('priceRefreshMode').value;
     S.logLevel = parseInt($('logLevel').value, 10) || 5;
     S.nrelKey = $('nrelKey').value.trim();
     S.ocmKey = $('ocmKey').value.trim();
@@ -1647,7 +1678,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, ignore: IG, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, jobShort: jobShort, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };

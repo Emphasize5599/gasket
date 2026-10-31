@@ -292,7 +292,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(optimize){best.opts.cands=g.cands;best.opts.lite=false;best.plan=await planAsync(best.opts,valid,10);var tm=best.opts._plannerTiming;phase.plans++;if(tm){phase.kernelMs+=tm.runMs;phase.kernelWaitMs+=tm.waitMs;}if(!valid()||!best.plan.ok||best.plan.firstDip)return null;}
     var timeline=T.scheduleTimeline(best.opts,best.plan),aligned=windowAlign(path,timeline);if(aligned.some(function(r){return !r;}))return windowReject('hours');
     if(aligned.some(function(r,i){return r.depart!==path[i].depart;})){if((attempt||0)>=3)return windowReject('hours');return windowEvaluate(aligned,valid,changed,optimize,(attempt||0)+1);}
-    var allowance=windows.config();best.trafficDelay=path.reduce(function(n,r){return n+(Number.isFinite(r.trafficDelay)?r.trafficDelay:Infinity);},0);if(allowance.earlyEnabled&&best.trafficDelay>+allowance.delayMinutes+1e-7)return windowReject('trafficDelay');best.path=path;best.phase=phase;
+    var allowance=windowEarlyOff?Object.assign({},windows.config(),{earlyEnabled:false}):windows.config();best.trafficDelay=path.reduce(function(n,r){return n+(Number.isFinite(r.trafficDelay)?r.trafficDelay:Infinity);},0);if(allowance.earlyEnabled&&best.trafficDelay>+allowance.delayMinutes+1e-7)return windowReject('trafficDelay');best.path=path;best.phase=phase;
     if(!optimize){LG.debug('timing','Candidate planning phases',phase);return best;}
     best.minutes=(timeline[timeline.length-1].ready-best.depart)/60000;var energy=choiceCost({plan:best.plan,startGal:best.opts.startGal});best.cost=energy==null||toll.cost==null?null:energy+toll.cost;
     if(finals){if(finals.size>=4)finals.delete(finals.keys().next().value);finals.set(finalKey,{at:Date.now(),value:best});}
@@ -304,6 +304,16 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(!Number.isFinite(rate)||rate<0)rate=kind==='ev'?.4:kind==='h2'?30:4;
       proxy={cost:energy*rate+(Number.isFinite(toll)?toll:0),service:stops*(kind==='ev'?35:kind==='h2'?12:10)};cache.set(row.routeKey,proxy);}
     var profile=traffic&&traffic.profile(row.raw,row.depart);return {cost:proxy.cost,minutes:(Number.isFinite(row.forecastMinutes)?row.forecastMinutes:(profile?profile.seconds:m.durationSec)/60)+proxy.service};
+  }
+  // Reading forecast traffic for every approved road and hour can take many minutes: ask before a big read (once per
+  // review session). Skipping plans this run without the earlier-departure allowance; saved forecasts are reused either way.
+  var windowEarlyOff=false;
+  async function windowTrafficAsk(legs,session){
+    if(queueWorking)return true;if(session.earlyAnswer!=null)return session.earlyAnswer;
+    var forecasts=session.delayForecasts||new Map(),rows=[].concat.apply([],legs).filter(function(r){return session.consent.allowed(r);}),todo=rows.filter(function(r){return !forecasts.has(r.routeKey+'|'+r.depart);}).length;
+    if(todo<=20)return true;
+    var ok=!!await A.confirmDel({always:true,title:'Compare traffic for each departure hour?',body:'Your earlier-departure allowance needs forecast traffic for '+todo+' approved road and hour combinations. Forecasts you already have are reused; reading the rest can take several minutes. Skip to plan without the allowance this time.',no:'Skip traffic check',action:'Read traffic',goClass:'primary'});
+    session.earlyAnswer=ok;LG.info('timing','Traffic allowance choice',{rows:rows.length,toRead:todo,read:ok});return ok;
   }
   async function windowTrafficAllowance(legs,session,valid,progress){
     var allowance=+windows.config().delayMinutes;if(!Number.isFinite(allowance)||allowance<0||allowance>240)throw Error('Set a traffic delay allowance of 0–240 minutes');if(!traffic||!traffic.enabled())throw Error('Enable Forecast traffic to use the earlier-departure allowance');
@@ -324,6 +334,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       adjustError='';step=ST_STOPS;renderStep();if(!queueWorking)await queueNotify('start','Planning approved routes and hours',car);progress('Preparing shared station coverage');
       scheduleCollecting=true;try{await findStops();}finally{scheduleCollecting=false;}if(!valid())return;if(!choicePool)throw Error('Station coverage did not finish. Retry planning from your saved data.');
       session.planning=true;session.estimateCache=new Map();windowRejects={};var legs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i;});}),cfg=windows.config(),waits=choiceLists().map(function(_,i){return +windowDestination(i).wait||0;}),depWindows=[null].concat(choiceLists().map(function(_,i){var d=windowDestination(i);return d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null;})),pass=0;
+      windowEarlyOff=false;if(cfg.earlyEnabled&&!await windowTrafficAsk(legs,session)){windowEarlyOff=true;cfg=Object.assign({},cfg,{earlyEnabled:false});}if(!valid())return;
       if(cfg.earlyEnabled){progress('Checking traffic for approved roads and hours');await windowTrafficAllowance(legs,session,valid,progress);}if(!valid())return;
       while(valid()){
         var changed=new Map(),longTrip=model.totalMi>=500,previewLimit=longTrip?6:12;progress('Screening approved hourly routes');
@@ -338,7 +349,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(!valid())return;if(!best)throw Error('No checked recommendation fits your windows, reserve, charging and toll constraints.'+(cfg.earlyEnabled?' Traffic must also fit your '+cfg.delayMinutes+' min allowance; try increasing it or disabling the earlier-departure option.':'')+windowRejectText()+' Adjust Parameters or widen your time windows.');
       var full=best.plan;if(!valid())return;
       if(legsMode()){route.legs.forEach(function(l,i){l.sel=best.bundle.sel[i];});rebuildAlts();altSel=0;}else altSel=best.bundle.sel[0];rawRoute=alts[altSel];model=best.opts.model;S.trip.depart=windowLocal(best.depart);S.trip.departNow=false;S.trip.legDepartures=best.legs.map(function(t){return t.depart;});S.trip.bufferMi=best.buffer;S.trip.maxDetourMin=best.detour;
-      result={plan:full,opts:best.opts,cands:best.candidates.cands,notes:best.candidates.notes.concat(TimeWindows.dataNotices(best.legs),[cfg.earlyEnabled?'Earlier departure within your '+cfg.delayMinutes+' min whole-trip traffic allowance · about '+Math.round(best.trafficDelay)+' min extra traffic among checked options. Later departures may use less fuel.':'Recommended trips prioritize '+(cfg.priority==='time'?'total elapsed time':'estimated cost')+', then clearer weather. Other combinations may be '+(cfg.priority==='time'?'faster.':'cheaper.')]),unpriced:best.candidates.unpriced,stale:best.candidates.stale,grade:best.candidates.grade,startGal:best.opts.startGal,bufMi:best.buffer,topMi:S.trip.topUpMi,topSel:-1,planOffs:'',schedule:best.legs};
+      result={plan:full,opts:best.opts,cands:best.candidates.cands,notes:best.candidates.notes.concat(TimeWindows.dataNotices(best.legs),[cfg.earlyEnabled?'Earlier departure within your '+cfg.delayMinutes+' min whole-trip traffic allowance · about '+Math.round(best.trafficDelay)+' min extra traffic among checked options. Later departures may use less fuel.':'Recommended trips prioritize '+(cfg.priority==='time'?'total elapsed time':'estimated cost')+', then clearer weather. Other combinations may be '+(cfg.priority==='time'?'faster.':'cheaper.')],windowEarlyOff?['Earlier-departure traffic check skipped this time: departures weren\'t compared for traffic delay.']:[]),unpriced:best.candidates.unpriced,stale:best.candidates.stale,grade:best.candidates.grade,startGal:best.opts.startGal,bufMi:best.buffer,topMi:S.trip.topUpMi,topSel:-1,planOffs:'',schedule:best.legs};
       compareReviewed=Date.now();compareReviewKey=compareSafetyKey();compareReviewProof={context:compareReviewContext(),routes:choiceLists().map(function(list,i){return list.filter(function(a){return session.consent.roadAllowed(i,RouteChoices.key(i,a));}).map(function(a){return RouteChoices.key(i,a);});})};choiceComplete=true;recompute();compareCapture();A.save();if(choicePool){var savedRows=(choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]);saveTrip({official:mergeRouteStations(savedRows).map(function(st){var c=Object.assign({},st);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:[[]],kind:choicePool.kind||KIND()},[altSel]);}step=ST_STOPS;state.completed=true;session.createdAt=Date.now();
       LG.info('schedule','Verified flexible-time trip ready',{checked:checked,priority:cfg.priority,cost:best.cost,minutes:best.minutes,legs:best.legs.map(function(t){return {depart:t.depart,arrive:t.arrive,waitMinutes:t.waitMinutes};})});
     }catch(e){result=oldResult;model=oldModel;rawRoute=oldRaw;A.toast(e.message);LG.warn('schedule','Flexible-time planning stopped',{reason:e.message,checked:checked});adjustError=e.message;step=ST_STOPS;renderStep();}
@@ -2839,7 +2850,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         var refreshed=await priceUpdate(function(){return KeylessGas.refreshKnown(uniqueSaved,function(f,text){pg(f*.8,text);},[],gradeOf());}),bySaved=new Map(refreshed.stations.map(function(s){return [KeylessGas.knownKey(s),s];}));
         official=official.map(function(s){return bySaved.get(KeylessGas.knownKey(s))||s;});perModel=perModel.map(function(list){return list.map(function(s){return bySaved.get(KeylessGas.knownKey(s))||s;});});
         if(refreshed.blocked)A.showSiteCheck(refreshed.blockedSite||'gasweb','Station website');
-        if(pricesSkipped)notes.push('Price update skipped; the rest of the saved prices keep their original times.');
+        if(pricesSkipped)notes.push(SKIP_NOTE);
         else if(refreshed.errors.length)notes.push('Some expired saved prices could not be updated; retained prices keep their original timestamps.');
         LG.info('stations','Batch cached-price check',{reused:allSaved.length-staleSaved.length,expired:uniqueSaved.length,updated:refreshed.updated});
       }else LG.info('stations','Batch cached-price check',{reused:allSaved.length,expired:0,updated:0});
@@ -2901,7 +2912,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         tasks.push((cellApi?KeylessGas.discoverAPI:KeylessGas.discover)(areaPlan||KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover'||force===true).then(function(r){
           dbgS.keyless={areas:r.areas,completed:r.completedAreas,stations:r.stations.length,websiteLoads:r.websiteLoads,cancelled:r.cancelled,blocked:r.blocked,apiCalls:0};
           r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=maxOff)perModel[i].push(s);});});
-          notes=notes.concat(r.errors||[]);if(r.errors&&r.errors.length&&!r.cancelled&&!r.blocked)notes.push('Some website discovery work failed; completed station results are kept.');if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');
+          notes=notes.concat(r.errors||[]);if(r.errors&&r.errors.length&&!r.cancelled&&!r.blocked)notes.push('Some website discovery work failed; completed station results are kept.');if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');if(r.pricesSkipped&&notes.indexOf(SKIP_NOTE)<0)notes.push(SKIP_NOTE);
           var incomplete=r.details.filter(function(d){return !d.exhausted;}).length;
           if(incomplete)notes.push('Website discovery stopped before the list ended in '+incomplete+' areas; coverage is partial.');
           if(r.blocked)A.showSiteCheck(r.blockedSite||'gasweb',r.blockedSite==='walmart'?'Walmart':r.blockedSite==='murphy'?'Murphy USA':'Google Maps web');
@@ -3779,6 +3790,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function breathe() { return new Promise(function (r) { setTimeout(r, 0); }); }
   async function planAsync(opts,valid,priority){
+    // stations you told Gasket not to use (Station lists) never become stops
+    if(A.ignore&&A.ignore.list().length&&opts.cands){var kept=opts.cands.filter(function(c){return !A.ignore.has(c.station);});if(kept.length!==opts.cands.length)opts.cands=kept;}
     // a closed trip (✕ / Cancel search) drops its queued plans: sweeps used to keep the workers and the page busy
     var wanted=valid;valid=function(){return (document.body.classList.contains('trip-on')||bgJob||queueWorking)&&(!wanted||wanted());};
     var discounts={};['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].forEach(function(k){discounts[k]=S[k];});
@@ -3811,6 +3824,17 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   // A queued comparison can plan with the prices it already has: the batch switch skips price updates, and ✕ during
   // one (gas refresh of expired prices, EV network price pass) stops only that update; the plan still finishes.
+  // A trip that reuses stored stations with old prices asks once whether to read them again (Settings → Trip defaults:
+  // Ask me / Update them / Use saved prices). A comparison batch uses its own Update prices first switch.
+  var SKIP_NOTE='Price update skipped; saved prices keep their original times.';
+  var priceAsk={owner:null,answer:true};
+  async function askPriceRefresh(info){
+    var mode=S.priceRefreshMode||'ask';if(queueWorking||mode==='always')return true;if(mode==='never')return false;
+    if(priceAsk.owner&&priceAsk.owner===route)return priceAsk.answer;
+    var owner=route,ok=!!await A.confirmDel({always:true,title:'Update saved prices?',body:info.stations+' saved price'+(info.stations===1?' is':'s are')+' older than your '+(S.staleHours||24)+'-hour setting along this trip. Updating reads those areas from the Maps website again and can take several minutes. Saved prices keep their original times either way.',no:'Use saved prices',action:'Update prices',goClass:'primary'});
+    priceAsk={owner:owner,answer:ok};LG.info('stations','Saved price update choice',{expired:info.stations,update:ok});return ok;
+  }
+  if(window.KeylessGas&&KeylessGas.askRefresh)KeylessGas.askRefresh(askPriceRefresh);
   var priceUpdating=0,pricesSkipped=false,queueSkipPrices=false;   // a skip during a batch holds for its other vehicles
   function batchSkipsPrices(){return queueWorking&&(S.batchPrices===false||queueSkipPrices);}
   async function priceUpdate(work){priceUpdating++;try{return await work();}finally{priceUpdating--;}}

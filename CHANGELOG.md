@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.332 - 2026-10-31
+- A trip that reuses stored stations with old prices now asks first: update them, or plan with saved prices. Settings → Trip defaults → Old saved prices on a trip (Ask me / Update them / Use saved prices).
+- Before comparing traffic for many departure hours (the earlier-departure allowance), Gasket asks whether to read it or skip it this time.
+- Don't use this station: in a station's details or a trip stop, tell Gasket to skip a station (for example a price you know is wrong). Settings → Savings → Station lists brings it back.
+
 ## 0.0.331 - 2026-10-31
 - Roads to and from rest stops you add no longer bring Google's other routes into the hazard review: those legs keep the road you were on. A new switch in Route → Other routes (Compare roads to and from added rest stops) turns the extra routes back on.
 
