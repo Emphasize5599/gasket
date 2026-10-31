@@ -126,6 +126,7 @@
     function position(p){var k=p.lat+'|'+p.lng,r=positions.get(k);if(!r){r=T.project(m,p);positions.set(k,r);}return r;}
     for(var record of io.observations(m,t,ttl,o.avoid)||[]){
       if(++checked%16===0){await new Promise(function(r){setTimeout(r,0);});if(!valid())throw Error('Traffic lookup cancelled');}
+      if(record.gap){var gs=position(record.gap.first),ge=position(record.gap.last);if(gs.offset<=.015&&gs.along>.02&&gs.along<m.totalMi-.02&&ge.along>gs.along+.02)gap=gap==null?gs.along:Math.min(gap,gs.along);continue;}
       var ob=record.observation;if(!ob||!ob.pts||!ob.pts.length||ob.avoidKey!==avoidKey(o.avoid)||!usable(record.profile))continue;
       var shared=await reuse(ob,m,t,valid);if(!valid())throw Error('Traffic lookup cancelled');
       if(shared)return Object.assign(shared,{at:record.profile.at,depart:t,cached:true,sharedRoads:true});
@@ -174,7 +175,7 @@
    if(covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
    return {source:'Google Maps website forecast',cachePolicy:o.cachePolicy,estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,cachedPieces:cachedPieces,fetchedPieces:fetchedPieces,sharedPieces:sharedPieces,cachedSections:cachedSections,fetchedSections:fetchedSections,lookaheadReads:lookahead,lookaheadUsed:lookaheadUsed,readMs:(io.now?io.now():Date.now())-began,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
-  return {request:function(q,valid){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;});});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();items.clear();}};
+  return {stats:function(){return {active:active,queued:queue.length,lookaheadQueued:low.length,routes:chains,pending:pending.size};},request:function(q,valid){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;});});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();items.clear();}};
  }
  var api={projectAll:projectAll,cacheTtl:cacheTtl,MIN_COVER:MIN_COVER,unmatched:unmatched,wall:wall,query:query,parse:parse,match:match,read:read,readAsync:readAsync,reuse:reuse,boundaries:boundaries,create:create,hash:hash};if(node)module.exports=api;else root.GoogleTraffic=api;
 })(typeof window!=='undefined'?window:this);

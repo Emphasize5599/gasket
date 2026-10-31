@@ -2,18 +2,18 @@
 // earlier routes rather than evicting them during a large departure-window scan, the hot layer stays bounded, and one timezone lookup is shared.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const web=path.join(__dirname,'..','assets','web');
-function load(store,at,speed=50){
+function load(store,at,speed=50,hold){
   const clock=()=>at==null?Date.now():at;class Clock extends Date{static now(){return clock();}}
   const listeners={},ctx={console,Intl,Date:Clock,Math,JSON,Promise,setTimeout,clearTimeout,setInterval,clearInterval,Map,Set,WeakMap,Error,Number,String,Array,Object,BigInt};
   ctx.window=ctx;ctx.root=ctx;ctx.document={hidden:false};ctx.addEventListener=(n,f)=>{(listeners[n]=listeners[n]||[]).push(f);};ctx.dispatch=n=>(listeners[n]||[]).forEach(f=>f({}));
   vm.createContext(ctx);['trip.js','trafficpolicy.js','traffic.js','googletraffic.js','trafficcache.js','trafficflow.js'].forEach(f=>vm.runInContext(fs.readFileSync(path.join(web,f),'utf8'),ctx,{filename:f}));
   ctx.WorkerSettings={trafficCount:()=>4};
-  const KV={get:(ns,k,ttl)=>{const r=store.get(ns+'|'+k);return r&&(!ttl||clock()-r.t<ttl)?r:null;},put:(ns,k,v)=>store.set(ns+'|'+k,{v,t:clock()})};
+  const calls={google:0,zone:0,cacheReads:0,queries:[]};
+  const KV={get:(ns,k,ttl)=>{if(k.startsWith('google-slot|'))calls.cacheReads++;const r=store.get(ns+'|'+k);return r&&(!ttl||clock()-r.t<ttl)?r:null;},put:(ns,k,v)=>store.set(ns+'|'+k,{v,t:clock()})};
   const A={KV,S:{trip:{trafficForecast:true,trafficPreset:'weekend',avoid:{}},googleTraffic:true},esc:String,showSiteCheck(){throw Error('no check expected');}};
-  const calls={google:0,zone:0,queries:[]};
   async function call(name,q){
     if(name==='fetchJson'){calls.zone++;await new Promise(r=>setTimeout(r,5));return {body:JSON.stringify({timezone:'America/Chicago'})};}
-    if(name!=='fetchGoogleTraffic')throw Error('unexpected '+name);calls.google++;calls.queries.push(q);
+    if(name!=='fetchGoogleTraffic')throw Error('unexpected '+name);calls.google++;calls.queries.push(q);if(hold)await hold;
     const m=[...q.matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)],a={lat:+m[0][1],lng:+m[0][2]},b={lat:+m[1][1],lng:+m[1][2]},meters=ctx.Trip.hav(a,b)*1609.344,seconds=meters/1609.344/speed*3600,clock=+(/!3j(\d+)/.exec(q)[1]),r=[],root=[];
     r[0]=[];r[0][1]='Generic road';r[0][2]=[meters];r[0][10]=[[seconds],null,3,null,[seconds*.9,seconds*1.2]];r[3]=[[[0,0],[meters,seconds]]];root[1]=[r];
     root[7]=[[[Math.round(a.lat*1e7),Math.round((b.lat-a.lat)*1e7)],[Math.round(a.lng*1e7),Math.round((b.lng-a.lng)*1e7)]]];root[11]='!8j'+clock+'!3e0';return {body:JSON.stringify([root])};
@@ -94,5 +94,17 @@ function load(store,at,speed=50){
    await a.flow.prepare(raw,m,t0,{stops:[{d:m.totalMi/2,seconds:300}],phase:'fuel-stops'});assert(texts.some(t=>t.startsWith('Updating traffic for fuel-stop timing')),'genuine stop-aware update explains its purpose');
    const summary=logs.findLast(x=>x.m==='Forecast ready').d;assert(JSON.stringify(summary).indexOf('cachedSections')<JSON.stringify(summary).indexOf('legs'),'cache counters precede potentially truncated road details');assert(summary.legCount>=1&&summary.legs.length<=6);a.ctx.dispatch('pagehide');
   }
-  console.log('Traffic forecast cache: restart, mixed stored/missing/expired sections, changed boundaries/return time, older shared roads, normalized waits, bounded logs/index and timezone lookup passed');
+  {// A wide time-window cache must not read every future-hour payload before allowing an uncached hour to start.
+   const data=new Map(),origin=Date.UTC(2027,0,4,12),when=origin+86400000;let a=load(data,origin),c=a.ctx.TrafficCache.create(a.KV);
+   for(let i=0;i<2000;i++){const start=when+86400000+i*60000,rows=[{from:0,to:m.totalMi,seconds:300,baseSeconds:300,forecast:true}];c.put('future-'+i,{identity:'future-'+i,profile:{at:origin,seconds:300,rows},observation:{pts:m.pts,cum:m.cum,rows,depart:start,avoidKey:'false|false|false'}});}c.flush();
+   a=load(data,origin+3600000);await a.flow.forecast(m,when);a.ctx.dispatch('pagehide');assert.equal(a.calls.google,1);assert.equal(a.calls.cacheReads,0,'2000 future profiles are considered through metadata, not 2000 synchronous payload reads');
+  }
+  {// A long-running request emits enough state to distinguish network waits from cache work or verification.
+   let release;const held=new Promise(r=>release=r),origin=Date.UTC(2027,0,4,12),a=load(new Map(),origin,50,held),ticks=[],logs=[];
+   a.ctx.setInterval=fn=>{ticks.push(fn);return ticks.length;};a.ctx.clearInterval=()=>{};a.ctx.FLog={info:(_a,m,d)=>logs.push({m,d}),debug(){},warn(){}};
+   const pending=a.flow.prepare({description:'Held traffic'},m,t0);for(let i=0;i<100&&!a.calls.google;i++)await new Promise(r=>setTimeout(r,1));assert.equal(a.calls.google,1);
+   a.ctx.Date.now=()=>origin+16000;ticks.forEach(fn=>fn());const progress=logs.find(x=>x.m==='Forecast progress');assert(progress,'long request has a periodic diagnostic');assert.equal(progress.d.activeRoutes,1);assert.equal(progress.d.nativeActive,1);assert.equal(progress.d.reader.active,1);assert.equal(progress.d.waitingVerification,false);assert(progress.d.quietSeconds>=16);assert.equal(typeof progress.d.storageReads,'number');
+   release();await pending;a.ctx.dispatch('pagehide');
+  }
+  console.log('Traffic forecast cache: restart, mixed sections, return times, older shared roads, normalized waits, bounded future-hour payload reads and live diagnostics passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
