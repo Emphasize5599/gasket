@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.330 - 2026-10-30
+- Rest timing explains when an overnight stay can no longer fit, for example when the trip's planned departure has passed and the trip is now timed from leaving now, instead of showing a loading bar and a confusing 24-hour message.
+
 ## 0.0.329 - 2026-10-30
 - A trip with rest stops that still need departure times no longer gets stuck on Compare after the hazard review: it goes to Stops, where Calculate rest timing finishes them.
 
