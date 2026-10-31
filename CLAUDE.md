@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.327 - rests after a timed destination
+
+Owner's 10-31 02:25 log (326, Searcy→Bristol round trip, flexible time, overnight rests): plan ok; overnight rest 1 on the way out ok; overnight rest 2 on the return (I-75 Boone County, leg 3) → cached fuel plan failed "overnight stay no longer fits… / chosen rest departure no longer fits…", same after Calculate rest timing; the trip could never finish. Cause: tripui `restWaits` timed a pending rest's wait from the origin departure through earlier rests only, ignoring the plan's fixed departure from the destination (return left Nov 7 04:00 after a 6.5-day stay), so the rest's wait ended days before you got there, leave = arrival, and restPlanIssues' overnight check failed before `RestPlan.alignWaits` (only runs on ok plans) could correct it; also restAdd/RemoveDraft nulled `S.trip.legDepartures`, and makeBaseOpts only kept destination *windows* (leaveStart), never a waiting-allowance departure. Now `destinationWaits(m)` = each non-rest destination's fixed departure (the plan's chosen `legDepartures[i+1]` inside its leave window, else leaveStart; or the chosen departure after a wait allowance); `restWaits` times rests after them; `restClockWaits` (rest + destination waits) feeds makeBaseOpts, C.arrival/C.forecast, restUIArrival, restPrepareTiming and trafficPrepare (the return leg's approach traffic was read days early too); insert splices a null into legDepartures at leg+1, remove drops index. Test windowplanning-ui `restleave` (middle stop with a departure window an hour after arrival, overnight nightly hours, overnight rest after it: fails on 326 at the cached plan, passes through Calculate/review/finish). Not phone-verified.
+
+Phone checks: same round trip: add the return-leg overnight rest → Stops shows an ok plan; Calculate rest timing offers departures on the right night; Finish rest timing completes.
+
 ## 0.0.326 - bounded traffic payload lookup and stall diagnostics
 
 Verified publication:8ede995, run41148517566/job124379197414 SUCCESS. All191 release regressions including deterministic window/DST fixtures passed on GitHub, plus reference/native/runtime/signing checks and direct APK uploads. Release API confirms target8ede995, ARM64(30,422,538 bytes)/universal(56,784,469 bytes) and SHA256 digests.

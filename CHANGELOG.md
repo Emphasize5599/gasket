@@ -4,6 +4,10 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.327 - 2026-10-30
+- Rest stops added after a destination you leave later (a flexible-time departure window or waiting time) are now timed from that departure, so an overnight rest on the way back no longer breaks the plan.
+- Adding or removing a rest keeps the departure times your flexible-time plan chose for your destinations.
+
 ## 0.0.326 - 2026-10-30
 - Avoid loading unrelated future-hour traffic records while searching stored forecasts.
 - Make traffic verification pauses explicit and estimate browser fallback using its actual reader count.
