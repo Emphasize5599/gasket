@@ -4,6 +4,9 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.329 - 2026-10-30
+- A trip with rest stops that still need departure times no longer gets stuck on Compare after the hazard review: it goes to Stops, where Calculate rest timing finishes them.
+
 ## 0.0.328 - 2026-10-30
 - Opening a saved trip with rest stops no longer gets stuck in the hazard review: if the trip's roads change while the review is open, it starts over instead of ignoring Yes and No.
 - Roads to and from added rest stops no longer get extra toll-free alternatives to review.
