@@ -2252,3 +2252,14 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .tw-rel-fewer { color:var(--save); }
 .tw-rel-more { color:#c62828; }
 .tw-rel-similar { color:var(--muted, #6b7280); }
+/* 0.0.335: rest stops recommended for lighter traffic after leaving */
+.rest-reco { border: 2px solid var(--save); }
+.rest-reco .rest-reco-h { color: var(--save); }
+.rest-reco-list { margin: 8px 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.rest-reco-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; border-left: 6px solid var(--save); background: var(--card-2, rgba(127,127,127,.08)); min-width: 0; }
+.rest-reco-item.reco-yellow { border-left-color: #e0a800; } .rest-reco-item.reco-red { border-left-color: #c62828; }
+.rest-reco-item .rest-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rest-reco-item .rest-text small { display: block; }
+.rest-reco-item .rest-add { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; border-radius:50%; background:var(--save,#238657); color:#fff; }
+.rest-reco-item .rest-add svg { width:24px; height:24px; fill:currentColor; }
+.rest-reco-note { color: var(--save); font-weight: 650; display: block; }

@@ -1259,7 +1259,9 @@ public class MainActivity extends Activity {
             // EV networks' own published prices: IONNA's site list page, Blink's map service
             "www.ionna.com", "chargermap.blinknetwork.com", "apigw.blinknetwork.com",
             // Electric Era's drivers page reads this public site list (prices, ports, availability)
-            "ocpi-http.app.electricera.tech"};
+            "ocpi-http.app.electricera.tech",
+            // Recreation.gov's public campground facts (season, closures, sites, availability) for rest-stop campgrounds
+            "www.recreation.gov"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
     private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "thumb.wikimedia.org", "i.fuelapi.com"};
@@ -1275,7 +1277,8 @@ public class MainActivity extends Activity {
         if (!hostAllowed(url, JSON_HOSTS)) throw new Exception("Host not allowed");
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(10000);
-        c.setReadTimeout(20000);
+        // Overpass answers only once its query finishes (the query itself allows 60 s)
+        c.setReadTimeout("overpass-api.de".equals(new URL(url).getHost()) ? 70000 : 20000);
         c.setRequestProperty("Accept", "application/json");
         // OpenStreetMap's usage policy asks apps to identify themselves
         c.setRequestProperty("User-Agent", userAgent());

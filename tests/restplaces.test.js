@@ -41,3 +41,16 @@ assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:30}}}).radius,50
  memB.set('osm-cooldown',{until:Date.now()-1});const again=await R.create(ioB).corridor(m,wide,{});assert(asks.length>n,'asked again after the cooldown');assert(again.sites.some(x=>x.site.name==='Twenty miles off'));
  const ctl={valid:()=>false};await assert.rejects(R.create(ioB).corridor(m,wide,ctl),/cancelled/);
  console.log('Per-source rest radii, one-degree grouped OSM requests, cooldown and retry passed');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{// 0.0.335 (owner's 10-31 log: one 1° box timed out, the 30 s cool-down then marked all 799 cells failed): a box that times out is
+ // asked again as smaller boxes; the other boxes are still asked, and only the box that never answers counts as failed
+ const site=(id,lat,lon,name)=>({type:'node',id,lat,lon,tags:{highway:'rest_area',name}});
+ const mem=new Map(),asks=[];const io={get:k=>mem.get(k),put:(k,v)=>mem.set(k,v),fetch:async url=>{if(url.includes('arcgis'))return {features:[]};const q=decodeURIComponent(url.split('data=')[1]);const b=/\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\)/.exec(q).slice(1).map(Number);asks.push(b);
+  if(b[2]-b[0]>.6)throw Error('timeout');return {elements:[site(1,34.1,-92.02,'Split box site')].filter(e=>e.lat>=b[0]&&e.lat<b[2]&&e.lon>=b[1]&&e.lon<b[3])};}};
+ const notes=[];const got=await R.create(io).corridor(m,{},{note:x=>notes.push(x)});
+ assert(notes.some(x=>/timeout/.test(x)),'the timeout is noted');assert(!mem.get('osm-cooldown'),'a timeout does not cool the source down');
+ assert.equal(got.failed,0,'every cell answered after splitting');assert(asks.some(b=>b[2]-b[0]<.6),'smaller boxes asked');
+ assert(got.sites.some(x=>x.site.name==='Split box site'),'the timed-out box\'s site still found');
+ // a source that never answers: stops after a few slow boxes instead of asking forever
+ const mem2=new Map();let n=0;const io2={get:k=>mem2.get(k),put:(k,v)=>mem2.set(k,v),fetch:async url=>{if(url.includes('arcgis'))return {features:[]};n++;throw Error('timeout');}};
+ const dead=await R.create(io2).corridor(m,{},{});assert(n<=12,'bounded requests: '+n);assert.equal(dead.failed,dead.cells);
+ console.log('Timed-out OSM boxes split and retried, bounded when the source is down passed');})().catch(e=>{console.error(e);process.exitCode=1;});

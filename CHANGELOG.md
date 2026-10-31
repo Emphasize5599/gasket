@@ -4,6 +4,15 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.335 - 2026-10-31
+- Rest timing checks traffic only on the stretch the rest affects (up to your next rest or fixed departure, at most about 300 miles), so a long trip no longer turns every departure red. The page also has a Least traffic button.
+- Each leg's rest stop list has a green "Recommended: lighter traffic after leaving" section that finds places and departure times with lighter traffic afterwards.
+- Rest stop lists are ordered by local arrival time.
+- Rest stops with a Google Maps page show a location button. Those without one open Street View at the stop.
+- Gasket looks up U.S. DOT/BTS rest areas on Maps with NB / SB / EB / WB added (e.g. Ohio Turnpike Plaza).
+- Recreation.gov campground details load again, and OpenStreetMap rest areas and campsites are searched again after a slow area.
+- Bug fixes
+
 ## 0.0.334 - 2026-10-31
 - When an added rest stop makes you reach or leave a destination after its time window, the plan now says so instead of quietly timing the rest of the trip from the late arrival.
 

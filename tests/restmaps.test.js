@@ -14,3 +14,17 @@ assert.equal(M.choose(site,[{...row,name:'Completely unrelated rest area'}]),nul
 })().catch(e=>{console.error(e);process.exitCode=1;});
 
 const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.854,direction:'N'};const ardsleyPage={name:ardsley.name,url:'https://www.google.com/maps/place/Ardsley+Travel+Plaza/data=!3d40.984875!4d-73.852596'};assert(M.choose(ardsley,[ardsleyPage]),'exact-name plaza matches its measured inventory-to-entrance displacement');assert.equal(M.choose(ardsley,[{...ardsleyPage,name:'Different Travel Plaza'}]),null,'wider tolerance requires exact identity');
+(async()=>{// 0.0.335 (owner: "Ohio Turnpike Plaza" only shows up on Maps with its direction): a U.S. DOT/BTS place with no direction is searched again
+ // with EB / WB (even highway number) after its own name finds nothing; the first direction that finds a listing is kept
+ const plaza={id:'ntad:77',name:'Ohio Turnpike Plaza',lat:41.3,lng:-81.6,highway:'I-80'};
+ assert.deepEqual(M.queries(plaza).map(q=>q.name),['Ohio Turnpike Plaza','Ohio Turnpike Plaza EB','Ohio Turnpike Plaza WB']);
+ assert.deepEqual(M.queries({...plaza,highway:'I-71'}).map(q=>q.name).slice(1),['Ohio Turnpike Plaza NB','Ohio Turnpike Plaza SB'],'odd = north/south');
+ assert.deepEqual(M.queries({...plaza,direction:'W'}).map(q=>q.name).slice(1),['Ohio Turnpike Plaza WB'],'known direction only');
+ assert.equal(M.queries({...plaza,highway:null}).length,5,'unknown highway: all four');assert.equal(M.queries({...plaza,id:'osm:node:1'}).length,1,'other sources: own name only');
+ assert.equal(M.queries({...plaza,name:'Ohio Turnpike Plaza EB'}).length,1,'name already has a direction');
+ const asked=[],kv=new Map(),page={name:'Ohio Turnpike Plaza WB',url:'https://www.google.com/maps/place/Ohio+Turnpike+Plaza+WB/data=!3d41.3003!4d-81.6004'};
+ const s=M.create({get:k=>kv.get(k),put:(k,v)=>kv.set(k,v),read:async q=>{asked.push(q.name);return {complete:true,places:/WB$/.test(q.name)?[page]:[]};},blocked:()=>assert.fail('no check')});
+ const got=await s.resolve(plaza);assert.equal(got.state,'found');assert.equal(got.query,'Ohio Turnpike Plaza WB');assert.deepEqual(asked,['Ohio Turnpike Plaza','Ohio Turnpike Plaza EB','Ohio Turnpike Plaza WB']);
+ assert(M.choose({...plaza,direction:'W'},[page]),'exact name with its direction suffix matches');assert.equal(M.choose({...plaza,direction:'E'},[page]),null,'opposite direction rejected');
+ const none=M.create({get:()=>null,put:()=>{},read:async()=>({complete:true,places:[]}),blocked:()=>{}});assert.equal((await none.resolve({...plaza,id:'ntad:78'})).state,'notfound');
+ console.log('Direction-suffixed Maps searches for U.S. DOT/BTS rest areas passed');})().catch(e=>{console.error(e);process.exitCode=1;});
