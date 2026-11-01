@@ -26,4 +26,13 @@ Regression coverage exercises 3,010 clock-window lookups with bounded timezone c
 
 Retain the same trip and saved data. Compare the **All rest sites** task with the trip-wide card; **Rest suggestions / leg / Sample access** is a different, clearly labeled sample. Export a log after a minute to compare `actualRequestsPerSecond`, timer lateness, provider activity/queue and the global outcome snapshot. Do not interpret request rate as completed sites per second.
 
-All 200 mandatory local release regressions passed in 292.9 seconds with three jobs. Focused UI/eligibility/rendering checks also passed. Publication verification pending.
+All 200 mandatory local release regressions passed in 292.9 seconds with three jobs. Focused UI/eligibility/rendering checks also passed. GitHub repeated all 200 regressions in 256.8 seconds and passed the native reservation gate, Android build and release-signature checks.
+
+## Verified publication
+Source commit `58d93eef04008cd5e0a96b855d9704a1c23eadf5` was published as [v0.0.343](https://github.com/Emphasize5599/gasket/releases/tag/v0.0.343). [Source release run 41358429967](https://github.com/Emphasize5599/gasket/actions/runs/41358429967) and [signed APK run 41358429992](https://github.com/Emphasize5599/gasket/actions/runs/41358429992) both succeeded; build job 125003409586 verified the existing signing certificate SHA-256 `94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e`.
+
+Both versioned release assets were verified as uploaded:
+- ARM64: 30,455,675 bytes; SHA-256 `76032db44a6f792e11d9c8cd9ff16b698d6bd44fbb81ffc0063d9d2ea9b2c71f`.
+- Universal: 56,821,702 bytes; SHA-256 `77160ef9384cc109325e1dde5bf58331041fdcf2afc416e42b82b606c6ac2b6c`.
+
+Phone/live-site verification remains outstanding; use the same-trip checks above.
