@@ -1,5 +1,9 @@
 # Gasket
 
+## 0.0.344 - durable campsite facts and filter-scoped refresh
+
+Owner requested durable campsite reuse, 48-hour rate refreshes and refreshing only matching sites. Recreation.gov preserves non-media structured campsite properties in 30-day durable snapshots, with separate 48-hour site notices/status/fee templates and 48-hour rates; facility closure/gate checks and calendars remain hourly. Saved durable filter mismatches avoid every refresh, and first discovery checks site eligibility before prices/calendars. All three UI load paths pass active filters. Matching campsite endpoint data still refreshes at 48 hours because its operational fields are bundled. RV Parky/Campendium keep cells 30 days, refresh price-bearing searches after 48 hours only for areas with matching saved candidates, and retain old locations/amenities with prices/hours/overnight permission unverified when refresh fails or is deferred. Area requests cannot target an individual campsite; stale price alone never permanently excludes a candidate from rate refresh. New/30-day-expired areas still need discovery. See docs/REST_CACHE_344.md and mandatory rest-cache-policy tests. No unattended polling; refresh on next relevant search/use. Publication verification pending; phone checks in report.
+
 ## 0.0.343 - consistent rest counters and main-thread throughput
 
 Owner's 342 screenshot mixed a recommendation sample (8/8), a new background pass (60/3010), and trip-wide outcomes including prior campground checks (24 verified, 234 excluded, 24 unavailable). The log recorded about one access-route start/sec despite queued work, with no rate-limit responses or origin-zone failures in that pass. The six/sec setting was a ceiling, not achieved throughput. Trip task/card now use the same global resolved/total/outcome counts; recommendation samples are explicitly labeled by leg and phase. The rate diagnostic now includes achieved throughput and timer lateness.

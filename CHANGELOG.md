@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.344 - 2026-11-01
+- Retain durable campsite details and amenities, with 48-hour rate refreshes for matching places.
+- Skip campground refreshes ruled out by saved equipment and amenity filters; retain saved places without treating expired prices as verified.
+- Bug fixes
+
 ## 0.0.343 - 2026-11-01
 - Consistent trip-wide rest-check totals, with separately labeled recommendation samples.
 - Faster nightly filtering and fewer repeated list redraws so access requests can keep running.
