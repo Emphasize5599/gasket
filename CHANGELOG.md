@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.338 - 2026-11-01
+- Settings → Rest stops → RV Parky has a "Free only" switch: it keeps places listed as free plus rest areas, truck stops and stores that list no rate. Campendium has "Public land only" (usually free; Campendium's map doesn't give reliable prices).
+- Bug fixes
+
 ## 0.0.337
 - Faster campground verification with independent, RAM-based rest-stop readers adjustable up to 50.
 - Reuse campground timezones and defer road checks until places are viewed; show verification progress and estimates.

@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.338 - free-only RV Parky, public-land-only Campendium
+
+Owner: a setting to only show free places from RV Parky and Campendium. (Rebased on the other agent's 0.0.337, which already used that version: so this is 338.) SOURCES.rvparky/campendium `free: true` + `freeLabel` / `freeNote` (shown under the switch in restsettings; rvparky also `overnight: true` for the existing overnight-permission switch, which its `onp` flag satisfies). RV Parky "Free only": rvparkyRows price 0 for a "Free" / "$0" dailyRate; no rate on a non-campground (rest area, truck stop, store) = `freeLikely` + priceText "No rate listed"; check() lets `freeLikely` through free-only; campgrounds with a rate or no rate are hidden. Campendium "Public land only": 337's tile reader has no reliable price (place_detail.price is a category, never proof of free) and the tile requests don't carry the page's filter, so the free-camping URL filter tried first was dropped: campendiumRows keeps `landType` (filters_appearance label, Public Land / RV Park) and Public Land = `freeLikely` with priceText "Public land (usually free; not confirmed)", price stays null. restui test pins the clock with tests/fixed-test-date.js (failed on Nov 1, the DST fall-back day, on unchanged code). Tests restplaces (RV Parky keep/drop, Campendium public land kept / RV park hidden / no price claimed). Not phone-verified.
+
+Phone checks: Settings → Rest stops → RV Parky → Free only: leg lists drop paid RV parks, keep rest areas / Walmarts ("No rate listed"); Campendium → Public land only hides its RV parks.
+
 ## 0.0.337 — campsite verification throughput and live provider validation
 
 Synced main through c622797 (Claude 327–336), preserving existing tmp files. Owner log `gasket-log-2026-11-01-02-18-37.txt` identifies itself as 335, but includes older-session failures: 1,665 road-access warning events, predominantly Recreation.gov "Host not allowed" (the native allowlist was already corrected in 335). The last search has OSM timeouts/502s at 01:00:50, 01:00:51, 01:02:30 and 01:06:44Z, with no inventory completion before export. Thus the latest multi-minute wait is demonstrably in inventory acquisition; the log cannot separately measure campsite verification (new instrumentation does). Do not claim all that time was Recreation.gov.
