@@ -49,4 +49,12 @@ Check-in, checkout and gate hours are distinct. An eight-hour overnight ending b
 ## Performance audit
 The resumed end-to-end audit used a synthetic 1,200-mile route, 3,000 stations and 120 rest sites with a 4x CPU slowdown. All the way through final timing confirmation, the browser reported no page errors. Add-stop next paint: 60 ms; Calculate: 300 ms; select departure: 462 ms; Finish: 500 ms. Finish's longest main-thread task was 501 ms (769 ms total long-task blocking during that action). These are simulated desktop measurements with mocked network replies, not phone measurements or evidence that all stalls are eliminated. Wall times include the audit's deliberate settling interval. Remaining synchronous projection/pricing/storage work can still cause visible pauses on weaker phones.
 
-Local validation: all 197 mandatory release regressions passed in 204.2 seconds with three jobs and JDK 21 available. Focused price-confirmation/retry/no-budget browser checks and legal regeneration checks also passed. Changed production scripts passed syntax checks. Publication is in progress; do not claim this has shipped until signed APK assets are verified.
+Local validation: all 197 mandatory release regressions passed in 204.2 seconds with three jobs and JDK 21 available. Focused price-confirmation/retry/no-budget browser checks and legal regeneration checks also passed. Changed production scripts passed syntax checks.
+
+## Verified publication
+Source `a510191cd9a498148bdcf1633d17197a7d0f181e`, tag `v0.0.341`. [Release workflow 41348120246](https://github.com/Emphasize5599/gasket/actions/runs/41348120246) and [signed APK workflow 41348120238](https://github.com/Emphasize5599/gasket/actions/runs/41348120238), build job 124972226842, both succeeded. Release regressions, propulsion reference, actual native reservation gate, compilation, existing-key signing, APK verification and publication passed. Both direct assets were verified uploaded through the GitHub API:
+
+- ARM64: 30,447,413 bytes; SHA256 `b9f7c5279881e11e75dcfcca13adc35f16f316c6d57a2c0e4c2129ff41642800`.
+- Universal: 56,813,440 bytes; SHA256 `b39f09a694a32ca137295f2d7dbd94f6e8119996272edb25187c82bc372da9a6`.
+
+Phone checks: retain existing data and reopen the same long trip; inspect the disabled OSM explanation and source budgets; try the four nightly solar/clock bounds; add a campsite, calculate and finalize its departure; confirm any sparse unverified-rate option directly; check automatic suggestions and missing-station discovery. No phone performance verification was performed in this session. Presets remain backlog item 58, as requested.
