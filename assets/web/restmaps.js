@@ -3,7 +3,7 @@
 (function(root){'use strict';
  var node=typeof module!=='undefined'&&module.exports;
  function hav(a,b){var r=Math.PI/180,d=(b.lat-a.lat)*r,g=(b.lng-a.lng)*r,x=Math.sin(d/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(g/2)**2;return 3958.7613*2*Math.atan2(Math.sqrt(Math.max(0,x)),Math.sqrt(Math.max(0,1-x)));}
- function url(s){try{var u=new URL(s);if(u.protocol!=='https:'||!['www.google.com','maps.google.com','maps.app.goo.gl'].includes(u.hostname))return null;if(u.hostname==='maps.app.goo.gl'&&/^\/[A-Za-z0-9]+$/.test(u.pathname))return u.href;if(u.hostname!=='maps.app.goo.gl'&&(/^\/maps\/place\//.test(u.pathname)||/^\d+$/.test(u.searchParams.get('cid')||'')||/^[A-Za-z0-9_-]{10,200}$/.test(u.searchParams.get('query_place_id')||'')))return u.href;return null;}catch(e){return null;}}
+ function url(s){if(typeof s!=='string'||!s)return null;try{var u=new URL(s);if(u.protocol!=='https:'||!['www.google.com','maps.google.com','maps.app.goo.gl'].includes(u.hostname))return null;if(u.hostname==='maps.app.goo.gl'&&/^\/[A-Za-z0-9]+$/.test(u.pathname))return u.href;if(u.hostname!=='maps.app.goo.gl'&&(/^\/maps\/place\//.test(u.pathname)||/^\d+$/.test(u.searchParams.get('cid')||'')||/^[A-Za-z0-9_-]{10,200}$/.test(u.searchParams.get('query_place_id')||'')))return u.href;return null;}catch(e){return null;}}
  function norm(s){return String(s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();}
  var DIRS=/\b(?:north|south|east|west)bound\b|\b[nsew]b\b/g;
  function bare(s){return norm(s).replace(DIRS,' ').replace(/\s+/g,' ').trim();}

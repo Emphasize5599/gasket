@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.343 - 2026-11-01
+- Consistent trip-wide rest-check totals, with separately labeled recommendation samples.
+- Faster nightly filtering and fewer repeated list redraws so access requests can keep running.
+- Bug fixes
+
 ## 0.0.342 - 2026-11-01
 - Reuse saved access routes and timezones, batch missing timezone requests, and check useful places across every leg first.
 - Fixed provider request pacing, shared weather/timezone allowances, and explicit incomplete-access counts with targeted retry.
