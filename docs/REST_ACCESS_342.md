@@ -22,4 +22,12 @@ Automated coverage includes a 2,900-result ordering fixture; persistent access r
 
 On the same long trip, retain existing data, check all-leg early results, watch verified/excluded/unavailable counts, and reopen the trip to test saved access reuse. If a provider refuses requests, the cooldown and incomplete status should remain visible. Retry unavailable checks after the cooldown. Look for `Rest access progress`/`Rest road access checked` diagnostics rather than interpreting the processed count as success.
 
-Local validation: all 199 mandatory release regressions passed in 291.8 seconds with three jobs. Focused cache/rate/budget checks also pass. The two fixture races exposed by paced reads were corrected with condition-based waits: an optional error property is read through `window`, and pending automatic rest suggestions finish before a test measures new approach forecasts. Publication verification is pending.
+Local validation: all 199 mandatory release regressions passed in 291.8 seconds with three jobs. Focused cache/rate/budget checks also pass. The two fixture races exposed by paced reads were corrected with condition-based waits: an optional error property is read through `window`, and pending automatic rest suggestions finish before a test measures new approach forecasts.
+
+## Verified publication
+Source `024056756c48500743ebd424598f6d8747811570`, tag `v0.0.342`. [Release workflow 41354941911](https://github.com/Emphasize5599/gasket/actions/runs/41354941911) and [signed APK workflow 41354941845](https://github.com/Emphasize5599/gasket/actions/runs/41354941845), job 124992887202, succeeded. GitHub's 199 regressions passed in 219.6 seconds. Propulsion reference, actual native reservation gate, compilation, existing-key signing, APK verification and direct publication passed.
+
+- ARM64: 30,455,675 bytes; SHA256 `4199a3337c1cd9ddeb6ef064c9d799edb624c63605d6c868b1f97649228cbad3`.
+- Universal: 56,817,606 bytes; SHA256 `063beaf15ad84156f7851574aa25128c70080e2888c2b847b8122663c2209e49`.
+
+Both assets were confirmed uploaded through the release API. No on-phone performance test was performed in this session.
