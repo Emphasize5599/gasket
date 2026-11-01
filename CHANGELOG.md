@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.340 - 2026-11-01
+- Road access to every rest stop is checked in the background right after the rest search, so the lists fill in without scrolling. Rows you scroll to and stops you tap go first.
+- Bug fixes
+
 ## 0.0.339 - 2026-11-01
 - Recommended rest stops are only suggested once their road access is checked, so their + opens right away. Tapping + on any stop whose access isn't checked yet now checks it and opens when done.
 - Bug fixes
