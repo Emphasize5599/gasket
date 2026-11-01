@@ -4,6 +4,11 @@ Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).
 
+## 0.0.336 - 2026-11-01
+- RV Parky is now a rest-stop source: rest areas, truck stops, RV parks, campgrounds and stores that allow overnight parking along your route show up in each leg's list (Settings → Rest stops → RV Parky).
+- Campendium is read from its map a few areas per search (each area kept 30 days). This is a first version: if Gasket can't read its places yet, the log says what the page looked like.
+- Bug fixes
+
 ## 0.0.335 - 2026-10-31
 - Rest timing checks traffic only on the stretch the rest affects (up to your next rest or fixed departure, at most about 300 miles), so a long trip no longer turns every departure red. The page also has a Least traffic button.
 - Each leg's rest stop list has a green "Recommended: lighter traffic after leaving" section that finds places and departure times with lighter traffic afterwards.

@@ -356,6 +356,8 @@ public class MainActivity extends Activity {
         // ExxonMobil's station locator, asked from its own page (asked from outside it answers Access Denied): which
         // Exxon / Mobil stations take Walmart+
         workers.put("xom", new SiteWorker("xom", "https://www.exxonmobilfuels.com/en", "https://www.exxonmobilfuels.com/"));
+        // Campendium's free-camping map (maps.campendium.com), read signed out for places near a route
+        workers.put("campendium", new SiteWorker("campendium", "https://maps.campendium.com/", "https://maps.campendium.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || sw.key.equals("traffic") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -1261,7 +1263,9 @@ public class MainActivity extends Activity {
             // Electric Era's drivers page reads this public site list (prices, ports, availability)
             "ocpi-http.app.electricera.tech",
             // Recreation.gov's public campground facts (season, closures, sites, availability) for rest-stop campgrounds
-            "www.recreation.gov"};
+            "www.recreation.gov",
+            // RV Parky's public map search (rest areas, truck stops, RV parks, overnight-parking stores)
+            "www.rvparky.com"};
 
     // car pictures: NHTSA's vehicle photos, Wikimedia Commons photos (its thumbnails), Fuel API's (signed links that redirect to its CDN)
     private static final String[] PIC_HOSTS = {"static.nhtsa.gov", "upload.wikimedia.org", "thumb.wikimedia.org", "i.fuelapi.com"};
@@ -2523,6 +2527,7 @@ public class MainActivity extends Activity {
                             || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
                             || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
                             || ("xom".equals(key) && url.equals("https://www.exxonmobilfuels.com/en"))
+                            || ("campendium".equals(key) && url.startsWith("https://maps.campendium.com/?"))
                             || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
                             || ("restmaps".equals(key) && url.startsWith("https://www.google.com/maps/search/?api=1&query="))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
@@ -2571,7 +2576,7 @@ public class MainActivity extends Activity {
                     };
                     boolean discoveryRead = false;
                     try { discoveryRead = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "restmaps".equals(key) ? 35000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
+                    main.postDelayed(fw.readDeadline, "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;
