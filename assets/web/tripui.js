@@ -28,6 +28,7 @@
       if(fn==='siteRead'&&args[0]==='brave')timeout=60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
+      if(fn==='fetchJson'&&/^https:\/\/www\.recreation\.gov\//.test(args[0]||''))timeout=33000;
       if (fn === 'aiCommand') timeout = 15000;
       if (fn === 'visualSnapshot') timeout = 5000;
       if (fn === 'fetchHere' || fn === 'fetchGoogleTraffic') timeout = 45000;

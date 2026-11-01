@@ -79,6 +79,9 @@ on:
       - tests/resttiming.test.js
       - tests/stopclock.test.js
       - tests/restui.test.js
+      - tests/recreation.test.js
+      - tests/recreation-ui.test.js
+      - tests/campendium-reader.test.js
       - tests/restplan.test.js
       - tests/trafficflow-cache.test.js
       - tests/traffic-lookahead.test.js

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.337
+- Faster campground verification with independent, RAM-based rest-stop readers adjustable up to 50.
+- Reuse campground timezones and defer road checks until places are viewed; show verification progress and estimates.
+- Stop prolonged failed OpenStreetMap retries and remember smaller areas for the next search.
+- Read Campendium's local campground tiles and pet policies instead of global recommendations.
+
 Gasket (formerly **Fuel+ Map**). Version names follow `0.0.<versionCode>` (see `VERSIONING.md`).
 The old name each build shipped under is in brackets, e.g. `0.0.46 [3.25]`.
 Dates are when each build's source was archived (America/Chicago).

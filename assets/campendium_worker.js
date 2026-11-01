@@ -1,11 +1,8 @@
 // Runs inside the app's off-screen copy of maps.campendium.com (free public camping map), signed out.
-// Campendium has no published API and its site refuses cloud machines, so what its map page loads was never seen while
-// building this (0.0.336). This reader waits for the map to load, then reports:
-//   - the page's own data requests (host + path + query parameter names, no values),
-//   - for up to 4 same-origin JSON requests, a shape summary (top-level keys, array length, the first item's keys and a
-//     600-character sample of it) read again from the page, so the next build can read them properly,
-//   - any list of places it can recognize in those answers (objects with a name and latitude / longitude),
-//   - place links in the page (a[href*="/places/"]).
+// Read the signed-out map's observed local /api/v2/tiles GeoJSON requests at its current zoom.
+// Global recommendations/sponsored markers are not local search results. Only Public Land/RV Park features qualify.
+// place_detail.pets is a policy flag; place_detail.price is a category, never a dollar tariff.
+// Keep response-shape diagnostics to identify future provider changes. No sign-in or challenge bypass.
 // args: {url, site: {lat, lng}}. Reports {places, links, requests, shapes, title} or {blocked} or {error}.
 // A check on Campendium's page (Cloudflare "Just a moment", a challenge) is never got around: the read says blocked and stops.
 async function (reqId, args) {
@@ -14,13 +11,13 @@ async function (reqId, args) {
   const refused = (t) => /just a moment|attention required|checking your browser|verify you are human|captcha|access denied/i.test(t || '');
   const checkText = () => document.title + ' ' + (document.body ? document.body.innerText.slice(0, 1500) : '');
   const started = Date.now();
-  // wait for the map's requests to settle (no new data request for 3 s), at most 25 s
+  // Wait for local map tiles to settle for 1 s; telemetry cannot prolong the read (25 s ceiling).
   let last = -1, steady = 0;
   while (Date.now() - started < 25000) {
     if (refused(checkText())) { send({ blocked: true, title: document.title.slice(0, 120) }); return; }
-    const n = performance.getEntriesByType('resource').filter((e) => /fetch|xmlhttprequest/.test(e.initiatorType)).length;
+    const n = performance.getEntriesByType('resource').filter((e) => /fetch|xmlhttprequest/.test(e.initiatorType) && /\/api\/v2\/tiles\//.test(e.name)).length;
     steady = n === last ? steady + 1 : 0; last = n;
-    if (n > 0 && steady >= 6) break;
+    if (n > 0 && steady >= 2) break;
     await pause(500);
   }
   const reqs = performance.getEntriesByType('resource').filter((e) => /fetch|xmlhttprequest/.test(e.initiatorType)).map((e) => {
@@ -40,25 +37,33 @@ async function (reqId, args) {
   const walk = (v, depth) => {
     if (!v || depth > 5) return;
     if (Array.isArray(v)) {
-      const hits = v.map((o) => { const c = coord(o && (o.properties ? Object.assign({}, o.properties, { geometry: o.geometry }) : o)); const p = o && (o.properties || o); const name = p && (p.name || p.title); return c && name ? { name: String(name).slice(0, 160), lat: c.lat, lng: c.lng, url: p.url || p.permalink || p.slug || p.path || null, price: p.price ?? p.cost ?? null, kind: p.type || p.category || null } : null; }).filter(Boolean);
-      if (hits.length) places.push(...hits.slice(0, 500));
+      const hits = v.map((o) => { const c = coord(o && (o.properties ? Object.assign({}, o.properties, { geometry: o.geometry }) : o)); const p = o && (o.properties || o); const name = p && (p.name || p.title); return c && name ? { name: String(name).slice(0, 160), lat: c.lat, lng: c.lng, url: p.path ? 'https://maps.campendium.com' + p.path : p.url || p.permalink || p.slug || null, price: null, pets: p.place_detail && typeof p.place_detail.pets === 'boolean' ? p.place_detail.pets : null, kind: p.filters_appearance && p.filters_appearance.label || null } : null; }).filter(Boolean);
+      if (hits.length) places.push(...hits.filter(p => /^(Public Land|RV Park)$/.test(p.kind || '')).slice(0, 500));
       else v.slice(0, 3).forEach((x) => walk(x, depth + 1));
       return;
     }
     if (typeof v === 'object') Object.keys(v).slice(0, 40).forEach((k) => walk(v[k], depth + 1));
   };
-  const own = reqs.filter((r) => /campendium/.test(r.host)).slice(0, 4);
-  for (const r of own) {
+  // Only local tile data: sponsored markers and campers_choice can be anywhere in the country.
+  const tiles = reqs.filter((r) => r.host === 'maps.campendium.com' && /^\/api\/v2\/tiles\/\d+\/\d+\/\d+$/.test(r.path));
+  const zoom = Math.max(-1, ...tiles.map(r => +r.path.split('/')[4]));
+  const own = Array.from(new Map(tiles.filter(r => +r.path.split('/')[4] === zoom).map(r => [r.full, r])).values()).slice(-12);
+  let cursor = 0, blocked = false;
+  await Promise.all(Array.from({length:Math.min(4,own.length)},async () => {
+   while(!blocked&&cursor<own.length&&Date.now()-started<50000){ const r=own[cursor++];
     try {
-      const res = await fetch(r.full, { credentials: 'include' });
-      const text = await res.text();
-      if (refused(text.slice(0, 600)) && !/^\s*[[{]/.test(text)) { send({ blocked: true, title: document.title.slice(0, 120) }); return; }
+      const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 8000);
+      let res, text;try { res = await fetch(r.full, { signal: abort.signal, credentials: 'include' });text = await res.text(); } finally { clearTimeout(timer); }
+      if (refused(text.slice(0, 600)) && !/^\s*[[{]/.test(text)) { if(!blocked){blocked=true;send({ blocked: true, title: document.title.slice(0, 120) });} return; }
       let j; try { j = JSON.parse(text); } catch (x) { shapes.push({ path: r.path, status: res.status, json: false, bytes: text.length }); continue; }
+      if(!res.ok)continue;
       const arr = Array.isArray(j) ? j : Object.values(j).find(Array.isArray);
       shapes.push({ path: r.path, status: res.status, json: true, bytes: text.length, keys: Array.isArray(j) ? null : Object.keys(j).slice(0, 20), length: arr ? arr.length : null, itemKeys: arr && arr[0] && typeof arr[0] === 'object' ? Object.keys(arr[0]).slice(0, 30) : null, sample: arr && arr[0] ? JSON.stringify(arr[0]).slice(0, 600) : null });
       walk(j, 0);
     } catch (e) { shapes.push({ path: r.path, error: String(e && e.message || e).slice(0, 120) }); }
-  }
+   }
+  }));
+  if(blocked)return;
   const links = Array.from(document.querySelectorAll('a[href*="/places/"]')).slice(0, 200).map((a) => ({ name: (a.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120), url: a.href })).filter((x) => x.name);
   send({ places, links, requests: reqs.map((r) => ({ host: r.host, path: r.path, params: r.params })).slice(0, 30), shapes, title: document.title.slice(0, 120), ms: Date.now() - started });
 }
