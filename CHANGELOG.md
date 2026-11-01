@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.339 - 2026-11-01
+- Recommended rest stops are only suggested once their road access is checked, so their + opens right away. Tapping + on any stop whose access isn't checked yet now checks it and opens when done.
+- Bug fixes
+
 ## 0.0.338 - 2026-11-01
 - Settings → Rest stops → RV Parky has a "Free only" switch: it keeps places listed as free plus rest areas, truck stops and stores that list no rate. Campendium has "Public land only" (usually free; Campendium's map doesn't give reliable prices).
 - Bug fixes
