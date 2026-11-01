@@ -72,6 +72,8 @@ on:
       - tests/traffic-energy-ui.test.js
       - tests/googletraffic.test.js
       - tests/googletraffic-ui.test.js
+      - tests/restaccess.test.js
+      - tests/rest-access-ui.test.js
       - tests/restplaces.test.js
       - tests/restplace.test.js
       - tests/restmaps.test.js

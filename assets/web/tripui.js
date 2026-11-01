@@ -56,7 +56,7 @@
   var LG = window.FLog || { error: function () {}, warn: function () {}, info: function () {}, debug: function () {}, trace: function () {} };
   var trafficRefreshing=false,trafficRefreshError='';
   function trafficJourneySeconds(){if(!route||!rawRoute)return 0;var key=JSON.stringify([!!S.trip.returnTrip,route.stops.filter(function(p){return !p.rest&&!p.ret;}).map(function(p){return [p.lat,p.lng,p.address||p.label||''];})]),held=S.trip.trafficJourney;if(held&&held.key===key&&held.seconds>0)return held.seconds;var seconds=TrafficPolicy.journey(T.buildRoute(rawRoute,carModel()),route.stops,!!S.trip.returnTrip);S.trip.trafficJourney={key:key,seconds:seconds};A.save();return seconds;}
-  var traffic=window.TrafficFlow&&TrafficFlow.init(A,call,{journeySeconds:trafficJourneySeconds,
+  var traffic=window.TrafficFlow&&TrafficFlow.init(A,call,{journeySeconds:trafficJourneySeconds,timezoneFetch:timezoneFetch,
     snapshot:function(){
       if(!rawRoute||!model||busy)return null;
       var depart=departAt().getTime(),ends=model.legEnds||[],manual=!!S.trip.returnTrip&&!backAuto(),wait=trafficWait(model);
@@ -69,11 +69,12 @@
   });
   var restUI=window.RestUI&&RestUI.init(A,{
     trafficEnabled:function(){return !!(traffic&&traffic.enabled());},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(){return windows&&windows.enabled()?+windows.config().delayMinutes||0:30;},
-    waitForPlan:restPrepareTiming,call:call,snapshot:function(){return model&&route&&!busy&&!queueWorking&&document.body.classList.contains('trip-on')?{model:result&&result.opts&&result.opts.model||model,route:route,depart:departAt().getTime(),kind:KIND(),maxDetourMin:RestSettings.limit(A)}:null;},
+    waitForPlan:restPrepareTiming,call:call,timezoneFetch:timezoneFetch,snapshot:function(){return model&&route&&!busy&&!queueWorking&&document.body.classList.contains('trip-on')?{model:result&&result.opts&&result.opts.model||model,route:route,depart:departAt().getTime(),kind:KIND(),maxDetourMin:RestSettings.limit(A)}:null;},
     arrival:function(d){return T.travelClock(result&&result.opts&&result.opts.model||model,d,departAt().getTime(),result&&result.plan&&(result.plan.ok||result.plan.restTimingInvalid)?result.plan.stops:[],(result&&result.opts.waits||restClockWaits(model)).filter(function(w){return w.d<d;}),result&&result.opts||{},result&&result.plan.destinationCharges||[]);},
     arrivalBounds:function(){if(!windows||!windows.enabled())return null;var a=windows.arrivals();return a[a.length-1]||null;},
+    accessStats:function(){return traffic&&traffic.accessStats?traffic.accessStats():{};},
     access:async function(site,d,t,valid){if(!S.trip.trafficForecast&&(S.googleTraffic!==false||S.hereTraffic===true&&S.hereKey)){S.trip.trafficForecast=true;A.save();}var point=model.pointAt(d),out,back;if(!traffic||!traffic.enabled()){// no traffic provider allowed: estimate the side trip (road ≈ 1.4 × straight line at 30 mph) so rest stops can still be added; adding one routes its legs for real
-      var miles=T.hav(point,site)*1.4+.2,sec=miles/30*3600;out={seconds:sec,meters:miles*1609.344,pts:null};back={seconds:sec,meters:miles*1609.344,pts:null};}else{out=await traffic.between(point,site,t,valid);back=await traffic.between(site,point,t+out.seconds*1000,valid);}if((out.seconds+back.seconds)/60>RestSettings.limit(A)){var e=Error('Road access exceeds your rest-stop extra driving limit. Adjust it in Settings → Rest stops or choose a closer site.');e.code='rest_detour_limit';throw e;}return {outSeconds:out.seconds,backSeconds:back.seconds,outPts:out.pts,backPts:back.pts,outMeters:out.meters,backMeters:back.meters};},
+      var miles=T.hav(point,site)*1.4+.2,sec=miles/30*3600;out={seconds:sec,meters:miles*1609.344,pts:null};back={seconds:sec,meters:miles*1609.344,pts:null};}else{out=await traffic.between(point,site,t,valid);if(RestAccess.returnTooLong(out.seconds,T.hav(point,site),RestSettings.limit(A))){var early=Error('Road access exceeds your rest-stop extra driving limit (outbound route and minimum return).');early.code='rest_detour_limit';throw early;}back=await traffic.between(site,point,t+out.seconds*1000,valid);}if((out.seconds+back.seconds)/60>RestSettings.limit(A)){var e=Error('Road access exceeds your rest-stop extra driving limit. Adjust it in Settings → Rest stops or choose a closer site.');e.code='rest_detour_limit';throw e;}return {outSeconds:out.seconds,backSeconds:back.seconds,outPts:out.pts,backPts:back.pts,outMeters:out.meters,backMeters:back.meters};},
     // 0.0.335: a rest's departure only changes traffic up to the next point with its own time (the next rest stop or a
     // destination's fixed departure), so only that stretch is forecast, capped at REST_HORIZON_MI (300 mi after leaving;
     // longer when a destination arrival window lies before that point). The old whole-rest-of-trip sum put every hour over
@@ -4319,9 +4320,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   var wxFlight=new Map();
   var weatherTransport=WeatherNet.create({get:function(k,ttl){var r=A.KV.get('wx',k,ttl);return r&&r.v;},put:function(k,v){A.KV.put('wx',k,v);},fetch:function(url){return call('fetchJson',url);},event:function(kind,data){
     if(kind==='rate-limited'){LG.warn('weather','Weather provider rate-limited; using saved forecasts and other sources',data);}
-    if(kind==='budget-wait'&&window.Tasks)Tasks.upsert('weather-budget',{text:'Weather forecast allowance · resumes in about '+Math.max(1,Math.ceil((data.retryAt-Date.now())/1000))+' sec',estimateMs:Math.max(1,data.retryAt-Date.now()),priority:21});
+    if(kind==='budget-wait'&&window.Tasks)Tasks.upsert('weather-budget',{text:'Weather / timezone allowance · resumes in about '+Math.max(1,Math.ceil((data.retryAt-Date.now())/1000))+' sec',estimateMs:Math.max(1,data.retryAt-Date.now()),priority:21});
     if(kind==='budget-ready'&&window.Tasks)Tasks.remove('weather-budget');
   }});
+  function timezoneFetch(url,cost){return weatherTransport.raw(url,cost||new URL(url).searchParams.get('latitude').split(',').length);}
   function wxFetch(url){return weatherTransport.get(url);}
   window.addEventListener('pagehide',function(){weatherTransport.flush();});
   window.addEventListener('cacheclear',function(){weatherTransport.clear();wxFailed.clear();wxFlight.clear();});

@@ -1,0 +1,29 @@
+/* Reusable directed access routes and fair background ordering. No permission or opening-hour facts are cached here. */
+(function(root){'use strict';
+ function identity(provider,a,b,t,avoid){return JSON.stringify([provider,a.lat,a.lng,b.lat,b.lng,Math.floor(t/60000),!!avoid.highways,!!avoid.tolls,!!avoid.ferries]);}
+ function copy(v){return Object.assign({},v,{pts:v.pts.map(function(p){return {lat:p.lat,lng:p.lng};})});}
+ function usable(v){return !!(v&&Number.isFinite(v.seconds)&&v.seconds>=0&&Number.isFinite(v.meters)&&v.meters>=0&&Array.isArray(v.pts)&&v.pts.length>=2&&v.pts.every(function(p){return p&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180;}));}
+ function create(io){var pending=new Map(),generation=0,n={cacheHits:0,shared:0,routeReads:0,failures:0,queueMs:0,providerMs:0};
+  async function read(key,ttl,valid,fetch){valid=valid||function(){return true;};if(!valid())throw Error('Rest access cancelled');var k='rest-access-v1|'+key,hit=io.get(k,ttl);if(hit&&usable(hit.value)){n.cacheHits++;return copy(hit.value);}var entry=pending.get(k);
+   if(!entry){entry={consumers:[],generation:generation};pending.set(k,entry);entry.promise=Promise.resolve().then(async function(){var queued=Date.now(),started=null,alive=function(){return entry.generation===generation&&entry.consumers.some(function(v){return v();});};if(!alive())throw Error('Rest access cancelled');var value=await fetch(alive,function(){if(started==null){started=Date.now();n.queueMs+=started-queued;n.routeReads++;}});if(!alive())throw Error('Rest access cancelled');if(started!=null)n.providerMs+=Date.now()-started;
+     if(!usable(value))throw Error('Rest access route unavailable');
+     var compact={seconds:value.seconds,meters:value.meters,pts:value.pts,low:value.low,high:value.high};io.put(k,{at:Date.now(),value:compact});return compact;
+    }).catch(function(e){if(!/cancel/i.test(e.message))n.failures++;throw e;}).finally(function(){if(pending.get(k)===entry)pending.delete(k);});
+   }else n.shared++;entry.consumers.push(valid);var value=await entry.promise;if(!valid()||entry.generation!==generation)throw Error('Rest access cancelled');return copy(value);
+  }
+  return {read:read,stats:function(){return Object.assign({pending:pending.size},n);},clear:function(){generation++;pending.clear();}};
+ }
+ // Pick low-detour candidates throughout each leg first, then round-robin the remaining places. Never drop a result.
+ function order(rows,ends,preferred){var groups=ends.map(function(){return [];});rows.forEach(function(x){var leg=x.leg==null?ends.findIndex(function(d){return x.d<=d;}):x.leg;if(groups[leg])groups[leg].push(x);});var first=[],rest=[];
+  groups.forEach(function(list,i){var from=i?ends[i-1]:0,span=ends[i]-from,buckets=Array.from({length:8},function(){return [];});list.forEach(function(x){var slot=Math.min(7,Math.max(0,Math.floor((x.d-from)/Math.max(.001,span)*8)));buckets[slot].push(x);});var chosen=[];buckets.forEach(function(b){b.sort(function(a,b){return (preferred?preferred(b)-preferred(a):0)||a.offset-b.offset||a.d-b.d;});if(b.length)chosen.push(b[0]);});var keep=new Set(chosen);first.push(chosen);rest.push(list.filter(function(x){return !keep.has(x);}).sort(function(a,b){return a.d-b.d;}));});
+  var out=[];function weave(lists){var count=Math.max(0,...lists.map(function(x){return x.length;}));for(var k=0;k<count;k++)lists.forEach(function(x){if(x[k])out.push(x[k]);});}weave(first);weave(rest);return out;
+ }
+ function returnTooLong(seconds,miles,limit){return seconds/60+Math.max(0,miles)*60/130>limit;}
+ // Fixed limits from the 342 desktop probes, below the successful burst throughput. A selected reader count remains an upper bound.
+ function limiter(options){var o=options||{},now=o.now||Date.now,later=o.setTimeout||setTimeout,cancel=o.clearTimeout||clearTimeout,rate=o.rate||6,max=o.max||8,queue=[],active=0,nextAt=0,coolUntil=0,timer=null,n={requests:0,retries:0,rateLimited:0,queueMs:0,providerMs:0};
+  function width(){return Math.min(max,Math.max(1,o.readers?o.readers():max));}
+  function pump(){if(timer){cancel(timer);timer=null;}while(active<width()&&queue.length){var job=queue[0];if(!job.valid()){queue.shift();job.reject(Error('Provider request cancelled'));continue;}var wait=Math.max(nextAt,coolUntil,job.ready||0)-now();if(wait>0){timer=later(pump,Math.min(wait,2147483647));return;}queue.shift();active++;nextAt=now()+(o.intervalMs==null?1000/rate:o.intervalMs);n.queueMs+=now()-job.queued;n.requests++;if(job.onStart)job.onStart();var started=now();(function(job,started){Promise.resolve().then(job.read).then(job.resolve,function(e){var limited=e.status===429||/\b429\b/.test(e.message||''),transient=limited||/HTTP 50[0234]|timeout|timed out|network|request failed/i.test(e.message||'');if(limited){n.rateLimited++;var r=e.retryAfter,until=/^\d+(\.\d+)?$/.test(String(r||''))?now()+Number(r)*1000:Date.parse(r||'');coolUntil=Math.max(coolUntil,Number.isFinite(until)&&until>now()?until:now()+60000);}if(transient&&job.attempt++<1&&job.valid()&&coolUntil-now()<=300000){n.retries++;job.ready=limited?coolUntil:now()+1000;job.queued=now();queue.push(job);}else job.reject(e);}).finally(function(){n.providerMs+=now()-started;active--;pump();});})(job,started);}}
+  return {run:function(read,valid,onStart){return new Promise(function(resolve,reject){queue.push({read:read,valid:valid||function(){return true;},onStart:onStart,resolve:resolve,reject:reject,queued:now(),attempt:0});pump();});},stats:function(){return Object.assign({active:active,queued:queue.length,readers:width(),requestsPerSecond:rate,cooldownMs:Math.max(0,coolUntil-now())},n);}};
+ }
+ var api={identity:identity,create:create,order:order,returnTooLong:returnTooLong,limiter:limiter};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RestAccess=api;
+})(typeof window==='undefined'?globalThis:window);

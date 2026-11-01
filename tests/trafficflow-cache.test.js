@@ -6,13 +6,15 @@ function load(store,at,speed=50,hold){
   const clock=()=>at==null?Date.now():at;class Clock extends Date{static now(){return clock();}}
   const listeners={},ctx={console,Intl,Date:Clock,Math,JSON,Promise,setTimeout,clearTimeout,setInterval,clearInterval,Map,Set,WeakMap,Error,Number,String,Array,Object,BigInt};
   ctx.window=ctx;ctx.root=ctx;ctx.document={hidden:false};ctx.addEventListener=(n,f)=>{(listeners[n]=listeners[n]||[]).push(f);};ctx.dispatch=n=>(listeners[n]||[]).forEach(f=>f({}));
-  vm.createContext(ctx);['trip.js','trafficpolicy.js','traffic.js','googletraffic.js','trafficcache.js','trafficflow.js'].forEach(f=>vm.runInContext(fs.readFileSync(path.join(web,f),'utf8'),ctx,{filename:f}));
+  vm.createContext(ctx);['trip.js','trafficpolicy.js','traffic.js','googletraffic.js','trafficcache.js','restaccess.js','trafficflow.js'].forEach(f=>vm.runInContext(fs.readFileSync(path.join(web,f),'utf8'),ctx,{filename:f}));
+  // This suite tests cache identity and reuse, not elapsed pacing; the limiter has separate fake-clock coverage.
+  const limiter=ctx.RestAccess.limiter;ctx.RestAccess.limiter=o=>limiter({...o,intervalMs:0});
   ctx.WorkerSettings={trafficCount:()=>4};
   const calls={google:0,zone:0,cacheReads:0,queries:[]};
   const KV={get:(ns,k,ttl)=>{if(k.startsWith('google-slot|'))calls.cacheReads++;const r=store.get(ns+'|'+k);return r&&(!ttl||clock()-r.t<ttl)?r:null;},put:(ns,k,v)=>store.set(ns+'|'+k,{v,t:clock()})};
   const A={KV,S:{trip:{trafficForecast:true,trafficPreset:'weekend',avoid:{}},googleTraffic:true},esc:String,showSiteCheck(){throw Error('no check expected');}};
   async function call(name,q){
-    if(name==='fetchJson'){calls.zone++;await new Promise(r=>setTimeout(r,5));return {body:JSON.stringify({timezone:'America/Chicago'})};}
+    if(name==='fetchJson'){calls.zone++;await new Promise(r=>setTimeout(r,5));const n=new URL(q).searchParams.get('latitude').split(',').length;return {body:JSON.stringify(n>1?Array.from({length:n},()=>({timezone:'America/Chicago'})):{timezone:'America/Chicago'})};}
     if(name!=='fetchGoogleTraffic')throw Error('unexpected '+name);calls.google++;calls.queries.push(q);if(hold)await hold;
     const m=[...q.matchAll(/!3m2!3d(-?[\d.]+)!4d(-?[\d.]+)/g)],a={lat:+m[0][1],lng:+m[0][2]},b={lat:+m[1][1],lng:+m[1][2]},meters=ctx.Trip.hav(a,b)*1609.344,seconds=meters/1609.344/speed*3600,clock=+(/!3j(\d+)/.exec(q)[1]),r=[],root=[];
     r[0]=[];r[0][1]='Generic road';r[0][2]=[meters];r[0][10]=[[seconds],null,3,null,[seconds*.9,seconds*1.2]];r[3]=[[[0,0],[meters,seconds]]];root[1]=[r];
@@ -106,5 +108,14 @@ function load(store,at,speed=50,hold){
    a.ctx.Date.now=()=>origin+16000;ticks.forEach(fn=>fn());const progress=logs.find(x=>x.m==='Forecast progress');assert(progress,'long request has a periodic diagnostic');assert.equal(progress.d.activeRoutes,1);assert.equal(progress.d.nativeActive,1);assert.equal(progress.d.reader.active,1);assert.equal(progress.d.waitingVerification,false);assert(progress.d.quietSeconds>=16);assert.equal(typeof progress.d.storageReads,'number');
    release();await pending;a.ctx.dispatch('pagehide');
   }
-  console.log('Traffic forecast cache: restart, mixed sections, return times, older shared roads, normalized waits, bounded future-hour payload reads and live diagnostics passed');
+  {
+   const store=new Map(),a={lat:34.01,lng:-92.01,timeZone:'America/Chicago'},b={lat:34.06,lng:-92.01};let x=load(store);
+   const p=await x.flow.between(a,b,t0,()=>true);assert(p.seconds>0);assert.equal(x.calls.zone,0,'provider-supplied timezone needs no network request');x.ctx.dispatch('pagehide');
+   x=load(store);await x.flow.between(a,b,t0,()=>true);assert.equal(x.calls.google,0,'direct access survives a restart');assert.equal(x.calls.zone,0);
+   await x.flow.between(b,a,t0,()=>true);assert.equal(x.calls.google,1,'direction is part of access identity');
+   x.settings.trip.avoid={tolls:true};await x.flow.between(a,b,t0,()=>true);assert.equal(x.calls.google,2,'avoid changes require a compatible access result');
+   x.KV.put('restplaces','timezone|34.07000|-92.01000',{zone:'America/Chicago'});const before=x.calls.zone;await x.flow.between({lat:34.07,lng:-92.01},a,t0,()=>true);assert.equal(x.calls.zone,before,'rest discovery timezone storage is shared');
+   x=load(new Map());await Promise.all(Array.from({length:20},(_,i)=>x.flow.between({lat:34.2+i*.001,lng:-92},b,t0,()=>true)));assert.equal(x.calls.zone,1,'twenty concurrent origin lookups become one timezone request');
+  }
+  console.log('Traffic forecast/access cache: restart, direction/settings identity, shared/batched timezones, bounded cache and diagnostics passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

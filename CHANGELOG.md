@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.342 - 2026-11-01
+- Reuse saved access routes and timezones, batch missing timezone requests, and check useful places across every leg first.
+- Fixed provider request pacing, shared weather/timezone allowances, and explicit incomplete-access counts with targeted retry.
+- Bug fixes
+
 ## 0.0.341 - 2026-11-01
 - Four nightly rest arrival/departure bounds, including local sunrise, sunset and civil twilight.
 - Per-source overnight budgets, more honest campground prices, and corrected booking-night availability checks.

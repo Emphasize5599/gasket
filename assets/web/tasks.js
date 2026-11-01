@@ -10,8 +10,9 @@
   function messageButton(){return '<button type="button" class="jb-expand hidden" aria-label="Show full status message" aria-controls="jobMessage" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button>';}
   // Measuring the bar forces a layout of the whole page, so it's measured only when its size or visibility changes
   // (a ResizeObserver says so), not on every progress update.
-  var insetSig='',insetValue=12,spaceDirty=true,sizeWatch=null,lastHidden=null,watched=new Set();
-  function watchSize(hub){var hidden=hub.classList.contains('hidden')+'|'+messageExpanded;if(hidden!==lastHidden){lastHidden=hidden;spaceDirty=true;}if(!root.ResizeObserver){spaceDirty=true;return;}if(!sizeWatch)sizeWatch=new ResizeObserver(function(){spaceDirty=true;layout();});[hub.querySelector('.task-top'),doc.getElementById('taskNotice'),doc.getElementById('visualMarkerRow')].forEach(function(el){if(el&&!watched.has(el)){watched.add(el);sizeWatch.observe(el);spaceDirty=true;}});}
+  var insetSig='',insetValue=12,spaceDirty=true,sizeWatch=null,lastHidden=null,watched=new Set(),layoutFrame=0;
+  function scheduleLayout(){if(!layoutFrame)layoutFrame=requestAnimationFrame(function(){layoutFrame=0;spaceDirty=true;layout();});}
+  function watchSize(hub){var hidden=hub.classList.contains('hidden')+'|'+messageExpanded;if(hidden!==lastHidden){lastHidden=hidden;spaceDirty=true;}if(!root.ResizeObserver){spaceDirty=true;return;}if(!sizeWatch)sizeWatch=new ResizeObserver(scheduleLayout);[hub.querySelector('.task-top'),doc.getElementById('taskNotice'),doc.getElementById('visualMarkerRow')].forEach(function(el){if(el&&!watched.has(el)){watched.add(el);sizeWatch.observe(el);spaceDirty=true;}});}
   function layout(){
     if(!doc)return;var hub=doc.getElementById('taskHub'),meter=doc.getElementById('apiCount'),inset=12;
     var tripFull=hub&&doc.body.classList.contains('trip-full')&&doc.body.classList.contains('trip-on')&&meter,sig=[!!tripFull,root.innerWidth,meter&&meter.className,meter&&meter.textContent].join('|');if(sig!==insetSig){insetSig=sig;insetValue=12;if(tripFull){var r=meter.getBoundingClientRect();if(r.width&&r.height)insetValue=Math.min(Math.ceil(r.right)+8,Math.max(12,root.innerWidth-180));}}inset=insetValue;
@@ -96,7 +97,7 @@
       hub = doc.createElement('div'); hub.id='taskHub'; hub.className='task-hub hidden';
       hub.innerHTML='<div class="task-top"><div id="jobBar" class="job-bar" role="status" aria-live="polite"></div><button id="taskMore" class="task-more hidden" aria-label="Show background tasks" aria-controls="taskList" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button></div><div id="taskList" class="task-list hidden" aria-label="Background tasks"></div>';
       doc.body.appendChild(hub);
-      if(root.ResizeObserver)new ResizeObserver(layout).observe(hub.querySelector('.task-top'));
+
       doc.getElementById('taskMore').onclick=function(){expanded=!expanded;draw();};
       hub.onclick=function(e){if(e.target.closest('.jb-expand')){messageExpanded=!messageExpanded;layout();return;}var b=e.target.closest('[data-cancel]');if(b)cancel(b.dataset.cancel);};
       // The other-statuses button and its list keep the expanded message open.
@@ -104,9 +105,9 @@
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});
     }
     var all=visible(), multiple=all.length>1;if(all.length&&!etaTimer)etaTimer=setInterval(queue,1000);else if(!all.length&&etaTimer){clearInterval(etaTimer);etaTimer=null;}
-    var hint=doc.getElementById('taskNotice');if(!hint){hint=doc.createElement('div');hint.id='taskNotice';hint.className='task-notice hidden';hint.setAttribute('role','status');hint.setAttribute('aria-live','polite');hint.innerHTML='<span></span><button type="button" aria-label="Dismiss screen flicker tip">✕</button>';hub.insertBefore(hint,doc.getElementById('taskList'));hint.querySelector('button').onclick=function(){dismissNotice(hint.dataset.noticeId);};if(root.ResizeObserver)new ResizeObserver(layout).observe(hint);}
+    var hint=doc.getElementById('taskNotice');if(!hint){hint=doc.createElement('div');hint.id='taskNotice';hint.className='task-notice hidden';hint.setAttribute('role','status');hint.setAttribute('aria-live','polite');hint.innerHTML='<span></span><button type="button" aria-label="Dismiss screen flicker tip">✕</button>';hub.insertBefore(hint,doc.getElementById('taskList'));hint.querySelector('button').onclick=function(){dismissNotice(hint.dataset.noticeId);};}
     hint.classList.toggle('hidden',!notice);if(notice){hint.dataset.noticeId=notice.id;var noticeText=hint.querySelector('span');if(noticeText.textContent!==notice.text)noticeText.textContent=notice.text;}
-    var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};if(root.ResizeObserver)new ResizeObserver(layout).observe(marker);}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
+    var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
     var primary=all[0], bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
     var nextId=primary?primary.id:completion?'completion':'';if(nextId!==primaryId){messageExpanded=false;primaryId=nextId;}
     // One dock stays visible on every screen, even when a tile also offers inline progress.

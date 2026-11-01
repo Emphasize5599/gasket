@@ -70,7 +70,7 @@
  }
  function create(io){var pending=new Map(),reading=new Map(),queue=[],active=0,coolUntil=0,counts={requests:0,cached:0,shared:0,failed:0,ms:0};
   function width(){return Math.min(50,Math.max(1,Math.round(+(io.readers?io.readers():4)||4)));}
-  function stats(){return Object.assign({},counts,{active:active,queued:queue.length,readers:width(),cooldownMs:Math.max(0,coolUntil-Date.now())});}
+  function stats(){return Object.assign({},counts,{active:active,queued:queue.length,readers:width(),pacing:io.pacing?io.pacing():null,cooldownMs:Math.max(0,coolUntil-Date.now())});}
   function pump(){while(active<width()&&queue.length){var job=queue.shift();if(coolUntil>Date.now()){job.reject(Error('Recreation.gov temporarily limited requests; saved facts retained. Try again later.'));continue;}active++;run(job);}}
   async function run(job){var start=Date.now(),timer;counts.requests++;try{var value=await Promise.race([Promise.resolve().then(function(){return io.fetch(job.url);}),new Promise(function(_,reject){timer=setTimeout(function(){reject(Error('Campground request timed out'));},io.timeoutMs||35000);})]);job.resolve(value);}catch(e){counts.failed++;if(e.status===429||/HTTP 429/.test(e.message||'')){var after=Number(e.retryAfter);coolUntil=Date.now()+Math.min(300,Math.max(30,after||60))*1000;}job.reject(e);}finally{clearTimeout(timer);counts.ms+=Date.now()-start;active--;pump();}}
   function fetch(url){return new Promise(function(resolve,reject){queue.push({url:url,resolve:resolve,reject:reject});pump();});}

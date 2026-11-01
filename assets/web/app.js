@@ -1178,9 +1178,9 @@
     pg.innerHTML = '<div class="sub-bar"><button type="button" class="sub-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button><h2>' + esc(title) + '</h2></div><div class="sub-body"></div>';
     pg.querySelector('.sub-body').innerHTML = html;
     document.body.appendChild(pg);
-    var header=pg.querySelector('.sub-bar'),resize=new ResizeObserver(function(){pg.style.setProperty('--sub-head-h',header.getBoundingClientRect().height+'px');});resize.observe(header);
+    var header=pg.querySelector('.sub-bar'),headFrame=0,resize=new ResizeObserver(function(){if(!headFrame)headFrame=requestAnimationFrame(function(){headFrame=0;if(!pg.isConnected)return;var h=header.getBoundingClientRect().height+'px';if(pg.style.getPropertyValue('--sub-head-h')!==h)pg.style.setProperty('--sub-head-h',h);});});resize.observe(header);
     var stop = null;
-    var close = function (force) { if(force!==true&&pg.beforeClose&&pg.beforeClose()===false)return false;resize.disconnect(); if (stop) try { stop(); } catch (e) { } var hint=pg.querySelector('.sub-body')._hint;if(hint)hint._dispose();pg.remove(); window.__subClose = null;return true; };
+    var close = function (force) { if(force!==true&&pg.beforeClose&&pg.beforeClose()===false)return false;resize.disconnect();if(headFrame)cancelAnimationFrame(headFrame); if (stop) try { stop(); } catch (e) { } var hint=pg.querySelector('.sub-body')._hint;if(hint)hint._dispose();pg.remove(); window.__subClose = null;return true; };
     window.__subClose = close;
     pg.querySelector('.sub-back').onclick = function(){close();};
     qify(pg); scrollHint(pg.querySelector('.sub-body'));

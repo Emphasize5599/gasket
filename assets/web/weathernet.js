@@ -24,7 +24,7 @@
    var rows=await Promise.all(promises),bad=rows.find(function(x){return x.error;});if(bad&&!rows.some(function(x){return !!x.value;}))return Object.assign({error:bad.error},bad.response||{});var out={body:rows.length===1?rows[0].value:rows.map(function(x){return x.value||null;})};if(bad){out.partialError=bad.error;if(bad.response){out.rateLimited=bad.response.rateLimited;out.retryAt=bad.response.retryAt;}}return out;
   }
   function seed(url,r,at){var d=describe(url);if(!d||!r||!r.body||!Number.isFinite(at)||Math.floor(at/86400000)!==Math.floor(now()/86400000)||now()-at>=45*60000)return;try{var j=typeof r.body==='string'?JSON.parse(r.body):r.body,rows=Array.isArray(j)?j:[j];if(rows.length!==d.points.length)return;rows.forEach(function(v,i){if(!v||!v.hourly||!Array.isArray(v.hourly.time)||!v.hourly.time.length)return;var k=pointKey(d,d.points[i],d.days),held=read(k);if(!held||held.at<at)remember(k,{at:at,value:v});});}catch(e){}}
-  return {get:get,seed:seed,handles:function(url){return !!describe(url);},flush:flush,clear:function(){epoch++;if(flushTimer){clearTimeout(flushTimer);flushTimer=null;}hot.clear();diskMiss.clear();usage=[];index=[];keys.clear();dirty=false;},counts:function(){return Object.assign({},counts);}};
+  return {raw:request,get:get,seed:seed,handles:function(url){return !!describe(url);},flush:flush,clear:function(){epoch++;if(flushTimer){clearTimeout(flushTimer);flushTimer=null;}hot.clear();diskMiss.clear();usage=[];index=[];keys.clear();dirty=false;},counts:function(){return Object.assign({},counts);}};
  }
  var api={create:create,describe:describe};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WeatherNet=api;
 })(typeof window==='undefined'?globalThis:window);
