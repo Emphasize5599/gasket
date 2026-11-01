@@ -1,5 +1,7 @@
 // Stand-ins for Google Routes, Places along-route, EPA, Walmart and Murphy (shapes match the real APIs)
 (function () {
+  // Route-flow fixtures choose saved prices up front. Refresh consent has its own regression tests.
+  if(window.__app) __app.S.priceRefreshMode='never';
   // Route fixtures explicitly opt into experimental tariff networks; defaults are tested separately.
   if(window.__app&&__app.S.trip) __app.S.trip.evNetworksOff={tesla:false,blink:false,flo:false,francis:false,chargepoint:false};
   // Test-owned baseline vehicles, never populated by the production app on a fresh install.

@@ -8,5 +8,6 @@
   return {soonestLowTraffic:low[0]||null,latestFeasible:rows[rows.length-1]||null,earliestArrival:earliest||null,feasible:rows,intervals:intervals,unavailable:unavailable,permissionRequired:o.permission!==true};
  }
  function samples(start,end){var out=[];if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>24*3600000)throw Error('Choose a rest window of at most 24 hours');for(var t=Math.ceil(start/300000)*300000;t<=end;t+=300000)out.push(t);return out;}
- var api={choose:choose,samples:samples};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RestTiming=api;
+ async function map(rows,width,read,valid){var out=new Array(rows.length),next=0;async function lane(){while(next<rows.length){if(valid&&!valid())throw Error('Rest timing cancelled');var i=next++;out[i]=await read(rows[i],i);}}await Promise.all(Array.from({length:Math.min(rows.length,Math.max(1,Math.min(50,+width||1)))},lane));return out;}
+ var api={choose:choose,samples:samples,map:map};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RestTiming=api;
 })(typeof window!=='undefined'?window:this);

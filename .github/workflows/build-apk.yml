@@ -76,6 +76,10 @@ on:
       - tests/restplace.test.js
       - tests/restmaps.test.js
       - tests/restmaps-reader.test.js
+      - tests/rest-prices-ui.test.js
+      - tests/projection-memo.test.js
+      - tests/campprice.test.js
+      - tests/rest-bounds.test.js
       - tests/resttiming.test.js
       - tests/stopclock.test.js
       - tests/restui.test.js

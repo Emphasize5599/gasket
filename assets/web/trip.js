@@ -325,7 +325,25 @@
     try { Object.defineProperty(model, '_grid', { value: G, enumerable: false }); } catch (e) { model._grid = G; }
     return G;
   }
+  // Geometry is immutable (as for gridOf). Forecasts often project the same
+  // station/polyline points repeatedly; speed/traffic changes do not move them.
+  // Separate cumulative-distance arrays can scale route miles differently.
+  var projections = new WeakMap();
   function project(model, p) {
+    if (!model.cum || typeof model.cum !== 'object' || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return project0(model, p);
+    var byDistance = projections.get(model.pts);
+    if (!byDistance) { byDistance = new WeakMap(); projections.set(model.pts, byDistance); }
+    var memo = byDistance.get(model.cum);
+    if (!memo) { memo = new Map(); byDistance.set(model.cum, memo); }
+    var key = p.lat + ',' + p.lng, found = memo.get(key);
+    if (!found) {
+      found = project0(model, p);
+      if (memo.size >= 4096) memo.delete(memo.keys().next().value);
+      memo.set(key, found);
+    }
+    return { along: found.along, offset: found.offset };
+  }
+  function project0(model, p) {
     var best = { along: 0, offset: Infinity };
     if (model.pts.length < 2) return model.pts.length ? { along: 0, offset: hav(model.pts[0], p) } : best;
     var kx = 69.17 * Math.cos(p.lat * Math.PI / 180), ky = 69.0, i;

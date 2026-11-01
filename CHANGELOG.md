@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.341 - 2026-11-01
+- Four nightly rest arrival/departure bounds, including local sunrise, sunset and civil twilight.
+- Per-source overnight budgets, more honest campground prices, and corrected booking-night availability checks.
+- Faster rest-time forecasts, automatic rest suggestions, and missing-station recovery after adding rests. OSM rest searches are temporarily unavailable.
+- Bug fixes
+
 ## 0.0.340 - 2026-11-01
 - Road access to every rest stop is checked in the background right after the rest search, so the lists fill in without scrolling. Rows you scroll to and stops you tap go first.
 - Bug fixes

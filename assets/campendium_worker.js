@@ -37,7 +37,7 @@ async function (reqId, args) {
   const walk = (v, depth) => {
     if (!v || depth > 5) return;
     if (Array.isArray(v)) {
-      const hits = v.map((o) => { const c = coord(o && (o.properties ? Object.assign({}, o.properties, { geometry: o.geometry }) : o)); const p = o && (o.properties || o); const name = p && (p.name || p.title); return c && name ? { name: String(name).slice(0, 160), lat: c.lat, lng: c.lng, url: p.path ? 'https://maps.campendium.com' + p.path : p.url || p.permalink || p.slug || null, price: null, pets: p.place_detail && typeof p.place_detail.pets === 'boolean' ? p.place_detail.pets : null, kind: p.filters_appearance && p.filters_appearance.label || null } : null; }).filter(Boolean);
+      const hits = v.map((o) => { const c = coord(o && (o.properties ? Object.assign({}, o.properties, { geometry: o.geometry }) : o)); const p = o && (o.properties || o); const name = p && (p.name || p.title); return c && name ? { providerId: /^\d+$/.test(String(p.id)) ? String(p.id) : null, name: String(name).slice(0, 160), lat: c.lat, lng: c.lng, url: p.path ? 'https://maps.campendium.com' + p.path : p.url || p.permalink || p.slug || null, price: null, pets: p.place_detail && typeof p.place_detail.pets === 'boolean' ? p.place_detail.pets : null, kind: p.filters_appearance && p.filters_appearance.label || null } : null; }).filter(Boolean);
       if (hits.length) places.push(...hits.filter(p => /^(Public Land|RV Park)$/.test(p.kind || '')).slice(0, 500));
       else v.slice(0, 3).forEach((x) => walk(x, depth + 1));
       return;
@@ -64,6 +64,15 @@ async function (reqId, args) {
    }
   }));
   if(blocked)return;
+  const unique=Array.from(new Map(places.filter(p=>p.providerId).map(p=>[p.providerId,p])).values());
+  let detailCursor=0,detailsRead=0;
+  await Promise.all(Array.from({length:Math.min(unique.length,Math.max(1,Math.min(50,+args.readers||4)))},async()=>{
+   while(!blocked&&detailCursor<unique.length&&Date.now()-started<50000){const p=unique[detailCursor++],abort=new AbortController(),timer=setTimeout(()=>abort.abort(),8000);try{const res=await fetch('/api/v1/pois/'+p.providerId,{credentials:'include',signal:abort.signal}),body=await res.text();if(refused(body.slice(0,600))&&!/^\s*[[{]/.test(body)){if(!blocked){blocked=true;send({blocked:true,title:document.title.slice(0,120)});}return;}if(!res.ok)continue;const j=JSON.parse(body);if(String(j.id)!==p.providerId||Math.abs(+j.latitude-p.lat)>.02||Math.abs(+j.longitude-p.lng)>.02)continue;const c=j.canonical_place||{},g=c.campground_details||{},r=j.last_nightly_rate_review||{},f=j.place_detail||{},known=v=>v===true||v==='true'?true:v===false||v==='false'?false:null;
+ p.details={description:String(j.description_text||j.description||'').slice(0,6000),seasonal:g.open_seasonally===true||c.details&&c.details.open_seasonally===true,reportedRate:typeof r.nightly_rate==='number'?r.nightly_rate:null,reportedAt:r.date_stayed||r.created_at||null,timeZone:j.timezone,closed:j.permanently_closed,checkIn:f.check_in||null,checkOut:f.check_out||null,stayText:g.max_stay||null,amenities:{pets:known(f.pets),restrooms:known(f.restrooms),showers:known(g.showers),electric:known(g.full_hookup||g.fifty_amp),water_hookup:known(g.water_hookup),sewer:known(g.sewer_hookup),dump_station:known(g.dump_station)}};detailsRead++;
+ }catch(e){}finally{clearTimeout(timer);}}
+  }));
+  if(blocked)return;
+  const byId=new Map(unique.map(p=>[p.providerId,p.details]));places.forEach(p=>{if(byId.has(p.providerId))p.details=byId.get(p.providerId);});
   const links = Array.from(document.querySelectorAll('a[href*="/places/"]')).slice(0, 200).map((a) => ({ name: (a.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120), url: a.href })).filter((x) => x.name);
-  send({ places, links, requests: reqs.map((r) => ({ host: r.host, path: r.path, params: r.params })).slice(0, 30), shapes, title: document.title.slice(0, 120), ms: Date.now() - started });
+  send({ places, links, detailsRead, detailsPending:unique.length-detailsRead, requests: reqs.map((r) => ({ host: r.host, path: r.path, params: r.params })).slice(0, 30), shapes, title: document.title.slice(0, 120), ms: Date.now() - started });
 }

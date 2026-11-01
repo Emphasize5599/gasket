@@ -1,4 +1,7 @@
 const assert=require('node:assert/strict'),R=require('../assets/web/restplaces'),T=require('../assets/web/trip');
+assert.equal(R.SOURCES.osm.disabled,true,'OSM is temporarily disabled even for previously enabled preferences');assert(!R.check({source:'osm',id:'osm:n1'},{}).ok);
+// Exercise dormant source mechanics without enabling them in the app.
+R.SOURCES.osm.disabled=false;
 const seed={features:[{attributes:{OBJECTID:1,nhs_rest_stop:'Generic Eastbound Rest Area',highway_route:'I-40',state:'AR',number_of_spots:10},geometry:{x:-92,y:34.1}}]},row=R.ntad(seed,123)[0];assert.equal(row.direction,'E');assert.equal(row.permission,'unknown');assert.equal(row.price,null);assert.equal(row.stayMinutes,null);assert.deepEqual(row.amenities,{});assert.equal(row.truckSpaces,10,'truck capacity is not passenger permission');
 const osm=R.osm({elements:[{type:'node',id:2,lat:34.1,lon:-92,tags:{highway:'rest_area',name:'Generic site',fee:'no',toilets:'yes',maxstay:'3 hours',opening_hours:'24/7',motorcar:'no'}}]},456)[0];assert.equal(osm.price,0);assert.equal(osm.stayMinutes,180);assert.equal(osm.amenities.restrooms,true);assert(!R.check(osm,{}).ok,'closed car access is not offered');
 const old={...row,closed:true,stayMinutes:60,hours:'08:00-20:00',amenities:{restrooms:false}},fresh={...row,closed:null,stayMinutes:null,hours:null,amenities:{restrooms:null}};const merged=R.merge([old],[fresh])[0];assert.equal(merged.closed,true);assert.equal(merged.stayMinutes,60);assert.equal(merged.amenities.restrooms,false,'missing refreshed fields never erase restrictions');
@@ -69,7 +72,7 @@ assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:30}}}).radius,50
  const off=await R.create(io2).corridor(m,{sources:{rvparky:{enabled:false}}},{});assert.equal(off.rvparky.asked,0,'turned off in Settings');
  // Campendium: places the page reader recognized; nothing recognized twice = stop for the session; blocked = check
  const cpRows=R.campendiumRows({places:[{name:'Generic Free Camp',lat:34.1,lng:-92.01,url:'/us/generic/places/free-camp',price:'Free'},{name:'Generic Free Camp',lat:34.1,lng:-92.01,url:'/us/generic/places/free-camp'}]},1);
- assert.equal(cpRows.length,1,'duplicates merged');assert.equal(cpRows[0].sourceUrl,'https://www.campendium.com/us/generic/places/free-camp');assert.equal(cpRows[0].price,0);assert.equal(R.sourceId(cpRows[0]),'campendium');
+ assert.equal(cpRows.length,1,'duplicates merged');assert.equal(cpRows[0].sourceUrl,'https://www.campendium.com/us/generic/places/free-camp');assert.equal(cpRows[0].price,null,'tile free text is not a verified fee schedule');assert.equal(R.sourceId(cpRows[0]),'campendium');
  R.resetCampendium();const mem3=new Map(),pages=[];const io3={...io,get:k=>mem3.get(k),put:(k,v)=>mem3.set(k,v),fetch:async u=>u.includes('arcgis')?{features:[]}:u.includes('overpass')?{elements:[]}:{locations:[]},campendium:async u=>{pages.push(u);return {places:[{name:'Generic Free Camp',lat:34.1,lng:-92.01,url:'/x'}]};}};
  const cg=await R.create(io3).corridor(m,{},{});assert(pages.length>=1&&pages.length<=6);assert(/^https:\/\/maps\.campendium\.com\/\?lat=/.test(pages[0]));assert(cg.sites.some(x=>x.site.name==='Generic Free Camp'),'Campendium place on the route list');const p0=pages.length;await R.create(io3).corridor(m,{},{});assert.equal(pages.length,p0,'remembered boxes');
  R.resetCampendium();const mem4=new Map(),pages4=[];const io4={...io3,get:k=>mem4.get(k),put:(k,v)=>mem4.set(k,v),campendium:async u=>{pages4.push(u);return {places:[],requests:[]};}};const big=T.buildRoute({distanceMeters:300*1609.344,duration:'18000s',polyline:{encodedPolyline:T.encodePolyline([{lat:34,lng:-92},{lat:34,lng:-87}])},legs:[]},{city:30,hwy:40,comb:35});
@@ -83,9 +86,9 @@ assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:30}}}).radius,50
  const row=(id,cat,name,rate)=>({id,lat:34.1,lon:-92.01-id*1e-3,cat,name,slug:'p'+id,amenities:[],closed:'',open_dates:'',dailyRate:rate||''});
  const rows=R.rvparkyRows({locations:[row(1,6,'Generic Rest Area'),row(2,7,'Generic Walmart'),row(3,1,'Generic RV Park','$35'),row(4,2,'Generic Public Park','Free'),row(5,1,'Generic RV Park 2')]},1);
  const free={sources:{rvparky:{freeOnly:true}}},keep=rows.filter(p=>R.check(p,free).ok).map(p=>p.name);
- assert.deepEqual(keep,['Generic Rest Area','Generic Walmart','Generic Public Park'],'free-only keeps listed-free and no-rate rest areas/stores, drops rated or unknown-rate campgrounds');
+ assert.deepEqual(keep,['Generic Public Park'],'free-only requires explicit rate evidence, never a missing rate');
  assert.equal(rows.filter(p=>R.check(p,{}).ok).length,5,'off: everything');assert.equal(rows[0].priceText,'No rate listed');assert.equal(rows[3].price,0);
  // Campendium: its map data has no reliable price, so free-only = its Public Land places (never a price claim)
  const cp=R.campendiumRows({places:[{name:'Generic Public Camp',lat:34.1,lng:-92.01,url:'/a',kind:'Public Land'},{name:'Generic RV Resort',lat:34.1,lng:-92.02,url:'/b',kind:'RV Park'}]},1),cpf={sources:{campendium:{freeOnly:true}}};
- assert.deepEqual(cp.filter(p=>R.check(p,cpf).ok).map(p=>p.name),['Generic Public Camp'],'public land kept, RV parks hidden');assert.equal(cp[0].price,null,'no price claimed');assert.match(cp[0].priceText,/not confirmed/);assert.equal(cp.filter(p=>R.check(p,{}).ok).length,2);
+ assert.deepEqual(cp.filter(p=>R.check(p,cpf).ok).map(p=>p.name),[],'public land is not proof of a free stay');assert.equal(cp[0].price,null,'no price claimed');assert.match(cp[0].priceText,/unverified/);assert.equal(cp.filter(p=>R.check(p,{}).ok).length,2);
  console.log('Free-only RV Parky and public-land-only Campendium passed');})().catch(e=>{console.error(e);process.exitCode=1;});

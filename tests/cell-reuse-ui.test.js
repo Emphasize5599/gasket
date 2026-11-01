@@ -28,7 +28,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await plan();const first=await p.evaluate(()=>__reads.filter(r=>r==='discover').length);assert(first>3,'first trip reads its cells: '+first);
  const cells=await p.evaluate(()=>KeylessGas.discoveryAreas([__trip.state().model],Trip,__app.P).length);assert.equal(first,cells,'one read per cell');
  // brand-new trip, same route, the other car on premium: the saved trip and temporary caches are gone, only the store remains
- await fresh();await p.evaluate(()=>{const c=__app.S.cars[1];c.grade='premium';__app.S.carId=c.id;});
+ await fresh();await p.evaluate(()=>{__app.S.priceRefreshMode='ask';const c=__app.S.cars[1];c.grade='premium';__app.S.carId=c.id;});
  await plan(null,'saved');assert.equal(await p.evaluate(()=>__reads.filter(r=>r==='discover').length),0,'new trip, other car, other grade: no discovery read');
  assert.deepEqual(__asked,['Refresh saved prices?'],'the new trip asked once before reading prices again');assert.equal(await p.evaluate(()=>__reads.filter(r=>r==='refresh').length),0,'Use saved prices: no price reads');
  assert(await p.evaluate(()=>__trip.state().result.notes.some(n=>/Price update skipped/.test(n))),'the plan says it used saved prices');

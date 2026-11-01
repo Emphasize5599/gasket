@@ -70,6 +70,12 @@ const THROTTLE=+process.env.THROTTLE||4,ONLY=(process.argv.find(a=>a.startsWith(
  if(await p.locator('#restAddGo').count()){await p.check('#restPermission').catch(()=>{});await act('Confirm second add',()=>p.click('#restAddGo'));}
  while(await p.locator('.sub-page .sub-back').count())await p.locator('.sub-page .sub-back').last().click();
  if(await p.locator('#tNext').count())await act('Next (Calculate rest timing)',()=>p.click('#tNext'));
+ if(process.env.FINAL_TIMING){
+  const count=await p.evaluate(()=>__trip.state().route.stops.filter(s=>s.rest).length);
+  for(let i=0;i<count;i++){await p.waitForSelector('#restTimeSlider',{timeout:120000});await act('Choose rest departure '+(i+1),()=>p.click('#restTimingGo'));}
+  await p.waitForSelector('#restReviewDone');await act('Finish rest timing review',()=>p.click('#restReviewDone'));
+  const problem=await p.locator('#restReviewError').allTextContents();if(problem.some(Boolean))console.log('REST REVIEW',JSON.stringify(problem));
+ }
  if(process.env.PLAN_SIZES)console.log('PLAN SIZES',JSON.stringify(await p.evaluate(()=>(window.__planSizes||[]).slice(-3))));
  if(process.env.PROFILE_ALL){const {profile}=await cdp.send('Profiler.stop');summarize('whole run',profile);}
  console.log('TOTAL blocked',rows.reduce((n,r)=>n+r.blockedMs,0),'ms over',rows.length,'actions');

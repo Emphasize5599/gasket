@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.234**, 2026-10-22, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 58 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 59 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 Latest research additions: **2026-10-27**, after 0.0.282; older entries were not re-audited in this pass.
 
@@ -46,6 +46,8 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 14. [ ] **Cash-price offers and comparisons.** The current one-price-per-grade model does not preserve payment eligibility; Google fuel-price responses have no cash/card field. Add separate explicitly labeled offers, cash/card preferences, correct reward/cashback eligibility and history/cache support, then verify real source coverage. Never infer that an unlabeled price is cash. Findings and a proposed design are in [DATA_OPTIONS.md](docs/DATA_OPTIONS.md).
 
 ### Onboarding and visual explanations
+
+58. [ ] **Road-trip style presets during onboarding.** Let users choose and customize presets such as Speed, Eco, Frugal and Relaxing. Explain the practical tradeoffs visually and apply coherent trip defaults (speed preferences, cost/time priority, detours, reserve and rest style), while keeping every value editable. Allow saving personal presets and switching styles later.
 
 46. [ ] **Simpler UI flow for everyday users.** Assume users will read very little: make the next action obvious, group related inputs where users expect them, and use concise labels, progressive disclosure and visual feedback instead of explanation walls. Validate common setup and trip tasks with people unfamiliar with Gasket.
 

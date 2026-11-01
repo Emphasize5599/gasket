@@ -18,8 +18,9 @@ for(let y=0;y<qm.getHeight();y++){let row='';for(let x=0;x<qm.getWidth();x++)row
    const paint=()=>{g.fillStyle='#fff';g.fillRect(0,0,720,1280);g.fillStyle='#000';let at=(upright?1280:720)/2-len/2;bars.forEach(x=>{if(x.bar){if(upright)g.fillRect(260,at,200,x.w);else g.fillRect(at,540,x.w,200);}at+=x.w;});};
    paint();const s=c.captureStream(15);window.__paint=setInterval(paint,60);window.__stream=s;return s;};
   window.__camMode='flat';navigator.mediaDevices.getUserMedia=async()=>{if(__camMode==='denied')throw new DOMException('denied','NotAllowedError');if(__camMode==='qr'||__camMode==='qrinv')return __qrCamera(__camMode==='qrinv');return __camera('I'+'1M8GDM9AXKP042788',__camMode==='upright');};
-  // a tiny QR in the middle (about 1.5 px a dot), on a camera that says it can zoom and focus on a point
-  window.__qrCamera=inv=>{const c=document.createElement('canvas');c.width=720;c.height=1280;const g=c.getContext('2d'),q=__QR,d=1.5,n=q.length*d;
+  // A tiny QR in the middle, on a camera that says it can zoom and focus on a point.
+  // Whole-pixel modules keep canvas/video antialiasing from corrupting the synthetic barcode.
+  window.__qrCamera=inv=>{const c=document.createElement('canvas');c.width=720;c.height=1280;const g=c.getContext('2d'),q=__QR,d=2,n=q.length*d;
    const paint=()=>{g.fillStyle=inv?'#000':'#fff';g.fillRect(0,0,720,1280);g.fillStyle=inv?'#fff':'#000';q.forEach((row,y)=>[...row].forEach((b,x)=>{if(b==='1')g.fillRect(360-n/2+x*d,640-n/2+y*d,d,d);}));};
    paint();const s=c.captureStream(15);window.__paint=setInterval(paint,60);window.__stream=s;window.__applied=[];const t=s.getVideoTracks()[0];
    t.getCapabilities=()=>({zoom:{min:1,max:8,step:0.1},focusMode:['continuous','single-shot'],exposureMode:['continuous','single-shot']});t.applyConstraints=c=>{__applied.push(c);return Promise.resolve();};return s;};

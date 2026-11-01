@@ -454,3 +454,6 @@ Commons images are accepted only with nearby geolocation, relevant subject and s
 ### Rest-stop place links
 
 The per-leg rest directory checks visible rest-site names and coordinates against the Google Maps website using a separate, single text-only reader. Matching requires a nearby, relevant, direction-compatible place; an uncompleted or blocked lookup is not treated as proof of absence. Matched pages open externally. Inventory and Maps sources appear beneath the place name. No Google reviews or photographs are copied into this directory. Ordinary matches are stored for30days, unmatched completed searches for1day; user-entered links/details remain in app storage and backups. Google Maps site verification stays in its own WebView and pauses queued rest lookups. Editing fallback facts uses nearby OpenStreetMap information for the user to review, without fetching unused photo galleries.
+
+## SunCalc 1.9.0
+Offline sunrise, sunset and civil-twilight calculations by Vladimir Agafonkin, BSD-2-Clause. Source: https://github.com/mourner/suncalc/tree/v1.9.0 . Full notice: `assets/web/vendor/suncalc-LICENSE.txt`.
