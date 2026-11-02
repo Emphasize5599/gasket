@@ -302,6 +302,8 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
                 String u = req.getUrl().toString();
                 if (u.startsWith("https://tile.openstreetmap.org/")) return fetchTile(u);
+                // 0.0.355: the rest list's pan-and-zoom satellite view (same tiles as its preview)
+                if (SAT_TILE.matcher(u).matches() && "GET".equals(req.getMethod())) return fetchTile(u);
                 for (String p : AI_FILES) if (u.startsWith(p) && "GET".equals(req.getMethod())) return aiFile(u);
                 return null;
             }
@@ -505,6 +507,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    private static final java.util.regex.Pattern SAT_TILE = java.util.regex.Pattern.compile("^https://mt1\\.google\\.com/vt/lyrs=s&x=\\d{1,7}&y=\\d{1,7}&z=\\d{1,2}$");
     private WebResourceResponse fetchTile(String u) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
@@ -517,7 +520,9 @@ public class MainActivity extends Activity {
             Map<String, String> h = new HashMap<String, String>();
             h.put("Access-Control-Allow-Origin", "*");
             h.put("Cache-Control", "max-age=604800");
-            return new WebResourceResponse("image/png", null, 200, "OK", h, c.getInputStream());
+            String type = c.getContentType();
+            if (type == null || !type.startsWith("image/")) type = "image/png"; else if (type.indexOf(';') > 0) type = type.substring(0, type.indexOf(';')).trim();
+            return new WebResourceResponse(type, null, 200, "OK", h, c.getInputStream());
         } catch (Exception e) {
             return null;
         }

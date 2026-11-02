@@ -10,6 +10,8 @@ The helper uses a matching cached traffic profile where already available, other
 
 ## Candidate screening
 
+> Superseded in 0.0.355 (docs/REST_LIST_355.md): no screening hold or countdown; hiding is a per-row button.
+
 Inventory and needed facility/price facts still establish which results meet source filters. Before broad road-access checking and automatic departure recommendations start, the rest tile and opened leg list prompt **Screen rest candidates**. Full candidate names/images/actions are available during this step without waiting for every road-access check. An explicit Add may perform the one site's required access checks.
 
 - **Hide candidate** temporarily removes a source ID across this trip's candidate lists, counts, broad access jobs and traffic samples. It does not remove an already added rest from the route, delete source records, change provider facts or clear route caches.

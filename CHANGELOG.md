@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.355 - 2026-11-02
+- With overnight planning, leaving Compare opens leg 1's rest stops and waits there until their details are ready; the screening countdown is gone.
+- Provider cooldowns show in the status bar with a pause icon instead of a tile in the rest list.
+- Each rest stop has Hide, 😀/😐/🙁 experience, Not pleasing and Edit rates / mark amenities buttons; you can hide places you marked not pleasing.
+- Every rest source can filter by any amenity; places with unknown values still show until you mark them.
+- The satellite preview is wider, and tapping it lets you pan and zoom in place.
+- Bug fixes
+
 ## 0.0.354 - 2026-11-02
 - Show civil-dusk estimates below departure-window limits using existing route and traffic timing.
 - Screen rest candidates before broad forecasts, with temporary hide/restore controls.
