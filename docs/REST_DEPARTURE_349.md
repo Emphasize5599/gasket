@@ -24,6 +24,18 @@ New pure tests reproduce a long outbound drive, a five-minute stop allowance and
 
 Phone: keep saved data, reopen the trip and retry the rest. When it fits, check the earlier-start explanation and confirm the original second-leg departure remains unchanged. If there is insufficient room, the add dialog should explain why and keep the original trip. Try a rest on each original leg, review timing, and remove the last rest to check restoration. Phone/live-app verification remains outstanding.
 
+For an already broken draft with an invalid fixed rest departure from a previous version, remove and re-add only the affected rest to run the new insertion preflight. Keep the saved trip, windows, places and station data.
+
 The final local full run completed 210 checks in 297.0 seconds: 209 passed and an unrelated vehicle-identity UI test timed out; that test passed in isolation in 6.8 seconds. Targeted scheduling/tolerance checks passed after all refinements. The first CI attempt exposed a test that checked a mode switch before its deferred render; the test now waits for the rendered controls, without changing the application or weakening assertions.
 
-CI build 41391200539 (commit 1ce0228) passed all 210 checks in 248.8 seconds, native reservation checks, Android build and both signature checks, but its upload was correctly blocked by the exact tag/build commit guard: v0.0.349 points to c61cb08 before the test-only correction. No APK assets were published or overwritten. Version 0.0.350 had a matching tag but its CI run exposed another immediate state-versus-render assertion in the broad restui fixture (the tolerance label was still showing the previous value). Both tolerance tests now wait for their rendered state. Version 0.0.351 includes these test synchronizations in the matching tag; application behavior remains unchanged after c61cb08. Publication verification pending.
+CI build 41391200539 (commit 1ce0228) passed all 210 checks in 248.8 seconds, native reservation checks, Android build and both signature checks, but its upload was correctly blocked by the exact tag/build commit guard: v0.0.349 points to c61cb08 before the test-only correction. No APK assets were published or overwritten. Version 0.0.350 had a matching tag but its CI run exposed another immediate state-versus-render assertion in the broad restui fixture (the tolerance label was still showing the previous value). Both tolerance tests now wait for their rendered state. Version 0.0.351 includes these test synchronizations in the matching tag; application behavior remains unchanged after c61cb08. Verified publication details follow.
+
+## Verified 0.0.351 publication
+
+Published [v0.0.351](https://github.com/Emphasize5599/gasket/releases/tag/v0.0.351) from `48d9045a30fc6d497c7d79319cd7d00fb75f3fea`, exactly matching the tag and build commit. [Source release run 41392705777](https://github.com/Emphasize5599/gasket/actions/runs/41392705777) and [signed build run 41392705753](https://github.com/Emphasize5599/gasket/actions/runs/41392705753) succeeded. Build job 125107367184 repeated all **210 tests in 269.7 seconds**, passed native reservation checks and built both APKs with the existing certificate SHA-256 `94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e`. APK checks covered ABI sets, version/package identity, signature, alignment, matching application code and runtime notices.
+
+Both assets were verified uploaded:
+- ARM64: 30,472,281 bytes; SHA-256 `6ed49b4c6e337d213ed226ee46c2242fc6da5d4a99d744ed2577f3acbd5d6832`.
+- Universal: 56,834,212 bytes; SHA-256 `4b993840799f93e41b1338987348e58d60376e6cd32caff3f2be19b9774bd1ef`.
+
+Downloaded the published ARM64 APK, independently verified its digest, and compared its RestPlan, TripUI and RestUI assets byte-for-byte against the released Git blobs. All matched. Phone/live-app verification remains outstanding.
