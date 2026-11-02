@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.346 - 2026-11-02
+- Campsites whose price can't be checked are hidden whenever a price limit is on, even when few priced places fit.
+- Each rest source's price limit shows a chart of the nightly rates Gasket has seen, so you can tell how many places a limit leaves.
+- Bug fixes
+
 ## 0.0.345 - 2026-11-01
 - Save personal rate tables by site type, dates, weekdays and calendar-day stay length; mark places as not free.
 - Show reported RV Parky nightly ranges and recognize rate text in older saved records.

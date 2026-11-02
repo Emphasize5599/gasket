@@ -28,6 +28,8 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 
 47. [ ] **Redesign hazard warning menus with animations.** Use concise, focused animations to make each hazard and its vehicle-specific consequences understandable without a text wall. Preserve accessible text, reduced-motion support and explicit acknowledgment where required.
 
+59. [ ] **Campsite / rest-stop map mode.** Add a map mode (beside gas / EV / H₂) that shows stored and searched rest places (campgrounds, rest areas, services) instead of fuel stations, with their source, checkable price and amenities, and lets you plan a route between them (pick places as start, stops or destination). Reuse the rest inventories and the same price/amenity filters; no automatic searches on open.
+
 ### Vehicle images
 
 11. [ ] **Scenic backgrounds.** Let users place their recreated car image into licensed environments inspired by the idea of Gran Turismo Scapes, without using its assets. Design background selection, placement/compositing and required attribution.

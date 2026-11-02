@@ -2275,3 +2275,13 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-reco-item .rest-add { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; border-radius:50%; background:var(--save,#238657); color:#fff; }
 .rest-reco-item .rest-add svg { width:24px; height:24px; fill:currentColor; }
 .rest-reco-note { color: var(--save); font-weight: 650; display: block; }
+/* 0.0.346 rest price distribution (Settings → Rest stops) */
+.rpd { margin:4px 0 2px; }
+.rpd-chart { width:100%; height:auto; display:block; }
+.rpd-chart text { fill:var(--ink-2); font-size:11px; }
+.rpd-chart .rpd-empty { font-size:13px; }
+.rpd-base { stroke:var(--ink-2); opacity:.5; }
+.rpd-bar { fill:var(--ink-2); opacity:.35; }
+.rpd-bar.fit { fill:var(--accent); opacity:1; }
+.rpd-limit { stroke:var(--warn); stroke-width:2; stroke-dasharray:4 3; }
+.rpd-title { margin:8px 0 2px; font-weight:600; font-size:14px; }
