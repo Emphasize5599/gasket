@@ -338,7 +338,7 @@
     var key = p.lat + ',' + p.lng, found = memo.get(key);
     if (!found) {
       found = project0(model, p);
-      if (memo.size >= 4096) memo.delete(memo.keys().next().value);
+      if (memo.size >= 16384) memo.delete(memo.keys().next().value);
       memo.set(key, found);
     }
     return { along: found.along, offset: found.offset };

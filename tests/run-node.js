@@ -55,7 +55,7 @@ release.push('chargepoint-loading');
 release.push('startup-ui');
 release.push('kv-store','traffic','traffic-ui','timewindows','windowplanning-ui','traffic-energy','traffic-energy-ui','hourly-weather','hourly-approval-ui','window-recommendations','window-performance','window-form-ui','planning-policy','planning-policy-ui');
 release.push('datetimepicker','endpoint-approval');
-release.push('restimagery','restaccess','rest-access-ui','rest-render-work','rest-cache-policy','rest-links-prices-ui','userrestprice','userrestprice-ui');
+release.push('rest-draft-work','offline-timezones','restimagery','restaccess','rest-access-ui','rest-render-work','rest-cache-policy','rest-links-prices-ui','userrestprice','userrestprice-ui');
 release.push('campprice','rest-bounds','rest-prices-ui','projection-memo');
 release.push('rest-price-dist','rest-traffic-leg','rest-tolerance-ui','rest-departure-anchors','rest-departure-ui','rest-reco-restart');
 release.push('googletraffic','googletraffic-ui','restplaces','restplace','restmaps','restmaps-reader','resttiming','stopclock','restui','restplan','window-review-restart','recreation','recreation-ui','trafficflow-cache','traffic-lookahead','rest-leg-choices','campendium-reader','trafficcache','trafficpolicy','traffic-presets-ui','overnight','overnight-ui','windowclock','ridb','ridb-ui');

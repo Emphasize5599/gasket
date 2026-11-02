@@ -22,7 +22,7 @@
  }
  function key(p){return 'timezone|'+(+p.lat).toFixed(5)+'|'+(+p.lng).toFixed(5);}
  function create(io){var zones=new Map(),pending=new Map();
-  function get(p){if(zoneOK(p.timeZone))return p.timeZone;var k=key(p),v=zones.get(k)||io.get(k);if(v&&zoneOK(v.zone||v)){zones.set(k,v.zone||v);return v.zone||v;}return null;}
+  function get(p){if(zoneOK(p.timeZone))return p.timeZone;var k=key(p),v=zones.get(k)||io.get(k);if(v&&zoneOK(v.zone||v)){zones.set(k,v.zone||v);return v.zone||v;}var local=root.PointZone&&root.PointZone.resolve(p);if(zoneOK(local)){zones.set(k,local);return local;}return null;}
   async function load(points,valid){valid=valid||function(){return true;};var missing=[],seen=new Set();points.forEach(function(p){var k=key(p);if(!get(p)&&!seen.has(k)){seen.add(k);missing.push(p);}});var jobs=[];
    for(var start=0;start<missing.length;start+=20){var group=missing.slice(start,start+20),id=group.map(key).join(';');if(!pending.has(id)){var task=(async function(ps){if(!valid())return;try{var q=new URLSearchParams({latitude:ps.map(function(p){return (+p.lat).toFixed(5);}).join(','),longitude:ps.map(function(p){return (+p.lng).toFixed(5);}).join(','),timezone:'auto',forecast_days:1}),j=await io.fetch('https://api.open-meteo.com/v1/forecast?'+q),rows=Array.isArray(j)?j:[j];if(rows.length!==ps.length)throw Error('Timezone response incomplete');rows.forEach(function(r,i){if(zoneOK(r.timezone)){var k=key(ps[i]);zones.set(k,r.timezone);io.put(k,{zone:r.timezone});}});}catch(e){if(io.error)io.error(e);} })(group).finally((function(k){return function(){pending.delete(k);};})(id));pending.set(id,task);}jobs.push(pending.get(id));if(jobs.length===2){await Promise.all(jobs);jobs=[];if(!valid())return;}}
    await Promise.all(jobs);

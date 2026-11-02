@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.353 - 2026-11-02
+- Resolve local timezones offline so rest forecasts do not depend on the weather-service allowance.
+- Plan fuel stops after rest timing is finished, reusing saved stations and discovering missing coverage when needed.
+- Give rest timing forecasts priority over background access checks and keep draft editing responsive.
+- Bug fixes
+
 ## 0.0.352 - 2026-11-02
 - Preview rest-stop surroundings with satellite imagery and a location marker.
 - Separate Street View and satellite actions, shown only after availability checks; right-align the action buttons.

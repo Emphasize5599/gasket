@@ -77,6 +77,8 @@ on:
       - tests/rest-render-work.test.js
       - tests/restplaces.test.js
       - tests/restplace.test.js
+      - tests/rest-draft-work.test.js
+      - tests/offline-timezones.test.js
       - tests/restimagery.test.js
       - tests/restmaps.test.js
       - tests/restmaps-reader.test.js

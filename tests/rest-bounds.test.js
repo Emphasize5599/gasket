@@ -34,12 +34,12 @@ ctx.S.trip.legDepartures=[0,null,120000];assert(ctx.restWindowIssues([{}, {arriv
 
 (async()=>{
  const fragment=source.slice(source.indexOf('  async function restCommit('),source.indexOf('  function localStamp(')),calls=[];
- const c={route:{},restRows:()=>[],restPlanPromise:null,restSeedRows:()=>[],result:null,LG:{info:()=>{}},restPlanIssues:()=>[],restReplan:async(_seed,_previous,_quick,recover)=>{calls.push(!!recover);return {plan:{ok:false},cands:[],opts:{}};}};
+ const c={route:{},restRows:()=>[],afterPaint:async()=>{},planningPreflight:async()=>{},restSession:null,restPlanPromise:null,restSeedRows:()=>[],result:null,LG:{info:()=>{}},restPlanIssues:()=>[],restReplan:async(_seed,_previous,_quick,recover)=>{calls.push(!!recover);return {plan:{ok:false},cands:[],opts:{}};}};
  vm.createContext(c);vm.runInContext(fragment,c);
  await assert.rejects(c.restCommit(),/after checking remembered stations and missing coverage/);assert.deepEqual(calls,[false,true],'untimed fuel failure attempts station discovery once');
  calls.length=0;c.restReplan=async()=>{calls.push(false);return {plan:{ok:false,restTimingInvalid:true},opts:{}};};
  await assert.rejects(c.restCommit());assert.deepEqual(calls,[false],'timing violations do not trigger pointless station discovery');
- const rest=fs.readFileSync('assets/web/restui.js','utf8'),legs=[],r={C:{forecast:()=>{},trafficEnabled:()=>true,snapshot:()=>({})},state:{token:7},endsOf:()=>[10,20,30],legSites:()=>[{}],reco:new Map(),recoKey:(_s,i)=>i,startReco:async i=>legs.push(i)};
+ const rest=fs.readFileSync('assets/web/restui.js','utf8'),legs=[],r={focusedTraffic:0,C:{forecast:()=>{},trafficEnabled:()=>true,snapshot:()=>({})},state:{token:7},endsOf:()=>[10,20,30],legSites:()=>[{}],reco:new Map(),recoKey:(_s,i)=>i,startReco:async i=>legs.push(i)};
  vm.createContext(r);vm.runInContext(rest.slice(rest.indexOf('  async function autoReco('),rest.indexOf('  function recoNote(')),r);
  await r.autoReco({model:{}},7);assert.deepEqual(legs,[0,1,2],'suggestions start for every original leg');
  legs.length=0;await r.autoReco({model:{}},6);assert.equal(legs.length,0,'superseded searches stop automatic recommendations');
