@@ -24,6 +24,7 @@ async function (reqId, args) {
     try { const u = new URL(e.name); return { host: u.host, path: u.pathname.slice(0, 160), params: Array.from(u.searchParams.keys()).slice(0, 20), full: e.name }; } catch (x) { return null; }
   }).filter(Boolean).filter((r) => !/google|facebook|doubleclick|analytics|mapbox\.com\/(fonts|styles)|sentry|segment|hotjar|clarity/.test(r.host + r.path));
   const num = (v) => (typeof v === 'number' ? v : typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) ? +v : NaN);
+  const reportedRange = (v) => {const m=/^\$?\s*(\d+(?:\.\d{1,2})?)(?:\s*[-–—]\s*\$?\s*(\d+(?:\.\d{1,2})?))?$/.exec(String(v==null?'':v).trim());if(!m)return null;const min=+m[1],max=m[2]?+m[2]:min;return max>=min?{min,max}:null;};
   const coord = (o) => {
     if (!o || typeof o !== 'object') return null;
     const lat = num(o.lat ?? o.latitude ?? (o.location && (o.location.lat ?? o.location.latitude)) ?? (o.coordinates && o.coordinates.lat));
@@ -68,7 +69,8 @@ async function (reqId, args) {
   let detailCursor=0,detailsRead=0;
   await Promise.all(Array.from({length:Math.min(unique.length,Math.max(1,Math.min(50,+args.readers||4)))},async()=>{
    while(!blocked&&detailCursor<unique.length&&Date.now()-started<50000){const p=unique[detailCursor++],abort=new AbortController(),timer=setTimeout(()=>abort.abort(),8000);try{const res=await fetch('/api/v1/pois/'+p.providerId,{credentials:'include',signal:abort.signal}),body=await res.text();if(refused(body.slice(0,600))&&!/^\s*[[{]/.test(body)){if(!blocked){blocked=true;send({blocked:true,title:document.title.slice(0,120)});}return;}if(!res.ok)continue;const j=JSON.parse(body);if(String(j.id)!==p.providerId||Math.abs(+j.latitude-p.lat)>.02||Math.abs(+j.longitude-p.lng)>.02)continue;const c=j.canonical_place||{},g=c.campground_details||{},r=j.last_nightly_rate_review||{},f=j.place_detail||{},known=v=>v===true||v==='true'?true:v===false||v==='false'?false:null;
- p.details={description:String(j.description_text||j.description||'').slice(0,6000),seasonal:g.open_seasonally===true||c.details&&c.details.open_seasonally===true,reportedRate:typeof r.nightly_rate==='number'?r.nightly_rate:null,reportedAt:r.date_stayed||r.created_at||null,timeZone:j.timezone,closed:j.permanently_closed,checkIn:f.check_in||null,checkOut:f.check_out||null,stayText:g.max_stay||null,amenities:{pets:known(f.pets),restrooms:known(f.restrooms),showers:known(g.showers),electric:known(g.full_hookup||g.fifty_amp),water_hookup:known(g.water_hookup),sewer:known(g.sewer_hookup),dump_station:known(g.dump_station)}};detailsRead++;
+ const rate=reportedRange(r.nightly_rate)||reportedRange(g.last_nightly_rate);
+ p.details={description:String(j.description_text||j.description||'').slice(0,6000),seasonal:g.open_seasonally===true||c.details&&c.details.open_seasonally===true,reportedRange:rate,reportedRate:rate&&rate.min===rate.max?rate.min:null,reportedAt:r.date_stayed||r.created_at||null,timeZone:j.timezone,closed:j.permanently_closed,checkIn:f.check_in||null,checkOut:f.check_out||null,stayText:g.max_stay||null,amenities:{pets:known(f.pets),restrooms:known(f.restrooms),showers:known(g.showers),electric:known(g.full_hookup||g.fifty_amp),water_hookup:known(g.water_hookup),sewer:known(g.sewer_hookup),dump_station:known(g.dump_station)}};detailsRead++;
  }catch(e){}finally{clearTimeout(timer);}}
   }));
   if(blocked)return;

@@ -88,6 +88,9 @@ on:
       - tests/restui.test.js
       - tests/recreation.test.js
       - tests/rest-cache-policy.test.js
+      - tests/rest-links-prices-ui.test.js
+      - tests/userrestprice.test.js
+      - tests/userrestprice-ui.test.js
       - tests/recreation-ui.test.js
       - tests/campendium-reader.test.js
       - tests/restplan.test.js

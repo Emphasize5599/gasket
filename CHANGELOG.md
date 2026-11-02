@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.345 - 2026-11-01
+- Save personal rate tables by site type, dates, weekdays and calendar-day stay length; mark places as not free.
+- Show reported RV Parky nightly ranges and recognize rate text in older saved records.
+- Separate Google Maps place, Street View and source-record buttons; missing destinations are omitted.
+- Read Campendium's current nightly-rate field and exclude reported prices above the budget from sparse-result fallbacks.
+- Bug fixes
+
 ## 0.0.344 - 2026-11-01
 - Retain durable campsite details and amenities, with 48-hour rate refreshes for matching places.
 - Skip campground refreshes ruled out by saved equipment and amenity filters; retain saved places without treating expired prices as verified.

@@ -2161,18 +2161,30 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-leg-entry > span:first-child { min-width:0; }
 .rest-leg-entry b, .rest-leg-entry small { display:block; white-space:normal; }
 .rest-leg-entry small { font-size:12.5px; color:var(--ink-2); margin-top:4px; }
-.rest-name { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; }
+.rest-name { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
 .rest-name .rest-text { min-width:0; }
 .rest-name > .rest-kind, .rest-name > small { grid-column:1 / -1; }
 .rest-info-entrance { border:0; background:none; color:inherit; font:inherit; padding:0; margin:0; text-align:left; cursor:pointer; width:100%; }
 .rest-source { display:block; font-size:12px; font-weight:400; color:var(--ink-2); line-height:1.35; margin:3px 0 0; overflow-wrap:anywhere; }
-.rest-row-actions { display:flex; align-items:flex-start; gap:6px; }
+.rest-row-actions { display:flex; flex-wrap:wrap; align-items:flex-start; gap:6px; grid-column:1 / -1; }
 .rest-row-actions .rest-add, .rest-row-actions .rest-external { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; text-decoration:none; }
 .rest-row-actions .rest-add { border-radius:50%; background:var(--save,#238657); color:#fff; }
 .rest-row-actions .rest-external { border-radius:12px; color:var(--ink); background:var(--surface-2); }
 .rest-row-actions svg { width:23px; height:23px; fill:currentColor; }
 .rest-row-actions button:focus-visible, .rest-row-actions a:focus-visible, .rest-info-entrance:focus-visible { outline:2px solid var(--blue,#7fb0ff); outline-offset:3px; }
 [data-rest-list] { min-width:0; }
+.rest-price-edit { border:0; background:none; padding:4px 0; color:var(--blue); font:inherit; font-size:12px; text-align:left; text-decoration:underline; }
+.up-table-wrap { max-width:100%; overflow-x:auto; margin:12px 0; border:1px solid var(--line); border-radius:12px; }
+.up-table { min-width:940px; width:100%; border-collapse:collapse; font-size:13px; }
+.up-table caption { text-align:left; padding:10px; font-weight:700; }
+.up-table th, .up-table td { padding:8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+.up-table td { min-width:115px; }
+.up-table input:not([type=checkbox]), .up-table select { box-sizing:border-box; width:100%; min-width:100px; }
+.up-table input:not([type=checkbox]) { font:inherit; color:var(--ink); background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:8px; }
+.up-table label { display:block; margin:3px 0; }
+.up-days { display:grid; grid-template-columns:repeat(2,1fr); gap:3px; }
+.up-days label { display:flex; align-items:center; gap:4px; }
+.up-days input { flex:none; width:18px; height:18px; }
 
 /* Collapsible submenus use the same tile affordance throughout the app. */
 .tp-body details:not(.epa):not(.g-info):not(.g-tires):not(.rc-tile), .sub-body details:not(.epa):not(.settings-help) { border:1px solid var(--line); border-radius:18px; background:var(--surface); padding-left:14px; padding-right:14px; margin-top:10px; margin-bottom:10px; }
