@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.354 - 2026-11-02
+- Show civil-dusk estimates below departure-window limits using existing route and traffic timing.
+- Screen rest candidates before broad forecasts, with temporary hide/restore controls.
+- Start forecasts after two minutes without interaction, with a visible countdown and Keep screening control.
+- Bug fixes
+
 ## 0.0.353 - 2026-11-02
 - Resolve local timezones offline so rest forecasts do not depend on the weather-service allowance.
 - Plan fuel stops after rest timing is finished, reusing saved stations and discovering missing coverage when needed.

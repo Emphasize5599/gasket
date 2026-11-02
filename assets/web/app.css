@@ -2176,6 +2176,14 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-preview-marker { position:absolute; width:12px; height:12px; border:2px solid white; background:#2878e8; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 1px 4px #000; }
 .rest-view-retry { border:0; background:none; color:var(--blue); font:inherit; font-size:12px; padding:4px 0; text-align:right; width:100%; }
 .rest-view-pending { display:block; font-size:12px; color:var(--ink-2); text-align:right; }
+.rest-screen { padding:12px; margin:10px 0; border:1px solid var(--blue); border-radius:14px; }
+.rest-screen h3 { margin:0 0 6px; }
+.rest-screen p { font-size:13px; margin:6px 0; }
+.rest-screen small { display:block; color:var(--ink-2); }
+.rest-screen-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.rest-screen-actions .btn { max-width:100%; white-space:normal; }
+.rest-hide { border:0; background:none; color:var(--blue); font:inherit; font-size:12px; padding:4px 0; text-align:right; }
+.tw-dusk { margin:6px 0 12px; overflow-wrap:anywhere; }
 .rest-row-actions .rest-add, .rest-row-actions .rest-external { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; text-decoration:none; }
 .rest-row-actions .rest-add { border-radius:50%; background:var(--save,#238657); color:#fff; }
 .rest-row-actions .rest-external { border-radius:12px; color:var(--ink); background:var(--surface-2); }

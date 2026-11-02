@@ -1,0 +1,11 @@
+/* Civil twilight ends at solar altitude -6°. Uses existing route clocks only. */
+(function(root){'use strict';
+ var node=typeof module!=='undefined'&&module.exports,SUN=node?require('./vendor/suncalc'):root.SunCalc,N=node?require('./overnight'):root.Overnight;
+ function position(m,seconds){if(seconds<=0)return m.pointAt(0);if(seconds>=m.durationSec)return m.pointAt(m.totalMi);var rows=m.segs||[],lo=0,hi=rows.length-1;while(lo<hi){var mid=(lo+hi)>>1;if(rows[mid].t1<seconds)lo=mid+1;else hi=mid;}var s=rows[lo];if(!s)return null;return m.pointAt(s.from+(s.to-s.from)*Math.max(0,Math.min(1,(seconds-s.t0)/Math.max(.001,s.t1-s.t0))));}
+ function first(m,depart,zone){if(!m||!m.pointAt||!Number.isFinite(m.durationSec)||!SUN||!N)return null;var p=m.pointAt(0),date=N.local(depart,zone),here=date&&N.event(date.date,zone,{kind:'dusk'},p);if(Number.isFinite(here)&&depart>here)return {at:here,past:true};
+  function height(t){var p=position(m,(t-depart)/1000);return p?SUN.getPosition(new Date(t),p.lat,p.lng).altitude+Math.PI/30:NaN;}
+  var a=depart,ha=height(a),end=depart+30*3600000;for(var b=a+600000;b<=end;b+=600000){var hb=height(b);if(ha>=0&&hb<=0){var lo=a,hi=b;for(var i=0;i<16;i++){var mid=(lo+hi)/2;if(height(mid)>0)lo=mid;else hi=mid;}return {at:(lo+hi)/2,past:false};}a=b;ha=hb;}return null;
+ }
+ function range(o){var a=o.earliest,b=o.latest;if(!Number.isFinite(a)||!Number.isFinite(b)||b<a||b-a>14*86400000)return {state:'input'};var samples=[],past=[],missing=0,known=0,total=0;for(var i=0;i<=8;i++){var t=a+(b-a)*i/8,routes=typeof o.routes==='function'?o.routes(t):o.routes||[];routes.slice(0,3).forEach(function(row){var m=row.model||row,result=first(m,t,o.zone);total++;if(row.trafficKnown||m.traffic)known++;if(result)(result.past?past:samples).push(result.at);else missing++;});if(a===b)break;}var values=samples.length?samples:past;return values.length?{state:'ready',start:Math.min.apply(null,values),end:Math.max.apply(null,values),past:past.length,total:total,missing:missing,known:known,allPast:!samples.length}:{state:'unavailable',missing:missing,total:total};}
+ var api={first:first,range:range,position:position};if(node)module.exports=api;else root.RouteDusk=api;
+})(typeof window!=='undefined'?window:this);

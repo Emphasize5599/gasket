@@ -77,6 +77,10 @@ on:
       - tests/rest-render-work.test.js
       - tests/restplaces.test.js
       - tests/restplace.test.js
+      - tests/restscreen.test.js
+      - tests/rest-screening-ui.test.js
+      - tests/routedusk.test.js
+      - tests/route-dusk-ui.test.js
       - tests/rest-draft-work.test.js
       - tests/offline-timezones.test.js
       - tests/restimagery.test.js
