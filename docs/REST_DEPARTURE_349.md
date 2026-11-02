@@ -1,4 +1,4 @@
-# Keep original later-leg departures when inserting rests (0.0.349 source; 0.0.350 publication)
+# Keep original later-leg departures when inserting rests (0.0.349 source; 0.0.351 publication)
 
 ## Evidence and intended behavior
 
@@ -26,4 +26,4 @@ Phone: keep saved data, reopen the trip and retry the rest. When it fits, check 
 
 The final local full run completed 210 checks in 297.0 seconds: 209 passed and an unrelated vehicle-identity UI test timed out; that test passed in isolation in 6.8 seconds. Targeted scheduling/tolerance checks passed after all refinements. The first CI attempt exposed a test that checked a mode switch before its deferred render; the test now waits for the rendered controls, without changing the application or weakening assertions.
 
-CI build 41391200539 (commit 1ce0228) passed all 210 checks in 248.8 seconds, native reservation checks, Android build and both signature checks, but its upload was correctly blocked by the exact tag/build commit guard: v0.0.349 points to c61cb08 before the test-only correction. No APK assets were published or overwritten. Version 0.0.350 gives the tested source a fresh matching tag. Publication verification pending.
+CI build 41391200539 (commit 1ce0228) passed all 210 checks in 248.8 seconds, native reservation checks, Android build and both signature checks, but its upload was correctly blocked by the exact tag/build commit guard: v0.0.349 points to c61cb08 before the test-only correction. No APK assets were published or overwritten. Version 0.0.350 had a matching tag but its CI run exposed another immediate state-versus-render assertion in the broad restui fixture (the tolerance label was still showing the previous value). Both tolerance tests now wait for their rendered state. Version 0.0.351 includes these test synchronizations in the matching tag; application behavior remains unchanged after c61cb08. Publication verification pending.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.351 - 2026-11-01
+- Keep original later-leg departures when adding rests, with earlier first starts constrained to the allowed window.
+- Reliable release checks for rest-tolerance redraws.
+- Bug fixes
+
 ## 0.0.350 - 2026-11-01
 - Keep original later-leg departures when adding rests, using an earlier first start within the allowed window.
 - Verified publication of the rest-window and recommendation-recovery fixes.
