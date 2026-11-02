@@ -91,6 +91,8 @@ on:
       - tests/rest-links-prices-ui.test.js
       - tests/rest-departure-anchors.test.js
       - tests/rest-departure-ui.test.js
+      - tests/rest-tolerance-ui.test.js
+      - tests/rest-traffic-leg.test.js
       - tests/rest-reco-restart.test.js
       - tests/userrestprice.test.js
       - tests/userrestprice-ui.test.js
