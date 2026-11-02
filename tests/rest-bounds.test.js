@@ -15,9 +15,10 @@ const fit=N.fit(site,w.start,w,clocks);assert(fit.leave>=w.leaveStart);assert.eq
 
 // Exercise the actual UI validator after a rest was inserted before a timed destination.
 const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync('assets/web/tripui.js','utf8'),fragment=source.slice(source.indexOf('function restWindowIssues('),source.indexOf('// The flexible-time departure window has closed'));
-const ctx={route:{stops:[{label:'Start'},{rest:{}},{label:'Destination'}]},windows:{enabled:()=>true,arrivals:()=>[null,{end:200000}]},windowDestination:i=>i===1?{leaveStart:'1970-01-01T00:00:00Z',leaveEnd:'1970-01-01T00:03:20Z'}:{},stopName:s=>s.label};vm.createContext(ctx);vm.runInContext(fragment,ctx);
+const ctx={S:{trip:{legDepartures:[]}},route:{stops:[{label:'Start'},{rest:{}},{label:'Destination'}]},windows:{enabled:()=>true,arrivals:()=>[null,{end:200000}]},windowDestination:i=>i===1?{leaveStart:'1970-01-01T00:00:00Z',leaveEnd:'1970-01-01T00:03:20Z'}:{},stopName:s=>s.label};vm.createContext(ctx);vm.runInContext(fragment,ctx);
 assert(ctx.restWindowIssues([{}, {arrive:300001}, {depart:300001}]).some(s=>/arrival window ends/.test(s)),'destination bound follows the shifted point slot');
 assert.equal(ctx.restWindowIssues([{}, {arrive:100000}, {depart:100000}]).length,0);
+ctx.S.trip.legDepartures=[0,null,120000];assert(ctx.restWindowIssues([{}, {arrive:100000}, {depart:180000}]).some(s=>/chosen departure/.test(s)),'an original chosen departure stays an anchor even before the outer window ends');ctx.S.trip.legDepartures=[];
 
 // Refresh consent is resolved before discovery, including areas whose expired prices are not yet loaded.
 (async()=>{
@@ -33,7 +34,7 @@ assert.equal(ctx.restWindowIssues([{}, {arrive:100000}, {depart:100000}]).length
 
 (async()=>{
  const fragment=source.slice(source.indexOf('  async function restCommit('),source.indexOf('  function localStamp(')),calls=[];
- const c={restRows:()=>[],restPlanPromise:null,restSeedRows:()=>[],result:null,LG:{info:()=>{}},restPlanIssues:()=>[],restReplan:async(_seed,_previous,_quick,recover)=>{calls.push(!!recover);return {plan:{ok:false},cands:[],opts:{}};}};
+ const c={route:{},restRows:()=>[],restPlanPromise:null,restSeedRows:()=>[],result:null,LG:{info:()=>{}},restPlanIssues:()=>[],restReplan:async(_seed,_previous,_quick,recover)=>{calls.push(!!recover);return {plan:{ok:false},cands:[],opts:{}};}};
  vm.createContext(c);vm.runInContext(fragment,c);
  await assert.rejects(c.restCommit(),/after checking remembered stations and missing coverage/);assert.deepEqual(calls,[false,true],'untimed fuel failure attempts station discovery once');
  calls.length=0;c.restReplan=async()=>{calls.push(false);return {plan:{ok:false,restTimingInvalid:true},opts:{}};};

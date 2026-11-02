@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.349 - 2026-11-01
+- Keep original later-leg departures when adding rests, using an earlier first-leg start only within the allowed window.
+- Reject rests that cannot fit before changing the trip, and restore the original first start when the last rest is removed.
+- Bug fixes
+
 ## 0.0.348 - 2026-11-02
 - Set the rest-stop traffic tolerance for the whole trip or separately for each leg (Stops → Rest stops → Traffic tolerance).
 - Bug fixes

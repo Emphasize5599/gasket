@@ -1,0 +1,27 @@
+# Keep original later-leg departures when inserting rests (0.0.349)
+
+## Evidence and intended behavior
+
+Synced with main through 0.0.348, preserving its stricter price filtering, source charts and per-original-leg traffic tolerance. The owner's 0.0.347 log showed a verified outbound itinerary with under five minutes between arrival and the selected next departure, followed by a rest adding roughly seven hours. Replanning then reported an overnight mismatch and a departure after the later window. The stored later departure was not explicitly edited; the physical schedule used `max(arrival, requested departure)` and let it drift, then failed afterward.
+
+The owner explicitly chose: **try an earlier first-leg start within its allowed window, while retaining the original later-leg departure**. It is impossible to preserve that departure by merely relabeling a later arrival. If no earlier allowed start and valid rest can satisfy it, the selected rest must be refused or the draft marked infeasible, without changing the original later departure.
+
+## Implementation
+
+- Pure `RestPlan.anchoredTiming` builds absolute waits at original destination departures and minimum/fixed rest departures. `fitStart` moves only the initial start earlier, bounded by the real primary departure window and current time, with a finite iteration limit. It includes driving, fuel service, destination charging, rest/charging overlap, minimum dwell, nightly earliest leave and stay limits. Fixed night bounds cannot be bypassed by moving the start indefinitely.
+- Insertion performs a provisional fit on copied geometry/stop/timing data **before** mutating the trip, window slots, chosen departures, charging settings or reviewed alternatives. Existing purchases and destination charges are shifted onto the new route for this estimate. Arrival windows move with their destination slots and are checked alongside chosen departures. If an earlier start is needed, traffic is refreshed at that candidate (or the earliest allowed start when the old forecast cannot fit), with at most two refinements, so an old peak-traffic estimate alone does not reject a potentially viable earlier start. An impossible rest returns an inline add-dialog explanation with the trip unchanged.
+- If fitting succeeds, the original later departures remain anchors; only the first chosen start and corresponding overnight-selection pin move earlier. The rest screen states the adjustment. A small route metadata record preserves the original first start through saving/reopening. Removing the last rest restores it only if the current start is still the app's automatic adjustment; a later explicit user edit is preserved.
+- Fuel/charging replanning fits again using actual service and route timing, and validates original anchors as well as window endpoints. Original destination waits and hazard display clocks use chosen departures. A rest-time selection is checked before replacing its previous time. Forecast samples arriving after an original departure are rejected rather than offered as usable times.
+- Preparing rest timing refreshes traffic again if fitting changes the initial departure, with a bounded retry count. Failed anchor fits report the scheduling conflict and invalidate an earlier successful draft, instead of reusing that draft or describing the problem as missing fuel information.
+- Moving the initial start changes conditions before the first rest too: final hazard comparison applies time sensitivity from the route start in that case. Existing approval preferences and genuine new-condition review remain in force.
+- Related 0.0.348 regression: tolerance changes could reuse a cancelled recommendation entry still marked busy. Retire busy entries and keep completed results reusable; ignore change events from retiring/detached tolerance inputs so redraw/blur cannot overwrite newer values. Background progress defers replacement of a focused tolerance field; an explicit committed tolerance change still redraws it.
+
+Provisional fitting is not a promise about live traffic or station availability. Full traffic, energy, rest, price, arrival-window, departure-window and hazard checks still run before committing a rest itinerary. This does not widen any window or move a later departure to make an impossible plan appear valid.
+
+## Validation and phone checks
+
+New pure tests reproduce a long outbound drive, a five-minute stop allowance and a seven-hour inserted rest, using generic fixture locations and dates. They verify an earlier bounded start, unchanged later departure, insufficient-window and fixed-night refusal, fuel/charging service, return-leg insertion, no mutation during fitting and persisted restoration without overwriting a user edit. The real add-dialog test covers both feasible and impossible windows and asserts route/window/departure preservation. Recommendation restart and stale-input tests reproduce the related tolerance regressions. Existing overnight/time-window/route-choice/tolerance/price tests remain mandatory.
+
+Phone: keep saved data, reopen the trip and retry the rest. When it fits, check the earlier-start explanation and confirm the original second-leg departure remains unchanged. If there is insufficient room, the add dialog should explain why and keep the original trip. Try a rest on each original leg, review timing, and remove the last rest to check restoration. Phone/live-app verification remains outstanding.
+
+Full local release and publication verification pending.

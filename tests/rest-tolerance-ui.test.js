@@ -17,6 +17,6 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  await p.fill('#tol [data-rest-tol="1"]','999');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');assert.equal(await p.evaluate(()=>__cfg.legs[1]),45,'out-of-range is refused');
  await p.fill('#tol [data-rest-tol="1"]','');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');await p.waitForFunction(()=>!('1' in __cfg.legs));
  await p.selectOption('#tol [data-rest-tol-mode]','trip');await p.waitForFunction(()=>__cfg.mode==='trip');assert.equal(await p.locator('#tol [data-rest-tol]').count(),1);
- assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'fits '+width);assert.deepEqual(errors,[]);await p.close();}
+ const retired=await p.locator('#tol [data-rest-tol="trip"]').elementHandle();await p.fill('#tol [data-rest-tol="trip"]','44');await p.locator('#tol [data-rest-tol="trip"]').dispatchEvent('change');await p.waitForFunction(el=>!el.isConnected,retired);await retired.evaluate(el=>{el.value='99';el.dispatchEvent(new Event('change'));});assert.equal(await p.evaluate(()=>__cfg.minutes),44,'a detached old input cannot overwrite current tolerance');assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'fits '+width);assert.deepEqual(errors,[]);await p.close();}
  console.log('Rest traffic tolerance: whole trip or each leg, blank legs use the trip value, at 320/448px');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

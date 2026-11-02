@@ -34,4 +34,14 @@ Pure tests cover calendar-day versus nightly/flat charges, local midnight, both 
 
 Phone: reopen the same trip without clearing saved data. Check Pennyrile's reported range; a $10 budget must exclude Huggins Haven after its new-schema detail read. Test the three fixed-purpose buttons. Save two site types and weekday/date rates, extend a stay across midnight, and confirm the total/budget updates. Mark a place not free and verify it disappears from free-only results. Phone/live-app verification remains outstanding.
 
-All 204 local mandatory release checks passed in 247.2 seconds with three jobs. Ten focused pricing, browser, source, cache and rendering regressions passed again in 5.8 seconds after the final stay-price preview refinement. Changed JavaScript syntax and whitespace checks passed. GitHub publication verification pending.
+All 204 local mandatory release checks passed in 247.2 seconds with three jobs. Ten focused pricing, browser, source, cache and rendering regressions passed again in 5.8 seconds after the final stay-price preview refinement. Changed JavaScript syntax and whitespace checks passed. GitHub repeated all 204 checks in 262.8 seconds and passed the native reservation gate, Android build and existing release-signature checks.
+
+## Verified publication
+
+Source `c37b242d7216581ebd35ae9643e3d4a446063306` was published as [v0.0.345](https://github.com/Emphasize5599/gasket/releases/tag/v0.0.345). [Source release run 41365350205](https://github.com/Emphasize5599/gasket/actions/runs/41365350205) and [signed APK run 41365350262](https://github.com/Emphasize5599/gasket/actions/runs/41365350262) succeeded; build job 125024226089 verified the existing certificate SHA-256 `94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e`.
+
+Both release assets were verified uploaded:
+- ARM64: 30,464,016 bytes; SHA-256 `d29463492d76c25be0ebe4477b7e66479881c6df403d32cf412039b006e1f0b6`.
+- Universal: 56,830,043 bytes; SHA-256 `58eaadb8072d05df5a7bd9cb6765bc64e731b71da1b88dad4d98e031d39399b2`.
+
+The published ARM64 APK was downloaded and its digest independently checked. Packaged index, both new pricing modules, RestUI, RestPlaces, CampPrice, Recreation, app CSS and Campendium worker exactly matched the committed Git blob bytes. Windows working-copy CRLF differences were distinguished from committed LF bytes. Phone/live-app checks remain outstanding.
