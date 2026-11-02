@@ -17,3 +17,14 @@ const fast=P.zones([{drivingMinutes:390,freeMinutes:405},{drivingMinutes:420,fre
 assert.equal(fc.freeOf({seconds:100}),null);
 assert(!/REST_HORIZON_MI/.test(src),'no fixed whole-trip horizon');
 console.log('Rest traffic compared per leg against the leg\'s no-traffic time');
+// 0.0.348: tolerance for the whole trip or each leg; a leg = between your own stops, so an added rest doesn't renumber it.
+{const fn2=src.slice(src.indexOf('  function restSegments(){'),src.indexOf('  function restHorizon(d){'));
+ const c={S:{trip:{}},windows:null,A:{save(){}},route:{stops:[{label:'Home',lat:34,lng:-92},{label:'Rest A',rest:{},lat:35,lng:-90},{label:'Bristol',lat:36.6,lng:-82.2},{label:'Home',lat:34,lng:-92}]},model:{legEnds:[300,749,1320],totalMi:1320}};vm.createContext(c);vm.runInContext(fn2,c);
+ assert.deepEqual(c.restSegments().map(g=>g.from+'>'+g.to),['Home>Bristol','Bristol>Home'],'two legs between your own stops; the rest is inside leg 1');
+ assert.equal(c.restSegmentAt(0),0);assert.equal(c.restSegmentAt(300),0,'leaving the added rest is still leg 1');assert.equal(c.restSegmentAt(749),1,'leaving Bristol = leg 2');assert.equal(c.restSegmentAt(1000),1);
+ assert.equal(c.restTolerance(300),30,'unset = the old 30-min default');
+ c.S.trip.restTraffic={mode:'trip',minutes:15,sig:c.restSegSig()};assert.equal(c.restTolerance(300),15);assert.equal(c.restTolerance(1000),15);
+ c.S.trip.restTraffic={mode:'leg',minutes:15,legs:{1:45},sig:c.restSegSig()};assert.equal(c.restTolerance(300),15,'a blank leg uses the whole-trip value');assert.equal(c.restTolerance(1000),45);
+ c.route.stops[2]={label:'Knoxville',lat:35.96,lng:-83.92};assert.equal(c.restTolerance(1000),15,'per-leg values from another trip are not applied');
+ c.windows={enabled:()=>true,config:()=>({delayMinutes:20})};c.S.trip.restTraffic=null;assert.equal(c.restTolerance(10),20,'with time windows on, unset = the window traffic allowance as before');}
+console.log('Rest traffic tolerance per leg or for the whole trip');

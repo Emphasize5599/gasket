@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.348 - 2026-11-02
+- Set the rest-stop traffic tolerance for the whole trip or separately for each leg (Stops → Rest stops → Traffic tolerance).
+- Bug fixes
+
 ## 0.0.347 - 2026-11-02
 - Rest-stop traffic is compared over the rest of that leg, not the whole trip.
 - "Over free flow" now measures against the road's normal no-traffic driving time.
