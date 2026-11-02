@@ -1,4 +1,4 @@
-# Keep original later-leg departures when inserting rests (0.0.349)
+# Keep original later-leg departures when inserting rests (0.0.349 source; 0.0.350 publication)
 
 ## Evidence and intended behavior
 
@@ -24,4 +24,6 @@ New pure tests reproduce a long outbound drive, a five-minute stop allowance and
 
 Phone: keep saved data, reopen the trip and retry the rest. When it fits, check the earlier-start explanation and confirm the original second-leg departure remains unchanged. If there is insufficient room, the add dialog should explain why and keep the original trip. Try a rest on each original leg, review timing, and remove the last rest to check restoration. Phone/live-app verification remains outstanding.
 
-Full local release and publication verification pending.
+The final local full run completed 210 checks in 297.0 seconds: 209 passed and an unrelated vehicle-identity UI test timed out; that test passed in isolation in 6.8 seconds. Targeted scheduling/tolerance checks passed after all refinements. The first CI attempt exposed a test that checked a mode switch before its deferred render; the test now waits for the rendered controls, without changing the application or weakening assertions.
+
+CI build 41391200539 (commit 1ce0228) passed all 210 checks in 248.8 seconds, native reservation checks, Android build and both signature checks, but its upload was correctly blocked by the exact tag/build commit guard: v0.0.349 points to c61cb08 before the test-only correction. No APK assets were published or overwritten. Version 0.0.350 gives the tested source a fresh matching tag. Publication verification pending.

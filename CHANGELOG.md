@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.350 - 2026-11-01
+- Keep original later-leg departures when adding rests, using an earlier first start within the allowed window.
+- Verified publication of the rest-window and recommendation-recovery fixes.
+- Bug fixes
+
 ## 0.0.349 - 2026-11-01
 - Keep original later-leg departures when adding rests, using an earlier first-leg start only within the allowed window.
 - Reject rests that cannot fit before changing the trip, and restore the original first start when the last rest is removed.
