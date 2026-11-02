@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.347 - 2026-11-02
+- Rest-stop traffic is compared over the rest of that leg, not the whole trip.
+- "Over free flow" now measures against the road's normal no-traffic driving time.
+- Bug fixes
+
 ## 0.0.346 - 2026-11-02
 - Campsites whose price can't be checked are hidden whenever a price limit is on, even when few priced places fit.
 - Each rest source's price limit shows a chart of the nightly rates Gasket has seen, so you can tell how many places a limit leaves.
