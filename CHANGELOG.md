@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.352 - 2026-11-02
+- Preview rest-stop surroundings with satellite imagery and a location marker.
+- Separate Street View and satellite actions, shown only after availability checks; right-align the action buttons.
+- Bug fixes
+
 ## 0.0.351 - 2026-11-01
 - Keep original later-leg departures when adding rests, with earlier first starts constrained to the allowed window.
 - Reliable release checks for rest-tolerance redraws.

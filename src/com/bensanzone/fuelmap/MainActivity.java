@@ -74,6 +74,7 @@ public class MainActivity extends Activity {
         return pool;
     }
     private final java.util.concurrent.ExecutorService trafficRequests = trafficExecutor();
+    private final java.util.concurrent.ExecutorService imageryRequests = trafficExecutor();
     private static java.lang.ref.WeakReference<MainActivity> queueActivity=new java.lang.ref.WeakReference<>(null);
     public static void queueTimeout(){MainActivity a=queueActivity.get();if(a!=null)a.js("window.onTripQueueTimeout&&onTripQueueTimeout()");}
     private void handleQueueIntent(Intent i){
@@ -178,6 +179,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         trafficRequests.shutdownNow();
+        imageryRequests.shutdownNow();
         main.removeCallbacks(frameTick);if(frameThread!=null)frameThread.quitSafely();
         if (aiFrames != null) { getWindow().removeOnFrameMetricsAvailableListener(aiFrames); aiFrames = null; }
         synchronized (this) { if (gemma != null) { gemma.close(); gemma = null; } }
@@ -1563,6 +1565,43 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
+        /** Fixed public imagery endpoints; bounded transient thumbnail, no WebViews, keys or cookies. */
+        @JavascriptInterface public void restImagery(final int reqId, final String kind, final double lat, final double lng) {
+            if ((!"street".equals(kind) && !"aerial".equals(kind)) || !Double.isFinite(lat) || !Double.isFinite(lng) || Math.abs(lat)>85.05112878 || Math.abs(lng)>180) {
+                JSONObject e=new JSONObject();try{e.put("error","Invalid imagery request");}catch(Exception ignored){}reply(reqId,e);return;
+            }
+            imageryRequests.execute(new Runnable(){public void run(){
+                JSONObject out=new JSONObject();HttpURLConnection c=null;
+                try{
+                    boolean aerial="aerial".equals(kind);int n=1<<17;
+                    int x=Math.min(n-1,(int)Math.floor((lng+180)/360*n));
+                    double rad=Math.toRadians(lat);int y=Math.max(0,Math.min(n-1,(int)Math.floor((1-Math.log(Math.tan(rad)+1/Math.cos(rad))/Math.PI)/2*n)));
+                    String endpoint=aerial?"https://mt1.google.com/vt/lyrs=s&x="+x+"&y="+y+"&z=17":"https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/SingleImageSearch";
+                    c=(HttpURLConnection)new URL(endpoint).openConnection();c.setConnectTimeout(8000);c.setReadTimeout(12000);c.setInstanceFollowRedirects(false);
+                    c.setRequestProperty("User-Agent","Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36");
+                    if(!aerial){
+                        c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json+protobuf");
+                        String payload="[[\"apiv3\",null,null,null,\"US\"],[[null,null,"+lat+","+lng+"],50],[null,[\"en\",\"US\"],null,null,null,null,null,null,[2],null,[[[2,true,2]]]],[[1,2,3,4,6,8]]]";
+                        try(OutputStream stream=c.getOutputStream()){stream.write(payload.getBytes("UTF-8"));}
+                    }
+                    int status=c.getResponseCode();out.put("status",status);String retry=c.getHeaderField("Retry-After");if(retry!=null)out.put("retryAfter",retry);
+                    if(aerial&&(status==404||status==204))out.put("available",false);
+                    else if(status!=200)out.put("error","Imagery HTTP "+status);
+                    else if(aerial){
+                        if(c.getContentType()==null||!c.getContentType().toLowerCase(Locale.US).startsWith("image/"))throw new Exception("Image response missing");
+                        byte[] bytes;try(InputStream in=ChargerInventory.bounded(c.getInputStream(),1000000);ByteArrayOutputStream bo=new ByteArrayOutputStream()){byte[] b=new byte[8192];int count;while((count=in.read(b))!=-1)bo.write(b,0,count);bytes=bo.toByteArray();}
+                        android.graphics.BitmapFactory.Options bounds=new android.graphics.BitmapFactory.Options();bounds.inJustDecodeBounds=true;android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length,bounds);
+                        if(bounds.outWidth!=256||bounds.outHeight!=256)throw new Exception("Unexpected satellite tile");
+                        if(!"image/jpeg".equals(bounds.outMimeType)&&!"image/png".equals(bounds.outMimeType))throw new Exception("Unsupported satellite image format");
+                        android.graphics.Bitmap bitmap=android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length);
+                        if(bitmap==null)throw new Exception("Satellite tile could not be decoded");
+                        try{int first=bitmap.getPixel(0,0);boolean varied=false;for(int a=0;a<256&&!varied;a+=8)for(int b=0;b<256;b+=8)if(bitmap.getPixel(a,b)!=first){varied=true;break;}if(!varied)throw new Exception("Satellite detail unavailable");}finally{bitmap.recycle();}
+                        out.put("available",true);out.put("thumbnail","data:"+bounds.outMimeType+";base64,"+android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));
+                    }else{try(InputStream in=ChargerInventory.bounded(c.getInputStream(),1000000)){out.put("body",readAll(in));}}
+                }catch(Exception e){try{out.put("error","Imagery check failed: "+e.getClass().getSimpleName());}catch(Exception ignored){}}
+                finally{if(c!=null)c.disconnect();}reply(reqId,out);
+            }});
+        }
         /** Public anonymous website protocol: fixed endpoint, bounded response, at most50 readers (RAM default/user cap enforced by JS queue).
          * No cookies, credentials, API key or app-client token are extracted or copied. */
         @JavascriptInterface public void fetchGoogleTraffic(final int reqId, final String pb) {

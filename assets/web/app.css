@@ -2166,7 +2166,16 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-name > .rest-kind, .rest-name > small { grid-column:1 / -1; }
 .rest-info-entrance { border:0; background:none; color:inherit; font:inherit; padding:0; margin:0; text-align:left; cursor:pointer; width:100%; }
 .rest-source { display:block; font-size:12px; font-weight:400; color:var(--ink-2); line-height:1.35; margin:3px 0 0; overflow-wrap:anywhere; }
-.rest-row-actions { display:flex; flex-wrap:wrap; align-items:flex-start; gap:6px; grid-column:1 / -1; }
+.rest-row-actions { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:flex-end; gap:4px; grid-column:1 / -1; }
+.rest-views { grid-column:1 / -1; min-width:0; }
+.rest-preview { display:block; width:min(100%,256px); margin:0 0 0 auto; text-decoration:none; color:var(--ink-2); }
+.rest-preview-image { display:block; position:relative; overflow:hidden; border-radius:12px; aspect-ratio:1; }
+.rest-preview-loading { width:min(100%,256px); margin-left:auto; aspect-ratio:1; border-radius:12px; background:var(--surface-2); }
+.rest-preview img { display:block; width:100%; height:auto; }
+.rest-preview small { display:block; font-size:11px; text-align:right; margin:3px 0; }
+.rest-preview-marker { position:absolute; width:12px; height:12px; border:2px solid white; background:#2878e8; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 1px 4px #000; }
+.rest-view-retry { border:0; background:none; color:var(--blue); font:inherit; font-size:12px; padding:4px 0; text-align:right; width:100%; }
+.rest-view-pending { display:block; font-size:12px; color:var(--ink-2); text-align:right; }
 .rest-row-actions .rest-add, .rest-row-actions .rest-external { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; text-decoration:none; }
 .rest-row-actions .rest-add { border-radius:50%; background:var(--save,#238657); color:#fff; }
 .rest-row-actions .rest-external { border-radius:12px; color:var(--ink); background:var(--surface-2); }
