@@ -24,10 +24,16 @@ const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoV
  assert.deepEqual(p.errors,[]);await p.close();
  // a background answer redraws the editor while your finger is on Remove: the tap still opens the confirmation
  p=await open();await p.waitForSelector('.car-edit #gRemove',{state:'visible'});
- const bb=await seen(p,'#gRemove');
+ let bb;for(let i=0;i<40;i++){const a=await seen(p,'#gRemove');await p.waitForTimeout(250);const b2=await seen(p,'#gRemove');if(JSON.stringify(a)===JSON.stringify(b2)&&await p.evaluate(([x,y])=>!!document.elementFromPoint(x,y)?.closest('#gRemove,.scroll-hint'),[b2.x+b2.width/2,b2.y+b2.height/2])){bb=b2;break;}}assert.ok(bb,'Remove settles in place');
  await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await p.mouse.down();
  await p.evaluate(()=>Garage.redraw());await p.mouse.up();
  await p.waitForSelector('#cfm.on #cfmYes',{timeout:3000});await p.click('#cfm.on #cfmYes');
  await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='corolla20'));
  assert.deepEqual(p.errors,[]);await p.close();
-}console.log('320/448px redraw mid-tap keeps no-trim / Remove taps, identity tile stays open, tank asked without a trim');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+ // Remove just scrolled into view sits under the floating ↓ arrow: a tap on the arrow there is a tap on Remove
+ p=await open();await seen(p,'#gRemove');
+ const hit=await p.evaluate(async()=>{const sc=document.querySelector('.car-edit .sub-body'),r=document.getElementById('gRemove');sc.scrollTop+=r.getBoundingClientRect().bottom-sc.getBoundingClientRect().bottom+2;await new Promise(f=>requestAnimationFrame(()=>requestAnimationFrame(f)));const h=document.querySelector('.scroll-hint:not(.hidden)');if(!h)return null;const b=h.getBoundingClientRect(),x=b.x+b.width/2,y=b.y+b.height/2;return {x,y,covered:document.elementFromPoint(x,y).closest('.scroll-hint')===h&&document.elementsFromPoint(x,y).some(e=>e.id==='gRemove')};});
+ assert.ok(hit&&hit.covered,'the arrow covers Remove in this position');
+ await p.mouse.click(hit.x,hit.y);await p.waitForSelector('#cfm.on #cfmYes',{timeout:3000});await p.click('#cfm.on #cfmYes');
+ await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='corolla20'));assert.deepEqual(p.errors,[]);await p.close();
+}console.log('320/448px redraw mid-tap keeps no-trim / Remove taps, a tap on the ↓ arrow over Remove removes, identity tile stays open, tank asked without a trim');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1165,7 +1165,15 @@
     var ro=window.ResizeObserver?new ResizeObserver(soon):null,mo=window.MutationObserver?new MutationObserver(soon):null;
     if(ro)ro.observe(sc);if(mo)mo.observe(sc,{ childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'open'] });
     b._dispose=function(){sc.removeEventListener('scroll',soon);window.removeEventListener('resize',soon);if(ro)ro.disconnect();if(mo)mo.disconnect();if(raf)cancelAnimationFrame(raf);b.remove();delete sc._hint;};
-    b.onclick = function () { sc.scrollTo({ top: up ? 0 : sc.scrollTop + Math.round(sc.clientHeight * 0.8), behavior: 'smooth' }); };
+    // 0.0.362: the arrow floats over the scroller, so it can sit on a control (the car editor's Remove once it's just in view):
+    // a tap there means that control, not "scroll"
+    var under = function (ev) {
+      if (!ev || !(ev.clientX || ev.clientY) || !document.elementsFromPoint) return null;
+      var els = document.elementsFromPoint(ev.clientX, ev.clientY);
+      for (var i = 0; i < els.length; i++) { var e = els[i]; if (e === b || b.contains(e)) continue; if (!sc.contains(e)) return null; var c = e.closest('button,a[href],input,select,textarea,label,summary,[role=button]'); return c && sc.contains(c) && !c.disabled ? c : null; }
+      return null;
+    };
+    b.onclick = function (ev) { var c = under(ev); if (c) { if (/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName)) c.focus(); c.click(); return; } sc.scrollTo({ top: up ? 0 : sc.scrollTop + Math.round(sc.clientHeight * 0.8), behavior: 'smooth' }); };
     soon();
     return { update: soon };
   }

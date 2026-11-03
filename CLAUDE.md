@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.362 - scroll arrow over Remove (360/361 published no APK)
+
+361's CI run failed car-editor-taps-ui at the Remove step (no confirmation). Under load the measured Remove spot was under `A.scrollHint`'s floating ↓ button (sub-hint, centered, 44 px above the scroller bottom): with Remove only just scrolled into view, the arrow covers its center, so a tap scrolled instead of removing. Likely a phone cause of "can't remove cars" too. app.js scrollHint's click now looks under the arrow (`elementsFromPoint`) and, if an enabled button / link / input / label / summary of that scroller is there, clicks it (focuses inputs) instead of scrolling. Tests: car-editor-taps-ui waits until Remove's box is stable (under it: Remove or the arrow) and adds a deterministic case (Remove aligned to the scroller bottom, arrow verified covering it, tap the arrow → confirmation → removed; fails without the fix). 8/8 parallel local runs pass. 360/361 source tags untouched.
+
+Phone checks: Garage → Edit a car → scroll until Remove just appears at the bottom with the ↓ arrow over it → tap it → confirmation; the arrow elsewhere still scrolls.
+
 ## 0.0.361 - test synchronization (360 published no APK)
 
 360's signed build run 41568458403 failed only car-editor-taps-ui and car-editor-picture-error-ui: `locator.scrollIntoViewIfNeeded` resolved `#gRemove` / `#gNoTrim` and the editor redrew (background lookups) before it finished ("Element is not attached to the DOM"). With 360's fix the bind no longer throws, so those redraws now complete. Both tests now use a `seen(p, sel)` helper that retries scroll + boundingBox across redraws; no assertion weakened, no app change after 360 (16/16 passes with 16 copies running at once locally). vehiclecompare-ui passed on that run (known flake still open). 360's source tag stays untouched.

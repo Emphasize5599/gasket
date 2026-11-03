@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.362 - 2026-11-03
+- Includes 0.0.360's car editor fix (360 and 361 published no APK).
+- Tapping a button that the floating scroll arrow sits on (such as the car editor's Remove) now presses that button instead of scrolling.
+- Bug fixes
+
 ## 0.0.361 - 2026-11-03
 - Includes 0.0.360's car editor fix (it published no APK).
 - Bug fixes
