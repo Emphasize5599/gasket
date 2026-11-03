@@ -15,9 +15,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const box=await p.evaluate(()=>{const c=document.getElementById('gNoTrim').closest('label'),s=document.getElementById('gTrimSel');return {above:c.getBoundingClientRect().bottom<=s.getBoundingClientRect().top+1,checked:document.getElementById('gNoTrim').checked};});
  assert.deepEqual(box,{above:true,checked:false},'the checkbox sits above the trim menu, unchecked');
  assert.equal(await p.isDisabled('#gSave'),true,'trim still required');assert.equal(await p.isDisabled('#gTank'),true,'no tank before a trim');
+ // ticked while a lookup for a picked trim is still out: the no-trim question must still be asked and win
+ await p.evaluate(()=>{const o=window.onNativeResult;window.onNativeResult=function(){const a=arguments;setTimeout(()=>o.apply(window,a),400);};window.__before=__asked.length;});
+ await p.selectOption('#gTrimSel','Base');await p.waitForTimeout(100);assert.equal(await p.evaluate(()=>Garage.car().trim==='Base'&&!(+Garage.car().tank)),true,'the Base answer has not arrived yet');
  await p.check('#gNoTrim');await p.waitForSelector('#gTrimSel',{state:'detached'});
  await p.waitForFunction(()=>+Garage.car().tank===13.2,null,{timeout:5000});
- assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2005 Ford Test Coupe fuel tank capacity in gallons?','tank asked without a trim');
+ assert.equal(await p.evaluate(()=>__asked.slice(__before).filter(q=>/tank capacity/.test(q)&&!/Base/.test(q)).length),1,'the no-trim tank question asked once');assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2005 Ford Test Coupe fuel tank capacity in gallons?','tank asked without a trim');
  assert.deepEqual(await p.evaluate(()=>[Garage.car().noTrim,Garage.car().trim]),[true,''],'saved as no trim');
  await p.waitForFunction(()=>!document.querySelector('#gSave').disabled);assert.equal(await p.isDisabled('#gTank'),false);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal scroll');
