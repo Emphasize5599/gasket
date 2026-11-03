@@ -28,7 +28,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert(await p.evaluate(()=>__app.S.trip.routeChoices[RouteChoices.key(2,__leg2b)]&&__app.S.trip.routeChoices[RouteChoices.key(2,__leg2b)].consider===false),'the answer moved to the leg\'s new number');
  assert.deepEqual(await dim(),[],'after adding a rest the later steps stay open');
  // Stops always offers every leg's directory, even one with nothing found
- assert.equal(await p.locator('[data-rest-leg]').count(),3,'one entrance per leg, including the new ones');
+ assert.equal(await p.locator('[data-rest-leg]').count(),2,'one entrance per original leg; added rests stay inside it');
  assert.deepEqual(errors,[]);await p.close();
  console.log('Rest stop insertion keeps later legs\' road answers and every leg\'s directory passed');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

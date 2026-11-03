@@ -1100,18 +1100,20 @@
    * parts share their handoff stop: no road segment is omitted. planStops need .c.d.
    */
   function exportLegs(route, planStops, model) {
-    var stops = route.stops, out = [], ends = model.legEnds || [];
-    for (var i = 0; i < stops.length - 1; i++) {
-      var a = i ? ends[i - 1] || 0 : -1, b = i < stops.length - 2 ? ends[i] : Infinity;
+    var stops = route.stops, out = [], ends = model.legEnds || [],destinations=stops.map(function(p,i){return p.rest||p.stopRole==='rest'?-1:i;}).filter(function(i){return i>=0;});
+    for (var g = 0; g < destinations.length - 1; g++) {
+      var i=destinations[g],last=destinations[g+1],a = i ? ends[i - 1] || 0 : -1, b = last < stops.length - 1 ? ends[last-1] : Infinity;
       var mine = planStops.filter(function (p) { return p.c.d > a && p.c.d <= b; });
       mine=mine.slice().sort(function(x,y){return x.c.d-y.c.d;});
-      var points=[{stop:stops[i],d:Math.max(0,a)}].concat(mine.map(function(p){return {stop:{address:stationAddress(p.c),placeId:stationPlaceId(p.c),label:p.c.station&&p.c.station.name||'Charging / fuel stop'},d:p.c.d,fuel:p};}),[{stop:stops[i+1],d:b===Infinity?model.totalMi:b}]);
+      var points=[{stop:stops[i],d:Math.max(0,a)}].concat(mine.map(function(p){return {stop:{address:stationAddress(p.c),placeId:stationPlaceId(p.c),label:p.c.station&&p.c.station.name||'Charging / fuel stop'},d:p.c.d,fuel:p};}));
+      for(var ri=i+1;ri<last;ri++){var rest=stops[ri],d=ends[ri-1],via={rest:true,c:{d:d,lat:rest.lat,lng:rest.lng,station:{id:rest.placeId||null,address:rest.address,name:rest.short||rest.label}}};points.push({stop:rest,d:d,fuel:via});}
+      points.sort(function(a,b){return a.d-b.d;});points.push({stop:stops[last],d:b===Infinity?model.totalMi:b});
       var edges=points.length-1,parts=Math.ceil(edges/8),at=0;
       for(var part=0;part<parts;part++){
         var end=at+Math.ceil((edges-at)/(parts-part)),slice=points.slice(at,end+1);
         var ex=exportUrl({stops:[slice[0].stop,slice[slice.length-1].stop]},slice.slice(1,-1).map(function(p){return p.fuel;}),{legEnds:[]});
-        out.push({leg:i,part:part,parts:parts,from:slice[0].stop,to:slice[slice.length-1].stop,url:ex.url,waypoints:ex.waypoints,tooMany:ex.tooMany,
-          fuelStops:slice.slice(1).filter(function(p){return p.fuel;}).length,fromMi:slice[0].d,toMi:slice[slice.length-1].d});
+        out.push({leg:g,part:part,parts:parts,from:slice[0].stop,to:slice[slice.length-1].stop,url:ex.url,waypoints:ex.waypoints,tooMany:ex.tooMany,
+          fuelStops:slice.slice(1).filter(function(p){return p.fuel&&!p.fuel.rest;}).length,fromMi:slice[0].d,toMi:slice[slice.length-1].d});
         at=end;
       }
     }

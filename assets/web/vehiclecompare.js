@@ -41,7 +41,7 @@
     return {cost:cost,energy:quote.energy,spend:quote.spend,tolls:quote.tolls,fees:quote.fees,estimated:!!quote.estimated,minutes:minutes,driving:Math.max(0,driving),detour:detour,setup:setup,service:service,overlap:overlap,miles:row?row.miles:m.totalMi,stops:chosen.length,ready:!s.needsReview&&!s.stale};
   }
   function sorted(rows,sort){var field=sort==='time'?'minutes':'cost';return rows.slice().sort(function(a,b){var av=a.metrics[field],bv=b.metrics[field],ak=a.metrics.ready&&Number.isFinite(av),bk=b.metrics.ready&&Number.isFinite(bv);return (bk?1:0)-(ak?1:0)||(ak&&bk?av-bv:0)||a.order-b.order;});}
-  function portable(s,car){var t=clone(s.trip);delete t.routeChoices;return {id:s.id,trip:t,speed:clone(s.speed),route:clone(s.route),alts:clone(s.alts),altSel:s.altSel,altSure:s.altSure,replay:clone(s.replay),profile:s.profile,kind:s.kind,needsReview:true};}
+  function portable(s,car){var t=clone(s.trip);delete t.routeChoices;return {id:s.id,savedAt:s.savedAt,trip:t,speed:clone(s.speed),route:clone(s.route),alts:clone(s.alts),altSel:s.altSel,altSure:s.altSure,replay:clone(s.replay),profile:s.profile,kind:s.kind,needsReview:true};}
   /** The saved stations a queued car can reuse from its trip's record {stations, savedT, comparison: [{id, replay}]}, or
    *  null. The top level is whichever car saved last (an EV after a gas car, or the reverse); each car's own list
    *  survives in the comparison snapshots. EV: this car's own, else the top level if it's EV (prices and connectors are

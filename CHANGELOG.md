@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.370 - 2026-11-03
+- Preserve added rests and their settings when reopening recent trips or refreshing routes.
+- Group rests beneath original destinations in route menus, rest directories, time windows, departure summaries and navigation links.
+- Bug fixes
+
 ## 0.0.369 - 2026-11-03
 - Automatic planning refreshes prices from a collapsible tile above Rest stops and re-optimizes buffer and detour.
 - Optional automatic cheaper-route switching after refresh, enabled by default, compares original routes without added rests and requires new stop selection when the route changes.

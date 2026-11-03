@@ -1,6 +1,8 @@
 /* Persist repeated inventories once. Full object identity retains vehicle tariffs. */
 (function(root){'use strict';
+ var stops=typeof module!=='undefined'&&module.exports?require('./tripstops'):root.TripStops;
  function pack(v){
+  if(stops)v=stops.reconcile(v);
   if(!v||(!v.stations&&!v.comparison)||v.stationPoolVersion===1)return v;
   var pool=[],seen=new Map();
   function refs(rows){return (rows||[]).map(function(st){var key=JSON.stringify(st),i=seen.get(key);if(i===undefined){i=pool.length;seen.set(key,i);pool.push(st);}return i;});}
@@ -10,6 +12,7 @@
   copy.stationPoolVersion=1;copy.stationPool=pool;return copy;
  }
  function unpack(v){
+  if(stops)v=stops.reconcile(v);
   if(!v||v.stationPoolVersion!==1)return v;
   var pool=v.stationPool;
   if(!Array.isArray(pool))throw Error('Invalid saved station inventory');
