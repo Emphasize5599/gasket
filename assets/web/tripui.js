@@ -5534,7 +5534,16 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function compareEdit(id){
     if(!compareSwitch(id))return;step=ST_COMPARE;renderStep();var before=VehicleCompare.profile(Garage.car()),previous=result,kind=KIND(),grade=gradeOf();compareEditing=true;
-    Garage.render($('vcEditorHost'),null,function(){},call);Garage.editVehicle(function(saved){compareEditing=false;var changed=saved&&before!==VehicleCompare.profile(Garage.car());if(changed){compareReviewed=0;result=null;model=buildModel(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();S.trip.routeChoices={};routeReview=null;choiceComplete=false;choicePool=null;choiceCandidates=new Map();choiceReviewedAt=0;compareEntries.delete(id);}step=ST_COMPARE;renderStep();if(changed){if(previous&&kind==='gas'&&KIND()===kind&&grade===gradeOf())compareRecalculate(previous);else A.toast('Vehicle updated. Review setup to recalculate its trip.');}});
+    Garage.render($('vcEditorHost'),null,function(){},call);Garage.editVehicle(function(saved,info){compareEditing=false;if(info&&info.removed){compareRemoved(info.removed);return;}var changed=saved&&before!==VehicleCompare.profile(Garage.car());if(changed){compareReviewed=0;result=null;model=buildModel(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();S.trip.routeChoices={};routeReview=null;choiceComplete=false;choicePool=null;choiceCandidates=new Map();choiceReviewedAt=0;compareEntries.delete(id);}step=ST_COMPARE;renderStep();if(changed){if(previous&&kind==='gas'&&KIND()===kind&&grade===gradeOf())compareRecalculate(previous);else A.toast('Vehicle updated. Review setup to recalculate its trip.');}});
+  }
+  // 0.0.358: a vehicle removed from the Garage while editing it from the comparison leaves the comparison and its queue
+  function compareRemoved(id){
+    compareEntries.delete(id);if(queueEngine){var ids=queueEngine.state().jobs.map(function(j){return j.id;}).filter(function(x){return x!==id;});queueEngine.select(ids);}
+    if(compareOwner===id)compareOwner=null;
+    var next=Array.from(compareEntries.keys()).find(function(k){return S.cars.some(function(c){return c.id===k;});});
+    LG.info('trip','Vehicle removed from the comparison',{left:compareEntries.size});
+    if(next){compareOwner=next;if(compareSwitch(next,true)){step=ST_COMPARE;renderStep();return;}}
+    compareReset();step=ST_GARAGE;renderStep();
   }
   function compareRecalculate(previous){
     // Same fuel/grade and geometry: reuse priced candidates, but recalculate consumption,

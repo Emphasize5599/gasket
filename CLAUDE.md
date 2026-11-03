@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.358 - Remove from the comparison's editor
+
+Owner: fix the rest of 357's caveats (357 left Remove hidden when the editor opens from Compare, the 0.0.235 design). garage.js no longer drops `#gRemove` for `externalEditDone`; removeCar from that editor ends editing and calls `finishExternalEdit(false, {removed: id})`. tripui compareEdit's callback → `compareRemoved(id)`: deletes the comparison entry, drops its queue job (`queueEngine.select`), switches (restore-only) to the next remaining compared car on Compare, or compareReset + Garage when none. vehiclecompare-ui: Remove shown in the comparison editor (assertion flipped), removing venza12 leaves corolla20 on Compare. Identity editing (EPA pickers / custom fields) was already editable; the phone failure is attributed to 357's lost taps, re-check on 357/358. Not phone-verified.
+
+Phone checks: Compare → Edit vehicle → Remove → confirm: back on Compare without that car, the other stays; the Garage editor's Remove still works.
+
 ## 0.0.357 - car editor taps lost to redraws
 
 Owner on 356: ticking "This car has no trim" didn't hide the trim box or start the tank lookup, Remove didn't work, the car's identity couldn't be changed. Reproduced in the browser: (1) a redraw while a finger is down replaces the control under it, so the tap is lost; a typed trim's blur (`#gTrim` onchange → setTrim → draw) did it to `#gNoTrim`, and on the phone background answers (Brave trim/tank/spare, photos, Tire Rack) landing mid-tap can do it to anything (Remove, pickers). garage.js now counts pointers (`ptrDown`, document capture listeners): draw() while one is down sets `tapWait` and redraws after the click (or 400 ms after pointerup, 1.5 s max). (2) `#tEpa` (identity tile) open state came only from its toggle event, a task later, so a redraw in between folded the tile you just opened; editPanel now reads the live `open` first (`data-forced` marks a tile held open only because the trim is missing, so it still folds once the trim is set). Editor opened from Compare (`externalEditDone`) still hides Remove (unchanged). Test car-editor-taps-ui (release, 320/448: redraw right after opening the tile, typed trim then tap no-trim → ticked + tank asked without a trim, redraw while pressing Remove → confirmation; fails on 356). Not phone-verified.

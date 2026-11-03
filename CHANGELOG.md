@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.358 - 2026-11-03
+- Remove is available when editing a vehicle from the vehicle comparison; the comparison continues with the other vehicles.
+- Bug fixes
+
 ## 0.0.357 - 2026-11-03
 - Car editor: taps no longer get lost when the editor refreshes under your finger, so "This car has no trim", Remove and the vehicle pickers respond, and the Year / make / model / trim tile stays open after you open it.
 - Bug fixes

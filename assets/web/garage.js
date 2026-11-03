@@ -927,7 +927,9 @@
       S.cars = S.cars.filter(function (x) { return x !== c; });
       if (!S.cars.some(function (x) { return x.id === S.carId; })) { S.carId = S.cars.length ? S.cars[0].id : ''; editing = false; editSnap = null; }   // the only car: the garage is empty again
       LG.info('car', 'Removed ' + shortName(c));
+      var ext = !!externalEditDone; if (ext) { editing = false; editSnap = null; vinStates.delete(c); }
       draw(); changed();
+      if (ext) finishExternalEdit(false, { removed: c.id });   // opened from the comparison: it drops this vehicle
     });
   }
 
@@ -959,13 +961,12 @@
     settle(ed.body);
     var sc = ed.body.scrollTop;
     ed.body.innerHTML = editPanel(c);
-    if(externalEditDone&&$('gRemove'))$('gRemove').remove();
     ed.body.scrollTop = sc;
     $('gSave').disabled = !editorOk(c);
     if (A.qify) A.qify(ed.body);
   }
   var externalEditDone=null;
-  function finishExternalEdit(saved){var cb=externalEditDone;externalEditDone=null;if(cb)cb(saved);}
+  function finishExternalEdit(saved,info){var cb=externalEditDone;externalEditDone=null;if(cb)cb(saved,info);}
   function saveEdit(c) {
     if (!editorOk(c)) { var n = !identityOk(c)?$('gName'):!trimOk(c)?$('gTrim'):$('gTank'); if (n) { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); n.focus(); } return; }
     vinStates.delete(c);editSnap = null; editing = false; LG.info('car', 'Saved ' + shortName(c)); draw(); changed();finishExternalEdit(true);
