@@ -6,14 +6,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const open=async()=>{const p=await b.newPage({viewport:{width,height:900}});p.errors=[];p.on('pageerror',e=>p.errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
   await p.evaluate(()=>{window.__asked=[];__mocks.siteRead=(k,a)=>{if(k!=='brave')return {error:'none'};if(a.kind==='trims')return {error:'none'};const q=decodeURIComponent(a.url);__asked.push(q);return /\bLE\b|XSE/.test(q)?{error:'no answer'}:{gal:11.8,src:'ai'};};});
-  await p.click('#btnTrip');await p.click('#gEdit');await p.waitForSelector('.car-edit');return p;};
+  await p.click('#btnTrip');await p.click('#gEdit');await p.waitForSelector('.car-edit #tEpa');await p.waitForSelector('.car-edit #gSave');return p;};
  // the identity tile of a saved car is folded; open it, and a background redraw right after must not fold it again
  let p=await open();
  assert.equal(await p.evaluate(()=>document.getElementById('tEpa').open),false,'saved car: identity folded');
  await p.evaluate(()=>{document.querySelector('#tEpa > summary').click();Garage.redraw();});
  assert.equal(await p.evaluate(()=>document.getElementById('tEpa').open),true,'a redraw right after opening keeps the tile open');
  // a typed trim, then tap the checkbox: the box's blur redraws the editor, and the tap must still tick it
- await p.waitForSelector('#gTrim');await p.fill('#gTrim','XSE');await p.click('#gNoTrim');
+ await p.waitForSelector('#gTrim',{state:'visible'});await p.fill('#gTrim','XSE');await p.click('#gNoTrim');
  await p.waitForSelector('#gNoTrim:checked');assert.equal(await p.locator('#gTrim').count(),0,'trim box gone');assert.equal(await p.locator('#gTrimSel').count(),0);
  await p.waitForFunction(()=>+Garage.car().tank===11.8,null,{timeout:5000});
  assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2020 Toyota Corolla Hybrid fuel tank capacity in gallons?','tank asked without a trim');
@@ -22,11 +22,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal scroll');
  assert.deepEqual(p.errors,[]);await p.close();
  // a background answer redraws the editor while your finger is on Remove: the tap still opens the confirmation
- p=await open();const box=await p.locator('#gRemove').boundingBox();
+ p=await open();await p.waitForSelector('.car-edit #gRemove',{state:'visible'});
  await p.locator('#gRemove').scrollIntoViewIfNeeded();const bb=await p.locator('#gRemove').boundingBox();
  await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await p.mouse.down();
  await p.evaluate(()=>Garage.redraw());await p.mouse.up();
  await p.waitForSelector('#cfm.on #cfmYes',{timeout:3000});await p.click('#cfm.on #cfmYes');
- await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='corolla20'));assert.ok(box,'Remove shown');
+ await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='corolla20'));
  assert.deepEqual(p.errors,[]);await p.close();
 }console.log('320/448px redraw mid-tap keeps no-trim / Remove taps, identity tile stays open, tank asked without a trim');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

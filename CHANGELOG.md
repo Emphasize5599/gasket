@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.359 - 2026-11-03
+- Includes 0.0.357's car editor tap fixes and 0.0.358's Remove from the comparison (neither published an APK).
+- Bug fixes
+
 ## 0.0.358 - 2026-11-03
 - Remove is available when editing a vehicle from the vehicle comparison; the comparison continues with the other vehicles.
 - Bug fixes

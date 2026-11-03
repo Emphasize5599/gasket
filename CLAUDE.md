@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.359 - test synchronization (357/358 published no APK)
+
+357's signed build run 41559240364 passed 218/219 and failed only car-editor-taps-ui: it read `#gRemove`'s boundingBox before the editor had drawn it (null on the CI runner). 358 (run 41560097937) carries the same test. The test now waits for `.car-edit #tEpa` / `#gSave` and a visible `#gRemove` / `#gTrim`; no assertion weakened, no app change after 358. 357/358 source tags stay untouched without APKs.
+
+Known pre-existing flake (reproduced on 356 too, CI passed it on 357): vehiclecompare-ui line 29 "queue switching preserves both hazard approvals" fails ~1/3–1/2 locally when run alongside autotrip-ui/ev-feasibility at TEST_JOBS=3. Instrumenting compareCapture showed a planned Corolla comparison entry overwritten with an empty result by the capture at the end of findStops1, awaited through the batch queue's run() (findStops() returns any in-flight `finding` promise). A bounded wait for finding/busy before compareSwitch in run() was tried and did NOT reliably fix it (0/15 with instrumentation, 3/8 and 5/6 without), so it was reverted. Real root cause still open; the test now waits up to 5 s before the same count assertion (didn't fix it either: the entry's result is really gone). Phone impact unknown: a batch may show one vehicle needing replanning.
+
 ## 0.0.358 - Remove from the comparison's editor
 
 Owner: fix the rest of 357's caveats (357 left Remove hidden when the editor opens from Compare, the 0.0.235 design). garage.js no longer drops `#gRemove` for `externalEditDone`; removeCar from that editor ends editing and calls `finishExternalEdit(false, {removed: id})`. tripui compareEdit's callback → `compareRemoved(id)`: deletes the comparison entry, drops its queue job (`queueEngine.select`), switches (restore-only) to the next remaining compared car on Compare, or compareReset + Garage when none. vehiclecompare-ui: Remove shown in the comparison editor (assertion flipped), removing venza12 leaves corolla20 on Compare. Identity editing (EPA pickers / custom fields) was already editable; the phone failure is attributed to 357's lost taps, re-check on 357/358. Not phone-verified.
