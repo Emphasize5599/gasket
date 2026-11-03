@@ -2,6 +2,7 @@
 // Garage redraw threw in CarPics.selectedView before the editor's buttons were bound: no-trim didn't start the tank
 // lookup, Remove and Discard did nothing (a discarded new car stayed). Phone taps with that failed picture record.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoViewIfNeeded({timeout:1000});const bb=await p.locator(sel).boundingBox();if(bb)return bb;}catch(e){if(i>=20)throw e;}await p.waitForTimeout(100);}}; // the editor may redraw (background lookups) while we scroll
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const ctx=await b.newContext({viewport:{width,height:900},hasTouch:true,isMobile:true}),p=await ctx.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.stack));
  await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
@@ -16,15 +17,15 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  for(const [id,value] of [['eYear','2005'],['eMake','MINI'],['eModel','Cooper S Convertible'],['eOpt','20531']]){await p.waitForFunction(([id,value])=>[...document.getElementById(id).options].some(o=>o.value===value),[id,value]);await p.selectOption('#'+id,value);}
  await p.waitForFunction(()=>Garage.car().epaId==='20531');await p.waitForFunction(()=>Garage.car().pic&&Garage.car().pic.fuel,null,{timeout:5000});await p.waitForTimeout(600);
  // tick no-trim with a finger: the tank question is asked without a trim
- await p.locator('#gNoTrim').scrollIntoViewIfNeeded();await p.tap('#gNoTrim');
+ await seen(p,'#gNoTrim');await p.tap('#gNoTrim');
  await p.waitForFunction(()=>+Garage.car().tank===13.2,null,{timeout:5000});
  assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2005 MINI Cooper S Convertible fuel tank capacity in gallons?');
  // Discard the new car: it is gone, the garage is as before
- await p.locator('#gDiscard').scrollIntoViewIfNeeded();await p.tap('#gDiscard');await p.waitForSelector('#cfm.on #cfmYes');await p.tap('#cfm.on #cfmYes');
+ await seen(p,'#gDiscard');await p.tap('#gDiscard');await p.waitForSelector('#cfm.on #cfmYes');await p.tap('#cfm.on #cfmYes');
  await p.waitForSelector('.car-edit',{state:'detached'});assert.deepEqual(await p.evaluate(()=>__app.S.cars.map(c=>c.id)),before,'discarded new car removed');
  // a saved car with the same failed picture record: Remove works
  await p.evaluate(()=>{const c=__app.S.cars.find(x=>x.id==='corolla20');c.pic=Object.assign({},c.pic,{fuel:{failed:true,t:Date.now()}});__app.S.carId=c.id;Garage.redraw();});
- await p.tap('#gEdit');await p.waitForSelector('.car-edit #gRemove',{state:'visible'});await p.locator('#gRemove').scrollIntoViewIfNeeded();await p.tap('#gRemove');
+ await p.tap('#gEdit');await p.waitForSelector('.car-edit #gRemove',{state:'visible'});await seen(p,'#gRemove');await p.tap('#gRemove');
  await p.waitForSelector('#cfm.on #cfmYes');await p.tap('#cfm.on #cfmYes');await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='corolla20'));
  assert.deepEqual(errors,[]);await ctx.close();
 }console.log('320/448px touch: failed Fuel API picture no longer breaks the editor: no-trim tank lookup, Discard of a new car, Remove');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

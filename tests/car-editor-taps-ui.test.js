@@ -3,6 +3,7 @@
 // replaced the control under it (a typed trim's blur, or a background lookup's answer), and the identity tile's late
 // toggle event let a redraw fold it again right after you opened it.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoViewIfNeeded({timeout:1000});const bb=await p.locator(sel).boundingBox();if(bb)return bb;}catch(e){if(i>=20)throw e;}await p.waitForTimeout(100);}}; // the editor may redraw (background lookups) while we scroll
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const open=async()=>{const p=await b.newPage({viewport:{width,height:900}});p.errors=[];p.on('pageerror',e=>p.errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
   await p.evaluate(()=>{window.__asked=[];__mocks.siteRead=(k,a)=>{if(k!=='brave')return {error:'none'};if(a.kind==='trims')return {error:'none'};const q=decodeURIComponent(a.url);__asked.push(q);return /\bLE\b|XSE/.test(q)?{error:'no answer'}:{gal:11.8,src:'ai'};};});
@@ -23,7 +24,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.deepEqual(p.errors,[]);await p.close();
  // a background answer redraws the editor while your finger is on Remove: the tap still opens the confirmation
  p=await open();await p.waitForSelector('.car-edit #gRemove',{state:'visible'});
- await p.locator('#gRemove').scrollIntoViewIfNeeded();const bb=await p.locator('#gRemove').boundingBox();
+ const bb=await seen(p,'#gRemove');
  await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2);await p.mouse.down();
  await p.evaluate(()=>Garage.redraw());await p.mouse.up();
  await p.waitForSelector('#cfm.on #cfmYes',{timeout:3000});await p.click('#cfm.on #cfmYes');
