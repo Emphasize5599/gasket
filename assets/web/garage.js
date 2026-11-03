@@ -183,7 +183,12 @@
   function editorOk(c){return !!c&&Number.isFinite(Number(c.tank))&&Number(c.tank)>0&&identityOk(c)&&trimOk(c);}
   /** Trim is required (it can change the tank size), except for a custom car known only by its name. */
   function trimNeeded(c){return !!c&&!(c.entryMode==='custom'&&!(c.year&&c.make&&c.model));}
-  function trimOk(c){return !trimNeeded(c)||!!String(c.trim||'').trim();}
+  function trimOk(c){return !trimNeeded(c)||c.noTrim===true||!!String(c.trim||'').trim();}
+  /** 0.0.356 (owner): some cars really have no trim; a checkbox above the trim menu says so (the tank / DC lookups then ask without one). */
+  function setNoTrim(c,on){on=!!on;if(!!c.noTrim===on)return;if(on){c.noTrim=true;delete trimOther[c.id];}else delete c.noTrim;var had=String(c.trim||'');c.trim='';LG.info('car','No trim '+(on?'checked':'unchecked'));
+    if(kind(c)==='gas'&&(had||c.tankSrc!=='you entered it')){c.tank='';c.tankSrc='';c.tankLookup=null;}
+    if(kind(c)==='ev'&&c.dcKwSrc!=='you entered it'){c.dcKw='';c.dcKwSrc='';c.dcKwLookup=null;}
+    draw();changed();if(on&&kind(c)==='gas'&&tankKey(c))tankFind(c,false);if(on&&kind(c)==='ev'&&tankKey(c))dcFind(c,false);}
   function identityOk(c){
     if(!c)return false;
     if(c.entryMode==='custom')return !!(c.year&&c.make&&c.model||String(c.name||'').trim()||String(c.nick||'').trim());
@@ -329,8 +334,10 @@
   }
   function trimHtml(c) {
     var st = trimState(c), list = trimList(c), have = TrimMath.find(list, vehicleLabel(c,c.trim)), other = trimOther[c.id] || (!!c.trim && !have);
+    var none = '<label class="nf chk wide no-trim"><input type="checkbox" id="gNoTrim"' + (c.noTrim ? ' checked' : '') + '><span>This car has no trim<small>some models come in only one version</small></span></label>';
+    if (c.noTrim) return none;
     var hint = st && st.busy ? 'looking up this model\'s trims…' : list.length ? 'pick yours: it can change the tank size' : 'can change the tank size';
-    var h = '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>' + hint + '</small></span>';
+    var h = none + '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>' + hint + '</small></span>';
     if (st && st.busy && !list.length) return h + '<select id="gTrimSel" disabled><option>Looking up trims…</option></select>' + A.ldBar('Asking Brave Search for this model\'s trims') + '</label>' +
       '<label class="nf wide"><span>Or type it<small>if you know it</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     if (list.length) {
@@ -993,11 +1000,12 @@
         $('gTrim').oninput = function () { if ($('gSave')) $('gSave').disabled = !editorOk(Object.assign({}, c, { trim: this.value.trim() })); };
         $('gTrim').onchange = function () { setTrim(c, this.value); };
       }
+      if ($('gNoTrim')) $('gNoTrim').onchange = function () { setNoTrim(c, this.checked); };
       if ($('gTrimSel')) $('gTrimSel').onchange = function () {
         if (this.value === '__other') { trimOther[c.id] = true; draw(); if ($('gTrim')) $('gTrim').focus(); return; }
         delete trimOther[c.id]; setTrim(c, this.value);
       };
-      if (trimKey(c) && !trimState(c)) trimFind(c);
+      if (!c.noTrim && trimKey(c) && !trimState(c)) trimFind(c);
       if($('gTrimRetry'))$('gTrimRetry').onclick=function(){var key=trimKey(c);delete trimMem[key];A.KV.put('trims',TRIM_V+key,null);trimFind(c);};
       $('gTank').onchange = function () { var v = parseFloat(this.value); c.tank = v > 0 ? r2(v) : ''; c.tankSrc = v > 0 ? 'you entered it' : ''; changed(); draw(); };
       if ($('gTankFind')) $('gTankFind').onclick = function () { if (c.tankSrc === 'you entered it') c.tankSrc = ''; tankFind(c, false); };
@@ -1262,7 +1270,7 @@
     if (!(city > 0 && hwy > 0)) return { error: 'The EPA has no mileage numbers for that one.' };
     var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
     var identityChanged=wasCar!==[+v.year,String(v.make||'').toLowerCase(),baseOf({model:v.model,epaBase:v.baseModel}).toLowerCase()].join('|');
-    if(identityChanged&&!matching&&c.epaId){detachVin(c);c.trim='';delete c.catalog;delete c.vpicModel;c.recalls=null;delete c.recallCheck;delete trimOther[c.id];}
+    if(identityChanged&&!matching&&c.epaId){detachVin(c);c.trim='';delete c.noTrim;delete c.catalog;delete c.vpicModel;c.recalls=null;delete c.recallCheck;delete trimOther[c.id];}
     c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : /diesel/i.test(fuel) ? 'diesel' : 'gas';
     c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);else delete c.epaBase;
     c.name = [v.year, v.make, v.model].join(' ') + (opt ? ' · ' + opt : '');c.epaOption=opt||'';

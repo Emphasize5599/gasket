@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.356 - 2026-11-03
+- A "This car has no trim" checkbox above the trim menu, for models that come in only one version; the tank size is then looked up without a trim.
+
 ## 0.0.355 - 2026-11-02
 - With overnight planning, leaving Compare opens leg 1's rest stops and waits there until their details are ready; the screening countdown is gone.
 - Provider cooldowns show in the status bar with a pause icon instead of a tile in the rest list.
