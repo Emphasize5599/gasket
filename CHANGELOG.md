@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.364 - 2026-11-03
+- Campendium search radius is adjustable mile by mile, with a customizable slider maximum.
+- Rest editing preserves original destination departure windows when a leg is split.
+- Bug fixes
+
 ## 0.0.363 - 2026-11-03
 - Includes 0.0.360's car editor fix and 0.0.362's scroll arrow fix (360–362 published no APK).
 - Vehicle comparison batches: a vehicle's plan no longer fails because the previous vehicle's traffic lookup was cancelled.

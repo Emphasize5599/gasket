@@ -32,6 +32,8 @@ assert.equal(R.osm({elements:[{type:'node',id:3,lat:34,lon:-92,tags:{highway:'re
 // Per-source radius and slider maximum: default max 50 (website 100), RV Parky keeps its discrete radii.
 assert.equal(R.sourceFilter('osm',{sources:{}}).radiusMax,50);assert.equal(R.sourceFilter('osm',{sources:{osm:{radius:80}}}).radius,50,'radius never exceeds the slider maximum');assert.equal(R.sourceFilter('osm',{sources:{osm:{radius:80,radiusMax:120}}}).radius,80,'a raised maximum allows a wider radius');
 assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:30}}}).radius,50,'RV Parky snaps up to a radius it supports');assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:500,radiusMax:500}}}).radius,100,'RV Parky maximum is 100');assert.equal(R.sourceFilter('campendium',{sources:{}}).radius,5,'no radius is sent to Campendium');
+assert.equal(R.sourceFilter('campendium',{sources:{campendium:{radius:37,radiusMax:80}}}).radius,37,'Campendium supports each mile instead of preset website radii');
+assert.equal(R.sourceFilter('campendium',{sources:{campendium:{radius:150,radiusMax:200}}}).radius,150,'Campendium can use the same adjustable maximum as native inventories');
 (async()=>{// a 25-mile OSM radius widens the cells asked and the sites kept; 4×4 cells (1°) share one request; a 429 cools the source down without remembering the failed cells
  const far={type:'node',id:9,lat:34.1,lon:-92+20/(69*Math.cos(34.1*Math.PI/180)),tags:{highway:'rest_area',name:'Twenty miles off'}};
  const wide={sources:{osm:{radius:25}}},narrow={sources:{osm:{radius:5}}};assert(R.cellsFor(m,25).length>R.cellsFor(m,5).length);
@@ -92,3 +94,5 @@ assert.equal(R.sourceFilter('rvparky',{sources:{rvparky:{radius:30}}}).radius,50
  const cp=R.campendiumRows({places:[{name:'Generic Public Camp',lat:34.1,lng:-92.01,url:'/a',kind:'Public Land'},{name:'Generic RV Resort',lat:34.1,lng:-92.02,url:'/b',kind:'RV Park'}]},1),cpf={sources:{campendium:{freeOnly:true}}};
  assert.deepEqual(cp.filter(p=>R.check(p,cpf).ok).map(p=>p.name),[],'public land is not proof of a free stay');assert.equal(cp[0].price,null,'no price claimed');assert.match(cp[0].priceText,/unverified/);assert.equal(cp.filter(p=>R.check(p,{}).ok).length,2);
  console.log('Free-only RV Parky and public-land-only Campendium passed');})().catch(e=>{console.error(e);process.exitCode=1;});
+
+(async()=>{const filter={sources:{ntad:{enabled:false},osm:{enabled:false},rvparky:{enabled:false},campendium:{enabled:true,radius:37,radiusMax:80}}},mem=new Map();const out=await R.create({get:k=>mem.get(k),put:(k,v)=>mem.set(k,v),fetch:async()=>({locations:[]}),campendium:async()=>({places:[]})}).corridor(m,filter,{});assert.equal(out.campendium.cells,R.cellsFor(m,37).length,'Campendium discovery honors the full chosen radius rather than clipping at 25');console.log('Campendium full configured discovery radius passed');})().catch(e=>{console.error(e);process.exitCode=1;});
