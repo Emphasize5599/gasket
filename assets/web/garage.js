@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   var A = window.__app, S = A.S, N = A.N, P = A.P, $ = A.$, esc = A.esc, SP = window.Speed;
-  var LG = window.FLog || { info: function () {}, debug: function () {}, warn: function () {} };
+  var LG = window.FLog || { info: function () {}, debug: function () {}, warn: function () {}, error: function () {} };
   var EPA = 'https://www.fueleconomy.gov/ws/rest/vehicle/';
   var VPIC = 'https://vpic.nhtsa.dot.gov/api/vehicles/';
   function vehicleLabel(c,text){return window.VehicleNames?VehicleNames.display(c,text):String(text||'');}
@@ -550,7 +550,7 @@
   window.addEventListener('carpic', function (e) {
     var c = car(); if (!c || e.detail !== c.id || !host) return;
     var p = document.getElementById('gcPic'); if (p && p.classList.contains('gc-tip')) { draw(); return; } if (p) p.innerHTML = picHtml(c);
-    syncRotation(c);
+    try { syncRotation(c); } catch (err) { LG.error('car', 'Car picture controls failed: ' + err.message, String(err.stack || '').slice(0, 1200)); }
     var originalButton = document.getElementById('gcOriginal');
     if (originalButton && window.CarPics) originalButton.disabled = !CarPics.hasOverride(c);
     var s = document.getElementById('gcSub'); if (s) { s.innerHTML = subHtml(c); bindSub(); }
@@ -978,7 +978,8 @@
     syncVinUi(c);
     if(ed&&ed.body){ed.body.querySelectorAll('details').forEach(function(d){d.addEventListener('toggle',function(){syncVinUi(c);});});}
     if($('gInfo'))$('gInfo').addEventListener('toggle',function(){syncVinUi(c);});
-    bindCarousel(c);
+    // a picture problem must never leave the editor's buttons unbound (0.0.360: a failed Fuel API answer threw here)
+    try { bindCarousel(c); } catch (e) { LG.error('car', 'Car picture controls failed: ' + e.message, String(e.stack || '').slice(0, 1200)); }
     if (editing && ed) bindPaints(c);
     host.querySelectorAll('[data-car]').forEach(function (b) {
       b.onclick = function () {

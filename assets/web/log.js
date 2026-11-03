@@ -56,7 +56,7 @@
       return entries.map(function (e) { return e.t + ' ' + e.l + ' [' + e.a + '] ' + e.m + (e.d ? '\n    ' + e.d : ''); }).join('\n');
     }
   };
-  root.addEventListener && root.addEventListener('error', function (ev) { log(1, 'app', 'Uncaught: ' + ev.message, (ev.filename || '') + ':' + (ev.lineno || '')); });
+  root.addEventListener && root.addEventListener('error', function (ev) { log(1, 'app', 'Uncaught: ' + ev.message, (ev.filename || '') + ':' + (ev.lineno || '') + (ev.error && ev.error.stack ? '\n' + String(ev.error.stack).slice(0, 1500) : '')); });
   root.addEventListener && root.addEventListener('unhandledrejection', function (ev) { log(1, 'app', 'Unhandled: ' + (ev.reason && ev.reason.message || ev.reason)); });
   root.FLog = api;
 })(this);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.360 - 2026-11-03
+- Car editor: fixed the tank-size lookup, Remove and Discard not working for cars whose Fuel API picture lookup failed (a discarded new car was being kept).
+- Bug fixes
+
 ## 0.0.359 - 2026-11-03
 - Includes 0.0.357's car editor tap fixes and 0.0.358's Remove from the comparison (neither published an APK).
 - Bug fixes

@@ -81,6 +81,7 @@ on:
       - tests/rest-tools-ui.test.js
       - tests/no-trim-ui.test.js
       - tests/car-editor-taps-ui.test.js
+      - tests/car-editor-picture-error-ui.test.js
       - tests/routedusk.test.js
       - tests/route-dusk-ui.test.js
       - tests/rest-draft-work.test.js

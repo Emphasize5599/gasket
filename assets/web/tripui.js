@@ -15,7 +15,7 @@
 
   // ---------- native calls as promises ----------
   var nid = 900000, waiting = {};
-  window.onNativeResult = function (id, res) { var f = waiting[id]; if (f) { delete waiting[id]; f(res); } };
+  window.onNativeResult = function (id, res) { var f = waiting[id]; if (f) { delete waiting[id]; try { f(res); } catch (e) { if (window.FLog) FLog.error('app', 'Native reply handler failed: ' + (e && e.message), String(e && e.stack || '').slice(0, 1500)); setTimeout(function () { throw e; }, 0); } } };
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function (resolve) {

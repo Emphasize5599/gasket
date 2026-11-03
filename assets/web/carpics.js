@@ -59,7 +59,7 @@
   /** Prefer the front three-quarter, then side, then rear; any returned view is usable. */
   function bestColors(v) { var a=colorsOf(v,'color_0640_032_png');if(a.length)return a;a=colorsOf(v,'color_0640_001_png');return a.length?a:colorsOf(v,'color_0640_014_png'); }
   function fuelViews(v){var out=[];['032','001','014'].forEach(function(angle){colorsOf(v,'color_0640_'+angle+'_png').forEach(function(c){out.push(Object.assign({angle:angle},c));});});return out;}
-  function selectedView(c){var f=c&&c.pic&&c.pic.fuel,col=f&&(pickColor(f.colors,c.paint)||f.colors[0]),views=f&&f.views&&f.views.filter(function(v){return col&&v.code===col.code;})||[];return views.find(function(v){return v.angle===c.picAngle;})||views.find(function(v){return v.angle==='032';})||views[0]||{angle:'032',code:col&&col.code};}
+  function selectedView(c){var f=c&&c.pic&&c.pic.fuel,col=f&&(pickColor(f.colors,c.paint)||(f.colors||[])[0]),views=f&&f.views&&f.views.filter(function(v){return col&&v.code===col.code;})||[];return views.find(function(v){return v.angle===c.picAngle;})||views.find(function(v){return v.angle==='032';})||views[0]||{angle:'032',code:col&&col.code};}
   function pickColor(colors, paint) {
     if (!colors || !colors.length || !paint) return null;
     return colors.filter(function (c) { return paint.code && c.code === paint.code; })[0] || null;

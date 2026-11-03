@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.360 - the real cause of the car editor failures
+
+Owner's 358 log (2005 MINI Cooper S Convertible): tank lookup never asked, Remove did nothing, Discard of a new car kept it. Log showed "Uncaught: Script error." (WebView hides details for errors thrown inside evaluateJavascript callbacks) right after each car event, also on 355/356. Cause: Fuel API answered HTML, so `c.pic.fuel` was a failed record without `colors`; `CarPics.selectedView` read `f.colors[0]` and threw inside `syncRotation` ← `bindCarousel` ← garage `bind`, before any editor button was bound (and in the `carpic` listener). So 357's "lost taps" diagnosis was at most partial. Fixes: `(f.colors||[])[0]`; bind/carpic wrap picture controls in try (logged "Car picture controls failed"); tripui `onNativeResult` catches handler errors and logs message + stack ("Native reply handler failed") before rethrowing; log.js adds `ev.error.stack` when the browser gives it. Test car-editor-picture-error-ui (release, 320/448, touch: failed Fuel API record, no-trim tap → tank asked, Discard removes the new car, Remove on a saved car; fails on 359). vehiclecompare-ui flake still open: guarding findStops1's tail capture by the starting car + waiting for another car's in-flight search did NOT fix it (2/6 failures) and was reverted. Not phone-verified.
+
+Phone checks: add a car whose Fuel API pictures fail (e.g. 2005 MINI Cooper S Convertible) → tick "This car has no trim" → tank fills; Discard → the car is gone; edit a saved car → Remove → confirmation → gone; a new log should show no "Script error." after car events.
+
 ## 0.0.359 - test synchronization (357/358 published no APK)
 
 357's signed build run 41559240364 passed 218/219 and failed only car-editor-taps-ui: it read `#gRemove`'s boundingBox before the editor had drawn it (null on the CI runner). 358 (run 41560097937) carries the same test. The test now waits for `.car-edit #tEpa` / `#gSave` and a visible `#gRemove` / `#gTrim`; no assertion weakened, no app change after 358. 357/358 source tags stay untouched without APKs.
