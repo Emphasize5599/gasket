@@ -98,6 +98,9 @@ on:
       - tests/restui.test.js
       - tests/recreation.test.js
       - tests/rest-cache-policy.test.js
+      - tests/rest-persistence-ui.test.js
+      - tests/ignored-stations-ui.test.js
+      - tests/traffic-analysis-reuse.test.js
       - tests/rest-links-prices-ui.test.js
       - tests/rest-departure-anchors.test.js
       - tests/rest-departure-ui.test.js

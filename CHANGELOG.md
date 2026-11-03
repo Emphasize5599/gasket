@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.366 - 2026-11-03
+- Reuse saved rest-site road access across trips and departure times without repeating the full access scan.
+- Configure how often changing rest-site data refreshes, with a seven-day default.
+- Keep forecasts for unchanged later legs when adding an earlier rest; clearly label onward departures and rest arrivals.
+- Hide gas stations marked “Don't use” from maps, station lists, details and trip choices.
+- Reuse completed traffic analyses across trips; analyze only newly needed road/time combinations when windows or hazard choices change.
+- Bug fixes
+
 ## 0.0.365 - 2026-11-03
 - Includes the Campendium radius and rest departure-window fixes from 0.0.364 (no APK published).
 - Editing a charging-curve point preserves other recently edited points across editor redraws.

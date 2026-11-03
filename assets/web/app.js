@@ -497,12 +497,12 @@
   // same stations, settings, position and minute: same prices (redraws when closing Settings or a trip repeated it all)
   var enrichedMemo=null;
   function enriched() {
-    var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null),vis=visibleStations(),key=[S.grade,JSON.stringify(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','dieselRisk','staleHours'].map(function(k){return S[k];})),ref?ref.lat+','+ref.lng:'',Math.floor(Date.now()/60000)].join('|');
+    var ref = me || (lastFetch ? { lat: lastFetch.lat, lng: lastFetch.lng } : null),vis=visibleStations(),key=[S.grade,JSON.stringify(['walmartPlus','samsMode','cashbackPct','citgoTier','citgoUsed','citgoHistory','blacklist','ignoredStations','dieselRisk','staleHours'].map(function(k){return S[k];})),ref?ref.lat+','+ref.lng:'',Math.floor(Date.now()/60000)].join('|');
     if(enrichedMemo&&enrichedMemo.vis===vis&&enrichedMemo.key===key)return enrichedMemo.out;
     var out=enriched0(vis,ref);enrichedMemo={vis:vis,key:key,out:out};return out;
   }
   function enriched0(vis,ref) {
-    return vis.map(function (s) {
+    return vis.filter(function(s){return !IG||!IG.has(s);}).map(function (s) {
       var c = P.compute(s, S.grade, S, new Date());
       return { s: s, c: c, dist: ref ? P.haversineMi(ref.lat, ref.lng, s.lat, s.lng) : null };
     });
@@ -511,7 +511,7 @@
   function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function shortAddr(a) { return String(a).split(',').slice(0, 2).join(','); }
 
-  function shown(x) { return x.c || !S.hideUnpriced || x.s.id === selectedId; }
+  function shown(x) { return (!IG||!IG.has(x.s))&&(x.c || !S.hideUnpriced || x.s.id === selectedId); }
   var LIST_MAX = 200;   // rows in the list sheet: past that the page itself slows down
   function render() {
     syncMain();
@@ -730,7 +730,7 @@
     if (sign && v < 0) return '−' + s; if (sign && v > 0) return '+' + s; return s;
   }
   function openDetail(id) {
-    var s = byId(id); if (!s) return;
+    var s = byId(id); if (!s) return;if(IG&&IG.has(s)){closeDetail();return;}
     selectedId = id;
     var br = P.brand(s.brand);
     var c = P.compute(s, S.grade, S, new Date());
@@ -839,7 +839,7 @@
       if (!st || IG.has(st)) return;
       var e = BL.entryOf(st);
       IG.list().push(e); save(); FLog.info('stations', 'Station ignored', { brand: st.brand }); BL.changed();
-      undoToast('Gasket won\'t use ' + (st.name || 'this station'), function () { S.ignoredStations = IG.list().filter(function (x) { return x !== e; }); save(); BL.changed(); });
+      undoToast('Station hidden throughout Gasket', function () { S.ignoredStations = IG.list().filter(function (x) { return x !== e; }); save(); BL.changed(); });
     },
     remove: function (st) {
       var gone = IG.list().filter(function (x) { return BL.same(x, st); });
@@ -880,11 +880,11 @@
   /** Settings → Bad CITGO stations: each one opens on the map; ✕ takes it off the list. */
   function openBlPage() { drawBlPage(); $('blPage').classList.remove('hidden'); $('blPage').scrollTop = 0; }
   function drawBlPage() {
-    var l = BL.list().slice().sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
+    var l = BL.list().filter(function(st){return !IG.has(st);}).sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
     var h = '<div class="pg-head"><button class="x" id="blBack" aria-label="Back">←</button><h1>Station lists</h1></div>';
     var il = IG.list().slice().sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
-    h += '<div class="card"><h3>Stations Gasket won\'t use</h3><p class="lead small keep">Trip plans skip these, for example a price you know is wrong.</p>' + (il.length ? '<div class="bl-list">' + il.map(function (e, i) {
-      return '<div class="bl-row"><button class="bl-go" data-ig="' + i + '"><b>' + esc(e.name || 'Station') + '</b><small>' + esc(shortAddr(e.address || '')) + (e.t ? ' · added ' + new Date(e.t).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '') + '</small></button>' +
+    h += '<div class="card"><h3>Stations Gasket won\'t use</h3><p class="lead small keep">Hidden stations are omitted from maps, lists and trip choices. Use again restores one.</p>' + (il.length ? '<div class="bl-list">' + il.map(function (e, i) {
+      return '<div class="bl-row"><span class="bl-go"><b>Hidden station ' + (i+1) + '</b><small>Station details hidden</small></span>' +
         '<button class="btn tonal sm" data-igrm="' + i + '">Use again</button></div>';
     }).join('') + '</div>' : '<p class="small keep">None yet. Open a station\'s details or a trip stop and tap Don\'t use this station.</p>') + '</div>';
     h += '<h3 class="sec">Bad CITGO stations</h3><p class="lead">CITGOs where Walmart+ didn\'t work. They don\'t get the 10¢ in prices or trip plans. Tap one to see it on the map.</p>';
@@ -1689,7 +1689,7 @@
   qify(document.body);
 
   window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, ignore: IG, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
-    me: function () { return me; }, stations: function () { return stations; }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
+    me: function () { return me; }, stations: function () { return stations.filter(function(st){return !IG.has(st);}); }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, jobShort: jobShort, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
   window.__app.confirmDiscard=function(){return confirmDel({always:true,title:'Discard changes?',body:'Your changes in this editor will be undone.',action:'Discard changes',goClass:'tonal caution'});};
