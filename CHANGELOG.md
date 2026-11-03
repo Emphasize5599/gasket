@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.365 - 2026-11-03
+- Includes the Campendium radius and rest departure-window fixes from 0.0.364 (no APK published).
+- Editing a charging-curve point preserves other recently edited points across editor redraws.
+- Bug fixes
+
 ## 0.0.364 - 2026-11-03
 - Campendium search radius is adjustable mile by mile, with a customizable slider maximum.
 - Rest editing preserves original destination departure windows when a leg is split.

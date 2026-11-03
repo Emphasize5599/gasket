@@ -676,7 +676,9 @@
   function bindCurve(c){
     var host=$('gDcCurve');if(!host)return;
     host.querySelectorAll('[data-dc-pct]').forEach(function(el){el.onchange=function(){
-      var pts=[].map.call(host.querySelectorAll('[data-dc-pct]'),function(x){return [+x.dataset.dcPct,+x.value];}),ok=ChargeCurve.clean(pts);
+      // A blur/change from the previous render can arrive after another point was saved.
+      // Merge only the edited point into the latest curve; stale boxes must not replace it.
+      var pct=+this.dataset.dcPct,value=+this.value,pts=ChargeCurve.rows11(ChargeCurve.forCar(c).points).map(function(p){return p[0]===pct?[pct,value]:p;}),ok=ChargeCurve.clean(pts);
       if(!ok||ok.length!==pts.length){this.value=Math.round(ChargeCurve.at(ChargeCurve.forCar(c).points,+this.dataset.dcPct/100));return;}   // 1–1000 kW in every box
       c.dcCurve=ok;LG.info('car','Charging curve typed',{peak:ChargeCurve.peak(ok)});changed();draw();};});
     if($('gDcCurveReset'))$('gDcCurveReset').onclick=function(){delete c.dcCurve;LG.info('car','Charging curve reset to automatic');changed();draw();};

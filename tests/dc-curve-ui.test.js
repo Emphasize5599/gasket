@@ -12,8 +12,15 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.locator('#gDcCurve [data-dc-pct]').count(),11);assert.equal(await p.inputValue('[data-dc-pct="50"]'),'250');assert.equal(await p.inputValue('[data-dc-pct="80"]'),'100');
  assert.equal(await p.locator('.dc-curve-svg .dc-line').count(),1);assert.equal(await p.locator('#gDcCurveReset').count(),0);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth||[...document.querySelectorAll('.car-edit .sub-body')].some(x=>x.scrollWidth>x.clientWidth+1)),false,'no horizontal scroll');
+ // A lookup can redraw while an older field still has a queued change event.
+ await p.evaluate(()=>{window.__oldCurve70=document.querySelector('[data-dc-pct="70"]');Garage.redraw();document.getElementById('gEnergy').open=true;});
+ await p.fill('[data-dc-pct="50"]','150');await p.dispatchEvent('[data-dc-pct="50"]','change');
+ await p.evaluate(()=>{__oldCurve70.value='75';__oldCurve70.dispatchEvent(new Event('change'));delete window.__oldCurve70;});
+ assert.deepEqual(await p.evaluate(()=>Garage.car().dcCurve.filter(x=>x[0]===50||x[0]===70)),[[50,150],[70,75]],'a stale field change cannot overwrite another saved point');
+ await p.click('#gDcCurveReset');await p.waitForSelector('#gDcCurveReset',{state:'detached'});
  // your Model Y figures: 150 kW at 50%, 75 at 70%
  await p.fill('[data-dc-pct="50"]','150');await p.dispatchEvent('[data-dc-pct="50"]','change');
+ await p.waitForFunction(()=>Garage.car().dcCurve?.find(x=>x[0]===50)?.[1]===150);
  await p.waitForSelector('#gDcCurveReset');await p.fill('[data-dc-pct="70"]','75');await p.dispatchEvent('[data-dc-pct="70"]','change');
  const saved=await p.evaluate(()=>Garage.car().dcCurve);assert.equal(saved.length,11);assert.deepEqual(saved.find(x=>x[0]===50),[50,150]);assert.deepEqual(saved.find(x=>x[0]===70),[70,75]);
  assert.match(await p.innerText('#gDcCurve .dc-curve-h'),/Your charging curve/);assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).src),'user');
