@@ -2016,6 +2016,9 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .epa-grid.filling select { opacity: .55; pointer-events: none; transition: opacity .2s; }
 .prog-load .pl-x { flex: none; width: 32px; height: 32px; margin-left: 4px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); font-size: 15px; }
 .price-refresh-card .prog-load .pl-x { display: grid; }   /* this tile owns scan progress and cancellation */
+.price-refresh-tile > summary { cursor:pointer; min-height:44px; font-weight:600; }
+.price-refresh-tile .price-refresh-card { margin:12px 0 0; padding:0; border:0; box-shadow:none; }
+.price-refresh-tile .nf > span { min-width:0; overflow-wrap:anywhere; }
 .hz-opt .hz-o2:has(.hz-ld) { flex-wrap: wrap; white-space: normal; }
 .via-add { margin: 2px 0 12px; }
 .via-row .via-x { color: var(--ink-2); font-size: 15px; }

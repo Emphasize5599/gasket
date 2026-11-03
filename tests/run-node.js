@@ -22,6 +22,7 @@ release.push('ai-flicker-tip');
 release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices','charger-download');
 release.push('ev-feasibility','tripstorage','charger-first-trip','autotrip','autotrip-ui');
+release.push('price-refresh-plan');
 release.push('departure-summary');
 release.push('evprices-recovery','evprices-ui');
 release.push('chargerdata','chargerdata-ui');

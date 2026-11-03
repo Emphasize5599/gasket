@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.369 - 2026-11-03
+- Automatic planning refreshes prices from a collapsible tile above Rest stops and re-optimizes buffer and detour.
+- Optional automatic cheaper-route switching after refresh, enabled by default, compares original routes without added rests and requires new stop selection when the route changes.
+- Bug fixes
+
 ## 0.0.368 - 2026-11-03
 - Suggested rests appear with a green outline in the normal rest-stop list.
 - Preserve completed suggestions when adding an earlier rest renumbers an unchanged later leg.
