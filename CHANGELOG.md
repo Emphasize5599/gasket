@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.367 - 2026-11-03
+- Includes 0.0.366’s saved rest-site reuse, configurable refresh interval, clearer times, hidden stations and incremental traffic analyses (366 published no APK).
+- Bug fixes
+
 ## 0.0.366 - 2026-11-03
 - Reuse saved rest-site road access across trips and departure times without repeating the full access scan.
 - Configure how often changing rest-site data refreshes, with a seven-day default.

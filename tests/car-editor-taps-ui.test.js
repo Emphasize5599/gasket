@@ -32,7 +32,9 @@ const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoV
  assert.deepEqual(p.errors,[]);await p.close();
  // Remove just scrolled into view sits under the floating ↓ arrow: a tap on the arrow there is a tap on Remove
  p=await open();await seen(p,'#gRemove');
- const hit=await p.evaluate(async()=>{const sc=document.querySelector('.car-edit .sub-body'),r=document.getElementById('gRemove');sc.scrollTop+=r.getBoundingClientRect().bottom-sc.getBoundingClientRect().bottom+2;await new Promise(f=>requestAnimationFrame(()=>requestAnimationFrame(f)));const h=document.querySelector('.scroll-hint:not(.hidden)');if(!h)return null;const b=h.getBoundingClientRect(),x=b.x+b.width/2,y=b.y+b.height/2;return {x,y,covered:document.elementFromPoint(x,y).closest('.scroll-hint')===h&&document.elementsFromPoint(x,y).some(e=>e.id==='gRemove')};});
+ // Use this scroller's own arrow, reacquiring controls after asynchronous redraws.
+ // Scroll geometry and the owned hint must agree on two consecutive animation frames.
+ const overlap=await p.waitForFunction(()=>{const sc=document.querySelector('.car-edit .sub-body'),r=document.getElementById('gRemove'),h=sc&&sc._hint;if(!sc||!r||!h||h.classList.contains('hidden'))return false;const b=h.getBoundingClientRect(),a=r.getBoundingClientRect(),x=b.x+b.width/2,y=b.y+b.height/2,covered=document.elementFromPoint(x,y)?.closest('.scroll-hint')===h&&document.elementsFromPoint(x,y).some(e=>e.id==='gRemove');if(!covered){window.__removeOverlap=null;sc.scrollTop+=(a.top+a.height/2)-y;return false;}const prior=window.__removeOverlap;window.__removeOverlap={el:r,x,y};if(!prior||prior.el!==r||Math.abs(prior.x-x)>.25||Math.abs(prior.y-y)>.25)return false;delete window.__removeOverlap;return {x,y,covered:true};},null,{polling:'raf',timeout:10000});const hit=await overlap.jsonValue();
  assert.ok(hit&&hit.covered,'the arrow covers Remove in this position');
  await p.mouse.click(hit.x,hit.y);await p.waitForSelector('#cfm.on #cfmYes',{timeout:3000});await p.click('#cfm.on #cfmYes');
  await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='corolla20'));assert.deepEqual(p.errors,[]);await p.close();
