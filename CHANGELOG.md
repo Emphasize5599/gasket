@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.368 - 2026-11-03
+- Suggested rests appear with a green outline in the normal rest-stop list.
+- Preserve completed suggestions when adding an earlier rest renumbers an unchanged later leg.
+- Bug fixes
+
 ## 0.0.367 - 2026-11-03
 - Includes 0.0.366’s saved rest-site reuse, configurable refresh interval, clearer times, hidden stations and incremental traffic analyses (366 published no APK).
 - Bug fixes
