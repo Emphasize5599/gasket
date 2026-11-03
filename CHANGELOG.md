@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.363 - 2026-11-03
+- Includes 0.0.360's car editor fix and 0.0.362's scroll arrow fix (360–362 published no APK).
+- Vehicle comparison batches: a vehicle's plan no longer fails because the previous vehicle's traffic lookup was cancelled.
+- Bug fixes
+
 ## 0.0.362 - 2026-11-03
 - Includes 0.0.360's car editor fix (360 and 361 published no APK).
 - Tapping a button that the floating scroll arrow sits on (such as the car editor's Remove) now presses that button instead of scrolling.
