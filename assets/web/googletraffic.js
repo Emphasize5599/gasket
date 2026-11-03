@@ -103,7 +103,7 @@
   // Defaults chosen with tools/simulate-traffic-reads.cjs: about 1.5–2× faster for one route or rest timing, results
   // within about a minute on a 20-hour drive. Longer pieces were faster still but Google's own road choice can't be simulated.
   var tune=Object.assign({speculate:true,specTolerance:2,tolerance:2,pieceMi:100,cellDeg:1,maxSpec:1,lookahead:2},io.tune||{});
-  var active=0,activeLow=0,queue=[],low=[],pending=new Map(),items=new Map(),epoch=0,chains=0;
+  var active=0,activeLow=0,queue=[],low=[],pending=new Map(),pendingUsers=new Map(),items=new Map(),epoch=0,chains=0;
   function cap(){return Math.max(1,Math.min(50,Math.round(io.concurrency?io.concurrency():2)||2));}
   function limited(fn,opt){var x={fn:fn,low:!!(opt&&opt.low),alive:opt&&opt.alive},pr=new Promise(function(resolve,reject){x.resolve=resolve;x.reject=reject;});(x.low?low:queue).push(x);if(opt&&opt.item)opt.item.x=x;pump();return pr;}
   function promote(x){if(!x||!x.low)return;x.low=false;var i=low.indexOf(x);if(i>=0){low.splice(i,1);queue.push(x);pump();}}
@@ -145,9 +145,11 @@
 
    var pendingKey=identity+(fresh?'|after|'+fresh:o.force?'|force':'');
    if(o.onQueue)o.onQueue();
-   if(pending.has(pendingKey)){if(!o.low)promote(items.get(pendingKey));}
-   else{var generation=epoch,slot={};pending.set(pendingKey,limited(async function(){if(o.onStart)o.onStart();if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,valid);if(r.error)throw Error(r.error);var p,alive=function(){return generation===epoch;};try{p=await readAsync(r.body||r,clock,m,alive,0);}catch(e){if(!e.mismatch&&!/No usable time-specific/.test(e.message))throw e;var why=String(e.message).slice(0,120);if(io.put&&alive())io.put(key,{identity:identity,unmatched:why,at:now});if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');return Object.assign(unmatched(m,why),{at:now,depart:t,cached:false});}p.at=now;p.depart=t;p.originZone=zone;p.cached=false;// A forecast that was read is kept even if the plan that asked for it was cancelled or failed: it's valid for its own road and time.
-   if(io.put&&alive())io.put(key,p.coverage>=.95?{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t,avoidKey:avoidKey(o.avoid)}}:{identity:identity,profile:p});if(!valid()||generation!==epoch)throw Error('Traffic lookup cancelled');return p;},{low:o.low,alive:o.alive,item:slot}).finally(function(){pending.delete(pendingKey);items.delete(pendingKey);}));items.set(pendingKey,slot.x);}
+   // 0.0.363: a shared read stays wanted while ANY caller still wants it; one caller's cancellation (the comparison
+   // queue's previous car) must not cancel another caller's identical piece.
+   if(pending.has(pendingKey)){var users=pendingUsers.get(pendingKey);if(users)users.add(valid);if(!o.low)promote(items.get(pendingKey));}
+   else{var generation=epoch,slot={},users=new Set([valid]),wanted=function(){for(var f of users)if(f())return true;return false;};pendingUsers.set(pendingKey,users);pending.set(pendingKey,limited(async function(){if(o.onStart)o.onStart();if(!wanted()||generation!==epoch)throw Error('Traffic lookup cancelled');var r=await io.fetch(q,wanted);if(r.error)throw Error(r.error);var p,alive=function(){return generation===epoch;};try{p=await readAsync(r.body||r,clock,m,alive,0);}catch(e){if(!e.mismatch&&!/No usable time-specific/.test(e.message))throw e;var why=String(e.message).slice(0,120);if(io.put&&alive())io.put(key,{identity:identity,unmatched:why,at:now});if(!wanted()||generation!==epoch)throw Error('Traffic lookup cancelled');return Object.assign(unmatched(m,why),{at:now,depart:t,cached:false});}p.at=now;p.depart=t;p.originZone=zone;p.cached=false;// A forecast that was read is kept even if the plan that asked for it was cancelled or failed: it's valid for its own road and time.
+   if(io.put&&alive())io.put(key,p.coverage>=.95?{identity:identity,profile:p,observation:{pts:m.pts,cum:m.cum,rows:p.rows,depart:t,avoidKey:avoidKey(o.avoid)}}:{identity:identity,profile:p});if(!wanted()||generation!==epoch)throw Error('Traffic lookup cancelled');return p;},{low:o.low,alive:o.alive,item:slot}).finally(function(){pending.delete(pendingKey);pendingUsers.delete(pendingKey);items.delete(pendingKey);}));items.set(pendingKey,slot.x);}
    var p=await pending.get(pendingKey);if(!valid())throw Error('Traffic lookup cancelled');return p;
   }
   async function forecast(m,depart,options){
@@ -175,7 +177,7 @@
    if(covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
    return {source:'Google Maps website forecast',cachePolicy:o.cachePolicy,estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,cachedPieces:cachedPieces,fetchedPieces:fetchedPieces,sharedPieces:sharedPieces,cachedSections:cachedSections,fetchedSections:fetchedSections,lookaheadReads:lookahead,lookaheadUsed:lookaheadUsed,readMs:(io.now?io.now():Date.now())-began,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
-  return {stats:function(){return {active:active,queued:queue.length,lookaheadQueued:low.length,routes:chains,pending:pending.size};},request:function(q,valid,onStart){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;},onStart);});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();items.clear();}};
+  return {stats:function(){return {active:active,queued:queue.length,lookaheadQueued:low.length,routes:chains,pending:pending.size};},request:function(q,valid,onStart){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;},onStart);});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();pendingUsers.clear();items.clear();}};
  }
  var api={projectAll:projectAll,cacheTtl:cacheTtl,MIN_COVER:MIN_COVER,unmatched:unmatched,wall:wall,query:query,parse:parse,match:match,read:read,readAsync:readAsync,reuse:reuse,boundaries:boundaries,create:create,hash:hash};if(node)module.exports=api;else root.GoogleTraffic=api;
 })(typeof window!=='undefined'?window:this);

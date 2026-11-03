@@ -22,6 +22,12 @@ const ttlStore=new Map();let reads=0,put=0;const service=G.create({zone:async()=
  const store2=new Map();let asked=0;const split=G.create({zone:async()=>'UTC',get:k=>store2.get(k),put:(k,v)=>store2.set(k,v),now:()=>clock*1000,fetch:async pb=>{asked++;const c=[...pb.matchAll(/!3d(-?[\d.]+)!4d(-?[\d.]+)/g)].map(m=>({lat:+m[1],lng:+m[2]}));return {body:line(c[0],c[1],c[0].lat>34.1?.05:0,+/!3j(\d+)/.exec(pb)[1])};}});
  const partial=await split.forecast(two,clock*1000,{valid:()=>true});assert(partial.coverage>.6&&partial.coverage<.9,'the matching leg keeps its forecast: '+partial.coverage);assert(partial.rows.some(r=>r.forecast===false&&r.from>=legMi[0]-1e-6),'the other-roads leg uses the route time');const asked1=asked;
  await split.forecast(two,clock*1000,{valid:()=>true});assert.equal(asked,asked1,'a remembered mismatch is not asked again');
+ {// 0.0.363: two callers share one read of the same piece; the first is cancelled (the comparison queue moved on),
+  // the second still gets its forecast instead of "cancelled" (vehiclecompare-ui's lost Corolla plan)
+  const store5=new Map();let release,reads5=0;const gate=new Promise(r=>release=r);const g=G.create({zone:async()=>'UTC',get:k=>store5.get(k),put:(k,v)=>store5.set(k,v),now:()=>clock*1000,fetch:async(pb,valid)=>{reads5++;await gate;if(valid&&!valid())throw Error('Provider request cancelled');return {body:fixture()};}});
+  let firstLive=true;const a=g.forecast(model,clock*1000,{valid:()=>firstLive}),b=g.forecast(model,clock*1000,{valid:()=>true});await new Promise(r=>setTimeout(r,20));firstLive=false;release();
+  await assert.rejects(a,/cancelled/,'the cancelled caller still sees its cancellation');const got=await b;assert(got.coverage>.999,'the other caller gets the shared forecast');assert.equal(reads5,1,'one read for both');
+ }
  {// a forecast read while its plan was cancelled (or failed) is still stored for the next plan
   const store4=new Map();let live=true,reads=0;const g=G.create({zone:async()=>'UTC',get:k=>store4.get(k),put:(k,v)=>store4.set(k,v),now:()=>clock*1000,fetch:async pb=>{reads++;live=false;const c=[...pb.matchAll(/!3d(-?[\d.]+)!4d(-?[\d.]+)/g)].map(m=>({lat:+m[1],lng:+m[2]}));return {body:line(c[0],c[1],0,+/!3j(\d+)/.exec(pb)[1])};}});
   await assert.rejects(g.forecast(two,clock*1000+7200000,{valid:()=>live}),/cancelled/);assert(store4.size>0,'the answer was kept although the plan was cancelled');const n=reads;
