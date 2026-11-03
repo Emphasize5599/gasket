@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.357 - 2026-11-03
+- Car editor: taps no longer get lost when the editor refreshes under your finger, so "This car has no trim", Remove and the vehicle pickers respond, and the Year / make / model / trim tile stays open after you open it.
+- Bug fixes
+
 ## 0.0.356 - 2026-11-03
 - A "This car has no trim" checkbox above the trim menu, for models that come in only one version; the tank size is then looked up without a trim.
 

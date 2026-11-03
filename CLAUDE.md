@@ -1,5 +1,11 @@
 # Gasket
 
+## 0.0.357 - car editor taps lost to redraws
+
+Owner on 356: ticking "This car has no trim" didn't hide the trim box or start the tank lookup, Remove didn't work, the car's identity couldn't be changed. Reproduced in the browser: (1) a redraw while a finger is down replaces the control under it, so the tap is lost; a typed trim's blur (`#gTrim` onchange → setTrim → draw) did it to `#gNoTrim`, and on the phone background answers (Brave trim/tank/spare, photos, Tire Rack) landing mid-tap can do it to anything (Remove, pickers). garage.js now counts pointers (`ptrDown`, document capture listeners): draw() while one is down sets `tapWait` and redraws after the click (or 400 ms after pointerup, 1.5 s max). (2) `#tEpa` (identity tile) open state came only from its toggle event, a task later, so a redraw in between folded the tile you just opened; editPanel now reads the live `open` first (`data-forced` marks a tile held open only because the trim is missing, so it still folds once the trim is set). Editor opened from Compare (`externalEditDone`) still hides Remove (unchanged). Test car-editor-taps-ui (release, 320/448: redraw right after opening the tile, typed trim then tap no-trim → ticked + tank asked without a trim, redraw while pressing Remove → confirmation; fails on 356). Not phone-verified.
+
+Phone checks: Garage → Edit a saved car → open Year / make / model / trim → it stays open; type a trim, then tap "This car has no trim" → box ticked, trim box gone, tank fills; change Model and Engine/transmission → the car changes; Remove → confirmation → car gone.
+
 ## 0.0.356 - no-trim checkbox
 
 Owner: some cars legitimately have no trim. garage.js `trimHtml` puts `#gNoTrim` (`.nf.chk.no-trim`, "This car has no trim") above the trim menu; checked = `setNoTrim(c,true)`: `c.noTrim=true`, `c.trim=''`, menu/box hidden, trim lookup skipped, `trimOk` true (Save, tank and DC lookups no longer wait), a Brave-sourced tank / DC figure cleared and asked again keyed without a trim (`tankKey` already omits an empty trim). Unchecking restores the requirement. An EPA identity change clears `noTrim`. Test no-trim-ui (release, 320/448: above the menu, tank question without a trim, uncheck, save/reopen). Not phone-verified.

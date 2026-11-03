@@ -210,7 +210,21 @@
   function changed() { save(); onChange(); drawSpeed(); try { window.dispatchEvent(new Event('garagechange')); } catch (e) { } }
 
   var drawing = false;
+  // 0.0.357: a redraw while a finger is down replaces the button under it, so the tap is lost (a typed trim's blur
+  // redrew the editor under "This car has no trim"; Brave / photo answers landing mid-tap did the same to Remove).
+  // Wait for the tap to finish (its click, or 400 ms after the finger lifts; 1.5 s at most) and redraw then.
+  var ptrDown = 0, tapWait = null, tapSince = 0;
+  function tapDone() { if (ptrDown || !tapWait) return; var t = tapWait; tapWait = null; clearTimeout(t.timer); setTimeout(draw, 0); }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('pointerdown', function () { ptrDown++; tapSince = Date.now(); }, true);
+    ['pointerup', 'pointercancel'].forEach(function (k) { document.addEventListener(k, function () { ptrDown = Math.max(0, ptrDown - 1); if (!ptrDown && tapWait) { clearTimeout(tapWait.timer); tapWait.timer = setTimeout(tapDone, 400); } }, true); });
+    document.addEventListener('click', function () { if (!ptrDown && tapWait) setTimeout(tapDone, 0); });
+  }
   function draw() {
+    if (ptrDown && Date.now() - tapSince < 1500 && host && host.isConnected) {
+      if (!tapWait) tapWait = { timer: setTimeout(function () { ptrDown = 0; tapDone(); }, Math.max(0, 1500 - (Date.now() - tapSince))) };
+      return;
+    }
     if(window.VisualDiagnostics)VisualDiagnostics.redraw('garage');
     if (matching) { drawLater = true; return; }   // a VIN match is filling the pickers: redraw once it's done
     if (!host || !host.isConnected || drawing) return;
@@ -599,7 +613,10 @@
     if(!custom)h+='<div class="epa-tip"><span>Can\'t find your car? It might be exempt from the EPA.</span><button type="button" class="btn tonal sm" id="gNhtsaTip">NHTSA lookup</button></div>';
     // one tile for who the car is, down to the trim (folded once it's all known; never while the required trim is missing)
     var ymmTitle = 'Year / make / model / trim';
-    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (hasEpa(c) && !epaOpen && epaStay !== c.id && trimOk(c) ? '' : ' open') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc(vehicleLabel(c,[c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))) : 'no VIN? pick your car here') + '</small></summary>' +
+    // its toggle event comes a task later: a redraw before it folded the tile you just opened (read it live instead)
+    var yOld = $('tEpa'); if (yOld && yOld.isConnected && !yOld.hasAttribute('data-forced')) epaStay = yOld.open ? c.id : (epaStay === c.id ? null : epaStay);
+    var yFold = hasEpa(c) && !epaOpen && epaStay !== c.id, yForced = yFold && !trimOk(c);
+    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (yFold && !yForced ? '' : ' open') + (yForced ? ' data-forced' : '') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc(vehicleLabel(c,[c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))) : 'no VIN? pick your car here') + '</small></summary>' +
       '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':i===2?vehicleLabel(c,value):value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
       '<div class="epa-msg" id="eMsg"></div>' + trimHtml(c) + '</details>';
     if(custom&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
