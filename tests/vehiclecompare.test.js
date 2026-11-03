@@ -30,3 +30,10 @@ assert.equal(V.sharedReplay({stations:gasA,comparison:[{id:'prius',replay:{stati
 assert.equal(V.sharedReplay({stations:evList,comparison:[{id:'tesla',replay:{stations:evList}}]},'ioniq','ev').stations,evList,'top-level same-fuel list as before');
 assert.equal(V.sharedReplay({stations:gasA},'x','gas').stations,gasA);assert.equal(V.sharedReplay(null,'x','gas'),null);
 console.log('Vehicle comparison: shared saved-list choice per car and fuel; fair consumed-energy costs, missing/free rates, leg reconciliation, times, adapters, consent and profiles passed');
+{
+ const route={stops:[{lat:34,lng:-92,label:'A'},{lat:34.1,lng:-92,label:'Rest A',rest:{minimumRest:30}},{lat:34.2,lng:-92,label:'B'},{lat:34.3,lng:-92,label:'Rest B',rest:{minimumRest:45}},{lat:34.4,lng:-92,label:'C'}]},original={stops:route.stops.filter(p=>!p.rest)},four=T.restoreModel({pts:[],cum:[],totalMi:200,durationSec:12000,legEnds:[50,100,150,200],cityGpm:.1,hwyGpm:.1,combGpm:.1,segs:[{from:0,to:200,gpm:.1,t0:0,t1:12000}]}),s=session();s.route=route;s.model=s.result.opts.model=four;s.tolls=Array(4).fill({has:false});s.result.schedule=[{waitMinutes:0},{waitMinutes:30},{waitMinutes:10},{waitMinutes:45}];
+ assert.equal(V.places(route),V.places(original),'rest insertion keeps the original destination identity for comparison entries');assert.notEqual(V.journey(route,{}),V.journey(original,{}),'stay/timing changes still invalidate timing dependencies');
+ const total=V.metrics(s),first=V.metrics(s,0),second=V.metrics(s,1);for(const k of ['cost','energy','spend','tolls','fees','minutes','driving','detour','setup','service','overlap','miles','stops'])assert(Math.abs(first[k]+second[k]-total[k])<1e-6,k+' reconciles across original legs');assert.equal(first.miles,100);assert.equal(second.miles,100);
+ s.tolls[1]={has:true,cost:null};assert.equal(V.metrics(s,0).cost,null,'unknown toll in a rest section remains unknown for its original leg');assert.notEqual(V.metrics(s,1).cost,null);assert.equal(V.metrics(s,2).ready,false,'no phantom third leg');
+ console.log('Vehicle comparison retains original places and aggregates rest sections, waits, unknown prices and tolls by original leg');
+}

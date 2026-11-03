@@ -2,6 +2,7 @@
 (function(root){
   'use strict';
   var T=typeof module!=='undefined'&&module.exports?require('./trip.js'):root.Trip;
+  var Stops=typeof module!=='undefined'&&module.exports?require('./tripstops.js'):root.TripStops;
   function clone(x){return x==null?x:JSON.parse(JSON.stringify(x));}
   function key(x){if(Array.isArray(x))return '['+x.map(key).join(',')+']';if(x&&typeof x==='object')return '{'+Object.keys(x).sort().map(function(k){return JSON.stringify(k)+':'+key(x[k]);}).join(',')+'}';return JSON.stringify(x);}
   function profile(c){
@@ -14,7 +15,13 @@
   function journey(route,trip){var windowPlan=clone(trip.windowPlan);if(windowPlan)delete windowPlan.priority;return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret,s.rest?[s.rest.leaveAt,s.rest.minimumRest,s.rest.maximumStay,s.rest.parkingCloses,s.rest.chargeMinutes,s.rest.overlap]:null];}),trip.windowPlan&&trip.windowPlan.enabled?windowPlan:trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.windowPlan&&trip.windowPlan.enabled?'':trip.backAt||'',!!trip.trafficForecast]);}
   function sum(rows,k){return rows.reduce(function(n,r){return n+(r[k]||0);},0);}
   function toll(t){return t&&t.has===false?0:t&&Number.isFinite(t.cost)&&t.cost>=0?t.cost:null;}
+  function places(route){return key((route&&route.stops||[]).filter(function(p){return !Stops.isRest(p);}).map(function(p){return [p.lat,p.lng,p.label||p.address];}));}
   function metrics(s,leg,adapters){
+    if(leg==null||!s.route||!s.route.stops.some(Stops.isRest))return physicalMetrics(s,leg,adapters);
+    var g=Stops.groups(s.route)[leg];if(!g)return {cost:null,minutes:null,miles:null,stops:null,ready:false};var out={ready:true,estimated:false};
+    for(var i=g.from;i<=g.to;i++){var row=physicalMetrics(s,i,adapters);Object.keys(row).forEach(function(k){var v=row[k];if(k==='ready')out.ready=out.ready&&v;else if(k==='estimated')out.estimated=out.estimated||v;else if(v===null)out[k]=null;else if(Number.isFinite(v)&&out[k]!==null)out[k]=(out[k]||0)+v;});}return out;
+  }
+  function physicalMetrics(s,leg,adapters){
     var r=s.result,m=r&&r.opts&&r.opts.model||s.model,p=r&&r.plan;
     if(!m||!p||!p.ok)return {cost:null,minutes:null,miles:m?m.totalMi:null,stops:null,ready:false};
     var rows=T.legSummaries(m,p,r.startGal,r.startPrice,r.top,s.kind),i=leg==null?null:Math.max(0,Math.min(rows.length-1,leg)),row=i==null?null:rows[i];
@@ -55,6 +62,6 @@
     var size=function(st){return (st.official||[]).length+(st.google||[]).reduce(function(n,g){return n+((g.list||g.refs||[]).length);},0);};
     return opts.sort(function(a,b){return size(b.stations)-size(a.stations)||(b.own?1:0)-(a.own?1:0)||(+b.t||0)-(+a.t||0);})[0]||null;
   }
-  var api={clone:clone,key:key,profile:profile,journey:journey,metrics:metrics,sorted:sorted,portable:portable,sharedReplay:sharedReplay};
+  var api={clone:clone,key:key,profile:profile,journey:journey,places:places,metrics:metrics,sorted:sorted,portable:portable,sharedReplay:sharedReplay};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.VehicleCompare=api;
 })(typeof window!=='undefined'?window:globalThis);

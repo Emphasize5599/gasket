@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.371 - 2026-11-03
+- Includes the saved-rest identity and original-leg grouping changes from 0.0.370.
+- Vehicle comparisons keep their original destinations and combine rest sections in per-leg totals.
+- Bug fixes
+
 ## 0.0.370 - 2026-11-03
 - Preserve added rests and their settings when reopening recent trips or refreshing routes.
 - Group rests beneath original destinations in route menus, rest directories, time windows, departure summaries and navigation links.

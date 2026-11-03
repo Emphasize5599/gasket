@@ -1,5 +1,13 @@
 # Gasket
 
+## 0.0.371 - complete rest identity audit in vehicle comparison
+
+Final audit after pushing 370 found Compare still offered physical rest splits as per-leg scopes and compareCapture's places key included rests, clearing other vehicles as if destinations changed on rest commit. VehicleCompare.places now uses original destinations only, while journey still includes stay/timing dependencies for revalidation. Comparison labels and metrics use original-leg groups independently for each vehicle's rest layout; cost/energy/fees/tolls/service/waits sum across physical sections, unknown values remain unknown, and readiness/estimated flags combine correctly. Entire-trip metrics retain their existing behavior. 370's storage/menu/window/road/navigation fixes are included unchanged; 370 release assets remain immutable.
+
+Phone checks: use the 370 checklist below, plus Compare → Per leg should list only original destination pairs. Check per-leg totals against Whole trip, and confirm adding/retiming a rest does not restart comparison as if the destinations had changed. Physical-phone acceptance unverified.
+
+Validation: vehiclecompare, vehiclequeue, rest-leg-choices, saved-rest-ui and vehiclecompare-ui passed in 34.5s. New metrics assertions reconcile every numeric field across original legs, preserve unknown tolls and exclude phantom extra legs; original-place identity remains stable while timing journey identity changes for rests. Real saved-trip UI now checks two Compare scopes and their summed costs. Signed 371 CI/package verification pending at push.
+
 ## 0.0.370 - durable rest identity and original-destination grouping
 
 Owner found recent trips treating added rests as coordinate endpoints, breaking rest management, rest-road comparison opt-out and 369 original-route comparison. Deep audit found multiple paths: saveTrip omitted typed/source mode and restRoutes; go rebuilt a restored typed route from address inputs whenever route.typed was absent; refreshRoutes discarded all selected rest-access legs; saved leg keys were missing; openSaved could replace the latest top-level route with an older per-vehicle snapshot. Route menus, rest directories, window editors, departure scopes and navigation exports all numbered physical rest splits as new destination legs.
@@ -15,6 +23,8 @@ Mandatory tripstops tests cover independent records, legacy metadata/name repair
 Phone checks: open a recent trip with rests; Route should show 1/R/2/R/3 with names and green indented rests. With compare-rest-roads off, Refresh routes should retain those roads and avoid alternative-road prompts for them. Rest stops should show original-leg entrances and manage both saved rests inside them. Check original destination windows, rest timing and Departure costs/navigation, refresh prices, then close/reopen and verify the same identities. A new trip with ordinary coordinate destinations must stay ordinary.
 
 Validation: full local run completed 226 groups in 319.1s; 225 passed and vehicle-catalog timed out waiting for the make menu. That group passed its focused recheck in 5.9s. Grouped rest/timing/window checks passed in 73.6s; the final tripstops/rest-reco-restart/saved-rest-ui batch passed in 14.2s, including recovery after all rest payloads/records are removed but original-destination provenance remains. Saved-rest UI tests include a real rest commit's independent records, actual recent-trip snapshot writes and a second reopen. Final 320px screenshot inspected after fixing double indentation. Signed CI/package verification pending at push.
+
+Published 370 from e78e24b: source run 41722850622 and signed run 41722850448 / job 126219853043 succeeded. All 226 CI tests passed in 259.4s; Android build succeeded in 21s. Signing certificate remains 94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e. Downloaded ARM64 APK: 30,534,315 bytes, SHA256 47aa441d68bbd4978e2102e6a25e1e71f09cbf6bd0730875632e63ae0bbd1424 matching release digest. All eleven changed web assets match the tagged commit byte-for-byte. Physical-phone acceptance outstanding. 371 completes the final Compare audit without modifying 370 assets.
 
 ## 0.0.369 - automatic price refresh and optional original-route switching
 
