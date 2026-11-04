@@ -16,6 +16,8 @@ Validation: pure snapshot tests cover actual JSON with traffic and inherited spe
 
 Cancelled/failed refreshes now retain the previous completed result/model only if route and planning dependency identity still match. The previous loading UI is invalidated when restoring that result so refresh controls stay reachable. The existing background-search regression now also asserts that cancellation retains the completed plan. This fixes the focused failure rather than skipping or weakening refresh/cancellation coverage.
 
+Published v0.0.374 from b3ae6c9: source run 41854943155 and signed run 41854943138 / job 126660914342 succeeded. All 231 CI tests passed in 243.7s; native gates passed and Android build succeeded in 18s. Both APKs retain certificate SHA256 94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e. Downloaded ARM64 APK: 30,542,652 bytes, SHA256 1dda49e4ed3c43ed01abd8479460f4fbae49ff9234e37e4cc6f33a4969f603e3 matching the release digest. All seven changed packaged web assets match the release commit byte-for-byte. Physical-phone acceptance remains unverified.
+
 Phone checks: an older saved trip may need one reconstruction and save. After a completed rest plan, close/reopen it and check saved dates, fuel/rest selections, speed settings and saved-plan label; there should be no traffic/rematching task just to inspect it. Check default-over-limit controls after adding a rest. Explicitly change speed/windows or refresh data and verify the requested new calculation occurs. Physical-phone acceptance unverified.
 
 ## 0.0.373 - recover unfinished saved-rest timing before Compare
