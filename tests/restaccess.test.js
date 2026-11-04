@@ -1,4 +1,5 @@
 const assert=require('node:assert/strict'),R=require('../assets/web/restaccess');
+for(const [reason,key] of [['HTTP 404','missing'],['No usable time-specific Google traffic profiles','traffic'],['Site access road could not be verified','route'],['Campground timezone unavailable','timezone'],['captcha verification required','verification'],['Network timeout','network']])assert.equal(R.failureKind(reason).key,key);
 const a={lat:34,lng:-92},b={lat:34.01,lng:-92},t=Date.UTC(2027,0,1,12),value={seconds:60,meters:1000,pts:[a,b]},key=R.identity('google',a,b,t,{});
 assert.notEqual(key,R.identity('google',b,a,t,{}));assert.notEqual(key,R.identity('here',a,b,t,{}));assert.notEqual(key,R.identity('google',a,b,t+60000,{}));assert.notEqual(key,R.identity('google',a,b,t,{tolls:true}));assert.notEqual(key,R.identity('google',a,{...b,lng:-92.00001},t,{}));
 assert(R.returnTooLong(3601,0,60));assert(!R.returnTooLong(600,1,60));

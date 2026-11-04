@@ -1231,6 +1231,19 @@ public class MainActivity extends Activity {
         return false;
     }
 
+    /** Only Google place identities accepted by the rest-place reader; never arbitrary page URLs. */
+    private static boolean restMapsPlaceUrl(String value) {
+        try {
+            Uri u = Uri.parse(value);
+            if (!"https".equals(u.getScheme()) || u.getUserInfo() != null || u.getPort() != -1) return false;
+            String host = u.getHost(), path = u.getPath();
+            if ("maps.app.goo.gl".equals(host)) return path != null && path.matches("/[A-Za-z0-9]+");
+            if (!"www.google.com".equals(host) && !"maps.google.com".equals(host)) return false;
+            String cid = u.getQueryParameter("cid"), id = u.getQueryParameter("query_place_id");
+            return path != null && path.startsWith("/maps/place/") || cid != null && cid.matches("[0-9]+") || id != null && id.matches("[A-Za-z0-9_-]{10,200}");
+        } catch (Exception ignored) { return false; }
+    }
+
     private static final String[] LINK_HOSTS = {"maps.app.goo.gl", "goo.gl", "g.co", "maps.google.com", "www.google.com", "google.com"};
 
     /** Follows a shared Google Maps short link (maps.app.goo.gl/...) to the full directions URL. */
@@ -2573,7 +2586,7 @@ public class MainActivity extends Activity {
                             || ("xom".equals(key) && url.equals("https://www.exxonmobilfuels.com/en"))
                             || ("campendium".equals(key) && url.startsWith("https://maps.campendium.com/?"))
                             || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
-                            || ("restmaps".equals(key) && url.startsWith("https://www.google.com/maps/search/?api=1&query="))
+                            || ("restmaps".equals(key) && (url.startsWith("https://www.google.com/maps/search/?api=1&query=") || restMapsPlaceUrl(url)))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");

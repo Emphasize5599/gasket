@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.372 - 2026-11-03
+- Rest forecast progress uses original leg numbers and identifies sections created by added rests.
+- Check matched Google Maps pages for temporary and permanent closures, with cached status and a recheck option.
+- Explain unavailable rest-site checks by reason.
+- Bug fixes
+
 ## 0.0.371 - 2026-11-03
 - Includes the saved-rest identity and original-leg grouping changes from 0.0.370.
 - Vehicle comparisons keep their original destinations and combine rest sections in per-leg totals.

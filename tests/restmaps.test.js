@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),M=require('../assets/web/restmaps');
-const site={id:'sample',name:'Sample Woods Rest Area',lat:35,lng:-92,direction:'N'},row={name:site.name,url:'https://www.google.com/maps/place/Sample/data=!3d35!4d-92',lat:35,lng:-92};
+const site={id:'sample',name:'Sample Woods Rest Area',lat:35,lng:-92,direction:'N'},row={primary:true,name:site.name,url:'https://www.google.com/maps/place/Sample/data=!3d35!4d-92',lat:35,lng:-92};
+assert.equal(M.closure('Closed · Opens 8 AM'),null);assert.equal(M.closure('Temporarily closed'),'temporarily_closed');assert.equal(M.closure('Permanently closed'),'permanently_closed');
 assert(M.choose(site,[row]));assert(M.choose(site,[row,{...row,url:row.url+'?hl=en'}]),'duplicate canonical/location links are one listing');assert(!M.url('https://www.google.com/maps/search/?api=1&query=rest'));
 assert(!M.url('javascript:alert(1)'));assert(!M.url('https://evil.test/maps/place/Fake'));
 assert.equal(M.choose(site,[{...row,name:'Sample Woods southbound rest area'}]),null);assert.equal(M.choose(site,[{...row,url:'https://www.google.com/maps/place/Far/data=!3d36!4d-92'}]),null);assert.equal(M.choose(site,[row,{...row,name:'Sample Woods Rest Area North',url:row.url+'!1sother'}]),null,'ambiguous listings need review');
@@ -14,6 +15,12 @@ assert.equal(M.choose(site,[{...row,name:'Completely unrelated rest area'}]),nul
 })().catch(e=>{console.error(e);process.exitCode=1;});
 
 const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.854,direction:'N'};const ardsleyPage={name:ardsley.name,url:'https://www.google.com/maps/place/Ardsley+Travel+Plaza/data=!3d40.984875!4d-73.852596'};assert(M.choose(ardsley,[ardsleyPage]),'exact-name plaza matches its measured inventory-to-entrance displacement');assert.equal(M.choose(ardsley,[{...ardsleyPage,name:'Different Travel Plaza'}]),null,'wider tolerance requires exact identity');
+(async()=>{
+ let time=Date.UTC(2030,0,1),reads=[],status='temporarily_closed',fail=false;const kv=new Map(),io={now:()=>time,get:k=>kv.get(k),put:(k,v)=>kv.set(k,structuredClone(v)),read:async q=>{reads.push(q);if(fail)throw Error('Network timeout');return {complete:true,places:[{...row,primary:!!q.mapsLookupUrl,closure:q.mapsLookupUrl?status:null}]};}},make=()=>M.create(io);let m=make();let r=await m.resolve(site);assert.equal(reads.length,2,'search result is followed to its matched detail page');assert.equal(reads[1].mapsLookupUrl,row.url);assert.equal(r.closure,'temporarily_closed');m=make();const own={...site,mapsUri:row.url};assert.equal(m.peek(own).closure,'temporarily_closed','saved identity does not discard closure metadata');await m.resolve(own);assert.equal(reads.length,2,'fresh changing status reused across restart');
+ time+=48*3600000;fail=true;assert(m.needsStatus(own));r=await m.resolve(own);assert.equal(r.closure,'temporarily_closed','failed refresh retains a known closure');assert.match(r.statusError,/timeout/);assert(!m.needsStatus(own),'failed refresh has retry backoff');m=make();assert.equal(m.peek(own).closure,'temporarily_closed','durable old closure survives a failed refresh and restart');
+ fail=false;status=null;r=await m.resolve(own,null,true);assert.equal(r.closure,null,'fresh primary page can clear a previous closure');assert.equal(reads.at(-1).mapsLookupUrl,row.url,'status refresh uses the stored page identity');status='permanently_closed';r=await m.resolve(own,null,true);assert.equal(r.closure,status);assert.equal(r.statusCheckedAt,time);
+ console.log('Matched detail-page closure, 48-hour refresh, durable status, reopen and failed-refresh retention passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});
 (async()=>{// 0.0.335 (owner: "Ohio Turnpike Plaza" only shows up on Maps with its direction): a U.S. DOT/BTS place with no direction is searched again
  // with EB / WB (even highway number) after its own name finds nothing; the first direction that finds a listing is kept
  const plaza={id:'ntad:77',name:'Ohio Turnpike Plaza',lat:41.3,lng:-81.6,highway:'I-80'};
@@ -22,7 +29,7 @@ const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.85
  assert.deepEqual(M.queries({...plaza,direction:'W'}).map(q=>q.name).slice(1),['Ohio Turnpike Plaza WB'],'known direction only');
  assert.equal(M.queries({...plaza,highway:null}).length,5,'unknown highway: all four');assert.equal(M.queries({...plaza,id:'osm:node:1'}).length,1,'other sources: own name only');
  assert.equal(M.queries({...plaza,name:'Ohio Turnpike Plaza EB'}).length,1,'name already has a direction');
- const asked=[],kv=new Map(),page={name:'Ohio Turnpike Plaza WB',url:'https://www.google.com/maps/place/Ohio+Turnpike+Plaza+WB/data=!3d41.3003!4d-81.6004'};
+ const asked=[],kv=new Map(),page={primary:true,name:'Ohio Turnpike Plaza WB',url:'https://www.google.com/maps/place/Ohio+Turnpike+Plaza+WB/data=!3d41.3003!4d-81.6004'};
  const s=M.create({get:k=>kv.get(k),put:(k,v)=>kv.set(k,v),read:async q=>{asked.push(q.name);return {complete:true,places:/WB$/.test(q.name)?[page]:[]};},blocked:()=>assert.fail('no check')});
  const got=await s.resolve(plaza);assert.equal(got.state,'found');assert.equal(got.query,'Ohio Turnpike Plaza WB');assert.deepEqual(asked,['Ohio Turnpike Plaza','Ohio Turnpike Plaza EB','Ohio Turnpike Plaza WB']);
  assert(M.choose({...plaza,direction:'W'},[page]),'exact name with its direction suffix matches');assert.equal(M.choose({...plaza,direction:'E'},[page]),null,'opposite direction rejected');
