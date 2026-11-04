@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.379 - 2026-11-04
+- Keep the rate-rule heading full width in the phone layout.
+- Bug fixes
+
 ## 0.0.378 - 2026-11-04
 - Clarify menu hierarchy, control semantics, help disclosures and phone layouts.
 - Choose timing mode before entering exact times or windows, preserving each draft.

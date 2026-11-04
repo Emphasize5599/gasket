@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.379 - final rate-caption visual correction
+
+Final filled-rate screenshot review caught a table caption retaining intrinsic desktop width after its table became a vertical phone card. Make the caption a full-width block and assert its width in userrestprice-ui. This follows the 378 menu pass; no pricing logic changed. Phone acceptance remains outstanding.
+
 ## 0.0.378 - menu design and responsive controls
 
 Owner requested a whole-app menu review against the charter, with blank outline illustration spaces and no animation work. Review coverage, decisions, validation and phone checks: [docs/UI_REVIEW_378.md](docs/UI_REVIEW_378.md). Shared UIKit enhances live native controls without replacing their state/handlers; behavioral settings use switches while memberships, filters, facts and consent remain checkboxes. Worker/technical explanations use disclosures. Timing mode now precedes dependent fields, preserves exact-time drafts and leaves route loading available in window mode. Departure itinerary sits below summaries; narrow campsite rate rules use labeled vertical cards. Fixed enlarged retry-row overflow, range margins and narrow EPA tile columns. Captured 56 targeted final screens plus a broad instrumented browser run; reviewed contact sheets and selected individual menus. All 233 local release groups passed in 353.3s with a configured JDK; syntax/diff checks passed. Signed CI/package verification pending. Physical-phone font scaling, touch and screen-reader acceptance remain unverified; do not represent this agent review as human usability testing.

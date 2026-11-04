@@ -35,6 +35,8 @@ Captured 56 targeted final screens at 320px light and 448px dark. The broader in
 
 Visual review found and corrected a retry label squeezed into a one-character column, a range control overflowing with enlarged text, and an EPA tile grid retaining implicit columns. The final timing screen presents a compact mode choice before its fields; rest settings show a short list of expandable sources rather than a continuous technical form. Detailed help pages remain text-heavy by design because the user explicitly opened an explanation.
 
+The final filled-rate review additionally found its table caption retaining desktop intrinsic sizing. Follow-up 0.0.379 makes that heading full width and adds a browser width regression assertion.
+
 ## Verification and limits
 
 All 233 local release test groups passed in 353.3 seconds, including native gates with a JDK configured. New regression coverage checks control semantics and keyboard use, preserved timing drafts, route-loading access in window mode, enlarged-text source filters, EPA tiles, and retry bounds. Existing rate, saved-rest, traffic, itinerary, and settings tests were updated to interact with real disclosures.

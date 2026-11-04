@@ -2409,6 +2409,7 @@ input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
 @media(max-width:960px){
  .up-table-wrap { overflow:visible; border:0; }
  .up-table { display:block; min-width:0; width:100%; }
+ .up-table caption { display:block; width:100%; text-align:left; }
  .up-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
  .up-table tbody { display:grid; gap:14px; }
  .up-table tr[data-up-row] { display:grid; grid-template-columns:minmax(0,1fr); padding:8px 12px; background:var(--surface-2); border:1px solid var(--line); border-radius:16px; }
