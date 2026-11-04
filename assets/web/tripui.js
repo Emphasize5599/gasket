@@ -5660,12 +5660,18 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     VehicleCompareUI.render(e,{view:compareView,rows:compareRows,selected:function(){return queueWorking?queueViewCar:S.carId;},queue:function(){var q=comparisonQueue().state();return {state:q,cars:S.cars,prices:S.batchPrices!==false,setPrices:function(on){S.batchPrices=!!on;queueEstimateMemo=null;A.save();compareRender();},estimate:q.jobs.length>1?queueEstimate(q.jobs):'',elapsed:queueWorking?Math.floor((Date.now()-queueStarted)/1000):0,select:queueSelect};},legs:function(){return route?TripStops.groups(route).map(function(g){return (g.index+1)+': '+stopName(route.stops[g.start])+' → '+stopName(route.stops[g.end]);}):[];},locked:compareLocked,redraw:compareRender,edit:compareEdit,recover:compareRecover,priorityOptions:function(c){return priorityOptions(planningPriority(c));},autoRequired:function(c){var e=compareEntries.get(c.id);return !!(c.id===S.carId?windows&&windows.enabled():e&&e.trip.windowPlan&&e.trip.windowPlan.enabled);},autoEnabled:function(c){var e=compareEntries.get(c.id);return vehiclePriority(c)!=='manual'||!!(c.id===S.carId?windows&&windows.enabled():e&&e.trip.windowPlan&&e.trip.windowPlan.enabled);},setAuto:function(id,on){var c=S.cars.find(function(c){return c.id===id;});changeVehiclePriority(id,planningPriority(c),on);},setPriority:changeVehiclePriority,plan:function(id){if(compareSwitch(id)){var s=compareEntries.get(id);step=queueReviewStep(s,Garage.car())||ST_ADJ;renderStep();}},use:function(id){if(compareUsable(compareEntries.get(id)))queueOpen(id);},pick:comparePick,add:compareAdd,start:function(){if(restPending()){restResume();return;}step=model?ST_ADVISORY:ST_GARAGE;renderStep();},restPending:restPending()});A.qify(e);
     if(step===ST_COMPARE||queueWorking)navRender();if($('tNext')&&!queueWorking&&!(queueEngine&&queueEngine.state().jobs.length>1))$('tNext').disabled=compareLocked()||!restPending()&&!comparePrepared(compareEntries.get(S.carId));
   }
+  // 0.0.381: a tap on Compare another vehicle / Add / Edit while short background work holds the trip locked used to be
+  // dropped silently (the buttons are only drawn disabled when the lock is already on). Now the newest such tap waits
+  // for the work to finish (up to 30 s, while Compare is still showing) and then runs.
+  var compareWaiting=null;
+  function compareLater(fn){if(compareEditing)return;var token=compareWaiting={};var until=Date.now()+30000;(function tick(){if(compareWaiting!==token)return;if(step!==ST_COMPARE||!document.body.classList.contains('trip-on')||Date.now()>until){compareWaiting=null;return;}if(compareLocked()){setTimeout(tick,150);return;}compareWaiting=null;fn();})();}
   function comparePick(){
-    if(compareLocked())return;if(!model){step=ST_GARAGE;renderStep();return;}var cars=S.cars.filter(function(c){return !compareEntries.has(c.id);});
+    if(compareLocked()){compareLater(comparePick);return;}if(!model){step=ST_GARAGE;renderStep();return;}var cars=S.cars.filter(function(c){return !compareEntries.has(c.id);});
     if(!cars.length){A.toast('All garage vehicles are listed. Use Review setup to plan one, or Add vehicle.');return;}
     var close=A.subPage('Compare another vehicle',cars.map(function(c){return '<button class="btn tonal vc-pick" data-compare-car="'+esc(c.id)+'">'+esc(Garage.shortName(c))+'</button>';}).join(''),function(b){b.querySelectorAll('[data-compare-car]').forEach(function(el){el.onclick=function(){close();if(compareSwitch(el.dataset.compareCar)){step=ST_ADVISORY;renderStep();}};});});
   }
   function compareEdit(id){
+    if(compareLocked()){compareLater(function(){compareEdit(id);});return;}
     if(!compareSwitch(id))return;step=ST_COMPARE;renderStep();var before=VehicleCompare.profile(Garage.car()),previous=result,kind=KIND(),grade=gradeOf();compareEditing=true;
     Garage.render($('vcEditorHost'),null,function(){},call);Garage.editVehicle(function(saved,info){compareEditing=false;if(info&&info.removed){compareRemoved(info.removed);return;}var changed=saved&&before!==VehicleCompare.profile(Garage.car());if(changed){compareReviewed=0;result=null;model=buildModel(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();S.trip.routeChoices={};routeReview=null;choiceComplete=false;choicePool=null;choiceCandidates=new Map();choiceReviewedAt=0;compareEntries.delete(id);}step=ST_COMPARE;renderStep();if(changed){if(previous&&kind==='gas'&&KIND()===kind&&grade===gradeOf())compareRecalculate(previous);else A.toast('Vehicle updated. Review setup to recalculate its trip.');}});
   }
@@ -5688,10 +5694,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     planAsync(r.opts,function(){return S.carId===id&&result===r;},100).then(function(p){if(S.carId!==id||result!==r)return;r.plan=p;recompute();LG.info('compare','Recalculated edited vehicle',{kind:KIND(),ok:p.ok,candidates:r.cands.length});},function(e){LG.warn('compare','Edited vehicle needs replanning',String(e));}).finally(function(){end();compareCalculating=null;compareCapture();if(step===ST_COMPARE)compareRender();});
   }
   function compareAdd(){
-    if(compareLocked())return;compareCapture();var previous=S.carId;compareEditing=true;
+    if(compareLocked()){compareLater(compareAdd);return;}compareCapture();var previous=S.carId;compareEditing=true;
     Garage.render($('vcEditorHost'),null,function(){},call);Garage.addVehicle(function(saved){compareEditing=false;var id=S.carId;if(!compareEntries.size){S.carId=saved?id:previous;compareOwner=null;step=saved?ST_ADVISORY:ST_COMPARE;A.save();renderStep();return;}S.carId=previous;if(compareSwitch(saved?id:previous,true)){step=saved?ST_ADVISORY:ST_COMPARE;renderStep();}});
   }
-  window.__trip = { call: call, callP: callP, open: openTrip, steps:{COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:S.carId,rows:compareRows(),view:compareView};}, relogo: function () {
+  window.__trip = { holdCompareLock:function(on){compareCalculating=!!on;}, call: call, callP: callP, open: openTrip, steps:{COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:S.carId,rows:compareRows(),view:compareView};}, relogo: function () {
       drawn = {};
       if (result && onPlan(step)) keepScroll(renderResults);
       if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();
@@ -5717,5 +5723,5 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       return { pins: out, leads: leads.length, overRoute: over, crossings: cross };
     },
     tolls: function () { return choiceLists().map(function (l) { return l.map(function (a) { return { via: a.description, tolls: tollsOf(a), tag: tollTag(a) }; }); }); },
-    state: function () { var nl = model ? hzLegs() : 0, no = 0; for (var i = 0; i < nl; i++) no += hzAlts(i).length; return { route: route, model: model, result: result, busy: !!priceReplanning || busy || planning > 0 || searchSoon, planning: planning, step: step, legs: nl, options: no,evRecovery:evRecovery?{state:evRecovery.state,checked:evRecovery.checked,usable:evRecovery.options.length,errors:evRecovery.errors}:null }; } };
+    state: function () { var nl = model ? hzLegs() : 0, no = 0; for (var i = 0; i < nl; i++) no += hzAlts(i).length; return { route: route, model: model, result: result, busy: !!priceReplanning || busy || planning > 0 || searchSoon, planning: planning, step: step, legs: nl, options: no,locked:compareLocked(),evRecovery:evRecovery?{state:evRecovery.state,checked:evRecovery.checked,usable:evRecovery.options.length,errors:evRecovery.errors}:null }; } };
 })();
