@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.373 - 2026-11-03
+- Keep unfinished saved rest timing editable before vehicle comparison, with clear recovery for conflicting trip windows.
+- Clarify that solar rest times use each stop’s local date, time zone and daylight-saving rules.
+- Bug fixes
+
 ## 0.0.372 - 2026-11-03
 - Rest forecast progress uses original leg numbers and identifies sections created by added rests.
 - Check matched Google Maps pages for temporary and permanent closures, with cached status and a recheck option.
