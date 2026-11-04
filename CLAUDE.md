@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.380 - car-editor-taps-ui retry when the editor relayouts
+
+GitHub regression: car-editor-taps-ui line 40 (tap the ↓ arrow over Remove → no confirmation). Reproduced 1/10 at 10 parallel copies. Instrumented the tap: at pointerdown/click the arrow sat over `g-edit` (editor content), not `#gRemove`: a background redraw relaid out the editor after the two-frame overlap measurement, so the 0.0.362 pass-through correctly found no control and scrolled. Test now measures and taps again (≤4 tries, 1.5 s each) until the confirmation opens, still asserting the overlap before every tap and that a tap on the arrow over Remove opens it. 48/48 at 16 parallel copies. No app change.
+
 ## 0.0.379 - final rate-caption visual correction
 
 Final filled-rate screenshot review caught a table caption retaining intrinsic desktop width after its table became a vertical phone card. Make the caption a full-width block and assert its width in userrestprice-ui. This follows the 378 menu pass; no pricing logic changed. Phone acceptance remains outstanding.

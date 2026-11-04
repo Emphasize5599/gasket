@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.380 - 2026-11-04
+- Test reliability fix for the car editor (no app change).
+
 ## 0.0.379 - 2026-11-04
 - Keep the rate-rule heading full width in the phone layout.
 - Bug fixes
