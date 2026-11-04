@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.381 - 2026-11-04
+- Vehicle comparison: tapping Compare another vehicle, Add vehicle or Edit vehicle while the trip is still finishing background work now opens it once the work ends, instead of doing nothing.
+- Bug fixes
+
 ## 0.0.380 - 2026-11-04
 - Test reliability fix for the car editor (no app change).
 

@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.381 - comparison taps during background work
+
+380's CI failed vehiclecompare-ui line 19 (#vcCompare tapped, `[data-compare-car]` never appeared). comparePick / compareAdd / compareEdit (via compareSwitch) silently returned while `compareLocked()` (priceReplanning, traffic, schedule, queue, busy, routing, choicePlanning, hzRiskBusy, editing, calculating); the buttons are drawn disabled only when the lock is on at render time, so a tap during short background work was lost (phone too). Locally reproduced the same class at line 50 (#vcAdd → no editor, 2/32 at 16 parallel copies). Now `compareLater(fn)`: the newest tap waits (150 ms polls, ≤ 30 s, only while Compare is showing in an open trip, not while an editor is open) and then runs. `__trip.state().locked` and test hook `__trip.holdCompareLock(on)` (sets compareCalculating). vehiclecompare-ui holds the lock, taps Add (no editor), releases, editor opens (fails without the fix). 32/32 at 16 parallel copies. Not phone-verified.
+
+Phone checks: Compare right after Review this trip / an edit: tap Compare another vehicle, Add vehicle or Edit vehicle at once; it opens when the background work ends (no dead tap).
+
 ## 0.0.380 - car-editor-taps-ui retry when the editor relayouts
 
 GitHub regression: car-editor-taps-ui line 40 (tap the ↓ arrow over Remove → no confirmation). Reproduced 1/10 at 10 parallel copies. Instrumented the tap: at pointerdown/click the arrow sat over `g-edit` (editor content), not `#gRemove`: a background redraw relaid out the editor after the two-frame overlap measurement, so the 0.0.362 pass-through correctly found no control and scrolled. Test now measures and taps again (≤4 tries, 1.5 s each) until the confirmation opens, still asserting the overlap before every tap and that a tap on the arrow over Remove opens it. 48/48 at 16 parallel copies. No app change.
