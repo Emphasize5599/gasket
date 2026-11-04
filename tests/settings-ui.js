@@ -5,4 +5,5 @@ module.exports=async function(p,group){
  if(await p.locator('#settingsBack:visible').count())await p.click('#settingsBack');
  if(first&&group==='connections'){await p.click('[data-settings-group="map"]');await p.uncheck('[data-k="keylessRegular"]');await p.click('#settingsBack');}
  await p.click('[data-settings-group="'+group+'"]');
+ while(await p.locator('.settings-group:not(.hidden) details[data-ux-performance]:not([open])').count())await p.locator('.settings-group:not(.hidden) details[data-ux-performance]:not([open])').first().locator(':scope > summary').click();
 };

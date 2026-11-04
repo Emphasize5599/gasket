@@ -1604,6 +1604,7 @@
   function cleanNumber(input){if(!input||!input.matches||!input.matches('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"]'))return;var value=input.value,next=value.replace(/^([+-]?)\.(?=\d)/,'$10.');if(next!==value){var at=input.selectionStart;input.value=next;if(at!=null)try{input.setSelectionRange(at+1,at+1);}catch(e){}}}
   ['input','change','blur'].forEach(function(type){document.addEventListener(type,function(e){cleanNumber(e.target);},true);});
   function qify(root) {
+    if(window.UIKit)UIKit.enhance(root);
     if(root&&root.querySelectorAll)root.querySelectorAll('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"]').forEach(cleanNumber);
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('.lbl > small, .nf > span > small, .sub-h > small, .switch-row small').forEach(function (sm) {

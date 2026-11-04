@@ -2336,3 +2336,94 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .jb-pause { flex:none; display:grid; place-items:center; width:20px; height:20px; color:var(--warn); }
 .jb-pause svg { width:18px; height:18px; fill:currentColor; }
 .pbar.paused i { animation:none !important; opacity:.5; }
+/* 0.0.378: shared menu hierarchy, wrapping and semantic control rows. */
+.btn { min-width:0; max-width:100%; height:auto; min-height:48px; padding:10px 14px; white-space:normal; overflow-wrap:anywhere; line-height:1.25; text-align:center; }
+.btn > span { min-width:0; }
+.btn > svg { flex-shrink:0; }
+.btn.sm { min-height:40px; padding:8px 12px; }
+.card { min-width:0; }
+.card h3 { font-size:18px; line-height:1.25; font-weight:750; text-transform:none; letter-spacing:0; margin:12px 0 6px; }
+.card > h3 { box-shadow:none; }
+.bufbox .tb-h,.routebox .tb-h,.topbox .tb-h,.spdbox .tb-h,.sk-h { font-size:18px; line-height:1.25; text-transform:none; letter-spacing:0; color:var(--accent); }
+.nf { min-width:0; font-size:14px; color:var(--ink); gap:6px; }
+.nf small { font-size:12.5px; color:var(--ink-2); opacity:1; }
+.nf input,.nf select,.field input,.field select { min-width:0; max-width:100%; }
+.field { min-width:0; }
+.field > input[type=checkbox],.ux-check > input[type=checkbox] { width:22px; height:22px; min-width:22px; max-width:22px; flex:0 0 22px; padding:0; accent-color:var(--accent); }
+.ux-check { display:flex; flex-direction:row; align-items:center; justify-content:flex-start; gap:12px; min-height:44px; padding:8px 0; cursor:pointer; }
+.ux-check > input[type=checkbox] { order:-1; }
+.ux-check > .ux-check-control { order:-1; display:flex; align-items:center; justify-content:center; width:32px; height:44px; flex:0 0 32px; }
+.ux-check-control input { width:22px; height:22px; margin:0; accent-color:var(--accent); }
+.ux-check > span { min-width:0; flex:1; overflow-wrap:anywhere; }
+.ux-toggle { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:12px; min-height:52px; padding:8px 0; cursor:pointer; }
+.ux-toggle > span:not(.switch) { flex:1; min-width:0; }
+.ux-toggle .switch { display:inline-block; flex:0 0 52px; }
+.ux-toggle .switch input { width:100%; height:100%; padding:0; }
+.switch:focus-within { outline:3px solid var(--accent); outline-offset:3px; border-radius:20px; }
+button:focus-visible,summary:focus-visible,a:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.settings-group { min-width:0; }
+.settings-link { min-width:0; }
+.settings-link > span:first-child { min-width:0; overflow-wrap:anywhere; }
+.settings-link b { font-size:17px; }
+.settings-help,.ux-explanation { color:var(--ink-2); font-size:13px; margin:8px 0; }
+.ux-explanation > summary,.settings-help > summary { color:var(--accent); cursor:pointer; padding:6px 0; }
+.ux-explanation p { margin:6px 0 10px; }
+.ux-animation-slot { width:100%; height:76px; border:1px dashed var(--ink-2); border-radius:14px; background:transparent; margin:12px 0; }
+.ux-timing-mode { border:1px solid var(--line); }
+.ux-timing-mode select { font-weight:650; }
+.ux-timing-mode .field { margin-top:6px; }
+.ux-performance > summary { padding:14px 0; color:var(--accent); font-size:18px; font-weight:750; cursor:pointer; }
+.ux-performance[open] > summary { margin-bottom:8px; }
+.settings-group details.ux-performance,.settings-group details.ux-explanation { border:0; background:transparent; padding:0; }
+.settings-group details.ux-performance { margin:0; }
+.sub-head h2,.settings-bar h2 { font-size:21px; line-height:1.2; }
+.sub-body { min-width:0; }
+.cfm { max-height:calc(100dvh - var(--st) - var(--sb) - 32px); overflow-y:auto; }
+.cfm-btns .btn { height:auto; min-height:48px; }
+.qpop { overflow-wrap:anywhere; }
+.rest-access-status { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+.rest-access-status .btn { width:100%; }
+.rest-retry-line { display:grid; grid-template-columns:minmax(0,1fr) auto; }
+.rest-retry-line .btn { width:auto; }
+.rest-retry-line > span { min-width:0; overflow-wrap:normal; }
+.sub-body .btn { max-width:100%; }
+.rest-row-actions,.proposal-buttons,.gemma-controls { min-width:0; }
+.rest-row-actions > *, .proposal-buttons > *, .gemma-controls > * { min-width:0; }
+.settings-body input[type=range] { width:100%; max-width:100%; }
+input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
+.settings-body .field > select { max-width:60%; }
+.settings-body .field.col > select { max-width:100%; }
+.settings-footer .btn,.ob-footer .btn { min-height:48px; }
+.ob-body > h1 { font-size:28px; line-height:1.15; margin:12px 0; }
+.ob-option { min-width:0; }
+.ob-option > span { min-width:0; }
+.ob-option.ux-check { border-radius:14px; background:var(--surface); padding:12px; }
+.ob-option.ux-toggle { padding:12px; }
+.trip-itinerary { background:var(--surface); }
+.trip-itinerary > summary { font-size:18px; font-weight:750; color:var(--accent); }
+.trip-itinerary .dep-schedule { margin:0; padding:0; }
+.dep-fuel { margin:8px 0 8px 12px; padding:8px 10px; border-left:2px solid var(--accent); }
+.dep-fuel small { display:block; color:var(--ink-2); }
+.wx-a .ux-animation-slot { height:64px; }
+.adv-card .ux-animation-slot { height:64px; }
+@media(max-width:960px){
+ .up-table-wrap { overflow:visible; border:0; }
+ .up-table { display:block; min-width:0; width:100%; }
+ .up-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+ .up-table tbody { display:grid; gap:14px; }
+ .up-table tr[data-up-row] { display:grid; grid-template-columns:minmax(0,1fr); padding:8px 12px; background:var(--surface-2); border:1px solid var(--line); border-radius:16px; }
+ .up-table td { display:block; min-width:0; padding:10px 0; }
+ .up-table td::before { content:attr(data-label); display:block; font-weight:700; color:var(--ink); margin-bottom:6px; }
+ .up-table input:not([type=checkbox]),.up-table select { min-width:0; max-width:100%; min-height:42px; }
+ .up-days { grid-template-columns:repeat(auto-fit,minmax(60px,1fr)); }
+}
+@media(max-width:360px){
+ .grid2 { gap:10px; }
+ .card { padding-left:12px; padding-right:12px; }
+ .btn-row { gap:8px; }
+ .settings-body .field > select { max-width:56%; }
+}
+@media(max-width:400px){
+ .epa-tiles { grid-auto-flow:row; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-columns:auto; }
+ .epa-tiles > div > span { overflow-wrap:normal; word-break:normal; }
+}

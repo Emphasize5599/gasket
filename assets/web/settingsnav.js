@@ -20,6 +20,7 @@
   // Hide long descriptions, not values, counters, warnings or controls.
   pg.querySelectorAll('.lbl > small:not(.keep):not([id])').forEach(function(s){var d=document.createElement('details');d.className='settings-help';d.innerHTML='<summary>Details</summary>';s.replaceWith(d);d.appendChild(s);});
   var done=A.$('sDone'),footer=document.createElement('footer');footer.className='settings-footer';footer.appendChild(done);pg.appendChild(footer);
+  if(root.UIKit){Object.keys(views).forEach(function(k){UIKit.enhance(views[k]);});}
   body.appendChild(home);groups.forEach(function(g){body.appendChild(views[g[0]]);});
   bar.innerHTML='<button type="button" class="sub-back hidden" id="settingsBack" aria-label="Back to Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button><h2 id="settingsTitle">Settings</h2>';
   function show(key){current=key||'';home.classList.toggle('hidden',!!current);groups.forEach(function(g){views[g[0]].classList.toggle('hidden',g[0]!==current);});A.$('settingsBack').classList.toggle('hidden',!current);A.$('settingsTitle').textContent=current?groups.filter(function(g){return g[0]===current;})[0][1]:'Settings';body.scrollTop=0;}

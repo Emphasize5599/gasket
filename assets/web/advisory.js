@@ -178,7 +178,7 @@
     stale = false;
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
-    var h = '';
+    var h = window.UIKit?'<div class="card">'+UIKit.animation('Reserved illustration: prepare your vehicle before travel')+'</div>':'';
     h += recallCard(c) + (window.Gemma ? Gemma.card(c) : '') + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);

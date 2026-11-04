@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.378 - 2026-11-04
+- Clarify menu hierarchy, control semantics, help disclosures and phone layouts.
+- Choose timing mode before entering exact times or windows, preserving each draft.
+- Make campsite rate rules responsive and place the expandable itinerary below trip summaries.
+- Reserve blank illustration panels for the later animation pass.
+- Bug fixes
+
 ## 0.0.377 - 2026-11-04
 - Open individual-stop directions in route selection instead of immediately starting navigation.
 - Bug fixes

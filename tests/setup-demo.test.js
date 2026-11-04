@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){const p=require('./editor_guard')(await b.newPage({viewport:{width,height:900}})),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>{setInsets(24,48,0,0);window.__demoScanCalls=0;__app.N.search=()=>{__demoScanCalls++;};__app.N.siteRead=(id,key)=>{if(/^(gasweb|walmart|murphy)/.test(key))__demoScanCalls++;};});
  assert.equal(await p.locator('#onboarding').count(),1,'first-time setup is a staged walkthrough');
- assert.equal(await p.evaluate(()=>__app.S.cars.length),0);assert.equal(await p.evaluate(()=>typeof window.demoPlaces),'undefined','station fixture must not ship in production');assert.equal(await p.innerText('#sDemo'),'Let me test Gasket out with demo data');
+ assert.equal(await p.evaluate(()=>__app.S.cars.length),0);assert.equal(await p.evaluate(()=>typeof window.demoPlaces),'undefined','station fixture must not ship in production');assert.equal(await p.innerText('#sDemo'),'Try demo vehicles');
  await p.evaluate(()=>{const es=Array.from(document.querySelectorAll('#onboarding *')),sizes=es.map(e=>parseFloat(getComputedStyle(e).fontSize));es.forEach((e,i)=>{if(sizes[i])e.style.fontSize=sizes[i]*1.3+'px';});});
  assert.equal(await p.locator('.ob-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);
  assert.equal(await p.locator('.ob-body').evaluate(e=>e.scrollWidth>e.clientWidth),false);

@@ -65,7 +65,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.deepEqual(errors,[]);await p.close();continue;
  }
  // the overview says, for each leg, when to leave and which road
- await p.evaluate(()=>__trip.step(__trip.steps.DEPART));await p.waitForSelector('.dep-schedule');const legs=await p.$$eval('.dep-schedule [data-schedule-leg]',els=>els.map(e=>e.innerText));
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));await p.click('#tItinerary > summary');await p.waitForSelector('.dep-schedule');const legs=await p.$$eval('.dep-schedule [data-schedule-leg]',els=>els.map(e=>e.innerText));
  assert.equal(legs.length,2);assert.match(legs[0],/Leave .*\n?.*Take Leg 0 road [01]/s);assert.match(legs[1],/Take Leg 1 road [01]/);assert(legs.every(t=>/Leave /.test(t)&&/Arrive about/.test(t)));
  assert.deepEqual(errors,[]);assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));await p.close();
  }console.log('Road interest, grouped hourly hazard screening, declined-hour exclusion, bounded recommendation planning, per-destination waits, arrival windows and unchanged manual queue.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
