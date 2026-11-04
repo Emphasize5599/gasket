@@ -23,7 +23,7 @@ release.push('reader-resources');
 release.push('ev-discovery','ev-discovery-ui','ev-destination','ev-flow-ui','evprices','charger-download');
 release.push('ev-feasibility','tripstorage','charger-first-trip','autotrip','autotrip-ui');
 release.push('price-refresh-plan');
-release.push('tripstops','saved-rest-ui','saved-rest-compare-ui','rest-closure-ui');
+release.push('plannedtrip','plannedtrip-ui','routepositions','tripstops','saved-rest-ui','saved-rest-compare-ui','rest-closure-ui');
 release.push('departure-summary');
 release.push('evprices-recovery','evprices-ui');
 release.push('chargerdata','chargerdata-ui');

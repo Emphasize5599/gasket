@@ -9,6 +9,9 @@
   function inventory(s){if(!s)return s;var official=refs(s.official),google=(s.google||[]).map(function(g){var copy=Object.assign({},g,{refs:refs(g.list)});delete copy.list;return copy;});return Object.assign({},s,{official:official,google:google});}
   var copy=Object.assign({},v);if(v.stations)copy.stations=inventory(v.stations);
   if(Array.isArray(v.comparison))copy.comparison=v.comparison.map(function(c){if(!c.replay||!c.replay.stations)return c;return Object.assign({},c,{replay:Object.assign({},c.replay,{stations:inventory(c.replay.stations)})});});
+  // Candidate projections and chosen stops reference the same full station records as inventory.
+  function planned(value){if(!value)return value;function walk(v){if(Array.isArray(v))return v.map(walk);if(!v||typeof v!=='object')return v;var out={};Object.keys(v).forEach(function(k){if(k==='station'&&v[k]&&typeof v[k]==='object')out.stationRef=refs([v[k]])[0];else out[k]=walk(v[k]);});return out;}return walk(value);}
+  if(copy.planned)copy.planned=planned(copy.planned);if(copy.comparison)copy.comparison=copy.comparison.map(function(c){return c.planned?Object.assign({},c,{planned:planned(c.planned)}):c;});
   copy.stationPoolVersion=1;copy.stationPool=pool;return copy;
  }
  function unpack(v){
@@ -20,6 +23,8 @@
   function inventory(s){return Object.assign({},s,{official:rows(s.official),google:(s.google||[]).map(function(g){var copy=Object.assign({},g,{list:rows(g.refs)});delete copy.refs;return copy;})});}
   var copy=Object.assign({},v);if(v.stations)copy.stations=inventory(v.stations);
   if(Array.isArray(v.comparison))copy.comparison=v.comparison.map(function(c){if(!c.replay||!c.replay.stations)return c;return Object.assign({},c,{replay:Object.assign({},c.replay,{stations:inventory(c.replay.stations)})});});
+  function planned(value){if(!value)return value;function walk(v){if(Array.isArray(v))return v.map(walk);if(!v||typeof v!=='object')return v;var out={};Object.keys(v).forEach(function(k){if(k==='stationRef')out.station=rows([v[k]])[0];else out[k]=walk(v[k]);});return out;}return walk(value);}
+  if(copy.planned)copy.planned=planned(copy.planned);if(copy.comparison)copy.comparison=copy.comparison.map(function(c){return c.planned?Object.assign({},c,{planned:planned(c.planned)}):c;});
   delete copy.stationPool;delete copy.stationPoolVersion;return copy;
  }
  root.TripStorage={pack:pack,unpack:unpack};

@@ -114,7 +114,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     await p.waitForFunction(() => !__trip.state().busy, null, { timeout: 20000 });
     const c = await p.evaluate(() => ({ step: __trip.state().step, cancels: __cancels, job: !!__app.job(), bar: document.getElementById('jobBar').className }));
     console.log('  cancelled:', JSON.stringify(c));
-    assert.equal(c.step, 8); assert.ok(c.cancels > 0, 'the website readers were cancelled'); assert.equal(c.job, false);
+    assert(await p.evaluate(()=>__trip.state().result?.plan.ok),'cancelling refresh retains the previous completed plan');assert.equal(c.step, 8); assert.ok(c.cancels > 0, 'the website readers were cancelled'); assert.equal(c.job, false);
 
     // 7. the status bar's ✕ cancels a background search
     await p.evaluate(() => __trip.step(6)); await p.waitForFunction(() => !__trip.state().busy && document.querySelector('#taResults .price-refresh-card'));

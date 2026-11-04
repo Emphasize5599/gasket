@@ -16,19 +16,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  });
  await p.click('#btnTrip');await p.click('[data-hist="nokey"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
  await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy);
- await p.waitForSelector('#tsSpeed.spd-off .spd-off-note');
- await p.waitForFunction(()=>{const m=__trip.state().model;return m._lim&&m._lim!=='loading';});await p.evaluate(()=>__trip.step(6));
- const sp=await p.evaluate(()=>{const el=document.getElementById('tsSpeed');return {note:el.querySelector('.spd-off-note').textContent,inputs:el.querySelectorAll('input,button,select').length,enabled:[...el.querySelectorAll('input,button,select')].filter(x=>!x.disabled).map(x=>x.outerHTML.slice(0,120)).length,which:[...el.querySelectorAll('input,button,select')].filter(x=>!x.disabled).map(x=>x.outerHTML.slice(0,140)),tog:!!document.getElementById('lgTog'),all:!!document.getElementById('lgAll'),pe:getComputedStyle(el.querySelector(':scope > :not(.spd-off-note)')).pointerEvents};});
- console.log('  Adjustments:',JSON.stringify(sp));
- assert.match(sp.note,/off for this route: without a Google API key/);assert.ok(sp.inputs>0&&sp.enabled===0,'every control there, none usable');assert.ok(sp.tog&&sp.all,'the slider and the by-road entrance stay on screen');assert.equal(sp.pe,'none');
- assert.equal(await p.evaluate(()=>__trip.state().result.planOffs==null||!/[1-9]/.test(__trip.state().result.planOffs)),true,'planned at the limits, not your +5 rule');
- if(shots)await p.screenshot({path:shots+'/nokey-adjust.png',fullPage:false});
- await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tRule');
- const pr=await p.evaluate(()=>{const c=document.getElementById('tRule').closest('.card');return {off:c.classList.contains('spd-off'),note:(c.querySelector('.spd-off-note')||{}).textContent||'',first:c.children[1]&&c.children[1].className,enabled:[...c.querySelectorAll('input,button,select')].filter(x=>!x.disabled).length};});
- console.log('  Parameters:',JSON.stringify(pr));
- assert.ok(pr.off&&/API key/.test(pr.note)&&pr.first==='spd-off-note'&&pr.enabled===0,'the cruising-speed card: under its heading, grayed out');
- if(shots){await p.evaluate(()=>document.getElementById('tRule').closest('.card').scrollIntoView());await p.screenshot({path:shots+'/nokey-params.png'});}
- assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await p.waitForSelector('#tsSpeed');assert.equal(await p.locator('#tsSpeed.spd-off, #tsSpeed .spd-off-note').count(),0,'geometry-based limits keep speed controls enabled without a key or turn text');assert(await p.evaluate(()=>__trip.state().model._lim.stats.geometry&&__trip.state().model._lim.roads.length>0));assert(await p.evaluate(()=>__hpms.length>0),'free HPMS geometry lookup is requested');assert(await p.evaluate(()=>/[1-9]/.test(__trip.state().result.planOffs)),'the default +5 rule participates in planning');
+ await p.evaluate(()=>__trip.step(4));await p.waitForSelector('#tRule');assert.equal(await p.locator('#tRule').evaluate(e=>e.closest('.card').classList.contains('spd-off')),false);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  // the totals say they're rough: Stops and Departure
  await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tsResults .est-note');
  assert.match(await p.innerText('#tsResults .est-note'),/rough estimates/);
@@ -37,7 +26,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  // with a key: everything works again
  await p.evaluate(()=>{__app.S.apiKey='TEST';});await p.evaluate(()=>__trip.step(6));await p.waitForSelector('#tsSpeed');
  assert.equal(await p.locator('#tsSpeed.spd-off, #tsSpeed .spd-off-note').count(),0,'a key turns it back on');
- await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.equal(await p.locator('.est-note').count(),0,'no rough-cost note with a key');
+ await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.doesNotMatch((await p.locator('#tpS'+await p.evaluate(()=>__trip.steps.DEPART)+' .est-note').allTextContents()).join(' '),/Without a Google API key.*rough estimates/,'no no-key cost warning with a key');
  // Advice's tick boxes hold every later step until they're ticked
  await p.evaluate(()=>{__app.S.recircAck=0;__trip.step(7);});await p.waitForFunction(()=>__trip.state().step===2);
  await p.evaluate(()=>{__app.S.recircAck=Date.now();__trip.step(7);});await p.waitForFunction(()=>__trip.state().step===7);
@@ -48,5 +37,5 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.locator('#tsSpeed.spd-off, #tsSpeed .spd-off-note').count(),0,'steps from the website: cruising speed on without a key');
  await p.evaluate(()=>__trip.step(__trip.steps.DEPART));assert.match(await p.innerText('.est-note'),/rough estimates/);assert.doesNotMatch(await p.innerText('.est-note'),/planned at the limits/);
  assert.equal(errors.length,0,errors.join('\n'));
- console.log('no API key: cruising speed shown grayed out with a warning, planned at the limits; back on with a key');
+ console.log('No API key or turn text: geometry-based speed limits and default speed settings work; existing instructions/key paths remain supported');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

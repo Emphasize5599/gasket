@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.374 - 2026-11-04
+- Keep completed saved trips as planned, including chosen stops, dates, prices, traffic and speed settings.
+- Reuse stored station positions when only prices, timing or speed settings change.
+- Load geometry-based speed limits for routes without turn instructions, including added-rest routes.
+- Bug fixes
+
 ## 0.0.373 - 2026-11-03
 - Keep unfinished saved rest timing editable before vehicle comparison, with clear recovery for conflicting trip windows.
 - Clarify that solar rest times use each stop’s local date, time zone and daylight-saving rules.
