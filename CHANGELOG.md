@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.375 - 2026-11-04
+- Add per-vehicle commercial-truck rest filtering while retaining combined rest areas.
+- Show estimated arrival at the end of each rest-stop directory.
+- Bug fixes
+
 ## 0.0.374 - 2026-11-04
 - Keep completed saved trips as planned, including chosen stops, dates, prices, traffic and speed settings.
 - Reuse stored station positions when only prices, timing or speed settings change.

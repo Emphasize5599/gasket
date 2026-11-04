@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
-(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{const p=await b.newPage();p.setDefaultTimeout(5000);
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{const p=await b.newPage();p.setDefaultTimeout(5000);await p.route(/^https?:\/\//,r=>r.abort());
  await p.addInitScript(()=>{
   const key='persistent-native-settings',s=localStorage.getItem(key);if(s)sessionStorage.setItem('standinRestored',JSON.stringify({s}));
   addEventListener('DOMContentLoaded',()=>{const N=__app.N,save=N.saveSettings;N.saveSettings=function(s){localStorage.setItem(key,s);save(s);

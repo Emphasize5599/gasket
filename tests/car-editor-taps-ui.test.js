@@ -10,6 +10,7 @@ const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoV
   await p.click('#btnTrip');await p.click('#gEdit');await p.waitForSelector('.car-edit #tEpa');await p.waitForSelector('.car-edit #gSave');return p;};
  // the identity tile of a saved car is folded; open it, and a background redraw right after must not fold it again
  let p=await open();
+ assert.equal(await p.isChecked('#gCommercialTruck'),false,'commercial use is explicit and off by default');await p.check('#gCommercialTruck');await p.evaluate(()=>Garage.redraw());assert.equal(await p.isChecked('#gCommercialTruck'),true);assert.equal(await p.evaluate(()=>Garage.car().commercialTruck),true);await p.uncheck('#gCommercialTruck');assert.equal(await p.evaluate(()=>Garage.car().commercialTruck===true),false);
  assert.equal(await p.evaluate(()=>document.getElementById('tEpa').open),false,'saved car: identity folded');
  await p.evaluate(()=>{document.querySelector('#tEpa > summary').click();Garage.redraw();});
  assert.equal(await p.evaluate(()=>document.getElementById('tEpa').open),true,'a redraw right after opening keeps the tile open');

@@ -649,6 +649,7 @@
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
       return '<option value="' + t + '"' + ((c.type || 'car') === t ? ' selected' : '') + '>' + SP.TYPES[t].label + '</option>'; }).join('') + '</select></label></div>';
+    h += '<label class="nf chk"><span>Commercial truck<small>Include weigh facilities in rest-stop searches. Truck route restrictions are not checked.</small></span><input type="checkbox" id="gCommercialTruck"' + (c.commercialTruck === true ? ' checked' : '') + '></label>';
     // engine, transmission, drive, fuel and features: changed here (the Garage page's About this car only shows them)
     if(k==='ev'){
       var ep=c.propulsion||{};
@@ -1034,6 +1035,7 @@
       // Brave's tank answer, like the spare's: confirm it, or open Brave's page to read it yourself
       if ($('gTankYes')) $('gTankYes').onclick = function () { c.tankLookup.ok = true; c.tankSrc = 'from Brave Search · you confirmed it'; LG.info('car', 'Tank size confirmed: ' + c.tank + ' gal'); changed(); draw(); };
       if ($('gTankSee')) $('gTankSee').onclick = function () { tankFind(c, true); };
+      if ($('gCommercialTruck')) $('gCommercialTruck').onchange = function () { if(this.checked)c.commercialTruck=true;else delete c.commercialTruck;changed(); };
       if ($('gType')) $('gType').onchange = function () { c.type = this.value; changed(); draw(); };
       if ($('gDcKw')) $('gDcKw').onchange = function () { var v = parseFloat(this.value); c.dcKw = v > 0 ? Math.round(v) : ''; c.dcKwSrc = c.dcKw ? 'you entered it' : ''; changed(); draw(); };
       if ($('gDcFind')) $('gDcFind').onclick = function () { if (c.dcKwSrc === 'you entered it') c.dcKwSrc = ''; dcFind(c, false); };
