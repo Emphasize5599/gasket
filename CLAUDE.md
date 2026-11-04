@@ -1,5 +1,16 @@
 # Gasket
 
+## 0.0.376 - individual destinations inside leg directions
+
+Owner wants to drill into the per-leg Google Maps directions chooser and navigate from the current location to individual planned destinations because Maps sometimes offers a different road. Trip.exportLegs now exposes ordered destinations per balanced part, excluding its starting handoff: fuel/charging stops, subordinate added rests and the original destination. All targets appear exactly once across adjacent parts. Rest splits remain inside their original leg. Targets reuse saved coordinates/full addresses/place identities and require no discovery, traffic, location read or planning work.
+
+Each existing part link has expandable Individual stops beneath it. Buttons show the target name, its role and "from your current location"; rests are green. Individual URLs omit origin and waypoints, retain the destination place ID when available and request dir_action=navigate. Google Maps resolves the current location; it can still choose roads between targets, so the chooser explains checking against the selected route. Source: https://developers.google.com/maps/documentation/urls/get-started and https://developers.google.com/maps/architecture/maps-url. The existing one-tap whole-trip behavior remains for at-most-nine-point trips; Departure also has a Directions by leg or individual stop button to open the chooser for any trip. Existing invalid-plan, toll-policy and refreshed-traffic-review gates still apply.
+
+Validation: focused trip/ev-flow-ui/departure-summary/saved-rest-ui/traffic-presets-ui passed in 21.1s. Final ev-flow-ui rerun passed in 21.3s after adding the explicit chooser-entry test and target-name assertions. Tests cover target order/roles, original-leg grouping, current-location/no-waypoint links, place IDs, 25-stop split continuity without repeated handoffs, real individual-button clicks, part opened-state independence and 320/448px at enlarged text. Inspected the actual expanded 320px screenshot. Syntax/diff checks passed. Signed CI/package verification pending. Physical-phone Google Maps handoff unverified.
+
+Phone checks: on Departure, open Directions by leg or individual stop; expand Individual stops under a part and tap a fuel/rest/destination target. Maps should route from your present location to that one stop. Check target order against the plan, a leg with added rests, a trip split over nine points and a short trip's normal Open in Google Maps shortcut. Google Maps road selection remains its own.
+
+
 ## 0.0.375 - commercial-vehicle rest filtering and directory arrival estimates
 
 Owner approved a per-vehicle Commercial truck setting, off by default, to avoid offering weigh facilities to non-commercial drivers. Truck body type, diesel/RV use and the speed setting "As slow as the trucks" do not imply commercial use. The editor explicitly states that truck route restrictions are not checked; this is not dimensions/weight/hazmat-aware semi routing. The field is saved with the car and is already part of VehicleCompare.profile, invalidating incompatible completed plans/permission acknowledgements.

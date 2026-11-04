@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.376 - 2026-11-04
+- Expand directions by leg to navigate to individual planned stops from your current location.
+- Bug fixes
+
 ## 0.0.375 - 2026-11-04
 - Add per-vehicle commercial-truck rest filtering while retaining combined rest areas.
 - Show estimated arrival at the end of each rest-stop directory.

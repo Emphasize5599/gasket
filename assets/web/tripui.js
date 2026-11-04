@@ -4404,6 +4404,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       (p.ok ? '<div><b>' + stops + '</b><span>' + (KIND() === 'ev' ? 'charging' : 'fuel') + ' stop' + (stops === 1 ? '' : 's') + '</span></div>' : '') +
       (p.ok ? '<div><b>~' + glue(fmtDur(charging * 60)) + '</b><span>'+(KIND()==='ev'?'charging':'refueling')+' '+A.qBtn(KIND()==='ev'?'Estimated charging time, excluding queues.':'Estimated pumping time at 8 gal/min for liquid fuel or 1 kg/min for hydrogen. Trip comparisons also allow 3 minutes per stop for payment and nozzle setup, plus detours. Queues, breaks and slow equipment are not included.')+'</span></div>' : '') + '</div>';
     if (!p.ok) return h + '<div class="msg err">No plan works yet — go back to Stops.</div>';
+    h += '<button class="btn tonal" id="tChooseDirections">Directions by leg or individual stop</button>';
     var t = p.totals, out = summary||r.acc.legs[0];
     var costQ = summary?'Fuel or energy used on this leg, valued at the running average cost in your tank or battery. Purchases at a destination belong to the leg arriving there.':'The ' + out.burnGal.toFixed(1) + ' ' + UN() + ' this drive uses: what\'s already in your ' + (KIND() === 'ev' ? 'battery' : 'tank') + ' at ' + priceText(r.startPrice) + '/' + UN() +
       (parseFloat(S.trip[tankPriceKey()]) > 0 ? ' (what you said it cost)' : KIND() === 'ev' && evRates && evRates.all ? ' (the typical published rate of this route\'s chargers; set yours in Parameters)' : ' (typical on this route; set yours in Parameters)') + ', plus what you buy at what you pay.';
@@ -4797,6 +4798,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if($('tDepartLeg'))$('tDepartLeg').onchange=function(){departLeg=+$('tDepartLeg').value;renderStep();};
     if ($('tsReport')) $('tsReport').onclick = function (e) { e.preventDefault(); shareReport(e); };
     if ($('tShare')) $('tShare').onclick = shareTrip;
+    if($('tChooseDirections')){$('tChooseDirections').onclick=function(){openMaps(true);};$('tChooseDirections').disabled=trafficRefreshing||!!(result&&result.trafficReviewPending);}
     if($('tRefreshTraffic'))$('tRefreshTraffic').onclick=refreshTraffic;
     var b = $('tOpen'); if (b) b.disabled = trafficRefreshing||!(result && result.plan.ok)||!!(result&&result.trafficReviewPending);
   }
@@ -4804,18 +4806,18 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
    * The one place a trip goes to Google Maps: up to 9 stops opens in one tap. Over that, the legs slide up from the
    * button and you tap the one you're driving.
    */
-  function openMaps() {
+  function openMaps(showStops) {
     var allowed=tollPolicyCheck(rawRoute);if(!allowed.ok){A.toast(allowed.reason);return;}
     var ex = result && result.plan.ok ? exports() : null; if (!ex) return;
-    if (!ex.one.tooMany) { N.openUrl(ex.one.url); return; }
+    if (!ex.one.tooMany&&showStops!==true) { N.openUrl(ex.one.url); return; }
     if (closeLegs()) return;
     var pg = $('trip'), box = document.createElement('div');
     box.className = 'legs-pop'; box.id = 'tLegs';
-    box.innerHTML = '<div class="lp-h">Follow these links in order. Each has at most 9 points, including its start and end.</div>' + ex.legs.map(function (x, i) {
+    box.innerHTML = '<div class="lp-h">Follow the leg links in order, or expand a part to navigate to its individual stops from your current location. Google Maps chooses the roads between stops; check them against your selected route.</div>' + ex.legs.map(function (x, i) {
       return (x.part===0?'<h3 class="lp-h">Leg '+(x.leg+1)+' · '+arrowHtml(legName(route,x.leg))+'</h3>':'')+'<button class="leg-link' + (opened[x.leg+':'+x.part] ? ' done' : '') + '" data-legurl="' + i + '" style="--i:' + (ex.legs.length - 1 - i) + '"><span class="leg-n">' + (x.part + 1) + '</span><span class="ll-t"><b>' + (x.parts>1?'Part '+(x.part+1)+' of '+x.parts+' · ':'')+arrowHtml(stopLine(x.from)+' → '+stopLine(x.to)) + '</b><small>' +
         Math.round(x.toMi - x.fromMi).toLocaleString() + ' mi · ' + (x.fuelStops ? x.fuelStops + ' fuel / charging stop' + (x.fuelStops === 1 ? '' : 's') : 'no fuel stops') + '</small>' +
         (x.part<x.parts-1?'<small>At this part’s last stop, open Part '+(x.part+2)+'.</small>':'')+'</span>'+
-        '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>';
+        '<svg viewBox="0 0 24 24"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2z"/></svg></button>'+directionsStopsHtml(x,i);
     }).join('');
     pg.appendChild(box); document.body.classList.add('legs-open');      // the "more below" arrow would sit on the links
     box.style.bottom = ($('tpNav').getBoundingClientRect().height + 6) + 'px';
@@ -4823,8 +4825,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     box.querySelectorAll('[data-legurl]').forEach(function (b) {
       b.onclick = function () { var x = ex.legs[+b.dataset.legurl]; opened[x.leg+':'+x.part] = true; b.classList.add('done'); N.openUrl(x.url); };
     });
+    box.querySelectorAll('[data-stopurl]').forEach(function(b){b.onclick=function(){var k=b.dataset.stopurl.split(':').map(Number),target=ex.legs[k[0]].destinations[k[1]];N.openUrl(target.url);};});
     setTimeout(function () { document.addEventListener('pointerdown', outside, true); }, 0);
   }
+  function directionsStopsHtml(x,index){return '<details class="leg-stop-details"><summary>Individual stops ('+x.destinations.length+')</summary><ol>'+x.destinations.map(function(p,j){var name=p.kind==='rest'?stopLine(p.stop):p.stop.short||p.stop.label||stopLine(p.stop),kind=p.kind==='rest'?'Rest stop':p.kind==='fuel'?(KIND()==='ev'?'Charging stop':'Fuel stop'):'Destination';return '<li'+(p.kind==='rest'?' class="leg-rest"':'')+'><button class="leg-stop-link" data-stopurl="'+index+':'+j+'"><span class="leg-n">'+(j+1)+'</span><span class="ll-t"><b>'+esc(name)+'</b><small>'+kind+' · from your current location</small></span>'+MAPS_ICON+'</button></li>';}).join('')+'</ol></details>';}
   var opened = {};
   function outside(e) { var box = $('tLegs'); if (!box || box.contains(e.target) || (e.target.closest && e.target.closest('#tOpen'))) return; closeLegs(); }
   function closeLegs() {

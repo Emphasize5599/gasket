@@ -312,6 +312,13 @@ for(let count=2;count<=60;count++){
 }
 console.log('Balanced nine-point navigation, continuity, identifiers and 2–60 point boundaries passed');
 {
+ const stops=[{label:'Start',lat:34,lng:-92},{label:'Rest',lat:34.1,lng:-92,rest:{site:{name:'Sample Rest'}}},{label:'Middle',lat:34.2,lng:-92,placeId:'ChIJ-middle'},{label:'End',lat:34.3,lng:-92}],fuel=[5,15,25].map((d,i)=>({c:{d,lat:34+d/100,lng:-92,station:{id:'ChIJ-fuel'+i,name:'Sample Fuel '+i,address:'10 Main St, Sample City'}}})),model={legEnds:[10,20,30],totalMi:30};
+ const legs=T.exportLegs({stops},fuel,model);assert.deepEqual(legs.map(x=>x.leg),[0,1]);assert.deepEqual(legs[0].destinations.map(x=>x.kind),['fuel','rest','fuel','destination']);assert.deepEqual(legs[1].destinations.map(x=>x.kind),['fuel','destination']);
+ for(const target of legs.flatMap(x=>x.destinations)){const u=new URL(target.url);assert(!u.searchParams.has('origin'));assert(!u.searchParams.has('waypoints'));assert.equal(u.searchParams.get('dir_action'),'navigate');assert(u.searchParams.get('destination'));}
+ assert.equal(new URL(legs[0].destinations.at(-1).url).searchParams.get('destination_place_id'),'ChIJ-middle');assert.equal(new URL(legs[0].destinations[0].url).searchParams.get('destination_place_id'),'ChIJ-fuel0');assert.deepEqual(stops.map(s=>s.label),['Start','Rest','Middle','End'],'navigation does not alter original/rest roles');
+ const many=Array.from({length:25},(_,i)=>({c:{d:i+1,lat:34+i/100,lng:-92,station:{name:'Fuel '+i}}})),parts=T.exportLegs({stops:[stops[0],stops.at(-1)]},many,{legEnds:[30],totalMi:30});assert.equal(parts.flatMap(x=>x.destinations).length,26,'part handoffs never duplicate targets');assert.equal(new Set(parts.flatMap(x=>x.destinations.map(p=>p.d))).size,26);console.log('Current-location targets preserve stop order, rest grouping, place identity and part handoffs');
+}
+{
   const route={stops:[{address:'Start, Testville'},{address:'Middle, Testville'},{address:'End, Testville'}]},fuel=Array.from({length:16},(_,i)=>({c:{d:i+1,lat:35,lng:-92,station:{id:(i%2?'ocm':'afdc')+i,address:(i+1)+' Main St, Testville'}}}));
   const links=T.exportLegs(route,fuel,{legEnds:[8,18],totalMi:18});
   assert.deepEqual(links.map(x=>x.leg),[0,0,1,1]);
