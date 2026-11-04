@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.382 - fresh-car-lookups wait limit (381 published no APK)
+
+381's CI run 41924442013 passed 232/233 (vehiclecompare-ui passed with 381's fix) and failed only fresh-car-lookups 18:90: an EPA menu (year/make/model) didn't get the wanted option within the test's own 7 s default, 11 s into the run (first car). Not reproduced locally in 88 runs (16 and 24 parallel copies); 0.0.326 recorded the same test timing out on unmodified code. Test default timeout 15 s (others ~12 s) and a `pick(id, value)` helper that prints the menu's options, editor presence, car count and the last 10 log lines if it times out again; no assertion changed, no app change. 381's tag stays untouched.
+
 ## 0.0.381 - comparison taps during background work
 
 380's CI failed vehiclecompare-ui line 19 (#vcCompare tapped, `[data-compare-car]` never appeared). comparePick / compareAdd / compareEdit (via compareSwitch) silently returned while `compareLocked()` (priceReplanning, traffic, schedule, queue, busy, routing, choicePlanning, hzRiskBusy, editing, calculating); the buttons are drawn disabled only when the lock is on at render time, so a tap during short background work was lost (phone too). Locally reproduced the same class at line 50 (#vcAdd → no editor, 2/32 at 16 parallel copies). Now `compareLater(fn)`: the newest tap waits (150 ms polls, ≤ 30 s, only while Compare is showing in an open trip, not while an editor is open) and then runs. `__trip.state().locked` and test hook `__trip.holdCompareLock(on)` (sets compareCalculating). vehiclecompare-ui holds the lock, taps Add (no editor), releases, editor opens (fails without the fix). 32/32 at 16 parallel copies. Not phone-verified.
