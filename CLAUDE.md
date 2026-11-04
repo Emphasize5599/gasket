@@ -11,6 +11,9 @@ Validation: focused trip/ev-flow-ui/departure-summary/saved-rest-ui/traffic-pres
 Phone checks: on Departure, open Directions by leg or individual stop; expand Individual stops under a part and tap a fuel/rest/destination target. Maps should route from your present location to that one stop. Check target order against the plan, a leg with added rests, a trip split over nine points and a short trip's normal Open in Google Maps shortcut. Google Maps road selection remains its own.
 
 
+
+Published 376 from 96dbe84: source run 41882456535 and signed run 41882456261 / job 126758172350 succeeded. All 232 CI tests passed in 294.3s; native gates passed and Android build succeeded in 29s. Signing certificate remains 94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e. Downloaded ARM64 APK: 30,542,652 bytes, SHA256 57f80c773cda8aaf5cebb34392630a4e8c09903437ebed59494ffe62df54f917 matching release digest. All three changed app assets match the tagged commit byte-for-byte. Physical-phone navigation acceptance outstanding.
+
 ## 0.0.375 - commercial-vehicle rest filtering and directory arrival estimates
 
 Owner approved a per-vehicle Commercial truck setting, off by default, to avoid offering weigh facilities to non-commercial drivers. Truck body type, diesel/RV use and the speed setting "As slow as the trucks" do not imply commercial use. The editor explicitly states that truck route restrictions are not checked; this is not dimensions/weight/hazmat-aware semi routing. The field is saved with the car and is already part of VehicleCompare.profile, invalidating incompatible completed plans/permission acknowledgements.
@@ -27,6 +30,9 @@ Validation: new rest-vehicle-ui tests name variants, shared facilities versus ca
 
 Phone checks: toggle Commercial truck in Garage and reopen the same rest directory; non-commercial lists should omit weigh records without confirmed public-rest identity, while combined rest areas remain. Confirm ordinary truck body/speed mode does not enable commercial use. Open a directory ending at an onward destination: its top should say Depart and bottom Arrive; changing rest timing should update the estimated arrival. Check a saved incompatible weigh rest is retained for review/removal.
 
+
+
+Published 375 from 4287c4c: source run 41878884680 succeeded. Signed run 41878884679 first failed on a vehiclecompare-ui chooser timeout; it passed both the local full suite and isolated recheck (32.2s), then the authorized retry job 126753298140 passed all 232 CI tests in 243.9s and Android build in 16s. Signing certificate remains 94e3154b10bc95e47c34d1678205c1955e1788c4ed52819769b3e1fda391fa0e. Downloaded ARM64 APK: 30,542,652 bytes, SHA256 aced27bc4acc18c2fa9b39b43acb3ec4a4e60ed7f95f3cf5475ba34a835939a6 matching release digest. All four changed app assets match the tagged commit byte-for-byte. Physical-phone acceptance outstanding.
 
 ## 0.0.374 - retain completed plans and speed data after added rests
 
