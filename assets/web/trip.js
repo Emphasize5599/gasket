@@ -1113,7 +1113,7 @@
         var end=at+Math.ceil((edges-at)/(parts-part)),slice=points.slice(at,end+1);
         var ex=exportUrl({stops:[slice[0].stop,slice[slice.length-1].stop]},slice.slice(1,-1).map(function(p){return p.fuel;}),{legEnds:[]});
         out.push({leg:g,part:part,parts:parts,from:slice[0].stop,to:slice[slice.length-1].stop,url:ex.url,waypoints:ex.waypoints,tooMany:ex.tooMany,
-          destinations:slice.slice(1).map(function(p){return {stop:p.stop,d:p.d,kind:p.stop.rest||p.fuel&&p.fuel.rest?'rest':p.fuel?'fuel':'destination',url:exportUrl({stops:[{current:true},p.stop]},[],{legEnds:[]}).url+'&dir_action=navigate'};}),
+          destinations:slice.slice(1).map(function(p){return {stop:p.stop,d:p.d,kind:p.stop.rest||p.fuel&&p.fuel.rest?'rest':p.fuel?'fuel':'destination',url:exportUrl({stops:[{current:true},p.stop]},[],{legEnds:[]}).url};}),
           fuelStops:slice.slice(1).filter(function(p){return p.fuel&&!p.fuel.rest;}).length,fromMi:slice[0].d,toMi:slice[slice.length-1].d});
         at=end;
       }

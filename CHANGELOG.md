@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.377 - 2026-11-04
+- Open individual-stop directions in route selection instead of immediately starting navigation.
+- Bug fixes
+
 ## 0.0.376 - 2026-11-04
 - Expand directions by leg to navigate to individual planned stops from your current location.
 - Bug fixes

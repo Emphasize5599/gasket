@@ -1,5 +1,10 @@
 # Gasket
 
+## 0.0.377 - individual directions preserve route selection
+
+Owner reports that individual-stop links immediately start navigation and wants Google Maps route selection first. Removed dir_action=navigate from generated targets. Current-location origin omission, exact destination/place ID, stop order and absence of extra waypoints remain. Pure and actual browser-click tests now assert dir_action is absent. Phone check: Departure → Directions by leg or individual stop → expand Individual stops → tap a target. Maps should offer routes before the user starts navigation. Physical-phone handoff unverified. Focused regression and signed release verification pending.
+
+
 ## 0.0.376 - individual destinations inside leg directions
 
 Owner wants to drill into the per-leg Google Maps directions chooser and navigate from the current location to individual planned destinations because Maps sometimes offers a different road. Trip.exportLegs now exposes ordered destinations per balanced part, excluding its starting handoff: fuel/charging stops, subordinate added rests and the original destination. All targets appear exactly once across adjacent parts. Rest splits remain inside their original leg. Targets reuse saved coordinates/full addresses/place identities and require no discovery, traffic, location read or planning work.
