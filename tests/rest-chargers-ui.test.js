@@ -24,12 +24,13 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    RestPlaces.create=()=>({corridor:async()=>({sites:rows})});
    StopClock.create=()=>({load:async()=>{},get:()=> 'America/Chicago'});
    const depart=Date.parse('2030-11-13T02:00:00Z');
+   window.__restClockAdvance=0;
    window.__restChargeReads=[];window.__stationRestReads=0;window.__chargerForecasts=[];window.__restWork=[];window.__chargerTaskLabels=[];A.S.restAtChargerTypes={dc:true};
    const upsert=Tasks.upsert;Tasks.upsert=(id,value)=>{if(id.startsWith('charger-rest')&&value.text)__chargerTaskLabels.push(value.text);return upsert(id,value);};
    const begin=Tasks.begin;Tasks.begin=(id,value)=>{if(id.startsWith('charger-rest'))__chargerTaskLabels.push(value.text);return begin(id,value);};
    A.S.trip.windowPlan={enabled:true,planningMode:'overnight',overnight:{arrivalStart:{kind:'clock',time:'20:05'},arrivalEnd:{kind:'clock',time:'21:30'},leaveStart:{kind:'clock',time:'06:00'},leaveEnd:{kind:'clock',time:'07:00'},minimum:30,preferred:60}};
    const ui=RestUI.init(A,{
-    snapshot:()=>({model,route,depart,kind:'ev',maxDetourMin:30}),arrival:d=>depart+d/model.totalMi*3600000,
+    snapshot:()=>({model,route,depart:depart+__restClockAdvance,rollingDepart:true,kind:'ev',maxDetourMin:30}),arrival:d=>depart+__restClockAdvance+d/model.totalMi*3600000,
     restChargers:async(s,sites,f)=>{
      __restChargeReads.push(f.types);
      return {sites:RestPlaces.matchChargers(sites,stations,f.radius,st=>AltFuel.charging(st,car,f.types,['J1772COMBO','J1772']))};
@@ -83,12 +84,15 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.match(labels,/finding compatible chargers/);
   assert.match(labels,/Checking road access · 2 \/ 2/);
   assert.match(labels,/Charger rest departure forecasts/);
+  await page.waitForFunction(()=>!Tasks.list().some(task=>task.id.startsWith('charger-rest')));
+  const readsBeforeOpen=await page.evaluate(()=>{__restClockAdvance=65000;return __chargerForecasts.length;});
   await page.getByRole('button',{name:'Rest at a charging station'}).click();
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).waitFor();
   await page.waitForSelector('[data-rest-row] .rest-suggested');
   assert.equal(await page.getByText('Too early charger',{exact:true}).count(),0);
   assert(await page.evaluate(()=>__chargerForecasts.includes(.6)&&!__chargerForecasts.includes(.02)));
   assert.equal(await page.evaluate(()=>__stationRestReads),1,'opening the directory reuses the background inventory');
+  assert.equal(await page.evaluate(()=>__chargerForecasts.length),readsBeforeOpen,'opening a minute later reuses completed departure forecasts');
   assert.match(await page.locator('[data-rest-list]').innerText(),/at your own risk/);
   assert.equal(await rows.count(),1,'the separate charger list is independent of the nearby Level 2 requirement');
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).click();

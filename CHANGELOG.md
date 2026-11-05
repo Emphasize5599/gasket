@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.390 - 2026-11-05
+- Reuse completed charger-rest forecasts when opening the directory after the clock advances.
+- Bug fixes
+
 ## 0.0.389 - 2026-11-05
 - Show charger rest discovery, access checks and forecasts in the status bar. Start the automatic charger pass after ordinary rest work.
 - Bug fixes

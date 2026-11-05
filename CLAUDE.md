@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.390 - retain charger-rest forecasts on opening the directory
+
+Both charger directory and recommendation keys included the current departure minute on a leave-now trip. Crossing a minute made opening the directory look like new work. Live-clock trips now key charger work to the active rest search. Explicit future departure minutes, road and window context, preferences, retry and forecast expiration still govern reuse. The browser test finishes background work, advances the departure clock by 65 seconds, opens the directory, and asserts no additional inventory or forecast reads. Focused rest charger, access and recommendation tests passed. Phone check wait until the background charger task finishes, open its directory a minute later and confirm suggestions appear without a restarted forecast pass.
+
 ## 0.0.389 - charger rest background sequencing and progress
 
 The 17:08 UTC log shows charger inventory reuse after the ordinary access pass and charger access failures shortly before export. Previously the charger pass started alongside ordinary work and had no status task until departure forecasting. Ordinary access and recommendation work still run together. The automatic charger pass waits for both and runs inventory even with departure forecasts disabled. Each charger leg reports discovery, local-time matching, road-access counts and departure forecast work. The log records charger search starts and counts for eligible sites and unavailable access. The directory distinguishes finished checks from unavailable forecasts. Browser regression verifies the automatic ordering and all three status phases before opening the charger directory. Phone check the handoff from ordinary rest work to the charger task and compare its final counts with the directory.
