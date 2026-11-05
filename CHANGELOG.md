@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.386 - 2026-11-05
+- Put driving and rest charger types together on Route. Select nearby charger levels with checkboxes and set the distance with a slider.
+- Bug fixes
+
 ## 0.0.385 - 2026-11-05
 - Filter EV rest stops by nearby compatible charger type and open driving directions between the two locations.
 - Clarify that flexible-time planning can fill traffic gaps using forecasts already on the phone.

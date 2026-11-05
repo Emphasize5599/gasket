@@ -11,7 +11,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.evaluate(()=>{
    const A=__app,car=Garage.car();
    Object.assign(car,{plug:'CCS',acKw:7.2,dcKw:150});
-   A.S.trip.evChargers={dc:true,l2:false,l1:false};
+   A.S.trip.evChargers={dc:true,l2:false,l1:false};A.S.restChargerMode="ac";
    const pts=[{lat:34,lng:-92},{lat:34.1,lng:-92}],meters=Trip.hav(...pts)*1609.344;
    const model=Trip.buildRoute({distanceMeters:meters,duration:'600s',polyline:{encodedPolyline:Trip.encodePolyline(pts)},legs:[{distanceMeters:meters,duration:'600s',steps:[]}]},{});
    const route={stops:pts.map((point,i)=>({...point,label:i?'End':'Start'}))};
@@ -27,19 +27,23 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    const ui=RestUI.init(A,{
     snapshot:()=>({model,route,depart:Date.now(),kind:'ev',maxDetourMin:30}),arrival:()=>Date.now(),
     restChargers:async(s,sites,f)=>{
-     __restChargeReads.push(f.mode);
+     __restChargeReads.push(f.types);
      return {sites:RestPlaces.matchChargers(sites,stations,f.radius,st=>AltFuel.charging(st,car,f.types,['J1772COMBO','J1772']))};
     },
     call:async()=>({complete:true,places:[]})
    });
    RestPlaces.create=create;StopClock.create=clock;
    const host=document.createElement('div');host.innerHTML=ui.tile();document.body.appendChild(host);ui.bind(host);
-   RestSettings.open(A,()=>ui.openLeg(0,{wait:true}));
+   const close=A.subPage('Charging settings',RestSettings.chargingHtml(A),body=>RestSettings.bindCharging(A,body));
+   document.querySelector('.sub-page .sub-back').onclick=()=>{close();ui.openLeg(0,{wait:true});};
   });
-  await page.getByText('EV charging near rest stops',{exact:true}).click();
-  await page.selectOption('[data-rest-charger-mode]','l2');
+  assert(await page.isChecked('[data-rest-charger-type="l2"]'));
+  assert(await page.isChecked('[data-rest-charger-type="l1"]'),'legacy AC selection migrates to both AC levels');
+  await page.uncheck('[data-rest-charger-type="l1"]');
+  await page.focus('[data-rest-charger-radius]');await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('[data-rest-charger-distance]').innerText(),'275 m');
   await page.locator('.sub-page .sub-back').click();
-  await page.waitForFunction(()=>__restChargeReads.includes('l2'));
+  await page.waitForFunction(()=>__restChargeReads.some(f=>f.l2&&!f.dc&&!f.l1));
   await page.waitForSelector('[data-rest-row] .rest-charger');
   const rows=page.locator('[data-rest-row]');
   assert.equal(await rows.count(),1);
@@ -48,7 +52,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.notEqual(directions.searchParams.get('origin'),directions.searchParams.get('destination'));
   assert.equal(directions.searchParams.get('travelmode'),'driving');
   assert.deepEqual(await page.evaluate(()=>__app.S.trip.evChargers),{dc:true,l2:false,l1:false});
-  assert.equal(await page.evaluate(()=>__app.S.restChargerMode),'l2');
+  assert.deepEqual(await page.evaluate(()=>__app.S.restChargerTypes),{dc:false,l2:true,l1:false});
+  assert.equal(await page.evaluate(()=>__app.S.restChargerRadius),275);
   assert.deepEqual(errors,[]);
   console.log('Rest-only Level 2 filter, cross-road directions, restricted and incompatible exclusions passed');
  }finally{await browser.close();}

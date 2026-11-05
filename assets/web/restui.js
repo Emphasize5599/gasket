@@ -28,7 +28,7 @@
   function vehicleIssue(p,overnight){var r=RestPlaces.vehicleCheck(p,vehicleFilter(overnight));return r.ok?null:r.reason;}
   function filters(){var f={sources:A.S.restSources||{},deferPrices:true,commercialTruck:vehicleFilter().commercialTruck};f.radius=Math.max.apply(null,['ntad','osm','ridb'].filter(function(id){return !f.sources[id]||f.sources[id].enabled!==false;}).map(function(id){return RestPlaces.sourceFilter(id,f).radius;}).concat([1]));var s=C.snapshot();
    if(s&&s.kind==='ev'&&C.restChargers){
-    f.chargers=RestPlaces.chargerFilter(A.S.restChargerMode,A.S.restChargerRadius);
+    f.chargers=RestPlaces.chargerFilter(A.S.restChargerMode,A.S.restChargerRadius,A.S.restChargerTypes);
     if(f.chargers.mode!=='off'&&root.Garage&&root.AltFuel){var car=Garage.car();f.chargers.vehicle=[car.id,car.plug,car.acAdapter,car.acKw,car.dcKw,AltFuel.compatiblePlugs(car,Garage.plugs(car))];}
    }
    return RestPlaces.defaults(f);}

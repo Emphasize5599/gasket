@@ -7,6 +7,12 @@ const consent=W.create();consent.answer(groups[0],true);assert(!consent.allowed(
 const raw={distanceMeters:120*1609.344,duration:'7200s',polyline:{encodedPolyline:T.encodePolyline([{lat:35,lng:-92},{lat:36,lng:-92}])},legs:[]},m=T.buildRoute(raw,{city:30,hwy:40,comb:35});m.legEnds=[60,120];
 const o={model:m,rewardDepartAt:start,stopMinutes:3,fuelKind:'gas',legDepartures:[start,start+3*h]},p={stops:[],destinationCharges:[]};const timeline=T.scheduleTimeline(o,p);assert.equal(timeline[0].arrive,start+h);assert.equal(timeline[1].depart,start+3*h);assert.equal(timeline[1].waitMinutes,120);assert.equal(timeline[1].arrive,start+4*h);assert.equal(m.durationSec,7200,'waiting never becomes driving time');
 assert.equal(T.travelClock(m,90,start,[],[{d:60,at:start+3*h}],o),start+3.5*h);
+const evTimeline=T.scheduleTimeline({...o,fuelKind:'ev',legDepartures:[start]}, {
+ stops:[{c:{d:30,detourMin:4},curveMin:25}],destinationCharges:[{index:0,minutes:45},{index:1,minutes:30}]
+});
+assert.equal(evTimeline[0].arrive,start+92*60000,'curve, detour and stop overhead count against arrival');
+assert.equal(evTimeline[1].depart,start+137*60000,'destination charge counts against the next departure');
+assert.equal(evTimeline[1].ready-evTimeline[1].arrive,30*60000,'final destination charging follows physical arrival');
 const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at:start+3*h}],departAt:start});assert(projected.stopMinutes>=119,'destination waits advance the EV thermal/weather clock');
 (async()=>{
  let reads=0;const state=W.create();assert.deepEqual(await W.readings({rows,consent:state,read:async()=>{reads++;return clear;}}),[]);assert.equal(reads,0,'declined roads never trigger hourly hazard work');state.road(0,'road',true);const loaded=await W.readings({rows,consent:state,read:async r=>{reads++;return r.reading;}});W.group(loaded).forEach(g=>state.answer(g,true));assert.equal(reads,4);
