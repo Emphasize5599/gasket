@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.384 - 2026-11-05
+- Fix a crash after flexible-time planning: saving the finished plan copied every leg's whole road and weather data, which ran Android out of memory. Oversized saves are now refused instead of crashing.
+
 ## 0.0.383 - 2026-11-04
 - Remember hazard understanding once per warning type and vehicle for the current app session.
 - Batch guest charger prices and read independent networks concurrently while reusing stored tariffs.

@@ -4963,7 +4963,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     }
     var keepStop = function (st) { var o = Object.assign({}, st); delete o.choices; return o; };
     var planned=PlannedTrip.capture(plannedSession(),plannedSettings());
-    var savedOK=A.KV.put('trips', 'trip|' + id, {
+    var record=function(planned){return {
       planned:planned,speed:VehicleCompare.clone(S.speed),
       ownerVehicle:S.carId,route: { typed:!!route.typed,imported:!!route.imported,mode:route.mode,restRecords:route.restRecords,stops: route.stops.map(keepStop), restEditing:!!route.restEditing,restStartAdjustment:route.restStartAdjustment,priceOriginal:route.priceOriginal,priceRestReview:!!route.priceRestReview,avoid: route.avoid, avoidDetected: route.avoidDetected, routeIndex: route.routeIndex, mapsRoutes: route.mapsRoutes,
         legs: route.legs ? route.legs.map(function (L) { return { alts: L.alts, sel: L.sel }; }) : null },
@@ -4972,7 +4972,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       routeChoicesByVehicle:choices,
       comparison:previousComparison&&previousComparison.v&&previousComparison.v.comparison,
       stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
-    });
+    };};
+    var savedOK=A.KV.put('trips', 'trip|' + id, record(planned));
+    // Too big for the phone's bridge: keep the trip, drop only the completed-plan snapshot (it is rebuilt on open).
+    if(!savedOK&&planned&&A.KV.tooLarge){LG.warn('history','Saved trip without its completed plan: too large',{chars:A.KV.tooLarge.chars});savedOK=A.KV.put('trips', 'trip|' + id, record(null));}
     if(!savedOK){LG.error('history','Saved-trip record write failed',{routes:google.length,stations:google.reduce(function(n,g){return n+(g.list||[]).length;},0)});A.toast('This trip could not be saved. Your previous saved trip was kept.');throw Error('Saved-trip storage write failed');}
     if(routeFlow()||(replay&&replay.id===id))replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
     var idx = histIndex().filter(function (x) { return x.id !== id; });

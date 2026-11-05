@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.384 - save crash after flexible-time planning
+
+Owner's 382 phone: logcat FATAL on JavaBridge, `OutOfMemoryError` allocating 502,842,104 bytes (256 MB heap) ~2 min after the flexible-time finalist (04:13:48Z; trip 1,323 mi/leg, 2 legs, 44 forecast legs). A ~250M-character string crossed the bridge: 374's `PlannedTrip.capture` deep-copies everything on `result` except a skip list, and window results set `schedule: best.legs`, where each row (windowConditions) carries the leg's full route `model`, Google `raw` route and the whole RouteWx `reading` (dense samples, forecast, temperatures, alerts). Exact per-field sizes aren't in the log. Now `scheduleRow` keeps timing/routeKey/index/signature, `raw: {description}` and `reading: {hazards, stats, error}` (all that scheduleHtml / drawDepHaz / refreshPriorHazards / restBaseline / dataNotices read). app.js `KV.put` refuses any serialized record over `KV_MAX_CHARS` (40M chars; earlier phone trip records were ~16M packed): FLog error "Record too large to save" with the six largest top-level keys, `KV.tooLarge`, returns false. saveTrip then retries without `planned` (warn "Saved trip without its completed plan: too large"). Tests: plannedtrip (fat schedule row → <100 kB, kept fields, live result untouched), plannedtrip-ui (41M-char put refused, small put ok). Not phone-verified.
+
+Phone checks: rerun the same flexible-time trip to completion and wait a few minutes: no crash; close/reopen it: saved plan label and Departure "When to leave" with hazards. If a log shows "Record too large to save", send it (it names the big fields).
+
 ## 0.0.383 - session hazard understanding and guest tariff throughput
 
 Owner requests one understanding confirmation per hazard type/car/app session and reports slow guest tariff reads. Synced to 66a3cf0 (382, whose signed CI succeeded). The supplied Nov 5 01:40 UTC log's last 170.7 s network-price pass had 209 successful guest requests: 64 ChargePoint detail, 46 EVgo price, 20 each EVgo nearby/site and Chargeway nearby, 18 each EA nearby/detail, 2 PlugShare nearby and 1 Chargeway price. This is evidence of serialized work, not an estimated provider rate limit. No live provider throughput claim.

@@ -1588,11 +1588,15 @@
   window.addEventListener('resize', sizeSheet);
   setTimeout(function () { loadLogos(); }, 0);
   /** Saved answers (searches, speed limits, routes) in the app's private storage: {t: saved ms, v: value}. */
+  // Android's bridge copies a saved string into a 256 MB Java heap (twice its length in bytes, plus
+  // the file's bytes): a 250M-character record crashed the app. Refuse anything near that instead.
+  var KV_MAX_CHARS = 40e6;
+  function kvSizes(v){var out=[];if(v&&typeof v==='object')Object.keys(v).forEach(function(k){try{var n=JSON.stringify(v[k]);out.push([k,n?n.length:0]);}catch(e){out.push([k,-1]);}});return out.sort(function(a,b){return b[1]-a[1];}).slice(0,6).map(function(x){return x[0]+':'+x[1];});}
   var KV = {
     get: function (ns, key, maxAgeMs) {
       try { if (!N.kvGet) return null; var s = N.kvGet(ns, key); if (!s) return null; var o = JSON.parse(s);if(ns==='trips'&&key.startsWith('trip|'))o.v=TripStorage.unpack(o.v);return maxAgeMs && Date.now() - o.t > maxAgeMs ? null : o; } catch (e) { return null; }
     },
-    put: function (ns, key, v) { if(window.__erasing)return false;try { if(ns==='trips'&&key.startsWith('trip|'))v=TripStorage.pack(v);if (N.kvPut) return N.kvPut(ns, key, JSON.stringify({ t: Date.now(), v: v }))!==false; } catch (e) { if(window.FLog)FLog.error('storage','Persistent serialization or bridge failure',{namespace:ns,error:e.name||'Error'}); } return false; },
+    put: function (ns, key, v) { if(window.__erasing)return false;try { if(ns==='trips'&&key.startsWith('trip|'))v=TripStorage.pack(v);if (N.kvPut) { var text=JSON.stringify({ t: Date.now(), v: v });if(text.length>KV_MAX_CHARS){KV.tooLarge={namespace:ns,chars:text.length};if(window.FLog)FLog.error('storage','Record too large to save',{namespace:ns,chars:text.length,largest:kvSizes(v)});return false;}KV.tooLarge=null;return N.kvPut(ns, key, text)!==false; } } catch (e) { if(window.FLog)FLog.error('storage','Persistent serialization or bridge failure',{namespace:ns,error:e.name||'Error'}); } return false; },
     clear: function (ns) { try { return N.kvClear ? N.kvClear(ns) : 0; } catch (e) { return 0; } }
   };
   var lastScan=KV.get('gasmeta','last-scan');
