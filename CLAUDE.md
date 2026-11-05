@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.396 - place earlier and later controls around rest results
+
+Both rest directories show available earlier and later options alongside fitting stops. The earlier control appears above the list and the later control below. Each reveals up to five more results. Shorter stays are still offered when the normal list is empty. Focused browser checks passed. Phone check both directories on a leg with a fitting stop and an earlier or later candidate.
+
 ## 0.0.395 - preserve inventory when checkpointing a saved plan
 
 The 394 checkpoint wrote projected alternate lists back as searched coverage and dropped website refresh metadata. Checkpointing a replay now leaves its saved inventory intact. Actual discovery still persists newly covered roads. The saved-partial-search browser regression verifies the checkpoint leaves the alternate uncovered, then discovers only the missing area. Saved-prices and completed/pending checkpoint tests passed. Phone check an older trip with an unsearched approved alternative and verify that Search that route still works.

@@ -91,6 +91,9 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).waitFor();
   await page.waitForSelector('[data-rest-row] .rest-suggested');
   assert.equal(await page.getByText('Too early charger',{exact:true}).count(),0);
+  assert(await page.getByRole('button',{name:'Show 1 earlier stop'}).isVisible(),'earlier options remain available alongside fitting chargers');
+  assert(await page.evaluate(()=>!!(document.querySelector('[data-rest-alternative="earlier"]').compareDocumentPosition(document.querySelector('[data-rest-row]'))&Node.DOCUMENT_POSITION_FOLLOWING)));
+
   assert(await page.evaluate(()=>__chargerForecasts.includes(.6)&&!__chargerForecasts.includes(.02)));
   assert.equal(await page.evaluate(()=>__stationRestReads),1,'opening the directory reuses the background inventory');
   assert.equal(await page.evaluate(()=>__chargerForecasts.length),readsBeforeOpen,'opening a minute later reuses completed departure forecasts');

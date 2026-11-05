@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.396 - 2026-11-05
+- Show earlier stops above the overnight results and later stops below, even when some stops fit. Applies to ordinary and charging-station rests.
+
 ## 0.0.395 - 2026-11-05
 - Preserve existing station coverage and website price-refresh records when checkpointing a plan from Recent trips. Includes the overnight alternatives and Stops checkpoints from 0.0.394.
 
