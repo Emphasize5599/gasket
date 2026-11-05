@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.395 - preserve inventory when checkpointing a saved plan
+
+The 394 checkpoint wrote projected alternate lists back as searched coverage and dropped website refresh metadata. Checkpointing a replay now leaves its saved inventory intact. Actual discovery still persists newly covered roads. The saved-partial-search browser regression verifies the checkpoint leaves the alternate uncovered, then discovers only the missing area. Saved-prices and completed/pending checkpoint tests passed. Phone check an older trip with an unsearched approved alternative and verify that Search that route still works.
+
 ## 0.0.394 - rest timing exceptions and Stops checkpoints
 
 Empty overnight directories for ordinary places and charger rests can reveal the nearest earlier or later arrivals in batches of five, or offer shorter stays in 30-minute increments starting at the smallest viable reduction. A selected exception applies to that stop and night. Access, parking rules and arrival deadlines still apply. Planning now saves after the full stop plan exists, and Recent trips can restore a pending rest clock with its known fuel or charging dwell. Re-approving the same roads and hours reuses the checkpoint if planning inputs still match. Focused tests cover timing exceptions, completed and pending plan restoration, and invalidation after changes. Phone check an empty overnight directory, add an exception, then reopen Recent trips before choosing its departure.

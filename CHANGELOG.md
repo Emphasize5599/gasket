@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.395 - 2026-11-05
+- Preserve existing station coverage and website price-refresh records when checkpointing a plan from Recent trips. Includes the overnight alternatives and Stops checkpoints from 0.0.394.
+
 ## 0.0.394 - 2026-11-05
 - Offer earlier, later and shorter options when nightly windows leave no matching ordinary rest stops or charger rests.
 - Save the completed plan at Stops and restore pending rest timing from Recent trips. Reuse the checkpoint after unchanged hazard approvals.

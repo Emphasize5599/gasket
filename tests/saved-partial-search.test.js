@@ -21,6 +21,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{window.__limFails=2;window.__limCalls=0;const la=Limits.along;Limits.along=function(m){if(Math.abs(m.totalMi-__trip.state().model.totalMi)>0.5){__limCalls++;if(__limFails-->0)return Promise.reject(new Error('Synthetic speed limit failure'));}return la.apply(this,arguments);};});
  await p.evaluate(()=>__trip.step(6));await p.waitForFunction(()=>__trip.state().result&&!__trip.state().busy,null,{timeout:20000});
  assert.equal(await p.evaluate(()=>__areas.length),0,'opening a saved trip searches nothing by itself');
+ const checkpoint=await p.evaluate(()=>{const v=__app.KV.get('trips','trip|part').v;return {planned:!!v.planned,coverage:v.stations.google.map(g=>g.k)};});
+ assert(checkpoint.planned,'the completed primary plan is checkpointed');
+ assert.deepEqual(checkpoint.coverage,[0],'saving the primary plan does not mark the unsearched alternate as covered');
  assert.equal(await p.evaluate(()=>__limCalls),1,'approved-route limits start before entering comparison');
  // The alternative's speed limits fail twice: retried by itself, no Try again (that's for SPEED_TRIES failures).
  // Stops: the comparison doesn't trust the alternative's guessed stations; it offers to search that route

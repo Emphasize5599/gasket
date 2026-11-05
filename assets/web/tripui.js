@@ -4316,7 +4316,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       LG.info('routes', 'Other routes checked', compareRoutes().map(function (c) { return { via: c.via, saves: c.saves && Math.round(c.saves * 100) / 100, extraMin: Math.round(c.extraMin), ok: c.ok, worth: c.worth }; }));
     }
     startSweep();
-    if(!jobCancel&&(!rp||result.plan.ok)){try{saveTrip(ga.raw,okKs);}catch(e){LG.warn('history','Could not save the Stops checkpoint',String(e));}}
+    if(!jobCancel&&(!rp||result.plan.ok)){try{saveTrip(ga.raw,okKs,rp&&rp.stations);}catch(e){LG.warn('history','Could not save the Stops checkpoint',String(e));}}
     busy = false;priceRefreshActive=false;
     progEnd();
     await breathe();
@@ -5057,7 +5057,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       var saved=replay&&replay.stations,raw=choicePool||saved&&{official:saved.official,google:(saved.google||[]).map(function(g){return g.list||[];}),kind:saved.kind};
       if(raw){
         var ks=choicePool?[altSel].concat(altCompareList()):(saved.google||[]).map(function(g){return g.k;});
-        saveTrip(raw,ks);
+        saveTrip(raw,ks,!choicePool&&saved);
       }
     });
   }
@@ -5078,14 +5078,14 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function plannedSession(){return {id:S.carId,profile:VehicleCompare.profile(Garage.car()),kind:KIND(),speed:S.speed,trip:S.trip,route:route,rawRoute:rawRoute,result:result};}
   function savedPlanCurrent(){return !!(result&&result.plan&&result.plan.ok&&result.savedPlanAt&&!restRows().some(function(x){return !RestPlaces.vehicleCheck(x.rest.site,{commercialTruck:Garage.car().commercialTruck===true,overnight:x.rest.overnight}).ok||restUI&&restUI.closure&&x.rest.site&&restUI.closure(x.rest.site);})&&result.savedPlanIdentity===PlannedTrip.identity(plannedSession(),plannedSettings()));}
   function plannedRestore(saved,session){if(session.route&&session.route.stops.some(function(p){return p.rest&&!RestPlaces.vehicleCheck(p.rest.site,{commercialTruck:(S.cars.find(function(c){return c.id===session.id;})||{}).commercialTruck===true,overnight:p.rest.overnight}).ok;}))return null;var restored=PlannedTrip.restore(saved,session,plannedSettings(session.id));if(saved&&!restored)LG.info('history','Saved plan dependencies changed',{changed:PlannedTrip.changed(saved,session,plannedSettings(session.id))});if(restored){var full=restored.model;if(full.speedRates){restored.model=T.restoreModel(full);if(full._lim)restored.model._lim=full._lim;}restored.result.savedPlanIdentity=saved.identity;restored.result.opts.rewardPriceAt=function(c,m,stops){if(c.est||!c.station||c.station.brand!=='citgo')return Object.assign({},c,{rewardMonth:P.monthKey(rewardArrival(m,c.d,stops))});var q=P.tripPrice(c.station,gradeOf(),S,new Date(),rewardArrival(m,c.d,stops));return q?Object.assign({},c,q):c;};Object.defineProperty(restored.result.opts,'_trafficRaw',{value:session.rawRoute||session.alts[session.altSel||0]});}return restored;}
-  function saveTrip(raw, ks) {
+  function saveTrip(raw, ks, savedInventory) {
     if (!route || !raw) return;
     var id = histId(route), now = Date.now();
     choiceOwnerSync();// one read of the saved record (it can be tens of MB: each read parses all of it on the page)
     var previousComparison=A.KV.get('trips','trip|'+id),prior=choiceSavedId===id&&previousComparison;
     var choices=rememberedChoices(prior&&prior.v&&prior.v.routeChoicesByVehicle);choiceSavedId=id;
     var google = (raw.google || []).map(function (list, i) { return { k: ks[i], sig: alts[ks[i]] ? altSig(alts[ks[i]]) : '', list: list }; });
-    if(raw.kind==='ev'||raw.kind==='h2'){
+    if(!savedInventory&&(raw.kind==='ev'||raw.kind==='h2')){
       var old=previousComparison&&previousComparison.v&&previousComparison.v.stations;
       // Raw provider results may contain whole states. Compact only at the
       // persistence boundary, keeping coverage for EVERY leg option, not just
@@ -5112,14 +5112,14 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       trip: planned?planned.trip:draftClock?draftClock.trip:Object.assign(VehicleCompare.clone(S.trip),{routeChoices:VehicleCompare.clone(S.trip.routeChoices||{})}),
       routeChoicesByVehicle:choices,
       comparison:previousComparison&&previousComparison.v&&previousComparison.v.comparison,
-      stations: { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
+      stations: savedInventory || { official: raw.official || [], google: google, kind: raw.kind || 'gas' }, savedT: now
     };};
     var savedOK=A.KV.put('trips', 'trip|' + id, record(planned,draftClock));
     // Too big for the phone's bridge: keep the trip, drop only the completed-plan snapshot (it is rebuilt on open).
     if(!savedOK&&(planned||draftClock)&&A.KV.tooLarge){LG.warn('history','Saved trip without its completed plan: too large',{chars:A.KV.tooLarge.chars});savedOK=A.KV.put('trips', 'trip|' + id, record(null,null));}
     if(!savedOK){LG.error('history','Saved-trip record write failed',{routes:google.length,stations:google.reduce(function(n,g){return n+(g.list||[]).length;},0)});A.toast('This trip could not be saved. Your previous saved trip was kept.');throw Error('Saved-trip storage write failed');}
     if(planned)savedStopsResults.add(result);
-    if(routeFlow()||(replay&&replay.id===id))replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
+    if(!savedInventory&&(routeFlow()||(replay&&replay.id===id)))replay={id:id,t:now,stations:{official:raw.official||[],google:google,kind:raw.kind||'gas'},alts:alts.slice(),partial:true};
     var idx = histIndex().filter(function (x) { return x.id !== id; });
     idx.unshift({ id: id, t: now, title: tripTitle(route), pts: route.stops.map(function(p){return {name:stopName(p),rest:!!p.rest};}),
       mi: Math.round(model.totalMi), via: alts[altSel] && alts[altSel].description || '', n: route.stops.filter(function(p){return !p.rest;}).length });
