@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.394 - 2026-11-05
+- Offer earlier, later and shorter options when nightly windows leave no matching ordinary rest stops or charger rests.
+- Save the completed plan at Stops and restore pending rest timing from Recent trips. Reuse the checkpoint after unchanged hazard approvals.
+
 ## 0.0.393 - 2026-11-05
 - Estimate successive overnight rests and fill traffic coverage for the later projected driving hours. Leave out rests that would miss the arrival deadline.
 - Check saved traffic sections before offering Fill traffic gaps. Fill small gaps automatically.

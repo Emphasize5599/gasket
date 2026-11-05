@@ -26,3 +26,17 @@ assert.equal(limited.rests.length,1);
 assert.equal(limited.arrival,t+27*H,'cap the last driving hours at the deadline');
 const charging=N.trafficHorizon(c,{...horizon,to:1000,deadline:t+27*H,clock:d=>d/50*H+(d>500?2*H:0)});
 assert.deepEqual(charging.rests,[],'known charging dwell reduces the time available for overnight rest');
+
+const overnightWindow=N.windowFor('2026-11-02','UTC',c,{lat:35,lng:-90});
+const optionSite={timeZone:'UTC',parkingHours:'24/7'};
+const shorter=N.alternatives(optionSite,overnightWindow.arrivalEnd+75*60000,overnightWindow,Infinity);
+assert.equal(shorter.kind,'shorter');
+assert.equal(shorter.reduction,90,'first shortcut uses the smallest viable 30-minute multiple');
+assert.equal(shorter.fit.minimum,c.minimum-90);
+const earlier=N.alternatives(optionSite,overnightWindow.start-20*60000,overnightWindow,Infinity);
+assert.equal(earlier.kind,'earlier');assert.equal(earlier.fit.minimum,c.minimum);
+const fixed={...overnightWindow,derivedArrivalEnd:false};
+const later=N.alternatives(optionSite,overnightWindow.arrivalEnd+20*60000,fixed,Infinity);
+assert.equal(later.kind,'later');assert.equal(later.fit.minimum,c.minimum);
+assert.equal(N.alternatives(optionSite,later.fit.arrive,fixed,later.fit.leave-60000),null,'deadline remains a hard constraint');
+assert.equal(N.alternatives({...optionSite,parkingHours:'off'},earlier.fit.arrive,overnightWindow,Infinity),null);

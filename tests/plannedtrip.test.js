@@ -6,3 +6,19 @@ for(const change of [{profile:'other car'},{id:'other'},{speed:{rule:{over:6}}},
 {// Flexible-time schedule rows carry each leg's full model, Google route and dense weather: never save those.
 const big='x'.repeat(2e6),fat={...result,schedule:[{depart:1,arrive:2,from:0,to:100,waitMinutes:0,routeKey:'k',index:0,signature:'s',model:{pts:big},raw:{description:'I-40',polyline:{encodedPolyline:big},legs:[big]},reading:{hazards:[{kind:'rain',fromMi:1,toMi:2}],stats:{errors:0},dense:big,forecast:big,temperatures:big}}]};
 const slim=P.capture({...s,result:fat},settings),row=slim.result.schedule[0];assert(JSON.stringify(slim).length<1e5,'schedule rows drop models, routes and weather samples');assert.equal(row.raw.description,'I-40');assert.deepEqual(row.reading.hazards,fat.schedule[0].reading.hazards);assert.deepEqual(row.reading.stats,{errors:0});assert.equal(row.depart,1);assert.equal(row.routeKey,'k');assert.equal(row.model,undefined);assert.equal(fat.schedule[0].model.pts,big,'live schedule untouched');console.log('Saved flexible-time schedule keeps timing, road name and hazards only');}
+
+// Re-approval may keep the checkpoint only if the eligible choices and plan inputs still match.
+{
+ const fs=require('node:fs'),vm=require('node:vm'),src=fs.readFileSync('assets/web/tripui.js','utf8');
+ const route={},choices={same:{consider:true}},held={plan:{ok:true},opts:{model:{}},approvedHours:'same hours'};
+ let dependencies='same inputs',roads='same roads';
+ const c={route,S:{trip:{routeChoices:choices}},result:null,approvedStopsRoads:()=>roads,approvedWindowHours:s=>s.key,
+  plannedSession:()=>({trip:c.S.trip}),plannedSettings:()=>({}),PlannedTrip:{identity:()=>dependencies},LG:{info(){}}};
+ vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  function resumeStopsCheckpoint('),src.indexOf('  function queueStopsSnapshot(')),c);
+ function checkpoint(){c.reviewCheckpoint={owner:route,result:held,identity:'same inputs',at:1,roads:'same roads',choices};}
+ checkpoint();assert.equal(c.resumeStopsCheckpoint(),true);assert.equal(c.result,held);
+ checkpoint();roads='changed roads';assert.equal(c.resumeStopsCheckpoint(),false);
+ checkpoint();assert.equal(c.resumeStopsCheckpoint({key:'different hours'}),false);
+ checkpoint();dependencies='changed inputs';assert.equal(c.resumeStopsCheckpoint({key:'same hours'}),false);
+ checkpoint();dependencies='same inputs';assert.equal(c.resumeStopsCheckpoint({key:'same hours'}),true);
+}

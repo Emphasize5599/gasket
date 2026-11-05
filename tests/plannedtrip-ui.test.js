@@ -50,11 +50,21 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  if(width===320)assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'overnight directory fits');
  await p.click('[data-rest-add="0"]');assert(await p.isChecked('#restOvernight'),'overnight rest by default');assert.equal(await p.inputValue('#restMin'),'30','minimum rest from nightly settings');await p.click('.sub-page .sub-back');await p.waitForSelector('[data-rest-list]');
  await p.evaluate(()=>{__app.S.trip.windowPlan=JSON.parse(window.__savedWindow);});await p.click('.sub-page .sub-back');await p.evaluate(()=>__trip.step(7));await p.waitForSelector('[data-rest-leg="0"]');if(await p.locator('[data-rest-screen-go]').count())await p.locator('[data-rest-screen-go]').first().click();await p.click('[data-rest-leg="0"]');await p.waitForSelector('[data-rest-row="1"]');
+ await p.waitForFunction(()=>{const id=__trip.state().route.histId;return id&&__app.KV.get('trips','trip|'+id)?.v.planned;});
  // casual add: permission first, no trip restart, no rerouting, stay in Stops
  const routed=await p.evaluate(()=>__restRouteCalls),plannedBefore=await p.evaluate(()=>__restPlannerCalls);await p.click('[data-rest-add="0"]');await p.fill('#restMax','90');await p.click('#restAddGo');assert.match(await p.locator('#restAddError').innerText(),/Confirm/);assert.equal(await p.evaluate(()=>__trip.state().route.stops.length),2);
  await p.check('#restPermission');await p.click('#restAddGo');await p.waitForFunction(()=>__trip.state().route.stops.length===3&&!document.querySelector('.sub-page'));
  assert.equal(await p.evaluate(()=>__trip.state().step),7,'stays in Stops');assert.equal(await p.evaluate(()=>__restRouteCalls),routed,'the rest is spliced into the selected road, nothing rerouted');assert(await p.evaluate(()=>__trip.state().route.stops[1].rest.pendingTiming));
  assert.equal(await p.evaluate(()=>__trip.state().result),null,'draft is not an approved fuel plan');assert.equal(await p.evaluate(()=>__restPlannerCalls),plannedBefore,'adding a rest does not optimize fuel');await p.waitForFunction(()=>document.querySelector('#tNext').textContent==='Calculate rest timing');
+ if(width===320){
+  await p.waitForFunction(()=>{const id=__trip.state().route.histId;return id&&__app.KV.get('trips','trip|'+id)?.v.draftClock;});
+  const draftId=await p.evaluate(()=>__trip.state().route.histId);
+  await p.evaluate(()=>__trip.close());
+  await p.click('#btnTrip');await p.click('[data-hist="'+draftId+'"]');
+  await p.waitForFunction(()=>!__trip.state().busy&&__trip.state().step===7&&FLog.entries().some(e=>e.m==='Rest selection checkpoint restored'));
+  assert.equal(await p.evaluate(()=>__restPlannerCalls),plannedBefore,'opening a rest checkpoint skips fuel optimization');
+  assert(await p.evaluate(()=>__trip.state().route.stops[1].rest.pendingTiming));
+ }
  // timing: colored slider, a red time chosen with its warning
  await p.evaluate(()=>{window.__restHeavy=true;});await p.click('#tNext');await p.waitForSelector('#restTimeSlider',{timeout:30000});const bg=await p.locator('#restTimeSlider').evaluate(e=>e.style.background);assert(bg.includes('198, 40, 40')||bg.includes('#c62828'),'heavy times are red on the track');assert(!/158, 158, 158|#9e9e9e/.test(bg),'every time has a forecast, so none is gray');
  const red=await p.evaluate(()=>{const el=document.querySelector('#restTimeSlider');for(let i=0;i<=+el.max;i++){el.value=i;el.dispatchEvent(new Event('input'));if(/heavier than your/.test(document.querySelector('#restTimeRead').textContent))return i;}return -1;});assert(red>=0,'a red time exists');assert.match(await p.locator('#restTimeRead').innerText(),/You can still choose it/);await p.click('#restLeast');assert.doesNotMatch(await p.locator('#restTimeRead').innerText(),/heavier than your/,'least-traffic button picks a light time');assert.match(await p.locator('#restTimeRead').innerText(),/least traffic of these times/);await p.evaluate(r=>{const el=document.querySelector('#restTimeSlider');el.value=r;el.dispatchEvent(new Event('input'));},red);

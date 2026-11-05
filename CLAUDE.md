@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.394 - rest timing exceptions and Stops checkpoints
+
+Empty overnight directories for ordinary places and charger rests can reveal the nearest earlier or later arrivals in batches of five, or offer shorter stays in 30-minute increments starting at the smallest viable reduction. A selected exception applies to that stop and night. Access, parking rules and arrival deadlines still apply. Planning now saves after the full stop plan exists, and Recent trips can restore a pending rest clock with its known fuel or charging dwell. Re-approving the same roads and hours reuses the checkpoint if planning inputs still match. Focused tests cover timing exceptions, completed and pending plan restoration, and invalidation after changes. Phone check an empty overnight directory, add an exception, then reopen Recent trips before choosing its departure.
+
 ## 0.0.393 - project overnight traffic and fill small gaps automatically
 
 The overnight projection uses known driving and charging or fueling dwell, local nightly hours, user drive-through decisions and destination deadlines. It warms later traffic using hypothetical waits at the latest feasible departures and keeps the existing one-night-at-a-time candidate flow. Night suggestions and stay durations respect the arrival deadline. The traffic allowance preflight checks actual saved sections without provider requests, fills up to 20 missing sections automatically and asks before larger reads. Focused regressions cover multiple projected nights, deadlines, charging dwell, local gap reuse, a large gap prompt and a network-free probe. Phone check a multi-night drive with a tight arrival deadline and add a short off-route rest.

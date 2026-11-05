@@ -50,6 +50,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
     call:async()=>({complete:true,places:[]})
    });
    RestPlaces.create=create;StopClock.create=clock;
+   window.__openChargersAgain=()=>{if(window.__subClose)__subClose();ui.openLeg(0);};
    const host=document.createElement('div');host.innerHTML=ui.tile();document.body.appendChild(host);
    const close=A.subPage('Charging settings',RestSettings.chargingHtml(A),body=>RestSettings.bindCharging(A,body));
    document.querySelector('.sub-page .sub-back').onclick=()=>{close();ui.openLeg(0,{wait:true});};
@@ -120,6 +121,24 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargeLevel),'dc');
   assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargeMinutes),20);
   assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargePrice),0);
+  await page.evaluate(()=>{
+   __app.S.trip.windowPlan.overnight={arrivalStart:{kind:'clock',time:'20:10'},arrivalEnd:{kind:'clock',time:'20:20'},leaveStart:{kind:'clock',time:'06:00'},leaveEnd:{kind:'clock',time:'07:00'},minimum:30,preferred:60};
+   __openChargersAgain();
+  });
+  await page.getByRole('button',{name:'Rest at a charging station'}).click();
+  await page.getByRole('button',{name:'Show 1 earlier stop'}).click();
+  await page.getByRole('button',{name:'Add rest stop: Too early charger'}).waitFor();
+  await page.getByRole('button',{name:'Show 1 later stop'}).click();
+  await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).waitFor();
+  assert.equal(await page.locator('[data-rest-exception]').count(),2);
+  await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).click();
+  assert(await page.getByText(/timing exception for this night only/).isVisible());
+  assert.equal(await page.inputValue('#restMin'),'30');
+  assert.equal(await page.inputValue('#restChargePrice'),'0.345');
+  await page.evaluate(()=>{__stationRestAdded=null;});
+  await page.check('#restPermission');await page.click('#restAddGo');
+  await page.waitForFunction(()=>__stationRestAdded);
+  assert.equal(await page.evaluate(()=>__stationRestAdded.settings.nightDate),'2030-11-12');
   await page.reload();
   await require('./onboarding-ui')(page);
   await page.evaluate(()=>{
@@ -155,6 +174,12 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    };
    window.__confirmFirstNight=()=>{route.stops[1].rest.pendingTiming=false;__openNight();};
    window.__tightenNightDeadline=()=>{deadline=start+82*hour;__openNight();};
+   window.__ordinaryExceptions=()=>{
+    deadline=Infinity;
+    A.S.trip.windowPlan.driveThroughNights={};
+    A.S.trip.windowPlan.overnight={start:'21:15',end:'08:00',minimum:360,preferred:480,arrivalEnd:{kind:'clock',time:'21:30'}};
+    __openNight();
+   };
   });
   await page.locator('#multi-night [data-rest-need="0"]').click();
   await page.getByRole('heading',{name:'Night of 2030-11-12'}).waitFor();
@@ -183,6 +208,11 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.getByText(/A rest would miss the arrival deadline/).first().waitFor();
   assert.equal(await page.getByRole('heading',{name:/Night of 2030-11-/}).count(),0);
   assert.equal(await page.locator('[data-rest-row]').count(),0);
+  await page.evaluate(()=>__ordinaryExceptions());
+  await page.getByRole('button',{name:'Show 1 earlier stop'}).click();
+  const early=page.getByRole('button',{name:'Add rest stop: Place 24'});
+  await early.waitFor();
+  assert.equal(await early.getAttribute('data-rest-exception'),'earlier');
   assert.deepEqual(errors,[]);
   console.log('Rest-only Level 2 filter, cross-road directions, restricted and incompatible exclusions passed');
  }finally{await browser.close();}
