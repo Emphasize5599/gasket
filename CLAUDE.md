@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.391 - sequential overnight rests and charger pricing
+
+Rest candidates previously used each site's projected drive-through night. Each original leg now has one active night. The directory keeps completed night decisions visible and advances when the user sets a departure or checks Drive through. Ordinary and charger suggestions share that scope. Site arrival clocks retain known fuel and charging dwell. The destination estimate waits for the outstanding nights, and the draft can defer an earliest-arrival constraint while another overnight rest can still change arrival. Final planning validates the actual arrival window. Charger-rest charging minutes follow the minimum rest until edited, and the form requires an electricity price including an explicit zero for free charging.
+
+The focused browser tests cover a three-night leg, late-night candidate exclusion, pending departure, driving through, undoing the decision and arrival visibility. They also cover charger defaults, overrides and a required price, and the original destination window flow. Phone check a multi-night EV trip, set the first rest departure, drive through the second night, and confirm the arrival appears after resolving the remaining night.
+
 ## 0.0.390 - retain charger-rest forecasts on opening the directory
 
 Both charger directory and recommendation keys included the current departure minute on a leave-now trip. Crossing a minute made opening the directory look like new work. Live-clock trips now key charger work to the active rest search. Explicit future departure minutes, road and window context, preferences, retry and forecast expiration still govern reuse. The browser test finishes background work, advances the departure clock by 65 seconds, opens the directory, and asserts no additional inventory or forecast reads. Focused rest charger, access and recommendation tests passed. Phone check wait until the background charger task finishes, open its directory a minute later and confirm suggestions appear without a restarted forecast pass.

@@ -98,14 +98,81 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).click();
   await page.waitForSelector('#restAddGo');
   assert.equal(await page.inputValue('#restChargeLevel'),'dc');
+  assert.equal(await page.inputValue('#restCharge'),await page.inputValue('#restMin'));
+  assert(await page.getByText(/Defaults to your minimum rest/).isVisible());
+  await page.fill('#restMin','35');
+  assert.equal(await page.inputValue('#restCharge'),'35');
   await page.fill('#restCharge','20');
-  await page.fill('#restChargePrice','0.35');
+  await page.fill('#restMin','40');
+  assert.equal(await page.inputValue('#restCharge'),'20');
+  await page.fill('#restChargePrice','0');
   await page.click('#restAddGo');
   assert.match(await page.locator('#restAddError').innerText(),/Confirm that this site allows/);
-  await page.check('#restPermission');await page.click('#restAddGo');
+  await page.check('#restPermission');
+  await page.fill('#restChargePrice','');
+  await page.click('#restAddGo');
+  assert.match(await page.locator('#restAddError').innerText(),/Enter the electricity price/);
+  assert.equal(await page.evaluate(()=>window.__stationRestAdded),undefined);
+  await page.fill('#restChargePrice','0');
+  await page.click('#restAddGo');
   await page.waitForFunction(()=>window.__stationRestAdded);
   assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargeLevel),'dc');
   assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargeMinutes),20);
+  assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargePrice),0);
+  await page.reload();
+  await require('./onboarding-ui')(page);
+  await page.evaluate(()=>{
+   const A=__app,start=Date.parse('2030-11-12T11:00:00Z'),hour=3600000;
+   const points=[{lat:34,lng:-92,label:'Origin'},{lat:35,lng:-92,label:'Destination'}],route={stops:points.slice()};
+   const model=Trip.buildRoute({distanceMeters:112654,duration:'252000s',polyline:{encodedPolyline:Trip.encodePolyline(points)},legs:[{distanceMeters:112654,duration:'252000s',steps:[]}]},{});
+   model.totalMi=70;model.legEnds=[70];
+   A.S.trip.windowPlan={enabled:true,planningMode:'overnight',overnight:{start:'20:00',end:'08:00',minimum:360,preferred:480,arrivalEnd:{kind:'clock',time:'23:00'}}};
+   A.S.restSources={ntad:{enabled:true},osm:{enabled:false},ridb:{enabled:false},rvparky:{enabled:false},campendium:{enabled:false}};
+   A.S.restAtChargerTypes={};A.S.restChargerTypes={};A.S.restScreening=false;
+   const sites=[10,24,34,48,58].map(d=>({d,offset:0,site:{...model.pointAt(d),id:'ntad:night-'+d,name:'Place '+d,kind:'rest_area',source:'DOT/BTS',price:0,hours:'24/7'}}));
+   const create=RestPlaces.create,clock=StopClock.create;
+   RestPlaces.create=()=>({corridor:async()=>({sites})});
+   StopClock.create=()=>({load:async()=>{},get:()=> 'UTC'});
+   window.__nightForecasts=[];
+   const ui=RestUI.init(A,{
+    snapshot:()=>({route,model,depart:start,kind:'gas',maxDetourMin:20}),
+    arrival:d=>start+(d+(route.stops.length===3&&d>10?10:0))*hour,
+    departure:i=>i?route.stops[i].rest.leaveAt:start,
+    tolerance:()=>10,forecast:async d=>{__nightForecasts.push(d);return {seconds:600,baseSeconds:600,coverage:1};},
+    call:async()=>({complete:true,places:[]})
+   });
+   RestPlaces.create=create;StopClock.create=clock;
+   const host=document.createElement('div');host.id='multi-night';document.body.appendChild(host);
+   host.innerHTML=ui.tile();ui.bind(host);
+   window.__openNight=()=>{if(window.__subClose)__subClose();host.innerHTML=ui.tile();ui.bind(host);ui.openLeg(0);};
+   window.__selectFirstNight=()=>{
+    route.stops.splice(1,0,{...sites[0].site,label:'First rest',rest:{site:sites[0].site,overnight:true,pendingTiming:true,nightStart:start+9*hour,nightArrivalEnd:start+12*hour,leaveAt:start+20*hour}});
+    model.legEnds=[10,70];
+    __openNight();
+   };
+   window.__confirmFirstNight=()=>{route.stops[1].rest.pendingTiming=false;__openNight();};
+  });
+  await page.locator('#multi-night [data-rest-need="0"]').click();
+  await page.getByRole('heading',{name:'Night of 2030-11-12'}).waitFor();
+  assert.deepEqual(await page.locator('[data-rest-row] [data-rest-add]').evaluateAll(rows=>rows.map(r=>r.getAttribute('aria-label'))),['Add rest stop: Place 10']);
+  assert.match(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
+  await page.waitForFunction(()=>__nightForecasts.length>0);
+  assert.deepEqual(await page.evaluate(()=>Array.from(new Set(__nightForecasts))),[10]);
+  await page.evaluate(()=>__selectFirstNight());
+  await page.getByRole('button',{name:'Set rest departure'}).waitFor();
+  assert.equal(await page.locator('[data-rest-row]').count(),0);
+  await page.evaluate(()=>__confirmFirstNight());
+  await page.getByRole('heading',{name:'Night of 2030-11-13'}).waitFor();
+  assert.deepEqual(await page.locator('[data-rest-row] [data-rest-add]').evaluateAll(rows=>rows.map(r=>r.getAttribute('aria-label'))),['Add rest stop: Place 24']);
+  await page.check('[data-rest-drive-night="2030-11-13"]');
+  await page.getByRole('heading',{name:'Night of 2030-11-14'}).waitFor();
+  assert.deepEqual(await page.locator('[data-rest-row] [data-rest-add]').evaluateAll(rows=>rows.map(r=>r.getAttribute('aria-label'))),['Add rest stop: Place 48']);
+  await page.check('[data-rest-drive-night="2030-11-14"]');
+  assert.equal(await page.getByRole('heading',{name:/Night of 2030-11-/}).count(),0);
+  assert.doesNotMatch(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
+  await page.uncheck('[data-rest-drive-night="2030-11-13"]');
+  await page.getByRole('heading',{name:'Night of 2030-11-13'}).waitFor();
+  assert.match(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
   assert.deepEqual(errors,[]);
   console.log('Rest-only Level 2 filter, cross-road directions, restricted and incompatible exclusions passed');
  }finally{await browser.close();}
