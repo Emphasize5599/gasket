@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.387 - rest at a charging station
+
+Route has a separate Resting at charging stops disclosure above Charging near rest stops. Choose DC fast, Level 2 and Level 1 independently of driving and nearby-rest filters. All clear leaves this directory off. EV rest lists offer a submenu below ordinary rests even when a nearby-charger requirement is active. Discovery starts when the submenu opens and uses the existing charger inventory, vehicle compatibility, ignored stations and the selected leg. Charger results stay out of ordinary rest suggestions. Rows use the existing access, imagery, parking confirmation, rest insertion and timing flows. The directory and add form warn about parking limits and suitability for resting. Set charging minutes and a confirmed price before crediting charge. DC station rests use a segmented estimate of the car's charge curve capped by station power. Focused tests cover the independent directory, lazy loading, permission, DC submission, energy and taper, and regular EV and rest flows. Phone check: select DC rests with the nearby Level 2 requirement active, open the charger submenu, verify access and permission, add charging minutes, and run Calculate rest timing.
+
 ## 0.0.386 - EV charger types together on Route
 
 Route now holds driving charger types and AC adapter beside nearby rest charger types. Parameters links back to the Route card and retains network and destination charging controls. Rest charger levels are independent checkboxes. Clearing all levels disables the rest filter. The straight-line slider spans 100 to 1,000 m in 25 m steps with a live label. Legacy dropdown choices and saved radii are preserved. Focused browser and timing checks passed, including the missing-charger recovery flow, checkbox migration, keyboard slider and mobile layout. Phone check both groups on Route, change the slider and open an EV rest directory to verify the resulting filter.

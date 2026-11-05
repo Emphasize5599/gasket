@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.387 - 2026-11-05
+- Browse compatible charging stations as separate rest options. Confirm parking permission and plan charging during the stay.
+- Bug fixes
+
 ## 0.0.386 - 2026-11-05
 - Put driving and rest charger types together on Route. Select nearby charger levels with checkboxes and set the distance with a slider.
 - Bug fixes

@@ -68,6 +68,14 @@
     invalidate:trafficInvalidate,
     accept:function(value,back){if(back)S.trip.backAt=back;S.trip.depart=value;S.trip.departNow=false;S.trip.trafficForecast=true;trafficInvalidate();}
   });
+  async function restChargerInventory(m,plugs,corridor,types,notice){
+    var pool=choicePool&&choicePool.kind==='ev'?choicePool:null;
+    var stored=pool?(pool.official||[]).concat((pool.google||[]).flatMap(function(rows){return Array.isArray(rows)?rows:rows.list||[];})):[];
+    var found=[];
+    try{found=await AltFuel.alongRoute(m,'ev',plugs,corridor,null,types);}
+    catch(e){found=e.stations||[];notice.push('Charger coverage is incomplete. '+e.message);}
+    return Array.from(new Map(stored.concat(found).filter(function(st){return !stationHidden(st);}).map(function(st){return [st.id,st];})).values());
+  }
   var restUI=window.RestUI&&RestUI.init(A,{
     dormant:function(){return savedPlanCurrent()&&!savedRestBrowsing;},activate:function(){savedRestBrowsing=true;},trafficEnabled:function(){return !!(traffic&&traffic.enabled()&&(!savedPlanCurrent()||savedRestBrowsing));},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(d){return restTolerance(d);},trafficSegments:function(){return restSegments();},restTraffic:function(){return restTrafficCfg();},setRestTraffic:function(c){S.trip.restTraffic=Object.assign({},c,{sig:restSegSig()});A.save();},
     waitForPlan:restPrepareTiming,call:call,timezoneFetch:timezoneFetch,snapshot:function(){return model&&route&&!busy&&!queueWorking&&document.body.classList.contains('trip-on')?{model:result&&result.opts&&result.opts.model||model,route:route,depart:departAt().getTime(),kind:KIND(),maxDetourMin:RestSettings.limit(A)}:null;},
@@ -76,15 +84,30 @@
       var widest=sites.reduce(function(max,row){return Math.max(max,row.offset||0);},0)+radiusMi;
       var corridor=Math.min(20,Math.max(1,Math.ceil(widest))),notice=[];
       if(widest>20)notice.push('Charger discovery covers up to 20 miles from the route.');
-      var pool=choicePool&&choicePool.kind==='ev'?choicePool:null;
-      var stored=pool?(pool.official||[]).concat((pool.google||[]).flatMap(function(rows){return Array.isArray(rows)?rows:rows.list||[];})):[];
-      var found=[];
-      try{found=await AltFuel.alongRoute(s.model,'ev',plugs,corridor,null,filter.types);}
-      catch(e){found=e.stations||[];notice.push('Charger coverage is incomplete. '+e.message);}
-      var stations=Array.from(new Map(stored.concat(found).filter(function(st){return !stationHidden(st);}).map(function(st){return [st.id,st];})).values());
+      var stations=await restChargerInventory(s.model,plugs,corridor,filter.types,notice);
       var matches=RestPlaces.matchChargers(sites,stations,filter.radius,function(st){return AltFuel.charging(st,car,filter.types,plugs);});
       notice.push(matches.length?'Nearby charger matches are based on coordinates. Check driving access and parking before planning to charge.':'No compatible nearby chargers matched the rest stops found.');
       return {sites:matches,notice:notice.join(' ')};
+    },
+    chargerRestSites:async function(s,group,types){
+      var car=Garage.car(),plugs=AltFuel.compatiblePlugs(car,Garage.plugs(car)),ends=s.model.legEnds;
+      var from=group.from?ends[group.from-1]:0,to=ends[group.to],part=Traffic.slice(s.model,from,to),notice=[];
+      var corridor=Math.min(20,Math.max(1,Math.ceil(s.maxDetourMin*130/120)));
+      var stations=await restChargerInventory(part,plugs,corridor,types,notice);
+      var selected=new Set(s.route.stops.filter(function(p){return p.rest&&p.rest.site;}).map(function(p){return p.rest.site.id;}));
+      var rows=[];
+      stations.forEach(function(st){
+        if(st.status!=='E'||st.restricted||!Number.isFinite(st.lat)||!Number.isFinite(st.lng))return;
+        var id='charger-rest:'+st.id;if(selected.has(id))return;
+        var charge=AltFuel.charging(st,car,types,plugs);if(!charge)return;
+        var projection=T.project(part,st);
+        if(projection.offset>corridor||projection.along<=.001||projection.along>=part.totalMi-.001)return;
+        var d=from+projection.along,leg=ends.findIndex(function(end){return d<=end;});
+        if(leg<0||d-(leg?ends[leg-1]:0)<=.001||ends[leg]-d<=.001)return;
+        var site={id:id,name:st.name,lat:st.lat,lng:st.lng,kind:'charging_station',source:st.source||'Charger inventory',sourceUrl:st.sourceUrl||'',hours:st.hours||null,permission:'unknown',amenities:{},restChargeLevel:charge.level,restChargeKw:charge.stationKw,restChargeEstimated:charge.estimated};
+        rows.push({site:site,d:d,leg:leg,offset:projection.offset});
+      });
+      return {sites:rows,notice:notice.join(' ')};
     },
     recommendationRoad:function(i){var raw=hzAlts(i)[hzSel(i)];return raw?JSON.stringify([raw.polyline&&raw.polyline.encodedPolyline,raw.duration,raw.distanceMeters]):null;},
     arrival:restUIArrival,forecastTtl:function(){return TrafficPolicy.resolve(S.trip.trafficPreset,trafficJourneySeconds()).ttl;},departure:function(i){var clock=restClockState(),row=clock&&clock.schedule&&clock.schedule[i];return row&&Number.isFinite(row.depart)?row.depart:hzDepart(i);},forecastContext:restForecastContext,

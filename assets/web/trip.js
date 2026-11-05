@@ -443,8 +443,11 @@
   // Not an assertion that AC has the same 80% slowdown as DC fast charging.
   function destinationCharge(e,arrival,cap){
     arrival=Math.max(0,Math.min(cap,arrival));var efficiency=.9,kw=Math.max(.1,+e.kw||1.4)*efficiency,limit=Math.max(arrival,Math.min(cap,e.limit==null?cap:+e.limit)),target=Math.max(arrival,Math.min(limit,e.target==null?cap:+e.target)),energy=arrival,minutes=0,left=e.mode==='time'?Math.max(0,+e.minutes||0):Infinity;
-    var bands=[{end:cap*.9,factor:1},{end:cap*.98,factor:.5},{end:cap,factor:.25}];
-    bands.forEach(function(b){var to=Math.min(e.mode==='time'?limit:target,b.end);if(to<=energy||left<=0)return;var rate=kw*b.factor,buy=Math.min(to-energy,left*rate/60),time=buy/rate*60;energy+=buy;minutes+=time;left-=time;});
+    var bands=[{end:cap*.9,kw:kw},{end:cap*.98,kw:kw*.5},{end:cap,kw:kw*.25}];
+    if(e.level==='dc'&&e.curve&&e.curve.length){
+      bands=Array.from({length:20},function(_,i){return {end:cap*(i+1)/20,kw:Math.min(kw,curveKw(e.curve,(i+.5)/20)*efficiency)};});
+    }
+    bands.forEach(function(b){var to=Math.min(e.mode==='time'?limit:target,b.end);if(to<=energy||left<=0)return;var rate=b.kw,buy=Math.min(to-energy,left*rate/60),time=buy/rate*60;energy+=buy;minutes+=time;left-=time;});
     var added=Math.max(0,energy-arrival);return {arriveGal:arrival,departGal:energy,buyGal:added,gridKWh:added/efficiency,cost:added/efficiency*Math.max(0,+e.price||0),minutes:e.mode==='time'?Math.max(0,+e.minutes||0):minutes,estimated:true};
   }
   function purchasePrice(s){return s.propulsion&&s.propulsion.ok&&s.buyGal>0?s.propulsion.cost/s.buyGal:s.c.price;}

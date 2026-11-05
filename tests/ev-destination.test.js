@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),T=require('../assets/web/trip.js');
-const ctx={window:null,Trip:T};ctx.window=ctx;vm.runInNewContext(fs.readFileSync('assets/web/evcharging.js','utf8'),ctx);const E=ctx.EVCharging;
+const ctx={window:null,Trip:T,ChargeCurve:require('../assets/web/chargecurve')};ctx.window=ctx;vm.runInNewContext(fs.readFileSync('assets/web/evcharging.js','utf8'),ctx);const E=ctx.EVCharging;
 const leg=(a,b)=>({distanceMeters:140*1609.344,duration:'8400s',polyline:{encodedPolyline:T.encodePolyline([{lat:35,lng:a},{lat:35,lng:b}])},legs:[{steps:[{distanceMeters:140*1609.344,staticDuration:'8400s'}]}]}),model=T.buildRoute(T.joinRoutes([leg(-92,-90),leg(-90,-88)]),{city:5,hwy:5,comb:5}),stops=[{label:'Start'},{label:'Hotel'},{label:'Home'}],car={acKw:11},trip={arrive:'destination'};
 trip.evDestinations={signature:E.signature(stops),items:{0:{enabled:true,mode:'full',kw:7.2,price:.2}}};const policies=E.policies(trip,stops,car,model,60,.48),opts={model,capGal:60,startGal:50,bufferGal:5,arriveGal:5,step:.1,cands:[],destinationCharges:policies,refPrice:.48};
 let p=T.plan(opts);assert(p.ok,'destination charging bridges the return leg');assert.equal(p.stops.length,0);assert.equal(p.destinationCharges.length,1);assert(Math.abs(p.destinationCharges[0].arriveGal-22)<.2);assert.equal(p.destinationCharges[0].departGal,60);assert(Math.abs(p.arriveGal-32)<.2);assert(Math.abs(p.totals.cost-38/.9*.2)<.05);assert(T.account(50,.48,[{stops:T.purchases(p),arriveGal:p.arriveGal}]).legs[0].cost>0,'destination energy is not free');
@@ -7,6 +7,14 @@ assert(!T.plan({...opts,destinationCharges:[]}).ok,'same route cannot work witho
 let short={...policies[0],mode:'time',minutes:120,kw:1.4};assert(!T.plan({...opts,destinationCharges:[short]}).ok,'short Level1 stay cannot make up the shortfall');assert(T.plan({...opts,destinationCharges:[{...short,minutes:720}]}).ok,'longer stay adds usable charge');
 let est=T.destinationCharge({...short,minutes:120,limit:48},20,60);assert(est.departGal>20&&est.departGal<24);assert.equal(est.minutes,120);assert(T.destinationCharge({...short,kw:7.2},20,60).departGal>est.departGal,'Level2 is faster');assert(T.destinationCharge({...short,minutes:6000,limit:48},20,60).departGal<=48);assert.equal(T.destinationCharge({...short,limit:48},55,60).departGal,55,'a charge limit never discharges the battery');
 const low=T.destinationCharge({...short,kw:7.2,minutes:30},20,60),high=T.destinationCharge({...short,kw:7.2,minutes:30},58,60);assert(high.buyGal<low.buyGal,'generic near-full slowdown is applied');
+const dcStops=[stops[0],{label:'DC plaza',rest:{site:{kind:'charging_station'}}},stops[2]];
+const dcTrip={arrive:'destination',evDestinations:{signature:E.signature(dcStops),items:{0:{enabled:true,mode:'time',level:'dc',kw:120,minutes:25,price:.35}}}};
+const dc=E.policies(dcTrip,dcStops,{...car,dcKw:150},model,60,.48)[0];
+assert.equal(dc.kw,120,'DC does not inherit the AC power limit');
+assert(T.destinationCharge(dc,20,60).buyGal>20);
+assert(T.destinationCharge(dc,50,60).buyGal<T.destinationCharge(dc,20,60).buyGal,'DC taper limits energy gained near full');
+const dcPlan=T.plan({...opts,destinationCharges:[dc]});assert(dcPlan.ok,'charging-station rest supplies energy for the next leg');
+assert.equal(dcPlan.destinationCharges[0].minutes,25);
 trip.evDestinations.items[1]={enabled:true,mode:'pct',pct:80,kw:11,price:0};p=T.plan({...opts,destinationCharges:E.policies(trip,stops,car,model,60,.48)});assert(p.ok);assert.equal(p.destinationCharges.length,2);assert(Math.abs(p.destinationCharges[1].arriveGal-32)<.2);assert.equal(p.arriveGal,48);assert.equal(p.destinationCharges[1].cost,0,'explicitly free destination charging stays free');
 assert.equal(E.state(trip,[{label:'Different start'},{label:'Different destination'}]).items[0],undefined,'do not transfer chargers to unrelated destinations');trip.evDestinations.items[0].mode='pct';trip.evDestinations.items[0].pct='';assert(E.errors(trip,stops,car,.48).length);trip.arrive='buffer';assert.equal(E.errors(trip,stops,car,.48).length,0);assert.equal(E.policies(trip,stops,car,model,60,.48).length,0);
 console.log('EV destination charging: mandatory boundaries, multi-leg range, AC power/time/tail/limits, cost, final arrival distinction and trip identity passed');

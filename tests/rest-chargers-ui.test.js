@@ -23,13 +23,21 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    const create=RestPlaces.create,clock=StopClock.create;
    RestPlaces.create=()=>({corridor:async()=>({sites:rows})});
    StopClock.create=()=>({load:async()=>{},get:()=> 'America/Chicago'});
-   window.__restChargeReads=[];
+   window.__restChargeReads=[];window.__stationRestReads=0;A.S.restAtChargerTypes={dc:true};
    const ui=RestUI.init(A,{
     snapshot:()=>({model,route,depart:Date.now(),kind:'ev',maxDetourMin:30}),arrival:()=>Date.now(),
     restChargers:async(s,sites,f)=>{
      __restChargeReads.push(f.types);
      return {sites:RestPlaces.matchChargers(sites,stations,f.radius,st=>AltFuel.charging(st,car,f.types,['J1772COMBO','J1772']))};
     },
+    chargerRestSites:async(s,group,types)=>{
+     __stationRestReads++;
+     if(!types.dc)throw Error('DC station rest setting missing');
+     const d=model.totalMi*.6;
+     return {sites:[{d,leg:0,offset:0,site:{...model.pointAt(d),id:'charger-rest:test',name:'Direct DC charger',kind:'charging_station',restChargeLevel:'dc_fast',restChargeKw:120,source:'Fixture'}}]};
+    },
+    access:async()=>({outSeconds:30,backSeconds:30}),
+    addDraft:async(site,leg,d,settings)=>{window.__stationRestAdded={site,leg,settings};},
     call:async()=>({complete:true,places:[]})
    });
    RestPlaces.create=create;StopClock.create=clock;
@@ -54,6 +62,22 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.deepEqual(await page.evaluate(()=>__app.S.trip.evChargers),{dc:true,l2:false,l1:false});
   assert.deepEqual(await page.evaluate(()=>__app.S.restChargerTypes),{dc:false,l2:true,l1:false});
   assert.equal(await page.evaluate(()=>__app.S.restChargerRadius),275);
+  assert.equal(await page.evaluate(()=>__stationRestReads),0,'charger directory reads start only when opened');
+  await page.getByRole('button',{name:'Rest at a charging station'}).click();
+  await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).waitFor();
+  assert.match(await page.locator('[data-rest-list]').innerText(),/at your own risk/);
+  assert.equal(await rows.count(),1,'the separate charger list is independent of the nearby Level 2 requirement');
+  await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).click();
+  await page.waitForSelector('#restAddGo');
+  assert.equal(await page.inputValue('#restChargeLevel'),'dc');
+  await page.fill('#restCharge','20');
+  await page.fill('#restChargePrice','0.35');
+  await page.click('#restAddGo');
+  assert.match(await page.locator('#restAddError').innerText(),/Confirm that this site allows/);
+  await page.check('#restPermission');await page.click('#restAddGo');
+  await page.waitForFunction(()=>window.__stationRestAdded);
+  assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargeLevel),'dc');
+  assert.equal(await page.evaluate(()=>__stationRestAdded.settings.chargeMinutes),20);
   assert.deepEqual(errors,[]);
   console.log('Rest-only Level 2 filter, cross-road directions, restricted and incompatible exclusions passed');
  }finally{await browser.close();}

@@ -5,11 +5,18 @@
  function chargingHtml(A){
   var f=RestPlaces.chargerFilter(A.S.restChargerMode,A.S.restChargerRadius,A.S.restChargerTypes);
   var levels=[['dc','DC fast'],['l2','Level 2'],['l1','Level 1']];
-  return '<details class="disclosure-tile" id="tRestChargerTypes"'+(f.mode!=='off'?' open':'')+'><summary>Charging near rest stops</summary>'+
+  var at=A.S.restAtChargerTypes||{};
+  var station='<details class="disclosure-tile" id="tRestAtChargers"><summary>Resting at charging stops</summary>'+levels.map(function(level){return '<label class="nf chk"><span>'+level[1]+'</span><input type="checkbox" data-rest-at-charger="'+level[0]+'"'+(at[level[0]]===true?' checked':'')+'></label>';}).join('')+'<p class="lead small keep">Choose the chargers to show in the separate rest directory. Confirm the site permits your planned stay.</p></details>';
+  return station+'<details class="disclosure-tile" id="tRestChargerTypes"'+(f.mode!=='off'?' open':'')+'><summary>Charging near rest stops</summary>'+
    levels.map(function(level){return '<label class="nf chk"><span>'+level[1]+'</span><input type="checkbox" data-rest-charger-type="'+level[0]+'"'+(f.types[level[0]]?' checked':'')+'></label>';}).join('')+
    '<label class="nf"><span>Straight-line distance to charger · <b data-rest-charger-distance>'+f.radius+' m</b></span><input type="range" min="100" max="1000" step="25" value="'+f.radius+'" data-rest-charger-radius aria-label="Straight-line distance to charger" aria-valuetext="'+f.radius+' meters"'+(f.mode==='off'?' disabled':'')+'></label><p class="lead small keep">Leave all unchecked to show rests without a charger requirement. Check the drive and access before planning to charge.</p></details>';
  }
  function bindCharging(A,body){
+  var at=Array.from(body.querySelectorAll('[data-rest-at-charger]'));
+  at.forEach(function(box){box.onchange=function(){
+   var flags={};at.forEach(function(el){flags[el.dataset.restAtCharger]=el.checked;});
+   A.S.restAtChargerTypes=flags;A.save();
+  };});
   var types=Array.from(body.querySelectorAll('[data-rest-charger-type]')),radius=body.querySelector('[data-rest-charger-radius]');
   if(!radius)return;
   function paint(){body.querySelector('[data-rest-charger-distance]').textContent=radius.value+' m';radius.setAttribute('aria-valuetext',radius.value+' meters');}
