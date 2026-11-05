@@ -134,11 +134,13 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    const create=RestPlaces.create,clock=StopClock.create;
    RestPlaces.create=()=>({corridor:async()=>({sites})});
    StopClock.create=()=>({load:async()=>{},get:()=> 'UTC'});
-   window.__nightForecasts=[];
+   window.__nightForecasts=[];window.__laterTraffic=[];let deadline=Infinity;
    const ui=RestUI.init(A,{
     snapshot:()=>({route,model,depart:start,kind:'gas',maxDetourMin:20}),
     arrival:d=>start+(d+(route.stops.length===3&&d>10?10:0))*hour,
     departure:i=>i?route.stops[i].rest.leaveAt:start,
+    arrivalDeadline:()=>deadline,
+    prefetchNightTraffic:async(s,i,depart,rests)=>{__laterTraffic.push(rests);return true;},
     tolerance:()=>10,forecast:async d=>{__nightForecasts.push(d);return {seconds:600,baseSeconds:600,coverage:1};},
     call:async()=>({complete:true,places:[]})
    });
@@ -152,6 +154,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
     __openNight();
    };
    window.__confirmFirstNight=()=>{route.stops[1].rest.pendingTiming=false;__openNight();};
+   window.__tightenNightDeadline=()=>{deadline=start+82*hour;__openNight();};
   });
   await page.locator('#multi-night [data-rest-need="0"]').click();
   await page.getByRole('heading',{name:'Night of 2030-11-12'}).waitFor();
@@ -159,6 +162,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.match(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
   await page.waitForFunction(()=>__nightForecasts.length>0);
   assert.deepEqual(await page.evaluate(()=>Array.from(new Set(__nightForecasts))),[10]);
+  await page.waitForFunction(()=>__laterTraffic.length>0);
+  assert((await page.evaluate(()=>__laterTraffic[0])).length>=2,'later traffic is warmed without exposing future sites');
   await page.evaluate(()=>__selectFirstNight());
   await page.getByRole('button',{name:'Set rest departure'}).waitFor();
   assert.equal(await page.locator('[data-rest-row]').count(),0);
@@ -174,6 +179,10 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.uncheck('[data-rest-drive-night="2030-11-13"]');
   await page.getByRole('heading',{name:'Night of 2030-11-13'}).waitFor();
   assert.match(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
+  await page.evaluate(()=>__tightenNightDeadline());
+  await page.getByText(/A rest would miss the arrival deadline/).first().waitFor();
+  assert.equal(await page.getByRole('heading',{name:/Night of 2030-11-/}).count(),0);
+  assert.equal(await page.locator('[data-rest-row]').count(),0);
   assert.deepEqual(errors,[]);
   console.log('Rest-only Level 2 filter, cross-road directions, restricted and incompatible exclusions passed');
  }finally{await browser.close();}

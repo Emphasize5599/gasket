@@ -119,5 +119,17 @@ function load(store,at,speed=50,hold){
   }
   {const data=new Map(),origin=Date.UTC(2027,0,1),a={lat:34.01,lng:-92.01},b={lat:34.06,lng:-92.01};let x=load(data,origin),cache=x.ctx.TrafficCache.create(x.KV);const old=x.ctx.RestAccess.identity('google',a,b,t0,{});cache.put('rest-access-v1|'+old,{at:origin,value:{seconds:60,meters:1000,pts:[a,b]}});cache.flush();x=load(data,origin+86400000);assert.equal(await x.flow.warmAccess(),1,'legacy minute-keyed access migrates without a provider read');assert(x.flow.cachedBetween(a,b));await x.flow.between(a,b,t0+86400000,()=>true);assert.equal(x.calls.google,0);x.settings.restRefreshDays=1;assert.equal(x.flow.cachedBetween(a,b),null,'migration preserves the old observation time');await x.flow.between(a,b,t0+2*86400000,()=>true);assert.equal(x.calls.google,1,'expired access is refreshed at the configured age');x.ctx.dispatch('pagehide');}
   {const data=new Map(),origin=Date.UTC(2027,0,1),when=origin+86400000;let x=load(data,origin);await x.flow.forecast(m,when);x.ctx.dispatch('pagehide');x=load(data,origin+3600000);const tasks=[];x.ctx.Tasks={begin:(_id,o)=>{tasks.push(o.text);return ()=>{};},upsert:()=>{}};let r=await x.flow.prepare({description:'Same roads on another trip'},m,when);assert(r.traffic.analysisCached);assert.equal(x.flow.analysisStats().analyzed,0,'unchanged route/time uses a completed analysis after a restart');assert.equal(x.calls.google,0);assert.equal(tasks.length,0,'unchanged analysis creates no traffic-work UI');await x.flow.forecast(m,when+3600000);const count=x.flow.analysisStats().analyzed;assert.equal(count,1,'new window hour is the only combination analyzed');await x.flow.forecast(m,when);assert.equal(x.flow.analysisStats().analyzed,count,'the overlapping old hour stays reusable');const speedChanged=T.restoreModel({...m,segs:m.segs.map(s=>({...s,t0:s.t0*2,t1:s.t1*2})),durationSec:m.durationSec*2});assert.equal(x.flow.cachedForecast(speedChanged,when),null,'changed road timing cannot borrow an incompatible completed analysis');assert.equal(x.flow.cachedForecast(m,when,{force:true}),null,'manual refresh bypasses completed analysis');await assert.rejects(x.flow.forecast(m,when,{valid:()=>false}),/cancel/);x.ctx.dispatch('pagehide');}
+  {
+   const data=new Map(),when=Date.UTC(2027,0,2);let x=load(data),gaps=new Set();
+   await x.flow.probeForecast(m,when,key=>gaps.add(key));
+   assert(gaps.size>0,'cold probe counts missing sections');
+   assert.equal(x.calls.google,0,'preflight does not query traffic');
+   assert.equal(x.calls.zone,0,'preflight does not query timezones');
+   await x.flow.forecast(m,when);x.ctx.dispatch('pagehide');x=load(data);gaps.clear();
+   const profile=await x.flow.probeForecast(m,when,key=>gaps.add(key));
+   assert.equal(profile.coverage,1);
+   assert.equal(gaps.size,0,'stored sections satisfy the probe');
+   assert.equal(x.calls.google,0);
+  }
   console.log('Traffic forecast/access cache: restart, direction/settings identity, shared/batched timezones, bounded cache and diagnostics passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

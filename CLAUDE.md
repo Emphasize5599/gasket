@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.393 - project overnight traffic and fill small gaps automatically
+
+The overnight projection uses known driving and charging or fueling dwell, local nightly hours, user drive-through decisions and destination deadlines. It warms later traffic using hypothetical waits at the latest feasible departures and keeps the existing one-night-at-a-time candidate flow. Night suggestions and stay durations respect the arrival deadline. The traffic allowance preflight checks actual saved sections without provider requests, fills up to 20 missing sections automatically and asks before larger reads. Focused regressions cover multiple projected nights, deadlines, charging dwell, local gap reuse, a large gap prompt and a network-free probe. Phone check a multi-night drive with a tight arrival deadline and add a short off-route rest.
+
 ## 0.0.392 - prefill charger-rest electricity prices
 
 The charger rest form uses available station pricing evidence and quotes the published tariff for the estimated arrival. The price remains editable and required. Unknown and time-based rates leave the field blank, and a published free rate prefills zero. Focused charger data, tariff and browser regressions passed. Phone check a charger with a published per-kWh rate and another without a rate.

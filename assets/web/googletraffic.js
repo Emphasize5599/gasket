@@ -116,7 +116,7 @@
     return {rows:rows,seconds:a.seconds+b.seconds,baseSeconds:m.durationSec,low:(a.low||a.seconds)+(b.low||b.seconds),high:(a.high||a.seconds)+(b.high||b.seconds),at:Math.min(a.at,b.at),depart:t,cached:!!a.cached&&!!b.cached,sharedRoads:true,coverage:coverage,match:{coverage:coverage,joined:true},sections:{cached:ac.cached+bc.cached,fetched:ac.fetched+bc.fetched}};
   }
   async function piece(m,t,o){
-   var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid),clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),line=T.encodePolyline(m.pts),identity=q+'|'+line,key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=o.cachePolicy.ttl,held=get(key,ttl),fresh=o.freshAfter||0;
+   var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid,!!o.missing);if(o.missing&&!zone){o.missing('zone|'+T.encodePolyline(m.pts)+'|'+Math.floor(t/60000));return Object.assign(unmatched(m,'No stored timezone'),{at:Date.now(),depart:t});}var clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),line=T.encodePolyline(m.pts),identity=q+'|'+line,key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=o.cachePolicy.ttl,held=get(key,ttl),fresh=o.freshAfter||0;
    function usable(hp){return hp&&Array.isArray(hp.rows)&&hp.rows.length&&Number.isFinite(hp.at)&&hp.at>=fresh&&now-hp.at<ttl&&hp.seconds>0;}
    if(!valid())throw Error('Traffic lookup cancelled');
    if(!o.force&&held&&held.identity===identity){if(held.unmatched&&Number.isFinite(held.at)&&held.at>=fresh&&now-held.at<10*MINUTE)return Object.assign(unmatched(m,held.unmatched),{at:held.at,depart:t,cached:true});var hp=held.profile;if(usable(hp))return Object.assign({},hp,{cached:true});}
@@ -143,6 +143,7 @@
     if(gap!=null){var left=await piece(F.slice(m,0,gap),t,o),right=await piece(F.slice(m,gap,m.totalMi),t+left.seconds*1000,o);return joined(left,right,gap,m,t);}
    }
 
+   if(o.missing){o.missing(key);return Object.assign(unmatched(m,'No stored forecast'),{at:now,depart:t});}
    var pendingKey=identity+(fresh?'|after|'+fresh:o.force?'|force':'');
    if(o.onQueue)o.onQueue();
    // 0.0.363: a shared read stays wanted while ANY caller still wants it; one caller's cancellation (the comparison
@@ -167,14 +168,14 @@
    for(var i=0;i<breaks.length;i++){
     if(o.valid&&!o.valid())throw Error('Traffic lookup cancelled');var end=breaks[i],base=bases[i],hit=(specs[i]||[]).filter(function(e){return Math.abs(e.clock-clock)<=tolMs;}).sort(function(a,b){return Math.abs(a.clock-clock)-Math.abs(b.clock-clock);})[0],p=null,queued,reading=new Promise(function(r){queued=r;}),job=piece(base,hit?hit.clock:clock,Object.assign({},o,{onQueue:queued}));job.catch(function(){});
     // Read ahead only while this piece goes to Google: a stored piece answers at once and the next departure is known.
-    if(tune.speculate&&i+1<breaks.length){var quick=await Promise.race([job.then(function(){return true;},function(){return true;}),reading.then(function(){return false;})]);if(!quick)guess(i);}
+    if(!o.missing&&tune.speculate&&i+1<breaks.length){var quick=await Promise.race([job.then(function(){return true;},function(){return true;}),reading.then(function(){return false;})]);if(!quick)guess(i);}
     if(hit){try{p=await job;lookaheadUsed++;}catch(e){if(o.valid&&!o.valid())throw e;p=null;}}
     if(!p)p=hit?await piece(base,clock,o):await job;if(p.cached&&!p.sharedRoads&&p.at>=began)p=Object.assign({},p,{cached:false});(specs[i]||[]).forEach(function(e){e.dead=true;});if(p.cached)cachedPieces++;else fetchedPieces++;if(p.sharedRoads)sharedPieces++;var counts=sections(p);cachedSections+=counts.cached;fetchedSections+=counts.fetched;if(o.progress)o.progress(i+1,breaks.length,{cached:!!p.cached,cachedSections:cachedSections,fetchedSections:fetchedSections});
     p.rows.forEach(function(r){rows.push(Object.assign({},r,{from:r.from+start,to:r.to+start}));});legs.push({from:start,to:end,departure:clock,seconds:p.seconds,coverage:p.coverage,match:p.match});if(!p.unmatched)oldest=Math.min(oldest,p.at);baseSum+=base.durationSec;trafficSum+=p.seconds;clock=advance(i,clock,p.seconds,true);seconds+=p.seconds;low+=p.low||p.seconds;high+=p.high||p.seconds;cached=cached&&p.cached;start=end;
    }
    }finally{done=true;chains--;purge();pump();}
    if(o.progress)o.progress(breaks.length,breaks.length);var covered=rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi;
-   if(covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
+   if(!o.missing&&covered+1e-6<MIN_COVER){var miss=Error('Google forecast matched only '+Math.round(covered*100)+'% of this route');miss.details={coverage:covered,pieces:legs.length,unmatchedPieces:legs.filter(function(l){return !(l.coverage>0);}).length};throw miss;}
    return {source:'Google Maps website forecast',cachePolicy:o.cachePolicy,estimated:true,rows:rows,legs:legs,lowSeconds:low,highSeconds:high,seconds:seconds,baseSeconds:m.durationSec,depart:depart,arrival:clock,at:oldest,cached:cached,cachedPieces:cachedPieces,fetchedPieces:fetchedPieces,sharedPieces:sharedPieces,cachedSections:cachedSections,fetchedSections:fetchedSections,lookaheadReads:lookahead,lookaheadUsed:lookaheadUsed,readMs:(io.now?io.now():Date.now())-began,coverage:rows.reduce(function(n,r){return n+(r.forecast===false?0:r.to-r.from);},0)/m.totalMi};
   }
   return {stats:function(){return {active:active,queued:queue.length,lookaheadQueued:low.length,routes:chains,pending:pending.size};},request:function(q,valid,onStart){return limited(function(){if(valid&&!valid())throw Error('Traffic lookup cancelled');return io.fetch(q,valid||function(){return true;},onStart);});},forecast:forecast,retryFailures:function(){},clear:function(){epoch++;pending.clear();pendingUsers.clear();items.clear();}};

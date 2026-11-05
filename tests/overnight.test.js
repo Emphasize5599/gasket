@@ -12,3 +12,17 @@ const short={totalMi:100,durationSec:7200,timeTo:d=>d*72};assert.equal((await N.
 // Solar instants stay astronomical across DST; their displayed departure-local clocks shift by the date's rules.
 for(const [before,after,jump] of [['2026-10-31','2026-11-01',-60],['2027-03-13','2027-03-14',60]])for(const kind of ['dawn','sunrise','sunriseEnd','sunsetStart','sunset','dusk']){const loc={lat:40.71,lng:-74},a=N.event(before,'America/New_York',{kind},loc),b=N.event(after,'America/New_York',{kind},loc);assert(Math.abs((b-a)/60000-1440)<10,kind+' UTC instant follows the sun across DST');assert(Math.abs(N.local(b,'America/New_York').minute-N.local(a,'America/New_York').minute-jump)<10,kind+' uses departure-local DST');assert.equal(N.local(b,'America/New_York').date,after);}
 const az={lat:33.45,lng:-112.07};assert(Math.abs(N.local(N.event('2027-03-14','America/Phoenix',{kind:'dusk'},az),'America/Phoenix').minute-N.local(N.event('2027-03-13','America/Phoenix',{kind:'dusk'},az),'America/Phoenix').minute)<10,'non-DST locations do not get an invented clock change');
+
+const horizon={from:0,to:2500,depart:t,clock:d=>d/50*H,location:()=>({zone:'UTC',point:{lat:35,lng:-90}}),skips:[],deadline:Infinity};
+const late=N.trafficHorizon(c,horizon);
+assert(late.rests.length>=2,'count successive estimated nights before forecasting later driving');
+assert(late.rests.every(r=>r.at===N.windowFor(r.date,'UTC',c,{lat:35,lng:-90}).end),'use latest allowed departures');
+const tight=N.trafficHorizon(c,{...horizon,to:1000,deadline:t+21*H});
+assert.deepEqual(tight.rests,[],'a minimum rest would make this drive late');
+assert.equal(tight.arrival,t+20*H);
+assert.equal(tight.skipped.length,1);
+const limited=N.trafficHorizon(N.defaults({end:"10:00",arrivalEnd:{kind:"clock",time:"00:00"}}),{...horizon,to:1000,deadline:t+27*H});
+assert.equal(limited.rests.length,1);
+assert.equal(limited.arrival,t+27*H,'cap the last driving hours at the deadline');
+const charging=N.trafficHorizon(c,{...horizon,to:1000,deadline:t+27*H,clock:d=>d/50*H+(d>500?2*H:0)});
+assert.deepEqual(charging.rests,[],'known charging dwell reduces the time available for overnight rest');

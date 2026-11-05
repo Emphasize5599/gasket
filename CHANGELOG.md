@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.393 - 2026-11-05
+- Estimate successive overnight rests and fill traffic coverage for the later projected driving hours. Leave out rests that would miss the arrival deadline.
+- Check saved traffic sections before offering Fill traffic gaps. Fill small gaps automatically.
+
 ## 0.0.392 - 2026-11-05
 - Prefill the editable electricity price for charging-station rests when a published per-kWh rate is available.
 

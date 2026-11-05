@@ -3,5 +3,15 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
  assert.equal(await c.windowTrafficAsk([rows],session),true);assert.equal(asks,0,'unchanged saved traffic does not ask to refresh all departure hours');await c.windowTrafficAllowance([rows],session,()=>true,()=>{});assert.equal(computed.length,0,'unchanged roads/hazard responses/windows need no traffic analysis');
  const added={...rows[0],depart:now+26*3600000};await c.windowTrafficAllowance([[...rows,added]],session,()=>true,()=>{});assert.deepEqual(computed,[added.depart],'an expanded window analyzes only its new combination');
  await c.windowTrafficAllowance([[rows[0],added]],session,()=>true,()=>{});assert.equal(computed.length,1,'changing accepted hours preserves the saved overlap');
- const rejected={...rows[0],routeKey:'rejected-road',depart:now+40*3600000};session.consent.allowed=r=>r.routeKey!=='rejected-road';await c.windowTrafficAllowance([[...rows,rejected]],session,()=>true,()=>{});assert.equal(computed.length,1,'unapproved hazard responses never trigger traffic work');console.log('Initial traffic screening: saved analyses need no refresh question or analysis; window/response changes analyze only new approved combinations');
+ const rejected={...rows[0],routeKey:'rejected-road',depart:now+40*3600000};session.consent.allowed=r=>r.routeKey!=='rejected-road';await c.windowTrafficAllowance([[...rows,rejected]],session,()=>true,()=>{});assert.equal(computed.length,1,'unapproved hazard responses never trigger traffic work');const probeRows=rows.map(r=>({...r,routeKey:'edited-road',depart:r.depart+1000}));
+ c.traffic.probeForecast=async(_m,t,missing)=>{missing('short-detour');return {...profile,coverage:0};};
+ assert.equal(await c.windowTrafficAsk([probeRows],session),true);
+ assert.equal(asks,0,'many incomplete profiles sharing one new section fill automatically');
+ c.traffic.probeForecast=async(_m,t,missing)=>{missing('new-road-hour-'+t);return {...profile,coverage:0};};
+ assert.equal(await c.windowTrafficAsk([probeRows],session),true);
+ assert.equal(asks,1,'large sets of actual missing sections require a choice');
+ c.traffic.probeForecast=async()=>profile;
+ assert.equal(await c.windowTrafficAsk([probeRows],session),true);
+ assert.equal(asks,1,'reusable section coverage avoids a prompt even without complete analyses');
+ console.log('Initial traffic screening: saved analyses need no refresh question or analysis; window/response changes analyze only new approved combinations');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -116,6 +116,24 @@
     },
     recommendationRoad:function(i){var raw=hzAlts(i)[hzSel(i)];return raw?JSON.stringify([raw.polyline&&raw.polyline.encodedPolyline,raw.duration,raw.distanceMeters]):null;},
     arrival:restUIArrival,forecastTtl:function(){return TrafficPolicy.resolve(S.trip.trafficPreset,trafficJourneySeconds()).ttl;},departure:function(i){var clock=restClockState(),row=clock&&clock.schedule&&clock.schedule[i];return row&&Number.isFinite(row.depart)?row.depart:hzDepart(i);},forecastContext:restForecastContext,
+    arrivalDeadline:function(i){
+      if(!windows||!windows.enabled())return Infinity;
+      var arrivals=windows.arrivals(),anchors=restDepartureAnchors(),ends=model.legEnds,at=restUIArrival(ends[i]),deadline=Infinity;
+      for(var j=i;j<ends.length;j++){
+       var bound=arrivals[j],anchor=anchors[j+1],elapsed=j===i?0:restUIArrival(ends[j])-at;
+       if(bound&&Number.isFinite(bound.end))deadline=Math.min(deadline,bound.end-elapsed);
+       if(Number.isFinite(anchor)){deadline=Math.min(deadline,anchor-elapsed);break;}
+      }
+      return deadline;
+    },
+    prefetchNightTraffic:async function(s,i,depart,rests,valid){
+      var clock=restClockState(),from=i?s.model.legEnds[i-1]:0,to=s.model.legEnds[i];
+      var base=T.buildRoute(rawRoute,carModel()),part=Traffic.slice(base,from,to);
+      var stops=trafficStops(clock&&clock.plan,clock&&clock.opts).filter(function(st){return st.d>from&&st.d<to;}).map(function(st){return {d:st.d-from,seconds:st.seconds};});
+      var waits=rests.map(function(r){return {d:r.d-from,at:r.at};});
+      var profile=await traffic.forecast(part,depart,{stops:stops,waits:waits,valid:valid});
+      return profile.coverage>=.999999;
+    },
     arrivalBounds:function(){if(!windows||!windows.enabled())return null;var a=windows.arrivals();return a[a.length-1]||null;},
     accessStats:function(){return traffic&&traffic.accessStats?traffic.accessStats():{};},
     prepareAccessCache:function(){return traffic&&traffic.warmAccess?traffic.warmAccess():Promise.resolve();},
@@ -391,16 +409,29 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       proxy={cost:energy*rate+(Number.isFinite(toll)?toll:0),service:stops*(kind==='ev'?35:kind==='h2'?12:10)};cache.set(row.routeKey,proxy);}
     var profile=traffic&&traffic.profile(row.raw,row.depart);return {cost:proxy.cost,minutes:(Number.isFinite(row.forecastMinutes)?row.forecastMinutes:(profile?profile.seconds:m.durationSec)/60)+proxy.service};
   }
-  // Reading forecast traffic for every approved road and hour can take many minutes: ask before a big read (once per
-  // review session). Skipping plans this run without the earlier-departure allowance; saved forecasts are reused either way.
+  // Prompt only for a substantial amount of missing traffic. A changed route can still reuse its stored road sections.
   var windowEarlyOff=false;
   function windowStoredTraffic(legs,session){if(!traffic||!traffic.cachedForecast)return;var forecasts=session.delayForecasts||(session.delayForecasts=new Map());[].concat.apply([],legs).filter(function(r){return session.consent.allowed(r);}).forEach(function(row){var m=row.model||T.buildRoute(row.raw,carModel()),p=traffic.cachedForecast(m,row.depart);if(p)forecasts.set(row.routeKey+'|'+row.depart,{at:p.at,minutes:p.seconds/60,profile:p});});}
-  async function windowTrafficAsk(legs,session){
-    if(queueWorking)return true;windowStoredTraffic(legs,session);
-    var forecasts=session.delayForecasts||new Map(),rows=[].concat.apply([],legs).filter(function(r){return session.consent.allowed(r);}),todo=rows.filter(function(r){var hit=forecasts.get(r.routeKey+'|'+r.depart);return !hit||!(traffic&&traffic.freshForecast?traffic.freshForecast(hit.profile,r.model):Date.now()-hit.at<=600000);}).length;
-    if(!todo)return true;if(session.earlyAnswer!=null)return session.earlyAnswer;if(todo<=20)return true;
-    var ok=!!await A.confirmDel({always:true,title:'Fill gaps in traffic forecasts?',body:'Gasket reuses traffic forecasts within your selected age limit and fetches missing or expired sections. '+todo+' approved road and hour combinations still need checking. This can take several minutes.',no:'Skip allowance',action:'Fill traffic gaps',goClass:'primary'});
-    session.earlyAnswer=ok;LG.info('timing','Traffic allowance choice',{rows:rows.length,toRead:todo,read:ok});return ok;
+  async function windowTrafficAsk(legs,session,valid){
+    if(queueWorking)return true;
+    windowStoredTraffic(legs,session);
+    var forecasts=session.delayForecasts||(session.delayForecasts=new Map()),rows=[].concat.apply([],legs).filter(function(r){return session.consent.allowed(r);});
+    var todo=rows.filter(function(r){var hit=forecasts.get(r.routeKey+'|'+r.depart);return !hit||!(traffic&&traffic.freshForecast?traffic.freshForecast(hit.profile,r.model):Date.now()-hit.at<=600000);});
+    if(!todo.length||!traffic||!traffic.enabled()||!traffic.probeForecast)return true;
+    var gaps=new Set(),limit=20,large={};
+    try{
+     for(var row of todo){
+      if(valid&&!valid())return false;
+      try{
+       var m=row.model||T.buildRoute(row.raw,carModel());
+       var profile=await traffic.probeForecast(m,row.depart,function(key){gaps.add(key);if(gaps.size>limit)throw large;},valid);
+       if(profile.coverage>=.999999&&Number.isFinite(profile.at)&&profile.seconds>0)forecasts.set(row.routeKey+'|'+row.depart,{at:profile.at,minutes:profile.seconds/60,profile:profile});
+      }catch(e){if(e===large)throw e;if(valid&&!valid())return false;}
+     }
+    }catch(e){if(e!==large)throw e;}
+    if(gaps.size<=limit||valid&&!valid())return true;
+    var ok=!!await A.confirmDel({always:true,title:'Fill gaps in traffic forecasts?',body:'More than '+limit+' traffic sections need checking for the approved roads and hours. Saved coverage is reused. This can take several minutes.',no:'Skip allowance',action:'Fill traffic gaps',goClass:'primary'});
+    LG.info('timing','Traffic allowance choice',{rows:rows.length,missingAtLeast:gaps.size,read:ok});return ok;
   }
   async function windowTrafficAllowance(legs,session,valid,progress){
     var allowance=+windows.config().delayMinutes;if(!Number.isFinite(allowance)||allowance<0||allowance>240)throw Error('Set a traffic delay allowance of 0–240 minutes');if(!traffic||!traffic.enabled())throw Error('Enable Forecast traffic to use the earlier-departure allowance');
@@ -418,11 +449,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     var validatedAt=0,sameSession=true;function valid(){if(schedulePlanning!==state||state.cancelled||route!==owner||S.carId!==car)return false;if(Date.now()-validatedAt>50){validatedAt=Date.now();sameSession=windows.current()===session;}return sameSession;}
     function progress(text,frac){var stage=text.split(' · ')[0],at=Date.now();if(state.stage!==stage){state.stage=stage;state.stageStarted=at;}if(window.Tasks)Tasks.upsert('window-trip',{text:text,frac:frac==null?null:frac,started:state.stageStarted,etaKey:'window-trip-v2|'+stage,priority:30,cancel:cancelWindowPlanning});}
     try{
-      await planningPreflight();var preLegs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i&&(!route.priceRestReview||r.index===hzSel(i));});});if(windows.config().earlyEnabled)await windowTrafficAsk(preLegs,session);if(!valid())return;
+      await planningPreflight();var preLegs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i&&(!route.priceRestReview||r.index===hzSel(i));});});var fillTraffic=!windows.config().earlyEnabled||await windowTrafficAsk(preLegs,session,valid);if(!valid())return;
       adjustError='';step=ST_STOPS;renderStep();if(!queueWorking)await queueNotify('start','Planning approved routes and hours',car);progress('Preparing shared station coverage');
       scheduleCollecting=true;try{await findStops();}finally{scheduleCollecting=false;}if(!valid())return;if(!choicePool)throw Error('Station coverage did not finish. Retry planning from your saved data.');
       session.planning=true;session.estimateCache=new Map();windowRejects={};var legs=choiceLists().map(function(_,i){return session.rows.filter(function(r){return r.leg===i&&(!route.priceRestReview||r.index===hzSel(i));});}),cfg=windows.config(),waits=choiceLists().map(function(_,i){return +windowDestination(i).wait||0;}),depWindows=[null].concat(choiceLists().map(function(_,i){var d=windowDestination(i);return d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:null;})),pass=0;
-      windowEarlyOff=false;if(cfg.earlyEnabled&&!await windowTrafficAsk(legs,session)){windowEarlyOff=true;cfg=Object.assign({},cfg,{earlyEnabled:false});}if(!valid())return;
+      windowEarlyOff=false;if(cfg.earlyEnabled&&!fillTraffic){windowEarlyOff=true;cfg=Object.assign({},cfg,{earlyEnabled:false});}if(!valid())return;
       if(cfg.earlyEnabled){progress('Checking traffic for approved roads and hours');await windowTrafficAllowance(legs,session,valid,progress);}if(!valid())return;
       while(valid()){
         var changed=new Map(),longTrip=model.totalMi>=500,previewLimit=longTrip?6:12;progress('Screening approved hourly routes');

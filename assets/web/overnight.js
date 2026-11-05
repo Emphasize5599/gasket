@@ -24,5 +24,34 @@
   }
   options.sort(function(a,b){return b.choices-a.choices||b.totalChoices-a.totalChoices||a.shortfall-b.shortfall||(c.priority==='time'?a.arrive-a.depart-(b.arrive-b.depart):a.rests.reduce(function(n,r){return n+(r.site.price||0);},0)-b.rests.reduce(function(n,r){return n+(r.site.price||0);},0))||a.depart-b.depart;});return options.filter(function(o){var k=JSON.stringify([o.depart,o.rests.map(function(r){return [r.site.id,r.date,r.d];})]);if(seen.has(k))return false;seen.add(k);return true;}).slice(0,12);
  }
- var api={rules:rules,events:EVENTS,windowFor:windowFor,event:event,defaults:defaults,validate:validate,minute:minute,local:local,epoch:epoch,nextWindow:nextWindow,fit:fit,propose:propose};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Overnight=api;
+ // Estimate road hours without committing to a location or a later night's candidates.
+ function trafficHorizon(c,options){
+  var d=options.from,to=options.to,at=options.depart,clock=options.clock,deadline=options.deadline,rests=[],skipped=[],after=options.after||0;
+  for(var n=0;n<14&&d<to;n++){
+   var origin=options.location(d),w=nextWindow(Math.max(at,after),origin.zone,c,origin.point);
+   var finish=at+clock(to)-clock(d);
+   if(!w||finish<=Math.min(w.arrivalEnd,w.end-w.minimum*60000))break;
+   after=Math.min(w.arrivalEnd,w.end-w.minimum*60000)+1;
+   if(options.skips.includes(w.date))continue;
+   var lo=d,hi=to;
+   for(var k=0;k<20;k++){var mid=(lo+hi)/2;if(at+clock(mid)-clock(d)<=after-1)lo=mid;else hi=mid;}
+   var stop=options.location(lo),localWindow=windowFor(w.date,stop.zone,c,stop.point);
+   if(!localWindow.invalid){
+    w=localWindow;
+    var lastArrival=Math.min(w.arrivalEnd,w.end-w.minimum*60000);
+    if(at+clock(lo)-clock(d)>lastArrival){
+     hi=lo;lo=d;
+     for(var k=0;k<20;k++){var mid=(lo+hi)/2;if(at+clock(mid)-clock(d)<=lastArrival)lo=mid;else hi=mid;}
+    }
+   }
+   var arrive=at+clock(lo)-clock(d);
+   var earliest=Math.max(arrive+w.minimum*60000,w.leaveStart);
+   var latest=Math.min(w.end,deadline-(clock(to)-clock(lo)));
+   if(lo<=d+.001||arrive<w.start||earliest>latest){skipped.push(w.date);continue;}
+   rests.push({date:w.date,d:lo,arrive:arrive,at:latest});
+   d=lo;at=latest;
+  }
+  return {rests:rests,skipped:skipped,arrival:at+clock(to)-clock(d)};
+ }
+ var api={trafficHorizon:trafficHorizon,rules:rules,events:EVENTS,windowFor:windowFor,event:event,defaults:defaults,validate:validate,minute:minute,local:local,epoch:epoch,nextWindow:nextWindow,fit:fit,propose:propose};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Overnight=api;
 })(typeof window==='undefined'?globalThis:window);
