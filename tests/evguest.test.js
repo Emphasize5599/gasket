@@ -54,6 +54,7 @@ function setup(handler){const calls=[],cache=new Map(),S={evGuestApps:true,evPri
  const evStation=()=>({st:{id:'evgo-ok',afdcId:300,lat:35,lng:-91,group:'evgo',plugs:['J1772COMBO']},dc:true});
  const okStation=evStation();const okRes=await evgoOk.G.annotate([okStation],{});
  assert.equal(okRes.priced,1,'EVgo prices its own station once site detail is allowed');assert.equal(okStation.st.tariffV2.source,'evgo');
+ const twinA=evStation(),twinB=evStation();twinA.st.id='twin-a';twinB.st.id='twin-b';const twinBefore=evgoOk.calls.length;await evgoOk.G.annotate([twinA,twinB],{});assert(twinA.st.netPrice&&twinB.st.netPrice);assert.equal(evgoOk.calls.slice(twinBefore).filter(c=>c[1]==='evgo'&&c[2]==='price').length,1,'co-located inventory shares charger price reads by source ID');
  // A refusal pauses EVgo for that pass only (falls back to PlugShare); the next pass asks EVgo again. No day-long memory.
  const refusing=setup((fn,source,action)=>{
   if(fn==='evGuestConfig')return {enabled:true,chargeway:false,evgo:true,plugshare:true};

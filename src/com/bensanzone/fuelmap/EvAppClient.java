@@ -21,7 +21,8 @@ import javax.crypto.spec.GCMParameterSpec;
 /** Fixed guest endpoints only. No captured identities, embedded app credentials or arbitrary URLs/headers. */
 final class EvAppClient {
     private final SharedPreferences prefs;
-    private final HashMap<String, Long> next = new HashMap<>(), refused = new HashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> next = new java.util.concurrent.ConcurrentHashMap<>(), refused = new java.util.concurrent.ConcurrentHashMap<>();
+    private final GuestSourceGate gate = new GuestSourceGate();
     private static final String ALIAS = "gasket-ev-guest-v1";
     // Public Firebase project identifier, not an identity/session token. Guest identities are created per device.
     private static final String EVGO_FIREBASE_CLIENT = "AIzaSyB3lt9BT-8YCybXkXuMmL9MXV9zc3823tc";
@@ -46,7 +47,7 @@ final class EvAppClient {
         }
         return (SecretKey)ks.getKey(ALIAS, null);
     }
-    private JSONObject secrets() throws Exception {
+    private synchronized JSONObject secrets() throws Exception {
         String s = prefs.getString("secrets", ""); if (s.isEmpty()) return bootstrap(new JSONObject());
         String[] p = s.split(":"); Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(128, Base64.decode(p[0], Base64.NO_WRAP)));
@@ -57,8 +58,11 @@ final class EvAppClient {
         String s = Base64.encodeToString(c.getIV(), Base64.NO_WRAP) + ":" + Base64.encodeToString(c.doFinal(value.toString().getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
         if (!prefs.edit().putString("secrets", s).commit()) throw new Exception("Could not save private credentials");
     }
-    synchronized void clear() { prefs.edit().clear().commit(); next.clear(); refused.clear(); }
-    synchronized JSONObject configure(String args) throws Exception {
+    void clear() throws Exception { gate.change(()->{ prefs.edit().clear().commit(); next.clear(); refused.clear(); return null; }); }
+    JSONObject configure(String args) throws Exception {
+        return gate.change(()->configure0(args));
+    }
+    private JSONObject configure0(String args) throws Exception {
         JSONObject a = new JSONObject(args);
         if (a.optBoolean("clear")) { clear(); return status(); }
         JSONObject s = secrets();
@@ -122,7 +126,9 @@ final class EvAppClient {
         JSONObject j=new JSONObject(r.getString("body"));
         auth=new JSONObject().put("id",j.getString(refresh?"id_token":"idToken")).put("refresh",j.getString(refresh?"refresh_token":"refreshToken"))
             .put("until",now+Math.min(86400,j.getLong(refresh?"expires_in":"expiresIn"))*1000);
-        s.put(source+"Auth",auth);store(s);return auth.getString("id");
+        s.put(source+"Auth",auth);
+        synchronized(this) { JSONObject current=secrets();current.put(source+"Auth",auth);store(current); }
+        return auth.getString("id");
     }
     private static boolean authenticationFailure(JSONObject out) {
         if(out.optBoolean("blocked"))return false;
@@ -153,7 +159,11 @@ final class EvAppClient {
         }catch(Exception ignored){}
         return list;
     }
-    synchronized JSONObject request(String source,String action,String args) throws Exception {
+    JSONObject request(String source,String action,String args) throws Exception {
+        if(!java.util.Arrays.asList("ea","chargepoint","plugshare","evgo","chargeway").contains(source))throw new Exception("Unsupported guest source");
+        return gate.read(source,()->request0(source,action,args));
+    }
+    private JSONObject request0(String source,String action,String args) throws Exception {
         if(!prefs.getBoolean("enabled",false))throw new Exception("Guest-app add-on is disabled");
         JSONObject a=new JSONObject(args),s=secrets();String url,body=null,type="application/json",bearer=null,hk=null,hv=null;String[] extra=null;
         if(source.equals("ea")) {

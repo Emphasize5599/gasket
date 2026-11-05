@@ -260,15 +260,17 @@
     cancelled = false;
     var notes = [], priced = 0, t = Date.now(), isTesla = /tesla/i.test(car && car.make || '');
     if (S.evNetPrices === false || !items.length) return { priced: 0, notes: notes };
-    var guestPhase=!!(root.EVGuest&&S.evGuestApps);
-    if(guestPhase){try{var guest=await root.EVGuest.annotate(items,car,function(f,text){if(onProg)onProg(f*.3,text);},forcePriceRead);priced+=guest.priced;notes=notes.concat(guest.notes);}catch(e){notes.push('Guest charger sources could not complete; existing prices preserved.');}}
-    var by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[],ee:[],fcn:[] };
+    var guestResolved=new Set();var guestPhase=!!(root.EVGuest&&S.evGuestApps);
+    if(guestPhase){try{var guest=await root.EVGuest.annotate(items,car,function(f,text){if(onProg)onProg(f*.3,text);},forcePriceRead);guestResolved=new Set(guest.resolved||[]);priced+=guest.priced;notes=notes.concat(guest.notes);}catch(e){notes.push('Guest charger sources could not complete; existing prices preserved.');}}
+    var legacyAt=Date.now(),by = { tesla: [], ionna: [], blink: [], chargepoint: [],flo:[],ee:[],fcn:[] };
     items.forEach(function (x) { var n = String(x.st.network || ''); if (/^tesla(?! destination)/i.test(n) && x.dc) by.tesla.push(x); else if (/ionna/i.test(n)) by.ionna.push(x); else if (/^blink/i.test(n)) by.blink.push(x); else if (/^chargepoint/i.test(n) && chargePointIds(x.st).length) by.chargepoint.push(x);else if(/^flo$/i.test(n))by.flo.push(x);else if(/^electric[_ ]?era$/i.test(n)&&x.dc)by.ee.push(x);else if(/^fcn$|francis/i.test(n))by.fcn.push(x); });
     var set = function (x, p, src, label) { if(src==='chargepoint'&&p.complete!==false&&!p.blocks)delete x.st.tariffV2;x.st.netPrice = Object.assign({ src: src, label: label, t: null }, p); priced++; };
     // The website budget limits uncached sites, not the usable catalog. Apply
     // EVERY cached rate first, including sites beyond the first 20 in provider order.
     var cpCached=0,cpDeferred=0;
     by.chargepoint=by.chargepoint.filter(function(x){
+      if(guestResolved.has(x))return false; // already resolved by this pass's guest API; no slower page reread
+
       var p=forcePriceRead?null:cached(cpKey(x.st),DAY);if(!forcePriceRead&&(!p||p.none||p.missing))p=cpObserved(x.st);
       var label=function(q){return q.free?'Free, set by the station\'s host on ChargePoint':'The station host\'s ChargePoint rate'+(q.fee?' + $'+q.fee.toFixed(2)+' session fee':'');};
       if(p){var failure=cpFailures.get(cpKey(x.st));if(failure&&p.t>=failure.at)clearCpFailure(x.st);set(x,p,'chargepoint',label(p));cpCached++;return false;}
@@ -283,7 +285,7 @@
     var eta=root.__tripETA,etaWeights=new Map(),etaDone=0,etaCounted=new Set();
     if(eta)Object.keys(by).forEach(function(k){by[k].forEach(function(x){var hit=false;if(k==='tesla')hit=!!cached('tesla-v1|'+(isTesla?'t':'n')+'|'+x.st.id,DAY);else if(k==='ionna')hit=!!cached('ionna-v1',DAY);else if(k==='blink'){var sites=cached('blink-sites-v1',WEEK),near=sites&&nearest(x.st,sites,200);hit=!!(near&&cached('blink-price-v1|'+near.id+'|'+(x.dc?'dc':'ac'),DAY));}else if(k==='flo'){var plugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('flo-v1|'+x.st.id+'|'+x.dc+'|'+plugs.slice().sort().join(','),DAY);}else if(k==='ee')hit=!!cached('ee-v1',DAY);else if(k==='fcn'){var fplugs=root.AltFuel?root.AltFuel.compatiblePlugs(car,x.st.plugs):x.st.plugs||[];hit=!!cached('fcn-v1|'+x.st.id+'|'+(x.dc?'dc':'ac')+'|'+fplugs.slice().sort().join(','),DAY);}if(!hit)etaWeights.set(x,W[k]);});});
     var etaTotal=0;etaWeights.forEach(function(w){etaTotal+=w;});var etaPrices=eta&&eta.begin('charger-prices','charger-prices',etaTotal,1000,'Reading charger prices (cached tariffs excluded)');
-    var report = function () { if (!onProg) return; var f = Math.min(0.99, done / Math.max(0.001, total)), el = Date.now() - t, left = f > 0.05 && el > 4000 ? el / f * (1 - f) : 0;
+    var report = function () { if (!onProg) return; var f = Math.min(0.99, done / Math.max(0.001, total)), el = Date.now() - legacyAt, left = f > 0.05 && el > 4000 ? el / f * (1 - f) : 0;
       onProg(guestPhase?.3+f*.69:f, left ? 'about ' + (left < 90e3 ? Math.max(1, Math.round(left / 1000 / 5) * 5) + ' s' : Math.round(left / 60e3) + ' min') + ' left' : ''); };
     var step = function (k, n, cacheBatch) { done += (n == null ? 1 : n) * W[k];if(etaPrices){var count=n==null?1:n;by[k].forEach(function(x){if(count>0&&!etaCounted.has(x)&&(k!=='tesla'||etaWeights.has(x)!==!!cacheBatch)){etaCounted.add(x);etaDone+=etaWeights.get(x)||0;count--;}});etaPrices.progress(etaDone);}report(); };
     if (by.ionna.length) try { var ion = await ionnaSites(); by.ionna.forEach(function (x) { var s = nearest(x.st, ion, 250); if (s && s.open) set(x, { t:s.t,rate: s.rate, peak: s.rate, low: s.rate, uom: 'kwh', fee: 0, tax: s.tax }, 'ionna', 'IONNA\'s published rate' + (s.tax ? ' plus tax' : '')); step('ionna'); }); }

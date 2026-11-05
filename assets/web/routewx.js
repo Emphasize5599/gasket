@@ -562,7 +562,12 @@
     if (x.kind === 'wind') return 'Strong wind' + (pk.gust ? ' (gusts to ' + Math.round(pk.gust) + ' mph)' : pk.wind ? ' (up to ' + Math.round(pk.wind) + ' mph)' : '');
     return KINDS[x.kind][0];
   }
-  var api = { prepare:prepare, vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
+  // Session memory only: understanding a hazard is separate from accepting a particular road.
+  var understood = new Map();
+  function hazardTypes(hazards){return Array.from(new Set((hazards||[]).map(function(h){return h.kind==='alert'?'alert:'+String(h.event||h.title||'unclassified').trim().toLowerCase():h.kind;}).filter(Boolean)));}
+  function pendingHazards(car,kinds){var seen=understood.get(String(car));return Array.from(new Set(kinds||[])).filter(function(k){return !seen||!seen.has(k);});}
+  function acknowledgeHazards(car,kinds){var key=String(car),seen=understood.get(key);if(!seen){seen=new Set();understood.set(key,seen);}(kinds||[]).forEach(function(k){seen.add(k);});}
+  var api = { hazardTypes:hazardTypes, pendingHazards:pendingHazards, acknowledgeHazards:acknowledgeHazards, prepare:prepare, vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
     forRoute: forRoute, rerate:rerate, verdictCount:verdictCount, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;

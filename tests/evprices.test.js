@@ -6,7 +6,7 @@ function setup(answers){
  ctx.__app={S:{},N:{},KV:{get:(n,k,age)=>{const o=shared.get(n+'|'+k);return o&&(!age||Date.now()-o.t<=age)?o:null;},put:(n,k,v)=>{shared.set(n+'|'+k,{v:JSON.parse(JSON.stringify(v)),t:Date.now()});return true;}},esc:s=>String(s)};
  ctx.__trip={call:async(fn,...args)=>{calls.push([fn,...args]);return answers(fn,...args);}};
  vm.runInNewContext(fs.readFileSync('assets/web/chargerdata.js','utf8'),ctx);vm.runInNewContext(fs.readFileSync('assets/web/evprices.js','utf8'),ctx);
- return {E:ctx.EVPrices,C:ctx.ChargerData,S:ctx.__app.S,calls,shared};
+ return {ctx,E:ctx.EVPrices,C:ctx.ChargerData,S:ctx.__app.S,calls,shared};
 }
 const ionnaPage='<script>\nwindow.allLocations = {"6007":{"title":"Testville, AR Rechargery","status":"open","note":"","price":"<span class=\\"rechargery_price_now\\">$0.39<\\/span>\\/kWh Plus tax","price_updated":null,"speed":"400","lat":"34.7465","lon":"-92.2896"},"6008":{"title":"Soon","status":"soon","note":"Opening Soon","price":"<span class=\\"rechargery_price_now\\">$0.35<\\/span>\\/kWh","lat":"35.2","lon":"-92.5"}};\n</script>';
 const flexi=(cost,fee)=>({serviceFee:fee,days:['sunday','monday'].map(day=>({day,parkingSlots:[{start:'12:00 AM',end:'12:00 AM',cost:'$1.00/Hour'}],energySlots:[{start:'12:00 AM',end:'4:00 PM',cost},{start:'4:00 PM',end:'12:00 AM',cost:'$0.45/kWh'}]}))});
@@ -105,6 +105,12 @@ const flexi=(cost,fee)=>({serviceFee:fee,days:['sunday','monday'].map(day=>({day
  assert.equal(E.parseFrancis(fst({comingSoon:true}),true,['J1772COMBO']).length,0);
  assert.equal(JSON.stringify(E.parseFrancis(fst({stationSockets:[sock('CCS','SAE_J1772_COMBO_US','LEVEL3',guest(0))]}),true,['J1772COMBO'])),'[null]','all zeros: not published, never free');
  const pm=E.parseFrancis(fst({stationSockets:[sock('CCS','SAE_J1772_COMBO_US','LEVEL3',guest(0,1,.3))]}),true,['J1772COMBO'])[0];assert.equal(pm.uom,'min');assert.equal(pm.fee,1);
+ // A complete guest answer replaces the slower CP page read only when resolved in this pass.
+ const guestFlow=setup(()=>({text:'Price · Free'}));guestFlow.S.evGuestApps=true;
+ guestFlow.ctx.EVGuest={annotate:async items=>{items[0].st.tariffV2={offer:{}};items[0].st.netPrice={rate:.31,complete:true};return {priced:1,resolved:[items[0]],notes:[]};}};
+ const guestItem={st:{id:'guestFlow-cp',network:'ChargePoint',netIds:{station:['USCPIL1234']},lat:35,lng:-91},dc:true};
+ let gr=await guestFlow.E.annotate([guestItem],{});assert.equal(gr.priced,1);assert.equal(guestFlow.calls.length,0,'complete guest tariff avoids duplicate page read');
+ guestFlow.ctx.EVGuest.annotate=async()=>({priced:0,notes:['guestFlow source unavailable']});await guestFlow.E.annotate([guestItem],{});assert(guestFlow.calls.some(c=>c[0]==='siteRead'),'old tariff on a failed guest pass still allows public-page fallback');
  // annotate: Electric Era by distance; Francis: a box around the DOE site (test / coming-soon / distant / AC stations skipped), then details; cached a day
  let fcnCalls=[];const fAns=(fn,a,b)=>{if(fn==='fetchJson'&&/electricera/.test(a))return {body:eeList};
   if(fn==='fetchFrancis'&&a==='box'){fcnCalls.push(a);return {body:JSON.stringify({success:true,data:[{id:7,caption:'TV01',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'SEMI_FAST',stationStatusId:'AVAILABLE'},{id:8,caption:'AC003_Test',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'SEMI_FAST'},{id:9,caption:'TV09',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'FAST',comingSoon:true},{id:10,caption:'TV10',latitude:34.7565,longitude:-92.2896,chargingSpeedId:'FAST'},{id:11,caption:'TV11',latitude:34.7465,longitude:-92.2896,chargingSpeedId:'SLOW'}]})};}

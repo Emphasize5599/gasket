@@ -36,10 +36,11 @@ assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measure
  await p.clock.setFixedTime(new Date(await p.evaluate(()=>Date.now()+61000)));
  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);assert.equal(await p.locator('#cfm').count(),0,'same route/risk does not prompt twice across a minute boundary');
  await p.waitForFunction(()=>!__trip.state().busy);
- // Tire edits invalidate acknowledgment, and genuinely worn-out tires get stronger wording.
- await p.evaluate(()=>{Garage.car().tires.tread.depth=2;__trip.step(5);});await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');assert.match(await p.innerText('#cfm'),/replace before driving/i);
- await p.click('#cfmYes');await p.waitForFunction(()=>__trip.state().step===8);await p.waitForSelector('#cfm',{state:'detached'});await p.waitForFunction(()=>!__trip.state().busy);
- // A new explicit departure invalidates both forecast and acknowledgment.
+ // Understanding stays remembered across tire changes for this car/session; warnings still display on the route.
+ await p.evaluate(()=>{Garage.car().tires.tread.depth=2;__trip.step(5);});await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);assert.equal(await p.locator('#cfm').count(),0);await p.waitForFunction(()=>!__trip.state().busy);
+ // A different car needs its own acknowledgment; selecting an acknowledged car later retains its memory.
+ assert(await p.evaluate(()=>RouteWx.pendingHazards('other-car',['rain']).length===1),'another car has no acknowledgment');await p.evaluate(()=>{RouteWx.forRoute=async()=>{__weatherReads++;await new Promise(r=>__weatherGates.push(r));return {hazards:[{kind:'snow',level:2,fromMi:20,toMi:40}],stats:{},alerts:[],dense:[],forecast:[]};};});
+ // A new departure refreshes the forecast; the new snow type needs its own acknowledgment.
  await p.evaluate(()=>{__app.S.trip.departNow=false;__app.S.trip.depart=new Date(Date.now()+86400000).toISOString().slice(0,16);__trip.step(5);});
  await p.waitForFunction(()=>__weatherGates.length>0);await p.click('#tNext');await p.evaluate(()=>__weatherGates.splice(0).forEach(r=>r()));await p.waitForSelector('.wet-tire-warning');
  // An edit while the dialog is open cannot acknowledge stale data.
@@ -51,7 +52,7 @@ assert(W.tireRisk(Policy.snapshot(c,M),[{kind:'rain'}]).tires.some(t=>!t.measure
  // Considering a cheaper alternate is gated too; No can always reject it without acknowledging.
  await p.evaluate(()=>{Garage.car().tires.tread.depth=3;__app.S.trip.altCompare=true;__app.S.trip.routeChoices={};__trip.step(5);});await p.waitForTimeout(80);await p.evaluate(()=>__weatherGates.splice(0).forEach(r=>r()));
  await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmYes');await p.waitForFunction(()=>document.querySelector('#tBack').textContent==='No');await p.waitForSelector('#cfm',{state:'detached'});
- await p.click('#tNext');await p.waitForSelector('.wet-tire-warning');await p.click('#cfmNo');await p.waitForSelector('#cfm',{state:'detached'});assert.equal(await p.innerText('#tBack'),'No');
- await p.click('#tBack');await p.waitForFunction(()=>__trip.state().step===8);assert.equal(await p.locator('#cfm').count(),0);
+ await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8||document.querySelector('#tBack').textContent==='No');assert.equal(await p.locator('#cfm').count(),0,'same hazard on another road needs no second understanding dialog');
+ if(await p.evaluate(()=>__trip.state().step!==8)){await p.click('#tBack');await p.waitForFunction(()=>__trip.state().step===8);}assert.equal(await p.locator('#cfm').count(),0);
  assert.deepEqual(errors,[]);await p.close();
 }console.log('Wet/snow thresholds, estimated/car/trailer tires, in-flight reuse, cancel/ack, default-route gate and changed-risk invalidation passed');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

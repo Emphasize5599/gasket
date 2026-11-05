@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.383 - 2026-11-04
+- Remember hazard understanding once per warning type and vehicle for the current app session.
+- Batch guest charger prices and read independent networks concurrently while reusing stored tariffs.
+- Track guest-tariff work in progress estimates.
+- Bug fixes
+
 ## 0.0.382 - 2026-11-04
 - Includes 0.0.381's vehicle comparison fix (381 published no APK). Test reliability fix (no app change).
 

@@ -28,7 +28,7 @@ release.push('departure-summary','rest-vehicle-ui','menu-design-ui');
 release.push('evprices-recovery','evprices-ui');
 release.push('chargerdata','chargerdata-ui');
 release.push('ev-price-policy');
-release.push('evtariffs','evguest','evguest-ui');
+release.push('evtariffs','evguest','evguest-ui','evguest-parallel','guest-source-gate');
 release.push('onboarding-preferences','onboarding-connections','chargepoint-retry','chargepoint-retry-ui');
 release.push('visual-diagnostics');
 release.push('api-meter-ui');
