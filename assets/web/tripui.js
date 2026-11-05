@@ -71,6 +71,21 @@
   var restUI=window.RestUI&&RestUI.init(A,{
     dormant:function(){return savedPlanCurrent()&&!savedRestBrowsing;},activate:function(){savedRestBrowsing=true;},trafficEnabled:function(){return !!(traffic&&traffic.enabled()&&(!savedPlanCurrent()||savedRestBrowsing));},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(d){return restTolerance(d);},trafficSegments:function(){return restSegments();},restTraffic:function(){return restTrafficCfg();},setRestTraffic:function(c){S.trip.restTraffic=Object.assign({},c,{sig:restSegSig()});A.save();},
     waitForPlan:restPrepareTiming,call:call,timezoneFetch:timezoneFetch,snapshot:function(){return model&&route&&!busy&&!queueWorking&&document.body.classList.contains('trip-on')?{model:result&&result.opts&&result.opts.model||model,route:route,depart:departAt().getTime(),kind:KIND(),maxDetourMin:RestSettings.limit(A)}:null;},
+    restChargers:async function(s,sites,filter){
+      var car=Garage.car(),plugs=AltFuel.compatiblePlugs(car,Garage.plugs(car)),radiusMi=filter.radius/1609.344;
+      var widest=sites.reduce(function(max,row){return Math.max(max,row.offset||0);},0)+radiusMi;
+      var corridor=Math.min(20,Math.max(1,Math.ceil(widest))),notice=[];
+      if(widest>20)notice.push('Charger discovery covers up to 20 miles from the route.');
+      var pool=choicePool&&choicePool.kind==='ev'?choicePool:null;
+      var stored=pool?(pool.official||[]).concat((pool.google||[]).flatMap(function(rows){return Array.isArray(rows)?rows:rows.list||[];})):[];
+      var found=[];
+      try{found=await AltFuel.alongRoute(s.model,'ev',plugs,corridor,null,filter.types);}
+      catch(e){found=e.stations||[];notice.push('Charger coverage is incomplete. '+e.message);}
+      var stations=Array.from(new Map(stored.concat(found).filter(function(st){return !stationHidden(st);}).map(function(st){return [st.id,st];})).values());
+      var matches=RestPlaces.matchChargers(sites,stations,filter.radius,function(st){return AltFuel.charging(st,car,filter.types,plugs);});
+      notice.push(matches.length?'Nearby charger matches are based on coordinates. Check driving access and parking before planning to charge.':'No compatible nearby chargers matched the rest stops found.');
+      return {sites:matches,notice:notice.join(' ')};
+    },
     recommendationRoad:function(i){var raw=hzAlts(i)[hzSel(i)];return raw?JSON.stringify([raw.polyline&&raw.polyline.encodedPolyline,raw.duration,raw.distanceMeters]):null;},
     arrival:restUIArrival,forecastTtl:function(){return TrafficPolicy.resolve(S.trip.trafficPreset,trafficJourneySeconds()).ttl;},departure:function(i){var clock=restClockState(),row=clock&&clock.schedule&&clock.schedule[i];return row&&Number.isFinite(row.depart)?row.depart:hzDepart(i);},forecastContext:restForecastContext,
     arrivalBounds:function(){if(!windows||!windows.enabled())return null;var a=windows.arrivals();return a[a.length-1]||null;},
@@ -355,7 +370,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(queueWorking)return true;windowStoredTraffic(legs,session);
     var forecasts=session.delayForecasts||new Map(),rows=[].concat.apply([],legs).filter(function(r){return session.consent.allowed(r);}),todo=rows.filter(function(r){var hit=forecasts.get(r.routeKey+'|'+r.depart);return !hit||!(traffic&&traffic.freshForecast?traffic.freshForecast(hit.profile,r.model):Date.now()-hit.at<=600000);}).length;
     if(!todo)return true;if(session.earlyAnswer!=null)return session.earlyAnswer;if(todo<=20)return true;
-    var ok=!!await A.confirmDel({always:true,title:'Refresh traffic for each departure hour?',body:'Your earlier-departure allowance needs forecast traffic for '+todo+' approved road and hour combinations. Forecasts already on your phone are reused; refreshing reads the rest and can take several minutes. With on-device data only, this plan skips the allowance.',no:'Use on-device data',action:'Refresh',goClass:'primary'});
+    var ok=!!await A.confirmDel({always:true,title:'Fill gaps in traffic forecasts?',body:'Gasket reuses traffic forecasts within your selected age limit and fetches missing or expired sections. '+todo+' approved road and hour combinations still need checking. This can take several minutes.',no:'Skip allowance',action:'Fill traffic gaps',goClass:'primary'});
     session.earlyAnswer=ok;LG.info('timing','Traffic allowance choice',{rows:rows.length,toRead:todo,read:ok});return ok;
   }
   async function windowTrafficAllowance(legs,session,valid,progress){

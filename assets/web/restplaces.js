@@ -124,5 +124,24 @@
   }
   return {search:search,inventory:inventory,corridor:corridor};
  }
- var api={classify:classify,vehicleCheck:vehicleCheck,campendiumUrl:campendiumUrl,campendiumRows:campendiumRows,resetCampendium:function(){cpdUnknown=0;},rvparkyUrl:rvparkyUrl,rvparkyRows:rvparkyRows,SOURCES:SOURCES,ALL_REQUIRE:ALL_REQUIRE,sourceId:sourceId,sourceFilter:sourceFilter,stayHours:stayHours,cellsFor:cellsFor,cellQuery:cellQuery,onRoute:onRoute,CELL:CELL,ridb:ridb,NTAD:NTAD,CATEGORIES:CAT,AMENITIES:AM,ntad:ntad,osm:osm,merge:merge,defaults:defaults,check:check,along:along,rvparky:rvparky,links:links,create:create,direction:direction,acknowledge:acknowledge,hasPermission:hasPermission};if(node)module.exports=api;else root.RestPlaces=api;
+ var chargerModes={off:'No requirement',any:'Any compatible charger',ac:'AC charging (Level 1 or 2)',l1:'Level 1 only',l2:'Level 2 only',dc:'DC fast only'};
+ var chargerRadii=[100,250,500,1000];
+ function chargerFilter(mode,radius){
+  if(!Object.prototype.hasOwnProperty.call(chargerModes,mode))mode='off';
+  return {mode:mode,radius:chargerRadii.includes(+radius)?+radius:250,types:{dc:mode==='dc'||mode==='any',l2:mode==='l2'||mode==='ac'||mode==='any',l1:mode==='l1'||mode==='ac'||mode==='any'}};
+ }
+ function matchChargers(sites,stations,radius,compatible){
+  var candidates=stations.filter(function(st){return st.status==='E'&&!st.restricted&&Number.isFinite(st.lat)&&Number.isFinite(st.lng);}).map(function(st){return {station:st,charge:compatible(st)};}).filter(function(x){return x.charge;}).sort(function(a,b){return a.station.lat-b.station.lat;});
+  var latitudePad=radius/110000;
+  return sites.flatMap(function(row){
+   var site=row.site,lo=0,hi=candidates.length,best=null;
+   while(lo<hi){var mid=(lo+hi)>>>1;if(candidates[mid].station.lat<site.lat-latitudePad)lo=mid+1;else hi=mid;}
+   for(var i=lo;i<candidates.length&&candidates[i].station.lat<=site.lat+latitudePad;i++){
+    var candidate=candidates[i],meters=T.hav(site,candidate.station)*1609.344;
+    if(meters<=radius&&(!best||meters<best.meters))best=Object.assign({meters:meters},candidate);
+   }
+   return best?[Object.assign({},row,{charger:best})]:[];
+  });
+ }
+ var api={chargerModes:chargerModes,chargerRadii:chargerRadii,chargerFilter:chargerFilter,matchChargers:matchChargers,classify:classify,vehicleCheck:vehicleCheck,campendiumUrl:campendiumUrl,campendiumRows:campendiumRows,resetCampendium:function(){cpdUnknown=0;},rvparkyUrl:rvparkyUrl,rvparkyRows:rvparkyRows,SOURCES:SOURCES,ALL_REQUIRE:ALL_REQUIRE,sourceId:sourceId,sourceFilter:sourceFilter,stayHours:stayHours,cellsFor:cellsFor,cellQuery:cellQuery,onRoute:onRoute,CELL:CELL,ridb:ridb,NTAD:NTAD,CATEGORIES:CAT,AMENITIES:AM,ntad:ntad,osm:osm,merge:merge,defaults:defaults,check:check,along:along,rvparky:rvparky,links:links,create:create,direction:direction,acknowledge:acknowledge,hasPermission:hasPermission};if(node)module.exports=api;else root.RestPlaces=api;
 })(typeof window!=='undefined'?window:this);

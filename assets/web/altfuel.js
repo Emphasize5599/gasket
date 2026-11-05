@@ -80,6 +80,7 @@
       kw: pw ? pw.kw : 0, kwEst: pw ? pw.est : false, pricing: String(f.ev_pricing || '').trim(), netIds: f.ev_network_ids && typeof f.ev_network_ids === 'object' ? { station: [].concat(f.ev_network_ids.station || []).map(String).slice(0, 4), posts: [].concat(f.ev_network_ids.posts || []).map(String).slice(0, 8) } : null,
       source:'DOE AFDC',sourceUrl:'https://afdc.energy.gov/stations/#/station/'+f.id,dataUpdated:f.updated_at||'',country:f.country||'',
       hours: String(f.access_days_time || '').trim(), status: f.status_code || 'E', phone: f.station_phone || '',
+      restricted:/^(true|1|yes|t)$/i.test(String(f.restricted_access))||!!(f.access_code&&f.access_code!=='public'),
       hyPress: f.hy_pressures || [], hyLink: f.hy_status_link || '', retail: f.hy_is_retail, confirmed: f.date_last_confirmed || '',
       off: f.distance != null ? +f.distance : null, prices: {}
     };

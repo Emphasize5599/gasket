@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.385 - 2026-11-05
+- Filter EV rest stops by nearby compatible charger type and open driving directions between the two locations.
+- Clarify that flexible-time planning can fill traffic gaps using forecasts already on the phone.
+- Bug fixes
+
 ## 0.0.384 - 2026-11-05
 - Fix a crash after flexible-time planning: saving the finished plan copied every leg's whole road and weather data, which ran Android out of memory. Oversized saves are now refused instead of crashing.
 
