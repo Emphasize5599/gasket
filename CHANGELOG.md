@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.388 - 2026-11-05
+- Apply nightly arrival windows and traffic recommendations to charging-station rests.
+- Make potentially complimentary chargers opt-in in both rest charging sections.
+- Bug fixes
+
 ## 0.0.387 - 2026-11-05
 - Browse compatible charging stations as separate rest options. Confirm parking permission and plan charging during the stay.
 - Bug fixes

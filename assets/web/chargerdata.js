@@ -73,6 +73,13 @@
   var free=afdc?/^free\b(?!\s*park)/i.test(text)&&!/\$\s*\d/.test(charge.join(' ')):/^free charging[.;]?$/i.test(text);
   if(free)return one(0,'Published as free (not live)',false);
   return {known:false,price:fallback,estimated:true,label:'Your charging-price estimate',updated:null};}
+ function potentiallyComplimentary(st,kw){
+  var price=tariff(st,null,kw),text=String(st.pricing||'').replace(/\b(?:free|complimentary)\s+parking\b/gi,'');
+  if(price.known&&price.price===0||/complimentar|\bfree\s+(?:charging|for|to|with)\b|\b(?:charging|charger)\b.{0,20}\bfree\b/i.test(text))return true;
+  if(/^\s*free\b(?!\s+parking)/i.test(text))return true;
+  if(price.known&&price.price>0)return false;
+  return !!(root.AltFuel&&root.AltFuel.NET_HOSTED&&root.AltFuel.NET_HOSTED.some(function(group){return group[0]===root.AltFuel.netGroup(st);}));
+ }
  // What chargers along a route publish: the median paid $/kWh for fast (DC) and slower (AC) chargers, n of each
  function routeRates(list){var dc=[],ac=[];list.forEach(function(x){var t=tariff(x.st,null,x.kw);if(t.price>0&&t.label.indexOf('rate')>=0)(x.dc?dc:ac).push(t.price);});
   var med=function(a){if(a.length<3)return null;a=a.slice().sort(function(p,q){return p-q;});var k=a.length>>1;return a.length%2?a[k]:(a[k-1]+a[k])/2;};
@@ -136,6 +143,6 @@
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
+ root.ChargerData={potentiallyComplimentary:potentiallyComplimentary,firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();
 })(window);

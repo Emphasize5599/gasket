@@ -2,16 +2,22 @@
 (function(root){'use strict';
  var labels={rest_area:'Rest areas',services:'Highway services',campground:'Campgrounds',private:'Permission-dependent stores',restrooms:'Restrooms',showers:'Showers',pets:'Pets allowed',drinking_water:'Drinking water',electric:'Electric hookups',accessible:'Accessible campsites',picnic_tables:'Picnic tables',dump_station:'Dump station',sewer:'Sewer hookups',water_hookup:'Water hookups',fire_pit:'Fire rings / pits',playground:'Playground'};
  function limit(A){return Number.isFinite(+A.S.restDetourMin)&&+A.S.restDetourMin>=1?Math.min(180,+A.S.restDetourMin):30;}
+ function complimentaryBox(A,key){
+  return '<label class="nf chk"><span>Include potentially complimentary chargers</span><input type="checkbox" data-rest-complimentary="'+key+'"'+(A.S[key]===true?' checked':'')+'></label>';
+ }
  function chargingHtml(A){
   var f=RestPlaces.chargerFilter(A.S.restChargerMode,A.S.restChargerRadius,A.S.restChargerTypes);
   var levels=[['dc','DC fast'],['l2','Level 2'],['l1','Level 1']];
   var at=A.S.restAtChargerTypes||{};
-  var station='<details class="disclosure-tile" id="tRestAtChargers"><summary>Resting at charging stops</summary>'+levels.map(function(level){return '<label class="nf chk"><span>'+level[1]+'</span><input type="checkbox" data-rest-at-charger="'+level[0]+'"'+(at[level[0]]===true?' checked':'')+'></label>';}).join('')+'<p class="lead small keep">Choose the chargers to show in the separate rest directory. Confirm the site permits your planned stay.</p></details>';
+  var station='<details class="disclosure-tile" id="tRestAtChargers"><summary>Resting at charging stops</summary>'+levels.map(function(level){return '<label class="nf chk"><span>'+level[1]+'</span><input type="checkbox" data-rest-at-charger="'+level[0]+'"'+(at[level[0]]===true?' checked':'')+'></label>';}).join('')+complimentaryBox(A,'restAtAllowComplimentary')+'<p class="lead small keep">Choose the chargers to show in the separate rest directory. Confirm the site permits your planned stay.</p></details>';
   return station+'<details class="disclosure-tile" id="tRestChargerTypes"'+(f.mode!=='off'?' open':'')+'><summary>Charging near rest stops</summary>'+
    levels.map(function(level){return '<label class="nf chk"><span>'+level[1]+'</span><input type="checkbox" data-rest-charger-type="'+level[0]+'"'+(f.types[level[0]]?' checked':'')+'></label>';}).join('')+
-   '<label class="nf"><span>Straight-line distance to charger · <b data-rest-charger-distance>'+f.radius+' m</b></span><input type="range" min="100" max="1000" step="25" value="'+f.radius+'" data-rest-charger-radius aria-label="Straight-line distance to charger" aria-valuetext="'+f.radius+' meters"'+(f.mode==='off'?' disabled':'')+'></label><p class="lead small keep">Leave all unchecked to show rests without a charger requirement. Check the drive and access before planning to charge.</p></details>';
+   complimentaryBox(A,'restNearAllowComplimentary')+'<label class="nf"><span>Straight-line distance to charger · <b data-rest-charger-distance>'+f.radius+' m</b></span><input type="range" min="100" max="1000" step="25" value="'+f.radius+'" data-rest-charger-radius aria-label="Straight-line distance to charger" aria-valuetext="'+f.radius+' meters"'+(f.mode==='off'?' disabled':'')+'></label><p class="lead small keep">Leave all unchecked to show rests without a charger requirement. Check the drive and access before planning to charge.</p></details>';
  }
  function bindCharging(A,body){
+  body.querySelectorAll('[data-rest-complimentary]').forEach(function(box){box.onchange=function(){
+   A.S[box.dataset.restComplimentary]=box.checked;A.save();
+  };});
   var at=Array.from(body.querySelectorAll('[data-rest-at-charger]'));
   at.forEach(function(box){box.onchange=function(){
    var flags={};at.forEach(function(el){flags[el.dataset.restAtCharger]=el.checked;});

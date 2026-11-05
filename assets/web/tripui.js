@@ -74,7 +74,9 @@
     var found=[];
     try{found=await AltFuel.alongRoute(m,'ev',plugs,corridor,null,types);}
     catch(e){found=e.stations||[];notice.push('Charger coverage is incomplete. '+e.message);}
-    return Array.from(new Map(stored.concat(found).filter(function(st){return !stationHidden(st);}).map(function(st){return [st.id,st];})).values());
+    var byId=new Map();
+    stored.concat(found).forEach(function(st){if(!stationHidden(st))byId.set(st.id,Object.assign({},byId.get(st.id),st));});
+    return Array.from(byId.values());
   }
   var restUI=window.RestUI&&RestUI.init(A,{
     dormant:function(){return savedPlanCurrent()&&!savedRestBrowsing;},activate:function(){savedRestBrowsing=true;},trafficEnabled:function(){return !!(traffic&&traffic.enabled()&&(!savedPlanCurrent()||savedRestBrowsing));},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(d){return restTolerance(d);},trafficSegments:function(){return restSegments();},restTraffic:function(){return restTrafficCfg();},setRestTraffic:function(c){S.trip.restTraffic=Object.assign({},c,{sig:restSegSig()});A.save();},
@@ -85,7 +87,10 @@
       var corridor=Math.min(20,Math.max(1,Math.ceil(widest))),notice=[];
       if(widest>20)notice.push('Charger discovery covers up to 20 miles from the route.');
       var stations=await restChargerInventory(s.model,plugs,corridor,filter.types,notice);
-      var matches=RestPlaces.matchChargers(sites,stations,filter.radius,function(st){return AltFuel.charging(st,car,filter.types,plugs);});
+      var matches=RestPlaces.matchChargers(sites,stations,filter.radius,function(st){
+        var charge=AltFuel.charging(st,car,filter.types,plugs);
+        return charge&&(filter.allowComplimentary||!ChargerData.potentiallyComplimentary(st,charge.stationKw))?charge:null;
+      });
       notice.push(matches.length?'Nearby charger matches are based on coordinates. Check driving access and parking before planning to charge.':'No compatible nearby chargers matched the rest stops found.');
       return {sites:matches,notice:notice.join(' ')};
     },
@@ -99,7 +104,7 @@
       stations.forEach(function(st){
         if(st.status!=='E'||st.restricted||!Number.isFinite(st.lat)||!Number.isFinite(st.lng))return;
         var id='charger-rest:'+st.id;if(selected.has(id))return;
-        var charge=AltFuel.charging(st,car,types,plugs);if(!charge)return;
+        var charge=AltFuel.charging(st,car,types,plugs);if(!charge||!types.allowComplimentary&&ChargerData.potentiallyComplimentary(st,charge.stationKw))return;
         var projection=T.project(part,st);
         if(projection.offset>corridor||projection.along<=.001||projection.along>=part.totalMi-.001)return;
         var d=from+projection.along,leg=ends.findIndex(function(end){return d<=end;});

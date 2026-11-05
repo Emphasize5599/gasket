@@ -9,6 +9,13 @@ function setup(shared=new Map()){
 }
 (async()=>{
  const x=setup(),m={pts:[{lat:35,lng:-91},{lat:36,lng:-90}],totalMi:100};x.S.evRefreshPrices=false;
+ const paid={name:'Public charger',country:'US',source:'DOE AFDC',pricing:'$0.35/kWh'};
+ assert(x.C.potentiallyComplimentary({...paid,pricing:'Complimentary to guests'},7));
+ assert(x.C.potentiallyComplimentary({...paid,pricing:'Free'},7));
+ assert(x.C.potentiallyComplimentary({...paid,name:'Hotel fixture',network:'Tesla Destination',pricing:''},7));
+ assert(!x.C.potentiallyComplimentary({...paid,pricing:'Free parking; $0.35/kWh'},7));
+ assert(!x.C.potentiallyComplimentary({...paid,pricing:'Complimentary parking; $0.35/kWh'},7));
+ assert(!x.C.potentiallyComplimentary({...paid,name:'Hotel fixture',network:'Tesla Destination'},7));
  let rows=await x.A.alongRoute(m,'ev',['J1772'],2);assert.equal(rows.length,1);assert.equal(x.calls.filter(c=>c.fn==='fetchStationRoute').length,0,'offline discovery consumes no provider calls');
  x.S.evRefreshPrices=true;rows=await x.A.alongRoute(m,'ev',['J1772'],2);assert.equal(rows.length,1);assert.equal(x.calls.filter(c=>c.fn==='fetchStationRoute').length,0,'price updates do not repeat discovery when a full offline inventory exists');
  await x.A.alongRoute(m,'ev',['J1772'],2,null,null,true);assert.equal(x.calls.filter(c=>c.fn==='fetchStationRoute').length,1,'explicit rediscovery still queries the provider');assert.match(x.C.quotaText(),/998 remaining/);

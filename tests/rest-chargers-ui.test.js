@@ -23,9 +23,11 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    const create=RestPlaces.create,clock=StopClock.create;
    RestPlaces.create=()=>({corridor:async()=>({sites:rows})});
    StopClock.create=()=>({load:async()=>{},get:()=> 'America/Chicago'});
-   window.__restChargeReads=[];window.__stationRestReads=0;A.S.restAtChargerTypes={dc:true};
+   const depart=Date.parse('2030-11-13T02:00:00Z');
+   window.__restChargeReads=[];window.__stationRestReads=0;window.__chargerForecasts=[];A.S.restAtChargerTypes={dc:true};
+   A.S.trip.windowPlan={enabled:true,planningMode:'overnight',overnight:{arrivalStart:{kind:'clock',time:'20:05'},arrivalEnd:{kind:'clock',time:'21:30'},leaveStart:{kind:'clock',time:'06:00'},leaveEnd:{kind:'clock',time:'07:00'},minimum:30,preferred:60}};
    const ui=RestUI.init(A,{
-    snapshot:()=>({model,route,depart:Date.now(),kind:'ev',maxDetourMin:30}),arrival:()=>Date.now(),
+    snapshot:()=>({model,route,depart,kind:'ev',maxDetourMin:30}),arrival:d=>depart+d/model.totalMi*3600000,
     restChargers:async(s,sites,f)=>{
      __restChargeReads.push(f.types);
      return {sites:RestPlaces.matchChargers(sites,stations,f.radius,st=>AltFuel.charging(st,car,f.types,['J1772COMBO','J1772']))};
@@ -33,20 +35,28 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
     chargerRestSites:async(s,group,types)=>{
      __stationRestReads++;
      if(!types.dc)throw Error('DC station rest setting missing');
-     const d=model.totalMi*.6;
-     return {sites:[{d,leg:0,offset:0,site:{...model.pointAt(d),id:'charger-rest:test',name:'Direct DC charger',kind:'charging_station',restChargeLevel:'dc_fast',restChargeKw:120,source:'Fixture'}}]};
+     return {sites:[.6,.02].map((fraction,i)=>{
+      const d=model.totalMi*fraction;
+      return {d,leg:0,offset:0,site:{...model.pointAt(d),id:'charger-rest:'+i,name:i?'Too early charger':'Direct DC charger',kind:'charging_station',restChargeLevel:'dc_fast',restChargeKw:120,source:'Fixture'}};
+     })};
     },
     access:async()=>({outSeconds:30,backSeconds:30}),
+    tolerance:()=>15,forecast:async d=>{__chargerForecasts.push(d/model.totalMi);return {seconds:600,baseSeconds:600,coverage:1};},
     addDraft:async(site,leg,d,settings)=>{window.__stationRestAdded={site,leg,settings};},
     call:async()=>({complete:true,places:[]})
    });
    RestPlaces.create=create;StopClock.create=clock;
-   const host=document.createElement('div');host.innerHTML=ui.tile();document.body.appendChild(host);ui.bind(host);
+   const host=document.createElement('div');host.innerHTML=ui.tile();document.body.appendChild(host);
    const close=A.subPage('Charging settings',RestSettings.chargingHtml(A),body=>RestSettings.bindCharging(A,body));
    document.querySelector('.sub-page .sub-back').onclick=()=>{close();ui.openLeg(0,{wait:true});};
   });
   assert(await page.isChecked('[data-rest-charger-type="l2"]'));
   assert(await page.isChecked('[data-rest-charger-type="l1"]'),'legacy AC selection migrates to both AC levels');
+  assert(!await page.isChecked('[data-rest-complimentary="restNearAllowComplimentary"]'));
+  await page.getByText('Resting at charging stops',{exact:true}).click();
+  assert(!await page.isChecked('[data-rest-complimentary="restAtAllowComplimentary"]'));
+  await page.check('[data-rest-complimentary="restAtAllowComplimentary"]');
+  assert(!await page.isChecked('[data-rest-complimentary="restNearAllowComplimentary"]'),'the two opt-ins are independent');
   await page.uncheck('[data-rest-charger-type="l1"]');
   await page.focus('[data-rest-charger-radius]');await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('[data-rest-charger-distance]').innerText(),'275 m');
@@ -62,9 +72,13 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.deepEqual(await page.evaluate(()=>__app.S.trip.evChargers),{dc:true,l2:false,l1:false});
   assert.deepEqual(await page.evaluate(()=>__app.S.restChargerTypes),{dc:false,l2:true,l1:false});
   assert.equal(await page.evaluate(()=>__app.S.restChargerRadius),275);
-  assert.equal(await page.evaluate(()=>__stationRestReads),0,'charger directory reads start only when opened');
+  await page.waitForFunction(()=>__chargerForecasts.includes(.6));
   await page.getByRole('button',{name:'Rest at a charging station'}).click();
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).waitFor();
+  await page.waitForSelector('[data-rest-row] .rest-suggested');
+  assert.equal(await page.getByText('Too early charger',{exact:true}).count(),0);
+  assert(await page.evaluate(()=>__chargerForecasts.includes(.6)&&!__chargerForecasts.includes(.02)));
+  assert.equal(await page.evaluate(()=>__stationRestReads),1,'opening the directory reuses the background inventory');
   assert.match(await page.locator('[data-rest-list]').innerText(),/at your own risk/);
   assert.equal(await rows.count(),1,'the separate charger list is independent of the nearby Level 2 requirement');
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).click();
