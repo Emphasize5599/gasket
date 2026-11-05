@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.389 - 2026-11-05
+- Show charger rest discovery, access checks and forecasts in the status bar. Start the automatic charger pass after ordinary rest work.
+- Bug fixes
+
 ## 0.0.388 - 2026-11-05
 - Apply nightly arrival windows and traffic recommendations to charging-station rests.
 - Make potentially complimentary chargers opt-in in both rest charging sections.

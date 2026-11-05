@@ -24,7 +24,9 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    RestPlaces.create=()=>({corridor:async()=>({sites:rows})});
    StopClock.create=()=>({load:async()=>{},get:()=> 'America/Chicago'});
    const depart=Date.parse('2030-11-13T02:00:00Z');
-   window.__restChargeReads=[];window.__stationRestReads=0;window.__chargerForecasts=[];A.S.restAtChargerTypes={dc:true};
+   window.__restChargeReads=[];window.__stationRestReads=0;window.__chargerForecasts=[];window.__restWork=[];window.__chargerTaskLabels=[];A.S.restAtChargerTypes={dc:true};
+   const upsert=Tasks.upsert;Tasks.upsert=(id,value)=>{if(id.startsWith('charger-rest')&&value.text)__chargerTaskLabels.push(value.text);return upsert(id,value);};
+   const begin=Tasks.begin;Tasks.begin=(id,value)=>{if(id.startsWith('charger-rest'))__chargerTaskLabels.push(value.text);return begin(id,value);};
    A.S.trip.windowPlan={enabled:true,planningMode:'overnight',overnight:{arrivalStart:{kind:'clock',time:'20:05'},arrivalEnd:{kind:'clock',time:'21:30'},leaveStart:{kind:'clock',time:'06:00'},leaveEnd:{kind:'clock',time:'07:00'},minimum:30,preferred:60}};
    const ui=RestUI.init(A,{
     snapshot:()=>({model,route,depart,kind:'ev',maxDetourMin:30}),arrival:d=>depart+d/model.totalMi*3600000,
@@ -34,14 +36,15 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
     },
     chargerRestSites:async(s,group,types)=>{
      __stationRestReads++;
+     __restWork.push('charger inventory');
      if(!types.dc)throw Error('DC station rest setting missing');
      return {sites:[.6,.02].map((fraction,i)=>{
       const d=model.totalMi*fraction;
       return {d,leg:0,offset:0,site:{...model.pointAt(d),id:'charger-rest:'+i,name:i?'Too early charger':'Direct DC charger',kind:'charging_station',restChargeLevel:'dc_fast',restChargeKw:120,source:'Fixture'}};
      })};
     },
-    access:async()=>({outSeconds:30,backSeconds:30}),
-    tolerance:()=>15,forecast:async d=>{__chargerForecasts.push(d/model.totalMi);return {seconds:600,baseSeconds:600,coverage:1};},
+    access:async site=>{if(site.kind!=='charging_station'){await new Promise(r=>setTimeout(r,40));__restWork.push('ordinary access done');}return {outSeconds:30,backSeconds:30};},
+    tolerance:()=>15,forecast:async d=>{__chargerForecasts.push(d/model.totalMi);__restWork.push(d/model.totalMi===.6?'charger forecast':'ordinary forecast');return {seconds:600,baseSeconds:600,coverage:1};},
     addDraft:async(site,leg,d,settings)=>{window.__stationRestAdded={site,leg,settings};},
     call:async()=>({complete:true,places:[]})
    });
@@ -73,6 +76,13 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert.deepEqual(await page.evaluate(()=>__app.S.restChargerTypes),{dc:false,l2:true,l1:false});
   assert.equal(await page.evaluate(()=>__app.S.restChargerRadius),275);
   await page.waitForFunction(()=>__chargerForecasts.includes(.6));
+  const work=await page.evaluate(()=>__restWork);
+  assert(work.indexOf('ordinary access done')>=0&&work.indexOf('ordinary access done')<work.indexOf('charger inventory'));
+  assert(work.indexOf('ordinary forecast')>=0&&work.lastIndexOf('ordinary forecast')<work.indexOf('charger inventory'));
+  const labels=(await page.evaluate(()=>__chargerTaskLabels)).join('\n');
+  assert.match(labels,/finding compatible chargers/);
+  assert.match(labels,/Checking road access · 2 \/ 2/);
+  assert.match(labels,/Charger rest departure forecasts/);
   await page.getByRole('button',{name:'Rest at a charging station'}).click();
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).waitFor();
   await page.waitForSelector('[data-rest-row] .rest-suggested');

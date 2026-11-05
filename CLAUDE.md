@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.389 - charger rest background sequencing and progress
+
+The 17:08 UTC log shows charger inventory reuse after the ordinary access pass and charger access failures shortly before export. Previously the charger pass started alongside ordinary work and had no status task until departure forecasting. Ordinary access and recommendation work still run together. The automatic charger pass waits for both and runs inventory even with departure forecasts disabled. Each charger leg reports discovery, local-time matching, road-access counts and departure forecast work. The log records charger search starts and counts for eligible sites and unavailable access. The directory distinguishes finished checks from unavailable forecasts. Browser regression verifies the automatic ordering and all three status phases before opening the charger directory. Phone check the handoff from ordinary rest work to the charger task and compare its final counts with the directory.
+
 ## 0.0.388 - charger rest windows, forecasts and complimentary opt-ins
 
 Charger rests now use the same local nightly arrival and stay fit as ordinary rests, after checking road-access time. When charger rests and traffic forecasts are enabled, the background rest work loads compatible chargers per original leg and samples departures for the candidates that fit. The charger directory reuses the results and has its own green outlines and suggestion retry. Both charging sections independently opt into chargers listed free or complimentary and hosted locations without a published paid rate. Free parking alone does not count as free charging. Focused tests cover arrival exclusion, background recommendations and reuse, separate controls and source rate classification. Phone check an overnight EV route with charger rests enabled, compare the arrival times with the nightly window, then toggle each complimentary preference separately.
