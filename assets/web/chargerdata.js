@@ -62,17 +62,21 @@
   if(st.tariffV2&&root.EVTariffs){var q=root.EVTariffs.quote(st.tariffV2.offer,arrivalAt);if(q)np=Object.assign({},np,q,{t:st.tariffV2.t,src:st.tariffV2.source,label:(st.tariffV2.sourceLabel||st.tariffV2.source)+' published guest rate'+(!q.complete?' · energy only; fees unverified':q.conservative?' · upper estimate; arrival-time rate unverified':'')});else return {known:false,complete:false,price:null,estimated:true,label:'No applicable published tariff for this date',updated:null};}
   if(np&&typeof np.rate==='number'&&isFinite(np.rate)&&np.rate>=0&&(np.rate>0||np.free===true)){var at=+kw||+st.kw||0,upd=np.t?new Date(np.t).toISOString():null;   // the network's own published price (EVPrices) wins
    if(np.uom==='kwh')return {known:true,complete:np.complete!==false,price:Math.round(np.rate*1000)/1000,fee:np.fee||0,estimated:!!(np.estimated||np.conservative||np.fee||np.parking||np.extraFees),label:np.label+' (not live)',updated:upd,network:np.src};
-   if(at>0)return {known:true,price:Math.round((np.uom==='min'?np.rate*60:np.rate)/(at*0.8)*1000)/1000,estimated:true,label:np.label+' per '+(np.uom==='min'?'minute':'hour')+' at ~'+Math.round(at*0.8)+' kW (estimate, not live)',updated:upd,network:np.src};}
+   if(at>0)return {known:true,price:Math.round((np.uom==='min'?np.rate*60:np.rate)/(at*0.8)*1000)/1000,estimated:true,perTime:true,label:np.label+' per '+(np.uom==='min'?'minute':'hour')+' at ~'+Math.round(at*0.8)+' kW (estimate, not live)',updated:upd,network:np.src};}
   var text=String(st.pricing||'').replace(/\s+/g,' ').trim(),us=st.country==='US',afdc=(st.pricingSource||st.source)==='DOE AFDC';
   var parts=text.split(/[;,]|\s\+\s|\bplus\b/i).map(function(x){return x.trim();}).filter(Boolean),charge=parts.filter(function(x){return !/park|lot\b|garage|idle|idling|overstay|after\s+\d+\s*(?:min|hour|hr)/i.test(x);});
   var nums=function(re){var out=[];charge.forEach(function(x){var m;re.lastIndex=0;while((m=re.exec(x)))out.push(+(m[2]||m[1]));});return out.filter(function(v){return v>=0&&v<5;});};
   var kwh=us?nums(/\$\s*(\d*\.?\d+)(?:\s*-\s*\$?\s*(\d*\.?\d+))?\s*(?:\/|per|a)\s*kwh?\b/gi):[],fee=/(?:session|activation|connection|service|plug-?in|start)\s*fee|per session/i.test(charge.join(' ')),one=function(v,label,est){return {known:true,price:Math.round(v*1000)/1000,estimated:!!est,label:label,updated:st.pricingUpdated||null};};
   if(kwh.length){var hi=Math.max.apply(null,kwh),many=kwh.some(function(v){return v!==hi;});return one(hi,(many?'Highest published rate':'Published charger rate')+(fee?' + a session fee not included':'')+' (not live)',fee);}
   var power=+kw||+st.kw||0,hr=us?nums(/\$\s*(\d*\.?\d+)(?:\s*-\s*\$?\s*(\d*\.?\d+))?\s*(?:\/|per|an?)\s*(?:hour|hr)\b/gi):[],mn=us?nums(/\$\s*(\d*\.?\d+)(?:\s*-\s*\$?\s*(\d*\.?\d+))?\s*(?:\/|per|a)\s*min(?:ute)?\b/gi):[];
-  if(power>0&&(hr.length||mn.length)){var perH=Math.max.apply(null,hr.concat(mn.map(function(v){return v*60;})));return one(perH/(power*0.8),'Published '+(hr.length?'hourly':'per-minute')+' rate at ~'+Math.round(power*0.8)+' kW (estimate, not live)',true);}
+  if(power>0&&(hr.length||mn.length)){var perH=Math.max.apply(null,hr.concat(mn.map(function(v){return v*60;})));return Object.assign(one(perH/(power*0.8),'Published '+(hr.length?'hourly':'per-minute')+' rate at ~'+Math.round(power*0.8)+' kW (estimate, not live)',true),{perTime:true});}
   var free=afdc?/^free\b(?!\s*park)/i.test(text)&&!/\$\s*\d/.test(charge.join(' ')):/^free charging[.;]?$/i.test(text);
   if(free)return one(0,'Published as free (not live)',false);
   return {known:false,price:fallback,estimated:true,label:'Your charging-price estimate',updated:null};}
+ function restRate(st,kw,arrivalAt){
+  var q=tariff(st,null,kw,arrivalAt);
+  return q.known&&!q.perTime&&Number.isFinite(q.price)&&q.price>=0&&q.price<=10?q:null;
+ }
  function potentiallyComplimentary(st,kw){
   var price=tariff(st,null,kw),text=String(st.pricing||'').replace(/\b(?:free|complimentary)\s+parking\b/gi,'');
   if(price.known&&price.price===0||/complimentar|\bfree\s+(?:charging|for|to|with)\b|\b(?:charging|charger)\b.{0,20}\bfree\b/i.test(text))return true;
@@ -143,6 +147,6 @@
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={potentiallyComplimentary:potentiallyComplimentary,firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
+ root.ChargerData={restRate:restRate,potentiallyComplimentary:potentiallyComplimentary,firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();
 })(window);

@@ -74,9 +74,9 @@
     var found=[];
     try{found=await AltFuel.alongRoute(m,'ev',plugs,corridor,null,types);}
     catch(e){found=e.stations||[];notice.push('Charger coverage is incomplete. '+e.message);}
-    var byId=new Map();
-    stored.concat(found).forEach(function(st){if(!stationHidden(st))byId.set(st.id,Object.assign({},byId.get(st.id),st));});
-    return Array.from(byId.values());
+    var candidates=stored.concat(found),ids=new Set(candidates.map(function(st){return st.id;}));
+    var saved=window.StationStore?StationStore.routeRows([m],T,corridor,'ev',StationStore.priceScope(Garage.car())).filter(function(st){return ids.has(st.id);}):[];
+    return mergeRouteStations(saved.concat(candidates)).filter(function(st){return !stationHidden(st);});
   }
   var restUI=window.RestUI&&RestUI.init(A,{
     dormant:function(){return savedPlanCurrent()&&!savedRestBrowsing;},activate:function(){savedRestBrowsing=true;},trafficEnabled:function(){return !!(traffic&&traffic.enabled()&&(!savedPlanCurrent()||savedRestBrowsing));},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(d){return restTolerance(d);},trafficSegments:function(){return restSegments();},restTraffic:function(){return restTrafficCfg();},setRestTraffic:function(c){S.trip.restTraffic=Object.assign({},c,{sig:restSegSig()});A.save();},
@@ -109,7 +109,7 @@
         if(projection.offset>corridor||projection.along<=.001||projection.along>=part.totalMi-.001)return;
         var d=from+projection.along,leg=ends.findIndex(function(end){return d<=end;});
         if(leg<0||d-(leg?ends[leg-1]:0)<=.001||ends[leg]-d<=.001)return;
-        var site={id:id,name:st.name,lat:st.lat,lng:st.lng,kind:'charging_station',source:st.source||'Charger inventory',sourceUrl:st.sourceUrl||'',hours:st.hours||null,permission:'unknown',amenities:{},restChargeLevel:charge.level,restChargeKw:charge.stationKw,restChargeEstimated:charge.estimated};
+        var site={id:id,name:st.name,lat:st.lat,lng:st.lng,kind:'charging_station',source:st.source||'Charger inventory',sourceUrl:st.sourceUrl||'',hours:st.hours||null,permission:'unknown',amenities:{},restChargeLevel:charge.level,restChargeKw:charge.stationKw,restChargeEstimated:charge.estimated,restChargeTariff:{country:st.country,source:st.source,pricing:st.pricing,pricingSource:st.pricingSource,pricingUpdated:st.pricingUpdated,netPrice:st.netPrice,tariffV2:st.tariffV2}};
         rows.push({site:site,d:d,leg:leg,offset:projection.offset});
       });
       return {sites:rows,notice:notice.join(' ')};

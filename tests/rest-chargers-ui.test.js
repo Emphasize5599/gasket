@@ -41,7 +41,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
      if(!types.dc)throw Error('DC station rest setting missing');
      return {sites:[.6,.02].map((fraction,i)=>{
       const d=model.totalMi*fraction;
-      return {d,leg:0,offset:0,site:{...model.pointAt(d),id:'charger-rest:'+i,name:i?'Too early charger':'Direct DC charger',kind:'charging_station',restChargeLevel:'dc_fast',restChargeKw:120,source:'Fixture'}};
+      return {d,leg:0,offset:0,site:{...model.pointAt(d),id:'charger-rest:'+i,name:i?'Too early charger':'Direct DC charger',kind:'charging_station',restChargeLevel:'dc_fast',restChargeKw:120,restChargeTariff:{country:'US',source:'DOE AFDC',pricing:'$0.345/kWh'},source:'Fixture'}};
      })};
     },
     access:async site=>{if(site.kind!=='charging_station'){await new Promise(r=>setTimeout(r,40));__restWork.push('ordinary access done');}return {outSeconds:30,backSeconds:30};},
@@ -105,7 +105,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.fill('#restCharge','20');
   await page.fill('#restMin','40');
   assert.equal(await page.inputValue('#restCharge'),'20');
-  await page.fill('#restChargePrice','0');
+  assert.equal(await page.inputValue('#restChargePrice'),'0.345');
+  assert(await page.getByText(/Published charger rate/).isVisible());
   await page.click('#restAddGo');
   assert.match(await page.locator('#restAddError').innerText(),/Confirm that this site allows/);
   await page.check('#restPermission');

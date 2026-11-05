@@ -10,6 +10,10 @@ function setup(shared=new Map()){
 (async()=>{
  const x=setup(),m={pts:[{lat:35,lng:-91},{lat:36,lng:-90}],totalMi:100};x.S.evRefreshPrices=false;
  const paid={name:'Public charger',country:'US',source:'DOE AFDC',pricing:'$0.35/kWh'};
+ assert.equal(x.C.restRate(paid,7).price,0.35);
+ assert.equal(x.C.restRate({...paid,pricing:'Free'},7).price,0);
+ assert.equal(x.C.restRate({...paid,pricing:'$2/hour'},7),null);
+ assert.equal(x.C.restRate({...paid,pricing:'Contact the site'},7),null);
  assert(x.C.potentiallyComplimentary({...paid,pricing:'Complimentary to guests'},7));
  assert(x.C.potentiallyComplimentary({...paid,pricing:'Free'},7));
  assert(x.C.potentiallyComplimentary({...paid,name:'Hotel fixture',network:'Tesla Destination',pricing:''},7));

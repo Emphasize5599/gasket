@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.392 - 2026-11-05
+- Prefill the editable electricity price for charging-station rests when a published per-kWh rate is available.
+
 ## 0.0.391 - 2026-11-05
 - Plan overnight rests one night at a time on each original leg. Choose a rest departure or drive through the night to advance. Destination arrival estimates wait for the leg's overnight decisions.
 - Charging-station rests default charging time to the minimum rest and require an electricity price. Enter zero for a confirmed free charger.

@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.392 - prefill charger-rest electricity prices
+
+The charger rest form uses available station pricing evidence and quotes the published tariff for the estimated arrival. The price remains editable and required. Unknown and time-based rates leave the field blank, and a published free rate prefills zero. Focused charger data, tariff and browser regressions passed. Phone check a charger with a published per-kWh rate and another without a rate.
+
 ## 0.0.391 - sequential overnight rests and charger pricing
 
 Rest candidates previously used each site's projected drive-through night. Each original leg now has one active night. The directory keeps completed night decisions visible and advances when the user sets a departure or checks Drive through. Ordinary and charger suggestions share that scope. Site arrival clocks retain known fuel and charging dwell. The destination estimate waits for the outstanding nights, and the draft can defer an earliest-arrival constraint while another overnight rest can still change arrival. Final planning validates the actual arrival window. Charger-rest charging minutes follow the minimum rest until edited, and the form requires an electricity price including an explicit zero for free charging.
