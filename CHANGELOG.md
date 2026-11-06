@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.397 - 2026-11-06
+- Fix long freezes after planning EV trips: the saved plan copied the route's energy data twice and the whole 16-day weather forecast, reaching about 270 million characters and taking ~15 s to save each time. Oversized plans are now skipped instead of saved.
+
 ## 0.0.396 - 2026-11-05
 - Show earlier stops above the overnight results and later stops below, even when some stops fit. Applies to ordinary and charging-station rests.
 

@@ -22,3 +22,11 @@ const slim=P.capture({...s,result:fat},settings),row=slim.result.schedule[0];ass
  checkpoint();dependencies='changed inputs';assert.equal(c.resumeStopsCheckpoint({key:'same hours'}),false);
  checkpoint();dependencies='same inputs';assert.equal(c.resumeStopsCheckpoint({key:'same hours'}),true);
 }
+{// EV snapshot: no duplicate propulsion segments, weather limited to the trip's hours, oversized plans refused before copying.
+const at=Date.parse('2030-06-01T12:00Z'),hours=[];for(let i=-48;i<384;i++)hours.push([at+i*36e5,20]);
+const ev={...result,plan:{...result.plan,propulsionModel:{segs:new Array(5000).fill({from:0,to:1,gpm:.03})}},opts:{...result.opts,propulsionContext:{departAt:at,weather:[{mi:0,hours},{mi:50,hours}],waits:[]}}};
+const snap=P.capture({...s,result:ev},settings);assert.equal(snap.result.plan.propulsionModel,undefined,'duplicate propulsion model not saved');const kept=snap.result.opts.propulsionContext.weather[0].hours;assert(kept.length<60&&kept.length>=26,'weather trimmed to the trip span: '+kept.length);assert(kept[0][0]<=at&&kept[kept.length-1][0]>=at+2*36e5,'trimmed weather still covers leaving and driving');assert.equal(ev.opts.propulsionContext.weather[0].hours.length,432,'live weather untouched');
+let told=[];P.onTooLarge=d=>told.push(d);const huge={...result,cands:new Array(30000).fill(0).map((_,i)=>({...c,id:'x'+i,note:'y'.repeat(800)}))};huge.plan={...huge.plan};
+assert.equal(P.capture({...s,result:huge},settings),null,'over-budget plan is not saved');assert.equal(told.length,1);assert(told[0].chars>P.BUDGET);assert(told[0].largest.some(x=>/^cands:/.test(x)),'log names the big part: '+told[0].largest);
+const t0=Date.now();assert.equal(P.capture({...s,result:huge},settings),null);assert.equal(told.length,1,'unchanged oversized plan is not measured again');assert(Date.now()-t0<50);P.onTooLarge=null;
+assert(P.size({a:'x'.repeat(100)},Infinity)>=100);assert(P.size({a:'x'.repeat(1e6)},10)<2e6,'size stops near the budget');console.log('EV snapshot trims duplicate segments/weather and refuses oversized plans without copying them');}

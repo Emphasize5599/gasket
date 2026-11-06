@@ -55,6 +55,7 @@
     });
   }
   var LG = window.FLog || { error: function () {}, warn: function () {}, info: function () {}, debug: function () {}, trace: function () {} };
+  if(window.PlannedTrip)PlannedTrip.onTooLarge=function(d){LG.warn("history","Completed plan too large to save; it will be rebuilt when the trip opens",d);};
   var trafficRefreshing=false,trafficRefreshError='';
   function trafficJourneySeconds(){if(!route||!rawRoute)return 0;var key=JSON.stringify([!!S.trip.returnTrip,route.stops.filter(function(p){return !p.rest&&!p.ret;}).map(function(p){return [p.lat,p.lng,p.address||p.label||''];})]),held=S.trip.trafficJourney;if(held&&held.key===key&&held.seconds>0)return held.seconds;var seconds=TrafficPolicy.journey(T.buildRoute(rawRoute,carModel()),route.stops,!!S.trip.returnTrip);S.trip.trafficJourney={key:key,seconds:seconds};A.save();return seconds;}
   var traffic=window.TrafficFlow&&TrafficFlow.init(A,call,{journeySeconds:trafficJourneySeconds,timezoneFetch:timezoneFetch,
