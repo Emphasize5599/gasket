@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.401 - 2026-11-06
+
+- Stabilize the battery-pack editor browser test for the signed build.
+
 ## 0.0.400 - 2026-11-06
 
 - Show battery pack research through the standard Brave lookup flow and simplify the EV energy editor.

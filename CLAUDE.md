@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.401 - stabilize battery pack editor test
+
+The test opens Energy & charging estimates through its summary and checks the pack controls stay visible across editor redraws. Focused browser tests and repeated DC curve runs passed.
+
 ## 0.0.400 - show Brave battery pack results
 
 Pack research uses the standard serialized Brave reader, progress bar, answer card and visible verification. Results are saved by vehicle identity so Garage redraws can show them. Removed the generic Vehicle profile selector. An existing CATL LFP thermal opt-in can be turned off separately.
