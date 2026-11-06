@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.407 - 2026-11-06
+
+- Read completed Ask Brave answer containers and use a 120-second fallback for unfamiliar layouts.
+
 ## 0.0.406 - 2026-11-06
 
 - Update Garage browser tests to verify the Brave completion marker on tank lookup prompts.

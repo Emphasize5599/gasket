@@ -43,7 +43,9 @@ async function (reqId, args) {
   const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), dckw = !!(args && args.kind === 'dckw'), packs = !!(args && args.kind === 'packs'), words = spare || trims || dckw || packs;   // text answers, not a number
   const loc = typeof location !== 'undefined' ? location : { pathname: '', search: '' };
   const ask = loc.pathname.indexOf('/ask') === 0;
-  const q = flat(new URLSearchParams(loc.search).get('q') || ''), qHead = q.slice(0, 40);
+  // Ask rewrites the address with an abbreviated question once a conversation begins.
+  const originalSearch = args && args.url && args.url.split('?')[1];
+  const q = flat(new URLSearchParams(originalSearch || loc.search).get('q') || '');
   const STEADY = packs && ask ? 30 : ask ? 6 : 3;   // a chat answer can pause between sentences
   // Ask Brave shows our question on the page, and the spare question names every answer ("Run-flat tires, or No spare"):
   // each of its sentences is taken out before reading, so the echo alone is never taken for the answer
@@ -94,23 +96,28 @@ async function (reqId, args) {
   const completion = /(?:^|\s)(?:GASKET DONE|PACK RESEARCH COMPLETE)\.?\s*$/i;
   const t0 = Date.now(), AI_WAIT = spare ? 60000 : 25000;
   const LIMIT = aiOnly ? (bg ? 120000 : 165000) : packs && ask ? (bg ? 120000 : 165000) : bg ? (spare ? 75000 : 36000) : 120000;
-  function finished(answer) {
-    if (!aiOnly) return true;
-    const streaming = document.querySelector && document.querySelector('button[aria-label*="stop generating" i], button[aria-label*="stop response" i], button[title*="stop generating" i]');
-    return !streaming && (completion.test(answer) || AI_END.test(text()));
-  }
   let last = '', same = 0;
-  while (Date.now() - t0 < LIMIT) {
+  while (true) {
+    const expired = Date.now() - t0 >= LIMIT;
     const t = unask(text());
     if (refused(t)) {
       if (bg) { send({ blocked: true }); return; }
     } else {
-      const ai = aiText(), complete = completion.test(ai), settled = finished(ai);
+      // The disclaimer and copy button can be present while Ask is still generating.
+      const stop = document.querySelector && document.querySelector('button[aria-label="Stop" i], button[aria-label*="stop generating" i], button[aria-label*="stop response" i], button[title*="stop generating" i]');
+      const rounds = aiOnly && ask ? document.querySelectorAll('.tap-round') : [];
+      const round = rounds[rounds.length - 1];
+      const outputs = round ? Array.from(round.querySelectorAll('.message.assistant.llm-output')) : [];
+      const ai = round ? flat(outputs.map((e) => e.innerText).join(' ')) : aiText();
+      const complete = completion.test(ai);
+      const settled = !aiOnly || !stop && (round ? round.classList.contains('is-complete') : Date.now() - t0 >= 120000);
+      if (expired && (!aiOnly || !settled || !ai || ai !== last)) break;
       if(trims&&window.TrimMath){
         const names=TrimMath.parse(ai||'',args), fallback=AI_FAILED.test(t)||Date.now()-t0>AI_WAIT;
         if(names.length){same=ai===last?same+1:0;last=ai;if(settled&&same>=(complete?3:STEADY)){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
         else if(!aiOnly&&fallback){const list=TrimMath.parse(t,args);if(list.length){send({text:'Trims: '+list.join(', '),src:'results'});return;}}
-        await sleep(400);continue;
+        if (expired) break;
+        await sleep(400); continue;
       }
       if (words) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
@@ -124,6 +131,7 @@ async function (reqId, args) {
           const at = t.search(packs ? packWords : trims ? /\btrim(s| levels?)\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /spare tire/i);
           if (at >= 0) { send({ text: t.slice(Math.max(0, at - (dckw ? 200 : 0)), at + 1500), src: 'results' }); return; }
         }
+        if (expired) break;
         await sleep(400); continue;
       }
       const f = ai ? best(matches(ai)) : null;
@@ -136,6 +144,7 @@ async function (reqId, args) {
         if (r) { send(r); return; }
       }
     }
+    if (expired) break;
     await sleep(400);
   }
   send({ error: 'Brave Search didn\'t give ' + (packs ? 'battery pack details.' : spare ? 'an answer about the spare.' : trims ? 'a list of trims.' : dckw ? 'a DC charging rate.' : 'a tank size.') + (bg ? ' [' + document.title + ' | ' + text().slice(0, 300) + ']' : '') });

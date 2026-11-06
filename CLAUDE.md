@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.407 - detect real Ask Brave completion
+
+Live browser inspection showed the disclaimer while Brave was generating. The Stop button uses aria-label Stop and the completed answer round gains is-complete. The reader waits for that state and extracts only the assistant output. Unknown layouts use a 120-second wait, and an active or explicitly incomplete answer is rejected. Query echo removal uses the original request because Brave rewrites the URL.
+
 ## 0.0.406 - update Garage Brave prompt assertions
 
 The no-trim, editor-taps and picture-error browser tests assert the exact tank question with the completion marker added in 0.0.405.

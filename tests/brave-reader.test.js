@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),T=require('../assets/web/trims.js');
 const source=fs.readFileSync('assets/brave_worker.js','utf8');
-async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url='',aiOnly=false,streaming=()=>false}){let now=0,result;const ctx={document:{title,body:{get innerText(){return typeof text==='function'?text(now):text;}},querySelectorAll:()=>ai&&now>=aiAt?[{innerText:ai}]:[],querySelector:()=>streaming(now)?{}:null},TrimMath:T,GasketSite:{result:(_,s)=>result=JSON.parse(s)},Date:{now:()=>now},URLSearchParams,location:url?new URL(url):undefined,setTimeout:f=>{now+=500;f();},Promise};ctx.window=ctx;const fn=vm.runInNewContext('('+source+')',ctx);await fn(1,kind==='tank'?{year:2020,bg,aiOnly}:['spare','packs'].includes(kind)?{kind,bg,aiOnly}:{kind:'trims',year:2024,make:'Toyota',model:'Corolla Hybrid',bg,aiOnly});run.elapsed=now;return result;}
+async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url='',aiOnly=false,streaming=()=>false,round=null,originalUrl=''}){let now=0,result;const ctx={document:{title,body:{get innerText(){return typeof text==='function'?text(now):text;}},querySelectorAll:selector=>selector==='.tap-round'?(round?[{classList:{contains:name=>name==='is-complete'&&round.done(now)},querySelectorAll:()=>[{innerText:round.output(now)}]}]:[]):ai&&now>=aiAt?[{innerText:ai}]:[],querySelector:selector=>selector.includes('aria-label="Stop"')&&streaming(now)?{}:null},TrimMath:T,GasketSite:{result:(_,s)=>result=JSON.parse(s)},Date:{now:()=>now},URLSearchParams,location:url?new URL(url):undefined,setTimeout:f=>{now+=500;f();},Promise};ctx.window=ctx;const fn=vm.runInNewContext('('+source+')',ctx);await fn(1,Object.assign({url:originalUrl},kind==='tank'?{year:2020,bg,aiOnly}:['spare','packs'].includes(kind)?{kind,bg,aiOnly}:{kind:'trims',year:2024,make:'Toyota',model:'Corolla Hybrid',bg,aiOnly}));run.elapsed=now;return result;}
 (async()=>{
  assert.deepEqual(await run({title:'Captcha - Brave Search'}),{blocked:true},'real locally observed challenge title');
  const text='Answer with "Trims:" then each trim name, separated by commas. The 2024 Toyota Corolla Hybrid has three trim levels: LE, SE, XLE.';
@@ -41,9 +41,14 @@ async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url='',ai
  assert.equal(r.src,'ai','visible Ask allows extra time after verification');
  r=await run({kind:'packs',url:packUrl.replace('/ask?','/search?'),text:packPrompt});
  assert(r.error&&!r.text,'search fallback also ignores the pack prompt echo');
- r=await run({kind:'tank',aiOnly:true,url,text:ms=>'Ask Brave '+q+' '+(ms<70000?'Thinking…':'Fuel tank capacity is 20 gallons. '+(ms<100000?'':'GASKET DONE.')),streaming:ms=>ms<102000});
- assert.equal(r.gal,20);assert(run.elapsed>=102000,'wait through a long pause and until the stop control disappears');
- r=await run({kind:'tank',aiOnly:true,url,text:'Ask Brave '+q+' Fuel tank capacity is 20 gallons.'});
- assert(r.error&&!r.gal);assert(run.elapsed>=120000,'unfinished Ask output is never accepted');
+ const askDisclaimer='AI-generated answer. Please verify critical facts.';
+ r=await run({kind:'packs',aiOnly:true,url:packUrl,streaming:ms=>ms<102000,text:'Ask Brave '+packPrompt+' '+askDisclaimer,round:{done:ms=>ms>=100000,output:ms=>ms<20000?'':partial+(ms<100000?'':' LG 2170: applicability unverified. GASKET DONE.')}});
+ assert.match(r.text,/LG 2170/);assert(run.elapsed>=102000&&run.elapsed<110000,'the completed round wins even after a long pause and an early disclaimer');
+ r=await run({kind:'tank',aiOnly:true,url,text:'Ask Brave '+q+' Fuel tank capacity is 20 gallons. '+askDisclaimer});
+ assert.equal(r.gal,20);assert(run.elapsed>=120000,'unrecognized markup uses the full static wait');
+ r=await run({kind:'packs',aiOnly:true,url:packUrl,round:{done:()=>false,output:()=>partial}});
+ assert(r.error&&!r.text,'a recognized incomplete answer is never accepted at the deadline');
+ r=await run({kind:'packs',aiOnly:true,url:'https://search.brave.com/ask?q=Identify+the...&conversation=example',originalUrl:packUrl,text:'Ask Brave '+packPrompt+' Thinking… '+askDisclaimer});
+ assert(r.error&&!r.text,'a rewritten URL cannot turn the original question into an answer');
  console.log('Actual Brave reader: CAPTCHA, natural AI summary, results-only/offset-zero list, echoed-query rejection, tank figure over a warning-light one, Ask Brave chat answers.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
