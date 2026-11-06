@@ -444,13 +444,13 @@
     draw();
   }
   var packBusy={};
-  function packKey(c){return c&&c.year&&c.make&&c.model?[c.year,c.make,c.model,c.trim].filter(Boolean).join(' ').replace(/\s+/g,' ').trim():'';}
+  function packKey(c){return ChargeCurve.researchKey(c);}
   async function packFind(c,shown){
     var key=packKey(c);if(!key||!trimOk(c)||packBusy[c.id])return;
     var current=function(){return !window.__erasing&&car()&&car().id===c.id&&packKey(car())===key;};
     packBusy[c.id]=true;draw();
     LG.info('car','Asking Brave Search for possible battery packs'+(shown?' (shown to you)':''),key);
-    var query=key+' US battery packs? One line each: PACK: name/ID | chemistry/supplier | kWh | build dates/plant | owner verification | source. Use unknown when unverified.';
+    var query=key+' US packs. PACK: ID | chemistry | usable kWh | gross kWh | build | verify | pack source | curve | curve URL. Curve: measured same-pack DC kW, comma-separated 0–100%/10%. Missing trace/source: Charge curve cannot be confidently determined.';
     try{
       var r=await braveSerial(function(){return BraveLookup.read({url:BraveLookup.url(query),kind:'packs'},{call:call,shown:shown,label:'battery pack',current:current});});
       if(current()&&!(r&&r.closed)){
@@ -690,20 +690,29 @@
   var manualPackDrafts=new WeakMap();
   function curveHtml(c){
     if(!window.ChargeCurve)return '';
-    var cc=ChargeCurve.selected(c),packs=ChargeCurve.packs(c),manual=c.dcPack==='manual',draft=manualPackDrafts.get(c);
+    var cc=ChargeCurve.selected(c),packs=ChargeCurve.packs(c),research=ChargeCurve.installedResearch(c),manual=c.dcPack==='manual'||research&&!research.points,draft=manualPackDrafts.get(c);
     var rows=draft||((cc||manual&&ChargeCurve.clean(c.dcCurve))?ChargeCurve.rows11(cc?cc.points:c.dcCurve):ChargeCurve.EDIT_AT.map(function(p){return [p,''];}));
-    var choices=packs.map(function(p){return '<option value="'+p.id+'"'+(c.dcPack===p.id?' selected':'')+'>'+esc(p.label)+'</option>';}).join('');
-    return '<div class="dc-curve" id="gDcCurve"><label class="nf"><span>Installed battery pack · required</span><select id="gDcPack" required><option value="">Select your pack</option>'+choices+'<option value="manual"'+(manual?' selected':'')+'>Enter my installed pack and curve</option></select></label>'+
-      packLookupHtml(c)+
-      (manual?'<label class="nf"><span>Installed pack name or part number</span><input id="gDcPackName" required value="'+esc(c.dcPackName||'')+'"></label><div class="dc-curve-grid">'+rows.map(function(r){return '<label class="nf"><span>'+r[0]+'%</span><input type="number" inputmode="numeric" min="1" max="1000" step="1" data-dc-pct="'+r[0]+'" aria-label="kW at '+r[0]+'% charge" value="'+r[1]+'"></label>';}).join('')+'</div>':'')+
-      (cc?'<div class="dc-curve-h"><b>DC charging curve</b><small>'+esc(cc.label)+'</small></div>'+curveSvg(cc.points):'<p class="lead small keep">Choose the pack in your car. For a pack without a listed curve, enter the pack name and charging power at each battery level.</p>')+'</div>';
+    var candidates=lookupPacks(c);if(research&&!candidates.some(function(p){return p.id===research.id;}))candidates.unshift(research);
+    var choices=packs.concat(candidates).map(function(p){return '<option value="'+esc(p.id)+'"'+(c.dcPack===p.id?' selected':'')+'>'+esc(p.label)+'</option>';}).join('');
+    return '<div class="dc-curve" id="gDcCurve"><label class="nf"><span>Installed battery pack · required</span><select id="gDcPack" required><option value="">Select your pack</option>'+choices+'<option value="manual"'+(c.dcPack==='manual'?' selected':'')+'>Enter my installed pack and curve</option></select></label>'+
+      (research&&research.usable?'<button type="button" class="btn tonal sm" id="gPackUseCapacity">Use researched '+research.usable+' kWh usable</button>':'')+
+      (research&&!research.points&&!cc?'<p class="lead small">Charge curve cannot be confidently determined. Enter measured charging power below.</p>':'')+
+      (manual?(research?'':'<label class="nf"><span>Installed pack name or part number</span><input id="gDcPackName" required value="'+esc(c.dcPackName||'')+'"></label>')+'<div class="dc-curve-grid">'+rows.map(function(r){return '<label class="nf"><span>'+r[0]+'%</span><input type="number" inputmode="numeric" min="1" max="1000" step="1" data-dc-pct="'+r[0]+'" aria-label="kW at '+r[0]+'% charge" value="'+r[1]+'"></label>';}).join('')+'</div>':'')+
+      (cc?'<div class="dc-curve-h"><b>DC charging curve</b><small>'+esc(cc.label)+'</small></div>'+curveSvg(cc.points)+(research&&research.source?'<a href="'+esc(research.source)+'" target="_blank" rel="noopener">Review Brave’s curve source</a>':''):'<p class="lead small keep">Choose the pack in your car. For a pack without a listed curve, enter the pack name and charging power at each battery level.</p>')+packLookupHtml(c)+'</div>';
   }
-  function packResearchHtml(text){
-    var fields=['Chemistry / supplier','Capacity','Build dates / plant','How to verify','Source'];
-    var packs=text.split(/\bPACK:\s*/i).slice(1).map(function(row){return row.split('|').map(function(value){return value.trim();});}).filter(function(row){return row.length===6&&row[0];});
+  function lookupPacks(c){
+    var l=c.packLookup;
+    return l&&l.key===packKey(c)&&!l.failed?ChargeCurve.researchPacks(l.text):[];
+  }
+  function packResearchHtml(c,text){
     var details='<details class="disclosure-tile"><summary>Full Brave answer</summary><p class="keep">'+esc(text)+'</p></details>';
+    var packs=lookupPacks(c);
     if(!packs.length)return '<p class="lead small">Brave returned an unstructured answer. Open it for details.</p>'+details;
-    return packs.map(function(row){return '<div class="card"><b>'+esc(row[0])+'</b><dl>'+fields.map(function(label,i){return '<dt>'+label+'</dt><dd>'+esc(row[i+1]||'Unknown')+'</dd>';}).join('')+'</dl></div>';}).join('')+details;
+    return packs.map(function(p){
+      var labels=p.legacy?['Chemistry / supplier','Capacity as reported','Build dates / plant','How to verify','Pack source']:['Chemistry / supplier','Usable kWh','Gross kWh','Build dates / plant','How to verify','Pack source'];
+      return '<div class="card"><b>'+esc(p.label)+'</b><dl>'+labels.map(function(label,i){return '<dt>'+label+'</dt><dd>'+esc(p.details[i]||'Unknown')+'</dd>';}).join('')+'</dl>'+
+       (p.points?'<p>Brave-reported curve · <a href="'+esc(p.source)+'" target="_blank" rel="noopener">Review measured source</a></p>':'<p>Charge curve cannot be confidently determined.</p>')+'</div>';
+    }).join('')+details;
   }
   function packLookupHtml(c){
     if(!packKey(c)||!trimOk(c))return '<p class="lead small">Enter the vehicle details to look up battery packs.</p>';
@@ -711,13 +720,20 @@
     var l=c.packLookup,lookup='<button type="button" class="btn tonal sm" id="gPackSearch">'+(l&&l.key===packKey(c)?'Look up again':'Look up possible packs')+'</button>';
     if(!l||l.key!==packKey(c))return lookup;
     if(l.failed)return '<small class="tk-fail">No pack details yet. <a href="#" id="gPackSee">Complete Brave verification</a></small>'+lookup;
-    return '<div class="tz-guess tk-guess" id="gPackResearch" role="status"><b>Brave Search says</b>'+packResearchHtml(l.text)+'<p class="lead small">Confirm the installed pack with your car or service records.</p><div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gPackSee">See Brave’s answer</button>'+lookup+'</div></div>';
+    return '<div class="tz-guess tk-guess" id="gPackResearch" role="status"><b>Brave Search says</b>'+packResearchHtml(c,l.text)+'<p class="lead small">Confirm the installed pack with your car or service records.</p><div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gPackSee">See Brave’s answer</button>'+lookup+'</div></div>';
   }
   function bindCurve(c){
     var host=$('gDcCurve');if(!host)return;
     $('gDcPack').onchange=function(){
       if(c.dcPack&&c.dcPack!==this.value){delete c.dcCurve;delete c.dcPackName;manualPackDrafts.delete(c);}
+      var candidate=lookupPacks(c).find(function(p){return p.id===this.value;},this);
+      if(candidate)c.dcResearchPack={id:candidate.id,key:packKey(c),label:candidate.label,usable:candidate.usable,points:candidate.points,source:candidate.source};
+      else delete c.dcResearchPack;
       c.dcPack=this.value;changed();draw();
+    };
+    if($('gPackUseCapacity'))$('gPackUseCapacity').onclick=function(){
+      var p=ChargeCurve.installedResearch(c);if(!p||!p.usable)return;
+      c.tank=p.usable;c.tankSrc='Brave usable capacity · you selected it';changed();draw();
     };
     var name=$('gDcPackName');
     if(name)name.onchange=function(){c.dcPackName=this.value.trim();changed();};

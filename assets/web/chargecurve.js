@@ -22,11 +22,36 @@
   var name=norm([car.model,car.trim].join(' '));
   return PACKS.filter(function(p){return (name===norm(p.model)||name.startsWith(norm(p.model)+' '))&&car.year>=p.from&&car.year<=p.to&&(!p.trim||p.trim.test(name))&&(!p.exclude||!p.exclude.test(name));});
  }
+ function researchKey(car){return car&&car.year&&car.make&&car.model?[car.year,car.make,car.model,car.trim].filter(Boolean).join(' ').replace(/\s+/g,' ').trim():'';}
+ function researchPacks(text){
+  var seen=new Set();
+  return String(text||'').split(/\bPACK:\s*/i).slice(1).reduce(function(out,line){
+   var fields=line.replace(/\s+[-*•]\s*$/,'').split('|').map(function(v){return v.trim();}),label=fields[0],legacy=fields.length===6;
+   if(!(legacy||fields.length===9)||!label||label.length>160||/^(unknown|none|n\/?a)$/i.test(label)||seen.has(label))return out;
+   seen.add(label);
+   var n=legacy?null:/^(\d+(?:\.\d+)?)\s*(?:kWh)?$/i.exec(fields[2]),usable=n&&+n[1]>0&&+n[1]<=1000?+n[1]:null;
+   var source=!legacy&&/^https:\/\/[^\s<>]+$/i.test(fields[8])?fields[8]:null;
+   var rates=legacy?[]:fields[7].split(',').map(function(v){return /^\s*\d+(?:\.\d+)?\s*$/.test(v)?Number(v):NaN;});
+   var points=source&&rates.length===EDIT_AT.length?clean(EDIT_AT.map(function(soc,i){return [soc,rates[i]];})):null;
+   if(points&&points.length!==EDIT_AT.length)points=null;
+   out.push({id:'research:'+label,label:label,usable:usable,details:legacy?fields.slice(1):fields.slice(1,7),legacy:legacy,points:points,source:points?source:null});
+   return out;
+  },[]);
+ }
+ function installedResearch(car){
+  var p=car&&car.dcResearchPack,key=researchKey(car);
+  return p&&key&&p.key===key&&p.id===car.dcPack?p:null;
+ }
  function selected(car){
   if(!car)return null;
   if(car.dcPack==='manual'){
    var points=clean(car.dcCurve),name=String(car.dcPackName||'').trim();
    return name&&!/^(unknown|automatic|factory estimate|other|n\/?a)$/i.test(name)&&points&&points[0][0]===0&&points[points.length-1][0]===100?{points:points,src:'user',label:name,peak:peak(points)}:null;
+  }
+  var research=installedResearch(car);
+  if(research){
+   var points=clean(car.dcCurve||research.points);
+   return points&&points[0][0]===0&&points[points.length-1][0]===100?{points:points,src:car.dcCurve?'user':'research',label:research.label,peak:peak(points)}:null;
   }
   var pack=packs(car).find(function(p){return p.id===car.dcPack;});
   if(!pack)return null;
@@ -73,7 +98,7 @@
  /** {points, src: 'user' | 'data' | 'generic', label, peak}: the curve the planner uses for this car. */
  var memo={key:'',val:null};
  function forCar(car,rows){
-  var key=rows?'':JSON.stringify(car&&[car.make,car.model,car.trim,car.year,car.tank,car.dcKw,car.dcCurve,car.dcPack,car.dcPackName,car.info&&car.info.drive]);
+  var key=rows?'':JSON.stringify(car&&[car.make,car.model,car.trim,car.year,car.tank,car.dcKw,car.dcCurve,car.dcPack,car.dcPackName,car.dcResearchPack&&car.dcResearchPack.points,car.info&&car.info.drive]);
   if(key&&memo.key===key)return memo.val;
   var val=resolve(car,rows);if(key)memo={key:key,val:val};return val;
  }
@@ -89,6 +114,6 @@
  }
  /** The 11 editable rows (0, 10 … 100%) of a curve. */
  function rows11(points){return EDIT_AT.map(function(p){return [p,Math.round(at(points,p/100))];});}
- var api={packs:packs,selected:selected,GENERIC:GENERIC,EDIT_AT:EDIT_AT,clean:clean,at:at,peak:peak,scale:scale,generic:generic,match:match,forCar:forCar,rows11:rows11,tokens:tokens};
+ var api={packs:packs,selected:selected,researchKey:researchKey,researchPacks:researchPacks,installedResearch:installedResearch,GENERIC:GENERIC,EDIT_AT:EDIT_AT,clean:clean,at:at,peak:peak,scale:scale,generic:generic,match:match,forCar:forCar,rows11:rows11,tokens:tokens};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ChargeCurve=api;
 })(typeof window!=='undefined'?window:globalThis);

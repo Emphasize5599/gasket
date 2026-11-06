@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.408 - 2026-11-06
+
+- Make researched battery packs selectable, distinguish usable and gross capacity, and require a sourced charging curve or manual measurements.
+
 ## 0.0.407 - 2026-11-06
 
 - Read completed Ask Brave answer containers and use a 120-second fallback for unfamiliar layouts.
