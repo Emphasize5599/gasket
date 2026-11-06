@@ -1070,7 +1070,7 @@
     var sp = spare(t), kind = sp.kind, guess = sp.lookup && sp.lookup.guess;
     if(sp.lookup&&sp.lookup.text&&sp.lookup.locationV!==2){sp.lookup.location=spareLocation(sp.lookup.text);sp.lookup.locationV=2;save();}
     h += '<div class="sub-h tz-h">Spare tire</div>';
-    if (spareBusy[c.id]) h += window.__app.ldBar('Asking Brave Search about the spare');
+    if (spareBusy[c.id]) h += BraveLookup.progress('Asking Brave Search about the spare','spare');
     var showBtn = '<button class="btn tonal sm" id="tzSpareShow"' + (spareBusy[c.id] ? ' disabled' : '') + '>See Brave\'s answer</button>';
     if (!kind && guess) h += '<div class="tz-guess">Brave Search says: <b>' + esc(String(SPARE_NAME[guess]||'').replace(/\s+/g,' ').trim()) + '</b>.'+(sp.lookup.location?' '+esc(locationName(sp.lookup.location))+'.':'')+'<div class="tz-gbtns"><button class="btn tonal sm" id="tzSpareYes">That\'s right</button>' + showBtn + '</div></div>';
     h += '<label class="nf wide"><span>What your car has' + q(Q.spare) + '</span><select id="tzSpare"><option value="">' + (guess && !kind ? 'Not confirmed yet' : 'Not sure') + '</option>' +

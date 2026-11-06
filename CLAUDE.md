@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.403 - rest amenity marks, Recreation.gov export, and visible Brave lookups
+
+Both rest-stop editors preserve explicit amenity absence and keep untouched source values separate. Recreation.gov byte ranges request revalidation, check the range and ETag, and retry from the archive index when ranges disagree. A live Java probe imported 5,260 campgrounds. Brave uses Ask AI only and can show the active WebView without restarting a lookup. The battery-pack question is shorter.
+
 ## 0.0.402 - wait for Brave battery pack research
 
 Pack Ask can run for 120 seconds in the background or 165 seconds in the visible reader. The native and JS bridge deadlines leave room for page loading. The prompt asks for documented U.S. variants and a completion marker. Focused tests cover slow start, paused streaming, query echoes and verification.

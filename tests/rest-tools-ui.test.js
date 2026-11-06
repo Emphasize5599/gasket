@@ -27,6 +27,13 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  await p.locator('[data-rest-row="2"] .rest-hide-btn').click();await p.waitForFunction(()=>!document.querySelector('[data-rest-row="2"]'));assert.match(await p.locator('.rest-hidden-bar').innerText(),/1 place hidden/);await p.locator('[data-rest-screen-show]').click();await p.waitForSelector('[data-rest-row="2"] .rest-hide-btn[aria-pressed="true"]');await p.locator('[data-rest-screen-restore]').click();await p.waitForSelector('[data-rest-row="2"] .rest-hide-btn[aria-pressed="false"]');
  // Edit rates / mark amenities: mark restrooms No; an NTAD restroom requirement then hides it, unknown places still show
  await p.locator('[data-rest-row="1"] .rest-edit-btn').click();await p.waitForSelector('.rest-am-edit [data-am="restrooms"]');await p.selectOption('.rest-am-edit [data-am="restrooms"]','no');await p.click('[data-am-save]');await p.waitForFunction(()=>__app.KV.get('restplaces','user|ntad:2')?.v?.amenities?.restrooms===false);assert.equal(await p.evaluate(()=>__app.KV.get('restplaces','user|ntad:2').v.rating),'poor','rating kept');
+ await p.locator('[data-rest-site="1"]').click();
+ await p.locator('details').filter({has:p.locator('[data-ri-amenity="restrooms"]')}).locator('summary').click();
+ assert.equal(await p.inputValue('[data-ri-amenity="restrooms"]'),'no','absence carries into the details editor');
+ await p.selectOption('[data-ri-amenity="showers"]','no');
+ await p.click('#riSave');
+ await p.waitForSelector('[data-rest-row="1"]');
+ assert.deepEqual(await p.evaluate(()=>__app.KV.get('restplaces','user|ntad:2').v.amenities),{restrooms:false,showers:false});
  await p.evaluate(()=>{__app.S.restSources.ntad={enabled:true,required:['restrooms']};});await p.evaluate(()=>{document.querySelector('[data-rest-list] [data-rest-retry]').click();});await p.waitForFunction(()=>{const t=document.querySelector('[data-rest-list]')?.innerText||'';return /Candidate 1/.test(t)&&/Candidate 3/.test(t)&&document.querySelectorAll('[data-rest-list] .rest-tools').length===2;},null,{polling:200});assert(!/Candidate 2/.test(await p.innerText('[data-rest-list]')),'marked without restrooms = hidden by the requirement; unknown restrooms still show');
  assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'fits '+width);assert.equal(await p.evaluate(()=>__nightly),false);assert.deepEqual(errors,[]);await p.close();}
  console.log('Leg 1 waits for compiled details, cooldown pause row, hide/rate/not-pleasing/edit buttons and amenity filters at 320/448');

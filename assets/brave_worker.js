@@ -90,7 +90,7 @@ async function (reqId, args) {
     const pick = pool.slice().sort((a, b) => n[b.gal] - n[a.gal])[0];
     return { gal: pick.gal, text: pick.text, src: 'results' };
   };
-  const bg = !!(args && args.bg);
+  const bg = !!(args && args.bg), aiOnly = !!(args && args.aiOnly);
   // Pack research can take longer to start and can pause between variants. Allow the Ask page to finish before using search snippets.
   const packEnd = /(?:^|\s)PACK RESEARCH COMPLETE\.?\s*$/i;
   const t0 = Date.now(), AI_WAIT = spare ? 60000 : 25000;
@@ -105,7 +105,7 @@ async function (reqId, args) {
       if(trims&&window.TrimMath){
         const names=TrimMath.parse(ai||'',args), fallback=AI_FAILED.test(t)||Date.now()-t0>AI_WAIT;
         if(names.length){same=ai===last?same+1:0;last=ai;if(same>=STEADY){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
-        else if(fallback){const list=TrimMath.parse(t,args);if(list.length){send({text:'Trims: '+list.join(', '),src:'results'});return;}}
+        else if(!aiOnly&&fallback){const list=TrimMath.parse(t,args);if(list.length){send({text:'Trims: '+list.join(', '),src:'results'});return;}}
         await sleep(400);continue;
       }
       if (words) {
@@ -117,7 +117,7 @@ async function (reqId, args) {
             send({ text: (packs ? ai.replace(packEnd, '').slice(0, 3500) : ai.slice(0, 1500)), src: 'ai', ask: ask }); return;
           }
         }
-        else if (!(packs && ask) && (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT)) {
+        else if (!aiOnly && !(packs && ask) && (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT)) {
           const at = t.search(packs ? packWords : trims ? /\btrim(s| levels?)\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /spare tire/i);
           if (at >= 0) { send({ text: t.slice(Math.max(0, at - (dckw ? 200 : 0)), at + 1500), src: 'results' }); return; }
         }
@@ -128,7 +128,7 @@ async function (reqId, args) {
         // the answer streams in: take it once it has stopped changing for a moment
         same = ai === last ? same + 1 : 0; last = ai;
         if (same >= STEADY) { send({ gal: f.gal, text: f.text, src: 'ai', ask: ask }); return; }
-      } else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
+      } else if (!aiOnly && (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT)) {
         const r = fromResults(t);
         if (r) { send(r); return; }
       }

@@ -352,7 +352,7 @@
     if (c.noTrim) return none;
     var hint = st && st.busy ? 'looking up this model\'s trims…' : list.length ? 'pick yours: it can change the tank size' : 'can change the tank size';
     var h = none + '<label class="nf wide"><span>Trim' + (trimNeeded(c) ? '<span class="req" aria-label="required">*</span>' : '') + '<small>' + hint + '</small></span>';
-    if (st && st.busy && !list.length) return h + '<select id="gTrimSel" disabled><option>Looking up trims…</option></select>' + A.ldBar('Asking Brave Search for this model\'s trims') + '</label>' +
+    if (st && st.busy && !list.length) return h + '<select id="gTrimSel" disabled><option>Looking up trims…</option></select>' + '</label>' + BraveLookup.progress('Asking Brave Search for this model\'s trims','trims') +
       '<label class="nf wide"><span>Or type it<small>if you know it</small></span><input type="text" id="gTrim" maxlength="24" value="' + esc(c.trim || '') + '"></label>';
     if (list.length) {
       h += '<select id="gTrimSel"><option value=""' + (!have && !other ? ' selected' : '') + '>Choose your trim</option>' +
@@ -450,9 +450,7 @@
     var current=function(){return !window.__erasing&&car()&&car().id===c.id&&packKey(car())===key;};
     packBusy[c.id]=true;draw();
     LG.info('car','Asking Brave Search for possible battery packs'+(shown?' (shown to you)':''),key);
-    var query='Identify factory-installed high-voltage battery packs for this exact U.S. vehicle: '+key+'. '+
-      'Start with Battery packs. List one bullet per documented variant: pack name or part number | chemistry and supplier | capacity in kWh (usable or gross) | U.S. build dates or plant | how the owner can verify it | source. '+
-      'Separate conflicting evidence and label missing details as unverified. If no exact U.S. match is documented, say so. End with PACK RESEARCH COMPLETE.';
+    var query=key+' US battery packs? One per line: pack ID | chemistry/supplier | kWh | build dates | how to verify | source. Flag unknowns. End: PACK RESEARCH COMPLETE.';
     try{
       var r=await braveSerial(function(){return BraveLookup.read({url:'https://search.brave.com/ask?q='+encodeURIComponent(query)+'&source=llmSuggest',kind:'packs'},{call:call,shown:shown,label:'battery pack',current:current});});
       if(current()&&!(r&&r.closed)){
@@ -657,12 +655,12 @@
       (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
     // under the row, so the two boxes stay level
     var TL = c.tankLookup, seeBtn = '<button type="button" class="btn tonal sm" id="gTankSee">See Brave\'s answer</button>';
-    var tkExtra = tankLocked ? '' : tankFindable && tankBusy[c.id] ? A.ldBar('Asking Brave Search') :
+    var tkExtra = tankLocked ? '' : tankFindable && tankBusy[c.id] ? BraveLookup.progress('Asking Brave Search','tank') :
       tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
       tankFindable && TL && TL.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' :
       TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
     var dcFindable = k === 'ev' && !!tankKey(c), DL = c.dcKwLookup, dcSee = '<button type="button" class="btn tonal sm" id="gDcSee">See Brave\'s answer</button>';
-    if (k === 'ev') tkExtra += tankLocked || !dcFindable ? '' : dcBusy[c.id] ? A.ldBar('Asking Brave Search for the DC charging rate') :
+    if (k === 'ev') tkExtra += tankLocked || !dcFindable ? '' : dcBusy[c.id] ? BraveLookup.progress('Asking Brave Search for the DC charging rate','dckw') :
       DL && DL.failed && !(+c.dcKw > 0) ? '<small class="tk-fail dc-fail">No DC charging rate yet. <a href="#" id="gDcShow">Complete Brave verification</a>, or leave it blank (150 kW).</small>' :
       DL && DL.kw && !DL.ok && c.dcKwSrc === DC_SRC && +c.dcKw === DL.kw ? '<div class="tz-guess tk-guess dc-guess">Brave Search says the fastest DC charging is <b>' + DL.kw + ' kW</b>.<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gDcYes">That\'s right</button>' + dcSee + '</div></div>' : '';
     if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>' + esc(tankLocked ? 'choose your trim first' : c.dcKwSrc || 'the car\'s peak · blank = 150') + '</small></span>' +
@@ -702,7 +700,7 @@
   }
   function packLookupHtml(c){
     if(!packKey(c)||!trimOk(c))return '<p class="lead small">Enter the vehicle details to look up battery packs.</p>';
-    if(packBusy[c.id])return A.ldBar('Asking Brave Search for possible battery packs');
+    if(packBusy[c.id])return BraveLookup.progress('Asking Brave Search for possible battery packs','packs');
     var l=c.packLookup,lookup='<button type="button" class="btn tonal sm" id="gPackSearch">'+(l&&l.key===packKey(c)?'Look up again':'Look up possible packs')+'</button>';
     if(!l||l.key!==packKey(c))return lookup;
     if(l.failed)return '<small class="tk-fail">No pack details yet. <a href="#" id="gPackSee">Complete Brave verification</a></small>'+lookup;

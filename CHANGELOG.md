@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.403 - 2026-11-06
+
+- Make explicit amenity absence clear and preserve marks across rest-stop editors.
+- Retry Recreation.gov downloads when the CDN returns inconsistent archive ranges.
+- Keep Brave lookups on Ask Brave, add a watch button, and shorten the battery-pack question.
+
 ## 0.0.402 - 2026-11-06
 
 - Give Brave battery-pack research more time to finish and ask for documented variants in a consistent format.

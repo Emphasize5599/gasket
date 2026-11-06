@@ -43,6 +43,7 @@ final class RidbCampgrounds {
         return (range, ifRange) -> {
             HttpURLConnection c = (HttpURLConnection) new URL(URL_EXPORT).openConnection();
             c.setInstanceFollowRedirects(false); c.setConnectTimeout(30000); c.setReadTimeout(60000);
+            c.setRequestProperty("Cache-Control", "no-cache");
             c.setRequestProperty("Range", range); c.setRequestProperty("Accept-Encoding", "identity");
             if (userAgent != null) c.setRequestProperty("User-Agent", userAgent);
             if (ifRange != null) c.setRequestProperty("If-Range", ifRange);
@@ -51,17 +52,39 @@ final class RidbCampgrounds {
         };
     }
 
+    private static final class ExportMismatch extends IOException {
+        ExportMismatch() { super("Recreation.gov returned inconsistent archive ranges. Try again later."); }
+    }
+
     static Result download(Fetch f, Progress p, AtomicBoolean cancel) throws IOException {
+        for (int attempt = 0; ; attempt++) {
+            if (cancel != null && cancel.get()) throw new IOException("Campground download cancelled");
+            try { return downloadSnapshot(f, p, cancel); }
+            catch (ExportMismatch e) { if (attempt >= 2) throw e; }
+        }
+    }
+
+    private static Result downloadSnapshot(Fetch f, Progress p, AtomicBoolean cancel) throws IOException {
         Answer tail = f.get("bytes=-65536", null);
-        if (tail.status != 206 || tail.contentRange == null) throw new IOException("Recreation.gov export does not allow partial downloads (HTTP " + tail.status + ")");
+        if (tail.status != 206 || tail.contentRange == null) {
+            close(tail);
+            throw new IOException("Recreation.gov export does not allow partial downloads (HTTP " + tail.status + ")");
+        }
         String etag = tail.etag;
-        long total = Long.parseLong(tail.contentRange.substring(tail.contentRange.lastIndexOf('/') + 1).trim());
-        byte[] end = readAll(tail.body, 1 << 20); long base = total - end.length;
+        long total;
+        try { total = Long.parseLong(tail.contentRange.substring(tail.contentRange.lastIndexOf('/') + 1).trim()); }
+        catch (NumberFormatException e) { close(tail); throw new ExportMismatch(); }
+        long base = Math.max(0, total - 65536);
+        if (total <= 0 || !contentRange(base, total - 1, total).equals(tail.contentRange)) {
+            close(tail); throw new ExportMismatch();
+        }
+        byte[] end = readAll(tail.body, 65536);
+        if (end.length != total - base) throw new ExportMismatch();
         int e = -1; for (int i = end.length - 22; i >= 0; i--) if (u32(end, i) == 0x06054b50L) { e = i; break; }
         if (e < 0) throw new IOException("Recreation.gov export index not found");
         long cdSize = u32(end, e + 12), cdOff = u32(end, e + 16);
         if (cdSize == 0xFFFFFFFFL || cdOff == 0xFFFFFFFFL) throw new IOException("Recreation.gov export format not supported (ZIP64)");
-        byte[] cd = cdOff >= base ? java.util.Arrays.copyOfRange(end, (int) (cdOff - base), (int) (cdOff - base + cdSize)) : readAll(range(f, cdOff, cdSize, etag), 4 << 20);
+        byte[] cd = cdOff >= base ? java.util.Arrays.copyOfRange(end, (int) (cdOff - base), (int) (cdOff - base + cdSize)) : readAll(range(f, cdOff, cdSize, etag, total), 4 << 20);
         long crc = -1, csize = 0, usize = 0, lho = 0; int method = -1;
         for (int q = 0; q + 46 <= cd.length && u32(cd, q) == 0x02014b50L; ) {
             int nl = u16(cd, q + 28), el = u16(cd, q + 30), cl = u16(cd, q + 32);
@@ -72,10 +95,10 @@ final class RidbCampgrounds {
         if (crc < 0) throw new IOException("Campground file missing from the Recreation.gov export");
         if (method != 0 && method != 8) throw new IOException("Recreation.gov export compression not supported");
         if (csize > MAX_ENTRY || usize > MAX_ENTRY) throw new IOException("Recreation.gov campground file is unexpectedly large");
-        byte[] local = readAll(range(f, lho, 30, etag), 64);
+        byte[] local = readAll(range(f, lho, 30, etag, total), 64);
         if (local.length < 30 || u32(local, 0) != 0x04034b50L) throw new IOException("Recreation.gov export entry is damaged");
         long start = lho + 30 + u16(local, 26) + u16(local, 28);
-        final long size = csize; final InputStream raw = range(f, start, csize, etag);
+        final long size = csize; final InputStream raw = range(f, start, csize, etag, total);
         InputStream counted = new InputStream() {
             long done = 0, told = 0;
             @Override public int read() throws IOException { int b = raw.read(); if (b >= 0) tick(1); return b; }
@@ -96,10 +119,24 @@ final class RidbCampgrounds {
         return out;
     }
 
-    static InputStream range(Fetch f, long from, long len, String etag) throws IOException {
-        Answer a = f.get("bytes=" + from + "-" + (from + len - 1), etag);
-        if (a.status == 200) throw new IOException("Recreation.gov updated its export during the download; try again");
-        if (a.status != 206) throw new IOException("Recreation.gov download failed (HTTP " + a.status + ")");
+    private static void close(Answer a) throws IOException { if (a.body != null) a.body.close(); }
+
+    private static String contentRange(long from, long to, long total) {
+        return "bytes " + from + "-" + to + "/" + total;
+    }
+
+    static InputStream range(Fetch f, long from, long len, String etag, long total) throws IOException {
+        long to = from + len - 1;
+        Answer a = f.get("bytes=" + from + "-" + to, etag);
+        if (a.status == 200 || a.status == 206 && (!contentRange(from, to, total).equals(a.contentRange)
+                || etag != null && a.etag != null && !etag.equals(a.etag))) {
+            close(a);
+            throw new ExportMismatch();
+        }
+        if (a.status != 206) {
+            close(a);
+            throw new IOException("Recreation.gov download failed (HTTP " + a.status + ")");
+        }
         return a.body;
     }
 

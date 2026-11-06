@@ -678,6 +678,7 @@ public class MainActivity extends Activity {
             readReq = -1; readCall = null; partialGasStores = null;
             if (readDeadline != null) main.removeCallbacks(readDeadline);
             readDeadline = null;
+            if ("brave".equals(key) && verifying == this && showReq < 0) endVerify();
             if (isGasWorker(key) && view != null && verifying != this) {
                 completedReads++;
                 // One stable document per lane; periodically recycle, or immediately clear failed/grade-specific reads.
@@ -770,7 +771,7 @@ public class MainActivity extends Activity {
                         if (url.startsWith(SiteWorker.this.origin)) for (String call : queue) view.evaluateJavascript(call, null);
                         return;
                     }
-                    if (verifying == SiteWorker.this) {
+                    if (verifying == SiteWorker.this && readReq < 0) {
                         if (ready) js("window.toast&&toast(" + q("Check passed. Tap Done.") + ")");
                         return;
                     }
@@ -970,8 +971,8 @@ public class MainActivity extends Activity {
             js("window.onNativeResult&&onNativeResult(" + verifying.showReq + ",{closed:true})");
             verifying.showReq = -1;
             verifying.queue.clear();
-            wmDone.setText("Done \u2014 back to the map");
         }
+        wmDone.setText("Done \u2014 back to the map");
         String key = verifying != null ? verifying.key : "";
         if (verifying != null) { verifying.verificationUrl=null;showMargins(verifying, false); if(isGasWorker(verifying.key)||"restmaps".equals(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
         verifying = null;
@@ -2642,7 +2643,7 @@ public class MainActivity extends Activity {
                         public void run() {
                             if (fw.view == null) return;
                             String at = fw.view.getUrl();
-                            if (fw.readReq == fr && verifying != fw && at != null && at.startsWith(fw.origin)) fw.runRead();
+                            if (fw.readReq == fr && (verifying != fw || "brave".equals(fw.key)) && at != null && at.startsWith(fw.origin)) fw.runRead();
                         }
                     }, 5000);
                 }
@@ -2683,6 +2684,22 @@ public class MainActivity extends Activity {
                     if (verifying != null) endVerify();
                     startShow(w, reqId, url, "(" + script + ")(" + reqId + "," + argsJson + ")");
                 }
+            });
+        }
+
+        /** Bring the in-flight Brave reader forward without restarting the query. */
+        @JavascriptInterface
+        public void siteWatchBrave(final String url) {
+            main.post(() -> {
+                SiteWorker w = workers.get("brave");
+                if (verifying != null || w == null || w.view == null || w.readReq < 0 || !url.equals(w.gasTargetUrl)) return;
+                verifying = w;
+                showMargins(w, true);
+                wmDone.setText("Back to Gasket");
+                web.setVisibility(View.INVISIBLE);
+                wmDone.setVisibility(View.VISIBLE);
+                w.view.bringToFront();
+                wmDone.bringToFront();
             });
         }
 

@@ -49,7 +49,9 @@ public class RidbTest {
   try{RidbCampgrounds.download(serve(bad),null,new AtomicBoolean());throw new AssertionError("CRC");}catch(IOException e){if(!e.getMessage().contains("integrity"))throw e;}
   // the CDN switches export versions between requests
   RidbCampgrounds.Fetch flip=(range,ifRange)->{RidbCampgrounds.Answer a=serve(z).get(range,ifRange);etag[0]="\\"v2\\"";return a;};
-  try{RidbCampgrounds.download(flip,null,new AtomicBoolean());throw new AssertionError("version switch");}catch(IOException e){if(!e.getMessage().contains("updated its export"))throw e;}
+  RidbCampgrounds.download(flip,null,new AtomicBoolean());
+  RidbCampgrounds.Fetch inconsistent=(range,ifRange)->{RidbCampgrounds.Answer a=serve(z).get(range,ifRange);return ifRange==null?a:new RidbCampgrounds.Answer(206,"bytes 0-0/1",a.etag,a.body);};
+  try{RidbCampgrounds.download(inconsistent,null,new AtomicBoolean());throw new AssertionError("wrong range");}catch(IOException e){if(!e.getMessage().contains("inconsistent archive ranges"))throw e;}
   etag[0]="\\"v1\\"";
   // cancel stops the stream
   try{RidbCampgrounds.download(serve(z),null,new AtomicBoolean(true));throw new AssertionError("cancel");}catch(IOException e){if(!e.getMessage().contains("cancelled"))throw e;}
