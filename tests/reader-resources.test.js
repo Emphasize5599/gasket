@@ -61,14 +61,14 @@ public class ReaderTest {
  static class Main {int removed=0;void removeCallbacks(Runnable r){removed++;}void post(Runnable r){r.run();}}
  static class Root {void removeView(View v){}}
  class SiteWorker {
-  int readReq=1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
+  int readReq=1,showReq=-1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
   long gasReadStarted=System.nanoTime()/1000000L,gasRetryAt;String gasFirstStop="";int gasFirstRows;AtomicIntegerArray omittedGasResources=new AtomicIntegerArray(4);View view=new View();Runnable readDeadline=()->{};JSONArray partialGasStores=null;String gasRequestedGrade="regular",verificationUrl=null,gasTargetUrl=null;boolean gasCommandReady=false,gasCommandReusing=false;
   // Android-only NHTSA storage recovery is outside this gas-reader harness.
   boolean recoverNhtsa(int reqId,String json){return false;}
   ${finish}
  }
  SiteWorker verifying=null;Main main=new Main();Root root=new Root();int gasReaderRecycles=0,replies=0;Map<String,SiteWorker> workers=new HashMap<>();
- boolean isGasWorker(String k){return k.equals("gasweb");}String q(String s){return s;}void js(String s){replies++;}
+ boolean isGasWorker(String k){return k.equals("gasweb");}String q(String s){return s;}void js(String s){replies++;}void endVerify(){verifying=null;}
  static JSONObject answer(String key,String code,int count,boolean blocked,boolean cancelled){JSONObject a=new JSONObject();a.put("stores",new JSONArray(count));a.put("code",code);a.put("blocked",blocked);a.put("cancelled",cancelled);JSONObject.answers.put(key,a);return a;}
  static void laneWarmTests(ReaderTest app){
   SiteWorker lane=app.new SiteWorker();JSONObject a=answer("warm","limited",2,false,false),d=new JSONObject();d.put("commandReusable",true);a.put("detail",d);lane.finishRead(1,"warm");check(lane.view.loads==0&&lane.gasCommandReady&&lane.ready&&app.replies==1,"successful command page was not retained");
@@ -88,6 +88,7 @@ public class ReaderTest {
   }
   ReaderTest warm=new ReaderTest();laneWarmTests(warm);
   ReaderTest visible=new ReaderTest();SiteWorker lane=visible.new SiteWorker();visible.verifying=lane;lane.finishRead(1,"empty");check(lane.view.loads==0&&visible.replies==1,"visible verification retried");
+  ReaderTest brave=new ReaderTest();lane=brave.new SiteWorker();lane.key="brave";brave.verifying=lane;lane.finishRead(1,"ok");check(brave.verifying==null&&brave.replies==1&&lane.readReq==-1,"watched Brave read must close its overlay and settle once");
   ReaderTest bot=new ReaderTest();lane=bot.new SiteWorker();lane.view.at="https://www.google.com/sorry/index";answer("bot","blocked",0,true,false);lane.finishRead(1,"bot");check("https://www.google.com/sorry/index".equals(lane.verificationUrl),"lost actual check URL before blanking reader");
   ReaderTest charger=new ReaderTest();lane=charger.new SiteWorker();lane.key="chargepoint";lane.origin="https://driver.chargepoint.com/";lane.view.at=lane.origin+"stations/987654";answer("cpbot","blocked",0,true,false);lane.finishRead(1,"cpbot");check(lane.view.at.equals(lane.verificationUrl)&&charger.replies==1,"charger check must reopen the blocked station page");
   ReaderTest partial=new ReaderTest();lane=partial.new SiteWorker();answer("partial","unreadable",1,false,false);lane.finishRead(1,"partial");check(partial.replies==1&&lane.leanGasResources,"discarded partial results");

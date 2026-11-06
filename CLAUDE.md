@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.404 - native Brave watch test fixture
+
+The JVM reader harness now models the Brave overlay fields and checks that a watched lookup closes the overlay and delivers one reply. The native reader, RIDB and Brave verification tests passed.
+
 ## 0.0.403 - rest amenity marks, Recreation.gov export, and visible Brave lookups
 
 Both rest-stop editors preserve explicit amenity absence and keep untouched source values separate. Recreation.gov byte ranges request revalidation, check the range and ETag, and retry from the archive index when ranges disagree. A live Java probe imported 5,260 campgrounds. Brave uses Ask AI only and can show the active WebView without restarting a lookup. The battery-pack question is shorter.

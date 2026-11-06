@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.404 - 2026-11-06
+
+- Update the native reader test fixture for the Brave watch overlay and verify that it closes when the lookup finishes.
+
 ## 0.0.403 - 2026-11-06
 
 - Make explicit amenity absence clear and preserve marks across rest-stop editors.
