@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.410 - 2026-11-06
+
+- Includes the Add Car and editable charging profiles from 0.0.409.
+- Resume EV route recovery when returning from vehicle comparison, reusing discovered chargers and prices.
+
 ## 0.0.409 - 2026-11-06
 
 - Choose a fuel vehicle, established-profile EV, or custom vehicle at the top of Add Car. Custom includes the NHTSA vehicle catalog and requires a manual curve for EVs.
