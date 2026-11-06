@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),T=require('../assets/web/trims.js');
 const source=fs.readFileSync('assets/brave_worker.js','utf8');
-async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url=''}){let now=0,result;const ctx={document:{title,body:{innerText:text},querySelectorAll:()=>ai&&now>=aiAt?[{innerText:ai}]:[]},TrimMath:T,GasketSite:{result:(_,s)=>result=JSON.parse(s)},Date:{now:()=>now},URLSearchParams,location:url?new URL(url):undefined,setTimeout:f=>{now+=500;f();},Promise};ctx.window=ctx;const fn=vm.runInNewContext('('+source+')',ctx);await fn(1,kind==='tank'?{year:2020,bg}:kind==='spare'?{kind:'spare',bg}:{kind:'trims',year:2024,make:'Toyota',model:'Corolla Hybrid',bg});run.elapsed=now;return result;}
+async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url=''}){let now=0,result;const ctx={document:{title,body:{get innerText(){return typeof text==='function'?text(now):text;}},querySelectorAll:()=>ai&&now>=aiAt?[{innerText:ai}]:[]},TrimMath:T,GasketSite:{result:(_,s)=>result=JSON.parse(s)},Date:{now:()=>now},URLSearchParams,location:url?new URL(url):undefined,setTimeout:f=>{now+=500;f();},Promise};ctx.window=ctx;const fn=vm.runInNewContext('('+source+')',ctx);await fn(1,kind==='tank'?{year:2020,bg}:['spare','packs'].includes(kind)?{kind,bg}:{kind:'trims',year:2024,make:'Toyota',model:'Corolla Hybrid',bg});run.elapsed=now;return result;}
 (async()=>{
  assert.deepEqual(await run({title:'Captcha - Brave Search'}),{blocked:true},'real locally observed challenge title');
  const text='Answer with "Trims:" then each trim name, separated by commas. The 2024 Toyota Corolla Hybrid has three trim levels: LE, SE, XLE.';
@@ -29,5 +29,17 @@ async function run({title='',text='',ai='',aiAt=0,bg=true,kind='trims',url=''}){
  assert(r.error&&!r.text,'echo only: '+JSON.stringify(r));
  r=await run({kind:'spare',url:surl,text:'Ask Brave '+sq+' Compact spare. The 2020 Sienna LE has a compact spare under the vehicle.'});
  assert.equal(r.src,'ai');assert.match(r.text,/^Compact spare/);assert.doesNotMatch(r.text,/Run-flat|No spare/,JSON.stringify(r));
+ const packPrompt='Identify the factory-installed battery packs for this exact U.S. vehicle. End with PACK RESEARCH COMPLETE.';
+ const packUrl='https://search.brave.com/ask?q='+encodeURIComponent(packPrompt);
+ const partial='Battery packs: Panasonic 2170, see build records.';
+ r=await run({kind:'packs',url:packUrl,text:ms=>'Ask Brave '+packPrompt+' '+(ms<75000?'Thinking…':partial+(ms<84000?'':' LG 2170: applicability unverified. PACK RESEARCH COMPLETE.'))});
+ assert.equal(r.src,'ai');assert.match(r.text,/LG 2170/);assert.doesNotMatch(r.text,/PACK RESEARCH COMPLETE/);
+ assert(run.elapsed>=84000&&run.elapsed<90000,'wait for the delayed second variant and return promptly when complete');
+ r=await run({kind:'packs',url:packUrl,text:'Ask Brave '+packPrompt+' Thinking…'});
+ assert(r.error&&!r.text);assert(run.elapsed>=120000,'hidden Ask gets two minutes even with a query echo');
+ r=await run({kind:'packs',url:packUrl,bg:false,text:ms=>'Ask Brave '+packPrompt+' '+(ms<140000?'Thinking…':partial+' PACK RESEARCH COMPLETE.')});
+ assert.equal(r.src,'ai','visible Ask allows extra time after verification');
+ r=await run({kind:'packs',url:packUrl.replace('/ask?','/search?'),text:packPrompt});
+ assert(r.error&&!r.text,'search fallback also ignores the pack prompt echo');
  console.log('Actual Brave reader: CAPTCHA, natural AI summary, results-only/offset-zero list, echoed-query rejection, tank figure over a warning-light one, Ask Brave chat answers.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

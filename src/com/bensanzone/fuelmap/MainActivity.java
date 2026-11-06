@@ -2631,9 +2631,13 @@ public class MainActivity extends Activity {
                             fw.ready = false; if (fw.view != null) fw.view.stopLoading();
                         }
                     };
-                    boolean discoveryRead = false;
-                    try { discoveryRead = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
+                    boolean discoveryRead = false, packRead = false;
+                    try {
+                        JSONObject arguments = new JSONObject(argsJson);
+                        discoveryRead = "discover".equals(arguments.optString("mode"));
+                        packRead = "brave".equals(key) && "packs".equals(arguments.optString("kind"));
+                    } catch (Exception ignored) { }
+                    main.postDelayed(fw.readDeadline, packRead ? 150000 : "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;

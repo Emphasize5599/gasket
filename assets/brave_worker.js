@@ -44,13 +44,13 @@ async function (reqId, args) {
   const loc = typeof location !== 'undefined' ? location : { pathname: '', search: '' };
   const ask = loc.pathname.indexOf('/ask') === 0;
   const q = flat(new URLSearchParams(loc.search).get('q') || ''), qHead = q.slice(0, 40);
-  const STEADY = ask ? 6 : 3;   // a chat answer can pause between sentences
+  const STEADY = packs && ask ? 30 : ask ? 6 : 3;   // a chat answer can pause between sentences
   // Ask Brave shows our question on the page, and the spare question names every answer ("Run-flat tires, or No spare"):
   // each of its sentences is taken out before reading, so the echo alone is never taken for the answer
   const qParts = q.split(/(?<=[.?!])\s+/).map((x) => x.trim()).filter((x) => x.length >= 8).sort((a, b) => b.length - a.length);
   const lower = (x) => x.toLowerCase();
   const unask = (t) => {
-    if (!ask) return t;
+    if (!ask && !packs) return t;
     // what follows the question's last sentence on the page (the chat's own labels come before it)
     const lt = lower(t);
     let cut = 0;
@@ -91,7 +91,10 @@ async function (reqId, args) {
     return { gal: pick.gal, text: pick.text, src: 'results' };
   };
   const bg = !!(args && args.bg);
-  const t0 = Date.now(), AI_WAIT = spare ? 60000 : 25000, LIMIT = bg ? (spare ? 75000 : 36000) : 120000;   // Spare answers get a full minute before results fallback; other lookups retain 25 seconds.
+  // Pack research can take longer to start and can pause between variants. Allow the Ask page to finish before using search snippets.
+  const packEnd = /(?:^|\s)PACK RESEARCH COMPLETE\.?\s*$/i;
+  const t0 = Date.now(), AI_WAIT = spare ? 60000 : 25000;
+  const LIMIT = packs && ask ? (bg ? 120000 : 165000) : bg ? (spare ? 75000 : 36000) : 120000;
   let last = '', same = 0;
   while (Date.now() - t0 < LIMIT) {
     const t = unask(text());
@@ -107,8 +110,14 @@ async function (reqId, args) {
       }
       if (words) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
-        if (ai) { same = ai === last ? same + 1 : 0; last = ai; if (same >= STEADY) { send({ text: ai.slice(0, 1500), src: 'ai', ask: ask }); return; } }
-        else if (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT) {
+        if (ai) {
+          same = ai === last ? same + 1 : 0; last = ai;
+          const complete = packs && ask && packEnd.test(ai);
+          if (same >= (complete ? 3 : STEADY)) {
+            send({ text: (packs ? ai.replace(packEnd, '').slice(0, 3500) : ai.slice(0, 1500)), src: 'ai', ask: ask }); return;
+          }
+        }
+        else if (!(packs && ask) && (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT)) {
           const at = t.search(packs ? packWords : trims ? /\btrim(s| levels?)\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /spare tire/i);
           if (at >= 0) { send({ text: t.slice(Math.max(0, at - (dckw ? 200 : 0)), at + 1500), src: 'results' }); return; }
         }

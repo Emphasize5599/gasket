@@ -13,6 +13,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.waitForFunction(()=>document.querySelector('#gPackResearch')?.textContent.includes('Panasonic 2170'));
  assert.equal(await p.evaluate(()=>packQuery.kind),'packs');
  assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/2021 Tesla Model 3 Long Range AWD/);
+ assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/capacity in kWh.*U\.S\. build dates.*how the owner can verify.*PACK RESEARCH COMPLETE/);
  await p.click('#gPackSee');
  await p.waitForFunction(()=>document.querySelector('#gPackResearch')?.textContent.includes('Panasonic 2170'));
  assert.equal(await p.evaluate(()=>packShown),true,'open the answer in the shared visible Brave flow');

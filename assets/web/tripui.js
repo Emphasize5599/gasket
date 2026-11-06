@@ -25,8 +25,9 @@
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 80000 : 0;
       if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
-      if(fn==='siteRead'&&args[0]==='brave')timeout=60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
-      if(fn==='siteShow'&&args[0]==='brave')timeout=150000;
+      var packRead=args[0]==='brave'&&/"kind"\s*:\s*"packs"/.test(args[1]||'');
+      if(fn==='siteRead'&&args[0]==='brave')timeout=packRead?160000:60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
+      if(fn==='siteShow'&&args[0]==='brave')timeout=packRead?195000:150000;
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if(fn==='fetchJson'&&/^https:\/\/www\.recreation\.gov\//.test(args[0]||''))timeout=33000;
       if (fn === 'aiCommand') timeout = 15000;
@@ -37,7 +38,7 @@
       if (fn === 'tripQueue') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
         if (fn === 'aiGenerate') try { N.aiCommand(++nid, 'cancelAdvice'); } catch (e) { }
-        window.onNativeResult(id, { error: (/^ai/.test(fn) ? 'Local AI' : fn === 'fetchHere' ? 'HERE' : args[0] === 'tirerack' ? 'Tire Rack' : 'Keyless') + ' lookup timed out', code: 'timeout' });
+        window.onNativeResult(id, { error: (/^ai/.test(fn) ? 'Local AI' : fn === 'fetchHere' ? 'HERE' : args[0] === 'tirerack' ? 'Tire Rack' : args[0] === 'brave' ? 'Brave' : 'Keyless') + ' lookup timed out', code: 'timeout' });
       }, timeout);
       try { N[fn].apply(N, [id].concat(args)); }
       catch (e) { window.onNativeResult(id, { error: String(e && e.message || e), code: 'bridge' }); }

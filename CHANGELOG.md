@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.402 - 2026-11-06
+
+- Give Brave battery-pack research more time to finish and ask for documented variants in a consistent format.
+
 ## 0.0.401 - 2026-11-06
 
 - Stabilize the battery-pack editor browser test for the signed build.

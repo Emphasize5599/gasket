@@ -450,7 +450,9 @@
     var current=function(){return !window.__erasing&&car()&&car().id===c.id&&packKey(car())===key;};
     packBusy[c.id]=true;draw();
     LG.info('car','Asking Brave Search for possible battery packs'+(shown?' (shown to you)':''),key);
-    var query='Which high-voltage battery packs could a U.S. '+key+' have? List the pack names or part numbers, chemistry, and how the owner can tell them apart. Include sources.';
+    var query='Identify factory-installed high-voltage battery packs for this exact U.S. vehicle: '+key+'. '+
+      'Start with Battery packs. List one bullet per documented variant: pack name or part number | chemistry and supplier | capacity in kWh (usable or gross) | U.S. build dates or plant | how the owner can verify it | source. '+
+      'Separate conflicting evidence and label missing details as unverified. If no exact U.S. match is documented, say so. End with PACK RESEARCH COMPLETE.';
     try{
       var r=await braveSerial(function(){return BraveLookup.read({url:'https://search.brave.com/ask?q='+encodeURIComponent(query)+'&source=llmSuggest',kind:'packs'},{call:call,shown:shown,label:'battery pack',current:current});});
       if(current()&&!(r&&r.closed)){

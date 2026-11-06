@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.402 - wait for Brave battery pack research
+
+Pack Ask can run for 120 seconds in the background or 165 seconds in the visible reader. The native and JS bridge deadlines leave room for page loading. The prompt asks for documented U.S. variants and a completion marker. Focused tests cover slow start, paused streaming, query echoes and verification.
+
 ## 0.0.401 - stabilize battery pack editor test
 
 The test opens Energy & charging estimates through its summary and checks the pack controls stay visible across editor redraws. Focused browser tests and repeated DC curve runs passed.
