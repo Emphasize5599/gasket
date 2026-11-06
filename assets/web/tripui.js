@@ -4077,7 +4077,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
   function findStops(force) {
     if(restPending())return restPlanPromise||Promise.resolve();
-    if(KIND()==='ev'&&!ChargeCurve.selected(Garage.car())){A.toast('Select your installed battery pack in Garage before planning.');return Promise.resolve();}
+    if(KIND()==='ev'&&!ChargeCurve.selected(Garage.car())){A.toast('Choose an established profile or enter a custom charging curve in Garage.');return Promise.resolve();}
     if(force===true&&!S.apiKey)force='discover';
     if (finding || busy || !model) return finding || Promise.resolve();
     return (finding = findStops1(force).finally(function () { finding = null; }));

@@ -15,6 +15,14 @@ r=C.forCar({make:'Rivian',model:'R1T',year:2023,tank:128,dcKw:220});assert.equal
 r=C.forCar({make:'Tesla',model:'Model Y Long Range AWD',year:2024,tank:75,dcKw:250,dcCurve:MY});assert.equal(r.src,'user');assert.deepEqual(r.points,MY,'a typed curve is used as typed');
 assert.equal(C.rows11(MY).length,11);assert(D.rows.length>300&&D.rows.every(x=>x[5].length>=4),'bundled curves');
 assert(!D.rows.some(x=>x[4]&&Math.abs(Math.max(...x[5].filter((_,i)=>i%2))-x[4])<.05),'no rows whose "peak" is the battery size');
+const bolt={make:'Chevrolet',model:'Bolt EV',year:2022,dcPack:'bolt-ev-2022'};
+assert.equal(C.selected(bolt).src,'pack');
+assert.equal(C.selected({...bolt,model:'Bolt EUV'}),null);
+assert.equal(C.selected({...bolt,year:2020}),null);
+const rivian={make:'Rivian',model:'R1T',year:2022,dcPack:'rivian-large-gen1'};
+assert.deepEqual(C.selected(rivian).points,C.selected({...rivian,model:'R1S'}).points);
+assert.equal(C.selected({...rivian,trim:'Max Pack'}),null);
+assert.equal(C.selected({...rivian,year:2025}),null);
 // --- the planner charges by the curve: exact (brute force over every buy at three chargers) ---
 function route(mi,mpkwh){const raw={distanceMeters:mi*1609.344,duration:(mi*60)+'s',polyline:{encodedPolyline:T.encodePolyline([{lat:35,lng:-92},{lat:35,lng:-92+mi/57}])},legs:[]};return T.buildRoute(raw,{city:mpkwh,hwy:mpkwh,comb:mpkwh});}
 function brute(o,ds){

@@ -8,19 +8,29 @@
  // ~50% at 80%): owner-supplied Model Y figures and Open EV Data's curves fall off far sooner (~60% at 50%, ~30% at 70%).
  var GENERIC=[[0,.85],[10,1],[30,1],[40,.88],[50,.72],[60,.57],[70,.43],[80,.3],[90,.17],[100,.06]];
  var EDIT_AT=[0,10,20,30,40,50,60,70,80,90,100];
- // Warm planning curves. Sources, interpolation and U.S. applicability are documented in docs/TESLA_PACKS.md.
+ // Warm planning curves. Sources and applicability are documented in docs/TESLA_PACKS.md and docs/EV_CHARGING_PROFILES.md.
  var PACKS=[
   {id:'m3-lr-2021',model:'Model 3',from:2021,to:2021,trim:/(?=.*(?:long range|\blr\b))(?=.*(?:awd|dual motor))/,label:'2021 Long Range AWD · Panasonic 2170 family',kw:[100,250,225,180,145,100,80,60,45,30,15]},
   {id:'m3-sr-2020',model:'Model 3',from:2020,to:2020,trim:/standard range|sr\+/,label:'2020 Standard Range Plus · nickel-based pack',kw:[169,169,155,138,115,89,71,57,36,22,10]},
   {id:'ms-refresh',model:'Model S',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model S · 100 kWh class',kw:[138,214,220,224,200,152,118,94,67,48,15]},
   {id:'ms-plaid',model:'Model S',from:2021,to:2025,trim:/plaid/,label:'2021–25 Model S Plaid · 100 kWh class',kw:[133,205,211,215,193,146,114,90,65,46,15]},
   {id:'mx-refresh',model:'Model X',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model X · 100 kWh class',kw:[136,210,216,220,198,149,116,92,67,46,15]},
-  {id:'mx-plaid',model:'Model X',from:2022,to:2025,trim:/plaid/,label:'2022–25 Model X Plaid · 100 kWh class',kw:[133,205,211,215,192,146,114,90,65,47,15]}
+  {id:'mx-plaid',model:'Model X',from:2022,to:2025,trim:/plaid/,label:'2022–25 Model X Plaid · 100 kWh class',kw:[133,205,211,215,192,146,114,90,65,47,15]},
+  {id:'bolt-ev-2022',make:'Chevrolet',model:'Bolt EV',from:2022,to:2022,label:'2022 Bolt EV · 65 kWh class',
+   source:'https://insideevs.com/news/613786/chevrolet-bolt-ev-fast-charging/',
+   points:[[0,32],[5,38],[20,40],[25,45],[30,46],[50,45],[55,41],[60,36],[65,32],[70,29],[75,27],[80,24],[85,20],[90,17],[95,14],[100,9]]},
+  {id:'rivian-large-gen1',make:'Rivian',model:/^r1[ts](?: |$)/,from:2022,to:2022,exclude:/\b(?:standard|max|dual)\b/,
+   label:'2022 R1T / R1S · first-generation Large Pack',source:'https://insideevs.com/news/586886/how-long-to-charge-rivian-r1t/',
+   points:[[0,165],[5,200],[20,205],[22,200],[23,170],[40,155],[45,150],[50,133],[60,116],[70,100],[72,94],[78,70],[80,50],[85,49],[90,45],[95,25],[100,8]]}
  ];
- function packs(car){
-  if(!car||norm(car.make)!=='tesla')return [];
-  var name=norm([car.model,car.trim].join(' '));
-  return PACKS.filter(function(p){return (name===norm(p.model)||name.startsWith(norm(p.model)+' '))&&car.year>=p.from&&car.year<=p.to&&(!p.trim||p.trim.test(name))&&(!p.exclude||!p.exclude.test(name));});
+ function packs(car,listing){
+  if(!car)return [];
+  var make=norm(car.make),name=norm([car.model,car.trim].join(' '));
+  return PACKS.filter(function(p){
+   if((make||!listing)&&make!==norm(p.make||'Tesla')||car.year<p.from||car.year>p.to||!+car.year)return false;
+   var model=typeof p.model==='string'?norm(p.model):null;
+   return (listing&&!name||(model?name===model||name.startsWith(model+' '):p.model.test(name)))&&(listing||(!p.trim||p.trim.test(name))&&(!p.exclude||!p.exclude.test(name)));
+  });
  }
  function researchKey(car){return car&&car.year&&car.make&&car.model?[car.year,car.make,car.model,car.trim].filter(Boolean).join(' ').replace(/\s+/g,' ').trim():'';}
  function researchPacks(text){
@@ -53,10 +63,13 @@
    var points=clean(car.dcCurve||research.points);
    return points&&points[0][0]===0&&points[points.length-1][0]===100?{points:points,src:car.dcCurve?'user':'research',label:research.label,peak:peak(points)}:null;
   }
-  var pack=packs(car).find(function(p){return p.id===car.dcPack;});
+  var available=packs(car),pack=available.find(function(p){return p.id===car.dcPack;});
+  if(!pack&&!car.dcPack&&car.addMode==='ev'&&available.length===1)pack=available[0];
   if(!pack)return null;
-  var points=EDIT_AT.map(function(p,i){return [p,pack.kw[i]];});
-  return {points:points,src:'pack',label:pack.label,peak:peak(points)};
+  var override=clean(car.dcCurve);
+  if(override&&(override[0][0]!==0||override[override.length-1][0]!==100))override=null;
+  var points=override||pack.points||EDIT_AT.map(function(p,i){return [p,pack.kw[i]];});
+  return {points:points,src:override?'user':'pack',label:pack.label+(override?' · edited':''),peak:peak(points),source:pack.source};
  }
  function norm(s){return String(s||'').toLowerCase().replace(/(\d),(\d)/g,'$1.$2').replace(/(\d)\s*kwh/g,'$1kwh').replace(/[^a-z0-9.+]+/g,' ').replace(/\b(\d+)\.(\d+)\b/g,'$1_$2').replace(/\./g,' ').replace(/_/g,'.').trim();}
  var SYN=[[/\bdual motor\b|\btwin motor\b|\b4matic\b|\b4motion\b|\be-4orce\b|\b4wd\b|\ball wheel drive\b/g,'awd'],[/\bsingle motor\b|\b2wd\b|\bfwd\b|\brear wheel drive\b/g,'rwd'],[/\blr\b/g,'long range'],[/\bsr\b/g,'standard range'],[/\ber\b/g,'extended range'],[/\bsr\+/g,'standard range plus']];
@@ -98,7 +111,7 @@
  /** {points, src: 'user' | 'data' | 'generic', label, peak}: the curve the planner uses for this car. */
  var memo={key:'',val:null};
  function forCar(car,rows){
-  var key=rows?'':JSON.stringify(car&&[car.make,car.model,car.trim,car.year,car.tank,car.dcKw,car.dcCurve,car.dcPack,car.dcPackName,car.dcResearchPack&&car.dcResearchPack.points,car.info&&car.info.drive]);
+  var key=rows?'':JSON.stringify(car&&[car.make,car.model,car.trim,car.year,car.tank,car.dcKw,car.dcCurve,car.dcPack,car.dcPackName,car.dcResearchPack&&car.dcResearchPack.points,car.info&&car.info.drive,car.addMode]);
   if(key&&memo.key===key)return memo.val;
   var val=resolve(car,rows);if(key)memo={key:key,val:val};return val;
  }

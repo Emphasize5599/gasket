@@ -159,7 +159,7 @@
   function r2(v) { return Math.round(v * 100) / 100; }
   var emptyCar={id:'',name:'',type:'car',power:'gas',obs:{},entries:[],info:{},epa:null};
   function car() { return S.cars.filter(function (c) { return c.id === S.carId; })[0] || S.cars[0] || emptyCar; }
-  function addCar(){var previous=S.carId,nc={id:'c'+Date.now(),name:'',trim:'',type:'car',power:'gas',grade:'',tank:'',tankSrc:'',obs:{},entries:[],epa:null,info:{}};S.cars.push(nc);S.carId=nc.id;editing=true;editSnap={id:nc.id,before:JSON.stringify(nc),previous:previous,isNew:true};draw();changed();}
+  function addCar(){var previous=S.carId,nc={id:'c'+Date.now(),addMode:'fuel',name:'',trim:'',type:'car',power:'gas',grade:'',tank:'',tankSrc:'',obs:{},entries:[],epa:null,info:{}};S.cars.push(nc);S.carId=nc.id;editing=true;editSnap={id:nc.id,before:JSON.stringify(nc),previous:previous,isNew:true};draw();changed();}
   function harm(city, hwy) { return 1 / (0.55 / city + 0.45 / hwy); }
   function obsCity(c) { return +c.obs.city > 0 ? +c.obs.city : (c.epa && c.epa.city) || 0; }
   function obsHwy(c) { return +c.obs.hwy > 0 ? +c.obs.hwy : (c.epa && c.epa.hwy) || 0; }
@@ -180,7 +180,7 @@
   var host = null, speedHost = null, onChange = function () {}, editing = false, call = null, epaOpen = false,editSnap=null;
   var epaPending=new WeakSet(),epaEpoch=new WeakMap();
   function epaInvalidate(c){epaEpoch.set(c,(epaEpoch.get(c)||0)+1);epaPending.delete(c);}
-  function editorOk(c){return !!c&&Number.isFinite(Number(c.tank))&&Number(c.tank)>0&&identityOk(c)&&trimOk(c);}
+  function editorOk(c){return !!c&&Number.isFinite(Number(c.tank))&&Number(c.tank)>0&&identityOk(c)&&trimOk(c)&&(!c.addMode||kind(c)!=='ev'||!!ChargeCurve.selected(c));}
   /** Trim is required (it can change the tank size), except for a custom car known only by its name. */
   function trimNeeded(c){return !!c&&!(c.entryMode==='custom'&&!(c.year&&c.make&&c.model));}
   function trimOk(c){return !trimNeeded(c)||c.noTrim===true||!!String(c.trim||'').trim();}
@@ -419,7 +419,7 @@
   var dcBusy = {}, DC_SRC = 'from Brave Search\'s AI answer · check the maker\'s specs';
   function dcUrl(c) { return BraveLookup.url(tankKey(c) + ' maximum DC fast charging rate in kW?'); }
   function dcAuto(c) {
-    if (!c || kind(c) !== 'ev' || +c.dcKw > 0 || !call || !N.siteRead || dcBusy[c.id] || matching) return;
+    if (!c || c.addMode || ChargeCurve.selected(c) || kind(c) !== 'ev' || +c.dcKw > 0 || !call || !N.siteRead || dcBusy[c.id] || matching) return;
     var key = tankKey(c); if (!key || !trimOk(c)) return;   // the trim can change it: wait for it
     var L = c.dcKwLookup; if (L && L.key === key && (!L.failed || Date.now() - L.t < 6 * 3600e3)) return;   // once per car (a failure: again after 6 h)
     dcFind(c, false);
@@ -443,35 +443,22 @@
     }
     draw();
   }
-  var packBusy={};
-  function packKey(c){return ChargeCurve.researchKey(c);}
-  async function packFind(c,shown){
-    var key=packKey(c);if(!key||!trimOk(c)||packBusy[c.id])return;
-    var current=function(){return !window.__erasing&&car()&&car().id===c.id&&packKey(car())===key;};
-    packBusy[c.id]=true;draw();
-    LG.info('car','Asking Brave Search for possible battery packs'+(shown?' (shown to you)':''),key);
-    var query=key+' US packs. PACK: ID | chemistry | usable kWh | gross kWh | build | verify | pack source | curve | curve URL. Curve: measured same-pack DC kW, comma-separated 0–100%/10%. Missing trace/source: Charge curve cannot be confidently determined.';
-    try{
-      var r=await braveSerial(function(){return BraveLookup.read({url:BraveLookup.url(query),kind:'packs'},{call:call,shown:shown,label:'battery pack',current:current});});
-      if(current()&&!(r&&r.closed)){
-        car().packLookup=r&&r.text&&!r.error&&!r.blocked?{key:key,text:r.text,src:r.src||''}:{key:key,failed:true};
-        save();
-      }
-    }finally{delete packBusy[c.id];if(car()&&car().id===c.id)draw();}
-  }
   /**
    * What the trip planner still needs from the car, top to bottom: the EPA lookup (or your own city + highway mileage),
    * then the tank / battery size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
    */
   /** Is the car ready for a trip (mileage and tank size), without pointing at anything? */
-  function ok(c) { c=c||car();return !!S.cars.length && !!c && (c.id!==S.carId||!matching) && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0 && (kind(c)!=='ev'||!!ChargeCurve.selected(c)); }
+  function needsNaturalGas(c){return /^(?:natural gas|cng|lng|liquefied natural gas|compressed natural gas)$/i.test(String(c&&c.epa&&c.epa.fuel||'').trim());}
+  function ok(c) { c=c||car();return !!S.cars.length && !!c && !needsNaturalGas(c) && (c.id!==S.carId||!matching) && (hasEpa(c) || (+(c.obs || {}).city > 0 && +(c.obs || {}).hwy > 0)) && +c.tank > 0 && (kind(c)!=='ev'||!!ChargeCurve.selected(c)); }
   function need() {
     if(!S.cars.length)return {el:host&&host.querySelector('[data-car="+"]'),kind:'pick',msg:'Add your vehicle before planning a trip.'};
+    if(needsNaturalGas(car()))return {el:host&&host.querySelector('#gEdit'),kind:'pick',msg:'Gasket does not have natural gas station coverage for trip planning.'};
     var c = car(), mpgOk = hasEpa(c) || (+c.obs.city > 0 && +c.obs.hwy > 0), tankOk = +c.tank > 0, k = kind(c);
     if(mpgOk&&tankOk&&k==='ev'&&!ChargeCurve.selected(c)){
       if(!editing&&host){editing=true;draw();}
       var energy=$('gEnergy');if(energy)energy.open=true;
-      return {el:$('gDcPackName')&&!c.dcPackName?$('gDcPackName'):$('gDcPack'),kind:'pick',msg:'Select your installed battery pack or enter its charging curve.'};
+      var curveField=$('gDcPackName')&&!c.dcPackName?$('gDcPackName'):document.querySelector('#gDcCurve [data-dc-pct]:invalid');
+      return {el:curveField||$('gDcPack')||$('gManualCurve'),kind:curveField?'box':'pick',msg:'Select an established profile or complete your custom charging curve.'};
     }
     if (mpgOk && tankOk) {
       // tires that aren't all the same, not all filled in: fill them in, or discard the tire changes
@@ -489,6 +476,7 @@
   }
   /** "2020 Corolla Hybrid LE": year, model and (when you gave one) trim. */
   function shortName(x) {
+    if(x.addMode==='custom')return (x.nick||(x.year&&x.model?autoName(x):x.name)||'New car')+' (Custom)';
     if (x.nick) return x.nick + (x.demoMileage ? ' (demo)' : '');
     if (x.year && x.model) return autoName(x) + (x.demoMileage ? ' (demo)' : '');
     return x.name || 'New car';
@@ -620,7 +608,9 @@
     var k = kind(c), U = units(c);
     var auto = c.typeAuto ? ' (from the EPA: ' + SP.TYPES[c.typeAuto].label.toLowerCase() + ')' : '';
     var h = '<div class="g-edit">';
-    var custom=c.entryMode==='custom';
+    var custom=c.entryMode==='custom',adding=editSnap&&editSnap.isNew&&editSnap.id===c.id;
+    if(adding)h+='<label class="nf wide"><span>Vehicle type</span><select id="gAddMode">'+opts({fuel:'Gas / Diesel / E85 / Hydrogen / LNG',ev:'EV',custom:'Custom'},c.addMode||'fuel')+'</select></label>'+
+      (c.addMode==='ev'?'<p class="lead small">EVs with an established charging curve. Use Custom for other EVs.</p>':'');
     h += '<label class="nf wide"><span>Name<small>what Gasket calls this car · blank = ' + esc(c.year && c.model ? autoName(c) : 'year, make and model') + '</small></span><input type="text" id="gName" maxlength="40" placeholder="' + esc(c.year && c.model ? autoName(c) : 'e.g. My car') + '" value="' + esc(c.nick || (c.year && c.model ? '' : c.name || '')) + '"></label>';
     // one menu: the VIN first (worth the trouble: exact version, open recalls, factory tires; outlined in green until the
     // car has one), then year / make / model, which a VIN lookup fills in
@@ -630,8 +620,7 @@
         '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button></span></label>' +
         (window.VinScan ? '<button type="button" class="btn primary sm vin-scan-btn" id="gVinScan" aria-label="Scan the VIN barcode">' + VinScan.icon + '</button>' : '') +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>';
-    h += '<div class="seg2" id="gEntryMode" aria-label="Vehicle data source"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">EPA vehicle</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">Non-EPA / custom</button></div>';
-    if(!custom)h+='<div class="epa-tip"><span>Can\'t find your car? It might be exempt from the EPA.</span><button type="button" class="btn tonal sm" id="gNhtsaTip">NHTSA lookup</button></div>';
+    if(!c.addMode)h += '<div class="seg2" id="gEntryMode" aria-label="'+(k==='ev'?'Driving efficiency source':'Vehicle data source')+'"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">'+(k==='ev'?'EPA efficiency':'EPA vehicle')+'</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">'+(k==='ev'?'Observed efficiency':'Non-EPA / custom')+'</button></div>';
     // one tile for who the car is, down to the trim (folded once it's all known; never while the required trim is missing)
     var ymmTitle = 'Year / make / model / trim';
     // its toggle event comes a task later: a redraw before it folded the tile you just opened (read it live instead)
@@ -640,7 +629,7 @@
     if(!custom)h += '<details class="epa ymm" id="tEpa"' + (yFold && !yForced ? '' : ' open') + (yForced ? ' data-forced' : '') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc(vehicleLabel(c,[c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))) : 'no VIN? pick your car here') + '</small></summary>' +
       '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':i===2?vehicleLabel(c,value):value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
       '<div class="epa-msg" id="eMsg"></div>' + trimHtml(c) + '</details>';
-    if(custom&&!c.vin)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse more vehicles (NHTSA)</button>';
+    if(custom)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse vehicles (NHTSA)</button>';
     if(custom)h+='<button type="button" class="btn tonal sm" id="gBuildCustom">Build completely custom vehicle</button>';
     if (custom) h += '<details class="epa ymm" id="gCustom" open><summary>'+ymmTitle+'<small>Changing identity clears the previous EPA match and VIN association.</small></summary>' +
       '<div class="grid2"><label class="nf"><span>Year</span><input id="gCustomYear" type="number" inputmode="numeric" step="1" min="1886" max="9999" value="'+esc(c.year||'')+'"></label>' +
@@ -659,13 +648,14 @@
       tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
       tankFindable && TL && TL.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' :
       TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
-    var dcFindable = k === 'ev' && !!tankKey(c), DL = c.dcKwLookup, dcSee = '<button type="button" class="btn tonal sm" id="gDcSee">See Brave\'s answer</button>';
+    var legacyPeak = k==='ev'&&!c.addMode&&!ChargeCurve.selected(c);
+    var dcFindable = legacyPeak && !!tankKey(c), DL = c.dcKwLookup, dcSee = '<button type="button" class="btn tonal sm" id="gDcSee">See Brave\'s answer</button>';
     if (k === 'ev') tkExtra += tankLocked || !dcFindable ? '' : dcBusy[c.id] ? BraveLookup.progress('Asking Brave Search for the DC charging rate','dckw') :
       DL && DL.failed && !(+c.dcKw > 0) ? '<small class="tk-fail dc-fail">No DC charging rate yet. <a href="#" id="gDcShow">Complete Brave verification</a>, or leave it blank (150 kW).</small>' :
       DL && DL.kw && !DL.ok && c.dcKwSrc === DC_SRC && +c.dcKw === DL.kw ? '<div class="tz-guess tk-guess dc-guess">Brave Search says the fastest DC charging is <b>' + DL.kw + ' kW</b>.<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gDcYes">That\'s right</button>' + dcSee + '</div></div>' : '';
-    if (k === 'ev') h += '<label class="nf"><span>Fastest DC charging (kW)<small>' + esc(tankLocked ? 'choose your trim first' : c.dcKwSrc || 'the car\'s peak · blank = 150') + '</small></span>' +
+    if (k === 'ev') h += (legacyPeak?'<label class="nf"><span>Fastest DC charging (kW)<small>' + esc(tankLocked ? 'choose your trim first' : c.dcKwSrc || 'the car\'s peak · blank = 150') + '</small></span>' +
       '<span class="tk-join' + (dcFindable ? ' has-find' : '') + '"><input type="number" inputmode="numeric" step="1" id="gDcKw" value="' + esc(c.dcKw || '') + '">' +
-      (dcFindable ? '<button type="button" class="btn primary sm tk-find" id="gDcFind" aria-label="Look the DC charging rate up again"' + (dcBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label></div>' +
+      (dcFindable ? '<button type="button" class="btn primary sm tk-find" id="gDcFind" aria-label="Look the DC charging rate up again"' + (dcBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>':'') + '</div>' +
       '<div class="grid2"><label class="nf"><span>Charge port</span><select id="gPlug">' + opts(PLUGS, c.plug || 'CCS') + '</select></label>' +
       '<label class="nf chk"><span>I carry an adapter<small>' + ((c.plug || 'CCS') === 'NACS' ? 'NACS → CCS: CCS fast chargers too' : (c.plug || 'CCS') === 'CCS' ? 'CCS → NACS: Tesla Superchargers open to other cars too' : 'no common adapter') + '</small></span><input type="checkbox" id="gAdapter"' + (c.adapter ? ' checked' : '') + '></label></div>';
     else h += '<label class="nf"><span>Vehicle type<small>shapes the cruising-speed curve' + esc(auto) + '</small></span><select id="gType"' + (k === 'h2' ? ' disabled' : '') + '>' + Object.keys(SP.TYPES).map(function (t) {
@@ -689,63 +679,44 @@
   }
   var manualPackDrafts=new WeakMap();
   function curveHtml(c){
-    if(!window.ChargeCurve)return '';
-    var cc=ChargeCurve.selected(c),packs=ChargeCurve.packs(c),research=ChargeCurve.installedResearch(c),manual=c.dcPack==='manual'||research&&!research.points,draft=manualPackDrafts.get(c);
-    var rows=draft||((cc||manual&&ChargeCurve.clean(c.dcCurve))?ChargeCurve.rows11(cc?cc.points:c.dcCurve):ChargeCurve.EDIT_AT.map(function(p){return [p,''];}));
-    var candidates=lookupPacks(c);if(research&&!candidates.some(function(p){return p.id===research.id;}))candidates.unshift(research);
-    var choices=packs.concat(candidates).map(function(p){return '<option value="'+esc(p.id)+'"'+(c.dcPack===p.id?' selected':'')+'>'+esc(p.label)+'</option>';}).join('');
-    return '<div class="dc-curve" id="gDcCurve"><label class="nf"><span>Installed battery pack · required</span><select id="gDcPack" required><option value="">Select your pack</option>'+choices+'<option value="manual"'+(c.dcPack==='manual'?' selected':'')+'>Enter my installed pack and curve</option></select></label>'+
-      (research&&research.usable?'<button type="button" class="btn tonal sm" id="gPackUseCapacity">Use researched '+research.usable+' kWh usable</button>':'')+
-      (research&&!research.points&&!cc?'<p class="lead small">Charge curve cannot be confidently determined. Enter measured charging power below.</p>':'')+
-      (manual?(research?'':'<label class="nf"><span>Installed pack name or part number</span><input id="gDcPackName" required value="'+esc(c.dcPackName||'')+'"></label>')+'<div class="dc-curve-grid">'+rows.map(function(r){return '<label class="nf"><span>'+r[0]+'%</span><input type="number" inputmode="numeric" min="1" max="1000" step="1" data-dc-pct="'+r[0]+'" aria-label="kW at '+r[0]+'% charge" value="'+r[1]+'"></label>';}).join('')+'</div>':'')+
-      (cc?'<div class="dc-curve-h"><b>DC charging curve</b><small>'+esc(cc.label)+'</small></div>'+curveSvg(cc.points)+(research&&research.source?'<a href="'+esc(research.source)+'" target="_blank" rel="noopener">Review Brave’s curve source</a>':''):'<p class="lead small keep">Choose the pack in your car. For a pack without a listed curve, enter the pack name and charging power at each battery level.</p>')+packLookupHtml(c)+'</div>';
-  }
-  function lookupPacks(c){
-    var l=c.packLookup;
-    return l&&l.key===packKey(c)&&!l.failed?ChargeCurve.researchPacks(l.text):[];
-  }
-  function packResearchHtml(c,text){
-    var details='<details class="disclosure-tile"><summary>Full Brave answer</summary><p class="keep">'+esc(text)+'</p></details>';
-    var packs=lookupPacks(c);
-    if(!packs.length)return '<p class="lead small">Brave returned an unstructured answer. Open it for details.</p>'+details;
-    return packs.map(function(p){
-      var labels=p.legacy?['Chemistry / supplier','Capacity as reported','Build dates / plant','How to verify','Pack source']:['Chemistry / supplier','Usable kWh','Gross kWh','Build dates / plant','How to verify','Pack source'];
-      return '<div class="card"><b>'+esc(p.label)+'</b><dl>'+labels.map(function(label,i){return '<dt>'+label+'</dt><dd>'+esc(p.details[i]||'Unknown')+'</dd>';}).join('')+'</dl>'+
-       (p.points?'<p>Brave-reported curve · <a href="'+esc(p.source)+'" target="_blank" rel="noopener">Review measured source</a></p>':'<p>Charge curve cannot be confidently determined.</p>')+'</div>';
-    }).join('')+details;
-  }
-  function packLookupHtml(c){
-    if(!packKey(c)||!trimOk(c))return '<p class="lead small">Enter the vehicle details to look up battery packs.</p>';
-    if(packBusy[c.id])return BraveLookup.progress('Asking Brave Search for possible battery packs','packs');
-    var l=c.packLookup,lookup='<button type="button" class="btn tonal sm" id="gPackSearch">'+(l&&l.key===packKey(c)?'Look up again':'Look up possible packs')+'</button>';
-    if(!l||l.key!==packKey(c))return lookup;
-    if(l.failed)return '<small class="tk-fail">No pack details yet. <a href="#" id="gPackSee">Complete Brave verification</a></small>'+lookup;
-    return '<div class="tz-guess tk-guess" id="gPackResearch" role="status"><b>Brave Search says</b>'+packResearchHtml(c,l.text)+'<p class="lead small">Confirm the installed pack with your car or service records.</p><div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gPackSee">See Brave’s answer</button>'+lookup+'</div></div>';
+    var cc=ChargeCurve.selected(c),research=ChargeCurve.installedResearch(c);
+    var catalog=c.addMode==='custom'?[]:ChargeCurve.packs(c);
+    var automatic=c.addMode==='ev'&&!c.dcPack&&catalog.length===1;
+    var manual=c.dcPack==='manual'||!!(research&&!research.points)||c.addMode==='custom'&&!cc;
+    var draft=manualPackDrafts.get(c),showEditor=manual||!!draft||!!(cc&&c.dcCurve);
+    var rows=draft||(cc?cc.points:ChargeCurve.EDIT_AT.map(function(p){return [p,''];}));
+    var choices=catalog.map(function(p){return '<option value="'+esc(p.id)+'"'+(c.dcPack===p.id||automatic?' selected':'')+'>'+esc(p.label)+'</option>';}).join('');
+    return '<div class="dc-curve" id="gDcCurve">'+
+      (choices?'<label class="nf"><span>Battery pack</span><select id="gDcPack"><option value="">Select your pack</option>'+choices+'</select></label>':'')+
+      (cc?'<div class="dc-curve-h"><b>DC charging curve</b><small>'+esc(cc.label)+'</small></div>'+curveSvg(cc.points)+(cc.source?'<a href="'+esc(cc.source)+'" target="_blank" rel="noopener">Review measured source</a>':''):'')+
+      (!showEditor?(cc?'<button type="button" class="btn tonal sm" id="gEditCurve">Edit charging curve</button>':!choices?'<p class="lead small">No established charging profile for this vehicle.</p>':''):'')+
+      (!cc&&!manual&&c.addMode!=='ev'?'<button type="button" class="btn tonal sm" id="gManualCurve">Enter charging curve</button>':'')+
+      (showEditor?(manual&&!research?'<label class="nf"><span>Profile name</span><input id="gDcPackName" required value="'+esc(c.dcPackName||'')+'"></label>':'')+
+      '<p class="lead small">Enter DC charging power in kW at each battery percentage.</p><div class="dc-curve-grid">'+rows.map(function(r){return '<label class="nf"><span>'+r[0]+'%</span><input type="number" inputmode="decimal" min="1" max="1000" step="any" required data-dc-pct="'+r[0]+'" aria-label="kW at '+r[0]+'% charge" value="'+r[1]+'"></label>';}).join('')+'</div>'+
+      (!manual?'<button type="button" class="btn tonal sm" id="gResetCurve">Restore original curve</button>':''):'')+'</div>';
   }
   function bindCurve(c){
     var host=$('gDcCurve');if(!host)return;
-    $('gDcPack').onchange=function(){
-      if(c.dcPack&&c.dcPack!==this.value){delete c.dcCurve;delete c.dcPackName;manualPackDrafts.delete(c);}
-      var candidate=lookupPacks(c).find(function(p){return p.id===this.value;},this);
-      if(candidate)c.dcResearchPack={id:candidate.id,key:packKey(c),label:candidate.label,usable:candidate.usable,points:candidate.points,source:candidate.source};
-      else delete c.dcResearchPack;
+    var select=$('gDcPack');
+    if(select)select.onchange=function(){
+      delete c.dcCurve;delete c.dcPackName;delete c.dcResearchPack;manualPackDrafts.delete(c);
       c.dcPack=this.value;changed();draw();
     };
-    if($('gPackUseCapacity'))$('gPackUseCapacity').onclick=function(){
-      var p=ChargeCurve.installedResearch(c);if(!p||!p.usable)return;
-      c.tank=p.usable;c.tankSrc='Brave usable capacity · you selected it';changed();draw();
-    };
+    if($('gManualCurve'))$('gManualCurve').onclick=function(){c.dcPack='manual';changed();draw();};
+    if($('gEditCurve'))$('gEditCurve').onclick=function(){manualPackDrafts.set(c,ChargeCurve.selected(c).points);draw();};
+    if($('gResetCurve'))$('gResetCurve').onclick=function(){delete c.dcCurve;manualPackDrafts.delete(c);changed();draw();};
     var name=$('gDcPackName');
-    if(name)name.onchange=function(){c.dcPackName=this.value.trim();changed();};
+    if(name)name.onchange=function(){c.dcPack='manual';c.dcPackName=this.value.trim();changed();editorGate(c);};
     host.querySelectorAll('[data-dc-pct]').forEach(function(el){el.onchange=function(){
       if(!host.isConnected)return;
+      if(c.addMode==='custom'&&!c.dcPack)c.dcPack='manual';
       var rows=Array.from(host.querySelectorAll('[data-dc-pct]')).map(function(input){return [+input.dataset.dcPct,input.value];});
       manualPackDrafts.set(c,rows);
-      var curve=ChargeCurve.clean(rows);if(curve&&curve.length===rows.length)c.dcCurve=curve;else delete c.dcCurve;
-      changed();
+      var curve=ChargeCurve.clean(rows);
+      if(curve&&curve.length===rows.length)c.dcCurve=curve;
+      else if(c.dcPack==='manual'||ChargeCurve.installedResearch(c)&&!ChargeCurve.installedResearch(c).points)delete c.dcCurve;
+      changed();editorGate(c);
     };});
-    if($('gPackSearch'))$('gPackSearch').onclick=function(){packFind(c,false);};
-    if($('gPackSee'))$('gPackSee').onclick=function(e){e.preventDefault();packFind(c,true);};
   }
   function infoLine(c) {
     var i = c.info || {}, bits = [POWER_PLAIN[c.power] || '', enginePlain(c).text, i.drive ? DRIVE_PLAIN[i.drive] || '' : ''].filter(Boolean);
@@ -850,7 +821,7 @@
   function customPanel(c) {
     var i = c.info || {}, k = kind(c), gasLike = k === 'gas';
     return '<div class="lead small keep">A car you built yourself: set each part.</div>' +
-      '<div class="grid2"><label class="nf"><span>Powertrain</span><select id="gPower">' + opts(POWER_PLAIN, c.power || 'gas') + '</select></label>' +
+      '<div class="grid2"><label class="nf"><span>Powertrain</span><select id="gPower"'+(c.addMode&&c.addMode!=='custom'?' disabled':'')+'>' + opts(POWER_PLAIN, c.power || 'gas') + '</select></label>' +
       '<label class="nf wide"><span>' + (k === 'ev' ? 'Motor(s)' : k === 'h2' ? 'Fuel cell / motor' : 'Engine') + '<small>' + (k === 'ev' ? 'e.g. Dual motor, 250 kW' : k === 'h2' ? 'e.g. 128 kW fuel cell, 134 kW motor' : 'e.g. 2.0L 4-cylinder, 6.0L V8') + '</small></span><input type="text" id="gEngine" maxlength="60" value="' + esc(i.engine || '') + '"></label></div>' +
       '<div class="grid2">' + (gasLike || c.power === 'hybrid' || c.power === 'phev' ? '<label class="nf"><span>Air intake</span><select id="gAsp">' + opts(ASP_PLAIN, i.asp, '—') + '</select></label>' : '') +
       '<label class="nf"><span>Transmission</span><select id="gTrans">' + opts({ auto: 'Automatic', manual: 'Manual', cvt: 'Automatic, no fixed gears (CVT)', ecvt: 'Hybrid automatic (eCVT)', dct: 'Dual-clutch automatic (DCT)', amt: 'Automated manual', single: 'Single speed' }, i.trans, '—') + '</select></label>' +
@@ -1076,7 +1047,17 @@
       }
       if ($('gName')) $('gName').onchange = function () { var v = this.value.trim(); c.nick = v; if (!(c.year && c.model)) c.name = v; if (!v) delete c.nick; draw(); changed(); };
       if($('gCatalog'))$('gCatalog').onclick=function(){openCatalog(c);};
-      if($('gNhtsaTip'))$('gNhtsaTip').onclick=function(){c.entryMode='custom';draw();save();openCatalog(c);};
+      if($('gAddMode'))$('gAddMode').onchange=function(){
+        var mode=this.value,initial=JSON.parse(editSnap.before);
+        epaInvalidate(c);vinStates.delete(c);manualPackDrafts.delete(c);
+        if(mode==='custom'){
+          ['epa','epaId','epaBase','epaOption','dcPack','dcCurve','dcPackName','dcResearchPack'].forEach(function(key){delete c[key];});
+          c.addMode=mode;c.entryMode='custom';draw();changed();return;
+        }
+        Object.keys(c).forEach(function(key){delete c[key];});
+        Object.assign(c,initial,{addMode:mode,entryMode:'epa',power:mode==='ev'?'ev':'gas'});
+        draw();changed();
+      };
       if($('gBuildCustom'))$('gBuildCustom').onclick=function(){openCustom(c);};
       document.querySelectorAll('[data-entry]').forEach(function(b){b.onclick=function(){c.entryMode=b.dataset.entry;draw();save();};});
       if($('gName'))$('gName').oninput=function(){if($('gSave'))$('gSave').disabled=!editorOk(Object.assign({},c,{nick:this.value.trim(),name:this.value.trim()||c.name}));};
@@ -1282,12 +1263,18 @@
   function eMsg(m, err) { lastEMsg = { car: S.carId, m: m || '', err: !!err }; var el = $('eMsg'); if (el) { el.textContent = m || ''; el.classList.toggle('err', !!err); } }
   function restoreEMsg() { var el = $('eMsg'); if (el && lastEMsg && lastEMsg.car === S.carId && lastEMsg.m && !el.textContent) { el.textContent = lastEMsg.m; el.classList.toggle('err', lastEMsg.err); } }
   async function epaYears(c) {
+    var field=$('eYear');if(!field||field.dataset.loading==='1'&&!matching)return;
+    field.dataset.loading='1';
     try {
       var had = $('eMsg') && $('eMsg').textContent;
       if (!had) eMsg('Loading…');
-      fill($('eYear'), items(await epaGet('menu/year')), 'Year'); if (!had) eMsg('');
+      var years=items(await epaGet('menu/year'));
+      if($('eYear')!==field||car()!==c)return;
+      if(c.addMode==='ev')years=years.filter(function(y){return ChargeCurve.packs({year:+y.value},true).length;});
+      if(!field.value||matching)fill(field, years, 'Year'); if (!had) eMsg('');
       bindEpa(c);
-    } catch (e) { eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true);if(matching)throw e; }
+    } catch (e) { if($('eYear')===field)eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true);if(matching)throw e; }
+    finally{delete field.dataset.loading;}
   }
   function bindEpa(c){
     if(!$('eYear'))return;
@@ -1296,13 +1283,13 @@
         epaInvalidate(c);
         clearVinField(c,'eYear');
         var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!y) return;
-        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
+        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));if(c.addMode==='ev')makes=makes.filter(function(m){return ChargeCurve.packs({year:+y,make:m.value},true).length;});if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
       };
       $('eMake').onchange = async function () {
         epaInvalidate(c);
         clearVinField(c,'eMake');
         var y = $('eYear').value, mk = this.value; fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!mk) return;
-        try{var models=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)));if(car()===c&&$('eMake')&&$('eYear').value===y&&$('eMake').value===mk)fill($('eModel'),models,'Model');}catch(e){if(car()===c&&$('eModel')){eMsg('Could not load models. Choose the make again to retry.',true);needVinFields(c,['eModel'],'EPA model menu failed');}if(matching)throw e;}
+        try{var models=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)));if(c.addMode==='ev')models=models.filter(function(m){return ChargeCurve.packs({year:+y,make:mk,model:m.value},true).length;});if(car()===c&&$('eMake')&&$('eYear').value===y&&$('eMake').value===mk)fill($('eModel'),models,'Model');}catch(e){if(car()===c&&$('eModel')){eMsg('Could not load models. Choose the make again to retry.',true);needVinFields(c,['eModel'],'EPA model menu failed');}if(matching)throw e;}
       };
       $('eModel').onchange = async function () {
         epaInvalidate(c);
@@ -1352,10 +1339,13 @@
     if (c.epaId && String(c.epaId) !== String(v.id || id)) force = true;
     var atv = String(v.atvType || ''), fuel = String(v.fuelType1 || v.fuelType || '');
     var ev = /^EV$/i.test(atv) || /^electricity$/i.test(fuel), fc = /FCV/i.test(atv) || /hydrogen/i.test(fuel);
+    if(c.addMode==='fuel'&&ev)return {error:'Use EV for an established profile or Custom to enter a charging curve.'};
+    if(c.addMode==='ev'&&(!ev||!ChargeCurve.packs(v,true).length))return {error:'This vehicle has no established profile. Add it under Custom.'};
     var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;
     if (!(city > 0 && hwy > 0)) return { error: 'The EPA has no mileage numbers for that one.' };
     var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
     var identityChanged=wasCar!==[+v.year,String(v.make||'').toLowerCase(),baseOf({model:v.model,epaBase:v.baseModel}).toLowerCase()].join('|');
+    if(identityChanged&&c.epaId){delete c.dcPack;delete c.dcCurve;delete c.dcPackName;delete c.dcResearchPack;manualPackDrafts.delete(c);}
     if(identityChanged&&!matching&&c.epaId){detachVin(c);c.trim='';delete c.noTrim;delete c.catalog;delete c.vpicModel;c.recalls=null;delete c.recallCheck;delete trimOther[c.id];}
     c.power = ev ? 'ev' : fc ? 'h2' : /plug-in/i.test(atv) ? 'phev' : /hybrid/i.test(atv) || /HEV/.test(String(v.eng_dscr || '')) ? 'hybrid' : /diesel/i.test(fuel) ? 'diesel' : 'gas';
     c.year = +v.year; c.make = v.make; c.model = v.model; c.epaId = String(v.id || id); if (v.baseModel) c.epaBase = String(v.baseModel);else delete c.epaBase;
@@ -1477,6 +1467,7 @@
       var R = (JSON.parse(r.body).Results || [])[0] || {};
       var d = fromVpic(R);
       if (!d.year || !d.make || !d.model) { needVinFields(c,['gVin'],'NHTSA returned incomplete identity');vMsg('NHTSA couldn\'t decode that VIN' + (R.ErrorText ? ': ' + esc(R.ErrorText) : '.'), true); return; }
+      if(c.addMode==='fuel'&&d.power==='ev'){vMsg('Use EV for an established profile or Custom to enter a charging curve.',true);return;}
       c.vin = vin; c.vinDecodeRev=130;c.year = d.year; c.make = d.make; c.model = d.model; c.vpicModel = d.model;
       if (d.body) { c.info = c.info || {}; c.info.body = d.body; }   // the doodle's body style
       if (d.trim) c.trim = d.trim;

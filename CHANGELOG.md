@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.409 - 2026-11-06
+
+- Choose a fuel vehicle, established-profile EV, or custom vehicle at the top of Add Car. Custom includes the NHTSA vehicle catalog and requires a manual curve for EVs.
+- Edit or restore an established EV charging curve. Remove the AI battery pack and curve lookup.
+- Add measured charging references for the 2022 Bolt EV and first-generation 2022 Rivian Large Pack.
+
 ## 0.0.408 - 2026-11-06
 
 - Make researched battery packs selectable, distinguish usable and gross capacity, and require a sourced charging curve or manual measurements.
