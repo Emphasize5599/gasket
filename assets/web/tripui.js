@@ -3997,7 +3997,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     return {weather:temps,departAt:departAt().getTime(),limits:flatSecs(m),offset:rule.on?off:Math.min(0,off),roadOffsets:roadOffsets,allowAbove:!!rule.on,speedCap:capOn?Garage.ruleCap():null,waitAt:S.trip.returnTrip&&(!windows||!windows.enabled())&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null};
   }
   function makeBaseOpts(model, cands, startGal,raw) {
-    var kd = KIND(), cap = Garage.tank(), curve = kd === 'ev' && window.ChargeCurve ? ChargeCurve.forCar(Garage.car()) : null;
+    var kd = KIND(), cap = Garage.tank(), curve = kd === 'ev' ? ChargeCurve.selected(Garage.car()) : null;
+    if(kd==='ev'&&!curve)throw Error('Select your installed battery pack in Garage before planning.');
     var options={ step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * (S.trip.fillUp?0.8:1) : null,preferredFillCap:kd==='ev'&&!S.trip.fillUp?cap*.8:null,
       priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
@@ -4036,6 +4037,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   var finding = null;   // the stop search under way (a step jump waits for it rather than stopping)
   function findStops(force) {
     if(restPending())return restPlanPromise||Promise.resolve();
+    if(KIND()==='ev'&&!ChargeCurve.selected(Garage.car())){A.toast('Select your installed battery pack in Garage before planning.');return Promise.resolve();}
     if(force===true&&!S.apiKey)force='discover';
     if (finding || busy || !model) return finding || Promise.resolve();
     return (finding = findStops1(force).finally(function () { finding = null; }));
@@ -5078,7 +5080,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function plannedSession(){return {id:S.carId,profile:VehicleCompare.profile(Garage.car()),kind:KIND(),speed:S.speed,trip:S.trip,route:route,rawRoute:rawRoute,result:result};}
   function savedPlanCurrent(){return !!(result&&result.plan&&result.plan.ok&&result.savedPlanAt&&!restRows().some(function(x){return !RestPlaces.vehicleCheck(x.rest.site,{commercialTruck:Garage.car().commercialTruck===true,overnight:x.rest.overnight}).ok||restUI&&restUI.closure&&x.rest.site&&restUI.closure(x.rest.site);})&&result.savedPlanIdentity===PlannedTrip.identity(plannedSession(),plannedSettings()));}
-  function plannedRestore(saved,session){if(session.route&&session.route.stops.some(function(p){return p.rest&&!RestPlaces.vehicleCheck(p.rest.site,{commercialTruck:(S.cars.find(function(c){return c.id===session.id;})||{}).commercialTruck===true,overnight:p.rest.overnight}).ok;}))return null;var restored=PlannedTrip.restore(saved,session,plannedSettings(session.id));if(saved&&!restored)LG.info('history','Saved plan dependencies changed',{changed:PlannedTrip.changed(saved,session,plannedSettings(session.id))});if(restored){var full=restored.model;if(full.speedRates){restored.model=T.restoreModel(full);if(full._lim)restored.model._lim=full._lim;}restored.result.savedPlanIdentity=saved.identity;restored.result.opts.rewardPriceAt=function(c,m,stops){if(c.est||!c.station||c.station.brand!=='citgo')return Object.assign({},c,{rewardMonth:P.monthKey(rewardArrival(m,c.d,stops))});var q=P.tripPrice(c.station,gradeOf(),S,new Date(),rewardArrival(m,c.d,stops));return q?Object.assign({},c,q):c;};Object.defineProperty(restored.result.opts,'_trafficRaw',{value:session.rawRoute||session.alts[session.altSel||0]});}return restored;}
+  function plannedRestore(saved,session){var car=S.cars.find(function(c){return c.id===session.id;});if(session.kind==='ev'&&!ChargeCurve.selected(car))return null;if(session.route&&session.route.stops.some(function(p){return p.rest&&!RestPlaces.vehicleCheck(p.rest.site,{commercialTruck:(S.cars.find(function(c){return c.id===session.id;})||{}).commercialTruck===true,overnight:p.rest.overnight}).ok;}))return null;var restored=PlannedTrip.restore(saved,session,plannedSettings(session.id));if(saved&&!restored)LG.info('history','Saved plan dependencies changed',{changed:PlannedTrip.changed(saved,session,plannedSettings(session.id))});if(restored){var full=restored.model;if(full.speedRates){restored.model=T.restoreModel(full);if(full._lim)restored.model._lim=full._lim;}restored.result.savedPlanIdentity=saved.identity;restored.result.opts.rewardPriceAt=function(c,m,stops){if(c.est||!c.station||c.station.brand!=='citgo')return Object.assign({},c,{rewardMonth:P.monthKey(rewardArrival(m,c.d,stops))});var q=P.tripPrice(c.station,gradeOf(),S,new Date(),rewardArrival(m,c.d,stops));return q?Object.assign({},c,q):c;};Object.defineProperty(restored.result.opts,'_trafficRaw',{value:session.rawRoute||session.alts[session.altSel||0]});}return restored;}
   function saveTrip(raw, ks, savedInventory) {
     if (!route || !raw) return;
     var id = histId(route), now = Date.now();

@@ -1,6 +1,10 @@
 # EV and hydrogen models — integrated in 0.0.237
 
-## 0.0.264 charging curves in stop selection
+## 0.0.398 installed battery pack required
+
+EV planning requires a compatible library pack confirmed by the driver or a named pack with a user-entered DC curve. The selected curve supplies the DC power by state of charge in planning and thermal validation. Brave can help identify possible packs. See the [Tesla pack library and evidence](TESLA_PACKS.md).
+
+## 0.0.264 charging curves in stop selection (historical)
 
 Before 0.0.264 the stop optimizer charged every kWh at one average kW per charger (`kw = 0.7 × min(car peak, station)`), so in Fastest mode a top-up from 70→90% looked as quick as 10→30%; the taper appeared only afterwards, in the thermal validation. Now:
 

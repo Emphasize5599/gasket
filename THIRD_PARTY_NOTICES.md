@@ -463,3 +463,7 @@ The per-leg rest directory checks visible rest-site names and coordinates agains
 ## SunCalc 1.9.0
 
 Offline sunrise, sunset and civil-twilight calculations by Vladimir Agafonkin, BSD-2-Clause. Source: https://github.com/mourner/suncalc/tree/v1.9.0 . Full notice: `assets/web/vendor/suncalc-LICENSE.txt`.
+
+## Digitized EV charging profiles
+
+Hannah Morin, Aeka Chatra, Jeremy Michalek and Jay Whitacre, [Digitized Electric Vehicle Fast-Charging Profiles by Model, v1](https://doi.org/10.6084/m9.figshare.30570653.v1), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Selected Tesla curves in `assets/web/chargecurve.js` were sampled and rounded from the dataset, with inferred endpoints. Original curve publishers and model applicability are documented in `docs/TESLA_PACKS.md`.

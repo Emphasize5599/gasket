@@ -1,6 +1,6 @@
 /* An EV's DC charging curve: kW the car takes at each state of charge. Pure: runs in Node for the tests.
- * Order: the curve you typed > Open EV Data's for this car (bundled, evcurves-data.js) > a generic shape. The car's peak
- * (Fastest DC charging, typed or from Brave) scales a dataset or generic shape; your own curve is used as typed.
+ * Planning requires a confirmed installed pack or a named curve entered by the driver.
+ * The lower-level forCar helper also supports legacy previews.
  * Every curve is an estimate: real charging also depends on battery temperature, the charger and the car's software. */
 (function(root){'use strict';
  var DATA=typeof module!=='undefined'&&module.exports?require('./evcurves-data.js'):root.EVCurveData;
@@ -8,6 +8,31 @@
  // ~50% at 80%): owner-supplied Model Y figures and Open EV Data's curves fall off far sooner (~60% at 50%, ~30% at 70%).
  var GENERIC=[[0,.85],[10,1],[30,1],[40,.88],[50,.72],[60,.57],[70,.43],[80,.3],[90,.17],[100,.06]];
  var EDIT_AT=[0,10,20,30,40,50,60,70,80,90,100];
+ // Warm planning curves. Sources, interpolation and U.S. applicability are documented in docs/TESLA_PACKS.md.
+ var PACKS=[
+  {id:'m3-lr-2021',model:'Model 3',from:2021,to:2021,trim:/(?=.*(?:long range|\blr\b))(?=.*(?:awd|dual motor))/,label:'2021 Long Range AWD · Panasonic 2170 family',kw:[100,250,225,180,145,100,80,60,45,30,15]},
+  {id:'m3-sr-2020',model:'Model 3',from:2020,to:2020,trim:/standard range|sr\+/,label:'2020 Standard Range Plus · nickel-based pack',kw:[169,169,155,138,115,89,71,57,36,22,10]},
+  {id:'ms-refresh',model:'Model S',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model S · 100 kWh class',kw:[138,214,220,224,200,152,118,94,67,48,15]},
+  {id:'ms-plaid',model:'Model S',from:2021,to:2025,trim:/plaid/,label:'2021–25 Model S Plaid · 100 kWh class',kw:[133,205,211,215,193,146,114,90,65,46,15]},
+  {id:'mx-refresh',model:'Model X',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model X · 100 kWh class',kw:[136,210,216,220,198,149,116,92,67,46,15]},
+  {id:'mx-plaid',model:'Model X',from:2022,to:2025,trim:/plaid/,label:'2022–25 Model X Plaid · 100 kWh class',kw:[133,205,211,215,192,146,114,90,65,47,15]}
+ ];
+ function packs(car){
+  if(!car||norm(car.make)!=='tesla')return [];
+  var name=norm([car.model,car.trim].join(' '));
+  return PACKS.filter(function(p){return (name===norm(p.model)||name.startsWith(norm(p.model)+' '))&&car.year>=p.from&&car.year<=p.to&&(!p.trim||p.trim.test(name))&&(!p.exclude||!p.exclude.test(name));});
+ }
+ function selected(car){
+  if(!car)return null;
+  if(car.dcPack==='manual'){
+   var points=clean(car.dcCurve),name=String(car.dcPackName||'').trim();
+   return name&&!/^(unknown|automatic|factory estimate|other|n\/?a)$/i.test(name)&&points&&points[0][0]===0&&points[points.length-1][0]===100?{points:points,src:'user',label:name,peak:peak(points)}:null;
+  }
+  var pack=packs(car).find(function(p){return p.id===car.dcPack;});
+  if(!pack)return null;
+  var points=EDIT_AT.map(function(p,i){return [p,pack.kw[i]];});
+  return {points:points,src:'pack',label:pack.label,peak:peak(points)};
+ }
  function norm(s){return String(s||'').toLowerCase().replace(/(\d),(\d)/g,'$1.$2').replace(/(\d)\s*kwh/g,'$1kwh').replace(/[^a-z0-9.+]+/g,' ').replace(/\b(\d+)\.(\d+)\b/g,'$1_$2').replace(/\./g,' ').replace(/_/g,'.').trim();}
  var SYN=[[/\bdual motor\b|\btwin motor\b|\b4matic\b|\b4motion\b|\be-4orce\b|\b4wd\b|\ball wheel drive\b/g,'awd'],[/\bsingle motor\b|\b2wd\b|\bfwd\b|\brear wheel drive\b/g,'rwd'],[/\blr\b/g,'long range'],[/\bsr\b/g,'standard range'],[/\ber\b/g,'extended range'],[/\bsr\+/g,'standard range plus']];
  // Tesla renamed Long Range to Premium for 2026 (VehicleNames); other makes' Premium is just a trim
@@ -48,11 +73,12 @@
  /** {points, src: 'user' | 'data' | 'generic', label, peak}: the curve the planner uses for this car. */
  var memo={key:'',val:null};
  function forCar(car,rows){
-  var key=rows?'':JSON.stringify(car&&[car.make,car.model,car.trim,car.year,car.tank,car.dcKw,car.dcCurve,car.info&&car.info.drive]);
+  var key=rows?'':JSON.stringify(car&&[car.make,car.model,car.trim,car.year,car.tank,car.dcKw,car.dcCurve,car.dcPack,car.dcPackName,car.info&&car.info.drive]);
   if(key&&memo.key===key)return memo.val;
   var val=resolve(car,rows);if(key)memo={key:key,val:val};return val;
  }
  function resolve(car,rows){
+  var chosen=selected(car);if(chosen)return chosen;
   var mine=clean(car&&car.dcCurve);
   if(mine)return {points:mine,src:'user',label:'Your charging curve',peak:peak(mine)};
   var want=+(car&&car.dcKw)||0,r=match(car,rows);
@@ -63,6 +89,6 @@
  }
  /** The 11 editable rows (0, 10 … 100%) of a curve. */
  function rows11(points){return EDIT_AT.map(function(p){return [p,Math.round(at(points,p/100))];});}
- var api={GENERIC:GENERIC,EDIT_AT:EDIT_AT,clean:clean,at:at,peak:peak,scale:scale,generic:generic,match:match,forCar:forCar,rows11:rows11,tokens:tokens};
+ var api={packs:packs,selected:selected,GENERIC:GENERIC,EDIT_AT:EDIT_AT,clean:clean,at:at,peak:peak,scale:scale,generic:generic,match:match,forCar:forCar,rows11:rows11,tokens:tokens};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ChargeCurve=api;
 })(typeof window!=='undefined'?window:globalThis);

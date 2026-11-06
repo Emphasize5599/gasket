@@ -1,35 +1,34 @@
-// The car editor's DC charging curve: the automatic curve (Open EV Data for a matched car, else generic) with its
-// source and graph, typed kW saved as your curve, Use the automatic curve, no horizontal scroll at 320 / 448 px.
+// Installed pack confirmation, research suggestions, and manual curves at narrow widths.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
- await p.evaluate(()=>{window.__mocks=window.__mocks||{};__mocks.siteRead=()=>({error:'none'});const c=Garage.car();Object.assign(c,{year:2024,make:'Tesla',model:'Model Y Long Range AWD',trim:'Long Range',entryMode:'custom',power:'ev',type:'car',tank:75,dcKw:250,dcKwSrc:'you entered it'});delete c.dcCurve;__app.save();});
+ await p.evaluate(()=>{window.BraveLookup.read=async (q)=>{window.packQuery=q;return {text:'Possible high voltage pack: Panasonic 2170'};};const c=Garage.car();Object.assign(c,{year:2021,make:'Tesla',model:'Model 3 Long Range AWD',entryMode:'custom',power:'ev',type:'car',tank:75,dcKw:200,dcKwSrc:'you entered it',obs:{city:4,hwy:3}});delete c.dcCurve;delete c.dcPack;__app.save();});
  await p.click('#btnTrip');await p.click('#gEdit');
- await p.evaluate(()=>{document.getElementById('gEnergy').open=true;});
- await p.waitForSelector('#gDcCurve');
- assert.match(await p.innerText('#gDcCurve .dc-curve-h'),/Open EV Data: Tesla Model Y Long Range Dual Motor/);
- assert.equal(await p.locator('#gDcCurve [data-dc-pct]').count(),11);assert.equal(await p.inputValue('[data-dc-pct="50"]'),'250');assert.equal(await p.inputValue('[data-dc-pct="80"]'),'100');
- assert.equal(await p.locator('.dc-curve-svg .dc-line').count(),1);assert.equal(await p.locator('#gDcCurveReset').count(),0);
+ await p.locator('#gEnergy').evaluate(e=>{e.open=true;});
+ await p.waitForSelector('#gDcPack');
+ assert.equal(await p.inputValue('#gDcPack'),'');
+ assert.equal(await p.evaluate(()=>Garage.ok()),false,'an EV with no pack cannot plan');
+ await p.click('#gPackSearch');
+ await p.waitForFunction(()=>document.querySelector('#gPackResearch').textContent.includes('Panasonic 2170'));
+ assert.equal(await p.evaluate(()=>packQuery.kind),'packs');
+ assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/2021 Tesla Model 3 Long Range AWD/);
+ assert.equal(await p.inputValue('#gDcPack'),'','research does not confirm the pack');
+ await p.selectOption('#gDcPack','m3-lr-2021');
+ await p.locator('#gEnergy').evaluate(e=>{e.open=true;});
+ assert.equal(await p.evaluate(()=>Garage.ok()),true);
+ assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).peak),250,'chosen curve is not rescaled by the old peak field');
+ await p.waitForSelector('.dc-curve-svg .dc-line');
+ await p.selectOption('#gDcPack','manual');
+ await p.locator('#gEnergy').evaluate(e=>{e.open=true;});
+ assert.equal(await p.inputValue('[data-dc-pct="50"]'),'');
+ await p.fill('#gDcPackName','Documented replacement pack');
+ await p.dispatchEvent('#gDcPackName','change');
+ for(const pct of [0,10,20,30,40,50,60,70,80,90,100]){
+  const input=p.locator('[data-dc-pct="'+pct+'"]');await input.fill(String(150-pct));await input.dispatchEvent('change');
+ }
+ assert.equal(await p.evaluate(()=>Garage.ok()),true);
+ assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).points[5][1]),100);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth||[...document.querySelectorAll('.car-edit .sub-body')].some(x=>x.scrollWidth>x.clientWidth+1)),false,'no horizontal scroll');
- // A lookup can redraw while an older field still has a queued change event.
- await p.evaluate(()=>{window.__oldCurve70=document.querySelector('[data-dc-pct="70"]');Garage.redraw();document.getElementById('gEnergy').open=true;});
- await p.fill('[data-dc-pct="50"]','150');await p.dispatchEvent('[data-dc-pct="50"]','change');
- await p.evaluate(()=>{__oldCurve70.value='75';__oldCurve70.dispatchEvent(new Event('change'));delete window.__oldCurve70;});
- assert.deepEqual(await p.evaluate(()=>Garage.car().dcCurve.filter(x=>x[0]===50||x[0]===70)),[[50,150],[70,75]],'a stale field change cannot overwrite another saved point');
- await p.click('#gDcCurveReset');await p.waitForSelector('#gDcCurveReset',{state:'detached'});
- // your Model Y figures: 150 kW at 50%, 75 at 70%
- await p.fill('[data-dc-pct="50"]','150');await p.dispatchEvent('[data-dc-pct="50"]','change');
- await p.waitForFunction(()=>Garage.car().dcCurve?.find(x=>x[0]===50)?.[1]===150);
- await p.waitForSelector('#gDcCurveReset');await p.fill('[data-dc-pct="70"]','75');await p.dispatchEvent('[data-dc-pct="70"]','change');
- const saved=await p.evaluate(()=>Garage.car().dcCurve);assert.equal(saved.length,11);assert.deepEqual(saved.find(x=>x[0]===50),[50,150]);assert.deepEqual(saved.find(x=>x[0]===70),[70,75]);
- assert.match(await p.innerText('#gDcCurve .dc-curve-h'),/Your charging curve/);assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).src),'user');
- // a box out of range is put back, nothing saved
- await p.fill('[data-dc-pct="90"]','0');await p.dispatchEvent('[data-dc-pct="90"]','change');assert.notEqual(await p.inputValue('[data-dc-pct="90"]'),'0');assert.deepEqual(await p.evaluate(()=>Garage.car().dcCurve.find(x=>x[0]===90)),saved.find(x=>x[0]===90));
- await p.click('#gDcCurveReset');await p.waitForSelector('#gDcCurveReset',{state:'detached'});assert.equal(await p.evaluate(()=>Garage.car().dcCurve),undefined);
- // a car Open EV Data doesn't have: the generic curve, said so
- await p.evaluate(()=>{Object.assign(Garage.car(),{make:'Rivian',model:'R1T',trim:'Adventure',dcKw:220});Garage.redraw();});
- await p.evaluate(()=>{const d=document.getElementById('gEnergy');if(d)d.open=true;});
- await p.waitForFunction(()=>/A typical curve for a 220 kW peak/.test((document.querySelector('#gDcCurve .dc-curve-h')||{}).textContent||''));
- assert.equal(errors.length,0,errors.join('\n'));await p.close();
-}console.log('DC charging curve editor: dataset curve with source and graph, typed kW saved, bad value restored, reset, generic for an unmatched car, 320/448 px');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+  assert.equal(errors.length,0,errors.join('\n'));await p.close();
+}console.log('Required installed pack, lookup suggestions, and manual curve at 320/448 px');}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

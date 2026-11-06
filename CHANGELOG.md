@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.398 - 2026-11-06
+
+- Require an installed battery pack and DC curve for EV trip planning. Add six Tesla profiles, a named manual curve, and Brave pack research.
+
 ## 0.0.397 - 2026-11-06
 - Fix long freezes after planning EV trips: the saved plan copied the route's energy data twice and the whole 16-day weather forecast, reaching about 270 million characters and taking ~15 s to save each time. Oversized plans are now skipped instead of saved.
 
