@@ -443,6 +443,22 @@
     }
     draw();
   }
+  var packBusy={};
+  function packKey(c){return c&&c.year&&c.make&&c.model?[c.year,c.make,c.model,c.trim].filter(Boolean).join(' ').replace(/\s+/g,' ').trim():'';}
+  async function packFind(c,shown){
+    var key=packKey(c);if(!key||!trimOk(c)||packBusy[c.id])return;
+    var current=function(){return !window.__erasing&&car()&&car().id===c.id&&packKey(car())===key;};
+    packBusy[c.id]=true;draw();
+    LG.info('car','Asking Brave Search for possible battery packs'+(shown?' (shown to you)':''),key);
+    var query='Which high-voltage battery packs could a U.S. '+key+' have? List the pack names or part numbers, chemistry, and how the owner can tell them apart. Include sources.';
+    try{
+      var r=await braveSerial(function(){return BraveLookup.read({url:'https://search.brave.com/ask?q='+encodeURIComponent(query)+'&source=llmSuggest',kind:'packs'},{call:call,shown:shown,label:'battery pack',current:current});});
+      if(current()&&!(r&&r.closed)){
+        car().packLookup=r&&r.text&&!r.error&&!r.blocked?{key:key,text:r.text,src:r.src||''}:{key:key,failed:true};
+        save();
+      }
+    }finally{delete packBusy[c.id];if(car()&&car().id===c.id)draw();}
+  }
   /**
    * What the trip planner still needs from the car, top to bottom: the EPA lookup (or your own city + highway mileage),
    * then the tank / battery size. Opens the editor so the missing field is on screen -> {el, kind: 'box'|'pick', msg} or null.
@@ -659,7 +675,7 @@
     if(k==='ev'){
       var ep=c.propulsion||{};
       var eOld=$('gEnergy');if(eOld)energyOpen=eOld.open;   // kept open across redraws (typing a curve value redraws)
-      h+='<details class="card ed-details" id="gEnergy"'+(energyOpen?' open':'')+'><summary>Energy & charging estimates</summary><label class="nf"><span>Vehicle profile</span><select id="gEnergyProfile">'+opts({'estimate':'EPA/observed driving and thermal model','tum-m3-lfp':'I confirm: 2020 Model 3 SR+ · CATL LFP, ~55.4 kWh'},ep.profile||'estimate')+'</select></label><p class="lead small">The measured profile covers one car, not every Model 3. Other cars retain their EPA/observed consumption with estimated weather adjustments. The installed pack below supplies the DC charging curve.</p><label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label><label class="nf"><span>Starting battery temperature (°C)<small>blank: estimate from ambient weather</small></span><input id="gPackTemp" type="number" min="-40" max="65" step="1" value="'+esc(Number.isFinite(ep.initialTempC)?ep.initialTempC:'')+'"></label>'+curveHtml(c)+'</details>';
+      h+='<details class="card ed-details" id="gEnergy"'+(energyOpen?' open':'')+'><summary>Energy & charging estimates</summary><p class="lead small">Your installed pack sets fast-charging times. EPA or your recorded efficiency estimates driving range.</p>'+(ep.profile==='tum-m3-lfp'?'<label class="nf chk"><span>Use saved CATL LFP thermal model<small>Applies to temperature effects for the measured 2020 Model 3 SR+.</small></span><input type="checkbox" id="gLegacyThermal" checked></label>':'')+'<label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label><label class="nf"><span>Starting battery temperature (°C)<small>blank: estimate from ambient weather</small></span><input id="gPackTemp" type="number" min="-40" max="65" step="1" value="'+esc(Number.isFinite(ep.initialTempC)?ep.initialTempC:'')+'"></label>'+curveHtml(c)+'</details>';
     }
     var dOld = $('gDetails'); if (dOld) detOpen = dOld.open;   // its toggle event comes a task later: a redraw before it would close it
     h +=tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
@@ -678,9 +694,17 @@
     var rows=draft||((cc||manual&&ChargeCurve.clean(c.dcCurve))?ChargeCurve.rows11(cc?cc.points:c.dcCurve):ChargeCurve.EDIT_AT.map(function(p){return [p,''];}));
     var choices=packs.map(function(p){return '<option value="'+p.id+'"'+(c.dcPack===p.id?' selected':'')+'>'+esc(p.label)+'</option>';}).join('');
     return '<div class="dc-curve" id="gDcCurve"><label class="nf"><span>Installed battery pack · required</span><select id="gDcPack" required><option value="">Select your pack</option>'+choices+'<option value="manual"'+(manual?' selected':'')+'>Enter my installed pack and curve</option></select></label>'+
-      '<button type="button" class="btn tonal sm" id="gPackSearch">Look up possible packs</button><p class="lead small keep" id="gPackResearch" role="status"></p>'+
+      packLookupHtml(c)+
       (manual?'<label class="nf"><span>Installed pack name or part number</span><input id="gDcPackName" required value="'+esc(c.dcPackName||'')+'"></label><div class="dc-curve-grid">'+rows.map(function(r){return '<label class="nf"><span>'+r[0]+'%</span><input type="number" inputmode="numeric" min="1" max="1000" step="1" data-dc-pct="'+r[0]+'" aria-label="kW at '+r[0]+'% charge" value="'+r[1]+'"></label>';}).join('')+'</div>':'')+
       (cc?'<div class="dc-curve-h"><b>DC charging curve</b><small>'+esc(cc.label)+'</small></div>'+curveSvg(cc.points):'<p class="lead small keep">Choose the pack in your car. For a pack without a listed curve, enter the pack name and charging power at each battery level.</p>')+'</div>';
+  }
+  function packLookupHtml(c){
+    if(!packKey(c)||!trimOk(c))return '<p class="lead small">Enter the vehicle details to look up battery packs.</p>';
+    if(packBusy[c.id])return A.ldBar('Asking Brave Search for possible battery packs');
+    var l=c.packLookup,lookup='<button type="button" class="btn tonal sm" id="gPackSearch">'+(l&&l.key===packKey(c)?'Look up again':'Look up possible packs')+'</button>';
+    if(!l||l.key!==packKey(c))return lookup;
+    if(l.failed)return '<small class="tk-fail">No pack details yet. <a href="#" id="gPackSee">Complete Brave verification</a></small>'+lookup;
+    return '<div class="tz-guess tk-guess" id="gPackResearch" role="status"><b>Brave Search says</b><p class="keep">'+esc(l.text)+'</p><p class="lead small">Confirm the installed pack with your car or service records.</p><div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gPackSee">See Brave’s answer</button>'+lookup+'</div></div>';
   }
   function bindCurve(c){
     var host=$('gDcCurve');if(!host)return;
@@ -697,17 +721,8 @@
       var curve=ChargeCurve.clean(rows);if(curve&&curve.length===rows.length)c.dcCurve=curve;else delete c.dcCurve;
       changed();
     };});
-    $('gPackSearch').onclick=async function(){
-      var button=this,note=$('gPackResearch'),vehicle=[c.year,c.make,c.model,c.trim].filter(Boolean).join(' ');
-      if(!c.year||!c.make||!c.model){note.textContent='Enter the year, make and model first.';return;}
-      button.disabled=true;note.textContent='Looking up possible packs…';
-      var query=vehicle+' US EV high voltage battery pack variants chemistry cell supplier pack part number by build date sources';
-      try{
-        var r=await BraveLookup.read({url:'https://search.brave.com/ask?q='+encodeURIComponent(query)+'&source=llmSuggest',kind:'packs'},{call:call,label:'battery packs',current:function(){return host.isConnected&&car()===c;}});
-        if(host.isConnected)note.textContent=r&&r.text?'Research only. Confirm the installed pack with the car or service records. '+r.text:'No pack details found. Check the car or its service records.';
-      }catch(e){if(host.isConnected)note.textContent='Pack lookup unavailable. Check the car or its service records.';}
-      finally{if(host.isConnected)button.disabled=false;}
-    };
+    if($('gPackSearch'))$('gPackSearch').onclick=function(){packFind(c,false);};
+    if($('gPackSee'))$('gPackSee').onclick=function(e){e.preventDefault();packFind(c,true);};
   }
   function infoLine(c) {
     var i = c.info || {}, bits = [POWER_PLAIN[c.power] || '', enginePlain(c).text, i.drive ? DRIVE_PLAIN[i.drive] || '' : ''].filter(Boolean);
@@ -1068,7 +1083,7 @@
       if ($('gDcYes')) $('gDcYes').onclick = function () { c.dcKwLookup.ok = true; c.dcKwSrc = 'from Brave Search · you confirmed it'; LG.info('car', 'DC charging rate confirmed: ' + c.dcKw + ' kW'); changed(); draw(); };
       if ($('gDcSee')) $('gDcSee').onclick = function () { dcFind(c, true); };
       bindCurve(c);
-      ['gEnergyProfile','gHeatPump','gPrecondition','gPackTemp'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=function(){var p=c.propulsion=c.propulsion||{};if(id==='gEnergyProfile')p.profile=this.value;else if(id==='gPackTemp'){if(this.value==='')delete p.initialTempC;else{var t=Number(this.value);if(!Number.isFinite(t)||t< -40||t>65){this.value=Number.isFinite(p.initialTempC)?p.initialTempC:'';return;}p.initialTempC=t;}}else p[id==='gHeatPump'?'heatPump':'precondition']=this.checked;changed();};});
+      ['gLegacyThermal','gHeatPump','gPrecondition','gPackTemp'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=function(){var p=c.propulsion=c.propulsion||{};if(id==='gLegacyThermal'){delete p.profile;changed();draw();return;}else if(id==='gPackTemp'){if(this.value==='')delete p.initialTempC;else{var t=Number(this.value);if(!Number.isFinite(t)||t< -40||t>65){this.value=Number.isFinite(p.initialTempC)?p.initialTempC:'';return;}p.initialTempC=t;}}else p[id==='gHeatPump'?'heatPump':'precondition']=this.checked;changed();};});
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
       if($('tEpa'))$('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });

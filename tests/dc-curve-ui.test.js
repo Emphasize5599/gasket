@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
- await p.evaluate(()=>{window.BraveLookup.read=async (q)=>{window.packQuery=q;return {text:'Possible high voltage pack: Panasonic 2170'};};const c=Garage.car();Object.assign(c,{year:2021,make:'Tesla',model:'Model 3 Long Range AWD',entryMode:'custom',power:'ev',type:'car',tank:75,dcKw:200,dcKwSrc:'you entered it',obs:{city:4,hwy:3}});delete c.dcCurve;delete c.dcPack;__app.save();});
+ await p.evaluate(()=>{window.BraveLookup.read=async (q,o)=>{window.packQuery=q;window.packShown=o.shown;return {text:'Possible high voltage pack: Panasonic 2170'};};const c=Garage.car();Object.assign(c,{year:2021,make:'Tesla',model:'Model 3 Long Range AWD',entryMode:'custom',power:'ev',type:'car',tank:75,dcKw:200,dcKwSrc:'you entered it',obs:{city:4,hwy:3}});delete c.dcCurve;delete c.dcPack;__app.save();});
  await p.click('#btnTrip');await p.click('#gEdit');
  await p.locator('#gEnergy').evaluate(e=>{e.open=true;});
  await p.waitForSelector('#gDcPack');
@@ -13,12 +13,16 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.waitForFunction(()=>document.querySelector('#gPackResearch').textContent.includes('Panasonic 2170'));
  assert.equal(await p.evaluate(()=>packQuery.kind),'packs');
  assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/2021 Tesla Model 3 Long Range AWD/);
+ await p.click('#gPackSee');
+ await p.waitForFunction(()=>document.querySelector('#gPackResearch')?.textContent.includes('Panasonic 2170'));
+ assert.equal(await p.evaluate(()=>packShown),true,'open the answer in the shared visible Brave flow');
  assert.equal(await p.inputValue('#gDcPack'),'','research does not confirm the pack');
  await p.selectOption('#gDcPack','m3-lr-2021');
  await p.locator('#gEnergy').evaluate(e=>{e.open=true;});
  assert.equal(await p.evaluate(()=>Garage.ok()),true);
  assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).peak),250,'chosen curve is not rescaled by the old peak field');
  await p.waitForSelector('.dc-curve-svg .dc-line');
+ assert.match(await p.locator('#gPackResearch').innerText(),/Panasonic 2170/,'answer survives the editor redraw');
  await p.selectOption('#gDcPack','manual');
  await p.locator('#gEnergy').evaluate(e=>{e.open=true;});
  assert.equal(await p.inputValue('[data-dc-pct="50"]'),'');

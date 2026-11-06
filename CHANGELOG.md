@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.400 - 2026-11-06
+
+- Show battery pack research through the standard Brave lookup flow and simplify the EV energy editor.
+
 ## 0.0.399 - 2026-11-06
 
 - Use one least-traffic ranking in rest timing, show incomplete forecasts in gray, and align the slider colors with departure choices.

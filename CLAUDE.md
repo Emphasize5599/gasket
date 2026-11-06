@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.400 - show Brave battery pack results
+
+Pack research uses the standard serialized Brave reader, progress bar, answer card and visible verification. Results are saved by vehicle identity so Garage redraws can show them. Removed the generic Vehicle profile selector. An existing CATL LFP thermal opt-in can be turned off separately.
+
 ## 0.0.399 - consistent rest departure traffic labels
 
 Rest timing uses one ranked departure for the default and shortcut. Incomplete forecasts use gray, omit the delay claim, and are excluded from ranking. Saved departures are preserved, and color bands follow the slider thumb positions.
