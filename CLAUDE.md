@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.399 - consistent rest departure traffic labels
+
+Rest timing uses one ranked departure for the default and shortcut. Incomplete forecasts use gray, omit the delay claim, and are excluded from ranking. Saved departures are preserved, and color bands follow the slider thumb positions.
+
 ## 0.0.398 - require installed EV battery packs
 
 Garage requires a compatible Tesla library pack or a named manual DC curve before EV planning. Brave researches potential packs without selecting one. The saved plan identity includes the actual curve points. See [Tesla pack evidence](docs/TESLA_PACKS.md) for the six initial curves and variants awaiting a verified match.

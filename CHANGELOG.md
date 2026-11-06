@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.399 - 2026-11-06
+
+- Use one least-traffic ranking in rest timing, show incomplete forecasts in gray, and align the slider colors with departure choices.
+
 ## 0.0.398 - 2026-11-06
 
 - Require an installed battery pack and DC curve for EV trip planning. Add six Tesla profiles, a named manual curve, and Brave pack research.

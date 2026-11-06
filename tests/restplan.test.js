@@ -16,7 +16,12 @@ assert.throws(()=>P.remove(ins.route,0),/Not a rest stop/);
 assert.throws(()=>P.insert(route,selected,car,0,d,site,{...access,outPts:[{lat:35,lng:-90},site]},{minimumRest:30}),/needs routing/,'an access path that does not touch the road is routed, not glued');
 // colors
 const z=P.zones([{depart:1,drivingMinutes:61,freeMinutes:60,coverage:1},{depart:2,drivingMinutes:80,freeMinutes:60,coverage:1},{depart:3,drivingMinutes:120,freeMinutes:60,coverage:1},{depart:4,drivingMinutes:null},{depart:5,drivingMinutes:61,freeMinutes:60,coverage:.7}],30);
-assert.deepEqual(z.map(s=>s.zone),['green','yellow','red','unknown','yellow']);assert.equal(z[2].delayMinutes,60);
+assert.deepEqual(z.map(s=>s.zone),['green','yellow','red','unknown','unknown']);assert.equal(z[2].delayMinutes,60);
+const mixed=P.zones([{drivingMinutes:60,freeMinutes:60,coverage:.7},{drivingMinutes:63,freeMinutes:60,coverage:1},{drivingMinutes:62,freeMinutes:60,coverage:1}],30);
+assert.deepEqual(mixed.map(s=>s.zone),['unknown','green','green']);
+assert.deepEqual(mixed.map(s=>s.delayMinutes),[null,3,2]);
+assert.equal(P.leastIndex(mixed.map(P.compact)),2,'the lowest verified time wins even if green starts earlier');
+assert.equal(P.leastIndex([mixed[0]]),-1);
 const allBusy=P.zones([{drivingMinutes:90,freeMinutes:60},{drivingMinutes:95,freeMinutes:60}],10);assert(allBusy.every(s=>s.zone==='red'),'congested at every checked time is never green');
 assert.equal(P.zones([{drivingMinutes:50},{drivingMinutes:51}],10)[0].zone,'green','without a free-flow figure the best checked time is the reference');
 const c=P.compact(Object.assign({profile:{rows:new Array(1000)}},z[1]));assert(!('profile' in c)&&c.zone==='yellow');

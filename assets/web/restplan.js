@@ -18,14 +18,25 @@
  function fitStart(opts,plan,stops,departures,earliest,arrivals,arrivalMayMove){var start=opts.rewardDepartAt,original=start,last=Infinity,answer;for(var pass=0;pass<6;pass++){answer=anchoredTiming(Object.assign({},opts,{rewardDepartAt:start}),plan,stops,departures);(arrivals||[]).forEach(function(bound,i){if(bound&&answer.timeline[i]&&answer.timeline[i].arrive>bound.end+1000)answer.late.push({ms:answer.timeline[i].arrive-bound.end});});if(!answer.late.length){if((arrivals||[]).some(function(bound,i){return bound&&answer.timeline[i]&&answer.timeline[i].arrive<bound.start-1000&&!(arrivalMayMove&&arrivalMayMove(i,answer.timeline[i]));}))throw anchorError('This rest cannot keep the destination arrival window and original later departure. Choose another rest or change your allowed windows.');for(var i=1;i<stops.length-1;i++){var r=stops[i].rest;if(!r)continue;var arrive=answer.timeline[i-1].arrive,leave=answer.timeline[i].depart;if(r.maximumStay>0&&leave-arrive>r.maximumStay*60000+1000||r.parkingCloses&&leave>r.parkingCloses+1000||r.overnight&&(arrive<r.nightStart-1000||r.nightArrivalEnd!=null&&arrive>r.nightArrivalEnd+1000||leave>r.nightEnd+1000))throw anchorError('This rest cannot fit its stay limits or overnight hours while keeping your original later-leg departure. Choose a different rest or change your allowed windows.');}return Object.assign(answer,{depart:start,shiftMs:original-start});}var deficit=Math.max.apply(null,answer.late.map(function(a){return a.ms;})),next=start-deficit;if(next<earliest-1000||deficit>=last-1000)break;last=deficit;start=next;}throw anchorError('This rest cannot fit before your original later-leg departure within the allowed first-leg window. Choose a shorter or different rest, or change your allowed window.');}
  function hazardKey(h){return [h.kind,h.level,h.src||'',h.event||'',h.id||'',h.areaSource||''].join('|');}
  function newHazards(previous,current){var known=new Set((previous||[]).map(hazardKey));return (current||[]).filter(function(h){return !known.has(hazardKey(h));});}
- // Departure colors for one rest. Green = about free flow: within 3 min / 5% of the free-flow time = the stretch's normal
- // no-traffic driving time (forecast baseSeconds; 0.0.347), or a faster sampled departure: never just the least-bad of congested samples.
- // Yellow = within the user's traffic tolerance; red = beyond it (still selectable, with a warning). No forecast = gray;
- // a partly forecast trip can't be green (its unforecast stretches use the route's normal time).
- function zones(samples,tolerance){tolerance=Math.max(0,+tolerance||0);var good=samples.filter(function(s){return Number.isFinite(s.drivingMinutes);}),frees=good.map(function(s){return Number.isFinite(s.freeMinutes)?s.freeMinutes:null;}).filter(function(v){return v!=null;}),least=good.length?Math.min.apply(null,good.map(function(s){return s.drivingMinutes;})):null,free=frees.length?Math.min(Math.min.apply(null,frees),least):least;
-  return samples.map(function(s){var known=Number.isFinite(s.drivingMinutes)&&free!=null,delay=known?Math.max(0,s.drivingMinutes-free):null,zone=!known?'unknown':delay<=Math.max(3,free*.05)?'green':delay<=tolerance?'yellow':'red';if(zone==='green'&&s.coverage!=null&&s.coverage<.9)zone='yellow';return Object.assign({},s,{freeFlowMinutes:free,delayMinutes:delay,zone:zone,best:known&&least!=null&&s.drivingMinutes<=least+Math.max(1,least*.01)});});}
+ // Incomplete forecasts use normal route times for missing stretches, so they cannot compete with verified times.
+ function forecastZone(s){return !Number.isFinite(s.drivingMinutes)||s.coverage!=null&&s.coverage<.9?'unknown':s.zone;}
+ function leastIndex(samples){
+  var best=-1;
+  samples.forEach(function(s,i){if(forecastZone(s)!=='unknown'&&(best<0||s.drivingMinutes<samples[best].drivingMinutes))best=i;});
+  return best;
+ }
+ function zones(samples,tolerance){
+  tolerance=Math.max(0,+tolerance||0);
+  var good=samples.filter(function(s){return forecastZone(s)!=='unknown';});
+  var free=good.reduce(function(min,s){return Math.min(min,s.drivingMinutes,Number.isFinite(s.freeMinutes)?s.freeMinutes:Infinity);},Infinity);
+  return samples.map(function(s){
+   var delay=forecastZone(s)==='unknown'?null:Math.max(0,s.drivingMinutes-free);
+   var zone=delay==null?'unknown':delay<=Math.max(3,free*.05)?'green':delay<=tolerance?'yellow':'red';
+   return Object.assign({},s,{freeFlowMinutes:Number.isFinite(free)?free:null,delayMinutes:delay,zone:zone});
+  });
+ }
  /** Compact sample for storage: no traffic profile, just what the slider and review need. */
- function compact(s){return {depart:s.depart,arrive:s.arrive,drivingMinutes:Number.isFinite(s.drivingMinutes)?Math.round(s.drivingMinutes*10)/10:null,delayMinutes:s.delayMinutes==null?null:Math.round(s.delayMinutes*10)/10,zone:s.zone,coverage:s.coverage==null?null:Math.round(s.coverage*100)/100,error:s.error?String(s.error).slice(0,120):undefined,reachMi:Number.isFinite(s.reachMi)?Math.round(s.reachMi):undefined,reachName:s.reachName||undefined,best:s.best||undefined};}
+ function compact(s){return {depart:s.depart,arrive:s.arrive,drivingMinutes:Number.isFinite(s.drivingMinutes)?Math.round(s.drivingMinutes*10)/10:null,delayMinutes:s.delayMinutes==null?null:Math.round(s.delayMinutes*10)/10,zone:s.zone,coverage:s.coverage==null?null:Math.round(s.coverage*100)/100,error:s.error?String(s.error).slice(0,120):undefined,reachMi:Number.isFinite(s.reachMi)?Math.round(s.reachMi):undefined,reachName:s.reachName||undefined};}
  // Hazard review after rests: a current hazard is already reviewed when a previously shown hazard of the same kind (and
  // event, for alerts), at least as severe, covers the same place (every 2 mi of it within 5 mi of the old stretch). Rests
  // move times, not roads, so a known stretch that is still there needs no second Yes; new roads or worse conditions do.
@@ -33,5 +44,5 @@
  // opts.after: from this mile on (the first added rest) the trip runs at new hours, so an earlier review covers a hazard
  // there only if it was also met at about the same time (opts.slackMs, default 30 min) — not just the same place.
  function changedHazards(previous,prevModel,current,curModel,miles,opts){var near=miles||5,o2=opts||{},after=Number.isFinite(o2.after)?o2.after:Infinity,slack=o2.slackMs==null?1800000:o2.slackMs,old=(previous||[]).map(function(h){return placed(h,prevModel);});return (current||[]).filter(function(h){var c=placed(h,curModel),timed=Math.max(+h.toMi||0,+h.fromMi||0)>=after;return !old.some(function(o){if(!(o.kind===c.kind&&o.event===c.event&&o.level>=c.level&&c.pts.every(function(p){return o.pts.some(function(q){return T.hav(p,q)<=near;});})))return false;if(!timed)return true;var a0=+h.from,a1=Number.isFinite(+h.to)?+h.to:a0,b0=+o.from,b1=Number.isFinite(+o.to)?+o.to:b0;return Number.isFinite(a0)&&Number.isFinite(b0)&&a0<=b1+slack&&b0<=a1+slack;});});}
- var api={departures:departures,anchoredTiming:anchoredTiming,fitStart:fitStart,alignWaits:alignWaits,raw:raw,insert:insert,remove:remove,zones:zones,compact:compact,changedHazards:changedHazards,newHazards:newHazards,hazardKey:hazardKey};if(node)module.exports=api;else root.RestPlan=api;
+ var api={departures:departures,anchoredTiming:anchoredTiming,fitStart:fitStart,alignWaits:alignWaits,raw:raw,insert:insert,remove:remove,zones:zones,forecastZone:forecastZone,leastIndex:leastIndex,compact:compact,changedHazards:changedHazards,newHazards:newHazards,hazardKey:hazardKey};if(node)module.exports=api;else root.RestPlan=api;
 })(typeof window==='undefined'?globalThis:window);
