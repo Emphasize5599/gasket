@@ -25,9 +25,8 @@
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 80000 : 0;
       if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
-      var packRead=args[0]==='brave'&&/"kind"\s*:\s*"packs"/.test(args[1]||'');
-      if(fn==='siteRead'&&args[0]==='brave')timeout=packRead?160000:60000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
-      if(fn==='siteShow'&&args[0]==='brave')timeout=packRead?195000:150000;
+      if(fn==='siteRead'&&args[0]==='brave')timeout=160000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
+      if(fn==='siteShow'&&args[0]==='brave')timeout=195000;
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if(fn==='fetchJson'&&/^https:\/\/www\.recreation\.gov\//.test(args[0]||''))timeout=33000;
       if (fn === 'aiCommand') timeout = 15000;
@@ -284,7 +283,7 @@
   });
   function windowPointZone(i){var p=route&&route.stops[i];return p&&(p.timeZone||p.rest&&p.rest.site&&p.rest.site.timeZone||windowStopClocks.get(p));}
   function windowLocal(t){return new Date(t).toISOString();}
-  function windowStateKey(s){var c=S.cars.find(function(c){return c.id===s.id;}),lists=s.route&&s.route.legs?s.route.legs.map(function(l){return l.alts;}):[s.alts||[]];return VehicleCompare.key([VehicleCompare.profile(c),s.speed,s.trip.windowPlan,s.trip.trafficForecast,s.trip.avoid,planningPriority(c),c&&c.tollPreference,s.trip.returnTrip,s.trip.backAuto,lists.map(function(list){return list.map(function(a){return a.polyline;});})]);}
+  function windowStateKey(s){var c=S.cars.find(function(c){return c.id===s.id;}),lists=s.route&&s.route.legs?s.route.legs.map(function(l){return l.alts;}):[s.alts||[]];return VehicleCompare.key([VehicleCompare.profile(c),s.speed,s.trip.windowPlan,s.trip.trafficForecast,s.trip.avoid,planningPriority(c),c&&c.tollPreference,s.trip.returnTrip,s.trip.backAuto,lists.map(function(list){return list.map(function(a){return a.polyline;});})].concat(s.trip.batteryStart&&s.trip.batteryStart.carId===s.id?[s.trip.batteryStart]:[]));}
   function windowDestination(i){return windows.config().destinations&&windows.config().destinations[i]||{};}
   function windowRoutes(){return choiceLists().map(function(list,i){return list.map(function(a,k){var m=T.buildRoute(a,carModel());return {key:RouteChoices.key(i,a),index:k,raw:a,name:a.description||'Route '+(k+1),model:m};});});}
   function windowRows(roads,bounds){
@@ -1223,6 +1222,26 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     }
   }
   /** Is this step done? If not, point at the first thing missing (top to bottom) and say what's needed. */
+  function batteryStart(){
+    var t=S.trip.batteryStart;
+    return t&&t.carId===S.carId?t:{carId:S.carId,temperature:(Garage.car().propulsion||{}).initialTempC};
+  }
+  function syncBatteryStart(){
+    var t=batteryStart(),box=$('tBatteryTemp');
+    if(!box)return;
+    box.disabled=t.ambient===true;
+    box.value=!box.disabled&&Number.isFinite(t.temperature)?t.temperature:'';
+    box.placeholder=box.disabled?'Forecast at departure':'Enter °C';
+    $('tBatterySoak').textContent=t.ambient===true?'Use forecast temperature':t.ambient===false?'Use entered temperature':'Set battery temperature source';
+  }
+  async function askBatteryStart(){
+    if($('cfm'))return false;
+    var owner=S.trip,carId=S.carId,answer=await A.confirmDel({always:true,three:true,title:'Will the battery be at outdoor temperature?',body:'At your planned departure, will the car have been parked outdoors for about '+Propulsion.SOAK_HOURS+' hours without driving, charging, or preconditioning?',action:'Yes, use forecast',no:'No, enter temperature',goClass:'primary'});
+    if(answer==null||S.trip!==owner||S.carId!==carId)return false;
+    S.trip.batteryStart=Object.assign({},batteryStart(),{ambient:answer});
+    result=null;A.save();syncBatteryStart();
+    return true;
+  }
   async function ready(k) {
     if (k === ST_GARAGE) {
       var g = Garage.need && Garage.need();
@@ -1254,6 +1273,15 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (k === ST_PARAMS) {
       if (FuelGauge.math.empty(fuel(), Garage.tank(), Garage.carModel().comb)) { flag($('tEmpty') || $('tFuel'), 'pick', KIND() === 'ev' ? 'Charge enough to reach a station first.' : 'Put in enough gas to reach a station first.'); return false; }
       if (!hasFuel()) { flag($('tMiles') || $('tFuelPct') || $('tGauge'), 'box', KIND() === 'ev' ? 'How charged is your battery?' : 'How much gas do you have?'); return false; }
+      if(KIND()==='ev'){
+        if(batteryStart().ambient==null&&!await askBatteryStart())return false;
+        var battery=batteryStart();
+        if(!battery.ambient&&!Number.isFinite(battery.temperature)){
+          if(step!==ST_PARAMS){step=ST_PARAMS;renderStep();}
+          flag($('tBatteryTemp'),'box','Enter the starting battery temperature, or choose forecast temperature.');
+          return false;
+        }
+      }
       if(KIND()==='ev'&&window.EVCharging){var errs=EVCharging.errors(S.trip,route&&route.stops||[],Garage.car(),S.evPrice);if(errs.length){flag($('evDestinations'),'pick',errs.join(' '));return false;}}
       return true;
     }
@@ -1409,6 +1437,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       fuel(); // apply a newly selected demo car's fuel and detour defaults before rendering inputs
       var kd = KIND();
       return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div><div id="tEmpty"></div>' +
+        (kd==='ev'?'<label class="nf"><span>Starting battery temperature (°C)</span><input id="tBatteryTemp" type="number" min="-40" max="65" step="1"></label><button type="button" class="btn tonal sm" id="tBatterySoak"></button>':'')+
         '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
         num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t[tankPriceKey()]||'', 0.01, kd === 'ev' ? 'e.g. home charging · blank = the typical rate of this route\'s chargers' : 'blank = typical price on the route') + '</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
@@ -1538,6 +1567,15 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (srcOf() === 'link' && t.link && !route) readLink().then(autoRoutes); else autoRoutes();
   }
   function bindSettings() {
+    if($('tBatteryTemp')){
+      syncBatteryStart();
+      $('tBatterySoak').onclick=askBatteryStart;
+      $('tBatteryTemp').onchange=function(){
+        if(this.value!==''&&!this.checkValidity()){syncBatteryStart();return;}
+        S.trip.batteryStart=Object.assign({},batteryStart(),{ambient:false,temperature:this.value===''?null:Number(this.value)});
+        result=null;A.save();syncBatteryStart();
+      };
+    }
     var again = function () { collectSafe(); result = null;adjustError=''; };
     var arriveHelp = function () {
       var full = $('tArrive').querySelector('.on').dataset.a === 'full', ev = KIND() === 'ev';
@@ -4000,10 +4038,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function makeBaseOpts(model, cands, startGal,raw) {
     var kd = KIND(), cap = Garage.tank(), curve = kd === 'ev' ? ChargeCurve.selected(Garage.car()) : null;
     if(kd==='ev'&&!curve)throw Error('Select your installed battery pack in Garage before planning.');
+    var battery=kd==='ev'?batteryStart():null;
     var options={ step: kd === 'ev' ? Math.max(0.1, Math.round(cap / 150 * 10) / 10) : kd === 'h2' ? 0.05 : 0.1, fillCap: kd === 'ev' ? cap * (S.trip.fillUp?0.8:1) : null,preferredFillCap:kd==='ev'&&!S.trip.fillUp?cap*.8:null,
       priceAgeHours:kd==='ev'?Math.max(1,Math.min(720,+S.evPriceAgeHours||24)):0,priceNow:Date.now(),requireKnownPrice:kd==='ev'&&S.evAllowUnknownPrices!==true,
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
-      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:curve?curve.peak:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2},curve?{curve:curve.points}:{},S.trafficEnergy?{auxModel:true,preset:window.Climate&&Climate.current?Climate.current(Garage.car()):null}:{}),
+      propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:curve?curve.peak:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2},curve?{curve:curve.points,initialTempC:battery.ambient?null:battery.temperature,ambientStart:battery.ambient===true}:{},S.trafficEnergy?{auxModel:true,preset:window.Climate&&Climate.current?Climate.current(Garage.car()):null}:{}),
       chargeCurve:curve?{points:curve.points,acKw:+Garage.car().acKw||7.2,src:curve.src}:null,propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
       destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,S.evPrice):[],
       arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,
@@ -5190,7 +5229,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     resetAdjust();
     route = null; model = null; rawRoute = null; result = null; replay = null; parsing = null; alts = []; altSel = 0; altSure = false;
     routeBounds = null; userMoved = false; layer.clearLayers(); drawn = {}; resetSteps(); opened = {};
-    S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.via = []; S.trip.returnTrip = false;delete S.trip.propulsionRoads;delete S.trip.propulsionOffset; if (link) S.trip.src = 'link';
+    S.trip.link = link || ''; S.trip.from = ''; S.trip.to = ''; S.trip.via = []; S.trip.returnTrip = false;delete S.trip.propulsionRoads;delete S.trip.propulsionOffset;delete S.trip.batteryStart; if (link) S.trip.src = 'link';
     if (link) autoRoute = true;   // a link shared from Google Maps: its routes come by themselves
     A.save();
     openTrip(Garage.need && Garage.need() ? ST_GARAGE : link ? ST_ROUTE : ST_GARAGE);
@@ -5215,7 +5254,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     }else if(compareEntries.size){S.trip.fuel=null;S.trip.milesLeft='';v=Object.assign({},v,{trip:Object.assign({},v.trip,{fuel:null,milesLeft:'',evDestinations:null})});}
     var checkpoint=rootSaved.ownerVehicle===S.carId?rootSaved.planned:draft&&draft.planned,checkpointChoices=checkpoint&&checkpoint.trip&&checkpoint.trip.routeChoices||rootSaved.ownerVehicle===S.carId&&rootSaved.draftClock&&rootSaved.draftClock.choices;if(checkpointChoices&&!v.trip.routeChoices)v=Object.assign({},v,{trip:Object.assign({},v.trip,{routeChoices:checkpointChoices})});
     var savedContext={id:S.carId,profile:VehicleCompare.profile(Garage.car()),kind:KIND(),speed:draft&&draft.speed||rootSaved.speed||S.speed,trip:v.trip,route:v.route,alts:v.alts,altSel:v.altSel||0};var restoredPlan=plannedRestore(rootSaved.ownerVehicle===S.carId?rootSaved.planned:draft&&draft.planned,savedContext)||plannedRestore(draft&&draft.planned,savedContext),restoredClock=rootSaved.ownerVehicle===S.carId&&restoreRestClock(rootSaved.draftClock,savedContext);if(restoredPlan){S.trip=Object.assign({},S.trip,restoredPlan.trip);S.speed=VehicleCompare.clone(savedContext.speed);}else if(restoredClock){S.trip=Object.assign({},S.trip,VehicleCompare.clone(v.trip));S.speed=VehicleCompare.clone(savedContext.speed);}else{S.trip.depart='';S.trip.departNow=false;S.trip.backAt='';}
-    if(!restoredPlan){S.trip.propulsionOffset=v.trip.propulsionOffset;S.trip.propulsionRoads=VehicleCompare.clone(v.trip.propulsionRoads);
+    if(!restoredPlan){S.trip.batteryStart=VehicleCompare.clone(v.trip.batteryStart);S.trip.propulsionOffset=v.trip.propulsionOffset;S.trip.propulsionRoads=VehicleCompare.clone(v.trip.propulsionRoads);
     Object.assign(S.trip, { src: v.trip.link ? 'link' : 'typed', link: v.trip.link || '', from: v.trip.from || '', to: v.trip.to || '', via: (v.trip.via || []).slice(), avoid: Object.assign({ tolls: false, highways: false, ferries: false }, v.trip.avoid) });
     S.trip.restRoutes=v.trip.restRoutes===true;S.trip.priceReroute=v.trip.priceReroute!==false;S.trip.restScreen=v.trip.restScreen||null;S.trip.windowPlan=v.trip.windowPlan||null;S.trip.legDepartures=v.trip.legDepartures||null;S.trip.trafficForecast=v.trip.trafficForecast===true;S.trip.trafficPreset=v.trip.trafficPreset||'auto';S.trip.trafficJourney=v.trip.trafficJourney||null;S.trip.evChargers=v.trip.evChargers||null;if(v.trip.evNetworksOff)S.trip.evNetworksOff=v.trip.evNetworksOff;S.trip.evDestinations=v.trip.evDestinations||null;S.trip.arrive=v.trip.arrive||'buffer';S.trip.arriveSet=!!v.trip.arrive;resetChoices(id);S.trip.altCompare=!!v.trip.altCompare;S.trip.altMinSave=v.trip.altMinSave==null?5:v.trip.altMinSave;}
     routeReview=null;choiceComplete=false;choicePool=null;

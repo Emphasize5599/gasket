@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.405 - 2026-11-06
+
+- Set EV starting battery temperature in Parameters and use departure weather after long parked rests.
+- Give every Ask Brave lookup at least two minutes, show Watch in the task bar, and display structured battery-pack results.
+
 ## 0.0.404 - 2026-11-06
 
 - Update the native reader test fixture for the Brave watch overlay and verify that it closes when the lookup finishes.

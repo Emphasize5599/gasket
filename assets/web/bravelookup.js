@@ -3,12 +3,18 @@
 (function(root){'use strict';
  var A=root.__app,LG=root.FLog||{info:function(){},warn:function(){}};
  var active=null;
+ function url(query){
+  var end=' End: GASKET DONE.';
+  if((query+end).length<=400&&(query+end).trim().split(/\s+/).length<=50)query+=end;
+  return 'https://search.brave.com/ask?q='+encodeURIComponent(query)+'&source=llmSuggest';
+ }
+ function watch(){if(active&&active.current()&&A.N.siteWatchBrave)A.N.siteWatchBrave(active.url);}
  function progress(label,kind){
   return A.ldBar(label)+(A.N.siteWatchBrave?'<button type="button" class="btn tonal sm" data-brave-watch="'+kind+'">Watch Brave lookup</button>':'');
  }
  document.addEventListener('click',function(e){
   var button=e.target.closest('[data-brave-watch]');if(!button)return;
-  if(active&&active.kind===button.dataset.braveWatch&&active.current())A.N.siteWatchBrave(active.url);
+  if(active&&active.kind===button.dataset.braveWatch&&active.current())watch();
   else A.toast('This Brave lookup is queued or has just finished.');
  });
  async function read(args,options){
@@ -17,9 +23,10 @@
    if(!current())return {closed:true};
    var lookup={url:args.url,kind:args.kind||'tank',current:current};
    if(!shown)active=lookup;
+   var end=!shown&&A.N.siteWatchBrave&&root.Tasks?Tasks.begin('brave-lookup',{text:'Brave AI · '+(o.label||'vehicle research'),priority:25,action:'Watch',onAction:watch}):null;
    try{return await call(shown?'siteShow':'siteRead','brave',JSON.stringify(Object.assign({},args,{bg:!shown,aiOnly:true})));}
    catch(e){return {error:String(e&&e.message||e),code:'bridge'};}
-   finally{if(active===lookup)active=null;}
+   finally{if(active===lookup)active=null;if(end)end();}
   }
   var r=await ask(!!o.shown);
   if(valid(r))LG.info('car','Brave answer',{kind:args.kind||'tank',page:/\/ask\?/.test(args.url)?'ask':'search',src:r.src});
@@ -36,5 +43,5 @@
   if(current()&&!valid(r)&&!(r&&r.closed))A.toast('Brave still has no usable answer. You can retry the lookup.');
   return r;
  }
- root.BraveLookup={read:read,progress:progress};
+ root.BraveLookup={read:read,progress:progress,url:url};
 })(window);

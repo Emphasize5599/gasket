@@ -1,13 +1,27 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
  const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
- await p.evaluate(()=>{const S=__app.S,c=DemoCars.create().find(c=>c.power==='ev');S.cars=[c];S.carId=c.id;S.setupDone=true;});
+ await p.evaluate(()=>{const S=__app.S,c=DemoCars.create().find(c=>c.power==='ev');c.entryMode='custom';c.trim='Long Range AWD';S.cars=[c];S.carId=c.id;S.setupDone=true;});
  await p.click('#btnTrip');await p.click('#gInfo summary');await p.click('#gInfoEdit');await p.waitForFunction(()=>!Garage.trimBusy());
  await p.locator('#gEnergy').evaluate(e=>e.open=true);
  assert.equal(await p.locator('#gEnergyProfile').count(),0);
  assert.equal(await p.locator('#gLegacyThermal').count(),0);
- await p.check('#gPrecondition');await p.fill('#gPackTemp','-5');await p.locator('#gPackTemp').dispatchEvent('change');
- assert.equal(await p.evaluate(()=>Garage.car().propulsion.initialTempC),-5);assert.equal(await p.evaluate(()=>Garage.car().propulsion.precondition),true);
+ await p.check('#gPrecondition');
+ assert.equal(await p.locator('#gPackTemp').count(),0);
+ assert.equal(await p.evaluate(()=>Garage.car().propulsion.precondition),true);
+ await p.click('#gSave');
+ await p.evaluate(()=>__trip.step(4));
+ await p.click('#tBatterySoak');
+ await p.click('#cfm.on #cfmYes');
+ assert.equal(await p.isDisabled('#tBatteryTemp'),true);
+ assert.equal(await p.evaluate(()=>__app.S.trip.batteryStart.ambient),true);
+ await p.waitForSelector('#cfm',{state:'detached'});
+ await p.click('#tBatterySoak');
+ await p.click('#cfm.on #cfmNo');
+ assert.equal(await p.isDisabled('#tBatteryTemp'),false);
+ await p.waitForSelector('#cfm',{state:'detached'});
+ await p.fill('#tBatteryTemp','-5');await p.locator('#tBatteryTemp').dispatchEvent('change');
+ assert.equal(await p.evaluate(()=>__app.S.trip.batteryStart.temperature),-5);
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'320px editor remains contained');
  const parity=await p.evaluate(async()=>{
   let m=Trip.restoreModel({pts:[],cum:[],totalMi:240,durationSec:14400,legEnds:[240],cityGpm:.25,hwyGpm:.25,combGpm:.25,segs:[{from:0,to:240,t0:0,t1:14400,mph:60,gpm:.25}]}),opts=()=>({model:m,cands:[{id:'one',d:120,price:.4,stationKw:150,kw:105}],startGal:48,capGal:60,fillCap:48,bufferGal:5,arriveGal:5,step:.1,fuelKind:'ev',stopMinutes:5,propulsion:{kind:'ev',capacity:60},propulsionContext:{departAt:Date.UTC(2026,9,22),weather:[]}});

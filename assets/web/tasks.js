@@ -68,7 +68,7 @@
     var text = taskText(t);
     if (main && (doc.body.classList.contains('trip-full') || doc.querySelector('#settings:not(.hidden),.sub-page')) && root.__app && root.__app.jobShort) text = root.__app.jobShort(text);
     return (main?messageButton():'')+(t.paused?'<span class="jb-pause" role="img" aria-label="Paused"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></span>':'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(text)+'</span><span class="pbar'+(progress==null?' indeterminate':'')+'" role="progressbar" aria-label="'+esc(text)+'" aria-valuemin="0" aria-valuemax="100"'+(progress==null?'':' aria-valuenow="'+Math.round(progress*100)+'"')+'><i style="width:'+(progress==null?'35':Math.round(progress*100))+'%"></i></span>'+
-      '<span class="pct">'+(progress==null?'':Math.round(progress*100)+'%')+'</span>'+(t.cancel?'<button class="jb-x" data-cancel="'+esc(t.id)+'" aria-label="Cancel '+esc(text)+'"'+(t.cancelling?' disabled':'')+'>✕</button>':'');
+      '<span class="pct">'+(progress==null?'':Math.round(progress*100)+'%')+'</span>'+(t.action?'<button type="button" class="btn tonal sm" data-task-action="'+esc(t.id)+'">'+esc(t.action)+'</button>':'')+(t.cancel?'<button class="jb-x" data-cancel="'+esc(t.id)+'" aria-label="Cancel '+esc(text)+'"'+(t.cancelling?' disabled':'')+'>✕</button>':'');
   }
   function paintRow(el,t,main) {
     if(t.state==='pending'){
@@ -76,7 +76,7 @@
       el.innerHTML=(main?messageButton():'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(taskText(t))+'</span><span class="task-state">Pending</span>';return;
     }
     el.dataset.taskState='running';
-    if(el.dataset.taskId!==t.id||!el.querySelector('.pbar')||!!el.querySelector('.jb-x')!==!!t.cancel||!!el.querySelector('.jb-pause')!==!!t.paused){el.innerHTML=row(t,main);el.dataset.taskId=t.id;}
+    if(el.dataset.taskId!==t.id||!el.querySelector('.pbar')||!!el.querySelector('[data-task-action]')!==!!t.action||!!el.querySelector('.jb-x')!==!!t.cancel||!!el.querySelector('.jb-pause')!==!!t.paused){el.innerHTML=row(t,main);el.dataset.taskId=t.id;}
     var progress=Number.isFinite(t.frac)?Math.max(0,Math.min(1,t.frac)):null;
     var text=taskText(t);
     if(main&&(doc.body.classList.contains('trip-full')||doc.querySelector('#settings:not(.hidden),.sub-page'))&&root.__app&&root.__app.jobShort)text=root.__app.jobShort(text);
@@ -99,7 +99,7 @@
       doc.body.appendChild(hub);
 
       doc.getElementById('taskMore').onclick=function(){expanded=!expanded;draw();};
-      hub.onclick=function(e){if(e.target.closest('.jb-expand')){messageExpanded=!messageExpanded;layout();return;}var b=e.target.closest('[data-cancel]');if(b)cancel(b.dataset.cancel);};
+      hub.onclick=function(e){if(e.target.closest('.jb-expand')){messageExpanded=!messageExpanded;layout();return;}var action=e.target.closest('[data-task-action]');if(action){var task=tasks.get(action.dataset.taskAction);if(task&&task.onAction)task.onAction();return;}var b=e.target.closest('[data-cancel]');if(b)cancel(b.dataset.cancel);};
       // The other-statuses button and its list keep the expanded message open.
       doc.addEventListener('click',function(e){if(messageExpanded&&!e.target.closest('.jb-expand,#taskMore,#taskList')){messageExpanded=false;layout();}},true);
       doc.addEventListener('keydown',function(e){if(e.key==='Escape'&&messageExpanded){messageExpanded=false;layout();var b=doc.querySelector('.jb-expand');if(b)b.focus();}else if(e.key==='Escape'&&expanded){expanded=false;draw();doc.getElementById('taskMore').focus();}});

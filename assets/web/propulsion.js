@@ -7,6 +7,7 @@
   // The first bins include a session-start ramp, not a low-SOC acceptance dip.
   // Match the reference's reverse cumulative maximum envelope once at startup.
   for(var ai=ci.length-2;ai>=0;ai--)ci[ai]=Math.max(ci[ai],ci[ai+1]);
+  var PARK_TAU_HOURS=6, SOAK_HOURS=3*PARK_TAU_HOURS;
   function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
   function lerp(x,xs,ys){if(x<=xs[0])return ys[0];for(var i=1;i<xs.length;i++)if(x<=xs[i])return ys[i-1]+(ys[i]-ys[i-1])*(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[ys.length-1];}
   function mark(flags,s){if(flags.indexOf(s)<0)flags.push(s);}
@@ -98,10 +99,10 @@
   function project(model,spec,context,plan){
     var p=config(spec);if(p.auxModel&&!(p.cityGpm>0))p.cityGpm=model.cityGpm;var AL=p.auxModel?mod('AuxLoad','./auxload.js'):null,TM=AL?mod('TrafficModel','./trafficmodel.js'):null,aux=AL?AL.start({preconditioned:!!p.preconditionedStart}):null,trafficStops=0;
     var ctx=context||{},flags=[],segments=[],events=[],at=0,seconds=0,gal=Number(ctx.startGal)||0,temperature,initialTime=ctx.departAt||Date.now(),capacity=p.capacity,limits=ctx.limits||[];
-    var firstTa=weather(ctx.weather,0,initialTime,flags);temperature=Number.isFinite(p.initialTempC)?p.initialTempC:firstTa;
+    var firstTa=weather(ctx.weather,0,initialTime,flags);temperature=!p.ambientStart&&Number.isFinite(p.initialTempC)?p.initialTempC:firstTa;
     if(AL)mark(flags,'cabin_load_estimated');
-    if(!Number.isFinite(p.initialTempC))mark(flags,'initial_pack_temperature_estimated');
-    if(p.parkHours>0&&Number.isFinite(p.previousTempC)){temperature=p.previousTempC;for(var h=0;h<p.parkHours;h+=Math.min(1,p.parkHours-h)){var dt=Math.min(1,p.parkHours-h),ta=weather(ctx.weather,0,initialTime-(p.parkHours-h)*3600000,flags);temperature=ta+(temperature-ta)*Math.exp(-dt/6);}}
+    if(!p.ambientStart&&!Number.isFinite(p.initialTempC))mark(flags,'initial_pack_temperature_estimated');
+    if(!p.ambientStart&&p.parkHours>0&&Number.isFinite(p.previousTempC)){temperature=p.previousTempC;for(var h=0;h<p.parkHours;h+=Math.min(1,p.parkHours-h)){var dt=Math.min(1,p.parkHours-h),ta=weather(ctx.weather,0,initialTime-(p.parkHours-h)*3600000,flags);temperature=ta+(temperature-ta)*Math.exp(-dt/PARK_TAU_HOURS);}}
     if(!p.measured)mark(flags,p.kind==='h2'?'hydrogen_speed_unvalidated':'vehicle_profile_estimated');
     (plan&&plan.stops||[]).forEach(function(s){events.push({d:s.c.d,stop:s});});
     (plan&&plan.destinationCharges||[]).forEach(function(s){events.push({d:s.d,destination:s});});
@@ -109,10 +110,10 @@
     (ctx.waits||[]).forEach(function(w){events.push({d:w.d,waitUntil:w.at});});
     if(plan)(model.legEnds||[]).slice(0,-1).forEach(function(d){events.push({d:d,boundary:true});});
     events.sort(function(a,b){return a.d-b.d||Number(!!a.waitUntil)-Number(!!b.waitUntil);});var ei=0,ok=true,reason='',mismatch=0,stopSeconds=0,chargingMinutes=0;
-    function wait(minutes,mi){for(var s=0;s<minutes*60;s+=dt){var dt=Math.min(60,minutes*60-s),ta=weather(ctx.weather,mi,initialTime+(seconds+stopSeconds+s)*1000,flags);temperature=ta+(temperature-ta)*Math.exp(-dt/(6*3600));}stopSeconds+=minutes*60;if(aux)aux=AL.park(aux,minutes*60);}
+    function wait(minutes,mi,departure){for(var s=0;s<minutes*60;s+=dt){var dt=Math.min(60,minutes*60-s),ta=weather(ctx.weather,mi,initialTime+(seconds+stopSeconds+s)*1000,flags);temperature=ta+(temperature-ta)*Math.exp(-dt/(PARK_TAU_HOURS*3600));}if(p.kind==='ev'&&minutes>=SOAK_HOURS*60&&Number.isFinite(departure)){var missing=[],ambient=weather(ctx.weather,mi,departure,missing);if(!missing.length)temperature=ambient;else missing.forEach(function(f){mark(flags,f);});}stopSeconds+=minutes*60;if(aux)aux=AL.park(aux,minutes*60);}
     function event(e){
       if(!ok)return;
-      if(e.waitUntil){wait(Math.max(0,(e.waitUntil-initialTime-(seconds+stopSeconds)*1000)/60000),e.d);return;}
+      if(e.waitUntil){wait(Math.max(0,(e.waitUntil-initialTime-(seconds+stopSeconds)*1000)/60000),e.d,e.waitUntil);return;}
       if(e.boundary){if(gal<(ctx.reserve||0)-1e-7){ok=false;reason='weather_reserve_violated';}return;}
       if(e.destination){
         if(gal<(ctx.reserve||0)-1e-7&&!(plan.firstDip&&e===events[0])){ok=false;reason='weather_reserve_violated';return;}
@@ -153,7 +154,7 @@
     });while(ei<events.length&&events[ei].d<=at+1e-7)event(events[ei++]);
     return {model:Object.assign({},model,{segs:segments,durationSec:seconds}),ok:ok,reason:reason,flags:flags,temperature:temperature,arriveGal:gal,mismatch:mismatch,stopMinutes:stopSeconds/60,chargingMinutes:chargingMinutes,trafficStops:trafficStops};
   }
-  var api={config:config,weather:weather,thermal:thermal,drivePower:drivePower,charge:charge,project:project,data:DATA};
+  var api={SOAK_HOURS:SOAK_HOURS,config:config,weather:weather,thermal:thermal,drivePower:drivePower,charge:charge,project:project,data:DATA};
   api.workerSource='('+initPropulsion.toString()+')(self,'+JSON.stringify(DATA)+');';
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Propulsion=api;
 })(typeof self!=='undefined'?self:globalThis, {"poly":[200.81489647399306,229.88894453443953,0.6664311449270052,0.31462076245578136,"P_batt[W]=p0+p1 v+p2 v^2+p3 v^3, v m/s; 15-160 km/h, no HVAC, pack 23-36 C"],"q":[0.5795146619592638,0.001318002626609009,0.00014348017899144428],"ua":67.52700904840431,"curve":[[19,117.373,350.44,34],[20,348.758,363.994,34],[21,429.083,370.184,34],[22,390.33,369.705,34.5],[23,355.074,368.787,35],[24,332.732,368.151,35.5],[25,320.784,367.858,36.25],[26,314.95,367.772,36.5],[27,312.075,367.733,37],[28,310.527,367.748,37.25],[29,309.838,367.805,37.5],[30,308.129,367.774,38],[31,306.015,367.694,38.25],[32,304.228,367.674,38.5],[33,303.005,367.613,39],[34,302.087,367.6,39.25],[35,301.33,367.593,39.625],[36,300.565,367.541,39.75],[37,300.053,367.576,40.25],[38,299.141,367.505,40.5],[39,298.49,367.509,40.75],[40,297.691,367.446,41.25],[41,296.808,367.468,41.5],[42,295.65,367.51,41.75],[43,294.237,367.41,42],[44,292.908,367.487,42.5],[45,291.047,367.383,42.75],[46,289.317,367.453,43],[47,287.522,367.325,43.5],[48,284.925,367.321,43.75],[49,282.695,367.323,44],[50,280.202,367.245,44.25],[51,277.413,367.177,44.5],[52,274.397,367.084,44.75],[53,271.401,367.056,45],[54,267.813,366.899,45.25],[55,264.41,366.885,45.5],[56,260.894,366.88,45.75],[57,257.027,366.768,46],[58,253.089,366.673,46.25],[59,248.096,366.564,46.25],[60,243.88,366.466,46.5],[61,239.09,366.329,46.75],[62,235.058,366.294,46.75],[63,230.688,366.191,47],[64,226.379,366.145,47],[65,221.54,366.007,47.25],[66,217.143,365.943,47.25],[67,213.456,365.868,47.25],[68,209.034,365.795,47.5],[69,204.772,365.675,47.5],[70,200.891,365.602,47.5],[71,196.752,365.535,47.5],[72,192.691,365.461,47.5],[73,188.65,365.38,47.5],[74,184.677,365.303,47.5],[75,180.683,365.218,47.5],[76,175.775,365.12,47.5],[77,171.795,365.05,47.5],[78,167.227,364.968,47.25],[79,162.787,364.89,47.25],[80,158.467,364.782,47],[81,153.773,364.703,47],[82,148.635,364.594,47],[83,145.312,364.508,46.75]],"derate":[[19,0.29],[20,0.325],[21,0.371],[22,0.396],[23,0.425],[24,0.449],[25,0.47],[26,0.487],[27,0.502],[28,0.521],[29,0.541],[30,0.559],[31,0.576],[32,0.596],[33,0.617],[34,0.641],[35,0.67],[36,0.691],[37,0.718],[38,0.746],[39,0.778],[40,0.791]]});

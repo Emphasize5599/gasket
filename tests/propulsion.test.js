@@ -33,6 +33,12 @@ close(p.propulsion.chargingMinutes,p.stops.reduce((n,s)=>n+s.propulsion.minutes,
 const hp={...unknown,heatPump:true},weather=[{mi:0,hours:[[Date.UTC(2026,9,22),-10],[Date.UTC(2026,9,22,1),30],[Date.UTC(2026,9,22,2),30],[Date.UTC(2026,9,22,3),30]]}];
 let dynamic=P.project(m,hp,{startGal:60,weather,departAt:Date.UTC(2026,9,22)}),noHeat=P.project(m,hp,{startGal:60,weather:[{mi:0,hours:weather[0].hours.map(x=>[x[0],20])}],departAt:Date.UTC(2026,9,22)});assert(dynamic.model.segs[0].gpm>noHeat.model.segs[0].gpm);assert(dynamic.model.segs[120].gpm<dynamic.model.segs[0].gpm);
 let parked=P.project({...m,segs:[],totalMi:0},{...measured,initialTempC:40},{startGal:40,departAt:Date.UTC(2026,9,22),weather:[{mi:0,hours:Array.from({length:7},(_,i)=>[Date.UTC(2026,9,22,i),0])}],waitAt:{d:0,at:Date.UTC(2026,9,22,6)}});assert(parked.temperature<20&&parked.temperature>0,'a long dwell cools the pack, rather than resetting it instantly');
+const start=Date.UTC(2026,9,22),soakHours=P.SOAK_HOURS,localWeather=[{mi:0,hours:Array.from({length:soakHours+1},(_,i)=>[start+i*3600000,0])},{mi:1,hours:Array.from({length:soakHours+1},(_,i)=>[start+i*3600000,i===soakHours?7:2])}];
+const stationary={...m,segs:[],totalMi:0};
+const ambientStart=P.project(stationary,{...measured,ambientStart:true,initialTempC:40},{startGal:40,departAt:start,weather:localWeather});
+close(ambientStart.temperature,0);
+const soaked=P.project({...stationary,totalMi:1,segs:[{from:0,to:1,t0:0,t1:60,mph:60,gpm:.25}]},{...measured,initialTempC:40},{startGal:40,departAt:start,weather:localWeather,waits:[{d:1,at:start+soakHours*3600000+60000}]});
+close(soaked.temperature,7);
 close(parked.stopMinutes,360);assert.equal(parked.chargingMinutes,0,'scheduled waiting is not active charging');
 let missing=[];P.weather([],0,0,missing);assert(missing.includes('weather_missing'));
 let future=[];P.weather([{mi:0,hours:[[1000,10],[3601000,20]]}],0,9000000,future);assert(future.includes('weather_outside_forecast'));

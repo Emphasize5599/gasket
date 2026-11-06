@@ -60,7 +60,7 @@ async function (reqId, args) {
     if (spare) a = a.replace(/Start with:?\s*Full-size spare,?\s*Compact spare,?\s*Repair kit,?\s*Run-flat tires,?\s*(or\s+)?No spare\.?/gi, ' ');
     return flat(a);
   };
-  const packWords = /battery pack|lithium iron phosphate|\bLFP\b|\bNCA\b|\bNMC\b|pack chemistry/i; const want = packs ? packWords : spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /gal/i;
+  const packWords = /\bPACK:|battery pack|lithium iron phosphate|\bLFP\b|\bNCA\b|\bNMC\b|pack chemistry/i; const want = packs ? packWords : spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /gal/i;
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {
@@ -91,20 +91,24 @@ async function (reqId, args) {
     return { gal: pick.gal, text: pick.text, src: 'results' };
   };
   const bg = !!(args && args.bg), aiOnly = !!(args && args.aiOnly);
-  // Pack research can take longer to start and can pause between variants. Allow the Ask page to finish before using search snippets.
-  const packEnd = /(?:^|\s)PACK RESEARCH COMPLETE\.?\s*$/i;
+  const completion = /(?:^|\s)(?:GASKET DONE|PACK RESEARCH COMPLETE)\.?\s*$/i;
   const t0 = Date.now(), AI_WAIT = spare ? 60000 : 25000;
-  const LIMIT = packs && ask ? (bg ? 120000 : 165000) : bg ? (spare ? 75000 : 36000) : 120000;
+  const LIMIT = aiOnly ? (bg ? 120000 : 165000) : packs && ask ? (bg ? 120000 : 165000) : bg ? (spare ? 75000 : 36000) : 120000;
+  function finished(answer) {
+    if (!aiOnly) return true;
+    const streaming = document.querySelector && document.querySelector('button[aria-label*="stop generating" i], button[aria-label*="stop response" i], button[title*="stop generating" i]');
+    return !streaming && (completion.test(answer) || AI_END.test(text()));
+  }
   let last = '', same = 0;
   while (Date.now() - t0 < LIMIT) {
     const t = unask(text());
     if (refused(t)) {
       if (bg) { send({ blocked: true }); return; }
     } else {
-      const ai = aiText();
+      const ai = aiText(), complete = completion.test(ai), settled = finished(ai);
       if(trims&&window.TrimMath){
         const names=TrimMath.parse(ai||'',args), fallback=AI_FAILED.test(t)||Date.now()-t0>AI_WAIT;
-        if(names.length){same=ai===last?same+1:0;last=ai;if(same>=STEADY){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
+        if(names.length){same=ai===last?same+1:0;last=ai;if(settled&&same>=(complete?3:STEADY)){send({text:'Trims: '+names.join(', '),src:'ai'});return;}}
         else if(!aiOnly&&fallback){const list=TrimMath.parse(t,args);if(list.length){send({text:'Trims: '+list.join(', '),src:'results'});return;}}
         await sleep(400);continue;
       }
@@ -112,9 +116,8 @@ async function (reqId, args) {
         // the answer streams in: take it once it has stopped changing; no AI answer: the results' text
         if (ai) {
           same = ai === last ? same + 1 : 0; last = ai;
-          const complete = packs && ask && packEnd.test(ai);
-          if (same >= (complete ? 3 : STEADY)) {
-            send({ text: (packs ? ai.replace(packEnd, '').slice(0, 3500) : ai.slice(0, 1500)), src: 'ai', ask: ask }); return;
+          if (settled && same >= (complete ? 3 : STEADY)) {
+            send({ text: ai.replace(completion, '').slice(0, packs ? 3500 : 1500), src: 'ai', ask: ask }); return;
           }
         }
         else if (!aiOnly && !(packs && ask) && (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT)) {
@@ -127,7 +130,7 @@ async function (reqId, args) {
       if (f) {
         // the answer streams in: take it once it has stopped changing for a moment
         same = ai === last ? same + 1 : 0; last = ai;
-        if (same >= STEADY) { send({ gal: f.gal, text: f.text, src: 'ai', ask: ask }); return; }
+        if (settled && same >= (complete ? 3 : STEADY)) { send({ gal: f.gal, text: f.text, src: 'ai', ask: ask }); return; }
       } else if (!aiOnly && (AI_FAILED.test(t) || Date.now() - t0 > AI_WAIT)) {
         const r = fromResults(t);
         if (r) { send(r); return; }

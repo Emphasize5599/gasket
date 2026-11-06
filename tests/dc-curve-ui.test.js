@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await p.evaluate(()=>__app.S.setupDone=true);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
- await p.evaluate(()=>{window.BraveLookup.read=async (q,o)=>{window.packQuery=q;window.packShown=o.shown;return {text:'Possible high voltage pack: Panasonic 2170'};};const c=Garage.car();Object.assign(c,{year:2021,make:'Tesla',model:'Model 3 Long Range AWD',entryMode:'custom',power:'ev',type:'car',tank:75,dcKw:200,dcKwSrc:'you entered it',obs:{city:4,hwy:3}});delete c.dcCurve;delete c.dcPack;__app.save();});
+ await p.evaluate(()=>{window.BraveLookup.read=async (q,o)=>{window.packQuery=q;window.packShown=o.shown;return {text:'PACK: Panasonic 2170 | Nickel / Panasonic | 82 kWh gross | 2021 | Service records | Tesla'};};const c=Garage.car();Object.assign(c,{year:2021,make:'Tesla',model:'Model 3 Long Range AWD',entryMode:'custom',power:'ev',type:'car',tank:75,dcKw:200,dcKwSrc:'you entered it',obs:{city:4,hwy:3}});delete c.dcCurve;delete c.dcPack;__app.save();});
  await p.click('#btnTrip');await p.click('#gEdit');
  await p.locator('#gEnergy > summary').click();
  await p.locator('#gDcPack').waitFor({state:'visible'});
@@ -11,9 +11,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>Garage.ok()),false,'an EV with no pack cannot plan');
  await p.click('#gPackSearch');
  await p.waitForFunction(()=>document.querySelector('#gPackResearch')?.textContent.includes('Panasonic 2170'));
+ assert.match(await p.locator('#gPackResearch dl').innerText(),/How to verify[\s\S]*Service records/);
  assert.equal(await p.evaluate(()=>packQuery.kind),'packs');
  assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/2021 Tesla Model 3 Long Range AWD/);
- assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/US battery packs.*kWh.*build dates.*how to verify.*PACK RESEARCH COMPLETE/);
+ assert.match(await p.evaluate(()=>new URL(packQuery.url).searchParams.get('q')),/US battery packs.*PACK:.*kWh.*build dates.*owner verification.*GASKET DONE/);
  await p.click('#gPackSee');
  await p.waitForFunction(()=>document.querySelector('#gPackResearch')?.textContent.includes('Panasonic 2170'));
  assert.equal(await p.evaluate(()=>packShown),true,'open the answer in the shared visible Brave flow');
