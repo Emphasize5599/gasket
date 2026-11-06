@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.406 - 2026-11-06
+
+- Update Garage browser tests to verify the Brave completion marker on tank lookup prompts.
+
 ## 0.0.405 - 2026-11-06
 
 - Set EV starting battery temperature in Parameters and use departure weather after long parked rests.

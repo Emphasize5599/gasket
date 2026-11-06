@@ -18,7 +18,7 @@ const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoV
  await p.waitForSelector('#gTrim',{state:'visible'});await p.fill('#gTrim','XSE');await p.click('#gNoTrim');
  await p.waitForSelector('#gNoTrim:checked');assert.equal(await p.locator('#gTrim').count(),0,'trim box gone');assert.equal(await p.locator('#gTrimSel').count(),0);
  await p.waitForFunction(()=>+Garage.car().tank===11.8,null,{timeout:5000});
- assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2020 Toyota Corolla Hybrid fuel tank capacity in gallons?','tank asked without a trim');
+ assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2020 Toyota Corolla Hybrid fuel tank capacity in gallons? End: GASKET DONE.','tank asked without a trim');
  assert.deepEqual(await p.evaluate(()=>[Garage.car().noTrim,Garage.car().trim]),[true,'']);
  assert.equal(await p.evaluate(()=>document.getElementById('tEpa').open),true,'still open after ticking');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal scroll');

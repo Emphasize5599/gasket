@@ -19,7 +19,7 @@ const seen=async(p,sel)=>{for(let i=0;;i++){try{await p.locator(sel).scrollIntoV
  // tick no-trim with a finger: the tank question is asked without a trim
  await seen(p,'#gNoTrim');await p.tap('#gNoTrim');
  await p.waitForFunction(()=>+Garage.car().tank===13.2,null,{timeout:5000});
- assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2005 MINI Cooper S Convertible fuel tank capacity in gallons?');
+ assert.equal(await p.evaluate(()=>__asked.at(-1).replace(/^.*q=|&source.*$/g,'')),'2005 MINI Cooper S Convertible fuel tank capacity in gallons? End: GASKET DONE.');
  // Discard the new car: it is gone, the garage is as before
  await seen(p,'#gDiscard');await p.tap('#gDiscard');await p.waitForSelector('#cfm.on #cfmYes');await p.tap('#cfm.on #cfmYes');
  await p.waitForSelector('.car-edit',{state:'detached'});assert.deepEqual(await p.evaluate(()=>__app.S.cars.map(c=>c.id)),before,'discarded new car removed');

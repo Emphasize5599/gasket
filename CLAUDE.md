@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.406 - update Garage Brave prompt assertions
+
+The no-trim, editor-taps and picture-error browser tests assert the exact tank question with the completion marker added in 0.0.405.
+
 ## 0.0.405 - EV battery temperature and finished Brave answers
 
 Parameters asks if the EV will be parked outdoors for about 18 hours before departure. Forecast mode uses the selected start time, and parked waits of at least 18 hours use the stop departure forecast when available. Short waits retain thermal relaxation. Brave gives all Ask queries 120 seconds in the background or 165 seconds visibly and checks completion signals. The task bar can show the live reader, and structured pack rows display as labeled fields.
