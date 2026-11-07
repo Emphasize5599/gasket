@@ -53,3 +53,9 @@ const feasible=options(),preferred=T.plan({...feasible,fillCap:60,preferredFillC
 const unknownGap=gap();unknownGap.cands[0].priceKnown=false;assert(!T.plan({...unknownGap,fillCap:75,preferredFillCap:60}).ok,'higher charging never enables unknown prices');
 assert(!T.plan({...gap(),startGal:5,fillCap:75,preferredFillCap:60}).ok,'cannot fix an unreachable first charger by increasing a later target');
 console.log('Propulsion: weather, billing, arrival tariffs, preferred versus strict charge targets, reserves, repeat planning and legal caps passed');
+{// 0.0.413: per-mile energy scales by power/speed. Ratios against the DOE 2013 Leaf steady-state dyno sheet (AC Wh/mi
+ // 50 mph 236.0, 60 285.4, 70 343.8, 80 397.8): the old formula gave ×1.82 for 60→80 and ×0.27 for 65→30.
+ const ev=P.config({kind:'ev'}),g=(mph,base)=>P.drivePower(ev,mph,20,.25,base,[],0).gpm/.25;
+ assert(Math.abs(g(80,60)-397.8/285.4)<.06,'60→80 mph '+g(80,60));assert(Math.abs(g(60,70)-285.4/343.8)<.05,'70→60 mph '+g(60,70));
+ assert(Math.abs(g(65,65)-1)<1e-9,'baseline unchanged');assert(g(30,65)>.5&&g(30,65)<.65,'slow traffic keeps about half the per-mile energy '+g(30,65));
+ console.log('EV speed shape follows per-mile energy (Leaf dyno ratios)');}

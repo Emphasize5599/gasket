@@ -52,7 +52,10 @@
       function road(x){var w=x*1.609344/3.6;return .4+(182+2.46*w+.26*w*w)*w/900;}
       // Preserve the existing EPA/observed baseline. Only speed changes and additional
       // weather HVAC demand modify it; EPA labels are not steady-speed test points.
-      base=baseGpm*speed*road(speed)/road(Math.max(1,baseMph));
+      // road() is battery power: per-mile energy scales by (P(speed)/speed)/(P(base)/base), so the power is the
+      // baseline power (baseGpm × base speed) times the power ratio. 0.0.413: it used `speed` there, overstating the
+      // speed penalty by speed/base (≈2× the +5 mph penalty, ½ the energy at 30 mph traffic; DOE 2013 Leaf dyno data).
+      base=baseGpm*Math.max(1,baseMph)*road(speed)/road(Math.max(1,baseMph));
       if(p.auxModel&&speed<25&&p.cityGpm>0&&p.kind==='ev'){var floor=p.cityGpm*speed;if(floor>base){base=floor;mark(flags,'crawl_city_baseline');}}
       base+=p.auxModel?Math.max(0,auxKw(ta,p)-auxKw(20,Object.assign({},p,{preset:null}))) : Math.max(0,hvac(ta,p)-hvac(20,p));
     }

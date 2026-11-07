@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.413 - EV per-mile speed shape
+
+propulsion.js drivePower (estimated EV profiles) computed power as baseGpm × speed × road(speed)/road(base); road() is battery power, so per-mile energy scaled by the power ratio instead of power/speed, overstating speed sensitivity by speed/base. Against the DOE AVTA 2013 Leaf steady-state dyno sheet (AC Wh/mi 10–80 mph): 60→80 mph old ×1.82, fixed ×1.37, measured ×1.39; 65→30 old ×0.27, fixed ×0.60, measured ×0.53. Now base = baseGpm × base mph × power ratio. Baseline (offset 0, no traffic) unchanged; affects speed offsets, the EV speed graph and traffic slowdowns. TUM measured profile and hydrogen (already per-distance) unchanged. Test propulsion (Leaf ratios). 15 EV/propulsion/planner groups passed. Not phone-verified.
+
 ## 0.0.412 - battery-basis efficiency with pack usable capacity
 
 EPA label kWh/100 mi are wall energy (charging losses included); 0.0.411's pack usable kWh are battery energy, so EPA consumption against the pack under-states range ~14% (2021 Model 3 LR: 76 / (353 mi × 25 kWh/100 mi) = 0.861). garage.js `batteryBasis(c)` = usable / (EPA range × comb kWh/mi), only when a built-in pack with usable sets the tank and the EPA record has range and kWh; accepted range .75–1, else 1. carModel divides EPA-derived city/hwy/comb by it (typed observed efficiencies untouched) and returns `batteryBasis`. Test dc-curve-ui. Not phone-verified.

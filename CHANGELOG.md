@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.413 - 2026-11-07
+
+- Fix the EV speed model: energy per mile now changes with speed the way measured cars do. It previously doubled the cost of driving faster and greatly understated energy in slow traffic.
+
 ## 0.0.412 - 2026-11-07
 
 - With an established pack's usable capacity, EPA efficiency is converted from wall to battery energy so range isn't understated.
