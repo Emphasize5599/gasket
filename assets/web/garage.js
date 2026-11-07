@@ -176,6 +176,10 @@
     if (b !== 1) { if (!(+c.obs.city > 0)) city /= b; if (!(+c.obs.hwy > 0)) hwy /= b; if (!(+c.obs.city > 0) && !(+c.obs.hwy > 0)) comb /= b; else comb = harm(city, hwy); }
     return { city: city, hwy: hwy, comb: comb, adjustPct: 100, kind: k, batteryBasis: b };
   }
+  /** EV energy-model inputs: the car's EPA road-load (coast-down) coefficients, and whether its efficiencies are the EPA
+   *  label's (referenced to 65 mph in Propulsion) rather than typed observations (referenced to the route speed). */
+  function evEnergy(c){c=c||car();if(kind(c)!=='ev')return {};var rl=c.entryMode!=='custom'&&window.RoadLoad?RoadLoad.forCar(c):null;
+    return {roadLoad:rl?{a:rl.a,b:rl.b,c:rl.c}:null,labelAnchor:hasEpa(c)&&!(+(c.obs||{}).hwy>0)};}
   /** Battery kWh delivered per wall kWh implied by the EPA label for this car's established pack; 1 when not applicable. */
   function batteryBasis(c){var cc=c&&c.addMode!=='custom'&&kind(c)==='ev'&&window.ChargeCurve?ChargeCurve.selected(c):null;if(!cc||!cc.pack||!(cc.usable>0)||+c.tank!==cc.usable||!c.epa||!(c.epa.range>0)||!c.epa.kwh||!(c.epa.kwh.comb>0))return 1;
     var r=cc.usable/(c.epa.range*c.epa.kwh.comb/100);return r>=.75&&r<=1?r:1;}
@@ -425,9 +429,15 @@
   // ---------- an EV's fastest DC charging rate, from Brave Search's AI answer (the EPA and NHTSA don't publish it) ----------
   // Optional (blank = 150 kW), so it's only filled in when the box is empty and never over a number you typed.
   var dcBusy = {}, DC_SRC = 'from Brave Search\'s AI answer · check the maker\'s specs';
+  /** Which energy-vs-speed curve the trip planner uses for this EV. */
+  function speedCurveNote(c){var rl=c.entryMode!=='custom'&&window.RoadLoad?RoadLoad.forCar(c):null,obs=+(c.obs||{}).hwy>0;
+    return '<p class="lead small" id="gSpeedCurve">Speed curve: '+(rl?esc(rl.label)+' for this model':'a typical EV\u2019s (no EPA road-load test for this model)')+'. '+
+      (obs?'Your recorded highway efficiency is taken at the route\u2019s speed.':hasEpa(c)?'The EPA highway rating is taken at 65 mph.':'')+'</p>';}
+  /** The fastest-DC box (and its Brave lookup) matters when no established or typed curve sets the peak. */
+  function peakWanted(c){if(!c||kind(c)!=='ev')return false;var cc=ChargeCurve.selected(c);return !c.addMode&&!cc||!!(cc&&cc.estimated&&cc.src!=='user');}
   function dcUrl(c) { return BraveLookup.url(tankKey(c) + ' maximum DC fast charging rate in kW?'); }
   function dcAuto(c) {
-    if (!c || c.addMode || ChargeCurve.selected(c) || kind(c) !== 'ev' || +c.dcKw > 0 || !call || !N.siteRead || dcBusy[c.id] || matching) return;
+    if (!c || !peakWanted(c) || +c.dcKw > 0 || !call || !N.siteRead || dcBusy[c.id] || matching) return;
     var key = tankKey(c); if (!key || !trimOk(c)) return;   // the trim can change it: wait for it
     var L = c.dcKwLookup; if (L && L.key === key && (!L.failed || Date.now() - L.t < 6 * 3600e3)) return;   // once per car (a failure: again after 6 h)
     dcFind(c, false);
@@ -612,13 +622,18 @@
     var o = document.querySelector('#gPaints [data-orig]');
     if (o) o.onclick = function () { if (c.paint) c.paint.code = ''; LG.info('car', 'Picture: as photographed'); save(); draw(); };
   }
+  var EV_MODE_NOTE={ev:'EVs with an established charging curve and the EPA\u2019s road-load test: trips and charging times are the most accurate.',
+    evEff:'EVs with the EPA\u2019s road-load test but no established charging curve: trip energy is accurate, charging times are estimates.',
+    evNone:'EVs with neither: trip energy and charging times are estimates.',
+    custom:'Every EPA vehicle is listed. An EV here uses its EPA efficiency; charging times come from the curve you enter and are estimates.'};
+  function evAdd(m){return m==='ev'||m==='evEff'||m==='evNone';}
   function editPanel(c) {
     var k = kind(c), U = units(c);
     var auto = c.typeAuto ? ' (from the EPA: ' + SP.TYPES[c.typeAuto].label.toLowerCase() + ')' : '';
     var h = '<div class="g-edit">';
     var custom=c.entryMode==='custom',adding=editSnap&&editSnap.isNew&&editSnap.id===c.id;
-    if(adding)h+='<label class="nf wide"><span>Vehicle type</span><select id="gAddMode">'+opts({fuel:'Gas / Diesel / E85 / Hydrogen / LNG',ev:'EV',custom:'Custom'},c.addMode||'fuel')+'</select></label>'+
-      (c.addMode==='ev'?'<p class="lead small">EVs with an established charging curve. Use Custom for other EVs.</p>':c.addMode==='custom'?'<p class="lead small">Every EPA vehicle is listed. An EV here uses its EPA efficiency, so trips stay accurate; charging times come from the curve you enter and are estimates.</p>':'');
+    if(adding)h+='<label class="nf wide"><span>Vehicle type</span><select id="gAddMode">'+opts({fuel:'Gas / Diesel / E85 / Hydrogen / LNG',ev:'EV: charging and efficiency curves',evEff:'EV: efficiency curve only',evNone:'EV: no curves',custom:'Custom'},c.addMode||'fuel')+'</select></label>'+
+      (EV_MODE_NOTE[c.addMode]?'<p class="lead small">'+EV_MODE_NOTE[c.addMode]+'</p>':'');
     h += '<label class="nf wide"><span>Name<small>what Gasket calls this car · blank = ' + esc(c.year && c.model ? autoName(c) : 'year, make and model') + '</small></span><input type="text" id="gName" maxlength="40" placeholder="' + esc(c.year && c.model ? autoName(c) : 'e.g. My car') + '" value="' + esc(c.nick || (c.year && c.model ? '' : c.name || '')) + '"></label>';
     // one menu: the VIN first (worth the trouble: exact version, open recalls, factory tires; outlined in green until the
     // car has one), then year / make / model, which a VIN lookup fills in
@@ -656,7 +671,7 @@
       tankFindable && TL && TL.odd && !(+c.tank > 0) ? '<div class="tz-guess tk-guess">Brave Search\'s answer says <b>' + TL.gal + ' gal</b>, too small for this car, so it wasn\'t filled in. Enter the capacity from your owner\'s manual.' + '<div class="tz-gbtns">' + seeBtn + '</div></div>' :
       tankFindable && TL && TL.failed && !(+c.tank > 0) ? '<small class="tk-fail">No answer yet. <a href="#" id="gTankShow">Complete Brave verification</a>, or enter a known capacity.</small>' :
       TL && TL.gal && !TL.failed && !TL.ok && c.tankSrc === TANK_SRC && +c.tank === r2(TL.gal) ? '<div class="tz-guess tk-guess">Brave Search says: <b>' + TL.gal + ' gal</b>.' + '<div class="tz-gbtns"><button type="button" class="btn tonal sm" id="gTankYes">That\'s right</button>' + seeBtn + '</div></div>' : '';
-    var legacyPeak = k==='ev'&&!c.addMode&&!ChargeCurve.selected(c);
+    var legacyPeak = peakWanted(c);
     var dcFindable = legacyPeak && !!tankKey(c), DL = c.dcKwLookup, dcSee = '<button type="button" class="btn tonal sm" id="gDcSee">See Brave\'s answer</button>';
     if (k === 'ev') tkExtra += tankLocked || !dcFindable ? '' : dcBusy[c.id] ? BraveLookup.progress('Asking Brave Search for the DC charging rate','dckw') :
       DL && DL.failed && !(+c.dcKw > 0) ? '<small class="tk-fail dc-fail">No DC charging rate yet. <a href="#" id="gDcShow">Complete Brave verification</a>, or leave it blank (150 kW).</small>' :
@@ -673,7 +688,7 @@
     if(k==='ev'){
       var ep=c.propulsion||{};
       var eOld=$('gEnergy');if(eOld)energyOpen=eOld.open;   // kept open across redraws (typing a curve value redraws)
-      h+='<details class="card ed-details" id="gEnergy"'+(energyOpen?' open':'')+'><summary>Energy & charging estimates</summary><p class="lead small">Your installed pack sets fast-charging times. EPA or your recorded efficiency estimates driving range.</p>'+(ep.profile==='tum-m3-lfp'?'<label class="nf chk"><span>Use saved CATL LFP thermal model<small>Applies to temperature effects for the measured 2020 Model 3 SR+.</small></span><input type="checkbox" id="gLegacyThermal" checked></label>':'')+'<label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label>'+curveHtml(c)+'</details>';
+      h+='<details class="card ed-details" id="gEnergy"'+(energyOpen?' open':'')+'><summary>Energy & charging estimates</summary><p class="lead small">Your installed pack sets fast-charging times. EPA or your recorded efficiency estimates driving range.</p>'+speedCurveNote(c)+(ep.profile==='tum-m3-lfp'?'<label class="nf chk"><span>Use saved CATL LFP thermal model<small>Applies to temperature effects for the measured 2020 Model 3 SR+.</small></span><input type="checkbox" id="gLegacyThermal" checked></label>':'')+'<label class="nf chk"><span>Heat pump fitted</span><input type="checkbox" id="gHeatPump"'+(ep.heatPump?' checked':'')+'></label><label class="nf chk"><span>Precondition before fast charging (estimated)</span><input type="checkbox" id="gPrecondition"'+(ep.precondition?' checked':'')+'></label>'+curveHtml(c)+'</details>';
     }
     var dOld = $('gDetails'); if (dOld) detOpen = dOld.open;   // its toggle event comes a task later: a redraw before it would close it
     h +=tkExtra + '<details class="card g-obs ed-details" id="gDetails"' + (detOpen ? ' open' : '') + '><summary><span>Details<small>engine, transmission, drive, fuel, features</small></span></summary>' + infoPanel(c) + '</details>' + (S.cars.length > 1 || !(editSnap && editSnap.isNew) ? '<button class="btn tonal danger" id="gRemove">Remove this car</button>' : '') + '</div>';
@@ -1070,7 +1085,7 @@
           c.addMode=mode;c.entryMode='epa';draw();changed();return;
         }
         Object.keys(c).forEach(function(key){delete c[key];});
-        Object.assign(c,initial,{addMode:mode,entryMode:'epa',power:mode==='ev'?'ev':'gas'});
+        Object.assign(c,initial,{addMode:mode,entryMode:'epa',power:evAdd(mode)?'ev':'gas'});
         draw();changed();
       };
       if($('gBuildCustom'))$('gBuildCustom').onclick=function(){openCustom(c);};
@@ -1278,7 +1293,12 @@
   function eMsg(m, err) { lastEMsg = { car: S.carId, m: m || '', err: !!err }; var el = $('eMsg'); if (el) { el.textContent = m || ''; el.classList.toggle('err', !!err); } }
   function restoreEMsg() { var el = $('eMsg'); if (el && lastEMsg && lastEMsg.car === S.carId && lastEMsg.m && !el.textContent) { el.textContent = lastEMsg.m; el.classList.toggle('err', lastEMsg.err); } }
   // EV mode lists only years / makes / models with an established charging curve, wherever the menu is filled.
-  function evMenu(c,level,list,values){if(c.addMode!=='ev')return list;return list.filter(function(o){var q={year:+(level?values[0]:o.value)};if(level>=1)q.make=level===1?o.value:values[1];if(level>=2)q.model=level===2?o.value:values[2];return level>2||ChargeCurve.packs(q,true).length;});}
+  // Each EV type lists only years / makes / models in its category, wherever the menu is filled: established charging
+  // curve (ev); EPA road-load test but no charging curve (evEff); neither (evNone).
+  function evCategory(q){if(ChargeCurve.packs(q,true).length)return 'ev';var r=window.RoadLoad&&RoadLoad.of(q);return !r?null:r.coef?'evEff':'evNone';}
+  function evMenu(c,level,list,values){var m=c.addMode;if(!evAdd(m))return list;return list.filter(function(o){if(level>2)return true;var q={year:+(level?values[0]:o.value)};if(level>=1)q.make=level===1?o.value:values[1];if(level>=2)q.model=level===2?o.value:values[2];
+    if(m==='ev')return ChargeCurve.packs(q,true).length>0;
+    return !!window.RoadLoad&&RoadLoad.any(q,function(r){return evCategory({year:r.year,make:r.make,model:r.model})===m;});});}
   async function epaYears(c) {
     var field=$('eYear');if(!field||field.dataset.loading==='1'&&!matching)return;
     field.dataset.loading='1';
@@ -1356,8 +1376,10 @@
     if (c.epaId && String(c.epaId) !== String(v.id || id)) force = true;
     var atv = String(v.atvType || ''), fuel = String(v.fuelType1 || v.fuelType || '');
     var ev = /^EV$/i.test(atv) || /^electricity$/i.test(fuel), fc = /FCV/i.test(atv) || /hydrogen/i.test(fuel);
-    if(c.addMode==='fuel'&&ev)return {error:'Use EV for an established profile or Custom to enter a charging curve.'};
-    if(c.addMode==='ev'&&(!ev||!ChargeCurve.packs(v,true).length))return {error:'This vehicle has no established profile. Add it under Custom.'};
+    if(c.addMode==='fuel'&&ev)return {error:'This is an EV: choose one of the EV vehicle types, or Custom.'};
+    if(evAdd(c.addMode)){var cat=ev?evCategory({year:v.year,make:v.make,model:v.model}):null;
+      if(!ev)return {error:'This vehicle isn\u2019t an EV: choose Gas / Diesel / E85 / Hydrogen / LNG, or Custom.'};
+      if(c.addMode==='ev'&&cat!=='ev')return {error:'This vehicle has no established charging curve. Add it under EV: '+(cat==='evEff'?'efficiency curve only':'no curves')+'.'};}
     var city = +v.city08, hwy = +v.highway08, comb = +v.comb08;
     if (!(city > 0 && hwy > 0)) return { error: 'The EPA has no mileage numbers for that one.' };
     var wasKind = kind(c), wasCar = [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|');
@@ -1485,7 +1507,7 @@
       var R = (JSON.parse(r.body).Results || [])[0] || {};
       var d = fromVpic(R);
       if (!d.year || !d.make || !d.model) { needVinFields(c,['gVin'],'NHTSA returned incomplete identity');vMsg('NHTSA couldn\'t decode that VIN' + (R.ErrorText ? ': ' + esc(R.ErrorText) : '.'), true); return; }
-      if(c.addMode==='fuel'&&d.power==='ev'){vMsg('Use EV for an established profile or Custom to enter a charging curve.',true);return;}
+      if(c.addMode==='fuel'&&d.power==='ev'){vMsg('This is an EV: choose one of the EV vehicle types, or Custom.',true);return;}
       c.vin = vin; c.vinDecodeRev=130;c.year = d.year; c.make = d.make; c.model = d.model; c.vpicModel = d.model;
       if (d.body) { c.info = c.info || {}; c.info.body = d.body; }   // the doodle's body style
       if (d.trim) c.trim = d.trim;
@@ -1976,5 +1998,5 @@
     editVehicle:function(done){externalEditDone=done;var c=car();editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};editing=true;draw();},
     addVehicle:function(done){externalEditDone=done;addCar();},
     trimBusy: function () { return Object.keys(trimMem).some(function (k) { return trimMem[k].busy; }); },   // tests wait for the trim lookup's redraws
-    need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
+    need: need, ok: ok, braveSerial: braveSerial, carKey: tankKey, ruleOff: ruleOff, ruleCap:ruleCap, speedFn: speedFn, guardRange: guardRange, tripSpeed: tripSpeed, mpgFn: mpgFn, render: render, car: car, carModel: carModel, evEnergy: evEnergy, grade: grade, tank: tank, redraw: draw, drawSpeed: drawSpeed, speedModel: speedModel, TANKS: TANKS };
 })();

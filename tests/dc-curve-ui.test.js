@@ -42,6 +42,28 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>ChargeCurve.selected(Garage.car()).src),'pack');
  assert.deepEqual(await p.evaluate(()=>({tank:Garage.car().tank,src:Garage.car().tankSrc})),{tank:'',src:''},'no published usable capacity: blank for the driver, not the EPA estimate');
  assert.equal(await p.locator('#gCatalog').count(),0);
+ // 0.0.416: three EV types by what's established for the model (real RoadLoad data; menus from these mocks)
+ await p.evaluate(()=>{const M={'2022|Chevrolet':['Bolt EV','Bolt EUV'],'2016|Chevrolet':['Bolt EV','Spark EV'],'2022|Ford':['Mustang Mach-E RWD'],'2016|Ford':['Focus Electric']},ID={'Bolt EV':'90001','Bolt EUV':'90002','Spark EV':'90003','Mustang Mach-E RWD':'90004','Focus Electric':'90005'};
+  const R={'90002':{id:90002,year:2022,make:'Chevrolet',model:'Bolt EUV',atvType:'EV',fuelType1:'Electricity',city08:125,highway08:104,comb08:115,range:247},'90003':{id:90003,year:2016,make:'Chevrolet',model:'Spark EV',atvType:'EV',fuelType1:'Electricity',city08:128,highway08:109,comb08:119,range:82}};
+  __mocks.epa=url=>{const u=new URL(url),q=u.searchParams,menu=xs=>({menuItem:xs.map(x=>({text:x,value:x}))});if(u.pathname.endsWith('/menu/year'))return menu(['2022','2016']);if(u.pathname.endsWith('/menu/make'))return menu(['Chevrolet','Ford']);if(u.pathname.endsWith('/menu/model'))return menu(M[q.get('year')+'|'+q.get('make')]||[]);if(u.pathname.endsWith('/menu/options'))return menu([ID[q.get('model')]]);const id=u.pathname.split('/').pop();return R[id]||{id:90001,year:2022,make:'Chevrolet',model:'Bolt EV',atvType:'EV',fuelType1:'Electricity',city08:131,highway08:109,comb08:120,range:259};};});
+ const opts=sel=>p.$$eval(sel+' option',o=>o.map(x=>x.value).filter(Boolean)),filled=sel=>p.waitForFunction(s=>document.querySelectorAll(s+' option').length>1,sel);
+ assert.deepEqual(await p.$$eval('#gAddMode option',o=>o.map(x=>x.value)),['fuel','ev','evEff','evNone','custom']);
+ await p.selectOption('#gAddMode','evEff');await filled('#eYear');
+ assert.deepEqual(await opts('#eYear'),['2022','2016'],'efficiency-curve years: those with an EPA road-load test and no established charging curve');
+ await p.selectOption('#eYear','2022');await filled('#eMake');assert.deepEqual(await opts('#eMake'),['Chevrolet','Ford']);
+ await p.selectOption('#eMake','Chevrolet');await filled('#eModel');assert.deepEqual(await opts('#eModel'),['Bolt EUV'],'the Bolt EV has an established curve, so it is under the first EV type');
+ await p.selectOption('#eModel','Bolt EUV');await p.waitForFunction(()=>Garage.car().epaId==='90002');
+ const eff=await p.evaluate(()=>{const c=ChargeCurve.selected(Garage.car());return {est:c&&c.estimated,label:c&&c.label,power:Garage.car().power,note:[...document.querySelectorAll('#gEnergy [data-q]')].map(q=>decodeURIComponent(q.dataset.q)).join(' '),energy:Garage.evEnergy()};});
+ assert(eff.est&&/^Estimated/.test(eff.label),'an estimated charging curve '+JSON.stringify(eff));assert.equal(eff.power,'ev');
+ assert(/EPA road-load test/.test(eff.note)&&/65 mph/.test(eff.note),eff.note);assert(eff.energy.roadLoad&&eff.energy.roadLoad.a>0&&eff.energy.labelAnchor===true,JSON.stringify(eff.energy));
+ assert.equal(await p.locator('#gDcKw').count(),1,'an estimated curve takes the car\u2019s fastest DC rate');
+ await p.selectOption('#gAddMode','evNone');await filled('#eYear');
+ assert.deepEqual(await opts('#eYear'),['2016'],'no-curve years');
+ await p.selectOption('#eYear','2016');await filled('#eMake');assert.deepEqual(await opts('#eMake'),['Chevrolet'],'the 2016 Focus Electric has a road-load test');
+ await p.selectOption('#eMake','Chevrolet');await filled('#eModel');assert.deepEqual(await opts('#eModel'),['Spark EV']);
+ await p.selectOption('#eModel','Spark EV');await p.waitForFunction(()=>Garage.car().epaId==='90003');
+ const none=await p.evaluate(()=>{const c=ChargeCurve.selected(Garage.car());return {est:c&&c.estimated,note:[...document.querySelectorAll('#gEnergy [data-q]')].map(q=>decodeURIComponent(q.dataset.q)).join(' '),energy:Garage.evEnergy()};});
+ assert(none.est&&/typical EV/.test(none.note)&&none.energy.roadLoad===null,JSON.stringify(none));
  await p.selectOption('#gAddMode','custom');
  await p.waitForFunction(()=>document.querySelectorAll('#eYear option').length>1);
  assert.deepEqual(await p.$$eval('#eYear option',o=>o.map(x=>x.value).filter(Boolean)),['2022','2016'],'Custom lists every EPA year');

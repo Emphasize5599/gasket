@@ -7,6 +7,7 @@
   // The first bins include a session-start ramp, not a low-SOC acceptance dip.
   // Match the reference's reverse cumulative maximum envelope once at startup.
   for(var ai=ci.length-2;ai>=0;ai--)ci[ai]=Math.max(ci[ai],ci[ai+1]);
+  var ROAD_MEDIAN={a:39.52,b:.2483,c:.01934},LABEL_MPH=65;   // median MY2017+ battery EV target coast-down (evroadload-data.js)
   var PARK_TAU_HOURS=6, SOAK_HOURS=3*PARK_TAU_HOURS;
   function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
   function lerp(x,xs,ys){if(x<=xs[0])return ys[0];for(var i=1;i<xs.length;i++)if(x<=xs[i])return ys[i-1]+(ys[i]-ys[i-1])*(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[ys.length-1];}
@@ -49,13 +50,17 @@
     if(p.measured&&mph>=30){var c=DATA.poly;base=(c[0]+c[1]*v+c[2]*v*v+c[3]*v*v*v)/1000*.97*(1+.12*clamp((15-ta)/15,0,4/3))+(p.auxModel?auxKw(ta,p):hvac(ta,p));}
     else {
       mark(flags,'vehicle_profile_estimated');
-      function road(x){var w=x*1.609344/3.6;return .4+(182+2.46*w+.26*w*w)*w/900;}
-      // Preserve the existing EPA/observed baseline. Only speed changes and additional
-      // weather HVAC demand modify it; EPA labels are not steady-speed test points.
-      // road() is battery power: per-mile energy scales by (P(speed)/speed)/(P(base)/base), so the power is the
-      // baseline power (baseGpm × base speed) times the power ratio. 0.0.413: it used `speed` there, overstating the
-      // speed penalty by speed/base (≈2× the +5 mph penalty, ½ the energy at 30 mph traffic; DOE 2013 Leaf dyno data).
-      base=baseGpm*Math.max(1,baseMph)*road(speed)/road(Math.max(1,baseMph));
+      // Speed shape: the car's own EPA coast-down road load (target A + Bv + Cv², lbf) when known, else the median
+      // battery EV's, as battery power = road load × v / 0.85 + 1.2 kW (losses the dynamometer doesn't see: fitted to
+      // Nyland's 90/120 km/h tests and the DOE 2013 Leaf dyno; docs/EV_MILEAGE_CURVES.md).
+      var rl=p.roadLoad&&p.roadLoad.a>0?p.roadLoad:ROAD_MEDIAN;if(rl===ROAD_MEDIAN)mark(flags,'road_load_typical');
+      function road(x){return (rl.a+rl.b*x+rl.c*x*x)*4.44822*x*.44704/1000/.85+1.2;}
+      // EPA label efficiencies hold at a steady ~65 mph, not at the route's own speed (Nyland's tests against the label,
+      // 27 of 30 cars between 56 and 75 mph): highway stretches (and the highway share of blended ones) are referenced to
+      // 65 mph. Typed (observed) efficiencies stay referenced to the route speed. Per-mile energy scales by
+      // (P(speed)/speed)/(P(ref)/ref), so the power is baseGpm × ref × P(speed)/P(ref).
+      var ref=Math.max(1,baseMph);if(p.labelAnchor)ref+=clamp((ref-25)/30,0,1)*(LABEL_MPH-ref);
+      base=baseGpm*ref*road(speed)/road(ref);
       if(p.auxModel&&speed<25&&p.cityGpm>0&&p.kind==='ev'){var floor=p.cityGpm*speed;if(floor>base){base=floor;mark(flags,'crawl_city_baseline');}}
       base+=p.auxModel?Math.max(0,auxKw(ta,p)-auxKw(20,Object.assign({},p,{preset:null}))) : Math.max(0,hvac(ta,p)-hvac(20,p));
     }
@@ -157,7 +162,7 @@
     });while(ei<events.length&&events[ei].d<=at+1e-7)event(events[ei++]);
     return {model:Object.assign({},model,{segs:segments,durationSec:seconds}),ok:ok,reason:reason,flags:flags,temperature:temperature,arriveGal:gal,mismatch:mismatch,stopMinutes:stopSeconds/60,chargingMinutes:chargingMinutes,trafficStops:trafficStops};
   }
-  var api={SOAK_HOURS:SOAK_HOURS,config:config,weather:weather,thermal:thermal,drivePower:drivePower,charge:charge,project:project,data:DATA};
+  var api={SOAK_HOURS:SOAK_HOURS,ROAD_MEDIAN:ROAD_MEDIAN,LABEL_MPH:LABEL_MPH,config:config,weather:weather,thermal:thermal,drivePower:drivePower,charge:charge,project:project,data:DATA};
   api.workerSource='('+initPropulsion.toString()+')(self,'+JSON.stringify(DATA)+');';
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Propulsion=api;
 })(typeof self!=='undefined'?self:globalThis, {"poly":[200.81489647399306,229.88894453443953,0.6664311449270052,0.31462076245578136,"P_batt[W]=p0+p1 v+p2 v^2+p3 v^3, v m/s; 15-160 km/h, no HVAC, pack 23-36 C"],"q":[0.5795146619592638,0.001318002626609009,0.00014348017899144428],"ua":67.52700904840431,"curve":[[19,117.373,350.44,34],[20,348.758,363.994,34],[21,429.083,370.184,34],[22,390.33,369.705,34.5],[23,355.074,368.787,35],[24,332.732,368.151,35.5],[25,320.784,367.858,36.25],[26,314.95,367.772,36.5],[27,312.075,367.733,37],[28,310.527,367.748,37.25],[29,309.838,367.805,37.5],[30,308.129,367.774,38],[31,306.015,367.694,38.25],[32,304.228,367.674,38.5],[33,303.005,367.613,39],[34,302.087,367.6,39.25],[35,301.33,367.593,39.625],[36,300.565,367.541,39.75],[37,300.053,367.576,40.25],[38,299.141,367.505,40.5],[39,298.49,367.509,40.75],[40,297.691,367.446,41.25],[41,296.808,367.468,41.5],[42,295.65,367.51,41.75],[43,294.237,367.41,42],[44,292.908,367.487,42.5],[45,291.047,367.383,42.75],[46,289.317,367.453,43],[47,287.522,367.325,43.5],[48,284.925,367.321,43.75],[49,282.695,367.323,44],[50,280.202,367.245,44.25],[51,277.413,367.177,44.5],[52,274.397,367.084,44.75],[53,271.401,367.056,45],[54,267.813,366.899,45.25],[55,264.41,366.885,45.5],[56,260.894,366.88,45.75],[57,257.027,366.768,46],[58,253.089,366.673,46.25],[59,248.096,366.564,46.25],[60,243.88,366.466,46.5],[61,239.09,366.329,46.75],[62,235.058,366.294,46.75],[63,230.688,366.191,47],[64,226.379,366.145,47],[65,221.54,366.007,47.25],[66,217.143,365.943,47.25],[67,213.456,365.868,47.25],[68,209.034,365.795,47.5],[69,204.772,365.675,47.5],[70,200.891,365.602,47.5],[71,196.752,365.535,47.5],[72,192.691,365.461,47.5],[73,188.65,365.38,47.5],[74,184.677,365.303,47.5],[75,180.683,365.218,47.5],[76,175.775,365.12,47.5],[77,171.795,365.05,47.5],[78,167.227,364.968,47.25],[79,162.787,364.89,47.25],[80,158.467,364.782,47],[81,153.773,364.703,47],[82,148.635,364.594,47],[83,145.312,364.508,46.75]],"derate":[[19,0.29],[20,0.325],[21,0.371],[22,0.396],[23,0.425],[24,0.449],[25,0.47],[26,0.487],[27,0.502],[28,0.521],[29,0.541],[30,0.559],[31,0.576],[32,0.596],[33,0.617],[34,0.641],[35,0.67],[36,0.691],[37,0.718],[38,0.746],[39,0.778],[40,0.791]]});

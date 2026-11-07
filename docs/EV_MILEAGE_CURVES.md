@@ -35,9 +35,24 @@ So on a 70 mph interstate Gasket's baseline is roughly 8% optimistic, and at 75 
 
 **D. Energy basis.** EPA label kWh are measured at the wall. Usable pack kWh are battery-side. 0.0.412 converts EPA efficiency with the label's own range: usable / (range × kWh per mile), 0.861 for the 2021 Model 3 LR.
 
-## Recommendations (not implemented)
+## Implemented in 0.0.416
 
-1. **Anchor the EPA highway label at about 65 mph instead of the segment's route speed.** This is the largest remaining systematic error, about 8–16% at 70–75 mph. It changes every EV plan, so it should get an owner decision first.
-2. **Use each car's own EPA coast-down shape when a match exists.** Match by year/make/model, wheel size where listed, and the established pack. Fall back to the generic shape otherwise. Keep the fitted 1.6 kW term and η = 0.85 as documented estimates.
-3. **Calibration data to collect.** ANL D3 steady-state tables for US cars (Model 3 LR, Bolt), and US 70 mph tests from InsideEVs, Car and Driver (75 mph) and Edmunds, which are single-speed but US-spec. Ideally, add per-car Nyland pairs as validation fixtures.
-4. **Temperature and wind remain the dominant real-world error.** The Leaf track tests at 60/70 mph ran 9–27% above the dynamometer at the same speed. Propulsion's weather/HVAC model covers temperature only.
+1. **The EPA highway rating is taken at 65 mph** (`Propulsion.LABEL_MPH`), for EPA-derived efficiencies only. Highway stretches (route speed 55 mph or more) are referenced to 65 mph. A blended stretch's reference moves from its own speed at 25 mph to 65 mph at 55 mph, following the same blend that mixes the city and highway ratings. Typed (observed) highway efficiencies stay referenced to the route speed. City stretches are unchanged.
+2. **Each car's EPA coast-down sets its speed curve.** Battery power is road load × v / 0.85 + 1.2 kW. A car without a matched test vehicle uses the median MY2017+ battery EV (A 39.52 lbf, B 0.2483, C 0.01934; flag `road_load_typical`).
+   - The 1.2 kW term is a compromise. On the 30 matched Nyland cars it gives 3.3% mean error (1.6 kW gave 3.1%). It keeps the Leaf dyno's traffic ratio closer (65→30 mph: 0.56 vs 0.53 measured; 1.6 kW gives 0.59). Its 60→80 mph ratio is 1.45 against 1.39 on the dyno (a lab with no wind).
+   - The median curve predicts a 1.40 ratio for 120 vs 90 km/h; Nyland's median is 1.39.
+3. **Data:** `assets/web/evroadload-data.js`, built by `tools/gen-ev-roadload.py` (EPA Test Car List MY2017–2026 + fueleconomy.gov vehicles).
+   - Battery EVs only: Electricity test fuel, with an EV displacement marker (under 0.1 L, or 99.99 L in older years).
+   - Matched to fueleconomy.gov names offline, with wheel sizes preferred. Equally good rows are averaged; a neighboring model year is used when the same year has none, and is marked.
+   - 1,415 of 1,569 MY2017+ EPA EVs matched. The misses are mostly MY2026–27 cars not yet in the test lists, plus a few naming oddities (Polestar, i3, e-Golf).
+4. **Three EV types in Add Car:**
+   - **EV: charging and efficiency curves:** an established pack.
+   - **EV: efficiency curve only:** an EPA road-load test, no pack. Charging uses the typed curve, else Open EV Data's, else a typical curve at the entered peak, marked as an estimate.
+   - **EV: no curves:** neither; typical speed curve and estimated charging.
+   - Each type's menus list only its own models. Custom still lists every EPA vehicle.
+5. Completed EV plans saved before 0.0.416 are rebuilt once (`PlannedTrip` identity `ev-energy-416`).
+
+## Still open
+
+1. **Calibration data to collect:** ANL D3 steady-state tables for US cars (Model 3 LR, Bolt). US single-speed tests: InsideEVs, Car and Driver (75 mph), Edmunds. Per-car Nyland pairs as validation fixtures.
+2. **Temperature and wind remain the dominant real-world error.** The Leaf track tests at 60/70 mph ran 9–27% above the dynamometer at the same speed. Propulsion's weather/HVAC model covers temperature only.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.416 - 2026-11-07
+
+- EV trip energy is more accurate. The EPA highway rating is now treated as a 65 mph figure, so faster interstates use more energy (about 10% at 70 mph and 20% at 75 mph for a typical EV). Each EV model with an EPA road-load test uses its own energy-versus-speed curve.
+- Add Car has three EV types: charging and efficiency curves, efficiency curve only, and no curves. Each lists only its own models. The last two use an estimated charging curve unless you enter one.
+- Bug fixes.
+
 ## 0.0.415 - 2026-11-07
 
 - Add Car → Custom now lists every EPA year, make and model in its menus (including EVs without an established charging curve). An EV picked there uses its EPA efficiency, and you enter its charging curve. Typing a vehicle in yourself is still one tap away.

@@ -65,7 +65,7 @@
   }
   var available=packs(car),pack=available.find(function(p){return p.id===car.dcPack;});
   if(!pack&&!car.dcPack&&car.addMode==='ev'&&available.length===1)pack=available[0];
-  if(!pack)return null;
+  if(!pack)return car.addMode==='evEff'||car.addMode==='evNone'?estimate(car):null;
   var override=clean(car.dcCurve);
   if(override&&(override[0][0]!==0||override[override.length-1][0]!==100))override=null;
   var points=override||pack.points||EDIT_AT.map(function(p,i){return [p,pack.kw[i]];});
@@ -106,6 +106,18 @@
    if(!best||s>best.s)best={s:s,row:r};
   });
   return best?best.row:null;
+ }
+ /** EVs without an established charging curve (Add Car → EV with an efficiency curve only / without curves): your
+  *  typed curve, else Open EV Data's for this model, else a typical one at the peak you entered. Charging times from it
+  *  are estimates (estimated: true). */
+ function estimate(car){
+  var mine=clean(car.dcCurve);
+  if(mine&&mine[0][0]===0&&mine[mine.length-1][0]===100)return {points:mine,src:'user',label:'Your charging curve (estimate)',peak:peak(mine),estimated:true};
+  var want=+car.dcKw||0,r=match(car);
+  if(r){var pts=[];for(var i=0;i<r[5].length;i+=2)pts.push([r[5][i],r[5][i+1]]);pts=clean(pts);
+   if(pts)return {points:want?scale(pts,want):pts,src:'data',label:'Estimated: Open EV Data '+label(r)+(want&&Math.abs(want-peak(pts))>=1?', scaled to your '+want+' kW peak':''),peak:want||peak(pts),row:r,estimated:true};}
+  var kw=want||150;
+  return {points:generic(kw),src:'generic',label:'Estimated: a typical curve for a '+kw+' kW peak'+(want?'':' (no peak entered)'),peak:kw,estimated:true};
  }
  function label(r){return [r[0],r[1],r[2]].filter(Boolean).join(' ')+(r[3]?' ('+r[3]+')':'');}
  /** {points, src: 'user' | 'data' | 'generic', label, peak}: the curve the planner uses for this car. */

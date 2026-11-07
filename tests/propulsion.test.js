@@ -59,3 +59,22 @@ console.log('Propulsion: weather, billing, arrival tariffs, preferred versus str
  assert(Math.abs(g(80,60)-397.8/285.4)<.06,'60→80 mph '+g(80,60));assert(Math.abs(g(60,70)-285.4/343.8)<.05,'70→60 mph '+g(60,70));
  assert(Math.abs(g(65,65)-1)<1e-9,'baseline unchanged');assert(g(30,65)>.5&&g(30,65)<.65,'slow traffic keeps about half the per-mile energy '+g(30,65));
  console.log('EV speed shape follows per-mile energy (Leaf dyno ratios)');}
+{// 0.0.416: EPA label efficiencies hold at a steady ~65 mph (Nyland 90/120 km/h vs label: 0.848 and 1.187 median, wall
+ // basis); typed efficiencies stay at the route speed. Per-car EPA coast-down road load shapes the curve.
+ const leaf={a:31.911,b:.11588,c:.0177568},flags=[];
+ const ev=P.config({kind:'ev',labelAnchor:true,roadLoad:leaf}),at=(mph,base)=>P.drivePower(ev,mph,20,.25,base,flags,0).gpm/.25;
+ assert(Math.abs(at(65,65)-1)<1e-9,'the label holds at 65 mph');
+ assert(at(70,70)>1.04&&at(70,70)<1.12,'a 70 mph road uses more than the label '+at(70,70));
+ assert(at(75,75)>1.1&&at(75,75)<1.22,'75 mph '+at(75,75));
+ assert(Math.abs(at(56,56)-.848)<.05,'56 mph near Nyland 90 km/h '+at(56,56));
+ assert(Math.abs(at(20,20)-1)<1e-9,'city stretches stay at the city rating');
+ assert(!flags.includes('road_load_typical'),'own coast-down used');
+ const typed=P.config({kind:'ev',labelAnchor:false,roadLoad:leaf});assert(Math.abs(P.drivePower(typed,70,20,.25,70,[],0).gpm/.25-1)<1e-9,'typed efficiencies stay at the route speed');
+ const r=(mph,base)=>P.drivePower(typed,mph,20,.25,base,[],0).gpm/.25;
+ assert(Math.abs(r(80,60)-397.8/285.4)<.08,'Leaf coast-down 60→80 '+r(80,60));assert(r(30,65)>.5&&r(30,65)<.62,'Leaf coast-down 65→30 '+r(30,65));
+ const f2=[];P.drivePower(P.config({kind:'ev'}),70,20,.25,70,f2,0);assert(f2.includes('road_load_typical'),'no coast-down: typical EV curve, flagged');
+ const R=require('../assets/web/roadload.js'),m3=R.forCar({year:2021,make:'Tesla',model:'Model 3 Long Range AWD'});
+ assert(m3&&m3.a===34.98&&m3.c===.0149,'2021 Model 3 LR AWD EPA coast-down');
+ assert.equal(R.of({year:2022,make:'Chevrolet',model:'Bolt EV'}).coef.a,30.51);assert.equal(R.forCar({year:2022,make:'Toyota',model:'Corolla'}),null,'not an EV');
+ assert(R.any({year:2022},r=>!!r.coef)&&R.any({year:2022,make:'Tesla'},r=>!!r.coef));
+ console.log('EV label at 65 mph, EPA road-load speed curve, typical fallback');}
