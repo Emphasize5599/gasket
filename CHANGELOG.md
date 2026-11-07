@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.417 - 2026-11-07
+
+- EV energy and charging estimates now lean cautious. The EPA highway rating is taken at 61 mph, where only about one in five tested cars use more energy at highway speed than planned. EVs without an EPA road-load test use a speed-sensitive curve, and estimated charging curves charge 15% slower.
+
 ## 0.0.416 - 2026-11-07
 
 - EV trip energy is more accurate. The EPA highway rating is now treated as a 65 mph figure, so faster interstates use more energy (about 10% at 70 mph and 20% at 75 mph for a typical EV). Each EV model with an EPA road-load test uses its own energy-versus-speed curve.

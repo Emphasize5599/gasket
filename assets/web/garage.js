@@ -432,7 +432,7 @@
   /** Which energy-vs-speed curve the trip planner uses for this EV. */
   function speedCurveNote(c){var rl=c.entryMode!=='custom'&&window.RoadLoad?RoadLoad.forCar(c):null,obs=+(c.obs||{}).hwy>0;
     return '<p class="lead small" id="gSpeedCurve">Speed curve: '+(rl?esc(rl.label)+' for this model':'a typical EV\u2019s (no EPA road-load test for this model)')+'. '+
-      (obs?'Your recorded highway efficiency is taken at the route\u2019s speed.':hasEpa(c)?'The EPA highway rating is taken at 65 mph.':'')+'</p>';}
+      (obs?'Your recorded highway efficiency is taken at the route\u2019s speed.':hasEpa(c)?'The EPA highway rating is taken at '+(window.Propulsion?Propulsion.LABEL_MPH:61)+' mph, on the cautious side: most cars match it nearer 65 mph.':'')+'</p>';}
   /** The fastest-DC box (and its Brave lookup) matters when no established or typed curve sets the peak. */
   function peakWanted(c){if(!c||kind(c)!=='ev')return false;var cc=ChargeCurve.selected(c);return !c.addMode&&!cc||!!(cc&&cc.estimated&&cc.src!=='user');}
   function dcUrl(c) { return BraveLookup.url(tankKey(c) + ' maximum DC fast charging rate in kW?'); }

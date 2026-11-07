@@ -56,23 +56,27 @@ console.log('Propulsion: weather, billing, arrival tariffs, preferred versus str
 {// 0.0.413: per-mile energy scales by power/speed. Ratios against the DOE 2013 Leaf steady-state dyno sheet (AC Wh/mi
  // 50 mph 236.0, 60 285.4, 70 343.8, 80 397.8): the old formula gave ×1.82 for 60→80 and ×0.27 for 65→30.
  const ev=P.config({kind:'ev'}),g=(mph,base)=>P.drivePower(ev,mph,20,.25,base,[],0).gpm/.25;
- assert(Math.abs(g(80,60)-397.8/285.4)<.06,'60→80 mph '+g(80,60));assert(Math.abs(g(60,70)-285.4/343.8)<.05,'70→60 mph '+g(60,70));
+ // 0.0.416: the default (untested) curve is the cautious 80th-percentile one: at least the dyno's speed penalty, far from the old ×1.82
+ assert(g(80,60)>=397.8/285.4-.01&&g(80,60)<1.6,'60→80 mph '+g(80,60));assert(g(60,70)<=285.4/343.8+.01&&g(60,70)>.7,'70→60 mph '+g(60,70));
  assert(Math.abs(g(65,65)-1)<1e-9,'baseline unchanged');assert(g(30,65)>.5&&g(30,65)<.65,'slow traffic keeps about half the per-mile energy '+g(30,65));
  console.log('EV speed shape follows per-mile energy (Leaf dyno ratios)');}
-{// 0.0.416: EPA label efficiencies hold at a steady ~65 mph (Nyland 90/120 km/h vs label: 0.848 and 1.187 median, wall
- // basis); typed efficiencies stay at the route speed. Per-car EPA coast-down road load shapes the curve.
+{// 0.0.416: EPA label efficiencies hold at a steady ~65 mph for the median car (Nyland 90/120 km/h vs label: 0.848 and
+ // 1.187 median, p90 0.997 and 1.34, wall basis); the planner uses the cautious 61 mph (20th percentile). Typed
+ // efficiencies stay at the route speed. Per-car EPA coast-down road load shapes the curve.
  const leaf={a:31.911,b:.11588,c:.0177568},flags=[];
  const ev=P.config({kind:'ev',labelAnchor:true,roadLoad:leaf}),at=(mph,base)=>P.drivePower(ev,mph,20,.25,base,flags,0).gpm/.25;
- assert(Math.abs(at(65,65)-1)<1e-9,'the label holds at 65 mph');
- assert(at(70,70)>1.04&&at(70,70)<1.12,'a 70 mph road uses more than the label '+at(70,70));
- assert(at(75,75)>1.1&&at(75,75)<1.22,'75 mph '+at(75,75));
- assert(Math.abs(at(56,56)-.848)<.05,'56 mph near Nyland 90 km/h '+at(56,56));
+ assert.equal(P.LABEL_MPH,61);assert(Math.abs(at(61,61)-1)<1e-9,'the label holds at the cautious 61 mph');
+ assert(at(70,70)>1.12&&at(70,70)<1.25,'a 70 mph road uses more than the label '+at(70,70));
+ assert(at(75,75)>1.187&&at(75,75)<1.36,'75 mph: above the Nyland median, near its 90th percentile '+at(75,75));
+ assert(at(56,56)>.848&&at(56,56)<1,'56 mph: above the Nyland 90 km/h median '+at(56,56));
  assert(Math.abs(at(20,20)-1)<1e-9,'city stretches stay at the city rating');
  assert(!flags.includes('road_load_typical'),'own coast-down used');
  const typed=P.config({kind:'ev',labelAnchor:false,roadLoad:leaf});assert(Math.abs(P.drivePower(typed,70,20,.25,70,[],0).gpm/.25-1)<1e-9,'typed efficiencies stay at the route speed');
  const r=(mph,base)=>P.drivePower(typed,mph,20,.25,base,[],0).gpm/.25;
  assert(Math.abs(r(80,60)-397.8/285.4)<.08,'Leaf coast-down 60→80 '+r(80,60));assert(r(30,65)>.5&&r(30,65)<.62,'Leaf coast-down 65→30 '+r(30,65));
  const f2=[];P.drivePower(P.config({kind:'ev'}),70,20,.25,70,f2,0);assert(f2.includes('road_load_typical'),'no coast-down: typical EV curve, flagged');
+ const steep=(m,b)=>P.drivePower(P.config({kind:'ev'}),m,20,.25,b,[],0).gpm/.25;assert(steep(75,61)>at(75,61),'the untested fallback is a speed-sensitive (80th percentile) curve, steeper than the Leaf');
+ const C=require('../assets/web/chargecurve.js'),est=C.selected({addMode:'evNone',make:'Nobody',model:'Nothing',dcKw:100});assert(est.estimated&&est.peak===85&&/15% slower/.test(est.label),'estimated charging is 15% slower '+JSON.stringify(est));
  const R=require('../assets/web/roadload.js'),m3=R.forCar({year:2021,make:'Tesla',model:'Model 3 Long Range AWD'});
  assert(m3&&m3.a===34.98&&m3.c===.0149,'2021 Model 3 LR AWD EPA coast-down');
  assert.equal(R.of({year:2022,make:'Chevrolet',model:'Bolt EV'}).coef.a,30.51);assert.equal(R.forCar({year:2022,make:'Toyota',model:'Corolla'}),null,'not an EV');

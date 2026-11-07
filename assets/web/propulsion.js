@@ -7,7 +7,11 @@
   // The first bins include a session-start ramp, not a low-SOC acceptance dip.
   // Match the reference's reverse cumulative maximum envelope once at startup.
   for(var ai=ci.length-2;ai>=0;ai--)ci[ai]=Math.max(ci[ai],ci[ai+1]);
-  var ROAD_MEDIAN={a:39.52,b:.2483,c:.01934},LABEL_MPH=65;   // median MY2017+ battery EV target coast-down (evroadload-data.js)
+  // Cautious on purpose (owner: err on the side of caution). LABEL_MPH: the EPA highway rating matches a steady ~65 mph
+  // for the median car in Nyland's tests, 61 mph for the 20th percentile; using 61 means about four in five cars use no
+  // more than planned at highway speed. ROAD_MEDIAN (no EPA road-load test for the model): the MY2017+ battery EV at the
+  // 80th percentile of speed sensitivity (120/90 km/h energy 1.45 vs the median 1.40), not the median car.
+  var ROAD_MEDIAN={a:28.73,b:.2653,c:.02015},LABEL_MPH=61;
   var PARK_TAU_HOURS=6, SOAK_HOURS=3*PARK_TAU_HOURS;
   function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
   function lerp(x,xs,ys){if(x<=xs[0])return ys[0];for(var i=1;i<xs.length;i++)if(x<=xs[i])return ys[i-1]+(ys[i]-ys[i-1])*(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[ys.length-1];}

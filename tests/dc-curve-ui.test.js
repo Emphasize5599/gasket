@@ -55,7 +55,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.selectOption('#eModel','Bolt EUV');await p.waitForFunction(()=>Garage.car().epaId==='90002');
  const eff=await p.evaluate(()=>{const c=ChargeCurve.selected(Garage.car());return {est:c&&c.estimated,label:c&&c.label,power:Garage.car().power,note:[...document.querySelectorAll('#gEnergy [data-q]')].map(q=>decodeURIComponent(q.dataset.q)).join(' '),energy:Garage.evEnergy()};});
  assert(eff.est&&/^Estimated/.test(eff.label),'an estimated charging curve '+JSON.stringify(eff));assert.equal(eff.power,'ev');
- assert(/EPA road-load test/.test(eff.note)&&/65 mph/.test(eff.note),eff.note);assert(eff.energy.roadLoad&&eff.energy.roadLoad.a>0&&eff.energy.labelAnchor===true,JSON.stringify(eff.energy));
+ assert(/EPA road-load test/.test(eff.note)&&/61 mph/.test(eff.note),eff.note);assert(eff.energy.roadLoad&&eff.energy.roadLoad.a>0&&eff.energy.labelAnchor===true,JSON.stringify(eff.energy));
  assert.equal(await p.locator('#gDcKw').count(),1,'an estimated curve takes the car\u2019s fastest DC rate');
  await p.selectOption('#gAddMode','evNone');await filled('#eYear');
  assert.deepEqual(await opts('#eYear'),['2016'],'no-curve years');

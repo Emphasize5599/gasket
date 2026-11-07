@@ -110,14 +110,17 @@
  /** EVs without an established charging curve (Add Car → EV with an efficiency curve only / without curves): your
   *  typed curve, else Open EV Data's for this model, else a typical one at the peak you entered. Charging times from it
   *  are estimates (estimated: true). */
+ var ESTIMATE_MARGIN=.85;
  function estimate(car){
   var mine=clean(car.dcCurve);
   if(mine&&mine[0][0]===0&&mine[mine.length-1][0]===100)return {points:mine,src:'user',label:'Your charging curve (estimate)',peak:peak(mine),estimated:true};
-  var want=+car.dcKw||0,r=match(car);
+  // Cautious: an estimated curve charges 15% slower than its source says (ESTIMATE_MARGIN), so stops aren't planned short.
+  var want=+car.dcKw||0,r=match(car),m=ESTIMATE_MARGIN;
+  function slow(p){return p.map(function(x){return [x[0],Math.max(1,Math.round(x[1]*m*10)/10)];});}
   if(r){var pts=[];for(var i=0;i<r[5].length;i+=2)pts.push([r[5][i],r[5][i+1]]);pts=clean(pts);
-   if(pts)return {points:want?scale(pts,want):pts,src:'data',label:'Estimated: Open EV Data '+label(r)+(want&&Math.abs(want-peak(pts))>=1?', scaled to your '+want+' kW peak':''),peak:want||peak(pts),row:r,estimated:true};}
+   if(pts){var src=want?scale(pts,want):pts;return {points:slow(src),src:'data',label:'Estimated: Open EV Data '+label(r)+(want&&Math.abs(want-peak(pts))>=1?', scaled to your '+want+' kW peak':'')+', 15% slower for safety',peak:peak(slow(src)),row:r,estimated:true};}}
   var kw=want||150;
-  return {points:generic(kw),src:'generic',label:'Estimated: a typical curve for a '+kw+' kW peak'+(want?'':' (no peak entered)'),peak:kw,estimated:true};
+  return {points:slow(generic(kw)),src:'generic',label:'Estimated: a typical curve for a '+kw+' kW peak'+(want?'':' (no peak entered)')+', 15% slower for safety',peak:Math.round(kw*m*10)/10,estimated:true};
  }
  function label(r){return [r[0],r[1],r[2]].filter(Boolean).join(' ')+(r[3]?' ('+r[3]+')':'');}
  /** {points, src: 'user' | 'data' | 'generic', label, peak}: the curve the planner uses for this car. */

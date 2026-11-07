@@ -52,6 +52,15 @@ So on a 70 mph interstate Gasket's baseline is roughly 8% optimistic, and at 75 
    - Each type's menus list only its own models. Custom still lists every EPA vehicle.
 5. Completed EV plans saved before 0.0.416 are rebuilt once (`PlannedTrip` identity `ev-energy-416`).
 
+## Cautious margins (0.0.417)
+
+The owner asked to err on the side of caution, so the planner uses the pessimistic end of the measured spread rather than the median:
+- **Label speed 61 mph:** the 20th percentile of the label-equivalent steady speed across the 30 cars (the median is 65 mph). About four in five cars use no more than planned at highway speed.
+- **Untested cars:** the speed curve is the 80th-percentile battery EV's (2025 Volvo EC40 coefficients; 120 vs 90 km/h ratio 1.45, against a median of 1.40).
+- **Estimated charging curves:** charge 15% slower. These are the curves for EVs without an established pack: Open EV Data or the typical curve.
+- **Result for a typical untested EV:** 1.32 times the label at 75 mph (Nyland median 1.19, 90th percentile 1.34) and 0.90 at 56 mph (median 0.85, 90th percentile 1.00).
+- **Not covered:** cold weather and wind. Nyland's tests are mild-weather runs, so these remain the larger real-world risk.
+
 ## Still open
 
 1. **Calibration data to collect:** ANL D3 steady-state tables for US cars (Model 3 LR, Bolt). US single-speed tests: InsideEVs, Car and Driver (75 mph), Edmunds. Per-car Nyland pairs as validation fixtures.

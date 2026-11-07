@@ -2,6 +2,18 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.417 - cautious EV margins
+
+Owner: err on the side of caution with the margin of error.
+- Propulsion `LABEL_MPH` 61, the 20th percentile of the per-car label-equivalent steady speed. For 30 Nyland cars vs the EPA highway label (wall basis, 0.88 charging efficiency): median 64.6–65.4, p20 61.1, p10 58.5. With charging efficiency 0.85 the p20 is 59.4.
+- `ROAD_MEDIAN` (used without an EPA road-load test) is now the MY2017+ BEV at the 80th percentile of 120/90 km/h sensitivity: 2025 Volvo EC40, 28.73 / .2653 / .02015, ratio 1.446 vs median 1.401 (Nyland median 1.387).
+- Typical EV vs label: 56 mph 0.90 (Nyland median .848, p90 .997); 75 mph 1.32 (Nyland median 1.187, p90 1.34).
+- ChargeCurve `estimate()` (evEff/evNone, non-typed): `ESTIMATE_MARGIN` .85, so Open EV Data / generic kW × 0.85, with the label saying "15% slower for safety". Typed and established curves are unchanged.
+- PlannedTrip `ev-energy-417`. The Garage (?) note names 61 mph.
+- Tests: propulsion (61 mph, 70/75/56 bounds vs Nyland, steeper fallback, estimate 85 kW from 100), dc-curve-ui (note). Not phone-verified.
+
+Phone checks: an EV trip with 70–75 mph highways plans somewhat more energy and stops than 0.0.416. An "efficiency curve only" / "no curves" EV's charging curve says "15% slower for safety", with longer charging minutes. A pack (first EV type) curve is unchanged.
+
 ## 0.0.416 - EV label at 65 mph, EPA road-load curves, three EV types
 
 Owner: make EV trips as accurate as possible; maybe three EV categories (both curves, efficiency curve only, none). Research and constants: docs/EV_MILEAGE_CURVES.md.
