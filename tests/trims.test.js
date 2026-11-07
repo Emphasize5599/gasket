@@ -27,3 +27,6 @@ assert.deepEqual(T.merge(['LX', 'Sport'], ['sport', 'EX-L'], null), ['LX', 'Spor
 assert.equal(T.find(['LX', 'EX-L'], 'ex l'), 'EX-L');
 assert.equal(T.find(['LX'], 'Touring'), '');
 console.log('trims: parse, merge, find');
+// 0.0.418: the completion marker the app asks Brave to end with is not a trim; Tesla's "Long Range" is one
+assert.deepEqual(T.parse('Trims: Long Range, Plaid. End: GASKET DONE.', { year: 2025, make: 'Tesla', model: 'Model S' }), ['Long Range', 'Plaid']);
+assert.deepEqual(T.parse('Trims: Base, Plaid GASKET DONE', { year: 2025, make: 'Tesla', model: 'Model S' }), ['Base', 'Plaid']);

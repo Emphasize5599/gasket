@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.418 - 2026-11-07
+
+- The Garage shows one range figure, the same one trips plan with. For an EV with a known battery pack it matches the EPA's rated range. The EPA's kWh-per-100-mile figures moved into the tiles' (?) help, and the (?) buttons no longer crowd the numbers.
+- Trim lists no longer end with "GASKET DONE", and Tesla's "Long Range" trim is listed again.
+- Bug fixes.
+
 ## 0.0.417 - 2026-11-07
 
 - EV energy and charging estimates now lean cautious. The EPA highway rating is taken at 61 mph, where only about one in five tested cars use more energy at highway speed than planned. EVs without an EPA road-load test use a speed-sensitive curve, and estimated charging curves charge 15% slower.

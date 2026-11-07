@@ -108,12 +108,16 @@
   }
   /** Miles on a full tank / charge at highway mileage (yours if you've logged it, else the EPA's). */
   function rangeHwy(c) { c = c || car(); return obsHwy(c) > 0 && +c.tank > 0 ? obsHwy(c) * +c.tank : 0; }
+  /** Miles on a full tank / charge as trip plans count them: combined mileage (yours where logged) on the same energy
+   *  basis as the tank (an EV pack's usable kWh uses battery-side efficiency), so with EPA numbers it matches EPA's range. */
+  function rangeFull(c) { c = c || car(); var m = carModel(c).comb; return m > 0 && +c.tank > 0 ? m * +c.tank : 0; }
   function rangeTile(c) {
-    var r = rangeHwy(c), U = units(c), mine = +c.obs.hwy > 0;
+    var r = rangeFull(c), U = units(c), ev = kind(c) === 'ev', mine = +c.obs.hwy > 0 || +c.obs.city > 0;
     if (!(r > 0)) return '';
-    var q = '<b>Range</b>: how far a full ' + (kind(c) === 'ev' ? 'charge' : 'tank') + ' goes on the highway: ' + fmtPer(obsHwy(c)) + ' ' + U.per + ' (' + (mine ? 'your highway mileage' : 'EPA highway') + ') × ' + r2(+c.tank) + ' ' + U.unit +
-      (c.tankSrc ? ' (' + esc(c.tankSrc) + ')' : '') + '. City driving and high speeds go less far.' + (kind(c) === 'ev' ? ' Trip plans charge to 80%, so a stop is planned before that.' : '');
-    return '<div class="rng"><b>' + Math.round(r) + '</b><span>Range, mi</span>' + A.qBtn(q) + '</div>';
+    var q = '<b>Range</b>: how far a full ' + (ev ? 'charge' : 'tank') + ' goes in mixed driving: ' + r2(+c.tank) + ' ' + U.unit + (c.tankSrc ? ' (' + esc(c.tankSrc) + ')' : '') + ' at ' + (mine ? 'your logged mileage' : 'the EPA combined rating') + '.' +
+      (ev && c.epa && c.epa.range > 0 ? ' The EPA rates this car at ' + c.epa.range + ' mi.' + (!mine && r < c.epa.range * .95 ? ' This is lower because the EPA measures energy at the wall plug, charging losses included, and Gasket counts the battery capacity here against those figures. That errs on the safe side; pick the car\'s battery pack under Energy & charging estimates for the exact match.' : '') : '') +
+      ' Steady highway driving at 70+ mph goes less far; trip plans work out each road\'s speed and the weather' + (ev ? ', and charge to 80%, so stops come well before this' : '') + '.';
+    return '<div class="rng"><b>' + Math.round(r) + '</b><span>Range, mi' + A.qBtn(q) + '</span></div>';
   }
   /** Miles on a full tank / charge, from your mileage (or the EPA's) and the tank size. */
   function rangeMi(c) { c = c || car(); var m = obsHwy(c) && obsCity(c) ? harm(obsCity(c), obsHwy(c)) : 0; return m > 0 && +c.tank > 0 ? m * +c.tank : (c.epa && +c.epa.range) || 0; }
@@ -146,6 +150,7 @@
     if (!c.power) c.power = /electric/i.test(c.epa && c.epa.fuel || '') ? 'ev' : /hydrogen/i.test(c.epa && c.epa.fuel || '') ? 'h2' : c.type === 'hybrid' ? 'hybrid' : 'gas';
     if(c.power==='gas'&&(c.grade==='diesel'||/diesel/i.test(c.epa&&c.epa.fuel||'')))c.power='diesel';
     if (c.trim == null) c.trim = '';
+    else c.trim = String(c.trim).replace(/\s*\b(?:End\s*:\s*)?GASKET DONE\b\.?\s*$/i, '').trim();   // 0.0.418: a trim list caught Brave's completion marker
     if (!c.info) c.info = seedInfo(c.id);
     // 0.0.51: where each detail came from (vin / epa: confirmed; user: you set it)
     if (!c.info.src) c.info.src = {};
@@ -277,10 +282,9 @@
     var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><span class="g-top-btns">' + (publicPhoto(c) ? '<button class="btn tonal sm g-newpic" id="gNewPic">' + REFRESH + 'New photo</button>' : '') + '<button class="btn tonal sm" id="gEdit">Edit</button><button type="button" class="btn primary sm g-add" data-car="+">+ Add car</button></span></div>' + (editing ? '' : carousel(c));
     h += '<section class="g-econ g-car-section"><h4>' + U.econ + '</h4>';
     if (hasEpa(c)) {
-      var tile = function (v, label, q) { return '<div><b>' + fmtPer(v) + '</b><span>' + label + '</span>' + A.qBtn(q + (EPA_Q[k] || '')) + '</div>'; };
-      h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city) + tile(c.epa.hwy, 'Highway', EPA_Q.hwy) +
-        tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb) + rangeTile(c) + '</div>';
-      if (k === 'ev' && c.epa.kwh) h += '<div class="lead small keep">EPA: ' + c.epa.kwh.city + ' / ' + c.epa.kwh.hwy + ' / ' + c.epa.kwh.comb + ' kWh per 100 mi' + (c.epa.range ? ' · ' + c.epa.range + ' mi range' : '') + '</div>';
+      var kwh = k === 'ev' && c.epa.kwh, tile = function (v, label, q, w) { return '<div><b>' + fmtPer(v) + '</b><span>' + label + A.qBtn(q + (EPA_Q[k] || '') + (kwh && kwh[w] ? ' EPA label: ' + kwh[w] + ' kWh per 100 mi.' : '')) + '</span></div>'; };
+      h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city, 'city') + tile(c.epa.hwy, 'Highway', EPA_Q.hwy, 'hwy') +
+        tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb, 'comb') + rangeTile(c) + '</div>';
     } else h += '<p class="lead small keep">No EPA rating. Enter your observed mileage below.</p>';
     h += '</section><details class="g-obs g-info g-car-section" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary>About this car</summary>' + infoView(c);
     if(c.demoMileage)h += '<p class="lead small keep demo-data-note" style="color:var(--warn)">Demo setup values are illustrative; verify them before travel.'+(hasEpa(c)?' EPA mileage is sourced from the EPA.':' Mileage is illustrative, not EPA data.')+'</p>';
@@ -310,7 +314,7 @@
   // check). On failure, offer the real Brave verification page and read the answer after the user's check.
   // A known capacity can still be entered without a search.
   // ---------- trims: a list to pick from (Brave Search's answer, plus Fuel API's when its key is set) ----------
-  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30, TRIM_V = 'v4|';   // retry old bot-check failures and query-echo lists
+  var trimMem = {}, trimOther = {}, TRIM_DAYS = 30, TRIM_V = 'v5|';   // v5: drop lists that caught Brave's "End: GASKET DONE." marker
   function trimKey(c) { return c && c.year && c.make && c.model ? tankKey(Object.assign({}, c, { trim: '' })) : ''; }
   function trimUrl(c) {
     var w = trimKey(c).split(' '), q = function () { return 'What are all the trim levels of the ' + w.join(' ') + '? Answer with "Trims:" then each trim name, separated by commas.'; };
@@ -1994,7 +1998,7 @@
     return out;
   }
 
-  window.Garage = { installDemo:installDemo, addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
+  window.Garage = { installDemo:installDemo, addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, rangeFull: rangeFull, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
     editVehicle:function(done){externalEditDone=done;var c=car();editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};editing=true;draw();},
     addVehicle:function(done){externalEditDone=done;addCar();},
     trimBusy: function () { return Object.keys(trimMem).some(function (k) { return trimMem[k].busy; }); },   // tests wait for the trim lookup's redraws

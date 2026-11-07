@@ -895,8 +895,9 @@ body.trip-full #btnSettings { display: none !important; }   /* under the lookup 
 .ob-window { fill:var(--surface); }
 .ob-route { fill:none; stroke:var(--accent); stroke-width:5px; }
 @media (prefers-reduced-motion:no-preference) { .ob-body { animation:ob-appear .18s ease-out; } @keyframes ob-appear { from { opacity:.4; transform:translateY(6px); } to { opacity:1; transform:none; } } }
-.epa-tiles > div { position: relative; padding: 12px 6px 9px; }
-.epa-tiles .qi { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; font-size: 11px; }
+.epa-tiles > div { position: relative; padding: 10px 4px 8px; }
+.epa-tiles > div > span { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; }
+.epa-tiles .qi { position: static; width: 18px; height: 18px; font-size: 11px; flex: none; }
 .epa-src { font-size: 11.5px; color: var(--ink-2); margin: 6px 2px 0; text-align: right; }
 details.g-obs > summary, details.dep-more > summary { font-weight: 700; cursor: pointer; padding: 12px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
 details.g-obs { padding-bottom: 4px; }

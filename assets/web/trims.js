@@ -1,7 +1,8 @@
 /* Trim names for a year / make / model, read from an answer's text. Pure: tested in Node (tests/trims.test.js). */
 (function (root) {
   'use strict';
-  var NOT_A_TRIM = /\b(is|are|was|were|the|with|offers?|offered|available|which|include[sd]?|including|levels?|trims?|models?|years?|version|starts?|starting|priced|msrp|price|engine|features?|comes?|option(al)?|package|lineup|range|answer|generated|verify|sources?|separated|commas|then|each|following|search|question)\b/i;
+  var NOT_A_TRIM = /\b(is|are|was|were|the|with|offers?|offered|available|which|include[sd]?|including|levels?|trims?|models?|years?|version|starts?|starting|priced|msrp|price|engine|features?|comes?|option(al)?|package|lineup|(?<!long\s)range|answer|generated|verify|sources?|separated|commas|then|each|following|search|question)\b/i;
+  var END_MARK = /\b(?:End\s*:\s*)?(?:GASKET DONE|PACK RESEARCH COMPLETE)\b\.?/gi;
   function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
   // Remove EPA test-mode qualifiers, not meaningful Hybrid/Prime/Cross names.
   function modelName(s) { return String(s || '').replace(/\s*\([^)]*\bmodes?\b[^)]*\)/gi, '').replace(/\s+(?:2WD|4WD|AWD|FWD|RWD|4x4)$/i, '').replace(/\s+/g, ' ').trim(); }
@@ -11,7 +12,7 @@
    * -> ['LX', 'Sport', 'EX-L', 'Touring'] (at most 30), or [] when the text has no such list.
    */
   function parse(text, car) {
-    var t = String(text || '').replace(/\s+/g, ' ');
+    var t = String(text || '').replace(/\s+/g, ' ').replace(END_MARK, ' ');   // the completion marker the app asks Brave to end with
     var m = /\btrims?\s*:\s*/i.exec(t) || /\btrim(?: levels?)?(?: options)?\s*(?::|(?:are|include[sd]?|consist of)\s*:?\s*)/i.exec(t);
     // Natural summaries do not always obey the requested "Trims:" format.
     if(!m){var offered=/\b(?:available|offered)\s+in\s+(?:the\s+)?([^.!?]{2,180}?)\s+trims?\b/i.exec(t);if(offered&&/[,]|\band\b/i.test(offered[1]))return parse('Trims: '+offered[1],car);}
@@ -22,7 +23,7 @@
     var drop = norm([car && car.make, modelName(car && car.model)].join(' ')).split(' ').filter(function (w) { return w.length > 1 && !/^\d+$/.test(w); });
     var seen = {}, out = [];
     rest.split(/\s*(?:,|;|•|\||\/|\band\b|\bor\b)\s*/i).forEach(function (raw) {
-      var s = raw.replace(/\([^)]*\)/g, ' ').replace(/^\s*(?:\d{1,2}[.)]\s+|[-*]\s*)/, '').replace(/[.:!?"“”*]+$/g, '').replace(/^["“]+/, '').trim();
+      var s = raw.replace(/\s*\bEnd\s*:?\s*$/i, '').replace(/\([^)]*\)/g, ' ').replace(/^\s*(?:\d{1,2}[.)]\s+|[-*]\s*)/, '').replace(/[.:!?"“”*]+$/g, '').replace(/^["“]+/, '').trim();
       if (car && car.year) s = s.replace(new RegExp('\\b' + car.year + '\\b', 'g'), ' ');
       s = s.split(/\s+/).filter(function (w) { return drop.indexOf(norm(w)) < 0; }).join(' ').trim();
       if (!s || s.length > 28 || s.split(' ').length > 4 || !/[a-z0-9]/i.test(s) || NOT_A_TRIM.test(s) || /\$\s*\d/.test(s)) return;

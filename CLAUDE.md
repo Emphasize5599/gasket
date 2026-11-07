@@ -2,6 +2,17 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.418 - Garage range and trim marker
+
+Owner: trims end with "GASKET DONE"; unsure which range to trust; clean up the UI.
+- TrimMath.parse strips `END_MARK` ("End: GASKET DONE." / "PACK RESEARCH COMPLETE"; bravelookup appends the former to every Ask). NOT_A_TRIM's `range` now excludes "Long Range" (it dropped Tesla's trim). Trim cache `TRIM_V` v5. The car upgrade loop strips a saved `c.trim` ending in the marker.
+- The Range tile is `rangeFull(c)` = carModel(c).comb × tank: combined mileage on the tank's energy basis (battery basis for a pack's usable kWh). With EPA numbers it equals the EPA range. Its (?) names the EPA rated range and says 70+ mph highways go less far. It replaces highway mi/kWh × tank, which ignored battery basis and conflicted with the separate "EPA: … kWh per 100 mi · N mi range" line. That line was removed; each tile's (?) now carries its EPA kWh figure. Gas cars' Range is combined now too (lower, cautious). `Garage.rangeFull` is exported.
+- The (?) button sits inline after each tile's label (`.epa-tiles > div > span` inline-flex), not absolute over the number.
+- An EV whose tank is a typed or Brave usable figure without a selected pack still gets basis 1, so it can read below EPA's range; its (?) explains the gap (wall-measured EPA kWh against a battery capacity: cautious) and points to picking the pack.
+- Tests: trims (marker, Long Range), dc-curve-ui (rangeFull = battery-basis combined × pack). Not phone-verified.
+
+Phone checks: Garage on a 2025 Model S: one Range figure near EPA's 410 mi (or what the pack's usable capacity gives), the (?) beside each label rather than over the number, and kWh per 100 mi inside the (?). Re-pick a trim: no "GASKET DONE", and Long Range is listed.
+
 ## 0.0.417 - cautious EV margins
 
 Owner: err on the side of caution with the margin of error.
