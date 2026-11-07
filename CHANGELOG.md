@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.415 - 2026-11-07
+
+- Add Car → Custom now lists every EPA year, make and model in its menus (including EVs without an established charging curve). An EV picked there uses its EPA efficiency, and you enter its charging curve. Typing a vehicle in yourself is still one tap away.
+
 ## 0.0.414 - 2026-11-07
 
 - Bug fixes.

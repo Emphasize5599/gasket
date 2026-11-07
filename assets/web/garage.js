@@ -618,7 +618,7 @@
     var h = '<div class="g-edit">';
     var custom=c.entryMode==='custom',adding=editSnap&&editSnap.isNew&&editSnap.id===c.id;
     if(adding)h+='<label class="nf wide"><span>Vehicle type</span><select id="gAddMode">'+opts({fuel:'Gas / Diesel / E85 / Hydrogen / LNG',ev:'EV',custom:'Custom'},c.addMode||'fuel')+'</select></label>'+
-      (c.addMode==='ev'?'<p class="lead small">EVs with an established charging curve. Use Custom for other EVs.</p>':'');
+      (c.addMode==='ev'?'<p class="lead small">EVs with an established charging curve. Use Custom for other EVs.</p>':c.addMode==='custom'?'<p class="lead small">Every EPA vehicle is listed. An EV here uses its EPA efficiency, so trips stay accurate; charging times come from the curve you enter and are estimates.</p>':'');
     h += '<label class="nf wide"><span>Name<small>what Gasket calls this car · blank = ' + esc(c.year && c.model ? autoName(c) : 'year, make and model') + '</small></span><input type="text" id="gName" maxlength="40" placeholder="' + esc(c.year && c.model ? autoName(c) : 'e.g. My car') + '" value="' + esc(c.nick || (c.year && c.model ? '' : c.name || '')) + '"></label>';
     // one menu: the VIN first (worth the trouble: exact version, open recalls, factory tires; outlined in green until the
     // car has one), then year / make / model, which a VIN lookup fills in
@@ -628,7 +628,7 @@
         '<button type="button" class="vin-eye" id="gVinEye" aria-label="' + (vinShown ? 'Hide' : 'Show') + ' the VIN" aria-pressed="' + vinShown + '">' + (vinShown ? EYE_OFF : EYE) + '</button></span></label>' +
         (window.VinScan ? '<button type="button" class="btn primary sm vin-scan-btn" id="gVinScan" aria-label="Scan the VIN barcode">' + VinScan.icon + '</button>' : '') +
         '<button class="btn primary sm" id="gVinGo">Look up</button></div><div class="epa-msg" id="vMsg"></div>';
-    if(!c.addMode)h += '<div class="seg2" id="gEntryMode" aria-label="'+(k==='ev'?'Driving efficiency source':'Vehicle data source')+'"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">'+(k==='ev'?'EPA efficiency':'EPA vehicle')+'</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">'+(k==='ev'?'Observed efficiency':'Non-EPA / custom')+'</button></div>';
+    if(!c.addMode||c.addMode==='custom')h += '<div class="seg2" id="gEntryMode" aria-label="'+(k==='ev'?'Driving efficiency source':'Vehicle data source')+'"><button type="button" data-entry="epa" aria-pressed="'+(!custom)+'" class="'+(!custom?'on':'')+'">'+(k==='ev'&&!c.addMode?'EPA efficiency':'EPA vehicle')+'</button><button type="button" data-entry="custom" aria-pressed="'+custom+'" class="'+(custom?'on':'')+'">'+(k==='ev'&&!c.addMode?'Observed efficiency':'Non-EPA / custom')+'</button></div>';
     // one tile for who the car is, down to the trim (folded once it's all known; never while the required trim is missing)
     var ymmTitle = 'Year / make / model / trim';
     // its toggle event comes a task later: a redraw before it folded the tile you just opened (read it live instead)
@@ -1064,9 +1064,10 @@
       if($('gAddMode'))$('gAddMode').onchange=function(){
         var mode=this.value,initial=JSON.parse(editSnap.before);
         epaInvalidate(c);vinStates.delete(c);manualPackDrafts.delete(c);
+        if($('eYear'))$('eYear').value='';   // each type lists its own menus: don't keep the previous type's filled grid
         if(mode==='custom'){
           ['epa','epaId','epaBase','epaOption','dcPack','dcCurve','dcPackName','dcResearchPack'].forEach(function(key){delete c[key];});
-          c.addMode=mode;c.entryMode='custom';draw();changed();return;
+          c.addMode=mode;c.entryMode='epa';draw();changed();return;
         }
         Object.keys(c).forEach(function(key){delete c[key];});
         Object.assign(c,initial,{addMode:mode,entryMode:'epa',power:mode==='ev'?'ev':'gas'});

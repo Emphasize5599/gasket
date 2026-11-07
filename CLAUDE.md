@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.415 - Custom lists every EPA vehicle
+
+Owner: an established mileage (efficiency) curve keeps trips accurate, only charge times are off; Custom's drop-downs must list everything. Add Car → Custom now defaults to `entryMode 'epa'` with the #gEntryMode toggle (EPA vehicle / Non-EPA / custom); evMenu filters only addMode 'ev', so Custom's EPA menus are unfiltered. A Custom EPA EV gets EPA efficiency, never a built-in pack (builtInPack/batteryBasis skip custom), and needs a manual curve (dcPack manual). Changing Vehicle type clears #eYear's value so draw() doesn't keep the previous type's filled (filtered) grid. Switching to Custom still keeps identity/tank typed so far. Tests: dc-curve-ui (Custom: all years/makes, Bolt pick = EV with no pack, toggle to typed entry); nhtsa-catalog, setup-demo, vehicle-catalog, vehicle-required, vinscan-ui click the typed-entry toggle. Not phone-verified.
+
+Phone checks: Add Car → Custom → Year menu lists every year; pick an EV without a curve (e.g. a 2016 car) → EPA efficiency, Enter charging curve; Non-EPA / custom → typed boxes, Browse vehicles (NHTSA), Build completely custom.
+
 ## 0.0.414 - EPA tile toggle race
 
 0.0.412 CI failed vehicle-catalog (page error "Cannot read properties of null (reading 'open')"; passed 3/3 locally). garage.js's #tEpa toggle handler read `$('tEpa').open`; toggle fires a task later, after a redraw can replace the tile. Now uses `this`, returns when detached or without #eYear. No assertion changed.

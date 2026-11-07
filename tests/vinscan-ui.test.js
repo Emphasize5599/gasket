@@ -36,7 +36,7 @@ for(let y=0;y<qm.getHeight();y++){let row='';for(let x=0;x<qm.getWidth();x++)row
  assert(await p.evaluate(()=>{const r=e=>e.getBoundingClientRect(),eye=r(document.getElementById('gVinEye')),q=document.querySelector('.vin-box .qi');if(!q)return true;const qr=r(q);return eye.right<=qr.left+0.5||qr.right<=eye.left+0.5;}),'eye and (?) overlap');
  // one rounded identity tile down to the trim, in either mode (and for a custom car known by its VIN)
  const tile=()=>p.evaluate(()=>{const t=document.querySelector('details.epa.ymm');return t&&{title:t.querySelector('summary').childNodes[0].textContent,round:parseFloat(getComputedStyle(t).borderRadius)>=12,trim:!!t.querySelector('#gTrimSel,#gTrim'),open:t.open,count:document.querySelectorAll('#gTrimSel,#gTrim').length};});
- for(const mode of ['custom','fuel']){await p.selectOption('#gAddMode',mode);await p.waitForSelector(mode==='custom'?'#gCustom':'#tEpa');const t=await tile();
+ for(const mode of ['custom','fuel']){await p.selectOption('#gAddMode',mode);if(mode==='custom')await p.click('[data-entry="custom"]');await p.waitForSelector(mode==='custom'?'#gCustom':'#tEpa');const t=await tile();
   assert(t&&t.title==='Year / make / model / trim'&&t.round&&t.trim&&t.open,mode+' tile '+JSON.stringify(t));}
  for(const mode of ['flat','upright']){
   await p.evaluate(m=>{window.__camMode=m;window.__vinUrl=null;document.getElementById('gVin').value='';},mode);
