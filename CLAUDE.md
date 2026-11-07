@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.414 - EPA tile toggle race
+
+0.0.412 CI failed vehicle-catalog (page error "Cannot read properties of null (reading 'open')"; passed 3/3 locally). garage.js's #tEpa toggle handler read `$('tEpa').open`; toggle fires a task later, after a redraw can replace the tile. Now uses `this`, returns when detached or without #eYear. No assertion changed.
+
 ## 0.0.413 - EV per-mile speed shape
 
 propulsion.js drivePower (estimated EV profiles) computed power as baseGpm × speed × road(speed)/road(base); road() is battery power, so per-mile energy scaled by the power ratio instead of power/speed, overstating speed sensitivity by speed/base. Against the DOE AVTA 2013 Leaf steady-state dyno sheet (AC Wh/mi 10–80 mph): 60→80 mph old ×1.82, fixed ×1.37, measured ×1.39; 65→30 old ×0.27, fixed ×0.60, measured ×0.53. Now base = baseGpm × base mph × power ratio. Baseline (offset 0, no traffic) unchanged; affects speed offsets, the EV speed graph and traffic slowdowns. TUM measured profile and hydrogen (already per-distance) unchanged. Test propulsion (Leaf ratios). 15 EV/propulsion/planner groups passed. Not phone-verified.

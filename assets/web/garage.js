@@ -1104,7 +1104,7 @@
       ['gLegacyThermal','gHeatPump','gPrecondition'].forEach(function(id){var el=$(id);if(!el)return;el.onchange=function(){var p=c.propulsion=c.propulsion||{};if(id==='gLegacyThermal'){delete p.profile;changed();draw();return;}else p[id==='gHeatPump'?'heatPump':'precondition']=this.checked;changed();};});
       if ($('gPlug')) $('gPlug').onchange = function () { c.plug = this.value; changed(); draw(); };
       if ($('gAdapter')) $('gAdapter').onchange = function () { c.adapter = this.checked; changed(); };
-      if($('tEpa'))$('tEpa').addEventListener('toggle', function () { if ($('tEpa').open && !matching && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
+      if($('tEpa'))$('tEpa').addEventListener('toggle', function () { if (!this.isConnected || !$('eYear')) return; if (this.open && !matching && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } });
       // (a VIN match fills them itself; a redraw that kept the filled pickers has nothing to fill)
       setTimeout(function () { if ($('tEpa') && $('tEpa').open && !matching && $('eYear') && ($('eYear').options.length < 2||$('eYear').dataset.savedEpa==='1')) { if (hasEpa(c) && c.year) epaPreset(c); else epaYears(c); } }, 0);
       if ($('gRemove')) $('gRemove').onclick = function () { removeCar(c); };
