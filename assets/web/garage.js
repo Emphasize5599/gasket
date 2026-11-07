@@ -169,8 +169,16 @@
   function carModel(c) {
     c=c||car();var k = kind(c), city = obsCity(c) || (k === 'ev' ? 3.5 : k === 'h2' ? 65 : 25), hwy = obsHwy(c) || (k === 'ev' ? 3.0 : k === 'h2' ? 60 : 33);
     var comb = hasEpa(c) && c.epa.comb ? c.epa.comb * harm(city, hwy) / harm(c.epa.city, c.epa.hwy) : harm(city, hwy);
-    return { city: city, hwy: hwy, comb: comb, adjustPct: 100, kind: k };
+    // EPA label kWh are measured at the wall (charging losses included); a pack's published usable kWh is measured at
+    // the battery. With the battery-side usable capacity, put EPA efficiencies on the same basis using the label's own
+    // range: usable / (range × kWh per mile) = battery kWh per wall kWh. Observed (typed) efficiencies are left as entered.
+    var b = k === 'ev' ? batteryBasis(c) : 1;
+    if (b !== 1) { if (!(+c.obs.city > 0)) city /= b; if (!(+c.obs.hwy > 0)) hwy /= b; if (!(+c.obs.city > 0) && !(+c.obs.hwy > 0)) comb /= b; else comb = harm(city, hwy); }
+    return { city: city, hwy: hwy, comb: comb, adjustPct: 100, kind: k, batteryBasis: b };
   }
+  /** Battery kWh delivered per wall kWh implied by the EPA label for this car's established pack; 1 when not applicable. */
+  function batteryBasis(c){var cc=c&&c.addMode!=='custom'&&kind(c)==='ev'&&window.ChargeCurve?ChargeCurve.selected(c):null;if(!cc||!cc.pack||!(cc.usable>0)||+c.tank!==cc.usable||!c.epa||!(c.epa.range>0)||!c.epa.kwh||!(c.epa.kwh.comb>0))return 1;
+    var r=cc.usable/(c.epa.range*c.epa.kwh.comb/100);return r>=.75&&r<=1?r:1;}
   function grade() { var k = kind(); return k === 'ev' ? 'electric' : k === 'h2' ? 'hydrogen' : car().grade || S.grade || 'regular'; }
   function tank() { return +car().tank || (kind() === 'ev' ? 60 : kind() === 'h2' ? 5.6 : 14); }
   function save() { A.save(); }

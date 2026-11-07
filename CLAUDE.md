@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.412 - battery-basis efficiency with pack usable capacity
+
+EPA label kWh/100 mi are wall energy (charging losses included); 0.0.411's pack usable kWh are battery energy, so EPA consumption against the pack under-states range ~14% (2021 Model 3 LR: 76 / (353 mi × 25 kWh/100 mi) = 0.861). garage.js `batteryBasis(c)` = usable / (EPA range × comb kWh/mi), only when a built-in pack with usable sets the tank and the EPA record has range and kWh; accepted range .75–1, else 1. carModel divides EPA-derived city/hwy/comb by it (typed observed efficiencies untouched) and returns `batteryBasis`. Test dc-curve-ui. Not phone-verified.
+
 ## 0.0.411 - EV menus and pack usable capacity
 
 Owner: years without an established charge curve must not be visible; known packs must use the pack's usable capacity, not an estimate. garage.js `evMenu(c, level, list, values)` filters EV-mode year/make/model in epaYears, the onchange chains and epaPreset (saved-menu hydration previously skipped the filter). chargecurve PACKS carry `usable` + `usableSource` (Model 3 LR 2021 76 kWh: Nyland measured, InsideEVs; Model 3 SR+ 2020 49 kWh: ev-database 1177, itself an estimate; refreshed S/X and Plaid 95 kWh: ev-database 1404/1405/1407/1408); `selected()` returns `pack`, `usable`, `usableSource`. `builtInPack` / `syncUsable`: a selected built-in pack with usable sets c.tank (tankSrc 'usable capacity of the selected pack') and disables #gTank; a pack without a published figure (2022 Bolt EV, Rivian Large gen 1: sources disagree, ~60-65 and ~125-135 kWh) clears EPA/VIN estimates and asks for entry. applyEpa skips the EPA range estimate and the VIN 92% rule when a built-in pack is selected. Test dc-curve-ui (years/makes filtered, 76 kWh locked, Bolt blank). Not phone-verified.

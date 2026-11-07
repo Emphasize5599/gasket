@@ -13,6 +13,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.locator('#gDcPack').waitFor({state:'visible'});
  assert.equal(await p.evaluate(()=>Garage.ok()),true);
  assert.deepEqual(await p.evaluate(()=>({tank:Garage.car().tank,src:Garage.car().tankSrc,disabled:document.getElementById('gTank').disabled})),{tank:76,src:'usable capacity of the selected pack',disabled:true},'a known pack sets its own usable capacity, not the typed 75');
+ const basis=await p.evaluate(()=>{const c=Garage.car(),obs=c.obs;c.obs={};c.epa={city:4.6,hwy:4.0,comb:4.3,range:353,kwh:{comb:25}};const m=Garage.carModel(c);c.obs=obs;delete c.epa;return m;});
+ assert(Math.abs(basis.batteryBasis-76/88.25)<1e-9,'EPA wall kWh are put on the pack\'s battery basis');assert(Math.abs(basis.comb-4.3/(76/88.25))<1e-9);
  assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).peak),250,'chosen curve is not rescaled by the old peak field');
  await p.waitForSelector('.dc-curve-svg .dc-line');
 

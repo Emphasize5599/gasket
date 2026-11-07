@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.412 - 2026-11-07
+
+- With an established pack's usable capacity, EPA efficiency is converted from wall to battery energy so range isn't understated.
+
 ## 0.0.411 - 2026-11-07
 
 - Add Car's EV menus show only years, makes and models with an established charging curve, including when reopening a saved car.
