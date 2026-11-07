@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.411 - EV menus and pack usable capacity
+
+Owner: years without an established charge curve must not be visible; known packs must use the pack's usable capacity, not an estimate. garage.js  filters EV-mode year/make/model in epaYears, the onchange chains and epaPreset (saved-menu hydration previously skipped the filter). chargecurve PACKS carry  +  (Model 3 LR 2021 76 kWh: Nyland measured, InsideEVs; Model 3 SR+ 2020 49 kWh: ev-database 1177, itself an estimate; refreshed S/X and Plaid 95 kWh: ev-database 1404/1405/1407/1408);  returns , , .  / : a selected built-in pack with usable sets c.tank (tankSrc 'usable capacity of the selected pack') and disables #gTank; a pack without a published figure (2022 Bolt EV, Rivian Large gen 1: sources disagree, ~60-65 and ~125-135 kWh) clears EPA/VIN estimates and asks for entry. applyEpa skips the EPA range estimate and the VIN 92% rule when a built-in pack is selected. Test dc-curve-ui (years/makes filtered, 76 kWh locked, Bolt blank). Not phone-verified.
+
+Phone checks: Add Car → EV: Year menu lists only curve years; pick a 2021 Model 3 LR AWD pack → usable 76 kWh, locked; 2022 Bolt EV → usable blank, enter it.
+
 ## 0.0.408 - selectable researched battery packs
 
 Brave candidates appear in the installed pack selector. Choosing one preserves a copy of its curve, separate from later searches. Usable capacity is an explicit action, and insufficient curve evidence leaves the pack selected with manual curve fields. The prompt requests pack-specific measured DC points and a source.

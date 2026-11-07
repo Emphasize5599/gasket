@@ -638,9 +638,9 @@
       trimHtml(c) + '<p class="lead small keep">These are your entries, not EPA ratings. Set the vehicle type, tank size and observed city/highway mileage below. You can also use just a name.</p></details>';
     h += paintHtml(c);
     h += carousel(c, true);
-    var tankFindable = k === 'gas' && !!tankKey(c), tankLocked = !trimOk(c);   // the trim can change it: pick that first
-    h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(tankLocked ? 'choose your trim first' : c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
-      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" min="0.1" required id="gTank" value="' + esc(c.tank || '') + '"' + (tankLocked ? ' disabled' : '') + '>' +
+    syncUsable(c);var packCap=builtInPack(c),packFixed=!!(packCap&&packCap.usable>0);var tankFindable = k === 'gas' && !!tankKey(c), tankLocked = !trimOk(c);   // the trim can change it: pick that first
+    h += '<div class="grid2 g-pair"><label class="nf"><span>' + U.cap + '<span class="req" aria-label="required">*</span><small>' + esc(tankLocked ? 'choose your trim first' : packFixed ? 'usable capacity of '+packCap.label : packCap ? 'no published usable capacity for this pack: enter yours' : c.tankSrc || (k === 'ev' ? 'what the car can use, not the gross pack' : 'from your owner\'s manual')) + '</small></span>' +
+      '<span class="tk-join' + (tankFindable ? ' has-find' : '') + '"><input type="number" inputmode="decimal" step="0.1" min="0.1" required id="gTank" value="' + esc(c.tank || '') + '"' + (tankLocked || packFixed ? ' disabled' : '') + '>' +
       (tankFindable ? '<button type="button" class="btn primary sm tk-find" id="gTankFind" aria-label="Look the tank size up again"' + (tankBusy[c.id] || tankLocked ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>' : '') + '</span></label>';
     // under the row, so the two boxes stay level
     var TL = c.tankLookup, seeBtn = '<button type="button" class="btn tonal sm" id="gTankSee">See Brave\'s answer</button>';
@@ -677,6 +677,12 @@
     return '<svg class="dc-curve-svg" viewBox="0 0 300 104" role="img" aria-label="Charging power falls from '+Math.round(pk)+' kW as the battery fills"><path class="dc-axis" d="M10 14V90H290"/>'+
       '<polyline class="dc-line" points="'+points.map(xy).join(' ')+'"/><text x="10" y="102">0%</text><text x="150" y="102" text-anchor="middle">50%</text><text x="290" y="102" text-anchor="end">100%</text><text x="14" y="11">'+Math.round(pk)+' kW</text></svg>';
   }
+  // An established pack sets the usable capacity from that pack; the EPA range estimate or a VIN's gross pack × 92% never stands in for it.
+  var PACK_USABLE='usable capacity of the selected pack';
+  function builtInPack(c){var cc=kind(c)==='ev'&&c.addMode!=='custom'?ChargeCurve.selected(c):null;return cc&&cc.pack?cc:null;}
+  function syncUsable(c){var cc=builtInPack(c);if(!cc)return;
+    if(cc.usable>0){if(+c.tank!==cc.usable||c.tankSrc!==PACK_USABLE){c.tank=cc.usable;c.tankSrc=PACK_USABLE;}}
+    else if(c.tankSrc===PACK_USABLE||/^(estimated|VIN:)/.test(c.tankSrc||'')){c.tank='';c.tankSrc='';}}
   var manualPackDrafts=new WeakMap();
   function curveHtml(c){
     var cc=ChargeCurve.selected(c),research=ChargeCurve.installedResearch(c);
@@ -1262,6 +1268,8 @@
   var lastEMsg = null;   // kept across redraws (e.g. when the model's versions arrive), for the same car
   function eMsg(m, err) { lastEMsg = { car: S.carId, m: m || '', err: !!err }; var el = $('eMsg'); if (el) { el.textContent = m || ''; el.classList.toggle('err', !!err); } }
   function restoreEMsg() { var el = $('eMsg'); if (el && lastEMsg && lastEMsg.car === S.carId && lastEMsg.m && !el.textContent) { el.textContent = lastEMsg.m; el.classList.toggle('err', lastEMsg.err); } }
+  // EV mode lists only years / makes / models with an established charging curve, wherever the menu is filled.
+  function evMenu(c,level,list,values){if(c.addMode!=='ev')return list;return list.filter(function(o){var q={year:+(level?values[0]:o.value)};if(level>=1)q.make=level===1?o.value:values[1];if(level>=2)q.model=level===2?o.value:values[2];return level>2||ChargeCurve.packs(q,true).length;});}
   async function epaYears(c) {
     var field=$('eYear');if(!field||field.dataset.loading==='1'&&!matching)return;
     field.dataset.loading='1';
@@ -1270,7 +1278,7 @@
       if (!had) eMsg('Loading…');
       var years=items(await epaGet('menu/year'));
       if($('eYear')!==field||car()!==c)return;
-      if(c.addMode==='ev')years=years.filter(function(y){return ChargeCurve.packs({year:+y.value},true).length;});
+      years=evMenu(c,0,years,[]);
       if(!field.value||matching)fill(field, years, 'Year'); if (!had) eMsg('');
       bindEpa(c);
     } catch (e) { if($('eYear')===field)eMsg('Couldn\'t reach fueleconomy.gov: ' + e.message + '.', true);if(matching)throw e; }
@@ -1283,13 +1291,13 @@
         epaInvalidate(c);
         clearVinField(c,'eYear');
         var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!y) return;
-        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));if(c.addMode==='ev')makes=makes.filter(function(m){return ChargeCurve.packs({year:+y,make:m.value},true).length;});if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
+        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));makes=evMenu(c,1,makes,[y]);if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
       };
       $('eMake').onchange = async function () {
         epaInvalidate(c);
         clearVinField(c,'eMake');
         var y = $('eYear').value, mk = this.value; fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!mk) return;
-        try{var models=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)));if(c.addMode==='ev')models=models.filter(function(m){return ChargeCurve.packs({year:+y,make:mk,model:m.value},true).length;});if(car()===c&&$('eMake')&&$('eYear').value===y&&$('eMake').value===mk)fill($('eModel'),models,'Model');}catch(e){if(car()===c&&$('eModel')){eMsg('Could not load models. Choose the make again to retry.',true);needVinFields(c,['eModel'],'EPA model menu failed');}if(matching)throw e;}
+        try{var models=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk)));models=evMenu(c,2,models,[y,mk]);if(car()===c&&$('eMake')&&$('eYear').value===y&&$('eMake').value===mk)fill($('eModel'),models,'Model');}catch(e){if(car()===c&&$('eModel')){eMsg('Could not load models. Choose the make again to retry.',true);needVinFields(c,['eModel'],'EPA model menu failed');}if(matching)throw e;}
       };
       $('eModel').onchange = async function () {
         epaInvalidate(c);
@@ -1327,7 +1335,7 @@
     var ids=['eYear','eMake','eModel','eOpt'],els=ids.map($),grid=els[0]&&els[0].closest('.epa-grid');if(!grid||grid.dataset.epaHydrating==='1'||matching)return;
     bindEpa(c);grid.dataset.epaHydrating='1';var values=els.map(function(el){return el&&el.value||'';}),y=encodeURIComponent(values[0]),mk=encodeURIComponent(values[1]),md=encodeURIComponent(values[2]),failed=false;
     var paths=['menu/year',y&&'menu/make?year='+y,y&&mk&&'menu/model?year='+y+'&make='+mk,y&&mk&&md&&'menu/options?year='+y+'&make='+mk+'&model='+md],labels=['Year','Make','Model','Engine / transmission'];
-    try{await Promise.all(paths.map(async function(path,i){var el=els[i];if(!path||!el||el.dataset.epaMenu==='1')return;try{var list=items(await epaGet(path));if(car()!==c||$(ids[i])!==el||values.slice(0,i+1).some(function(v,j){return !$(ids[j])||$(ids[j]).value!==v;}))return;
+    try{await Promise.all(paths.map(async function(path,i){var el=els[i];if(!path||!el||el.dataset.epaMenu==='1')return;try{var list=evMenu(c,i,items(await epaGet(path)),values);if(car()!==c||$(ids[i])!==el||values.slice(0,i+1).some(function(v,j){return !$(ids[j])||$(ids[j]).value!==v;}))return;
       var selected=values[i],label=el.selectedOptions[0]&&el.selectedOptions[0].text;if(selected&&!list.some(function(o){return String(o.value)===selected;}))list.push({value:selected,text:label||selected});fill(el,list,labels[i]);el.value=selected;el.dataset.epaMenu=list.length?'1':'0';
     }catch(e){failed=true;if(car()===c&&$(ids[i])===el)eMsg('Could not load '+labels[i].toLowerCase()+' choices. Tap the field to retry; your saved selection is kept.',true);}}));}
     finally{grid.dataset.epaHydrating='0';if($(ids[0])===els[0])els[0].dataset.savedEpa=failed?'1':'0';editorGate(c);}
@@ -1364,6 +1372,7 @@
     c.typeAuto = SP.typeFromEpa(v); c.type = c.typeAuto;
     var t = tankFor(c), msg;
     if (t) { c.tank = t.gal; c.tankSrc = t.src; }
+    else if (ev && builtInPack(c)) { syncUsable(c); }
     else if (ev && c.epa.range && c.epa.kwh.comb) { c.tank = Math.round(c.epa.range * c.epa.kwh.comb / 100); c.tankSrc = 'estimated from the EPA range × kWh per 100 mi (counts charging losses, like the trip plans do)'; }
     // a different car (or powertrain) needs its own tank size; the same car keeps the one it has
     else if (kind(c) !== wasKind || (c.tankSrc !== 'you entered it' && [c.year, String(c.make || '').toLowerCase(), baseOf(c).toLowerCase()].join('|') !== wasCar)) { c.tank = ''; c.tankSrc = ''; }
@@ -1485,7 +1494,7 @@
           });
         } else if (d.info[k]) { i[k] = d.info[k]; src[k] = 'vin'; }
       });
-      if (d.power === 'ev' && d.battery > 0 && !(+c.tank > 0)) { c.tank = Math.round(d.battery * 0.92); c.tankSrc = 'VIN: ' + d.battery + ' kWh pack, ~92% usable'; }
+      if (d.power === 'ev' && d.battery > 0 && !(+c.tank > 0) && !builtInPack(c)) { c.tank = Math.round(d.battery * 0.92); c.tankSrc = 'VIN: ' + d.battery + ' kWh pack, ~92% usable'; }
       c.recalls = null;
       c.name = [c.year, c.make, c.model].join(' ');
       LG.info('car', 'VIN decoded', { year: c.year, make: c.make, model: c.model, power: c.power,engineDecoded:!!d.info.engine,transmissionDecoded:!!d.info.trans,driveDecoded:!!d.info.drive,engineKnown:!!i.engine,transmissionKnown:!!i.trans,driveKnown:!!i.drive,sourceWarning:!!d.warn });

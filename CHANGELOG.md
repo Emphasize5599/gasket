@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.411 - 2026-11-07
+
+- Add Car's EV menus show only years, makes and models with an established charging curve, including when reopening a saved car.
+- An established battery pack now sets its own published usable capacity (Tesla packs). Packs without a published usable figure ask you to enter it instead of using the EPA-range estimate.
+
 ## 0.0.410 - 2026-11-06
 
 - Includes the Add Car and editable charging profiles from 0.0.409.

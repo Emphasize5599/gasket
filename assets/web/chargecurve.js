@@ -10,12 +10,12 @@
  var EDIT_AT=[0,10,20,30,40,50,60,70,80,90,100];
  // Warm planning curves. Sources and applicability are documented in docs/TESLA_PACKS.md and docs/EV_CHARGING_PROFILES.md.
  var PACKS=[
-  {id:'m3-lr-2021',model:'Model 3',from:2021,to:2021,trim:/(?=.*(?:long range|\blr\b))(?=.*(?:awd|dual motor))/,label:'2021 Long Range AWD · Panasonic 2170 family',kw:[100,250,225,180,145,100,80,60,45,30,15]},
-  {id:'m3-sr-2020',model:'Model 3',from:2020,to:2020,trim:/standard range|sr\+/,label:'2020 Standard Range Plus · nickel-based pack',kw:[169,169,155,138,115,89,71,57,36,22,10]},
-  {id:'ms-refresh',model:'Model S',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model S · 100 kWh class',kw:[138,214,220,224,200,152,118,94,67,48,15]},
-  {id:'ms-plaid',model:'Model S',from:2021,to:2025,trim:/plaid/,label:'2021–25 Model S Plaid · 100 kWh class',kw:[133,205,211,215,193,146,114,90,65,46,15]},
-  {id:'mx-refresh',model:'Model X',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model X · 100 kWh class',kw:[136,210,216,220,198,149,116,92,67,46,15]},
-  {id:'mx-plaid',model:'Model X',from:2022,to:2025,trim:/plaid/,label:'2022–25 Model X Plaid · 100 kWh class',kw:[133,205,211,215,192,146,114,90,65,47,15]},
+  {id:'m3-lr-2021',usable:76,usableSource:'https://insideevs.com/news/519345/bjorn-tesla-model3-lr-range/',model:'Model 3',from:2021,to:2021,trim:/(?=.*(?:long range|\blr\b))(?=.*(?:awd|dual motor))/,label:'2021 Long Range AWD · Panasonic 2170 family',kw:[100,250,225,180,145,100,80,60,45,30,15]},
+  {id:'m3-sr-2020',usable:49,usableSource:'https://ev-database.org/car/1177/Tesla-Model-3-Standard-Range-Plus',model:'Model 3',from:2020,to:2020,trim:/standard range|sr\+/,label:'2020 Standard Range Plus · nickel-based pack',kw:[169,169,155,138,115,89,71,57,36,22,10]},
+  {id:'ms-refresh',usable:95,usableSource:'https://ev-database.org/car/1404/Tesla-Model-S-Dual-Motor',model:'Model S',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model S · 100 kWh class',kw:[138,214,220,224,200,152,118,94,67,48,15]},
+  {id:'ms-plaid',usable:95,usableSource:'https://ev-database.org/uk/car/1405/Tesla-Model-S-Plaid',model:'Model S',from:2021,to:2025,trim:/plaid/,label:'2021–25 Model S Plaid · 100 kWh class',kw:[133,205,211,215,193,146,114,90,65,46,15]},
+  {id:'mx-refresh',usable:95,usableSource:'https://ev-database.org/uk/car/1407/Tesla-Model-X-Dual-Motor',model:'Model X',from:2022,to:2025,exclude:/plaid|standard range/,label:'2022–25 refreshed Model X · 100 kWh class',kw:[136,210,216,220,198,149,116,92,67,46,15]},
+  {id:'mx-plaid',usable:95,usableSource:'https://ev-database.org/car/1408/Tesla-Model-X-Plaid',model:'Model X',from:2022,to:2025,trim:/plaid/,label:'2022–25 Model X Plaid · 100 kWh class',kw:[133,205,211,215,192,146,114,90,65,47,15]},
   {id:'bolt-ev-2022',make:'Chevrolet',model:'Bolt EV',from:2022,to:2022,label:'2022 Bolt EV · 65 kWh class',
    source:'https://insideevs.com/news/613786/chevrolet-bolt-ev-fast-charging/',
    points:[[0,32],[5,38],[20,40],[25,45],[30,46],[50,45],[55,41],[60,36],[65,32],[70,29],[75,27],[80,24],[85,20],[90,17],[95,14],[100,9]]},
@@ -69,7 +69,7 @@
   var override=clean(car.dcCurve);
   if(override&&(override[0][0]!==0||override[override.length-1][0]!==100))override=null;
   var points=override||pack.points||EDIT_AT.map(function(p,i){return [p,pack.kw[i]];});
-  return {points:points,src:override?'user':'pack',label:pack.label+(override?' · edited':''),peak:peak(points),source:pack.source};
+  return {points:points,src:override?'user':'pack',pack:pack.id,label:pack.label+(override?' · edited':''),peak:peak(points),source:pack.source,usable:pack.usable||null,usableSource:pack.usable?pack.usableSource:null};
  }
  function norm(s){return String(s||'').toLowerCase().replace(/(\d),(\d)/g,'$1.$2').replace(/(\d)\s*kwh/g,'$1kwh').replace(/[^a-z0-9.+]+/g,' ').replace(/\b(\d+)\.(\d+)\b/g,'$1_$2').replace(/\./g,' ').replace(/_/g,'.').trim();}
  var SYN=[[/\bdual motor\b|\btwin motor\b|\b4matic\b|\b4motion\b|\be-4orce\b|\b4wd\b|\ball wheel drive\b/g,'awd'],[/\bsingle motor\b|\b2wd\b|\bfwd\b|\brear wheel drive\b/g,'rwd'],[/\blr\b/g,'long range'],[/\bsr\b/g,'standard range'],[/\ber\b/g,'extended range'],[/\bsr\+/g,'standard range plus']];

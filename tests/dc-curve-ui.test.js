@@ -12,6 +12,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.selectOption('#gDcPack','m3-lr-2021');
  await p.locator('#gDcPack').waitFor({state:'visible'});
  assert.equal(await p.evaluate(()=>Garage.ok()),true);
+ assert.deepEqual(await p.evaluate(()=>({tank:Garage.car().tank,src:Garage.car().tankSrc,disabled:document.getElementById('gTank').disabled})),{tank:76,src:'usable capacity of the selected pack',disabled:true},'a known pack sets its own usable capacity, not the typed 75');
  assert.equal(await p.evaluate(()=>ChargeCurve.forCar(Garage.car()).peak),250,'chosen curve is not rescaled by the old peak field');
  await p.waitForSelector('.dc-curve-svg .dc-line');
 
@@ -28,11 +29,16 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{__mocks.epa=url=>{const u=new URL(url),menu=xs=>({menuItem:xs.map(x=>({text:x,value:x}))});if(u.pathname.endsWith('/menu/year'))return menu(['2022','2016']);if(u.pathname.endsWith('/menu/make'))return menu(['Chevrolet','Ford']);if(u.pathname.endsWith('/menu/model'))return menu(['Bolt EV','Bolt EUV']);if(u.pathname.endsWith('/menu/options'))return menu(['90001']);return {id:90001,year:2022,make:'Chevrolet',model:'Bolt EV',atvType:'EV',fuelType1:'Electricity',city08:131,highway08:109,comb08:120,range:259};};});
  await p.click('[data-car="+"]');
  await p.selectOption('#gAddMode','ev');
+ await p.waitForFunction(()=>document.querySelectorAll('#eYear option').length>1);
+ assert.deepEqual(await p.$$eval('#eYear option',o=>o.map(x=>x.value).filter(Boolean)),['2022'],'years without an established curve are hidden');
  await p.selectOption('#eYear','2022');
+ await p.waitForFunction(()=>document.querySelectorAll('#eMake option').length>1);
+ assert.deepEqual(await p.$$eval('#eMake option',o=>o.map(x=>x.value).filter(Boolean)),['Chevrolet']);
  await p.selectOption('#eMake','Chevrolet');
  await p.selectOption('#eModel','Bolt EV');
  await p.waitForFunction(()=>Garage.car().epaId==='90001');
  assert.equal(await p.evaluate(()=>ChargeCurve.selected(Garage.car()).src),'pack');
+ assert.deepEqual(await p.evaluate(()=>({tank:Garage.car().tank,src:Garage.car().tankSrc})),{tank:'',src:''},'no published usable capacity: blank for the driver, not the EPA estimate');
  assert.equal(await p.locator('#gCatalog').count(),0);
  await p.selectOption('#gAddMode','custom');
  assert.equal(await p.locator('#eYear').count(),0);
