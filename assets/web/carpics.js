@@ -21,6 +21,21 @@
     if (c.trim && norm(m).endsWith(' ' + norm(c.trim))) m = m.slice(0, m.length - String(c.trim).length).trim();
     return m.replace(/\s+(?:long range|standard range(?: plus)?|performance|XLE|XSE|LE|SE|Limited)$/i, '').trim();
   }
+  // Model years with one exterior (minor bumper/wheel updates count as the same look), by make and photo model:
+  // [first, last, years NHTSA has a photo for (checked 2026-11-08; tried first)]. Only spans we're sure of.
+  var SAME_LOOK={
+    'tesla|model s':[[2012,2016,[2013,2014]],[2017,2025,[2021]],[2026,2026,[2026]]],
+    'tesla|model x':[[2016,2026,[2026]]],
+    'tesla|model 3':[[2017,2023,[2017,2018,2019,2020,2021,2022,2023]],[2024,2026,[2024,2026]]],
+    'tesla|model y':[[2020,2024,[2020]],[2025,2026,[2025,2026]]],
+    'tesla|cybertruck':[[2024,2026,[]]]
+  };
+  /** Other years with the same look as this car's: known photo years nearest first, then the rest (earlier first on a
+   *  tie); [] when unknown. */
+  function sameLookYears(c){var spans=SAME_LOOK[norm(c&&c.make)+'|'+norm(photoModel(c||{}))],y=+(c&&c.year);if(!spans||!y)return [];
+    var span=spans.filter(function(r){return y>=r[0]&&y<=r[1];})[0];if(!span)return [];var near=[];
+    for(var d=1;d<=span[1]-span[0];d++){if(y-d>=span[0])near.push(y-d);if(y+d<=span[1])near.push(y+d);}
+    var known=near.filter(function(x){return span[2].indexOf(x)>=0;});return known.concat(near.filter(function(x){return known.indexOf(x)<0;}));}
   function closestModel(models,c) {
     var want=norm(photoModel(c)), best='', score=-1;
     (models||[]).forEach(function(v){var name=v.model||v.Model_Name||'',n=norm(name),s=n===want?100:n===want.replace(/\bhybrid\b/g,'').replace(/\s+/g,' ').trim()?70:-1;
@@ -114,7 +129,7 @@
   /** What a lookup depends on: one photo per model (year / make / model). */
   function sig(c, fuel) { return (fuel ? [preferFuel(c)?'f4':'f3'] : []).concat([c.year, norm(c.make), norm(baseModel(c.model))]).concat(fuel ? [norm(c.trim)] : []).join('|'); }
   function photoConfig(c){return [norm(c.trim),norm(c.info&&c.info.body),((c.info||{}).drw==='yes'||c.tires&&c.tires.corners&&c.tires.corners.dually)?'drw':''].join('|');}
-  function nhtsaSig(c) { return 'n5|'+sig(c)+'|'+norm(c.vpicModel)+'|'+photoConfig(c); }
+  function nhtsaSig(c) { return 'n6|'+sig(c)+'|'+norm(c.vpicModel)+'|'+photoConfig(c); }
   function wikiSig(c){return 'w5|'+sig(c)+'|'+photoConfig(c)+'|'+!!c.photoAnyYear;}
   /**
    * Which picture to show: 'fuel' when you've picked one of the trim's factory colors (and there's a key), else 'nhtsa',
@@ -142,7 +157,7 @@
   }
   function fuelModel(c){return photoModel(Object.assign({},c,{vpicModel:''}));}
   function catalogYears(list,year){return Array.from(new Set((Array.isArray(list)?list:[]).map(function(v){return +(v&&typeof v==='object'?(v.year||v.modelYear||v.name||v.id):v);}).filter(function(y){return Number.isInteger(y)&&y>=1998&&y<+year;}))).sort(function(a,b){return b-a;});}
-  var CarPicMath = { fuelMatch:fuelMatch,fuelModel:fuelModel,catalogYears:catalogYears,fuelViews:fuelViews,selectedView:selectedView,closestModel:closestModel, bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
+  var CarPicMath = { sameLookYears:sameLookYears,fuelMatch:fuelMatch,fuelModel:fuelModel,catalogYears:catalogYears,fuelViews:fuelViews,selectedView:selectedView,closestModel:closestModel, bestColors: bestColors, driveOf: driveOf, matchTrim: matchTrim, colorsOf: colorsOf, pickColor: pickColor, baseModel: baseModel, photoModel: photoModel, nhtsaPic: nhtsaPic, wikiPick: wikiPick, wikiRank:wikiRank, sig: sig, which: which, bodyOf: bodyOf };
   root.CarPicMath = CarPicMath;
   if (typeof module !== 'undefined' && module.exports) module.exports = CarPicMath;
   if (!root.document) return;
@@ -189,17 +204,24 @@
   }
   function due(x, sg) { return !x || x.sig !== sg || (x.fail && Date.now() - x.fail > RETRY_H * 3600e3); }
   function json(url) { return call('fetchJson', url).then(function (r) { if (r.error) throw new Error(r.error); return JSON.parse(r.body); }); }
+  function nhtsaYear(c,year) {
+    var key='nmodels|'+year+'|'+norm(c.make);
+    if(!mem[key])mem[key]=json('https://api.nhtsa.gov/products/vehicle/models?modelYear='+encodeURIComponent(year)+'&make='+encodeURIComponent(c.make)+'&issueType=r').then(function(r){return r.results||[];}).catch(function(){delete mem[key];return [];});
+    return mem[key].then(function(models){var model=closestModel(models,c);return json('https://api.nhtsa.gov/vehicles/byYmmt?modelYear='+encodeURIComponent(year)+'&make='+encodeURIComponent(c.make)+'&model='+encodeURIComponent(model)+'&data=none&productDetail=all').then(function(r){var x=nhtsaPic(r,c);if(x){x.model=model;x.year=+year;}return x;});});
+  }
+  /** NHTSA has photos only for crash-tested model years. When this year has none, borrow the nearest year with the same
+   *  exterior (sameLookYears); the credit names that year. */
   function nhtsaPhoto(c) {
-    var key='nmodels|'+c.year+'|'+norm(c.make);
-    if(!mem[key])mem[key]=json('https://api.nhtsa.gov/products/vehicle/models?modelYear='+encodeURIComponent(c.year)+'&make='+encodeURIComponent(c.make)+'&issueType=r').then(function(r){return r.results||[];}).catch(function(){delete mem[key];return [];});
-    return mem[key].then(function(models){var model=closestModel(models,c);return json('https://api.nhtsa.gov/vehicles/byYmmt?modelYear='+encodeURIComponent(c.year)+'&make='+encodeURIComponent(c.make)+'&model='+encodeURIComponent(model)+'&data=none&productDetail=all').then(function(r){var x=nhtsaPic(r,c);if(x)x.model=model;return x;});});
+    var alt=sameLookYears(c).slice(0,4);
+    return nhtsaYear(c,c.year).then(function(x){if(x||!alt.length)return x;
+      return alt.reduce(function(p,y){return p.then(function(found){return found||nhtsaYear(c,y).then(function(v){if(v)v.sameLook=true;return v;},function(){return null;});});},Promise.resolve(null));});
   }
   function lookNhtsa(c) {
     var sg = nhtsaSig(c), b = 'n|' + c.id;
     if (!due(P(c).nhtsa, sg) || busy[b]) return Promise.resolve();
     busy[b] = 1;
     return nhtsaPhoto(c)
-      .then(function (x) { if (!x) throw new Error('no photo'); P(c).nhtsa = { sig: sg, url: x.url, body: x.body, model:x.model, t: Date.now() }; LG.info('car', 'Picture from NHTSA', {model:x.model}); })
+      .then(function (x) { if (!x) throw new Error('no photo'); P(c).nhtsa = { sig: sg, url: x.url, body: x.body, model:x.model, year:x.year, sameLook:!!x.sameLook, t: Date.now() }; LG.info('car', 'Picture from NHTSA', {model:x.model,photoYear:x.year,sameLook:!!x.sameLook}); })
       .catch(function (e) { P(c).nhtsa = { sig: sg, fail: Date.now(), err: String(e && e.message || e) }; LG.info('car', 'No NHTSA photo', P(c).nhtsa.err); })
       .then(function () { delete busy[b]; A.save(); told(c); });
   }
@@ -342,7 +364,7 @@
     if(hasGenerated(c))return {text:'Your selected image'};
     if(w==='chosen')return {text:'Photo: '+p.chosen.artist+(p.chosen.license?' · '+p.chosen.license:''),url:p.chosen.page};
     if (w === 'fuel') return { text: 'Photo: EVOX Images via Fuel API' +(p.fuel.year&&+p.fuel.year!==+c.year?' · '+p.fuel.year+' model photo':'')+ (p.fuel.exact === false ? ' · closest trim: ' + (p.fuel.trim || 'base') : '') };
-    if (w === 'nhtsa') return { text: 'Photo: NHTSA (EVOX Images)' };
+    if (w === 'nhtsa') return { text: 'Photo: NHTSA (EVOX Images)'+(p.nhtsa.year&&+p.nhtsa.year!==+c.year?' · '+p.nhtsa.year+' model photo (same look)':'') };
     if (w === 'wiki') return { text: 'Photo: ' + p.wiki.artist + ' · ' + p.wiki.license + ' · Wikimedia Commons'+(p.wiki.approximate?' · similar model; check appearance':''), url: p.wiki.page };
     if (c && c.picMode === 'doodle') return { text: 'Doodle' };
     return { text: c && c.year && !pending(c) ? 'No photo found: here\'s a doodle' : '' };

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.421 - 2026-11-08
+
+- Tesla photos: when NHTSA has no photo for a model year, the Garage uses NHTSA's photo from a year with the same look (a 2025 Model S shows the 2021 photo), and the credit names that year.
+- Bug fixes.
+
 ## 0.0.420 - 2026-11-08
 
 - The EV range explanation no longer says trips always charge to 80%: plans charge each stop only as much as the trip needs.

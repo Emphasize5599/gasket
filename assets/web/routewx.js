@@ -401,7 +401,10 @@
   }
   // Zone-based alerts' SAME codes list intersecting counties, NOT the warning's
   // exact footprint. Resolve affectedZones before falling back to a county.
-  var zonePending=new Map();
+  // In-flight lookups are shared, and a resolved zone outline is kept 10 minutes (bounded), so routes checked moments
+  // apart share it no matter how the timing falls. Failures are never kept.
+  var zonePending=new Map(),zoneDone=new Map(),ZONE_MS=10*60e3;
+  function clearZones(){zonePending.clear();zoneDone.clear();}
   async function locateAlerts(alerts,getJson,stats,opts){
     var todo=alerts.filter(function(a){return !(a.polys&&a.polys.length)&&(a.zoneBased||!a.counties.length)&&a.zones.length;}),urls=new Set(),resolved=new Map();
     var routeBox=opts.dense&&opts.dense.length?boxOf([].concat.apply([],opts.dense.map(function(p){return [p.lng,p.lat];}))):null;
@@ -416,9 +419,10 @@
     stats.alertZones=urls.size;stats.alertZoneErrors=0;
     await pool(Array.from(urls),4,async function(url){
       try{
+        var done=zoneDone.get(url);if(done&&Date.now()-done.t<ZONE_MS){resolved.set(url,done.area);return;}
         var job=zonePending.get(url);
         if(!job){job=(async function(){var r=await getJson(url);if(!r||!r.body)throw new Error('Warning zone unavailable');var area=polysOf(JSON.parse(r.body).geometry);if(!area||!area.length)throw new Error('Warning zone has no geometry');return area;})().finally(function(){zonePending.delete(url);});zonePending.set(url,job);}
-        resolved.set(url,await job);
+        var area=await job;resolved.set(url,area);zoneDone.delete(url);zoneDone.set(url,{area:area,t:Date.now()});if(zoneDone.size>200)zoneDone.delete(zoneDone.keys().next().value);
       }catch(e){stats.alertZoneErrors++;stats.errors++;}
     });
     todo.forEach(function(a){if(a.zones.every(function(u){return resolved.has(u);}))a.zonePolys=[].concat.apply([],a.zones.map(function(u){return resolved.get(u);}));});
@@ -567,7 +571,7 @@
   function hazardTypes(hazards){return Array.from(new Set((hazards||[]).map(function(h){return h.kind==='alert'?'alert:'+String(h.event||h.title||'unclassified').trim().toLowerCase():h.kind;}).filter(Boolean)));}
   function pendingHazards(car,kinds){var seen=understood.get(String(car));return Array.from(new Set(kinds||[])).filter(function(k){return !seen||!seen.has(k);});}
   function acknowledgeHazards(car,kinds){var key=String(car),seen=understood.get(key);if(!seen){seen=new Set();understood.set(key,seen);}(kinds||[]).forEach(function(k){seen.add(k);});}
-  var api = { hazardTypes:hazardTypes, pendingHazards:pendingHazards, acknowledgeHazards:acknowledgeHazards, prepare:prepare, vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
+  var api = { clearZones:clearZones, hazardTypes:hazardTypes, pendingHazards:pendingHazards, acknowledgeHazards:acknowledgeHazards, prepare:prepare, vehicleProfile:vehicleProfile,vehicleFit:vehicleFit,rankOptions:rankOptions,tireRisk:tireRisk, timeAt: timeAt, samples: samples, classify: classify, airCause: airCause, stretches: stretches, advice: advice, alertOf: alertOf, hourIdx: hourIdx, lookup: lookup, KINDS: KINDS, ORDER: ORDER, COLORS: COLORS, isSummerTire: isSummerTire, classifyNws: classifyNws, windMph: windMph,
     forRoute: forRoute, rerate:rerate, verdictCount:verdictCount, title: title, digest: digest, digestKnown: digestKnown, digestWords: digestWords, alertStretches: alertStretches, inPolys: inPolys, polysOf: polysOf, ALERT_EX: ALERT_EX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.RouteWx = api;

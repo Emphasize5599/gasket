@@ -2,6 +2,14 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.421 - same-look NHTSA photo years; hazard-zones CI race
+
+Owner: use the 2021 NHTSA photo for newer Model S years, and other years NHTSA doesn't have but look the same. NHTSA byYmmt has vehiclePicture only for NCAP-tested years. carpics `SAME_LOOK` ('make|photoModel' → [first, last, known photo years], checked live 2026-11-08): Model S 2012–16 [2013, 2014], 2017–25 [2021], 2026 [2026]; Model X 2016–26 [2026]; Model 3 2017–23 (all) and 2024–26 [2024, 2026]; Model Y 2020–24 [2020], 2025–26 [2025, 2026]; Cybertruck 2024–26 []. `sameLookYears(c)` = known photo years in the car's span nearest first, then the other span years (earlier on a tie). `nhtsaPhoto` asks the car's own year (`nhtsaYear`), then up to 4 of those. The result keeps `year` / `sameLook`, the credit adds "· YEAR model photo (same look)", and `nhtsaSig` n6 retries older failures. No entry = only its own year (nothing borrowed across a design change or for an unknown model). Only Tesla spans for now; add others only when sure. Test car-photo-samelook (release).
+
+CI: 0.0.419/420 runs hit hazard-zones "concurrent routes coalesce zone geometry lookups" 2 !== 1 (passes locally). routewx `zonePending` shared only in-flight jobs and deleted them when done, so a slow runner's second lookup could arrive after the first finished and fetch again. Now `zoneDone` keeps a resolved outline 10 minutes (≤ 200; failures never kept) and `RouteWx.clearZones()` resets both. The test also checks a later lookup reuses the outline, and clears before its offline case.
+
+Phone checks: Garage on a 2025 Model S without a picked Fuel API color: NHTSA photo with "2021 model photo (same look)"; a 2022 Model X shows the 2026 photo.
+
 ## 0.0.420 - range help wording; charging and NHTSA photo notes
 
 Owner asked whether plans optimize along the charge curve instead of charging to 80%, and why NHTSA photos fail for a 2025 Model S. Both were already handled; only the Garage Range (?) was wrong ("charge to 80%"), now "charge each stop only as much as the trip needs (usually below 80%…)".
