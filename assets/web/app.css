@@ -2091,6 +2091,10 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .vc-title {display:flex;gap:12px;align-items:center;margin-bottom:12px;}
 .vc-title>div {min-width:0;flex:1;}
 .vc-title h3 {margin:0 0 5px;}
+.vc-drop {flex:none;align-self:flex-start;width:40px;height:40px;margin:-8px -8px 0 0;border:0;border-radius:50%;background:transparent;color:var(--sub,#5f6368);display:grid;place-items:center;cursor:pointer;}
+.vc-drop svg {width:20px;height:20px;fill:currentColor;}
+.vc-drop:active,.vc-drop:hover {background:rgba(127,127,127,.15);}
+.vc-drop:disabled {opacity:.4;}
 .vc-photo {width:80px;height:55px;object-fit:contain;border-radius:12px;flex:none;}
 .vc-state,.vc-main span,.vc-facts,.vc-breakdown {font-size:13px;color:var(--ink-2);}
 .vc-main {display:flex;gap:12px;justify-content:space-between;margin:12px 0;}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.433 - 2026-11-08
+
+- Compare remembers each plan's review: comparing one vehicle with both priorities no longer asks you to review it again.
+- Compare: one checkbox per vehicle; a vehicle's tiles show only while it's ticked, and each tile has an ✕ to take it out. "Plan another way" is now "Also compare with … as the priority".
+- Ticking a vehicle no longer freezes the app while the total time is estimated.
+- Bug fixes.
+
 ## 0.0.432 - 2026-11-08
 
 - With time windows on, Trip planning (Route and Compare) says buffer and detour are always adjusted automatically, instead of showing an unexplained grayed-out box.
