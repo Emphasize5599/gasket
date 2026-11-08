@@ -2429,3 +2429,9 @@ input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
  .epa-tiles { grid-auto-flow:row; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-columns:auto; }
  .epa-tiles > div > span { overflow-wrap:normal; word-break:normal; }
 }
+/* 0.0.424: each comparison card's own Trip planning box */
+.vc-plan {margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:14px;}
+.vc-plan h4 {margin:0 0 6px;font-size:15px;color:var(--accent);}
+.vc-plan .vc-priority {margin-top:4px;}
+.vc-plan-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.vc-plan-actions .btn {flex:1 1 120px;min-width:0;white-space:normal;}

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.424 - 2026-11-08
+
+- Compare: plan the same vehicle more than one way (for example lowest cost and shortest time). Each card has its own Trip planning box: priority, automatic buffer and detour, and toll settings.
+- Route: the Tolls card starts folded, and changing a setting no longer scrolls the page.
+- Bug fixes.
+
 ## 0.0.423 - 2026-11-08
 
 - Add Car: the Year list no longer empties itself and reloads when the screen refreshes before you pick a year.

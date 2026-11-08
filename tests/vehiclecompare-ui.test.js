@@ -52,10 +52,28 @@ assert.equal(await p.evaluate(()=>__expiredRefreshes.length),0,'switch off: no p
  await p.evaluate(()=>__trip.close());await p.click('#btnTrip');await p.click('[data-hist="compare"]');await p.waitForSelector('#tripPick',{state:'detached'});await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>__trip.step(8));assert.equal(await p.locator('[data-vc-card]').count(),2);if(!await p.locator('[data-vc-use="corolla20"]').isEnabled())console.log(await p.evaluate(()=>FLog.text().split('\n').filter((x,i,a)=>/Saved plan|dependencies/.test(x)||i&&/Saved plan|dependencies/.test(a[i-1])).slice(-20)));assert(await p.locator('[data-vc-use="corolla20"]').isEnabled(),'the unchanged selected vehicle can review its dated saved plan without rerunning it');assert.equal(await p.evaluate(()=>__app.S.trip.bufferMi),20,'saved draft restores this car’s buffer');assert.equal(await p.evaluate(()=>__app.S.trip.fuel.miles),'180','saved draft restores this car’s fuel, not the last compared car’s');
  await p.selectOption('[data-vc-priority="corolla20"]','cost');await p.selectOption('[data-vc-priority="venza12"]','time');
  assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'cost');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time');
- assert(await p.locator('[data-vc-priority="corolla20"]').evaluate(e=>e.closest('label').previousElementSibling.classList.contains('vc-actions')),'priority follows vehicle buttons');
+ assert(await p.locator('[data-vc-priority="corolla20"]').evaluate(e=>e.closest('.vc-plan').previousElementSibling.classList.contains('vc-actions')),'the Trip planning box follows vehicle buttons');
  await p.evaluate(()=>__trip.step(3));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows this vehicle’s priority');await p.uncheck('#tAutoTripEnabled');await p.evaluate(()=>__trip.step(8));
  assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'cost');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','another car’s priority is unchanged');
  assert(!await p.locator('#tCompare').evaluate(e=>e.scrollWidth>e.clientWidth),'priority dropdown stays inside narrow cards');
+ // 0.0.424: plan the same vehicle another way. The new plan starts with the other priority, keeps its own settings,
+ // and is listed for the batch; removing it leaves the vehicle's own plan as it was.
+ await p.click('[data-vc-mode-add="venza12"]');await p.waitForSelector('[data-vc-priority="venza12#2"]');
+ assert.equal(await p.inputValue('[data-vc-priority="venza12#2"]'),'cost','the new plan takes the other priority');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','the vehicle’s own plan is unchanged');
+ assert(await p.isChecked('[data-vc-auto="venza12#2"]'),'automatic buffer and detour start on for the new plan');
+ assert.match(await p.innerText('[data-vc-card="venza12#2"] h3'),/Lowest cost/);assert.match(await p.innerText('[data-vc-card="venza12"] h3'),/Shortest time/);
+ await p.selectOption('[data-vc-priority="venza12#2"]','time');await p.check('[data-vc-plan-box="venza12#2"] [data-vc-toll="allowPaid"]');await p.waitForSelector('[data-vc-plan-box="venza12#2"] [data-vc-toll="limited"]');
+ assert.equal(await p.evaluate(()=>!!(Garage.car&&__app.S.cars.find(c=>c.id==='venza12').tollPreference||{}).allowPaid),false,'toll settings stay with the plan, not the vehicle');
+ await p.selectOption('[data-vc-priority="venza12#2"]','cost');
+ assert.equal(await p.locator('[data-vc-queue="venza12#2"]').count(),1,'the batch lists the extra plan');
+ const ownAuto=await p.isChecked('[data-vc-auto="venza12"]');await p.uncheck('[data-vc-auto="venza12#2"]');assert(!await p.isChecked('[data-vc-auto="venza12#2"]'));assert.equal(await p.isChecked('[data-vc-auto="venza12"]'),ownAuto,'automatic buffer/detour is independent per plan');await p.check('[data-vc-auto="venza12#2"]');assert.equal(await p.isChecked('[data-vc-auto="venza12"]'),ownAuto);
+ await p.click('[data-vc-plan="venza12#2"]');await p.waitForFunction(()=>__trip.comparison().selected==='venza12#2');
+ assert.equal(await p.evaluate(()=>__app.S.carId),'venza12','the extra plan uses the same garage vehicle');
+ await p.evaluate(()=>__trip.step(3));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows the open plan’s priority');assert.match(await p.innerText('#tAutoTrip'),/extra comparison plan/);
+ await p.evaluate(()=>__trip.step(8));await p.waitForSelector('[data-vc-mode-remove="venza12#2"]');
+ assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','the vehicle’s own plan kept its priority');
+ await p.click('[data-vc-mode-remove="venza12#2"]');await p.waitForFunction(()=>!document.querySelector('[data-vc-card="venza12#2"]'));
+ assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time');assert(!await p.locator('#tCompare').evaluate(e=>e.scrollWidth>e.clientWidth),'plan boxes stay inside narrow cards');
  // 0.0.358 (owner): Remove from the comparison's editor removes the car and leaves the comparison with the others
  await p.click('[data-vc-edit="venza12"]');await p.waitForSelector('.car-edit #gRemove');await p.click('#gRemove');await p.waitForSelector('#cfm.on #cfmYes');await p.click('#cfm.on #cfmYes');
  await p.waitForFunction(()=>!__app.S.cars.some(c=>c.id==='venza12')&&!document.querySelector('.sub-page.car-edit'),null,{timeout:5000});

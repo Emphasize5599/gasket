@@ -19,13 +19,17 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{const x=document.getElementById('tTollCmp');x.checked=true;x.onchange();});
  await p.fill('#tFrom','100 Main St, Testville');await p.fill('#tTo','200 Main St, Testville');
  assert.equal(await p.evaluate(()=>__app.S.trip.tollCompare&&__app.S.trip.altCompare),true,'comparing tolls turns on the route comparison');
+ // 0.0.424: a setting that redraws Route keeps your place instead of jumping to the top
+ await p.waitForSelector('#twPlanningMode');const y0=await p.evaluate(()=>{const b=document.getElementById('tpBody');b.scrollTop=b.scrollHeight;return b.scrollTop;});assert(y0>100,'the Route page scrolls at this size');
+ await p.selectOption('#twPlanningMode','windows');await p.waitForFunction(()=>document.getElementById('twPlanningMode').value==='windows');assert(Math.abs(await p.evaluate(()=>document.getElementById('tpBody').scrollTop)-y0)<40,'the redraw kept the scroll position');
+ await p.selectOption('#twPlanningMode','fixed');
  await p.click('#tGetRoutes');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
  const urls=await p.evaluate(()=>__gmapsUrls);assert(urls.some(u=>/avoid=tolls/.test(u))&&urls.some(u=>!/avoid=/.test(u)),'both the usual and the toll-free routes were asked for');
  let t=await p.evaluate(()=>__trip.tolls());
  assert.deepEqual(t[0].map(x=>x.via),['Turnpike','Old Hwy 1 · no tolls']);
  assert.equal(t[0][0].tolls.has,true);assert.equal(t[0][0].tolls.cost,null,'Maps gives no amount');assert.equal(t[0][1].tolls.has,false);
- await p.waitForSelector('#tTolls .toll-in');assert.equal(await p.locator('#tTolls .toll-in').count(),1,'an amount box for the toll road only');
- await p.fill('#tTolls .toll-in','4.75');await p.dispatchEvent('#tTolls .toll-in','change');
+ await p.waitForSelector('#tTolls .toll-in',{state:'attached'});assert.equal(await p.$eval('#tTolls',e=>e.tagName+':'+e.open),'DETAILS:false','the Tolls card starts folded');await p.click('#tTolls > summary');assert.equal(await p.locator('#tTolls .toll-in').count(),1,'an amount box for the toll road only');
+ await p.fill('#tTolls .toll-in','4.75');await p.dispatchEvent('#tTolls .toll-in','change');await p.waitForFunction(()=>document.querySelector('#tTolls .toll-in')&&document.getElementById('tTolls').open);
  t=await p.evaluate(()=>__trip.tolls());assert.equal(t[0][0].tolls.cost,4.75);assert.equal(t[0][0].tolls.src,'you');assert.equal(t[0][0].tag,'$4.75 tolls');
  assert.equal(await p.evaluate(()=>Object.values(__app.S.trip.tollAmounts)[0]),4.75,'kept with the trip settings');
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('#tHz .hz-opt');
@@ -54,7 +58,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.click('#tGetRoutes');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
  await p.waitForFunction(()=>__trip.tolls()[0][0].tolls.src==='here');
  let t=await p.evaluate(()=>__trip.tolls());assert.equal(t[0][0].tolls.cost,5.75);assert.equal(t[0][0].tag,'$5.75 tolls');
- assert.match(await p.innerText('#tTolls'),/HERE's price/);
+ assert.match(await p.textContent('#tTolls'),/HERE's price/);
  let q=await p.evaluate(()=>__hereQ);assert.equal(q.length,2,'one transient failure and one retry, only for the toll road');
  assert(!/TEST_HERE_KEY/.test(q[0].q),'the key is passed apart from the query');assert.match(q[0].q,/passThrough=true/);
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('#tHz .hz-opt');await p.evaluate(()=>__trip.step(3));
