@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.419 - 2026-11-08
+
+- Add Car: the Gas / Diesel / E85 / Hydrogen / LNG type no longer lists electric vehicles, or makes that only sell them (such as Tesla). Pick an EV type for those.
+
 ## 0.0.418 - 2026-11-07
 
 - The Garage shows one range figure, the same one trips plan with. For an EV with a known battery pack it matches the EPA's rated range. The EPA's kWh-per-100-mile figures moved into the tiles' (?) help, and the (?) buttons no longer crowd the numbers.

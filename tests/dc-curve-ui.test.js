@@ -50,6 +50,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   __mocks.epa=url=>{const u=new URL(url),q=u.searchParams,menu=xs=>({menuItem:xs.map(x=>({text:x,value:x}))});if(u.pathname.endsWith('/menu/year'))return menu(['2022','2016']);if(u.pathname.endsWith('/menu/make'))return menu(['Chevrolet','Ford']);if(u.pathname.endsWith('/menu/model'))return menu(M[q.get('year')+'|'+q.get('make')]||[]);if(u.pathname.endsWith('/menu/options'))return menu([ID[q.get('model')]]);const id=u.pathname.split('/').pop();return R[id]||{id:90001,year:2022,make:'Chevrolet',model:'Bolt EV',atvType:'EV',fuelType1:'Electricity',city08:131,highway08:109,comb08:120,range:259};};});
  const opts=sel=>p.$$eval(sel+' option',o=>o.map(x=>x.value).filter(Boolean)),filled=sel=>p.waitForFunction(s=>document.querySelectorAll(s+' option').length>1,sel);
  assert.deepEqual(await p.$$eval('#gAddMode option',o=>o.map(x=>x.value)),['fuel','ev','evEff','evNone','custom']);
+ // 0.0.419: the gas / diesel / hydrogen type leaves battery EVs out: an all-EV make (Tesla) and EV models (bZ4X)
+ await p.evaluate(()=>{window.__evMock=__mocks.epa;const M={'Tesla':['Model 3 RWD','Model Y RWD'],'Toyota':['Camry','bZ4X','bZ4X AWD','Mirai']},menu=xs=>({menuItem:xs.map(x=>({text:x,value:x}))});
+  __mocks.epa=url=>{const u=new URL(url),q=u.searchParams;if(u.pathname.endsWith('/menu/year'))return menu(['2024']);if(u.pathname.endsWith('/menu/make'))return menu(['Tesla','Toyota']);if(u.pathname.endsWith('/menu/model'))return menu(M[q.get('make')]||[]);return menu([]);};});
+ await p.selectOption('#gAddMode','ev');await p.selectOption('#gAddMode','fuel');await filled('#eYear');await p.selectOption('#eYear','2024');await p.waitForFunction(()=>[...document.querySelectorAll('#eMake option')].some(o=>o.value==='Toyota'));
+ assert.deepEqual(await opts('#eMake'),['Toyota'],'Tesla sells only EVs, so it is not a gas make');
+ await p.selectOption('#eMake','Toyota');await p.waitForFunction(()=>[...document.querySelectorAll('#eModel option')].some(o=>o.value==='Camry'));assert.deepEqual(await opts('#eModel'),['Camry','Mirai'],'battery EVs left out, hydrogen kept');
+ await p.evaluate(()=>{__mocks.epa=window.__evMock;});
  await p.selectOption('#gAddMode','evEff');await filled('#eYear');
  assert.deepEqual(await opts('#eYear'),['2022','2016'],'efficiency-curve years: those with an EPA road-load test and no established charging curve');
  await p.selectOption('#eYear','2022');await filled('#eMake');assert.deepEqual(await opts('#eMake'),['Chevrolet','Ford']);

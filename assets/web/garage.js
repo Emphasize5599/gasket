@@ -1300,7 +1300,17 @@
   // Each EV type lists only years / makes / models in its category, wherever the menu is filled: established charging
   // curve (ev); EPA road-load test but no charging curve (evEff); neither (evNone).
   function evCategory(q){if(ChargeCurve.packs(q,true).length)return 'ev';var r=window.RoadLoad&&RoadLoad.of(q);return !r?null:r.coef?'evEff':'evNone';}
-  function evMenu(c,level,list,values){var m=c.addMode;if(!evAdd(m))return list;return list.filter(function(o){if(level>2)return true;var q={year:+(level?values[0]:o.value)};if(level>=1)q.make=level===1?o.value:values[1];if(level>=2)q.model=level===2?o.value:values[2];
+  /** A battery EV listed by the EPA (any test data); Gas / Diesel / E85 / Hydrogen / LNG menus leave these out. */
+  function isBev(q){return !!(window.RoadLoad&&RoadLoad.of(q));}
+  var fuelModelsMem={};
+  /** Gas-type menus: drop makes whose every EPA model that year is a battery EV (Tesla, Rivian…). Only makes with EV
+   *  rows are checked (their model lists, a few at a time); a failed lookup keeps the make. */
+  async function fuelMakes(c,y,list){if(c.addMode!=='fuel'||!window.RoadLoad)return list;
+    var cand=list.filter(function(o){return RoadLoad.any({year:+y,make:o.value},function(){return true;});}),drop={},i=0;
+    async function one(){while(i<cand.length){var mk=cand[i++].value,k=y+'|'+mk;try{var ms=fuelModelsMem[k]||(fuelModelsMem[k]=items(await epaGet('menu/model?year='+encodeURIComponent(y)+'&make='+encodeURIComponent(mk))));
+      if(ms.length&&ms.every(function(o){return isBev({year:+y,make:mk,model:o.value});}))drop[mk]=1;}catch(e){delete fuelModelsMem[k];}}}
+    await Promise.all([one(),one(),one(),one(),one(),one()]);return list.filter(function(o){return !drop[o.value];});}
+  function evMenu(c,level,list,values){var m=c.addMode;if(m==='fuel'){if(level!==2)return list;return list.filter(function(o){return !isBev({year:+values[0],make:values[1],model:o.value});});}if(!evAdd(m))return list;return list.filter(function(o){if(level>2)return true;var q={year:+(level?values[0]:o.value)};if(level>=1)q.make=level===1?o.value:values[1];if(level>=2)q.model=level===2?o.value:values[2];
     if(m==='ev')return ChargeCurve.packs(q,true).length>0;
     return !!window.RoadLoad&&RoadLoad.any(q,function(r){return evCategory({year:r.year,make:r.make,model:r.model})===m;});});}
   async function epaYears(c) {
@@ -1324,7 +1334,7 @@
         epaInvalidate(c);
         clearVinField(c,'eYear');
         var y = this.value; fill($('eMake'), [], 'Make'); fill($('eModel'), [], 'Model'); fill($('eOpt'), [], 'Engine / transmission');editorGate(c); if (!y) return;
-        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));makes=evMenu(c,1,makes,[y]);if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
+        try{var makes=items(await epaGet('menu/make?year='+encodeURIComponent(y)));makes=evMenu(c,1,makes,[y]);makes=await fuelMakes(c,y,makes);if(car()===c&&$('eYear')&&$('eYear').value===y)fill($('eMake'),makes,'Make');}catch(e){if(car()===c&&$('eMake')){eMsg('Could not load makes. Choose the year again to retry.',true);needVinFields(c,['eMake'],'EPA make menu failed');}if(matching)throw e;}
       };
       $('eMake').onchange = async function () {
         epaInvalidate(c);
@@ -1368,7 +1378,7 @@
     var ids=['eYear','eMake','eModel','eOpt'],els=ids.map($),grid=els[0]&&els[0].closest('.epa-grid');if(!grid||grid.dataset.epaHydrating==='1'||matching)return;
     bindEpa(c);grid.dataset.epaHydrating='1';var values=els.map(function(el){return el&&el.value||'';}),y=encodeURIComponent(values[0]),mk=encodeURIComponent(values[1]),md=encodeURIComponent(values[2]),failed=false;
     var paths=['menu/year',y&&'menu/make?year='+y,y&&mk&&'menu/model?year='+y+'&make='+mk,y&&mk&&md&&'menu/options?year='+y+'&make='+mk+'&model='+md],labels=['Year','Make','Model','Engine / transmission'];
-    try{await Promise.all(paths.map(async function(path,i){var el=els[i];if(!path||!el||el.dataset.epaMenu==='1')return;try{var list=evMenu(c,i,items(await epaGet(path)),values);if(car()!==c||$(ids[i])!==el||values.slice(0,i+1).some(function(v,j){return !$(ids[j])||$(ids[j]).value!==v;}))return;
+    try{await Promise.all(paths.map(async function(path,i){var el=els[i];if(!path||!el||el.dataset.epaMenu==='1')return;try{var list=evMenu(c,i,items(await epaGet(path)),values);if(i===1)list=await fuelMakes(c,values[0],list);if(car()!==c||$(ids[i])!==el||values.slice(0,i+1).some(function(v,j){return !$(ids[j])||$(ids[j]).value!==v;}))return;
       var selected=values[i],label=el.selectedOptions[0]&&el.selectedOptions[0].text;if(selected&&!list.some(function(o){return String(o.value)===selected;}))list.push({value:selected,text:label||selected});fill(el,list,labels[i]);el.value=selected;el.dataset.epaMenu=list.length?'1':'0';
     }catch(e){failed=true;if(car()===c&&$(ids[i])===el)eMsg('Could not load '+labels[i].toLowerCase()+' choices. Tap the field to retry; your saved selection is kept.',true);}}));}
     finally{grid.dataset.epaHydrating='0';if($(ids[0])===els[0])els[0].dataset.savedEpa=failed?'1':'0';editorGate(c);}

@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.419 - gas menus without EVs
+
+Owner: EVs still appeared in the dropdowns with the gas/diesel type selected. evMenu filtered only the EV types. Now with addMode 'fuel' the model menu drops `isBev` = RoadLoad.of(q) (every fueleconomy.gov battery EV; hydrogen and PHEVs aren't in it). `fuelMakes(c, y, makes)` (async; make menu and epaPreset hydration) drops makes whose every EPA model that year is a BEV. Only makes with RoadLoad rows are checked, six model-list reads at a time, cached in `fuelModelsMem`; a failed read keeps the make. Years aren't filtered. Test dc-curve-ui (2024 Tesla gone; Toyota lists Camry/Mirai, not bZ4X). Not phone-verified.
+
+Phone checks: Add Car → Gas / Diesel… → 2024: no Tesla/Rivian/Lucid; Toyota → no bZ4X, Mirai still there; Chevrolet → no Bolt/Equinox EV. EV types still list them.
+
 ## 0.0.418 - Garage range and trim marker
 
 Owner: trims end with "GASKET DONE"; unsure which range to trust; clean up the UI.
