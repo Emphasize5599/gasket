@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.422 - dc-curve-ui menu waits (419 published no APK)
+
+419's CI run 42429879672 failed only dc-curve-ui line 70, "no-curve years" [] vs ['2016'] (passes locally). Its menu waits were `filled(sel)` (more than one option), which can pass on the previous vehicle type's stale list and then read the menu while it's being refilled. 0.0.419's added Gas-type block made that likelier. The test now uses `menuIs(sel, expected)`, waiting for the exact expected options, at each type/year/make switch. 16/16 at 4 parallel copies. No app change. 420's run failed hazard-zones (fixed in 421). 419/420 tags stay untouched.
+
 ## 0.0.421 - same-look NHTSA photo years; hazard-zones CI race
 
 Owner: use the 2021 NHTSA photo for newer Model S years, and other years NHTSA doesn't have but look the same. NHTSA byYmmt has vehiclePicture only for NCAP-tested years. carpics `SAME_LOOK` ('make|photoModel' → [first, last, known photo years], checked live 2026-11-08): Model S 2012–16 [2013, 2014], 2017–25 [2021], 2026 [2026]; Model X 2016–26 [2026]; Model 3 2017–23 (all) and 2024–26 [2024, 2026]; Model Y 2020–24 [2020], 2025–26 [2025, 2026]; Cybertruck 2024–26 []. `sameLookYears(c)` = known photo years in the car's span nearest first, then the other span years (earlier on a tie). `nhtsaPhoto` asks the car's own year (`nhtsaYear`), then up to 4 of those. The result keeps `year` / `sameLook`, the credit adds "· YEAR model photo (same look)", and `nhtsaSig` n6 retries older failures. No entry = only its own year (nothing borrowed across a design change or for an unknown model). Only Tesla spans for now; add others only when sure. Test car-photo-samelook (release).
