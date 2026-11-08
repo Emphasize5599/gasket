@@ -257,7 +257,8 @@
     if($('gClimate'))climOpen=$('gClimate').open;
     // the year / make / model / engine pickers you (or a VIN) already filled: kept as they are, not emptied and filled
     // again one by one (each step waits on the EPA, so the boxes flickered and could end up half-filled)
-    var grid = $('eYear') && $('eYear').value && $('eYear').closest('.epa-grid'), keepFor = S.carId;
+    // (also a filled year list with nothing picked yet: rebuilding it emptied the menu and asked the EPA again)
+    var grid = $('eYear') && ($('eYear').value || $('eYear').dataset.epaMenu === '1') && $('eYear').closest('.epa-grid'), keepFor = S.carId;
     try { settle(host); if (ed && ed.body) settle(ed.body); draw0(); } finally { drawing = false; }
     var fresh = grid && keepFor === S.carId && $('eYear') && $('eYear').closest('.epa-grid');
     if (fresh) fresh.replaceWith(grid);
@@ -1083,7 +1084,7 @@
       if($('gAddMode'))$('gAddMode').onchange=function(){
         var mode=this.value,initial=JSON.parse(editSnap.before);
         epaInvalidate(c);vinStates.delete(c);manualPackDrafts.delete(c);
-        if($('eYear'))$('eYear').value='';   // each type lists its own menus: don't keep the previous type's filled grid
+        if($('eYear')){$('eYear').value='';delete $('eYear').dataset.epaMenu;}   // each type lists its own menus: don't keep the previous type's filled grid
         if(mode==='custom'){
           ['epa','epaId','epaBase','epaOption','dcPack','dcCurve','dcPackName','dcResearchPack'].forEach(function(key){delete c[key];});
           c.addMode=mode;c.entryMode='epa';draw();changed();return;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.423 - 2026-11-08
+
+- Add Car: the Year list no longer empties itself and reloads when the screen refreshes before you pick a year.
+- Bug fixes.
+
 ## 0.0.422 - 2026-11-08
 
 - Bug fixes.

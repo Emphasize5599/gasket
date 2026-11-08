@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.423 - keep a filled Year menu across redraws (422 published no APK)
+
+422's CI run 42431575927 failed dc-curve-ui line 71 again ("no-curve years" []), so 0.0.422's test-only fix was wrong. Reproduced locally (4–5 of 8 copies at 4 parallel jobs fail "no-curve years" or "Custom lists every EPA year"). The menu did fill, then a background redraw (late trim / tank / pack replies for the previous pick) ran draw(), which kept the `.epa-grid` only when `#eYear` had a value. With no year picked yet, the grid was rebuilt empty and bind's setTimeout fetched the years again: a gap with an empty Year menu and a repeated EPA request on every redraw. On the phone too, an open Year menu could empty itself. draw() now also keeps a grid whose `#eYear` is filled (`dataset.epaMenu === '1'`); the vehicle-type change clears `epaMenu` along with the value, so a new type still gets its own filtered list. 24/24 at 4 parallel copies; full release suite 237/237 locally. 0.0.422's `menuIs` waits stay.
+
+Phone check: Add Car → choose a type and wait on the Year menu without picking: it stays filled; switch type: the new type's years appear.
+
 ## 0.0.422 - dc-curve-ui menu waits (419 published no APK)
 
 419's CI run 42429879672 failed only dc-curve-ui line 70, "no-curve years" [] vs ['2016'] (passes locally). Its menu waits were `filled(sel)` (more than one option), which can pass on the previous vehicle type's stale list and then read the menu while it's being refilled. 0.0.419's added Gas-type block made that likelier. The test now uses `menuIs(sel, expected)`, waiting for the exact expected options, at each type/year/make switch. 16/16 at 4 parallel copies. No app change. 420's run failed hazard-zones (fixed in 421). 419/420 tags stay untouched.
