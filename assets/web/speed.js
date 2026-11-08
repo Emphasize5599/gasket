@@ -67,7 +67,9 @@
    * more, in percent, than it cuts driving time — past it you pay more in gas than you gain in time, proportionally.
    */
   function recommend(opts) {
-    var c = curve(opts.type, opts.epaHwy, opts.scale, Math.min(opts.min, 50) - 1, Math.max(opts.max, 80) + 1);
+    var lo0 = Math.min(opts.min, 50) - 1, hi0 = Math.max(opts.max, 80) + 1, c;
+    if (opts.f) { c = {}; for (var x = lo0; x <= hi0; x++) c[x] = opts.f(x); }   // a ready mileage(speed) function (EVs)
+    else c = curve(opts.type, opts.epaHwy, opts.scale, lo0, hi0);
     var min = opts.min, max = Math.max(opts.min, opts.max), price = opts.price, tv = opts.timeValue;
     var rows = [], rec = min, stop = false;
     for (var v = min; v <= max; v++) {

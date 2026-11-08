@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.425 - 2026-11-08
+
+- Tires change planned mileage: all-terrain, mud-terrain, winter and performance tires cost fuel; fuel-saving and worn tires save some. Tire details shows the estimate.
+- EVs with an EPA road-load test get the Best cruising speed curve (mi/kWh, kWh/100 mi).
+- Bug fixes.
+
 ## 0.0.424 - 2026-11-08
 
 - Compare: plan the same vehicle more than one way (for example lowest cost and shortest time). Each card has its own Trip planning box: priority, automatic buffer and detour, and toll settings.

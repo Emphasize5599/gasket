@@ -57,7 +57,7 @@
       // Speed shape: the car's own EPA coast-down road load (target A + Bv + Cv², lbf) when known, else the median
       // battery EV's, as battery power = road load × v / 0.85 + 1.2 kW (losses the dynamometer doesn't see: fitted to
       // Nyland's 90/120 km/h tests and the DOE 2013 Leaf dyno; docs/EV_MILEAGE_CURVES.md).
-      var rl=p.roadLoad&&p.roadLoad.a>0?p.roadLoad:ROAD_MEDIAN;if(rl===ROAD_MEDIAN)mark(flags,'road_load_typical');
+      var rl=p.roadLoad&&p.roadLoad.a>0?p.roadLoad:ROAD_MEDIAN;if(rl===ROAD_MEDIAN||rl.typical)mark(flags,'road_load_typical');
       function road(x){return (rl.a+rl.b*x+rl.c*x*x)*4.44822*x*.44704/1000/.85+1.2;}
       // EPA label efficiencies hold at a steady ~65 mph, not at the route's own speed (Nyland's tests against the label,
       // 27 of 30 cars between 56 and 75 mph): highway stretches (and the highway share of blended ones) are referenced to

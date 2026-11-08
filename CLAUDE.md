@@ -2,6 +2,16 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.425 - tire mileage effect; EV best cruising speed
+
+Owner: integrate tire-type fuel economy estimates (research what's needed); EVs should get the ideal mileage/speed curve when we have the EPA curves. Research, numbers and sources: docs/TIRE_FUEL_ECONOMY.md (TRB SR 286 via nationalacademies.org read pages; regulations.gov / nhtsa.gov PDFs answer 403 here).
+- TireMath `rrOf(spec, depth)` (rolling resistance vs a typical all-season: all-terrain 1.2, rugged 1.3, mud 1.45, winter 1.2, all-weather 1.1, summer/UHP 1.2, HP all-season 1.12, touring/highway/all-season 1; fuel-saving line ×0.85, run-flat ×1.2, tread wear ×(1 − 0.2 × worn share); Trailer / unknown null), `rrRatio(specs, depths, ev)` (average over known tires ÷ the rating's tires: 0.9, EV 0.85), `rrMileage(ratio)` (fuel per mile × 1 + E(ratio − 1), E city 0.10 / hwy 0.18 from SR 286 Table 3-1; comb 55/45). Tires `rr(c)` = the car's road tires (no trailers/spare; depthAt with drive).
+- Garage `tireEffect(c)` (memoized by tires JSON) → {ratio, city, hwy, comb, known}: gas/h2 by rrMileage; EV by scaling road-load A (model's RoadLoad, else ROAD_MEDIAN) at 25 / 61 mph. carModel multiplies only EPA-derived city/hwy (typed obs untouched), returns `tires`. evEnergy passes roadLoad.a × ratio (`typical` flag when it's the median; propulsion marks road_load_typical for it). Range tile, trip planning and comparisons follow carModel.
+- Best cruising speed: `evSpeedFn(c)` (mi/kWh = hwy × (P(61)/61)/(P(v)/v) with the tire-scaled A; needs RoadLoad.forCar), speedModel EV branch (price S.speed.evPrice, else S.evPrice, else $0.40; no log calibration), Speed.recommend accepts `opts.f`; card text/chart units per kind (chartSvg `o.unit`/`o.fuel`). Gas curves use `curveHwy(c)` = EPA hwy × tire factor. Tire details shows `#tzMileage` (% more/less highway and town). Trip "Cruising speed" panel stays gas-only (EV trips keep their speed-offset graph).
+- Tests: tire-fuel (factors, ratio, elasticities, ~3% all-terrain like Tire Rack's measured pair), tire-fuel-ui (gas and EV effects, city > highway for EVs, typed mileage untouched, EV card in mi/kWh). Not phone-verified.
+
+Phone checks: Garage → Tires → set all-terrain tires: Tire details shows about 3–4% more fuel on the highway; Range tile drops a little. Demo Tesla → Best cruising speed shows a mph pick with mi/kWh and a kWh/100 mi chart; slide Try a speed.
+
 ## 0.0.424 - planning modes per vehicle in Compare; Tolls folded; Route keeps its scroll
 
 Owner: on Compare, plan one vehicle several ways (lowest cost and shortest time, esp. EVs), a Trip planning box per card, automatic buffer/detour independent per mode; Route's Tolls box collapsible (folded by default); Route selections shouldn't scroll the page.

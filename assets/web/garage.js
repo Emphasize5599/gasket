@@ -179,12 +179,40 @@
     // range: usable / (range × kWh per mile) = battery kWh per wall kWh. Observed (typed) efficiencies are left as entered.
     var b = k === 'ev' ? batteryBasis(c) : 1;
     if (b !== 1) { if (!(+c.obs.city > 0)) city /= b; if (!(+c.obs.hwy > 0)) hwy /= b; if (!(+c.obs.city > 0) && !(+c.obs.hwy > 0)) comb /= b; else comb = harm(city, hwy); }
-    return { city: city, hwy: hwy, comb: comb, adjustPct: 100, kind: k, batteryBasis: b };
+    // 0.0.424: the tires on the car against the factory tires the EPA rating was measured on (only for efficiencies
+    // that come from the EPA: your own logged ones were driven on your tires already).
+    var tr = tireEffect(c), typedC = +(c.obs || {}).city > 0, typedH = +(c.obs || {}).hwy > 0, tc = typedC ? 1 : tr.city, th = typedH ? 1 : tr.hwy;
+    if (tc !== 1 || th !== 1) { city *= tc; hwy *= th; comb = typedC || typedH ? harm(city, hwy) : comb * tr.comb; }
+    return { city: city, hwy: hwy, comb: comb, adjustPct: 100, kind: k, batteryBasis: b, tires: tr };
+  }
+  /** Mileage multipliers for the car's tires: {ratio (rolling resistance vs factory), city, hwy, comb} (all 1 when the
+   *  tires aren't known). Gas, hybrid and hydrogen: fuel use changes by 0.10 (city) / 0.18 (highway) × the rolling
+   *  resistance change (TRB SR 286). EVs: the change goes into the road-load rolling term (A) of the car's EPA coast-down
+   *  curve (else a typical EV's), so it counts for more at low speed, where rolling is a bigger share. */
+  var tireMemo = { key: null, v: null };
+  function tireEffect(c) {
+    var none = { ratio: 1, city: 1, hwy: 1, comb: 1, known: false };
+    if (!c || !c.tires || !window.Tires || !Tires.rr || !window.TireMath) return none;
+    var k = kind(c), key = k + '|' + JSON.stringify(c.tires) + '|' + ((c.info || {}).drive || '') + '|' + (c.year || '') + '|' + (c.model || '');
+    if (tireMemo.key === key) return tireMemo.v;
+    var r = null; try { r = Tires.rr(c); } catch (e) { r = null; }
+    var out = none;
+    if (r && r.ratio > 0 && Math.abs(r.ratio - 1) > 1e-6) {
+      if (k === 'ev') {
+        var rl = (c.entryMode !== 'custom' && window.RoadLoad && RoadLoad.forCar(c)) || (window.Propulsion && Propulsion.ROAD_MEDIAN) || { a: 28.73, b: 0.2653, c: 0.02015 };
+        var per = function (a, v) { return ((a + rl.b * v + rl.c * v * v) * 4.44822 * v * 0.44704 / 1000 / 0.85 + 1.2) / v; };
+        var city = per(rl.a, 25) / per(rl.a * r.ratio, 25), hwy = per(rl.a, 61) / per(rl.a * r.ratio, 61);
+        out = { ratio: r.ratio, city: city, hwy: hwy, comb: 1 / (0.55 / city + 0.45 / hwy), known: true, n: r.n, of: r.of };
+      } else { var m = TireMath.rrMileage(r.ratio); out = { ratio: r.ratio, city: m.city, hwy: m.hwy, comb: m.comb, known: true, n: r.n, of: r.of }; }
+    }
+    tireMemo = { key: key, v: out };
+    return out;
   }
   /** EV energy-model inputs: the car's EPA road-load (coast-down) coefficients, and whether its efficiencies are the EPA
    *  label's (referenced to 65 mph in Propulsion) rather than typed observations (referenced to the route speed). */
-  function evEnergy(c){c=c||car();if(kind(c)!=='ev')return {};var rl=c.entryMode!=='custom'&&window.RoadLoad?RoadLoad.forCar(c):null;
-    return {roadLoad:rl?{a:rl.a,b:rl.b,c:rl.c}:null,labelAnchor:hasEpa(c)&&!(+(c.obs||{}).hwy>0)};}
+  function evEnergy(c){c=c||car();if(kind(c)!=='ev')return {};var rl=c.entryMode!=='custom'&&window.RoadLoad?RoadLoad.forCar(c):null,tr=tireEffect(c);
+    if(tr.known&&!rl&&window.Propulsion)rl=Object.assign({typical:true},Propulsion.ROAD_MEDIAN);
+    return {roadLoad:rl?{a:rl.a*(tr.known?tr.ratio:1),b:rl.b,c:rl.c,typical:!!rl.typical}:null,labelAnchor:hasEpa(c)&&!(+(c.obs||{}).hwy>0)};}
   /** Battery kWh delivered per wall kWh implied by the EPA label for this car's established pack; 1 when not applicable. */
   function batteryBasis(c){var cc=c&&c.addMode!=='custom'&&kind(c)==='ev'&&window.ChargeCurve?ChargeCurve.selected(c):null;if(!cc||!cc.pack||!(cc.usable>0)||+c.tank!==cc.usable||!c.epa||!(c.epa.range>0)||!c.epa.kwh||!(c.epa.kwh.comb>0))return 1;
     var r=cc.usable/(c.epa.range*c.epa.kwh.comb/100);return r>=.75&&r<=1?r:1;}
@@ -1618,18 +1646,39 @@
     });
     return best;
   }
+  /** 0.0.424: an EV's mileage (mi/kWh) by speed from its EPA road-load (coast-down) curve, with its tires' rolling
+   *  term, anchored at its highway efficiency at Propulsion's label speed (as in trip planning). Null without the
+   *  model's EPA road-load test. */
+  function evSpeedFn(c) {
+    if (!c || kind(c) !== 'ev' || c.entryMode === 'custom' || !window.RoadLoad) return null;
+    var rl = RoadLoad.forCar(c), hwy = carModel(c).hwy; if (!rl || !(rl.a > 0) || !(hwy > 0)) return null;
+    var a = rl.a * tireEffect(c).ratio, L = window.Propulsion ? Propulsion.LABEL_MPH : 61;
+    var per = function (v) { return ((a + rl.b * v + rl.c * v * v) * 4.44822 * v * 0.44704 / 1000 / 0.85 + 1.2) / v; };
+    return function (v) { v = Math.max(20, Math.min(100, v)); return hwy * per(L) / per(v); };
+  }
+  /** The gas curve's EPA highway anchor with this car's tires. */
+  function curveHwy(c) { return c.epa.hwy * tireEffect(c).hwy; }
   function speedModel() {
-    var c = car(); if (!hasEpa(c) || kind(c) !== 'gas') return null;
-    var cal = SP.calibrate(c.type || 'car', c.epa.hwy, c.entries);
+    var c = car(), tv0 = +S.trip.timeValue || 0;
+    var mn = Math.max(25, Math.round(+S.speed.min || 55)), mx = Math.max(mn + 5, Math.round(+S.speed.max || 84));
+    if (kind(c) === 'ev') {
+      var ef = evSpeedFn(c); if (!ef) return null;
+      var eo = parseFloat(S.speed.evPrice), ep = eo > 0 ? eo : +S.evPrice > 0 ? +S.evPrice : 0.4;
+      return { c: c, ev: true, f: ef, cal: { scale: 1, used: 0, points: [] }, near: null, price: ep, priceSrc: eo > 0 ? 'yours' : 'settings', tv: tv0, min: mn, max: mx,
+        rec: SP.recommend({ f: ef, min: mn, max: mx, price: ep, timeValue: tv0 }) };
+    }
+    if (!hasEpa(c) || kind(c) !== 'gas') return null;
+    var cal = SP.calibrate(c.type || 'car', curveHwy(c), c.entries);
     var near = nearbyCheapest(), over = parseFloat(S.speed.price);
     var price = over > 0 ? over : near ? near.price : 3.0;
     var tv = +S.trip.timeValue || 0;
     var min = Math.max(25, Math.round(+S.speed.min || 55)), max = Math.max(min + 5, Math.round(+S.speed.max || 84));
-    var rec = SP.recommend({ type: c.type || 'car', epaHwy: c.epa.hwy, scale: cal.scale, min: min, max: max, price: price, timeValue: tv });
+    var rec = SP.recommend({ type: c.type || 'car', epaHwy: curveHwy(c), scale: cal.scale, min: min, max: max, price: price, timeValue: tv });
     return { c: c, cal: cal, near: near, price: price, priceSrc: over > 0 ? 'yours' : near ? 'near' : 'default', tv: tv, min: min, max: max, rec: rec };
   }
   function mpgFn(c, cal) {
-    var cv = SP.curve(c.type || 'car', c.epa.hwy, cal.scale, 30, 95);
+    if (kind(c) === 'ev') return evSpeedFn(c);
+    var cv = SP.curve(c.type || 'car', curveHwy(c), cal.scale, 30, 95);
     return function (v) { return SP.at(cv, Math.max(30, Math.min(95, v))); };
   }
   var lastTripMi = 0;
@@ -1657,33 +1706,36 @@
       (m ? '<b class="spd-pill">' + m.rec.speed + ' mph</b>' : '') + '</summary>';
     if (!m) {
       speedHost.innerHTML = h + '<div class="lead small keep">' + (kind(c) === 'gas' ? 'Look your car up from the EPA (Edit) to see this.' :
-        'Not worked out for ' + (kind(c) === 'ev' ? 'EVs' : 'fuel-cell cars') + ' yet. Air drag grows with the square of speed and these cars waste little else, so slowing down saves an even bigger share of their energy than on a gas car.') + '</div></details>';
+        (kind(c) === 'ev' ? 'Needs the EPA road-load test for this model (pick it from the EPA menus; listed EVs without one show "No curves").' : 'Not worked out for fuel-cell cars yet.') + '  Air drag grows with the square of speed and these cars waste little else, so slowing down saves an even bigger share of their energy than on a gas car.') + '</div></details>';
       bindSpdOpen(); return;
     }
-    var r = m.rec, row = r.rows[r.speed - m.min], f = mpgFn(c, m.cal), bal = SP.balanced(f, m.min, m.max);
-    h += '<div class="spd-top"><div class="spd-big">' + r.speed + '<span>mph</span></div><div class="spd-sub">~' + row.mpg.toFixed(0) + ' mpg · ' + row.galPer100.toFixed(2) + ' gal/100 mi ' +
-      window.__app.qBtn(r.mode === 'time' ? 'The speed where each hour saved costs about your $' + m.tv + '/hr in extra gas.' : 'Past this speed, each 1% of time saved costs more than 1% more gas.') + '</div></div>';
-    h += chartSvg(r.rows, m.min, m.max, { id: 'gChart', shadeTo: bal, sel: r.speed, points: m.cal.points });
+    var r = m.rec, row = r.rows[r.speed - m.min], f = mpgFn(c, m.cal), bal = SP.balanced(f, m.min, m.max), U = m.ev ? { eff: 'mi/kWh', per: 'kWh/100 mi', unit: 'kWh', fuel: 'electricity', d: 1 } : { eff: 'mpg', per: 'gal/100 mi', unit: 'gal', fuel: 'gas', d: 0 };
+    h += '<div class="spd-top"><div class="spd-big">' + r.speed + '<span>mph</span></div><div class="spd-sub">~' + row.mpg.toFixed(U.d + 0) + ' ' + U.eff + ' · ' + row.galPer100.toFixed(m.ev ? 1 : 2) + ' ' + U.per + ' ' +
+      window.__app.qBtn(r.mode === 'time' ? 'The speed where each hour saved costs about your $' + m.tv + '/hr in extra ' + U.fuel + '.' : 'Past this speed, each 1% of time saved costs more than 1% more ' + U.fuel + '.') + '</div></div>';
+    h += chartSvg(r.rows, m.min, m.max, { id: 'gChart', shadeTo: bal, sel: r.speed, points: m.cal.points, unit: U.per, fuel: U.fuel });
     var tripMi = lastTripMi || 500;
     h += '<div class="spd-try"><div class="spd-try-h"><span>Try a speed for a <input type="number" inputmode="numeric" id="gTripMi" value="' + Math.round(tripMi) + '">-mile trip</span></div>' +
       '<input type="range" id="gTry" min="' + m.min + '" max="' + m.max + '" step="1" value="' + r.speed + '"><div class="spd-out" id="gTryOut"></div></div>';
-    if (r.mode === 'time' && r.speed === m.max) h += '<div class="lead small">At $' + m.tv + '/hr, gas never outweighs the time saved up to your ' + m.max + ' mph maximum — speed limits and safety are the real limit.</div>';
-    h += '<div class="lead small">' + (m.cal.used ? 'Calibrated from ' + m.cal.used + ' of your entries (your ' + esc(shortName(c)) + ' runs ' + Math.abs(Math.round((m.cal.scale - 1) * 100)) + '% ' + (m.cal.scale >= 1 ? 'better' : 'worse') + ' than the average curve).'
+    if (r.mode === 'time' && r.speed === m.max) h += '<div class="lead small">At $' + m.tv + '/hr, ' + U.fuel + ' never outweighs the time saved up to your ' + m.max + ' mph maximum — speed limits and safety are the real limit.</div>';
+    var tire = tireEffect(c), tireTxt = tire.known ? ' Includes your tires: about ' + Math.abs(Math.round((1 / tire.hwy - 1) * 100)) + '% ' + (tire.hwy <= 1 ? 'more' : 'less') + ' ' + (m.ev ? 'energy' : 'fuel') + ' on the highway than the tires it was rated on.' : '';
+    if (m.ev) { var rlx = window.RoadLoad && RoadLoad.forCar(c); h += '<div class="lead small">Curve: ' + esc(rlx && rlx.label || 'the EPA road-load test') + ' for this model, anchored at your highway efficiency at ' + (window.Propulsion ? Propulsion.LABEL_MPH : 61) + ' mph, as trip planning does. Shaded: speeds where going 1% faster saves more time than it costs in electricity.' + tireTxt + '</div>'; }
+    else h += '<div class="lead small">' + (m.cal.used ? 'Calibrated from ' + m.cal.used + ' of your entries (your ' + esc(shortName(c)) + ' runs ' + Math.abs(Math.round((m.cal.scale - 1) * 100)) + '% ' + (m.cal.scale >= 1 ? 'better' : 'worse') + ' than the average curve).'
       : 'Not calibrated yet — log mileage with the speed you held to fit this to your car.') +
-      ' Curve: ' + esc((SP.TYPES[c.type] || SP.TYPES.car).label.toLowerCase()) + ', anchored at ' + (c.type === 'hybrid' ? '1.3 × ' : '') + 'EPA highway (' + c.epa.hwy + ' mpg) at 55 mph. Shaded: speeds where going 1% faster saves more time than it costs in gas.</div>';
-    h += '<details class="spd-set"><summary>Speed settings · ' + money(m.price) + '/gal' + '</summary><div class="grid2">' +
-      '<label class="nf"><span>Gas price ($/gal)<small>' + (m.near ? 'blank = cheapest near you: ' + money(m.near.price) + ' at ' + esc(m.near.name) : 'blank = cheapest on the map') + '</small></span><input type="number" inputmode="decimal" step="0.01" id="sPrice" value="' + esc(S.speed.price) + '"></label>' +
+      ' Curve: ' + esc((SP.TYPES[c.type] || SP.TYPES.car).label.toLowerCase()) + ', anchored at ' + (c.type === 'hybrid' ? '1.3 × ' : '') + 'EPA highway (' + c.epa.hwy + ' mpg) at 55 mph. Shaded: speeds where going 1% faster saves more time than it costs in gas.' + tireTxt + '</div>';
+    h += '<details class="spd-set"><summary>Speed settings · ' + money(m.price) + '/' + U.unit + '</summary><div class="grid2">' +
+      (m.ev ? '<label class="nf"><span>Charging price ($/kWh)<small>blank = your EV price setting (' + money(m.price) + ')</small></span><input type="number" inputmode="decimal" step="0.01" id="sPrice" value="' + esc(S.speed.evPrice || '') + '"></label>'
+        : '<label class="nf"><span>Gas price ($/gal)<small>' + (m.near ? 'blank = cheapest near you: ' + money(m.near.price) + ' at ' + esc(m.near.name) : 'blank = cheapest on the map') + '</small></span><input type="number" inputmode="decimal" step="0.01" id="sPrice" value="' + esc(S.speed.price) + '"></label>') +
       '<label class="nf"><span>My time is worth ($/hr)<small>optional · 0 = balanced (US DOT uses ~$' + Math.round(DOT_TIME) + ' for road trips)</small></span><input type="number" inputmode="decimal" step="1" id="sTime" value="' + esc(S.trip.timeValue || 0) + '"></label>' +
       '<label class="nf"><span>Minimum speed (mph)</span><input type="number" inputmode="numeric" step="1" id="sMin" value="' + m.min + '"></label>' +
       '<label class="nf"><span>Maximum speed (mph)</span><input type="number" inputmode="numeric" step="1" id="sMax" value="' + m.max + '"></label></div></details>';
-    h += disclaimer() + '</details>';
+    h += (m.ev ? '<p class="disclaimer">Estimates from the EPA coast-down test of this model (air drag and rolling resistance) plus typical drivetrain losses. Wind, hills, heat or A/C, tires and load change real results. Always drive within the speed limit.</p>' : disclaimer()) + '</details>';
     var open = setOpen;
     speedHost.innerHTML = h;
     if (open) speedHost.querySelector('.spd-set').open = true;
     bindSpdOpen();
     speedHost.querySelector('.spd-set').addEventListener('toggle', function () { setOpen = this.open; });
     var upd = function () {
-      S.speed.price = $('sPrice').value.trim();
+      if (m.ev) S.speed.evPrice = $('sPrice').value.trim(); else S.speed.price = $('sPrice').value.trim();
       S.trip.timeValue = Math.max(0, parseFloat($('sTime').value) || 0);
       if ($('tTime')) $('tTime').value = S.trip.timeValue;
       var a = parseInt($('sMin').value, 10), b = parseInt($('sMax').value, 10);
@@ -1696,8 +1748,8 @@
       var t = mi * (1 / base - 1 / v) * 60, gal = mi * (1 / f(v) - 1 / f(base)), cost = gal * m.price;
       moveSel($('gChart'), v, 100 / f(v));
       $('gTryOut').innerHTML = v === base ? '<b>' + v + ' mph</b> — recommended. Slide to compare.'
-        : '<b>' + v + ' mph</b> instead of ' + base + ': ' + (t > 0 ? '<b>' + fmtMin(t) + ' sooner</b> for <b class="cost">+' + money(cost) + '</b> in gas'
-          : '<b>' + fmtMin(-t) + ' later</b>, <b class="good">saves ' + money(-cost) + '</b> in gas') + ' over ' + fmtMi(mi) + ' (at ' + money(m.price) + '/gal).';
+        : '<b>' + v + ' mph</b> instead of ' + base + ': ' + (t > 0 ? '<b>' + fmtMin(t) + ' sooner</b> for <b class="cost">+' + money(cost) + '</b> in ' + U.fuel
+          : '<b>' + fmtMin(-t) + ' later</b>, <b class="good">saves ' + money(-cost) + '</b> in ' + U.fuel) + ' over ' + fmtMi(mi) + ' (at ' + money(m.price) + '/' + U.unit + ').';
     };
     $('gTry').oninput = tryOut; guardRange($('gTry'));
     $('gTripMi').onchange = function () { lastTripMi = parseFloat(this.value) || 500; tryOut(); };
@@ -1717,10 +1769,10 @@
     var pad = (y1 - y0) * 0.12 || 0.2; y0 = Math.max(0, y0 - pad); y1 += pad;
     var X = function (v) { return L + (v - min) / (max - min) * (W - L - R); }, Y = function (g) { return T + (1 - (g - y0) / (y1 - y0)) * (H - T - B); };
     var d = rows.map(function (r, i) { return (i ? 'L' : 'M') + X(r.mph).toFixed(1) + ' ' + Y(r.galPer100).toFixed(1); }).join(' ');
-    var s = '<svg class="spd-chart" id="' + o.id + '" viewBox="0 0 ' + W + ' ' + H + '" data-g="' + [min, max, L, R, T, B, W, H, y0, y1].join(',') + '" role="img" aria-label="Gallons per 100 miles by speed">';
+    var s = '<svg class="spd-chart" id="' + o.id + '" viewBox="0 0 ' + W + ' ' + H + '" data-g="' + [min, max, L, R, T, B, W, H, y0, y1].join(',') + '" role="img" aria-label="' + (o.unit || 'gal/100 mi') + ' by speed">';
     if (o.shadeTo > min) {
       s += '<rect class="zone" x="' + X(min) + '" y="' + T + '" width="' + (X(Math.min(max, o.shadeTo)) - X(min)) + '" height="' + (H - T - B) + '"/>' +
-        '<text class="zt" x="' + (X(min) + 4) + '" y="' + (T + 11) + '">time gain &gt; gas cost</text>';
+        '<text class="zt" x="' + (X(min) + 4) + '" y="' + (T + 11) + '">time gain &gt; ' + (o.fuel || 'gas') + ' cost</text>';
     }
     for (var k = 0; k <= 2; k++) { var gv = y0 + (y1 - y0) * k / 2; s += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(gv) + '" y2="' + Y(gv) + '"/><text class="ax" x="' + (L - 4) + '" y="' + (Y(gv) + 3) + '" text-anchor="end">' + gv.toFixed(1) + '</text>'; }
     for (var v = Math.ceil(min / 5) * 5; v <= max; v += 5) s += '<text class="ax" x="' + X(v) + '" y="' + (H - 6) + '" text-anchor="middle">' + v + '</text>';
@@ -1730,7 +1782,7 @@
     var sv = Math.max(min, Math.min(max, o.sel)), sr = rows[Math.round(sv) - min] || rows[0];
     s += '<line class="rec sel-l" x1="' + X(sv) + '" x2="' + X(sv) + '" y1="' + T + '" y2="' + (H - B) + '"/><circle class="dot sel-d" cx="' + X(sv) + '" cy="' + Y(sr.galPer100) + '" r="4.5"/>' +
       '<text class="ax sel-t" x="' + X(sv) + '" y="' + (T - 4) + '" text-anchor="middle">' + Math.round(sv) + '</text>';
-    s += '<text class="ax unit" x="' + (W - R) + '" y="' + (T - 4) + '" text-anchor="end">gal / 100 mi</text></svg>';
+    s += '<text class="ax unit" x="' + (W - R) + '" y="' + (T - 4) + '" text-anchor="end">' + (o.unit || 'gal/100 mi').replace('/', ' / ') + '</text></svg>';
     return s;
   }
   /** Move one road section's faint marker line on the chart to its current speed. */
@@ -1790,7 +1842,7 @@
   /** This car's mpg-vs-speed curve (calibrated to your log) and the speed range used for trips; null without EPA data. */
   function speedFn() {
     var c = car(); if (!hasEpa(c) || kind(c) !== 'gas') return null;
-    var cal = SP.calibrate(c.type || 'car', c.epa.hwy, c.entries);
+    var cal = SP.calibrate(c.type || 'car', curveHwy(c), c.entries);
     return { f: mpgFn(c, cal), lo: 25, hi: Math.max(80, +S.speed.max || 84) };
   }
   function tripSpeed(el, ctx) {
@@ -1798,7 +1850,7 @@
     if (!el) return;
     if (kind(c) !== 'gas') { el.innerHTML = '<div class="tb-h">Cruising speed</div><div class="lead small keep">Speed adjustments are for gas and hybrid cars for now. At highway speeds an ' + (kind(c) === 'ev' ? 'EV' : 'fuel-cell car') + ' loses even more range per extra mph — the plan assumes the speed limits.</div>'; return; }
     if (!hasEpa(c)) { el.innerHTML = '<div class="tb-h">Cruising speed</div><div class="lead small keep">Look your car up from the EPA to plan speeds.</div>'; return; }
-    var cal = SP.calibrate(c.type || 'car', c.epa.hwy, c.entries), f = mpgFn(c, cal);
+    var cal = SP.calibrate(c.type || 'car', curveHwy(c), c.entries), f = mpgFn(c, cal);
     var lo = 25, hi = Math.max(80, +S.speed.max || 84);
     var rows = []; for (var v = 45; v <= hi; v++) rows.push({ mph: v, galPer100: 100 / f(v) });
     var bal = SP.balanced(f, 45, hi);
@@ -2009,7 +2061,7 @@
     return out;
   }
 
-  window.Garage = { installDemo:installDemo, addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, rangeFull: rangeFull, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
+  window.Garage = { installDemo:installDemo, addDuallyDemo:addDuallyDemo, kind: kind, unit: unit, units: units, plugs: plugs, rangeMi: rangeMi, rangeHwy: rangeHwy, rangeFull: rangeFull, tireEffect: tireEffect, evSpeedFn: evSpeedFn, shortName: shortName, fromVpic: fromVpic, modelScore: modelScore, applyEpa: applyEpa, POWER: POWER,
     editVehicle:function(done){externalEditDone=done;var c=car();editSnap={id:c.id,before:JSON.stringify(c),previous:S.carId};editing=true;draw();},
     addVehicle:function(done){externalEditDone=done;addCar();},
     trimBusy: function () { return Object.keys(trimMem).some(function (k) { return trimMem[k].busy; }); },   // tests wait for the trim lookup's redraws

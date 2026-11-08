@@ -609,8 +609,47 @@
     var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:optional|option|available on|some trims|certain trims|depend\w*|varies|package)\b/i.test(x) && !/^(?:no spare|full[- ]size spare|compact spare|repair kit|run[- ]flat tires)\.?$/i.test(x) && x.length <= 220; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
+  // ---------- rolling resistance and mileage (0.0.424; sources and numbers: docs/TIRE_FUEL_ECONOMY.md) ----------
+  // A tire's rolling resistance compared with a typical replacement all-season (1). Type: TRB Special Report 286 (2006)
+  // and OEM figures (performance and high-speed tires higher; winter and off-road treads higher still), Tire Rack's
+  // measured highway vs all-terrain pair (3.2% mpg). Fuel-saving lines about 15% lower, run-flats at least 20% higher
+  // (SR 286 p. 63). Rolling resistance falls about 20% as the tread wears down to 2/32 (SR 286 p. 45). Null: unknown.
+  var RR_TYPES = [[/trailer/, null], [/mud|maximum traction/, 1.45], [/rugged/, 1.3], [/terrain|off.?road/, 1.2], [/all-weather|all weather/, 1.1],
+    [/studless|winter|snow|ice/, 1.2], [/summer|max(imum)? performance|ultra high|extreme|competition|racetrack/, 1.2], [/high performance|performance all/, 1.12],
+    [/touring|highway|all-season|all season|passenger/, 1]];
+  var RUNFLAT = /run.?flat|\brft\b|\bzp\b|\bssr\b|\bdsst\b|\broff\b|\beufonic\b/i;
+  function rrOf(t, depth) {
+    if (!t) return null;
+    var ty = String(t.type || '').toLowerCase(), name = String((t.brand || '') + ' ' + (t.model || '')), f = null;
+    if (!ty && !t.model) return null;
+    for (var i = 0; i < RR_TYPES.length; i++) if (RR_TYPES[i][0].test(ty)) { f = RR_TYPES[i][1]; break; }
+    if (f === null && /trailer/.test(ty)) return null;
+    if (f == null) f = 1;
+    if (ECO.test(name)) f *= 0.85;
+    if (RUNFLAT.test(name)) f *= 1.2;
+    var nd = +t.newDepth || newDepth(t.type);
+    if (depth > 0 && nd > 2) f *= 1 - 0.2 * Math.max(0, Math.min(1, (nd - depth) / (nd - 2)));
+    return f;
+  }
+  /** The car's road tires against the tires its rating was measured on (factory tires: 0.9 of a typical replacement, an
+   *  EV's 0.85). specs/depths per tire. -> {ratio, n, of} or null when no tire is known. */
+  function rrRatio(specs, depths, ev) {
+    var got = specs.map(function (s, i) { return rrOf(s, depths && depths[i]); }).filter(function (x) { return x != null; });
+    if (!got.length) return null;
+    var avg = got.reduce(function (a, b) { return a + b; }, 0) / got.length;
+    return { ratio: avg / (ev ? 0.85 : 0.9), n: got.length, of: specs.length };
+  }
+  /** Fuel use per mile changes by elasticity × the rolling resistance change: about 0.10 in city driving and 0.18 on
+   *  the highway (SR 286 Table 3-1, four simulation models). -> mileage multipliers {city, hwy, comb}. */
+  var RR_E = { city: 0.10, hwy: 0.18 };
+  function rrMileage(ratio) {
+    if (!(ratio > 0)) return { city: 1, hwy: 1, comb: 1 };
+    var c = 1 / (1 + RR_E.city * (ratio - 1)), h = 1 / (1 + RR_E.hwy * (ratio - 1));
+    return { city: c, hwy: h, comb: 1 / (0.55 / c + 0.45 / h) };
+  }
   var TireMath = { dotDate:dotDate,dotOk:dotOk,ageYears:ageYears,spareDot:spareDot,ageStatus:ageStatus,forThisCar:forThisCar,sentenceKind:sentenceKind,variantOf:variantOf,leadOverruled:leadOverruled,sameNeeds:sameNeeds,sameDepth:sameDepth,newDepth: newDepth, lifeMiles: lifeMiles, estimate: estimate, status: status, split: split, normSize: normSize, ROT: ROT,
     CORNERS: CORNERS, corners: corners, worst: worst, positions: positions, missing: missing, needs: needs, depthAt: depthAt, hooked: hooked, warrantyOf: warrantyOf, rotation: rotation, treadDiff: treadDiff, TD_LIMIT: TD_LIMIT, fuelOf: fuelOf, fuelScore: fuelScore, parseSpare: parseSpare, spareLead: spareLead, leadTip: leadTip, optTip: optTip, instead: instead, spareClauses: spareClauses, pickSpare: pickSpare, spareTip: spareTip, tipFacts: tipFacts, SPARE_EX: SPARE_EX, TIP_EX: TIP_EX,
+    rrOf: rrOf, rrRatio: rrRatio, rrMileage: rrMileage, RR_E: RR_E,
     hue: hue, trFacts: trFacts, rankModels: rankModels, modelsToAsk: modelsToAsk, pickVersion: pickVersion, twGood: twGood, tracGood: tracGood, tempGood: tempGood, depthGood: depthGood };
   function generalized(t){return !!t&&!(+t.warrantyMi>0)&&!(t.type&&t.brand&&t.model);}
   function spareLocation(text){var found=new Set();String(text||'').replace(/\s+/g,' ').trim().split(/[.!?;]+/).forEach(function(s){
@@ -936,6 +975,21 @@
   function fuelFor(t, id) {
     return fuelOf(positions(t).filter(function (p) { return id == null ? true : id === 'car' ? !p.trailer : p.trailer === id; }).map(function (p) { return specAt(t, p); }));
   }
+  /** The car's road tires' rolling resistance against its rating's factory tires (TireMath.rrRatio), or null. */
+  function rrFor(c) {
+    var t = c && c.tires; if (!t) return null;
+    var ps = positions(t).filter(function (p) { return !p.trailer; }), drive = (c.info && c.info.drive) || '';
+    var depths = ps.map(function (p) { try { return depthAt(t, p, drive); } catch (e) { return null; } });
+    return rrRatio(ps.map(function (p) { return specAt(t, p); }), depths, G().kind(c) === 'ev');
+  }
+  /** 0.0.424: what the car's tires do to its mileage in trip planning, against the tires its rating was measured on. */
+  function mileageLine(c) {
+    var e = G().tireEffect && G().tireEffect(c); if (!e || !e.known) return '';
+    var pct = function (m) { var p = Math.round((1 / m - 1) * 1000) / 10; return Math.abs(p) < 0.5 ? 'about the same' : (p > 0 ? 'about ' + Math.abs(p) + '% more' : 'about ' + Math.abs(p) + '% less'); };
+    var ev = G().kind(c) === 'ev', w = ev ? 'energy' : 'fuel';
+    return '<p class="lead small keep tz-mileage" id="tzMileage">Trip planning counts these tires: ' + pct(e.hwy) + ' ' + w + ' on the highway and ' + pct(e.city) + ' in town than the tires your ' + (ev ? 'EV' : 'car') + '\u2019s rating was measured on' + (e.n < e.of ? ' (' + e.n + ' of ' + e.of + ' tires known)' : '') + '. ' +
+      A.qBtn('Rolling resistance by tire type (all-terrain and winter treads roll harder, fuel-saving lines easier, worn tread easier) and the TRB fuel-economy study\u2019s rule: a 10% change in rolling resistance changes fuel use about 1% in town and 2% on the highway. EVs: the change goes into the rolling part of the model\u2019s EPA road-load curve. Logged mileage you typed in is used as is.') + '</p>';
+  }
   function fuelTiles(c, t) {
     return [{ id: 'car', name: hooked(t).length ? 'Car' : 'Your tires', f: fuelFor(t, 'car') }].concat(hooked(t).map(function (tr) { return { id: tr.id, name: tr.name || 'Trailer', f: fuelFor(t, tr.id) }; }));
   }
@@ -1065,7 +1119,7 @@
     var fr = fuelTiles(c, t);
     if (fr.length) h += '<div class="sub-h tz-h">Fuel rating' + q(Q.fuel) + '</div><div class="tz-fuel-tiles">' + fr.map(function (x) {
       return '<div class="tz-ft" data-fuel="' + esc(x.id) + '"><span>' + esc(x.name) + '</span>' + (x.f ? '<b class="gr" style="color:' + hue((x.f.score - 1) / 9) + '">' + x.f.score + '/10</b><small>' + esc(fuelWhy(x.f)) + '</small>' : '<b class="tz-ft-none">—</b><small>Pick its tire type, brand and model to rate it.</small>') + '</div>';
-    }).join('') + '</div>';
+    }).join('') + '</div>' + mileageLine(c);
     // the spare
     var sp = spare(t), kind = sp.kind, guess = sp.lookup && sp.lookup.guess;
     if(sp.lookup&&sp.lookup.text&&sp.lookup.locationV!==2){sp.lookup.location=spareLocation(sp.lookup.text);sp.lookup.locationV=2;save();}
@@ -2035,6 +2089,6 @@
   function tiresDue(c) { return !tiresAiredOk(c && c.tires || {}); }
   /** Anything on Advice still to tick for the tires (Advisory's Next waits for it). */
   function airDue(c) { return spareDue(c) || tiresDue(c); }
-  root.Tires = { replyRedraw: function () { if (subFill) subFill(); },   // tests: what a lookup's reply does to the open page
+  root.Tires = { rr: rrFor, replyRedraw: function () { if (subFill) subFill(); },   // tests: what a lookup's reply does to the open page
     missing: function (c) { return missing(c && c.tires); }, editing: function (c) { var e = c && tireEditors.get(c); return e ? tires(e.draft) : null; }, sizeMissing: sizeMissing, duallyState: duallyState, spareDue: spareDue, tiresDue: tiresDue, airDue: airDue, setTiresAired: setTiresAired, render: render, summary: summary, summaryHtml: summaryHtml, advice: advice, lookup: lookup, setAired: setAired, departureNote: departureNote, spareKind: spareKind };
 })(typeof window !== 'undefined' ? window : globalThis);
