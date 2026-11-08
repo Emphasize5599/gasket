@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{const p=await b.newPage({viewport:{width:360,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(()=>{Garage.installDemo();});
  const r=await p.evaluate(()=>{const S=__app.S,tesla=S.cars.find(c=>c.id==='demo-tesla'),prime=S.cars.find(c=>c.id==='demo-prime');const out={};
-  const set=(c,type,model)=>{c.tires.type=type;c.tires.model=model||'';c.tires.brand='Test';c.tires.tread={mode:'measure',depth:c.tires.newDepth||10};};
+  const set=(c,type,model)=>{c.tires.type=type;c.tires.model=model||'';c.tires.brand='Test';c.tires.tread={mode:'measure',depth:TireMath.newDepth(type)};if(c.tires.corners)c.tires.corners.split=false;};
   set(prime,'Touring All-Season');out.primeTouring=Garage.carModel(prime);set(prime,'All-Terrain');out.primeAT=Garage.carModel(prime);out.primeEffect=Garage.tireEffect(prime);
   set(tesla,'Touring All-Season','Energy Saver');out.teslaEco=Garage.carModel(tesla);out.ecoA=Garage.evEnergy(tesla).roadLoad.a;
   set(tesla,'All-Terrain');out.teslaAT=Garage.carModel(tesla);out.atA=Garage.evEnergy(tesla).roadLoad.a;out.teslaEffect=Garage.tireEffect(tesla);

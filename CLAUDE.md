@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.426 - tire factors from NHTSA's measured data
+
+Owner supplied the PDFs that answer 403 here (NHTSA Phase 1 DOT HS 811 119 / Phase 2 DOT HS 811 154, FRIA, PRIA, CEC 2003 vol. I, SR 286 ch. 4). Findings (docs/TIRE_FUEL_ECONOMY.md): elasticity measured on a vehicle = city 0.102, highway FET 0.113, US06 0.132 (0.0.425 used SR 286's simulated 0.18 for highway); winter tires measured within the all-season range (2 tires, 0.94×); UHP summer 1.08×; HP all-season 0.73×; within-category spread larger than between categories; LT all-terrain 1.06–1.11× on-road LT in the lab. `RR_E` {city .10, hwy .12}; RR_TYPES: mud 1.5, rugged 1.35, all-terrain 1.25 (calibrated to Tire Rack's on-vehicle 3.2%, which includes tread mass), summer/UHP 1.08, everything else (winter, all-weather, HP, touring, highway, all-season) 1. ECO ×0.85, run-flat ×1.2, wear −20% kept (SR 286 ch. 4 and Phase 2 confirm). Tests tire-fuel / tire-fuel-ui updated (the UI test now uses one depth for all four tires: the demo Prime's split corners are part-worn). Not phone-verified.
+
+Phone check: Garage → Tires → All-Terrain: about 3% more fuel on the highway; Winter: about the same as touring.
+
 ## 0.0.425 - tire mileage effect; EV best cruising speed
 
 Owner: integrate tire-type fuel economy estimates (research what's needed); EVs should get the ideal mileage/speed curve when we have the EPA curves. Research, numbers and sources: docs/TIRE_FUEL_ECONOMY.md (TRB SR 286 via nationalacademies.org read pages; regulations.gov / nhtsa.gov PDFs answer 403 here).

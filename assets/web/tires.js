@@ -609,14 +609,17 @@
     var t = ss.filter(function (x) { return /\bspare\b/i.test(x) && /\b(?:optional|option|available on|some trims|certain trims|depend\w*|varies|package)\b/i.test(x) && !/^(?:no spare|full[- ]size spare|compact spare|repair kit|run[- ]flat tires)\.?$/i.test(x) && x.length <= 220; })[0];
     return t ? t.replace(/\s*\[\d+\]/g, '').trim() : '';
   }
-  // ---------- rolling resistance and mileage (0.0.424; sources and numbers: docs/TIRE_FUEL_ECONOMY.md) ----------
-  // A tire's rolling resistance compared with a typical replacement all-season (1). Type: TRB Special Report 286 (2006)
-  // and OEM figures (performance and high-speed tires higher; winter and off-road treads higher still), Tire Rack's
-  // measured highway vs all-terrain pair (3.2% mpg). Fuel-saving lines about 15% lower, run-flats at least 20% higher
-  // (SR 286 p. 63). Rolling resistance falls about 20% as the tread wears down to 2/32 (SR 286 p. 45). Null: unknown.
-  var RR_TYPES = [[/trailer/, null], [/mud|maximum traction/, 1.45], [/rugged/, 1.3], [/terrain|off.?road/, 1.2], [/all-weather|all weather/, 1.1],
-    [/studless|winter|snow|ice/, 1.2], [/summer|max(imum)? performance|ultra high|extreme|competition|racetrack/, 1.2], [/high performance|performance all/, 1.12],
-    [/touring|highway|all-season|all season|passenger/, 1]];
+  // ---------- rolling resistance and mileage (0.0.426; sources and numbers: docs/TIRE_FUEL_ECONOMY.md) ----------
+  // A tire's rolling resistance compared with a typical replacement all-season (1). NHTSA's 2009 lab tests (DOT HS 811 119,
+  // 25 models) found winter tires no higher than same-size all-seasons (2 tires: 0.94x), a UHP summer 1.08x, and the spread
+  // inside one category larger than between categories; light-truck on/off-road (all-terrain) tires 1.06-1.11x their
+  // on-road LT siblings in the lab, but Tire Rack's on-vehicle pair cost 3.2% mpg (tread mass and squirm count too), so
+  // all-terrain is 1.25 here (3% highway with the measured elasticity), rugged/mud scaled up from it. Fuel-saving lines
+  // about 15% lower (Goodyear Integrity 0.68-0.87x in the same tests), run-flats at least 20% higher (TRB SR 286 p. 63).
+  // Rolling resistance falls about 20% as the tread wears down to 2/32 (SR 286 p. 45 and ch. 4; NHTSA Phase 2). Null: unknown.
+  var RR_TYPES = [[/trailer/, null], [/mud|maximum traction/, 1.5], [/rugged/, 1.35], [/terrain|off.?road/, 1.25],
+    [/summer|max(imum)? performance|ultra high|extreme|competition|racetrack/, 1.08],
+    [/all-weather|all weather|studless|winter|snow|ice|high performance|performance all|touring|highway|all-season|all season|passenger/, 1]];
   var RUNFLAT = /run.?flat|\brft\b|\bzp\b|\bssr\b|\bdsst\b|\broff\b|\beufonic\b/i;
   function rrOf(t, depth) {
     if (!t) return null;
@@ -639,9 +642,10 @@
     var avg = got.reduce(function (a, b) { return a + b; }, 0) / got.length;
     return { ratio: avg / (ev ? 0.85 : 0.9), n: got.length, of: specs.length };
   }
-  /** Fuel use per mile changes by elasticity × the rolling resistance change: about 0.10 in city driving and 0.18 on
-   *  the highway (SR 286 Table 3-1, four simulation models). -> mileage multipliers {city, hwy, comb}. */
-  var RR_E = { city: 0.10, hwy: 0.18 };
+  /** Fuel use per mile changes by elasticity × the rolling resistance change, as NHTSA measured on a car on a dynamometer
+   *  (DOT HS 811 154 Table 19: city FTP 0.102, highway FET 0.113, high-speed US06 0.132): 0.10 city, 0.12 highway
+   *  (real highways run faster than the FET). -> mileage multipliers {city, hwy, comb}. */
+  var RR_E = { city: 0.10, hwy: 0.12 };
   function rrMileage(ratio) {
     if (!(ratio > 0)) return { city: 1, hwy: 1, comb: 1 };
     var c = 1 / (1 + RR_E.city * (ratio - 1)), h = 1 / (1 + RR_E.hwy * (ratio - 1));
@@ -988,7 +992,7 @@
     var pct = function (m) { var p = Math.round((1 / m - 1) * 1000) / 10; return Math.abs(p) < 0.5 ? 'about the same' : (p > 0 ? 'about ' + Math.abs(p) + '% more' : 'about ' + Math.abs(p) + '% less'); };
     var ev = G().kind(c) === 'ev', w = ev ? 'energy' : 'fuel';
     return '<p class="lead small keep tz-mileage" id="tzMileage">Trip planning counts these tires: ' + pct(e.hwy) + ' ' + w + ' on the highway and ' + pct(e.city) + ' in town than the tires your ' + (ev ? 'EV' : 'car') + '\u2019s rating was measured on' + (e.n < e.of ? ' (' + e.n + ' of ' + e.of + ' tires known)' : '') + '. ' +
-      A.qBtn('Rolling resistance by tire type (all-terrain and winter treads roll harder, fuel-saving lines easier, worn tread easier) and the TRB fuel-economy study\u2019s rule: a 10% change in rolling resistance changes fuel use about 1% in town and 2% on the highway. EVs: the change goes into the rolling part of the model\u2019s EPA road-load curve. Logged mileage you typed in is used as is.') + '</p>';
+      A.qBtn('Rolling resistance by tire type (off-road treads roll harder, fuel-saving lines easier, worn tread easier; NHTSA\u2019s tests found winter and touring tires about the same) and NHTSA\u2019s measured rule: a 10% change in rolling resistance changes fuel use about 1% in town and 1.2% on the highway. EVs: the change goes into the rolling part of the model\u2019s EPA road-load curve. Logged mileage you typed in is used as is.') + '</p>';
   }
   function fuelTiles(c, t) {
     return [{ id: 'car', name: hooked(t).length ? 'Car' : 'Your tires', f: fuelFor(t, 'car') }].concat(hooked(t).map(function (tr) { return { id: tr.id, name: tr.name || 'Trailer', f: fuelFor(t, tr.id) }; }));

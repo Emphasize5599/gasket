@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.426 - 2026-11-08
+
+- Tire mileage estimates follow NHTSA's measured tire tests: winter and touring tires count about the same, all-terrain about 3% more fuel on the highway, mud-terrain more.
+- Bug fixes.
+
 ## 0.0.425 - 2026-11-08
 
 - Tires change planned mileage: all-terrain, mud-terrain, winter and performance tires cost fuel; fuel-saving and worn tires save some. Tire details shows the estimate.
