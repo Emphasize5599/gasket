@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.430 - 2026-11-08
+
+- Compare: a vehicle's estimated travel time no longer includes the time you stay at a destination before heading on (rest-stop waits still count, listed separately).
+- Bug fixes.
+
 ## 0.0.429 - 2026-11-08
 
 - Add Car → EV with an established charging curve lists only the versions that have one (a 2020 Model 3 Long Range no longer shows up because the Standard Range Plus has a curve).

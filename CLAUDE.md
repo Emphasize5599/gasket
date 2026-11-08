@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.430 - Compare time leaves out destination stays
+
+Owner: Compare counted the time between arriving at a destination and leaving it as travel time. VehicleCompare physicalMetrics added every `result.schedule[j].waitMinutes` (the wait at the start of physical leg j: flexible-time / window plans). Now only legs starting at an added rest (`Stops.isRest(route.stops[j])`) count; returned as `rest`, shown "Rest stops N" in the card's breakdown with "Time spent at your destinations isn't counted." Destination charging overlap unchanged. Test vehiclecompare (rest 30 + 45 counted, 10-min stay at B not; `rest` reconciles across legs). Not phone-verified.
+
+Phone check: Compare on a trip with a stay at a destination (flexible time or a set departure window): the estimated time is about driving + charging/refueling (+ rests), not days.
+
 ## 0.0.429 - established-curve menus match the version
 
 Owner: 2020 Tesla Model 3 Long Range listed under the established-curve EV type but had no curve. `ChargeCurve.packs(q, true)` (menus, evCategory / evMenu) checked only year/make/model family and skipped each pack's `trim` / `exclude`, so the SR+ pack let every 2020 Model 3 in. Now the menu check applies trim/exclude to the EPA model name too (EPA model names carry the version for every pack: Model 3 Long Range AWD / Standard Range Plus, Model S vs Model S Plaid, Bolt EV vs EUV, R1T); make/year levels unchanged. Such cars now go to "Efficiency curve only" (evCategory). Test propulsion (menu list per version). Not phone-verified.

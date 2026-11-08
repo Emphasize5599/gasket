@@ -45,9 +45,10 @@
     var quote={energy:missing?null:energy,spend:missing?null:spend,tolls:tolls,fees:0,estimated:estimated};
     if(adapters&&adapters.price)quote=adapters.price(s,i,clone(quote))||quote;
     var cost=Number.isFinite(quote.energy)&&Number.isFinite(quote.tolls)&&Number.isFinite(quote.fees)?quote.energy+quote.tolls+quote.fees:null;
-    var restWait=(r.schedule||[]).reduce(function(n,t,j){return n+(i==null||i===j?Math.max(0,t.waitMinutes||0):0);},0),minutes=Math.max(0,driving)+detour+setup+Math.max(0,service-overlap)+restWait;
+    var pts=s.route&&s.route.stops||[],restWait=(r.schedule||[]).reduce(function(n,t,j){return n+((i==null||i===j)&&j>0&&Stops.isRest(pts[j])?Math.max(0,t.waitMinutes||0):0);},0),   // a leg's wait is at its start: count rests, not your stay at a destination
+    minutes=Math.max(0,driving)+detour+setup+Math.max(0,service-overlap)+restWait;
     if(adapters&&adapters.time){var time=adapters.time(s,i,minutes);if(Number.isFinite(time)&&time>=0)minutes=time;}
-    return {cost:cost,energy:quote.energy,spend:quote.spend,tolls:quote.tolls,fees:quote.fees,estimated:!!quote.estimated,minutes:minutes,driving:Math.max(0,driving),detour:detour,setup:setup,service:service,overlap:overlap,miles:row?row.miles:m.totalMi,stops:chosen.length,ready:!s.needsReview&&!s.stale};
+    return {cost:cost,energy:quote.energy,spend:quote.spend,tolls:quote.tolls,fees:quote.fees,estimated:!!quote.estimated,minutes:minutes,driving:Math.max(0,driving),detour:detour,setup:setup,service:service,rest:restWait,overlap:overlap,miles:row?row.miles:m.totalMi,stops:chosen.length,ready:!s.needsReview&&!s.stale};
   }
   function sorted(rows,sort){var field=sort==='time'?'minutes':'cost';return rows.slice().sort(function(a,b){var av=a.metrics[field],bv=b.metrics[field],ak=a.metrics.ready&&Number.isFinite(av),bk=b.metrics.ready&&Number.isFinite(bv);return (bk?1:0)-(ak?1:0)||(ak&&bk?av-bv:0)||a.order-b.order;});}
   function portable(s,car){var t=clone(s.planned?s.planned.trip:s.trip);if(!s.planned)delete t.routeChoices;return {id:s.id,mode:clone(s.mode),savedAt:s.savedAt,planned:clone(s.planned),trip:t,speed:clone(s.speed),route:clone(s.route),alts:clone(s.alts),altSel:s.altSel,altSure:s.altSure,replay:clone(s.replay),profile:s.profile,kind:s.kind,needsReview:true};}
