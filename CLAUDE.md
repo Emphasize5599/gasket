@@ -2,6 +2,14 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.420 - range help wording; charging and NHTSA photo notes
+
+Owner asked whether plans optimize along the charge curve instead of charging to 80%, and why NHTSA photos fail for a 2025 Model S. Both were already handled; only the Garage Range (?) was wrong ("charge to 80%"), now "charge each stop only as much as the trip needs (usually below 80%…)".
+- Charging, as already shipped: "Cheapest overall" lets the DP pick each stop's amount, capped at 80% (`preferredFillCap`) and allowed to 100% only when a gap needs it (0.0.259). Since 0.0.264, `chargeTimes` integrates the charge curve: the time objective (auto Time) prices minutes on the curve, so it picks more, shorter stops low on the curve; the cost objective uses curve minutes only as a 1e-6 $/min tie-break. "Charge to 80% each stop" is the explicit fill mode.
+- NHTSA photos: byYmmt returns vehiclePicture only for NCAP-rated vehicles. Tesla Model S checked 2026-11-08: 2025/2024/2023/2016 = no records, 2021 = one. Tesla already asks Fuel API first (`preferFuel`, 0.0.263). No fallback to another year's NHTSA photo was added.
+
+Phone check: Garage → EV Range (?) wording.
+
 ## 0.0.419 - gas menus without EVs
 
 Owner: EVs still appeared in the dropdowns with the gas/diesel type selected. evMenu filtered only the EV types. Now with addMode 'fuel' the model menu drops `isBev` = RoadLoad.of(q) (every fueleconomy.gov battery EV; hydrogen and PHEVs aren't in it). `fuelMakes(c, y, makes)` (async; make menu and epaPreset hydration) drops makes whose every EPA model that year is a BEV. Only makes with RoadLoad rows are checked, six model-list reads at a time, cached in `fuelModelsMem`; a failed read keeps the make. Years aren't filtered. Test dc-curve-ui (2024 Tesla gone; Toyota lists Camry/Mirai, not bZ4X). Not phone-verified.

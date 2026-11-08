@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.420 - 2026-11-08
+
+- The EV range explanation no longer says trips always charge to 80%: plans charge each stop only as much as the trip needs.
+
 ## 0.0.419 - 2026-11-08
 
 - Add Car: the Gas / Diesel / E85 / Hydrogen / LNG type no longer lists electric vehicles, or makes that only sell them (such as Tesla). Pick an EV type for those.

@@ -116,7 +116,7 @@
     if (!(r > 0)) return '';
     var q = '<b>Range</b>: how far a full ' + (ev ? 'charge' : 'tank') + ' goes in mixed driving: ' + r2(+c.tank) + ' ' + U.unit + (c.tankSrc ? ' (' + esc(c.tankSrc) + ')' : '') + ' at ' + (mine ? 'your logged mileage' : 'the EPA combined rating') + '.' +
       (ev && c.epa && c.epa.range > 0 ? ' The EPA rates this car at ' + c.epa.range + ' mi.' + (!mine && r < c.epa.range * .95 ? ' This is lower because the EPA measures energy at the wall plug, charging losses included, and Gasket counts the battery capacity here against those figures. That errs on the safe side; pick the car\'s battery pack under Energy & charging estimates for the exact match.' : '') : '') +
-      ' Steady highway driving at 70+ mph goes less far; trip plans work out each road\'s speed and the weather' + (ev ? ', and charge to 80%, so stops come well before this' : '') + '.';
+      ' Steady highway driving at 70+ mph goes less far; trip plans work out each road\'s speed and the weather' + (ev ? ', and charge each stop only as much as the trip needs (usually below 80%, where charging slows), so stops come well before this' : '') + '.';
     return '<div class="rng"><b>' + Math.round(r) + '</b><span>Range, mi' + A.qBtn(q) + '</span></div>';
   }
   /** Miles on a full tank / charge, from your mileage (or the EPA's) and the tank size. */
