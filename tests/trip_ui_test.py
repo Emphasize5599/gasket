@@ -148,11 +148,9 @@ with sync_playwright() as p:
         pg.click('#oFiltClear'); pg.wait_for_timeout(150); assert pg.locator('.log-row').count() == 2
         pg.evaluate("document.getElementById('tSpeed').scrollIntoView()"); pg.wait_for_timeout(150)
         pg.screenshot(path=f'{OUT}/{name}-g2-speed.png'); wide(pg, 'garage speed')
-        # with a time value
-        pg.click('.spd-set summary'); pg.fill('#sTime', '10'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
-        sp = ft(pg, '#tSpeed'); print('  at $10/hr:', sp.split('\n')[0:4])
-        assert '84 mph' in sp and 'gas never outweighs' in sp
-        pg.fill('#sTime', '0'); pg.dispatch_event('#sTime', 'change'); pg.wait_for_timeout(200)
+        # no time-value setting (removed app-wide)
+        pg.click('.spd-set summary'); pg.wait_for_timeout(150)
+        assert pg.locator('#sTime').count() == 0 and 'time is worth' not in ft(pg, '#tSpeed')
         pg.fill('#sPrice', '3.50'); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)
         assert '$3.50/gal' in ft(pg, '.spd-set summary')
         pg.fill('#sPrice', ''); pg.dispatch_event('#sPrice', 'change'); pg.wait_for_timeout(200)

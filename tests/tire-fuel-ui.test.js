@@ -22,4 +22,5 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  await p.waitForFunction(()=>/mi\/kWh/.test(document.querySelector('details.spd-card').textContent));
  const txt=await p.textContent('details.spd-card');assert.match(txt,/\d+\s*mph/);assert.match(txt,/kWh \/ 100 mi/);assert.match(txt,/electricity/);assert.match(await p.innerHTML('details.spd-card'),/Includes(%20| )your(%20| )tires/);
  assert.match(await p.textContent('details.spd-card .spd-pill'),/^\d+ mph$/);
+ assert.equal(await p.locator('#sTime').count(),0,'no time-value setting');assert.doesNotMatch(txt,/time is worth|\/hr/i);
  assert.deepEqual(errors,[]);console.log('tire-fuel-ui ok');}finally{await b.close();}})().catch(e=>{console.error(e);process.exit(1);});

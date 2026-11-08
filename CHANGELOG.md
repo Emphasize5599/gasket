@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.427 - 2026-11-08
+
+- Removed the "My time is worth" setting from Best cruising speed (gas and EV); the pick is always the balanced speed.
+- Bug fixes.
+
 ## 0.0.426 - 2026-11-08
 
 - Tire mileage estimates follow NHTSA's measured tire tests: winter and touring tires count about the same, all-terrain about 3% more fuel on the highway, mud-terrain more.
