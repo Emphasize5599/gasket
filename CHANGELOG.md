@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.432 - 2026-11-08
+
+- With time windows on, Trip planning (Route and Compare) says buffer and detour are always adjusted automatically, instead of showing an unexplained grayed-out box.
+
 ## 0.0.431 - 2026-11-08
 
 - Trip time windows: "Hours I won't leave" ranges (every night or one night only), e.g. leave by 22:00 or wait until 08:00 rather than setting out late at night.

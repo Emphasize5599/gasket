@@ -9,7 +9,7 @@
   function planBox(c,row){
     var id=A.esc(row.id),off=c.locked()?' disabled':'',p=c.priority?c.priority(row.id):'cost',t=c.tolls?c.tolls(row.id):{},h='<div class="vc-plan" data-vc-plan-box="'+id+'"><h4>Trip planning</h4>';
     h+='<label class="nf vc-priority"><span>Priority</span><select data-vc-priority="'+id+'"'+off+'>'+c.priorityOptions(row.id)+'</select></label>';
-    h+='<label class="nf chk"><span>Adjust buffer and detour automatically</span><input type="checkbox" data-vc-auto="'+id+'"'+(c.autoEnabled(row.id)?' checked':'')+(off||(c.autoRequired&&c.autoRequired(row.id)?' disabled':''))+'></label>';
+    h+='<label class="nf chk"><span>Adjust buffer and detour automatically</span><input type="checkbox" data-vc-auto="'+id+'"'+(c.autoEnabled(row.id)?' checked':'')+(off||(c.autoRequired&&c.autoRequired(row.id)?' disabled':''))+'></label>'+(c.autoRequired&&c.autoRequired(row.id)?'<p class="lead small keep">Time-window planning always adjusts buffer and detour automatically.</p>':'');
     if(p==='time'&&c.setTolls){
       h+='<label class="nf chk"><span>I don’t mind paying tolls</span><input type="checkbox" data-vc-toll="allowPaid"'+(t.allowPaid?' checked':'')+off+'></label>';
       if(t.allowPaid){h+='<label class="nf chk"><span>Set a maximum toll</span><input type="checkbox" data-vc-toll="limited"'+(t.limited?' checked':'')+off+'></label>';

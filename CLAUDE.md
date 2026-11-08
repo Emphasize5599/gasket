@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.432 - time windows: auto buffer/detour note
+
+Owner asked why time-window planning has no auto buffer/detour option. It always has one: windowEvaluate runs AutoTrip.search on the finalists (bounded: quick screening of every approved road/hour, ≤ 16 real plans, the best 1–2 swept), so the checkbox is checked and disabled. Notes now say so: tripui planningCard "Time-window planning always adjusts buffer and detour automatically and uses this priority." and the Compare planBox under the disabled box (autoRequired). Not phone-verified.
+
+Phone check: Route with time windows on → Trip planning: the note under the grayed box; Compare → a card's Trip planning shows it too.
+
 ## 0.0.431 - hours I won't leave
 
 Owner: within time windows, exclude hour ranges overall or per night (fine leaving early at 8:00 PM, but past 10:00 they'd rather sleep at the start). docs/TIME_WINDOWS.md "Hours I won't leave". Form card `#twNoLeave` (rows `[data-tw-nl]`: From / Until time, Every night | One night only + Night starting date, Remove; `#twNlAdd` starts 22:00–08:00) → `windowPlan.noLeave` (deleted when empty). `TimeWindows.noLeave(wall, rules)` / `noLeaveRules`; tripui `windowNoLeave(i, t)` (start, or a destination with a leave window; local zone via windowPointZone) filters `windowRows` hours and `windowMiss` → why `noLeave`. windowPlan is in windowStateKey / VehicleCompare.journey, so changes re-plan. Tests: timewindows (rules), window-form-ui (add, one-night validation, save, reopen, remove), windowplanning-ui `noleave` mode (first hour blocked → plan starts after it; fails without the filter). Also vehicle-catalog waits 15 s for Save (429's CI timed out at 5 s under load). Not phone-verified.
