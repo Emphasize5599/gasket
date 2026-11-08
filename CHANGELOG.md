@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.431 - 2026-11-08
+
+- Trip time windows: "Hours I won't leave" ranges (every night or one night only), e.g. leave by 22:00 or wait until 08:00 rather than setting out late at night.
+- Bug fixes.
+
 ## 0.0.430 - 2026-11-08
 
 - Compare: a vehicle's estimated travel time no longer includes the time you stay at a destination before heading on (rest-stop waits still count, listed separately).

@@ -130,6 +130,14 @@
     return valid()?{best:best,checked:checked,screened:ranked.screened,shortlisted:ranked.candidates.length,screening:ranked,review:best?[]:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}
-  var api={HOUR:HOUR,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,approvalRules:approvalRules,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};
+  /** "Don't leave between" rules: [{from:'22:00', to:'08:00', night:'' | 'YYYY-MM-DD'}]. An empty night = every
+   *  night; a date = only the night starting that evening (a range past midnight runs into the next morning, a range
+   *  within a day applies on that date). `wall` is the local time 'YYYY-MM-DDTHH:MM' at the departure point. */
+  function minutesOf(hm){var m=/^(\d{1,2}):(\d{2})$/.exec(String(hm||''));return m&&+m[1]<24&&+m[2]<60?+m[1]*60+ +m[2]:null;}
+  function noLeaveRules(list){return (Array.isArray(list)?list:[]).filter(function(r){var a=minutesOf(r&&r.from),b=minutesOf(r&&r.to);return a!=null&&b!=null&&a!==b&&(!r.night||/^\d{4}-\d{2}-\d{2}$/.test(r.night));});}
+  function nextDay(d){var t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+1);return t.toISOString().slice(0,10);}
+  function noLeave(wall,list){var w=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(wall||''));if(!w)return null;var day=w[1],m=+w[2]*60+ +w[3];
+    return noLeaveRules(list).find(function(r){var a=minutesOf(r.from),b=minutesOf(r.to);if(a<b)return m>=a&&m<b&&(!r.night||r.night===day);return m>=a&&(!r.night||r.night===day)||m<b&&(!r.night||nextDay(r.night)===day);})||null;}
+  var api={HOUR:HOUR,noLeave:noLeave,noLeaveRules:noLeaveRules,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,approvalRules:approvalRules,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimeWindows=api;
 })(typeof window==='undefined'?globalThis:window);

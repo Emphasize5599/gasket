@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.431 - hours I won't leave
+
+Owner: within time windows, exclude hour ranges overall or per night (fine leaving early at 8:00 PM, but past 10:00 they'd rather sleep at the start). docs/TIME_WINDOWS.md "Hours I won't leave". Form card `#twNoLeave` (rows `[data-tw-nl]`: From / Until time, Every night | One night only + Night starting date, Remove; `#twNlAdd` starts 22:00–08:00) → `windowPlan.noLeave` (deleted when empty). `TimeWindows.noLeave(wall, rules)` / `noLeaveRules`; tripui `windowNoLeave(i, t)` (start, or a destination with a leave window; local zone via windowPointZone) filters `windowRows` hours and `windowMiss` → why `noLeave`. windowPlan is in windowStateKey / VehicleCompare.journey, so changes re-plan. Tests: timewindows (rules), window-form-ui (add, one-night validation, save, reopen, remove), windowplanning-ui `noleave` mode (first hour blocked → plan starts after it; fails without the filter). Also vehicle-catalog waits 15 s for Save (429's CI timed out at 5 s under load). Not phone-verified.
+
+Phone check: Route → Time windows → Set time windows → Hours I won't leave → Add hours (22:00–08:00, every night) with a departure window that crosses 22:00: Hazards only asks about hours before 22:00 or from 08:00, and the plan leaves outside the range.
+
 ## 0.0.430 - Compare time leaves out destination stays
 
 Owner: Compare counted the time between arriving at a destination and leaving it as travel time. VehicleCompare physicalMetrics added every `result.schedule[j].waitMinutes` (the wait at the start of physical leg j: flexible-time / window plans). Now only legs starting at an added rest (`Stops.isRest(route.stops[j])`) count; returned as `rest`, shown "Rest stops N" in the card's breakdown with "Time spent at your destinations isn't counted." Destination charging overlap unchanged. Test vehiclecompare (rest 30 + 45 counted, 10-min stay at B not; `rest` reconciles across legs). Not phone-verified.

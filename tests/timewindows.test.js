@@ -60,3 +60,10 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
 
 // Missing air-quality requests are reported after planning, not treated as a weather approval.
 {const r={hazards:[],stats:{points:2,weather:2,air:0,errors:1,airErrors:1}};assert.equal(W.screeningIssues(r).length,0);assert(W.autoAllowed(r,{version:2,allow:['rain']},{}));assert.equal(W.dataNotices([{reading:r}]).length,1);}
+
+// "Hours I won't leave": every night across midnight, one night only, a daytime range, bad rules ignored
+{const every=[{from:'22:00',to:'08:00',night:''}],one=[{from:'22:00',to:'08:00',night:'2026-11-12'}],day=[{from:'10:00',to:'14:00',night:''}];
+ assert(!W.noLeave('2026-11-12T21:59',every)&&W.noLeave('2026-11-12T22:00',every)&&W.noLeave('2026-11-13T07:59',every)&&!W.noLeave('2026-11-13T08:00',every));
+ assert(W.noLeave('2026-11-12T23:30',one)&&W.noLeave('2026-11-13T03:00',one)&&!W.noLeave('2026-11-13T23:30',one)&&!W.noLeave('2026-11-12T03:00',one),'one night: that evening and the next morning only');
+ assert(W.noLeave('2026-11-12T12:00',day)&&!W.noLeave('2026-11-12T14:00',day));
+ assert.equal(W.noLeaveRules([{from:'22:00',to:'22:00'},{from:'25:00',to:'08:00'},{from:'22:00',to:'08:00',night:'Nov 12'}]).length,0,'invalid rules are dropped');assert.equal(W.noLeave('',every),null);}
