@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.429 - 2026-11-08
+
+- Add Car → EV with an established charging curve lists only the versions that have one (a 2020 Model 3 Long Range no longer shows up because the Standard Range Plus has a curve).
+- Bug fixes.
+
 ## 0.0.428 - 2026-11-08
 
 - EV speed curves for the Tesla Model S and X (2022–26), Model 3 Premium AWD, Model Y Standard AWD and Genesis GV60 use the right EPA test car instead of the Plaid / Performance ones.

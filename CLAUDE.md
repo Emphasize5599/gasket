@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.429 - established-curve menus match the version
+
+Owner: 2020 Tesla Model 3 Long Range listed under the established-curve EV type but had no curve. `ChargeCurve.packs(q, true)` (menus, evCategory / evMenu) checked only year/make/model family and skipped each pack's `trim` / `exclude`, so the SR+ pack let every 2020 Model 3 in. Now the menu check applies trim/exclude to the EPA model name too (EPA model names carry the version for every pack: Model 3 Long Range AWD / Standard Range Plus, Model S vs Model S Plaid, Bolt EV vs EUV, R1T); make/year levels unchanged. Such cars now go to "Efficiency curve only" (evCategory). Test propulsion (menu list per version). Not phone-verified.
+
+Phone check: Add Car → EV (established curve) → 2020 Tesla: models list Standard Range / Standard Range Plus only; 2021: Model 3 Long Range AWD only.
+
 ## 0.0.428 - Model S / X road load from the right test car
 
 Owner: a 2025 Model S picked 62 mph, the 2022–23 one 69; why do EPA's numbers differ? docs/EV_MILEAGE_CURVES.md 0.0.428. Our bug: fueleconomy.gov's plain "Model S" / "Model X" matched the Plaid 19"+21" test cars by word overlap (1/2 beats Long Range's 1/3), averaging in the 21" car's A (43–45 lbf). gen-ev-roadload.py `VARIANT` {plaid, performance, ludicrous}: a test car adding one the listing lacks scores −0.2 (Rivian "Performance Dual" exempt). Regenerated from the MY2017–26 Test Car List workbooks (the old code reproduced the shipped file exactly first). Changed only Model S/X 2022–26, Model 3 Premium AWD 2026–27, Model Y Standard AWD 2026, GV60. EPA side: the Long Range tests (MY2021 carried to 2023; new MY2024 and MY2025 tests) agree on total force at 60–70 mph (≈2.95 mi/kWh at 70 in our curve) but split B vs C differently, so the balanced pick is 63 (2022–23) vs 55–56 (2024–26). PlannedTrip `ev-energy-428`. Test propulsion (plain S/X ≠ Plaid, 2025 A 26.37). Not phone-verified.

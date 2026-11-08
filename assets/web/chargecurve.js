@@ -29,7 +29,7 @@
   return PACKS.filter(function(p){
    if((make||!listing)&&make!==norm(p.make||'Tesla')||car.year<p.from||car.year>p.to||!+car.year)return false;
    var model=typeof p.model==='string'?norm(p.model):null;
-   return (listing&&!name||(model?name===model||name.startsWith(model+' '):p.model.test(name)))&&(listing||(!p.trim||p.trim.test(name))&&(!p.exclude||!p.exclude.test(name)));
+   return listing&&!name||(model?name===model||name.startsWith(model+' '):p.model.test(name))&&(!p.trim||p.trim.test(name))&&(!p.exclude||!p.exclude.test(name));   // menus too: EPA model names carry the version (Model 3 Long Range vs Standard Range Plus)
   });
  }
  function researchKey(car){return car&&car.year&&car.make&&car.model?[car.year,car.make,car.model,car.trim].filter(Boolean).join(' ').replace(/\s+/g,' ').trim():'';}
