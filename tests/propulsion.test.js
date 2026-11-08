@@ -79,6 +79,8 @@ console.log('Propulsion: weather, billing, arrival tariffs, preferred versus str
  const C=require('../assets/web/chargecurve.js'),est=C.selected({addMode:'evNone',make:'Nobody',model:'Nothing',dcKw:100});assert(est.estimated&&est.peak===85&&/15% slower/.test(est.label),'estimated charging is 15% slower '+JSON.stringify(est));
  const R=require('../assets/web/roadload.js'),m3=R.forCar({year:2021,make:'Tesla',model:'Model 3 Long Range AWD'});
  assert(m3&&m3.a===34.98&&m3.c===.0149,'2021 Model 3 LR AWD EPA coast-down');
- assert.equal(R.of({year:2022,make:'Chevrolet',model:'Bolt EV'}).coef.a,30.51);assert.equal(R.forCar({year:2022,make:'Toyota',model:'Corolla'}),null,'not an EV');
+ assert.equal(R.of({year:2022,make:'Chevrolet',model:'Bolt EV'}).coef.a,30.51);
+ for(const y of [2022,2025]){const s=R.forCar({year:y,make:'Tesla',model:'Model S'}),x=R.forCar({year:y,make:'Tesla',model:'Model X'}),pl=R.forCar({year:y,make:'Tesla',model:y===2022?'Model S Plaid (19 inch wheels)':'Model S Plaid (19in wheels)'});assert(s&&s.a<30&&x&&pl&&s.a!==pl.a,'plain Model S/X use the Long Range test car, not the Plaid ones ('+y+'): '+JSON.stringify([s,x,pl]));}
+ assert.equal(R.forCar({year:2025,make:'Tesla',model:'Model S'}).a,26.37);assert.equal(R.forCar({year:2022,make:'Toyota',model:'Corolla'}),null,'not an EV');
  assert(R.any({year:2022},r=>!!r.coef)&&R.any({year:2022,make:'Tesla'},r=>!!r.coef));
  console.log('EV label at 65 mph, EPA road-load speed curve, typical fallback');}

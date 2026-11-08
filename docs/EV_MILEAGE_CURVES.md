@@ -65,3 +65,21 @@ The owner asked to err on the side of caution, so the planner uses the pessimist
 
 1. **Calibration data to collect:** ANL D3 steady-state tables for US cars (Model 3 LR, Bolt). US single-speed tests: InsideEVs, Car and Driver (75 mph), Edmunds. Per-car Nyland pairs as validation fixtures.
 2. **Temperature and wind remain the dominant real-world error.** The Leaf track tests at 60/70 mph ran 9–27% above the dynamometer at the same speed. Propulsion's weather/HVAC model covers temperature only.
+
+## 0.0.428 - Model S / X matched to the wrong test cars
+
+Owner noticed a 2025 Model S picked 62 mph while the 2022–23 one picked 69 and asked why EPA's numbers differ by year. Rebuilt the data from the EPA Test Car List workbooks (MY2017–26, downloaded 2026-11-08; the generator reproduced the shipped file byte for byte first) and listed every Tesla Model S test row:
+
+| Test car list | Represented model | Target A / B / C |
+|---|---|---|
+| MY2021–23 (one test, vehicle SD321-428324, carried over) | Model S Long Range | 28.99 / 0.4592 / 0.0111 |
+| MY2021–23 | Model S Plaid 19" / 21" | 29.64 / 0.6164 / 0.0100 · 43.30 / 0.5143 / 0.0109 |
+| MY2024 (new test, SD224-531323) | Model S Long Range | 27.20 / 0.2522 / 0.0148 |
+| MY2025–26 (new test, SD225-547476) | Model S Long Range | 26.37 / 0.3082 / 0.0139 |
+| MY2024–25 | Model S Plaid 19" / 21" | 32.42 / 0.4783 / 0.0132 · 45.32 / 0.4407 / 0.0144 |
+
+Two separate things:
+- **Our matcher was wrong.** fueleconomy.gov lists the dual-motor car as plain "Model S" / "Model X". Word overlap scored "Model S Plaid" (1 of 2 words) above "Model S Long Range" (1 of 3), so the plain car got the average of the 19" and 21" Plaid test cars, whose A is 37–39 lbf (the 21" wheels) instead of 26–29. Now a test car whose name adds Plaid / Performance / Ludicrous loses 0.2 when the listing doesn't say it (Rivian's "Performance Dual" is its dual-motor drive and is exempt). Changed rows: Model S and X 2022–26, Model 3 Premium AWD 2026–27 (was Performance AWD, now Long Range AWD), Model Y Standard AWD 2026 (was Performance), Genesis GV60 (drops the Performance car from its average). Nothing else moved.
+- **EPA's fits differ, but not in total force.** A, B and C come from a curve fit to a coast-down; B and C trade off against each other. The Long Range tests give nearly the same total force at highway speed (60 mph: 96.5 / 95.6 / 94.9 lbf; 70 mph: 115.5 / 117.4 / 116.1 lbf) and the same 2.92–2.95 mi/kWh at 70 mph in our curve, but the 2021 fit puts more in B (linear) and the 2024–25 fits more in C (square), so the slope, and with it the balanced cruising speed, differs: 63 mph vs 55–56 mph. Efficiency at a given speed is consistent; the "balanced" pick is the sensitive part. MY2022–23 carry the MY2021 test unchanged (the same vehicle ID), which is normal carry-over, not a new measurement.
+
+PlannedTrip `ev-energy-428` so saved EV plans rebuild once.

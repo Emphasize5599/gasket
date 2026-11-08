@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.428 - Model S / X road load from the right test car
+
+Owner: a 2025 Model S picked 62 mph, the 2022–23 one 69; why do EPA's numbers differ? docs/EV_MILEAGE_CURVES.md 0.0.428. Our bug: fueleconomy.gov's plain "Model S" / "Model X" matched the Plaid 19"+21" test cars by word overlap (1/2 beats Long Range's 1/3), averaging in the 21" car's A (43–45 lbf). gen-ev-roadload.py `VARIANT` {plaid, performance, ludicrous}: a test car adding one the listing lacks scores −0.2 (Rivian "Performance Dual" exempt). Regenerated from the MY2017–26 Test Car List workbooks (the old code reproduced the shipped file exactly first). Changed only Model S/X 2022–26, Model 3 Premium AWD 2026–27, Model Y Standard AWD 2026, GV60. EPA side: the Long Range tests (MY2021 carried to 2023; new MY2024 and MY2025 tests) agree on total force at 60–70 mph (≈2.95 mi/kWh at 70 in our curve) but split B vs C differently, so the balanced pick is 63 (2022–23) vs 55–56 (2024–26). PlannedTrip `ev-energy-428`. Test propulsion (plain S/X ≠ Plaid, 2025 A 26.37). Not phone-verified.
+
+Phone check: Garage on the 2025 Model S → Best cruising speed about 56 mph (was 62).
+
 ## 0.0.427 - no time value in Best cruising speed
 
 Owner: the "My time is worth" setting is supposed to be gone everywhere; the Garage speed card (gas and EV) still had `#sTime` writing S.trip.timeValue (tripui already deletes it at start and plans with timeValue 0). Removed the box, DOT_TIME, the time-mode help/note; speedModel passes timeValue 0 (Speed.recommend keeps its generic option). Tests tire-fuel-ui (no #sTime / "/hr" on the EV card), trip_ui_test.py (no #sTime). Owner also asked which supported EV is best on the highway by our curve: 2025–27 Lucid Air Pure RWD 19 in (≈3.6 mi/kWh at 70 mph wall basis, balanced pick 57 mph), then Air Touring and 2024–26 Model 3 RWD (computed offline from RoadLoad × fueleconomy.gov highwayE, not in the app). Not phone-verified.

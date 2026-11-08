@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.428 - 2026-11-08
+
+- EV speed curves for the Tesla Model S and X (2022–26), Model 3 Premium AWD, Model Y Standard AWD and Genesis GV60 use the right EPA test car instead of the Plaid / Performance ones.
+- Bug fixes.
+
 ## 0.0.427 - 2026-11-08
 
 - Removed the "My time is worth" setting from Best cruising speed (gas and EV); the pick is always the balanced speed.

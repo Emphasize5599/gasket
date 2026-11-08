@@ -81,6 +81,9 @@ def candidates(by, year, make):
         t, w = tokens(name)
         yield name, set(t) - {want.lower()} - set(norm_make(x).lower() for x in made), w, sets
 
+# Words that name a faster, different-drag variant: a test car with one stands in for a listing only when nothing else fits.
+VARIANT = {'plaid', 'performance', 'ludicrous'}
+
 def match(by, year, make, model, base):
     want, wheel = tokens(model)
     want = set(want)
@@ -92,6 +95,10 @@ def match(by, year, make, model, base):
             if not set(core) <= t:
                 continue
             score = len(want & t) / max(1, len(want | t))
+            extra = (t - want) & VARIANT
+            if re.search(r'performance dual', md, re.I):  # Rivian's "Performance Dual" is its dual-motor drive, same body
+                extra -= {'performance'}
+            score -= .2 * len(extra)                      # a Plaid / Performance test car isn't the plain model
             if wheel and w:
                 score += .25 if wheel & w else -.25
             if score > best + 1e-9:
