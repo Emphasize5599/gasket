@@ -28,3 +28,18 @@ console.log('Rest traffic compared per leg against the leg\'s no-traffic time');
  c.route.stops[2]={label:'Knoxville',lat:35.96,lng:-83.92};assert.equal(c.restTolerance(1000),15,'per-leg values from another trip are not applied');
  c.windows={enabled:()=>true,config:()=>({delayMinutes:20})};c.S.trip.restTraffic=null;assert.equal(c.restTolerance(10),20,'with time windows on, unset = the window traffic allowance as before');}
 console.log('Rest traffic tolerance per leg or for the whole trip');
+
+// An added rest is a physical routing waypoint, even when it carries a saved departure time.
+{
+ const check=src.slice(src.indexOf('  function windowNoLeave('),src.indexOf('  function windowMiss('));
+ const c={route:{stops:[{}, {rest:{}}, {stopRole:'rest'}, {}]},
+  windows:{config:()=>({noLeave:[{from:'22:00',to:'08:00'}]})},
+  TripStops:require('../assets/web/tripstops'),TimeWindows:require('../assets/web/timewindows'),
+  windowDestination:()=>({leaveStart:'2026-11-10T02:00:00Z'}),
+  windowPointZone:()=> 'UTC',window:{WindowClock:true},WindowClock:{wall:()=> '2026-11-10T02:00'}};
+ vm.createContext(c);vm.runInContext(check,c);
+ assert(c.windowNoLeave(0,0),'trip origin observes the blocked hours');
+ assert.equal(c.windowNoLeave(1,0),null,'a timed rest is exempt');
+ assert.equal(c.windowNoLeave(2,0),null,'a restored rest waypoint is also exempt');
+ assert(c.windowNoLeave(3,0),'a user destination with a departure window observes the blocked hours');
+}

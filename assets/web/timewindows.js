@@ -93,8 +93,8 @@
   }
   // Rank every approved hourly route in a bounded dynamic-programming frontier.
   // This is a recommendation shortlist, not a proof of a global cost optimum.
-  function rankLabel(a,b,priority,early){var keys=['penalty'].concat(early?['depart']:[]).concat(priority==='time'?['minutes','weather','cost']:['cost','weather','minutes']);for(var i=0;i<keys.length;i++){var d=(a[keys[i]]||0)-(b[keys[i]]||0);if(Math.abs(d)>1e-7)return d;}return a.depart-b.depart;}
-  function keepLabels(rows,limit,priority,early){rows.sort(function(a,b){return rankLabel(a,b,priority,early);});var keep=[],used=new Set(),routes=new Set();rows.forEach(function(r){var key=r.path.map(function(x){return x.routeKey;}).join('|');if(!routes.has(key)&&keep.length<limit){routes.add(key);used.add(r);keep.push(r);}});for(var i=0;i<rows.length&&keep.length<limit;i++)if(!used.has(rows[i]))keep.push(rows[i]);return keep.sort(function(a,b){return rankLabel(a,b,priority,early);});}
+  function rankLabel(a,b,c){var keys=(c.minimumTraffic?['delay']:[]).concat(['penalty'],c.earlyEnabled?['depart']:[],c.priority==='time'?['minutes','weather','cost']:['cost','weather','minutes']);for(var i=0;i<keys.length;i++){var d=(a[keys[i]]||0)-(b[keys[i]]||0);if(Math.abs(d)>1e-7)return d;}return a.depart-b.depart;}
+  function keepLabels(rows,limit,c){function rank(a,b){return rankLabel(a,b,c);}rows.sort(rank);var keep=[],used=new Set(),routes=new Set();rows.forEach(function(r){var key=r.path.map(function(x){return x.routeKey;}).join('|');if(!routes.has(key)&&keep.length<limit){routes.add(key);used.add(r);keep.push(r);}});for(var i=0;i<rows.length&&keep.length<limit;i++)if(!used.has(rows[i]))keep.push(rows[i]);return keep.sort(rank);}
   async function shortlist(c){
     var valid=c.valid||function(){return true;},previous=[],screened=0,rejected={},byLeg=[],total=c.legs.reduce(function(n,l){return n+l.filter(function(r){return c.consent.allowed(r);}).length;},0),slice=Date.now();
     for(var i=0;i<c.legs.length;i++){
@@ -109,24 +109,28 @@
           var penalty=p.penalty+Math.max(0,start-(row.depart+HOUR-1))/60000+(dw?Math.max(0,dw.start-start,start-dw.end)/60000:Math.max(0,wait-allow));if(window)penalty+=Math.max(0,window.start-arrival,arrival-window.end)/60000;
           candidates.push({path:p.path.concat([row]),depart:p.depart,arrive:arrival,cost:p.cost+estimate.cost,minutes:(arrival-p.depart)/60000,weather:p.weather+weatherScore(row.reading),penalty:penalty,delay:delay});
         }
-        next=next.concat(keepLabels(candidates,c.perState||8,c.priority,c.earlyEnabled));screened++;if(c.progress)c.progress(screened,total);
+        next=next.concat(keepLabels(candidates,c.perState||8,c));screened++;if(c.progress)c.progress(screened,total);
       }
       previous=next;if(!previous.length)break;
     }
-    return {candidates:keepLabels(previous,c.limit||48,c.priority,c.earlyEnabled),screened:screened,total:total,rejected:rejected,byLeg:byLeg,blockedLeg:previous.length?null:byLeg.length};
+    return {candidates:keepLabels(previous,c.limit||48,c),screened:screened,total:total,rejected:rejected,byLeg:byLeg,blockedLeg:previous.length?null:byLeg.length};
   }
   async function recommend(c){
     var ranked=await shortlist(c);if(!ranked)return null;var valid=c.valid||function(){return true;},best=null,verified=[],checked=0,review=[],seenPlans=new Set();
+    function prefer(a,b){
+      if(c.minimumTraffic&&b){var delay=Math.ceil(a.trafficDelay-1e-7)-Math.ceil(b.trafficDelay-1e-7);if(delay)return delay<0;}
+      return better(a,b,c.priority,c.earlyEnabled);
+    }
     var next=0,width=Math.max(1,Math.min(3,c.width||1)),initial=c.initial||16;
     async function lane(){while(next<ranked.candidates.length&&valid()){
       if(best&&next>=initial)break;var path=ranked.candidates[next++].path,key=c.planKey?c.planKey(path):path.map(function(r){return r.routeKey+'|'+r.depart;}).join(';');if(seenPlans.has(key))continue;seenPlans.add(key);var candidate=await c.plan(path);checked++;if(!valid())return;
-      if(candidate&&candidate.review){if(!review.length)review=candidate.review;}else if(candidate){verified.push(candidate);if(better(candidate,best,c.priority,c.earlyEnabled))best=candidate;}
+      if(candidate&&candidate.review){if(!review.length)review=candidate.review;}else if(candidate){verified.push(candidate);if(prefer(candidate,best))best=candidate;}
       if(c.planProgress)c.planProgress(checked,best,ranked.candidates.length);
     }}
     await Promise.all(Array.from({length:width},lane));
     if(!valid())return null;
-    verified.sort(function(a,b){return better(a,b,c.priority,c.earlyEnabled)?-1:better(b,a,c.priority,c.earlyEnabled)?1:0;});
-    if(c.refine){best=null;for(var j=0;j<Math.min(c.finalists||2,verified.length)&&valid();j++){var refined=await c.refine(verified[j].path);if(refined&&!refined.review&&better(refined,best,c.priority,c.earlyEnabled))best=refined;else if(refined&&refined.review){review=review.concat(refined.review);if(!best)break;}if(c.refineProgress)c.refineProgress(j+1);}}
+    verified.sort(function(a,b){return prefer(a,b)?-1:prefer(b,a)?1:0;});
+    if(c.refine){best=null;var limit=c.finalists||2;for(var j=0;j<verified.length&&(j<limit||c.minimumTraffic&&!best)&&valid();j++){var refined=await c.refine(verified[j].path);if(refined&&!refined.review&&prefer(refined,best))best=refined;else if(refined&&refined.review){review=review.concat(refined.review);if(!best)break;}if(c.refineProgress)c.refineProgress(j+1);}}
     return valid()?{best:best,checked:checked,screened:ranked.screened,shortlisted:ranked.candidates.length,screening:ranked,review:best?[]:review}:null;
   }
   function count(legs,consent){var previous=[];legs.forEach(function(list,i){var rows=list.filter(function(r){return consent.allowed(r);}).slice().sort(function(a,b){return a.depart-b.depart;}),at=0,sum=0;previous=rows.map(function(row){if(!i)return {depart:row.depart,n:1};while(at<previous.length&&previous[at].depart<row.depart+HOUR)sum+=previous[at++].n;return {depart:row.depart,n:sum};});});return previous.reduce(function(n,r){return n+r.n;},0);}

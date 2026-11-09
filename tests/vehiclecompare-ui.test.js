@@ -2,6 +2,17 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.stack));p.setDefaultTimeout(12000);await p.route(/^https?:\/\//,r=>r.abort());
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ const layout=await p.evaluate(()=>{
+  const car=Garage.car(),host=document.createElement('div'),error='The route cannot satisfy the selected time windows. '.repeat(9)+'Check your traffic allowance.';
+  host.style.width=(innerWidth-32)+'px';document.body.append(host);
+  VehicleCompareUI.render(host,{view:{sort:'cost',scope:'trip',open:{}},rows:()=>[],selected:()=>car.id,legs:()=>[],locked:()=>false,
+   queue:()=>({cars:[car],state:{jobs:[{id:car.id,status:'Needs input',error},{id:car.id+'#2',status:'Needs input',error}]}})});
+  const title=host.querySelector('.vc-queue-car span'),row=title.closest('.vc-queue-row'),details=row.querySelector('details');
+  const folded=!details.open;details.open=true;
+  const result={folded,full:details.querySelector('p').textContent===error,titleWidth:title.getBoundingClientRect().width,rowWidth:row.clientWidth,overflow:host.scrollWidth>host.clientWidth};
+  host.remove();return result;
+ });
+ assert(layout.folded&&layout.full&&!layout.overflow&&layout.titleWidth>layout.rowWidth*.35,'long comparison errors stay expandable under a readable vehicle name');
  await p.evaluate(()=>{
   __app.S.staleHours=24;
   const A=__app,S=A.S;S.hereKey='TEST-HERE';S.trip.trafficForecast=true;__mocks.here=()=>({routes:[]});S.cars.forEach(c=>{c.tires={aired:Date.now(),spare:{kind:'none'}};});S.trip.fuel={mode:'miles',miles:'180'};S.trip.milesLeft='180';S.trip.bufferMi=20;S.trip.minSave=0;S.trip.tankPrice=4;S.trip.altCompare=false;S.limitLookup=false;S.speed.rule={on:false};S.brands={exxon:true};window.__first=S.carId;window.__second=S.cars[1].id;

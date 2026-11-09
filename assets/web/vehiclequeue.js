@@ -13,7 +13,7 @@
       if(!a.eligible(j.id)){j.status='Needs input';j.review=true;changed();continue;}
       j.status='Working';j.error='';delete j.review;changed();
       try{var status=await a.run(j.id,function(){return mine===epoch&&!cancelled;});j.status=cancelled?'Cancelled':status||'Ready';if(!cancelled&&a.notify)a.notify(j);}
-      catch(e){j.status=cancelled?'Cancelled':'Needs input';j.error=String(e.message||e).slice(0,200);if(!cancelled&&!a.eligible(j.id))j.review=true;if(!cancelled&&a.failed)a.failed(j);}
+      catch(e){j.status=cancelled?'Cancelled':'Needs input';j.error=String(e.message||e);if(!cancelled&&!a.eligible(j.id))j.review=true;if(!cancelled&&a.failed)a.failed(j);}
       finally{try{await a.restore();}catch(e){pause=true;j.status='Needs input';j.error='Could not restore the selected vehicle. Reopen the comparison before continuing.';if(a.failed)a.failed(j);}changed();}
     }}finally{running=false;changed();if(a.finished)a.finished(state());}
    }

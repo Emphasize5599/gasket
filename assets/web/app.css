@@ -1959,6 +1959,13 @@ body .task-hub.compact.full-message .jb-t { white-space:normal; }
 .vc-batch-estimate { margin:16px 0 4px; padding:16px; border:1px solid var(--accent); border-radius:16px; }
 .vc-batch-estimate strong { display:block; color:var(--accent); font-size:1.25rem; }
 .vc-batch-estimate p { margin-bottom:0; }
+.vc-queue-row { border-top:1px solid var(--line); padding:12px 0; min-width:0; overflow-wrap:anywhere; }
+.vc-queue-car { display:flex; align-items:center; gap:8px; min-height:44px; font-weight:600; }
+.vc-queue-car input { flex:none; }
+.vc-queue-status { display:block; margin:4px 0 0 26px; color:var(--ink-2); }
+.vc-queue-status details { margin:4px 0 8px; }
+.vc-queue-status summary { min-height:32px; }
+.vc-queue-status p { margin:4px 0 8px; }
 .vc-actions [aria-invalid="true"] { outline:2px solid var(--accent); outline-offset:2px; }
 .task-row { display:flex; align-items:center; gap:8px; min-height:48px; padding:8px 0; }
 .task-row + .task-row { border-top:1px solid var(--line); }
