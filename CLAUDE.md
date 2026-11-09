@@ -2,6 +2,17 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.434 - review key, changed forecasts, earlier-departure default, comparison size
+
+Owner's 433 log (6 queued plans, time windows): the gas car's own plan failed twice with "No workable route found" without any hourly log; comparison saves failed "Record too large" (comparison 255.8M chars); the EV plan rejected 285 hours over a 10 min early-departure allowance the owner couldn't find per car. Owner also wants changed-forecast prompts only for extreme hazards.
+- windowStateKey / PlannedTrip.identity included `S.speed.view` (the speed panel's open/sort/hidden UI state; garage tripSpeed creates it, lgTog toggles it), so drawing or folding that panel changed the review key mid-plan: `current()` made a new unreviewed session and windowRun's valid() returned silently (result null → "No workable route"). Now `speedKey` / `speedOf` drop `view`; `windowPlanKey` also drops earlyEnabled/delayMinutes. A lost session sets `state.lost`: adjustError "Trip settings changed while planning… Review hazards again" + warn log. Cause inferred from code + log (no hourly logs after discovery); not reproduced from the phone trip.
+- windowConditions: decision==null on an approved row (`consent.allowed(row)`) with no `windowExtreme` hazard (tornado / flood / tropical / alert level 2) and no tire risk = accepted (debug "Forecast changed on an approved hour: accepted (nothing extreme)"). Unapproved/new hours still follow auto-approval rules and review.
+- `S.earlyDepartOn` / `S.earlyDepartMin` (Settings → Trip planner, `data-k` switch + `#earlyDepartMin`), migrated once from the trip's windowPlan; windowplanning `config()` copies them into windowPlan.earlyEnabled/delayMinutes; the window form edits the same globals (restored on a failed save) with a note.
+- `compareFit` (COMPARE_BUDGET 30M via PlannedTrip.size): over budget, non-active plans drop `planned` (largest first), then `replay`; logged "Comparison trimmed to fit the saved trip".
+- Tests: windowplanning-ui `changed` now injects a tornado (still reviewed), new `changedmild` (fog on approved hours: no review, logged).
+
+Phone checks: same comparison queue: the gas car's own plan should plan (or say what to review), no "Record too large". Settings → Trip defaults → Leave earlier when traffic allows / minutes. A forecast update on approved hours shouldn't ask unless extreme.
+
 ## 0.0.433 - Compare: per-plan reviews, one checkbox per car, tile ✕, no lag
 
 Owner (431 log): reviews weren't remembered so a car couldn't be compared several ways; tiles should need the car ticked; tiles need an ✕; "Plan another way" unclear; ticking a car hangs; one checkbox per car even with two priorities.

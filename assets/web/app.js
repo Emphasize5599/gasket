@@ -1259,6 +1259,8 @@
       '<div class="field"><div class="lbl">Look up posted speed limits<small>Free, from the Federal Highway Administration\'s road inventory (sends points along your route to geo.dot.gov). Off = state maximums only. No Google lookups.</small></div>' + sw('limitLookup', S.limitLookup !== false) + '</div>' +
       '<div class="field"><div class="lbl">Get prices when the app opens<small>Off: the map shows the last prices you got; tap ↻ (or Search this area) for fresh ones. On: searches nearby every time you open the app — uses Google lookups each time.</small></div>' + sw('autoRefresh', !!S.autoRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Old saved prices on a trip<small>When a trip reuses stations whose prices are older than the hours above.</small></div><select id="priceRefreshMode">' + [['ask', 'Ask me'], ['always', 'Refresh'], ['never', 'Use on-device data']].map(function (o) { return '<option value="' + o[0] + '"' + ((S.priceRefreshMode || 'ask') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><div class="lbl">Leave earlier when traffic allows<small>Trips with time windows, every vehicle: leave as early as your window allows when traffic adds no more than the minutes below over the whole trip. Off: departures are picked by cost or time alone.</small></div>' + sw('earlyDepartOn', S.earlyDepartOn === true) + '</div>' +
+      '<div class="field"><div class="lbl">Extra traffic allowed when leaving earlier<small>Minutes, whole trip (0–240).</small></div><input id="earlyDepartMin" type="number" inputmode="numeric" min="0" max="240" step="1" value="' + esc(S.earlyDepartMin == null ? 20 : S.earlyDepartMin) + '"></div>' +
       '<div class="field"><div class="lbl">Always get fresh prices when finding stops<small>Off: stations and prices already found along a route are reused for up to ' + S.staleHours + ' hours (faster, fewer Google lookups). On: search again every time.</small></div>' + sw('alwaysRefresh', !!S.alwaysRefresh) + '</div>' +
       '<div class="field"><div class="lbl">Trip history<small class="keep" id="histCount">' + histCount() + '</small></div><button class="btn tonal sm" id="histClear">Clear</button></div>' + (window.RidbUI ? RidbUI.html() : '') + '</div>';
     h += '<div class="card"><h3>EV & hydrogen</h3>' +
@@ -1418,6 +1420,7 @@
     S.radiusMi = Math.min(25, Math.max(2, parseFloat($('radiusMi').value) || 8));
     S.staleHours = Math.max(1, parseFloat($('staleHours').value) || 24);
     if ($('priceRefreshMode')) S.priceRefreshMode = $('priceRefreshMode').value;
+    if ($('earlyDepartMin')) { var em = parseInt($('earlyDepartMin').value, 10); S.earlyDepartMin = Number.isFinite(em) ? Math.max(0, Math.min(240, em)) : 20; }
     S.logLevel = parseInt($('logLevel').value, 10) || 5;
     S.nrelKey = $('nrelKey').value.trim();
     S.ocmKey = $('ocmKey').value.trim();

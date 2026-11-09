@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.434 - 2026-11-09
+
+- Opening or folding the cruising-speed panel no longer throws away your approved hazard review, which could make a queued comparison vehicle fail with "No workable route found".
+- Time-window plans: when the forecast changes for an hour you already approved, Gasket asks again only for something extreme (tornado, flooding, tropical storm, severe warning); other changes are accepted.
+- "Leave earlier when traffic allows" and its minutes are now in Settings → Trip defaults and apply to every vehicle.
+- Large comparisons save again (other vehicles' saved plans are trimmed to fit).
+- Bug fixes.
+
 ## 0.0.433 - 2026-11-08
 
 - Compare remembers each plan's review: comparing one vehicle with both priorities no longer asks you to review it again.
