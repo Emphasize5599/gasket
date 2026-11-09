@@ -662,7 +662,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         var toll=tripTolls(raw);if(!tollPolicyCheck(raw).ok){missing++;continue;}if(priority==='cost'&&toll.cost==null){missing++;continue;}
         if(!optEta){var sample=recommendationOpts(m,g,sel,raw),ms=eta.rate('kernel|'+KIND(),KIND()==='gas'?60:120)*TripETA.work(sample)/Math.max(1,Planner.size());optEta=eta.begin('optimize','optimize|'+KIND()+'|'+Math.round(sample.cands.length/250),it.total*optPer,Math.max(100,ms),'Route optimization ('+it.total+' combinations)');}
         var routeBest=await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,
-          evaluate:async function(x){var o=recommendationOpts(m,g,sel,raw);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=true;var p=await planAsync(o,valid,10);if(!p.ok||p.firstDip)return null;var saved=KIND()==='gas'?sel.reduce(function(n,k,i){return n+(recommendationTimeSaved.get(RouteChoices.key(i,lists[i][k]))||0);},0):0;return {cost:choiceCost({plan:p,startGal:base.startGal})+(toll.cost||0),minutes:routeMin({model:m,res:{plan:p,opts:o}})-saved,opts:o,plan:p};},
+          evaluate:async function(x){var o=recommendationOpts(m,g,sel,raw);o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=priority==='time'?'time':null;o.lite=true;
+            // Settings sweeps plan on a sampled station pool (as flexible-time planning does); the winner is re-planned on every
+            // station when it's applied. A sampled pool that can't make the trip retries with all of them (0.0.439).
+            var full=o.cands,sample=T.previewCandidates(o);o.cands=sample;o._full=full;var p=await planAsync(o,valid,10);if((!p.ok||p.firstDip)&&sample.length<full.length&&valid()){o.cands=full;p=await planAsync(o,valid,10);}if(!p.ok||p.firstDip)return null;var saved=KIND()==='gas'?sel.reduce(function(n,k,i){return n+(recommendationTimeSaved.get(RouteChoices.key(i,lists[i][k]))||0);},0):0;return {cost:choiceCost({plan:p,startGal:base.startGal})+(toll.cost||0),minutes:routeMin({model:m,res:{plan:p,opts:o}})-saved,opts:o,plan:p};},
           progress:function(n){if(optEta)optEta.progress(optDone+n);progress('Optimizing approved trip '+(checked+1)+' / '+it.total+' · '+n+' settings checked');}});
         if(!valid())return;checked++;optDone+=optPer;if(optEta)optEta.progress(optDone);if(routeBest&&AutoTrip.better(routeBest,best,priority))best=Object.assign(routeBest,{sel:sel.slice(),candidates:g});await breathe();
       }
@@ -670,7 +673,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(!best){var noPlan=Error('No approved route meets your reserve floor and toll preferences.');noPlan.noPlan=true;throw noPlan;}
       if(compareReviewContext()!==review||JSON.stringify([S.speed,S.trip.propulsionOffset,S.trip.propulsionRoads])!==speeds)throw Error('Your vehicle or trip settings changed. Review hazards and try again.');
       // Acceptance revalidates a full (not preview) plan and saves before leaving this stage.
-      best.autoOpts=Object.assign({},best.opts,{lite:false});best.autoBuffer=best.buffer;best.autoValid=function(){return valid()&&compareReviewContext()===review&&JSON.stringify([S.speed,S.trip.propulsionOffset,S.trip.propulsionRoads])===speeds;};
+      best.autoOpts=Object.assign({},best.opts,{lite:false,cands:best.opts._full||best.opts.cands});delete best.autoOpts._full;best.autoBuffer=best.buffer;best.autoValid=function(){return valid()&&compareReviewContext()===review&&JSON.stringify([S.speed,S.trip.propulsionOffset,S.trip.propulsionRoads])===speeds;};
       if(!await replaceRecommendation(best))throw Error('The selected automatic trip could not be applied.');
       if(missing)result.notes.push('Automatic planning could not compare '+missing+' route combinations with missing speed, station or toll data. Best of the checked options shown.');
       result.notes.push('Automatically prioritized '+(priority==='time'?'shortest estimated total time':'lowest estimated cost')+'. Speed unchanged; buffer '+best.buffer+' mi, detour '+best.detour+' min.');
@@ -1776,8 +1779,12 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     S.trip.depart = localNow();
     var d = $('tDepart'); if (d && document.activeElement !== d) d.value = S.trip.depart;
   }, 20000);
+  // "Now" during a batch: one clock for every vehicle (renewed every 30 minutes), so each vehicle's traffic forecasts
+  // and hazard timing reuse the previous vehicle's instead of reading the road again a few minutes later (0.0.439).
+  var queueClock=0;
+  function nowClock(){if(!queueWorking)return new Date();if(!queueClock||Date.now()-queueClock>1800e3)queueClock=Math.floor(Date.now()/60000)*60000;return new Date(queueClock);}
   function futureDepart() {
-    if (S.trip.departNow) return new Date(); var d = S.trip.depart ? new Date(S.trip.depart) : null; return d && !isNaN(d) && d.getTime() > Date.now() - 600e3 ? d : null; }
+    if (S.trip.departNow) return nowClock(); var d = S.trip.depart ? new Date(S.trip.depart) : null; return d && !isNaN(d) && d.getTime() > Date.now() - 600e3 ? d : null; }
   function departAt() { return futureDepart() || new Date(); }
   function isHere(x) { return /^(my|your) (current )?location$/i.test(String(x || '').trim()); }
   function sw(id, on) { return '<label class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></label>'; }
@@ -4391,7 +4398,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     }
     await paint();
     var t0 = Date.now();
+    // Automatic planning re-plans every route and setting right after this, so the first plan only needs to be a sampled,
+    // lite one (it used to take 150–200 s on 3,000+ stations before the search even began). A sample that fails uses all.
+    var quick=!!autoPlanning&&!scheduleCollecting&&cands.length>300,fullOpts=opts;if(quick){opts=Object.assign({},opts,{lite:true});opts.cands=T.previewCandidates(opts);}
     var plan = await planAsync(opts), estUsed = 0;
+    if(quick&&(!plan.ok||plan.firstDip)){opts=fullOpts;plan=await planAsync(opts);}
     // nothing priced in reach somewhere (very rural): let stations with no posted price fill the gap, at an estimate
     if ((!plan.ok || plan.firstDip) && g.unpricedCands && g.unpricedCands.length) {
       var oEst = Object.assign({}, opts, { cands: cands.concat(g.unpricedCands) });
@@ -5887,6 +5898,14 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   var queueTick=null,queueStarted=0;
   async function queueStart(){if(compareLocked())return;compareCapture();var q=comparisonQueue();if(!q.state().jobs.length)q.select([activeKey()]);
     var missing=q.state().jobs.filter(function(j){return !queuePrepared(compareEntries.get(j.id));}).map(function(j){return j.id;});if(missing.length){compareRender();queueHighlight(missing);return;}
+    // Order the batch so work in memory is reused: gas vehicles first (they share one station inventory and price
+    // checks), then hydrogen, then EVs (charger inventory and tariffs); same model together, and each vehicle's plans
+    // back to back. The ticked order breaks ties (0.0.439).
+    var rank={gas:0,h2:1,ev:2},jobIds=q.state().jobs.map(function(j){return j.id;}),firstAt=new Map();jobIds.forEach(function(id,i){if(!firstAt.has(baseId(id)))firstAt.set(baseId(id),i);});
+    var modelName=function(id){var c=carOf(id)||{};return [c.make||'',c.model||''].join(' ').toLowerCase();};
+    var ordered=jobIds.slice().sort(function(a,b){var ca=carOf(a),cb=carOf(b),ka=rank[Garage.kind(ca)]||0,kb=rank[Garage.kind(cb)]||0;return ka-kb||modelName(a).localeCompare(modelName(b))||firstAt.get(baseId(a))-firstAt.get(baseId(b))||jobIds.indexOf(a)-jobIds.indexOf(b);});
+    if(ordered.join('\n')!==jobIds.join('\n')){q.select(ordered);LG.info('compare','Queue ordered by fuel type and model',{order:ordered});}
+    queueClock=0;
     queueWorking=true;queueSkipPrices=false;queueViewCar=activeKey();queueStarted=Date.now();eta.clear();var r=await queueNotify('start','Preparing queued vehicles',queueViewCar);if(r&&r.error){A.toast('Background planning could not start. Keep Gasket open.');}
     navRender();queueTick=setInterval(function(){var s=q.state(),done=s.jobs.filter(function(j){return j.status==='Ready'||j.status==='Adjustments ready';}).length,text=eta.text(window.KeylessGas&&KeylessGas.isPaused());queueNotify('progress',done+' / '+s.jobs.length+' ready · '+text,queueViewCar);if(window.Tasks)Tasks.upsert('vehicle-queue',{text:'Planning vehicles · '+done+' / '+s.jobs.length+' ready · '+text,frac:done/Math.max(1,s.jobs.length),cancel:function(){q.cancel();}});var live=$('vcQueueTime');if(live)live.textContent='Elapsed '+Math.floor((Date.now()-queueStarted)/60000)+' min · '+text;},10000);
     try{await q.start();}finally{if(window.Tasks)Tasks.remove('vehicle-queue');}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.439 - 2026-11-09
+
+- Faster Compare queues: automatic planning checks settings on a sampled set of stations and re-plans only the winner on every station; the first plan before the search is quick; saved price history is looked up directly instead of searched per station.
+- A batch uses one "Now" departure (renewed every 30 minutes), so vehicles reuse each other's traffic forecasts and hazard timing.
+- The batch runs gas vehicles first, then hydrogen, then EVs, the same model together and each vehicle's plans back to back.
+- Bug fixes.
+
 ## 0.0.438 - 2026-11-09
 
 - Compare: a reviewed vehicle no longer needs another review after an hour, so long queues don't turn finished plans into "needs input". A plan asks for review again only when an extreme hazard (tornado, flooding, tropical storm, severe warning) appears that wasn't there before; one that goes away never asks.

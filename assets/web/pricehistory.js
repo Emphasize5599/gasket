@@ -5,12 +5,12 @@
   var P=root.Pricing||(typeof require==='function'?require('./pricing.js'):null);
   function stamp(s,at){Object.keys(s.prices||{}).forEach(function(g){s.prices[g]=Object.assign({},s.prices[g],{observedAt:at});});return s;}
   function create(KV){
-    var stationCache=null,groupCache=null;
+    var stationCache=null,groupCache=null,groupIndex=null;
     function get(k,fallback){var o=KV.get(NS,k);return o&&o.v!=null?o.v:fallback;}
     function put(k,v){if(KV.put(NS,k,v)===false)throw new Error('Price history could not be saved; check available app storage.');}
     function key(s){return (s.brand||'')+'|'+String(s.id||[s.lat,s.lng,s.address].join('|'));}
     function observe(stations,observedAt){
-      groupCache=null;
+      groupCache=null;groupIndex=null;
       var index=get('index',[]),indexed=new Set(index),added=false;
       stations.forEach(function(s){
         if(!s||!s.id&&!Number.isFinite(s.lat))return;
@@ -59,10 +59,13 @@
       Object.keys(m.latest||{}).forEach(function(g){var r=m.latest[g],old=s.prices[g],oldAt=old&&(old.observedAt||Date.parse(old.updated)||0)||0;if(!old||!r.observedAt||r.observedAt>=oldAt)s.prices[g]={price:r.price,source:r.source,updated:r.sourceUpdatedAt,observedAt:r.observedAt};});
       return s;
     }));return groupCache;}
+    // alias -> group, built once per group set: recover() was groups().find() per station, so a 14,700-station batch
+    // against a large history took ~2 minutes (0.0.439).
+    function groupOf(id){if(!groupIndex){groupIndex=new Map();groups().forEach(function(t){if(!groupIndex.has(key(t)))groupIndex.set(key(t),t);(t.stationAliases||[]).forEach(function(a){if(!groupIndex.has(a))groupIndex.set(a,t);});});}return groupIndex.get(id)||null;}
     function near(bounds){return groups().filter(function(s){return Number.isFinite(s.lat)&&Number.isFinite(s.lng)&&s.lat>=bounds[0]&&s.lng>=bounds[1]&&s.lat<=bounds[2]&&s.lng<=bounds[3];}).map(function(s){return Object.assign({},s,{prices:Object.assign({},s.prices)});});}
     function history(id,options){
       options=options||{};if(typeof id==='object')id=key(id);
-      var group=groups().find(function(s){return key(s)===id||(s.stationAliases||[]).includes(id);}),ids=group?group.stationAliases||[id]:[id],rows=[];
+      var group=groupOf(id),ids=group?group.stationAliases||[id]:[id],rows=[];
       ids.forEach(function(alias){var meta=get('station|'+alias,null);if(!meta)return;for(var i=0;i<Math.ceil(meta.count/PAGE);i++)rows=rows.concat(get('rows|'+alias+'|'+i,[]));});
       // Original pages remain intact for backup; collapse repeated observations
       // only in the unified read view, not by deleting records during migration.
@@ -72,12 +75,12 @@
       return options.limit?rows.slice(0,options.limit):rows;
     }
     function latest(s,grade){
-      var id=key(s),group=groups().find(function(t){return key(t)===id||(t.stationAliases||[]).includes(id);}),best=null;
+      var id=key(s),group=groupOf(id),best=null;
       (group?group.stationAliases:[id]).forEach(function(alias){var m=get('station|'+alias,null),r=m&&m.latest&&m.latest[grade],at=function(t){return t&&(t.observedAt||Date.parse(t.sourceUpdatedAt)||0)||0;};if(r&&(!best||at(r)>at(best)))best=r;});
       return best||history(s,{grade:grade,limit:1})[0]||null;
     }
     function recover(stations){return stations.map(function(s){
-      var prices=Object.assign({},s.prices),changed=false,group=groups().find(function(t){return key(t)===key(s)||(t.stationAliases||[]).includes(key(s));});
+      var prices=Object.assign({},s.prices),changed=false,group=groupOf(key(s));
       ['regular','midgrade','premium','diesel'].forEach(function(g){var gp=group&&group.prices[g],r=gp&&{price:gp.price,source:gp.source,sourceUpdatedAt:gp.updated,observedAt:gp.observedAt},old=prices[g],existing=old&&(old.observedAt||Date.parse(old.updated)||0)||0;
         if(!r||!['Google Maps web','walmart.com','murphyusa.com'].includes(r.source)||!r.observedAt||r.observedAt<=existing)return;
         prices[g]={price:r.price,source:r.source,updated:r.sourceUpdatedAt,observedAt:r.observedAt};changed=true;

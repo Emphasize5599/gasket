@@ -31,3 +31,9 @@ assert.equal(allRecovered.prices.premium.price,3.89);assert.equal(allRecovered.p
 assert.equal(allRecovered.prices.premium.updated,null,'recovery preserves unknown pump-update time');
 assert.equal(allRecovered.prices.diesel.source,'murphyusa.com');
 console.log('Persistent station registry, all grades, 300+ observations, restart, cache deduplication, queries and backup namespace passed');
+{ // 0.0.439: recover() looks stations up by alias, not with groups().find() per station (a 14,700-station batch took ~2 min)
+  const d2=new Map(),K2={get:(ns,k)=>d2.has(ns+'|'+k)?{v:JSON.parse(d2.get(ns+'|'+k))}:null,put:(ns,k,v)=>d2.set(ns+'|'+k,JSON.stringify(v))},h=create(K2),N=12000,rows=[];
+  for(let i=0;i<N;i++)rows.push({id:'b'+i,brand:'exxon',name:'B'+i,lat:30+i*0.01,lng:-90,source:'Google Maps web',prices:{regular:{price:3,source:'Google Maps web',observedAt:1000+i}}});
+  h.observe(rows);h.recover([rows[0]]);const t=Date.now(),out=h.recover(rows.map(s=>Object.assign({},s,{prices:{regular:{price:2.9,observedAt:10}}})));
+  assert.equal(out.filter(s=>s.prices.regular.price===3).length,N,'every station recovers its newer saved price');assert(Date.now()-t<2000,'recover is linear: '+(Date.now()-t)+' ms');
+}
