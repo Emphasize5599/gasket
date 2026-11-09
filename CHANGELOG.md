@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.435 - 2026-11-09
+
+- Keep vehicle names readable in Compare and put full planning errors under expandable details.
+- Add an opt-in Trip defaults setting that raises the traffic allowance for a plan by the smallest increase that works among the trips checked.
+- Apply “Hours I won’t leave” at the trip start and original destinations with a departure window. Added rests use their own timing settings.
+
 ## 0.0.434 - 2026-11-09
 
 - Opening or folding the cruising-speed panel no longer throws away your approved hazard review, which could make a queued comparison vehicle fail with "No workable route found".
