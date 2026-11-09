@@ -5781,7 +5781,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function fixedHazardReview(s){
     var review=fixedHazardReviews.get(baseId(s.id));
-    if(!review||Date.now()-review.at>=3600000||review.proof.context!==compareReviewContext(s))return null;
+    if(!review||review.proof.context!==compareReviewContext(s))return null;
     var legs=s.route&&s.route.legs,split=multiLeg(s.route)&&legs&&legs.length&&legs.every(function(l){return l.alts;});
     var lists=split?legs.map(function(l){return l.alts;}):[s.alts||[]],sel=split?legs.map(function(l){return l.sel||0;}):[s.altSel||0],answers=s.trip.routeChoices||{};
     if(s.trip.altCompare&&RouteChoices.pending(lists,sel,answers).length)return null;
@@ -5935,7 +5935,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(compareOwner&&compareOwner!==activeKey())return;
     var car=Garage.car(),key=activeKey(),old=compareEntries.get(key),journey=compareTimingKey(route,S.trip),places=VehicleCompare.places(route);
     if(compareJourney&&compareJourney.places!==places){compareEntries.clear();old=null;compareReviewed=0;A.toast('Destinations changed. Vehicle comparison restarted for this trip.');}
-    else if(compareJourney&&compareJourney.key!==journey){compareEntries.forEach(function(s){if(s.id!==key){['depart','departNow','returnTrip','backAuto','backAt','trafficForecast'].forEach(function(k){s.trip[k]=S.trip[k];});s.result=null;s.reviewedAt=0;s.needsReview=true;s.hzCache=null;}});compareReviewed=0;}
+    else if(compareJourney&&compareJourney.key!==journey){LG.info('compare','Trip timing changed: other plans need replanning',{plan:key});compareEntries.forEach(function(s){if(s.id!==key){['depart','departNow','returnTrip','backAuto','backAt','trafficForecast'].forEach(function(k){s.trip[k]=S.trip[k];});s.result=null;s.reviewedAt=0;s.needsReview=true;s.hzCache=null;}});compareReviewed=0;}
     compareJourney={places:places,key:journey};compareOwner=key;
     var profile=VehicleCompare.profile(car),settingsKey=compareSettingsKey(),changed=old&&(old.profile!==profile||old.settingsKey&&old.settingsKey!==settingsKey);
     if(changed){compareReviewed=0;result=null;model=buildModel(rawRoute,carModel());hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();}
@@ -5944,19 +5944,24 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(approved)compareReviewKey=compareSafetyKey();else{LG.info('compare','Review invalidated',{hasReview:!!compareReviewed,contextMatches:!!proof&&proof.context===compareReviewContext(),approved:!!approved});compareReviewed=0;}
     }
     var hazards=[];for(var i=0;i<hzLegs();i++){var a=hzAlts(i)[hzSel(i)],e=a&&hzCache.get(a),offset=i&&model.legEnds?model.legEnds[i-1]:0;(e&&e.hz||[]).forEach(function(x){hazards.push(Object.assign({},x,{fromMi:x.fromMi+offset,toMi:x.toMi+offset}));});}
+    // Reviews don't expire with the clock: a reviewed plan only needs another look when an extreme hazard appears that
+    // wasn't there at the review (one that went away never asks).
+    var extreme=hazards.filter(compareExtreme).map(function(h){return h.kind+'|'+(h.event||'');}).filter(function(k,i,a){return a.indexOf(k)===i;}),baseline=compareReviewed&&old&&old.reviewedAt===compareReviewed&&old.reviewExtreme?old.reviewExtreme:null;
+    if(baseline){var added=extreme.filter(function(k){return baseline.indexOf(k)<0;});if(added.length){LG.info('compare','New extreme hazard: review needed',{plan:key,added:added});compareReviewed=0;compareReviewProof=null;}}
     var s={id:key,mode:old&&old.mode,savedAt:Date.now(),profile:profile,kind:KIND(),trip:VehicleCompare.clone(S.trip),speed:VehicleCompare.clone(S.speed),route:route,alts:alts,altSel:altSel,altSure:altSure,rawRoute:rawRoute,model:model,result:result,replay:replay,evRates:evRates,hzCache:hzCache,hzModels:hzModels,hzRiskAcks:hzRiskAcks,hzLeg:hzLeg,choiceSavedId:choiceSavedId,choiceChecked:choiceChecked,choiceReviewedAt:choiceReviewedAt,choiceComplete:choiceComplete,choicePool:choicePool,choiceCandidates:choiceCandidates,routeReview:routeReview,reviewedAt:compareReviewed,needsReview:!compareReviewed,hazards:hazards,tolls:choiceLists().map(function(l,i){return tollsOf(l[hzSel(i)]);}),startEstimated:!(+S.trip[tankPriceKey()]>0),resumeStep:step===ST_COMPARE?old&&old.resumeStep||ST_ADVISORY:Math.min(step,ST_STOPS)};
     Object.defineProperty(s.trip,'routeChoices',{value:VehicleCompare.clone(S.trip.routeChoices||{}),writable:true,configurable:true,enumerable:false});
     s.speedTiming=KIND()==='gas'&&!speedOff()?flatSecs(model).map(function(sc,i){var offsets=result&&result.speedState&&result.speedState.offsets||{};return Object.assign({},sc,{offset:offsets[i]==null?Garage.ruleOff(sc.limit):offsets[i],lo:25,hi:Math.max(80,+S.speed.max||84)});}):[];
     s.evRecovery=evRecovery&&evRecovery.base===result?evRecovery:null;s.adjustError=adjustError;
-    s.reviewKey=compareReviewKey;s.reviewProof=compareReviewProof;s.settingsKey=settingsKey;s.planned=PlannedTrip.capture(s,plannedSettings(s.id));compareEntries.set(key,s);comparePersist();
+    s.reviewExtreme=compareReviewed?(baseline||extreme):null;s.reviewKey=compareReviewKey;s.reviewProof=compareReviewProof;s.settingsKey=settingsKey;s.planned=PlannedTrip.capture(s,plannedSettings(s.id));compareEntries.set(key,s);comparePersist();
   }
-  function compareUsable(s){return !!(s&&s.result&&s.result.plan.ok&&(s.id===activeKey()&&savedPlanCurrent()||s.reviewedAt&&Date.now()-s.reviewedAt<3600000&&s.settingsKey===compareSettingsKey()&&s.profile===VehicleCompare.profile(carOf(s.id))&&!s.needsReview));}
+  function compareExtreme(h){return /^(tornado|flood|tropical)$/.test(h.kind)||h.kind==='alert'&&h.level===2;}
+  function compareUsable(s){return !!(s&&s.result&&s.result.plan.ok&&(s.id===activeKey()&&savedPlanCurrent()||s.reviewedAt&&s.settingsKey===compareSettingsKey()&&s.profile===VehicleCompare.profile(carOf(s.id))&&!s.needsReview));}
   function comparePrepared(s){
     if(!s)return false;
     if(s.id===activeKey()&&savedPlanCurrent())return true;
     if(s.settingsKey!==compareSettingsKey()||s.profile!==VehicleCompare.profile(carOf(s.id)))return false;
     if(s.trip.windowPlan?.enabled&&windows)return windows.readyFor(s);
-    return !!(fixedHazardReview(s)||s.reviewedAt&&Date.now()-s.reviewedAt<3600000&&!s.needsReview);
+    return !!(fixedHazardReview(s)||s.reviewedAt&&!s.needsReview);
   }
   function compareSwitch(id,restoreOnly){
     if(compareLocked()&&!queueSwitching)return false;if(!restoreOnly){collectSafe();compareCapture();}var s=compareEntries.get(id),car=carOf(id);if(!car)return false;
@@ -5972,7 +5977,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     var changed=s.profile!==VehicleCompare.profile(car)||s.settingsKey&&s.settingsKey!==compareSettingsKey();model=!changed&&s.model||buildModel(rawRoute,carModel());result=!changed?s.result||null:null;replay=s.replay||null;evRates=s.evRates||null;
     hzCache=!changed&&s.hzCache||new WeakMap();hzModels=!changed&&s.hzModels||new WeakMap();hzRiskAcks=!changed&&s.hzRiskAcks||new WeakMap();hzLeg=s.hzLeg||0;hzFitKey=null;
     choiceOwner=id;choiceSavedId=s.choiceSavedId||route.histId||null;choiceChecked=!!s.choiceChecked;choiceReviewedAt=s.choiceReviewedAt||0;choiceComplete=!!s.choiceComplete;choicePool=s.choicePool||null;choiceCandidates=s.choiceCandidates||new Map();routeReview=s.routeReview||null;
-    compareOwner=id;compareReviewed=changed?0:s.reviewedAt||0;compareReviewKey=s.reviewKey||null;compareReviewProof=changed?null:s.reviewProof||null;if(compareReviewed&&Date.now()-compareReviewed>=3600000){compareReviewed=0;compareReviewProof=null;hzCache=new WeakMap();hzRiskAcks=new WeakMap();}
+    compareOwner=id;compareReviewed=changed?0:s.reviewedAt||0;compareReviewKey=s.reviewKey||null;compareReviewProof=changed?null:s.reviewProof||null;
     var shared=!changed&&!s.trip.windowPlan?.enabled&&fixedHazardReview(s);
     if(shared){compareReviewed=shared.at;compareReviewProof=shared.proof;compareReviewKey=compareSafetyKey();hzCache=shared.cache;hzRiskAcks=shared.acks;}
     evRecovery=!changed&&s.evRecovery&&s.evRecovery.base===result&&s.evRecovery.state!=='running'?s.evRecovery:null;adjustError=!changed?s.adjustError||'':'';opened={};routeBounds=null;userMoved=false;layer.clearLayers();drawn={};try{if(!queueWorking){A.save();window.dispatchEvent(new Event('garagechange'));}}finally{compareSwitching=false;}return true;

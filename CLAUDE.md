@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.438 - reviews don't expire on the clock
+
+Owner's 436 log: several queue tiles went "needs input" though plans succeeded. Two causes: (1) EV plans failing "Speed limits could not finish loading" during traffic forecasts (fixed by 0.0.437); (2) the 1-hour review expiry: the queue ran 21:04–22:38, so a review done before it ran out while later vehicles planned (compareSwitch zeroed compareReviewed past 1 h; compareUsable/comparePrepared/fixedHazardReview/windowplanning `fresh()`/readyFor all had 3600000 checks), giving "Review invalidated {hasReview:false}" and tiles needing review. Route auto-switching itself was fine (windowRun's proof lists all allowed roads). Now no clock expiry anywhere: a review stays valid until its key/context (trip, roads, vehicle, settings) changes. Safety: compareCapture keeps `reviewExtreme` (kind|event of extreme hazards: tornado/flood/tropical/alert level 2, `compareExtreme`) from the first capture after a review; a later capture with an extreme hazard not in that baseline logs "New extreme hazard: review needed" and clears the review (gone-away hazards never ask). Window plans still re-read hours at plan time and ask only for extreme changes (0.0.434). compareCapture logs "Trip timing changed: other plans need replanning" when the journey key resets other entries. Test vehiclecompare-ui: clock +2 h after the batch keeps both plans usable, no Review setup (fails on 437). The extreme-hazard re-review path has no automated test. Not phone-verified.
+
+Phone checks: queue several vehicles on a long trip (over an hour): finished tiles stay Ready; reopen after an hour: no Review setup unless a new tornado/flood/tropical/severe warning shows on the route.
+
 ## 0.0.434 - review key, changed forecasts, earlier-departure default, comparison size
 
 Owner's 433 log (6 queued plans, time windows): the gas car's own plan failed twice with "No workable route found" without any hourly log; comparison saves failed "Record too large" (comparison 255.8M chars); the EV plan rejected 285 hours over a 10 min early-departure allowance the owner couldn't find per car. Owner also wants changed-forecast prompts only for extreme hazards.

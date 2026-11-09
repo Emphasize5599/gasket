@@ -12,7 +12,8 @@
   function parse(s){try{return WindowClock.parse(s,config().legacyZone||initialZone);}catch(e){return NaN;}}
   function label(t,z){var o={month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:!A.S.clock24};if(WindowClock.zone(z)){o.timeZone=z;o.timeZoneName='short';}return new Date(t).toLocaleString([],o);}
   function rangeLabel(a,b){var x=new Date(a),y=new Date(b);return label(a)+' – '+(x.toDateString()===y.toDateString()?y.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',hour12:!A.S.clock24}):label(b));}
-  function fresh(s){return !!s&&(s.planning||Date.now()-s.createdAt<3600000);}
+  // A finished review stays valid until the trip, roads or vehicle change (its key): no clock expiry (0.0.438).
+  function fresh(s){return !!s;}
   function current(){var key=C.key(),id=sessionKey(owner(),key),s=sessions.get(id);if(!fresh(s)){sessions.forEach(function(held,k){if(!fresh(held))sessions.delete(k);});s={key:key,createdAt:Date.now(),consent:TimeWindows.create(),rows:[],reviewed:false,roads:[],groups:[]};sessions.set(id,s);}return s;}
   function ready(){return !enabled()||current().reviewed;}
   function bounds(ignoreSelected){

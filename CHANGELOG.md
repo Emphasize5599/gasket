@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.438 - 2026-11-09
+
+- Compare: a reviewed vehicle no longer needs another review after an hour, so long queues don't turn finished plans into "needs input". A plan asks for review again only when an extreme hazard (tornado, flooding, tropical storm, severe warning) appears that wasn't there before; one that goes away never asks.
+- Bug fixes.
+
 ## 0.0.437 - 2026-11-09
 
 - Keep speed limits available when a traffic forecast refreshes a leg during EV and time-window planning.
