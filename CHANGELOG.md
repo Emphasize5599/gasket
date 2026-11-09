@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.437 - 2026-11-09
+
+- Keep speed limits available when a traffic forecast refreshes a leg during EV and time-window planning.
+- Report speed-limit failures in Compare with the actual reason planning stopped.
+
 ## 0.0.436 - 2026-11-09
 
 - Adjust trip in Compare opens Route for that plan and guides you back through trip setup to Compare.

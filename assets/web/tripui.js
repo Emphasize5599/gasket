@@ -397,7 +397,13 @@ return conditions;
     if(prior&&Date.now()-prior.at<600000){var reused=prior.value,checked=await windowConditions(reused.path,reused.opts,reused.plan,changed,valid);if(!valid()||!checked)return null;reused.legs=checked;reused.weather=checked.reduce(function(n,r){return n+TimeWindows.weatherScore(r.reading);},0);LG.debug('timing','Finalist fuel plan reused',{stations:reused.opts.cands.length});return reused;}
     if(!tollPolicyCheck(recommendationRaw(path.map(function(r){return r.index;}))).ok)return windowReject('tolls');
     var bundle=await windowModel(path,valid),m=bundle.model,cache=schedulePlanning&&(schedulePlanning.candidates||(schedulePlanning.candidates=new Map())),geometryKey=bundle.sel.join('|'),g=cache&&cache.get(geometryKey);if(!g){g=cachedChoiceCandidates(bundle.raw,m);if(cache&&g)cache.set(geometryKey,g);}phase.modelMs=Math.round(performance.now()-began);if(!g||g.guessed){LG.debug('timing','Candidate lacks verified station coverage',{selected:bundle.sel,missing:!g,guessed:!!(g&&g.guessed),knownLegs:choiceCandidates.size});return windowReject('stations');}
-    if(!m._lim||m._lim==='loading'){path.forEach(function(r){ensureLimits(hzModel(r.raw,r.leg));});var until=Date.now()+120000;while(valid()&&Date.now()<until&&!applyChoiceLimits(m,bundle.sel))await breathe();if(!valid())return null;if(!m._lim)return windowReject('limits');}
+    if(!m._lim||m._lim==='loading'){
+      var limits=choiceLimitModels(bundle.sel);
+      startChoiceLimits(limits);
+      await waitChoiceLimits(limits,valid);
+      if(!valid())return null;
+      if(!applyChoiceLimits(m,bundle.sel,limits))return windowReject('limits');
+    }
     if(KIND()!=='gas'){var pool=choicePool,stations=(pool.official||[]).concat.apply(pool.official||[],pool.google||[]),exact=await gatherAlt([m],function(){},{},{localOnly:true,skipNetworkPrices:true,google:[{list:mergeRouteStations(stations)}]},[bundle.raw]);g=exact.per[0];}
     if(!tollPolicyCheck(bundle.raw).ok)return windowReject('tolls');var priority=planningPriority(Garage.car()),toll=tripTolls(bundle.raw);if(priority==='cost'&&toll.cost==null)return windowReject('tollPrice');
     var templateAt=performance.now(),template=windowOptions(bundle,g,path,start);phase.optionsMs=Math.round(performance.now()-templateAt);
@@ -644,7 +650,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     function valid(){return autoPlanning===state&&!state.cancelled&&route===owner&&activeKey()===car&&step===ST_STOPS&&document.body.classList.contains('trip-on')&&autoPriority()===priority;}
     function progress(text){if(optEta)text+=' · '+eta.text(false);if(window.Tasks)Tasks.upsert('auto-trip',{text:text,frac:null,cancel:function(){state.cancelled=true;}});}
     try{
-      renderStep();progress('Preparing automatic trip planning');await findStops();if(!valid())return;if(!result)throw Error('Station discovery did not finish.');
+      renderStep();progress('Preparing automatic trip planning');await findStops();if(!valid())return;if(!result)throw Error(adjustError||'Station discovery did not finish.');
       var base=result,lists=choiceLists(),selected=choiceSelections(),it=RouteChoices.combinations(lists,selected,route.priceRestReview?{}:routeFlow()?choiceAnswers():{}),best=null,checked=0,missing=0,review=compareReviewContext(),speeds=JSON.stringify([S.speed,S.trip.propulsionOffset,S.trip.propulsionRoads]);
       await prepareRecommendationSpeeds(valid,function(i,n){progress('Checking approved routes’ speed limits '+i+' / '+n);});if(!valid())return;
       var pool=choicePool,rows=pool?(pool.official||[]).concat.apply(pool.official||[],pool.google||[]):[],snapshot={localOnly:true,skipNetworkPrices:true,google:[{list:mergeRouteStations(rows)}]};
@@ -681,7 +687,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     recommendationSpeeds.clear();recommendationTimeSaved.clear();var entries=override||choiceEntries(),sf=Garage.speedFn&&Garage.speedFn(),todo=[];
     entries.forEach(function(item){
       if(item.primary&&KIND()==='gas'){var from=item.leg?(model.legEnds[item.leg-1]||0):0,to=model.legEnds[item.leg]||model.totalMi;recommendationTimeSaved.set(item.key,speedOff(model)?0:ruleMinutes(flatSecs(model).filter(function(s){return s.to>from&&s.from<to;}).map(function(s){return Object.assign({},s,{from:Math.max(from,s.from),to:Math.min(to,s.to)});}),sf));recommendationSpeeds.set(item.key,(result.opts.model.speedRates||[]).filter(function(r){return r.to>from&&r.from<to;}).map(function(r){return {from:Math.max(from,r.from)-from,to:Math.min(to,r.to)-from,rate:r.rate};}));return;}
-      var m=hzModel(item.route);if(KIND()==='gas'&&(!sf||speedOff(m))){recommendationSpeeds.set(item.key,[]);return;}
+      var m=choiceLimitModel(item.route);if(KIND()==='gas'&&(!sf||speedOff(m))){recommendationSpeeds.set(item.key,[]);return;}
       todo.push({item:item,m:m});
     });
     for(var i=0;i<todo.length&&valid();i++){
@@ -695,12 +701,14 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       }
       if(!valid())return;
       if(!m._lim||m._lim==='loading'||m._lim.error)continue; // Do not advertise savings by dropping unknown cruising-speed costs.
-      var secs=flatSecs(m);recommendationTimeSaved.set(todo[i].item.key,ruleMinutes(secs,sf));recommendationSpeeds.set(todo[i].item.key,sf?T.speedRates(secs,secs.map(function(sc){return Garage.ruleOff(sc.limit);}),sf.f,sf.lo,sf.hi):[]);
+      var timed=hzModel(todo[i].item.route);timed._lim=m._lim;
+      var secs=flatSecs(timed);recommendationTimeSaved.set(todo[i].item.key,ruleMinutes(secs,sf));recommendationSpeeds.set(todo[i].item.key,sf?T.speedRates(secs,secs.map(function(sc){return Garage.ruleOff(sc.limit);}),sf.f,sf.lo,sf.hi):[]);
     }
   }
   // Use the same per-leg limits and hourly forecasts for preview, acceptance and subsequent planning.
-  function applyChoiceLimits(m,sel){
-    var roads=[],complete=true;choiceLists().forEach(function(list,i){var a=list[sel[i]],lm=a&&hzModel(a),lim=lm&&lm._lim;if(!lim||lim==='loading'||lim.error){complete=false;return;}var from=i?(m.legEnds[i-1]||0):0,to=m.legEnds[i]||m.totalMi,scale=(to-from)/lm.totalMi;
+  function applyChoiceLimits(m,sel,models){
+    models=models||choiceLimitModels(sel);
+    var roads=[],complete=models.length>0;models.forEach(function(lm,i){var lim=lm&&lm._lim;if(!lim||lim==='loading'||lim.error){complete=false;return;}var from=i?(m.legEnds[i-1]||0):0,to=m.legEnds[i]||m.totalMi,scale=(to-from)/lm.totalMi;
       function shift(s){return Object.assign({},s,{from:from+s.from*scale,to:from+s.to*scale,mi:(s.to-s.from)*scale});}
       (lim.roads||[]).forEach(function(r){roads.push(Object.assign(shift(r),{sections:(r.sections||[]).map(shift),pieces:(r.pieces||[]).map(shift)}));});
     });if(complete)m._lim={roads:roads,stats:{composed:true}};return complete;
@@ -3433,14 +3441,33 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
 
   // ---------- cruising speed per leg ----------
   var limCache = {},limFlight=new Map(); // shared routes also share in-flight source requests
-  function warmChoiceLimits(){if(KIND()==='gas'&&(!routeFlow()||!Garage.speedFn||!Garage.speedFn()))return;choiceEntries().forEach(function(item){if(KIND()!=='gas'||!item.primary)ensureLimits(hzModel(item.route));});}
+  // Forecast overlays can replace a timed leg model while limits are loading.
+  // Posted limits belong to the route geometry and have their own stable model.
+  var choiceLimitCache=new WeakMap();
+  function choiceLimitModel(raw){
+    if(!raw)return null;
+    var m=choiceLimitCache.get(raw);
+    if(!m){m=T.buildRoute(raw,carModel());choiceLimitCache.set(raw,m);}
+    return m;
+  }
+  function choiceLimitModels(sel){return choiceLists().map(function(list,i){return choiceLimitModel(list[sel[i]]);});}
+  function startChoiceLimits(models){models.forEach(function(m){if(!m)return;if(m._lim&&m._lim.error)m._lim=null;ensureLimits(m);});}
+  async function waitChoiceLimits(models,valid,until){
+    until=until||Date.now()+120000;
+    while(valid()&&Date.now()<until&&models.some(function(m){return m&&m._lim==='loading';}))await new Promise(function(done){setTimeout(done,100);});
+  }
+  function warmChoiceLimits(){if(KIND()==='gas'&&(!routeFlow()||!Garage.speedFn||!Garage.speedFn()))return;choiceEntries().forEach(function(item){if(KIND()!=='gas'||!item.primary)ensureLimits(choiceLimitModel(item.route));});}
   async function energyLimits(m,raw){
     if(KIND()==='gas')return;
-    var sel=raw&&raw._sel||[alts.indexOf(raw||rawRoute)],models=choiceLists().map(function(list,i){return list[sel[i]]&&hzModel(list[sel[i]]);}).filter(Boolean),until=Date.now()+120000;
-    if(!models.length)models=[m];models.forEach(function(x){if(x._lim&&x._lim.error)x._lim=null;ensureLimits(x);});
+    var sel=raw&&raw._sel||choiceSelections(),models=choiceLimitModels(sel),until=Date.now()+120000;
+    startChoiceLimits(models);
     await Promise.all(choiceLists().map(function(list,i){return list[sel[i]]?hzLoad(list[sel[i]],i):null;}));
-    while(models.some(function(x){return x._lim==='loading';})&&Date.now()<until&&!jobCancel)await new Promise(function(r){setTimeout(r,100);});
-    if(!applyChoiceLimits(m,sel))throw Error('Speed limits could not finish loading. Retry before checking this route.');
+    await waitChoiceLimits(models,function(){return !jobCancel;},until);
+    if(jobCancel)return;
+    if(!applyChoiceLimits(m,sel,models)){
+      LG.warn('speed','Speed limit sections unavailable',{legs:models.map(function(x,i){var l=x&&x._lim;return l&&l!=='loading'&&!l.error?null:{leg:i+1,status:l==='loading'?'pending':l&&l.error||'missing'};}).filter(Boolean)});
+      throw Error('Speed limits could not finish loading. Retry before checking this route.');
+    }
   }
   function ensureLimits(m) {
     if (m && m._lim && m._lim.stats && m._lim.stats.off && !speedOff(m)) m._lim = null;      // a key was added: look them up now

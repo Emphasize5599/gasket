@@ -84,4 +84,34 @@ L.along(m, async (u) => { urls.push(u); return { body: JSON.stringify({ features
   assert.equal(L.roadFromHpms({ route_signing: 4, route_number: '005' }, 'AR').key, 'AR-5');
   assert.equal(L.roadFromHpms({ route_signing: 6, route_number: 12, f_system: 7 }, 'AR'), null, 'minor county roads are not stretches');
   console.log('website route: ' + res.roads.map((r) => r.name + ' ' + Math.round(r.from) + '–' + Math.round(r.to)).join(', ') + ' from ' + seen.length + ' HPMS lookups');
+}).then(async () => {
+  // A late hazard forecast can replace a timed model even when its limit lookup succeeded.
+  const fs=require('node:fs'),vm=require('node:vm'),src=fs.readFileSync('assets/web/tripui.js','utf8');
+  const other={name:'unselected',miles:80},outbound={name:'outbound',miles:120,limit:70},inbound={name:'return',miles:120,limit:65};
+  const roads=[[other,outbound],[inbound]],timed=new Map(),lookups=[],finish=new Map();
+  const c={T:{buildRoute:r=>({raw:r,totalMi:r.miles})},carModel:()=>({}),KIND:()=> 'ev',choiceLists:()=>roads,
+    choiceSelections:()=>[1,0],alts:[],jobCancel:false,setTimeout,LG:{warn(){}},
+    hzModel:r=>{if(!timed.has(r))timed.set(r,{raw:r,totalMi:r.miles});return timed.get(r);},
+    hzLoad:async r=>{
+      await Promise.resolve();
+      timed.set(r,{raw:r,totalMi:r.miles,traffic:{at:Date.now()}});
+      const done=finish.get(r);if(done)done();
+    },
+    ensureLimits(m){
+      if(m._lim)return;
+      const r=m.raw,s={from:0,to:r.miles,limit:r.limit};
+      lookups.push(r.name);m._lim='loading';
+      finish.set(r,()=>{m._lim={roads:[{...s,sections:[s],pieces:[s]}]};});
+    }};
+  vm.createContext(c);
+  vm.runInContext(src.slice(src.indexOf('  function applyChoiceLimits('),src.indexOf('  function recommendationOpts('))+
+    src.slice(src.indexOf('  var choiceLimitCache='),src.indexOf('  function ensureLimits(')),c);
+  const joined={totalMi:300,legEnds:[150,300]};
+  await c.energyLimits(joined,{_sel:[1,0]});
+  assert.deepEqual(Array.from(joined._lim.roads,r=>[r.from,r.to,r.limit]),[[0,150,70],[150,300,65]]);
+  assert.equal(timed.get(outbound)._lim,undefined,'the replacement forecast model never owned the lookup');
+  const restored={totalMi:240,legEnds:[120,240]};
+  await c.energyLimits(restored,{}); // a saved or rest-split route can lack selection metadata
+  assert.deepEqual(Array.from(restored._lim.roads,r=>r.limit),[70,65]);
+  assert.deepEqual(lookups,['outbound','return'],'later forecasts and the next plan reuse the same successful limits');
 }).catch((e) => { console.error(e); process.exit(1); });
