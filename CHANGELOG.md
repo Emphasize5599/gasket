@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.436 - 2026-11-09
+
+- Adjust trip in Compare opens Route for that plan and guides you back through trip setup to Compare.
+- Comparison plans for the same car reuse compatible hazard reviews. Different roads or departure windows can still require a review.
+
 ## 0.0.435 - 2026-11-09
 
 - Keep vehicle names readable in Compare and put full planning errors under expandable details.
