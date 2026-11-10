@@ -283,7 +283,7 @@ if(!n.required)return html;
   function siteRow(s,r){var x=r.x,access=accessCache.get(accessKey(s,x)),p=pricedSite(s,x,effective(x.site)),match=maps.peek(p),known=match&&match.state==='found',from=list&&list.leg?endsOf(s.model)[list.leg-1]:0,total=s.model.timeTo(x.d)+(access&&access.access&&access.access.outSeconds||0),since=total-s.model.timeTo(from),title='<b>'+esc(p.name)+'</b><small class="rest-source">Source: '+esc(source(p))+'</small>';
    var name=Recreation.id(p)?'<div class="rest-text">'+title+'</div>':known?'<div class="rest-text">'+title+'</div>':'<button class="rest-info-entrance rest-text" data-rest-site="'+r.k+'" aria-label="Details for '+esc(p.name)+'">'+title+'<small>'+(match&&match.state==='notfound'?'No matching Maps page found':match&&match.reason?'Maps lookup unavailable':'Details and Maps lookup')+' <span aria-hidden="true">›</span></small></button>';
    if(!screen.holding()&&!screen.hidden(p.id)&&C.access&&(!access||access.pending||access.factsOnly))return '<div class="rest-access-pending" role="status">Checking road access…</div>';
-   var suggested=recoFor(s,r.k);return '<div class="rest-row'+(suggested&&suggested.zone==='green'?' rest-suggested':'')+'"><span class="nn">'+(r.number||r.k+1)+'</span><div class="nl-a rest-name">'+name+'<div class="rest-views">'+viewPreview(p,r.k)+'</div><div class="rest-row-actions">'+siteLinks(p,match)+'<button type="button" class="rest-add"'+(screen.hidden(p.id)?' disabled':'')+' data-rest-add="'+r.k+'"'+(r.alternative?' data-rest-exception="'+r.alternative.kind+'"':'')+' aria-label="Add rest stop: '+esc(p.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button></div><small class="rest-kind">'+esc(KIND[p.kind]||'Rest stop')+' · '+x.offset.toFixed(1)+' mi off route'+esc(rateNote(p))+'</small>'+(isChargerRest(p)?'<small>'+esc(p.restChargeLevel==='dc_fast'?'DC fast':'Level '+p.restChargeLevel)+' · '+esc(p.restChargeKw)+' kW'+(p.restChargeEstimated?' estimated':'')+'</small>':chargerHtml(x))+toolsHtml(p,r.k)+''+(p.priceNotes?'<small>'+esc(p.priceNotes)+'</small>':'')+hoursNote(p,siteArrival(s,x))+(r.alternative?'<small class="warn">'+(r.alternative.kind==='shorter'?r.alternative.reduction+' min shorter than your minimum':'Arrival '+r.alternative.kind+' than your window')+'</small>':nightNote(s,x,p)+recoNote(s,r.k,p))+'</div><span class="rest-t">'+hm(since)+'</span><span class="rest-local"><small>Arrive</small>'+stamp(siteArrival(s,x),p)+'</span><span class="rest-t">'+hm(total)+'</span></div>';}
+   var suggested=recoFor(s,r.k);return '<div class="rest-row'+(suggested&&suggested.zone==='green'?' rest-suggested':'')+'"><span class="nn">'+(r.number||r.k+1)+'</span><div class="nl-a rest-name">'+name+'<div class="rest-views">'+viewPreview(p,r.k)+'</div><div class="rest-row-actions">'+siteLinks(p,match)+'<button type="button" class="rest-add"'+(screen.hidden(p.id)?' disabled':'')+' data-rest-add="'+r.k+'"'+(r.alternative?' data-rest-exception="'+r.alternative.kind+'"':'')+' aria-label="Add rest stop: '+esc(p.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button></div><small class="rest-kind">'+esc(KIND[p.kind]||'Rest stop')+' · '+x.offset.toFixed(1)+' mi off route'+esc(rateNote(p))+'</small>'+(isChargerRest(p)?'<small>'+esc(p.restChargeLevel==='dc_fast'?'DC fast':'Level '+p.restChargeLevel)+' · '+esc(p.restChargeKw)+' kW'+(p.restChargeEstimated?' estimated':'')+'</small>':chargerHtml(x))+toolsHtml(p,r.k)+''+(p.priceNotes?'<small>'+esc(p.priceNotes)+'</small>':'')+hoursNote(p,siteArrival(s,x))+(r.alternative?'<small class="warn">'+(r.alternative.kind==='shorter'?r.alternative.reduction+' min shorter than your minimum':'Arrival '+r.alternative.kind+' than your window')+'</small>':nightNote(s,x,p)+recoNote(s,r.k,p)+preparedNote(s,x,list&&list.chargerEntry))+'</div><span class="rest-t">'+hm(since)+'</span><span class="rest-local"><small>Arrive</small>'+stamp(siteArrival(s,x),p)+'</span><span class="rest-t">'+hm(total)+'</span></div>';}
   function nightNote(s,x,p){if(!nightly())return '';var f=overnightFit(s,x);if(!f)return '<small>Outside your nightly hours</small>';if(f.unknownZone)return '<small>Time zone unknown: nightly hours can’t be checked</small>';var until=StopClock.label(f.leave,clocks.get(p));return '<small class="rest-night">Overnight: rest '+(f.duration/60).toFixed(1)+' h, until '+esc(until?until.time:'')+(f.duration<f.preferred?' (short of your preferred '+(f.preferred/60).toFixed(1)+' h)':'')+'</small>';}
   function endpoint(s,index,d,ending){var p=s.route.stops[index]||{},rest=p.rest,hideArrival=ending&&index>0&&unresolved(s,index-1),leaving=!ending&&!rest&&index<s.route.stops.length-1,at=leaving&&C.departure?C.departure(index):d?C.arrival(d):s.depart,from=list.leg?endsOf(s.model)[list.leg-1]:0,total=s.model.timeTo(d);return '<li class="rest-dest'+(rest?' route-rest':'')+'"><span class="nn">'+(rest?'R':s.route.stops.slice(0,index+1).filter(function(p){return !p.rest;}).length)+'</span><span class="nl-a"><b>'+esc(p.short||p.label||(index?'Destination':'Start'))+'</b>'+(rest?'<small class="rest-source">Source: '+esc(source(rest.site||{}))+'</small>'+((typeof vehicleIssue==='function'&&vehicleIssue(rest.site||{},rest.overnight))?'<small class="warn">'+esc(vehicleIssue(rest.site||{},rest.overnight))+'</small>':'')+(mapsClosure(rest.site||{})?'<small class="warn">'+esc(closureText(mapsClosure(rest.site)))+'</small>':rest.recoveredIdentity?'<small>Recovered location · review stay details and parking permission.</small>':'')+'<span class="rest-acts"><button class="btn tonal sm" data-rest-edit="'+index+'">Change rest time</button><button class="btn tonal sm" data-rest-confirm="'+index+'">Confirm parking</button><button class="btn tonal sm caution" data-rest-remove="'+index+'">Remove</button></span>':'')+'</span><span class="rest-t">'+(d>from?hm(total-s.model.timeTo(from)):'')+'</span><span class="rest-local"><small>'+(leaving?'Depart':'Arrive')+'</small>'+(hideArrival?'After rest planning':stamp(at,p))+'</span><span class="rest-t">'+(d?hm(total):'')+'</span></li>';}
   function chargerDirectoryRows(s,leg,entry,showHidden,fallback){
@@ -341,7 +341,7 @@ if(!n.required)return html;
     alternatives.before+(rows.length?'<ol class="nlist rest-list">'+endpoint(s,leg,from)+'<li class="rest-candidates"><ol class="nlist rest-candidate-list">'+directoryRows(s,leg,rows)+'</ol></li>'+endpoint(s,group.end,ends[group.to],true)+'</ol>':entry.busy?'':'<p>'+(nightly()?'No matching charging stations fit your nightly arrival and stay windows.':'No matching charging stations found for this leg.')+'</p>')+(rows.length&&C.forecast&&(!C.trafficEnabled||C.trafficEnabled())?recoHtml(s,leg,entry):'')+
     alternatives.after+'<button class="btn tonal" data-rest-charger-retry'+(entry.busy?' disabled':'')+'>Search again</button>';
   }
-  function loadChargerDirectory(s,group,types,retry){
+  function loadChargerDirectory(s,group,types,retry,preview){
    // A live departure clock moves while the user browses. The search run still owns the same directory and forecast pass.
    var run=state.token,key=JSON.stringify([run,group.from,group.to,types,nightly(),s.rollingDepart?'now':Math.floor(s.depart/60000)]);
    var entries=state.chargerDirectories||(state.chargerDirectories=new Map()),entry=!retry&&entries.get(key);
@@ -366,7 +366,7 @@ if(!n.required)return html;
     await clocks.load(out.sites.map(function(x){return x.site;}),valid);
     if(!valid())return;
     entry.notice=out.notice||'';
-    if(nightly()&&C.access){
+    if(!preview&&nightly()&&C.access){
      var next=0,lastPaint=0;
      report('Checking road access · 0 / '+count,0);
      if(list&&list.chargerEntry===entry)renderList();
@@ -476,15 +476,98 @@ if(!n.required)return html;
     finally{if(end)end();}
    }
   }
+  function autoFirstNight(){var w=A.S.trip&&A.S.trip.windowPlan;return !!(nightly()&&w.autoFirstNight);}
+  var preparedFirstNight=new Map(),firstNightPass=null;
+  function initialNight(s,g){var p=nightPlan(s,g.from);return p&&!p.pending&&p.leg===g.from&&p.required&&!p.skips.length;}
+  function firstNightKey(s,x,charger){return recoKey(s,siteLeg(s,x),charger)+'|'+x.site.id+'|'+x.d.toFixed(3);}
+  function preparedNote(s,x,charger){
+   if(!autoFirstNight())return '';
+   var held=preparedFirstNight.get(firstNightKey(s,x,charger));
+   return held&&held.until>Date.now()?'<small>'+(held.available===held.count?'Departure preview ready':held.available?'Departure preview partly available':'Departure preview unavailable')+'</small>':'';
+  }
+  async function prepareFirstNight(s,run){
+   var groups=directoryGroups(s).filter(function(g){return initialNight(s,g);}),types=chargerRestTypes(s);
+   if(!groups.length)return;
+   var key=groups.map(function(g){return recoKey(s,g.from);}).join(';')+'|'+JSON.stringify(types);
+   if(firstNightPass&&firstNightPass.key===key&&firstNightPass.run===run)return;
+   var pass=firstNightPass={key:key,run:run},task='first-night-forecasts',total=0,done=0,unavailable=0,excluded=0;
+   function valid(){var current=C.snapshot();return firstNightPass===pass&&!pass.cancelled&&run===state.token&&!!current&&current.route===s.route&&autoFirstNight();}
+   var end=root.Tasks&&Tasks.begin(task,{text:'First-night forecasts · checking suggestions',priority:16,cancel:function(){pass.cancelled=true;}});
+   try{
+    var dirs=[];
+    for(var g of groups){
+     if(!valid())return;
+     var charger=types?loadChargerDirectory(s,g,types,false,true):null,prior=recoEntry(s,g.from);
+     if(!prior||prior.busy)await startReco(g.from);
+     if(charger){await charger.promise;if(valid()&&!recoEntry(s,g.from,charger))await startReco(g.from,charger);}
+     dirs.push({leg:g.from,charger:charger});
+    }
+    if(!valid())return;
+    var candidates=[],seen=new Set();
+    function collect(suggestedOnly){dirs.forEach(function(dir){
+     function add(rows,charger){
+      var reco=recoEntry(s,dir.leg,charger),suggested=new Set((reco&&reco.items||[]).filter(function(r){return r.zone==='green';}).map(function(r){return r.k;}));
+      rows.forEach(function(row){
+       var k=firstNightKey(s,row.x,charger),held=preparedFirstNight.get(k);
+       if(suggestedOnly&&!suggested.has(row.k)||seen.has(k)||held&&held.until>Date.now()&&held.available===held.count)return;
+       seen.add(k);candidates.push({x:row.x,key:k,leg:dir.leg});
+      });
+     }
+     add(legSites(s,dir.leg));
+     if(dir.charger)add(chargerDirectoryRows(s,dir.leg,dir.charger,false,!suggestedOnly).filter(function(r){return nightVisible(s,r.x);}),dir.charger);
+    });}
+    collect(true);total=candidates.length;
+    var width=root.WorkerSettings?WorkerSettings.trafficCount(A):4,lastPaint=0;
+    for(var phase of ['suggested','remaining']){
+     if(phase==='remaining'){await bgAccess(s,run);if(!valid())return;collect(false);total=candidates.length;}
+     for(var candidate of candidates.slice(done)){
+      if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
+      if(!valid())return;
+      var x=candidate.x;if(screen.hidden(x.site.id)){done++;excluded++;continue;}
+      var record=C.access?await checkAccess(s,x,false,true):{ok:true},f=overnightFit(s,x);
+      if(!valid())return;
+      var p=effective(x.site),reached=siteArrival(s,x),ready=f&&Math.max(reached+f.minimum*60000,f.leaveEarliest||0),last=f&&Math.min(f.windowEnd,reached+(p.stayMinutes==null?1440:p.stayMinutes)*60000),
+          site=Object.assign({},p,{timeZone:clocks.get(p),nightArrivalEnd:f&&f.arrivalLatest}),samples=[],available=0;
+      if(record.ok&&!record.excluded&&f&&!f.unknownZone&&last>=ready){
+       try{
+        samples=restSampleTimes(site,reached,ready,last);
+        var road=null,shared={},back=(record.access&&record.access.backSeconds||0)*1000;
+        if(C.previewRoad)try{road=C.previewRoad(s,Object.assign({},x,{leg:candidate.leg}),site,record.access);}
+        catch(e){if(root.FLog)FLog.debug('rest','Using original road for the departure preview',{reason:e.message});}
+        await RestTiming.map(samples,width,async function(t){
+         if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
+         if(!valid())return;
+         try{
+          var q=road?await C.previewForecast(road,t,site,valid):await C.forecast(x.d,t+back,valid,shared,site);
+          if(q.coverage>=.999999)available++;
+         }catch(e){if(valid()&&root.FLog)FLog.debug('rest','First-night departure sample unavailable',{reason:String(e.message).slice(0,120)});}
+        },valid);
+       }catch(e){if(valid()&&root.FLog)FLog.warn('rest','First-night rest forecast could not be prepared',{site:p.name,reason:String(e.message||e)});}
+       if(valid()&&samples.length){
+        preparedFirstNight.set(candidate.key,{available:available,count:samples.length,until:Date.now()+(available===samples.length?(C.forecastTtl?C.forecastTtl():7200000):300000)});
+        if(preparedFirstNight.size>6000)preparedFirstNight.delete(preparedFirstNight.keys().next().value);
+       }
+      }
+      if(record.excluded||record.ok&&(!f||last<ready))excluded++;
+      else if(!samples.length||available<samples.length)unavailable++;
+      done++;
+      if(root.Tasks&&valid())Tasks.upsert(task,{text:'First-night forecasts · '+done+' / '+total+' stops · '+unavailable+' incomplete',frac:done/total,priority:16});
+      if(Date.now()-lastPaint>800){lastPaint=Date.now();laterRender();}
+     }
+    }
+    if(valid()&&root.FLog)FLog.info('rest','First-night forecasts finished',{checked:done,total:total,excluded:excluded,incomplete:unavailable});
+   }finally{if(end)end();if(valid())laterRender();}
+  }
   async function runRestFollowups(s,run,restart){
    if(screen.holding()||run!==state.token)return;
    if(state.followupRun===run){if(restart)state.followupRestart=run;return;}
    state.followupRun=run;
    try{
-    await Promise.all([bgAccess(s,run),autoReco(s,run)]);
+    var full=autoFirstNight()&&C.forecast&&(!C.trafficEnabled||C.trafficEnabled());
+    await Promise.all([bgAccess(s,run),full?prepareFirstNight(s,run):autoReco(s,run)]);
     if(run!==state.token||!C.snapshot())return;
     if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
-    if(run===state.token)await autoChargerDirectories(C.snapshot()||s,run);
+    if(run===state.token){if(full)await autoReco(C.snapshot()||s,run);await autoChargerDirectories(C.snapshot()||s,run);}
     if(run===state.token)await warmNightTraffic(C.snapshot()||s,run);
    }catch(e){if(root.FLog)FLog.warn('rest','Rest background work interrupted',{reason:String(e.message||e)});}
    finally{if(state.followupRun===run)state.followupRun=null;if(state.followupRestart===run){state.followupRestart=null;var current=C.snapshot();if(current&&run===state.token)runRestFollowups(current,run);}}
@@ -509,7 +592,7 @@ if(!n.required)return html;
   function bindActions(host){host.querySelectorAll('[data-rest-edit]').forEach(function(b){b.onclick=function(){open(+b.dataset.restEdit);};});host.querySelectorAll('[data-rest-confirm]').forEach(function(b){b.onclick=function(){C.confirm(+b.dataset.restConfirm);};});host.querySelectorAll('[data-rest-remove]').forEach(function(b){b.onclick=function(){C.remove(+b.dataset.restRemove);};});}
   function bindList(host){var charger=host.querySelector('[data-rest-at-charger-list]');if(charger)charger.onclick=function(){if(list)openChargerLeg(list.leg);};var cb=host.querySelector('[data-rest-closed-recheck]');if(cb)cb.onclick=function(){this.disabled=true;var s=C.snapshot();if(s&&list)refreshClosures(s,list.leg,function(){return !!list;},true);};bindScreen(host);bindAccessRetry(host);var rb=host.querySelector('[data-rest-reco]');if(rb)rb.onclick=function(){if(list){var snap=C.snapshot(),g=directoryGroup(snap,list.leg);(async function(){for(var i=g.from;i<=g.to;i++)await startReco(i);})();}};var allBtn=host.querySelector('[data-rest-all]');if(allBtn)allBtn.onclick=function(){if(!list)return;showAll[list.leg]=!showAll[list.leg];renderList();};host.querySelector('[data-rest-settings]').onclick=function(){var leg=list?list.leg:0;RestSettings.open(A,function(){state.token++;state.busy=false;search();backToLeg(leg);});};host.querySelector('[data-rest-retry]').onclick=function(){search();redraw();};bindRows(host);bindActions(host);observeRows();}
   function redraw(forceTolerance){var s=C.snapshot();if(s)syncAccessTask(s);document.querySelectorAll('[data-rest-tile]').forEach(function(el){var focused=document.activeElement;if(!forceTolerance&&focused&&el.contains(focused)&&focused.matches('[data-rest-tol]'))return;var t=el.querySelector('.rest-tol');if(t)tolOpen=t.open;var tmp=document.createElement('div');tmp.innerHTML=tile();var fresh=tmp.firstChild;el.__restRetiring=true;el.replaceWith(fresh);bindTile(fresh);});renderList();}
-  function search(){var s=C.snapshot(),f=filters();if(!s)return;if(!f.kinds.length){state.key=keyOf(s,f);state.sites=[];state.error='Choose at least one site type.';redraw();return;}state.accessRunning=false;state.accessStopped=false;var key=keyOf(s,f),run=++state.token,notes=0,end=root.Tasks&&Tasks.begin('rest-search',{text:'Finding rest sites along your route',cancel:function(){state.token++;state.busy=false;state.key=key;state.sites=[];state.error='Rest search cancelled.';redraw();},priority:20});state.key=key;state.busy=true;state.error='';state.chargerNote='';state.chargerDirectories=null;
+  function search(){var s=C.snapshot(),f=filters();if(!s||state.busy)return;if(!f.kinds.length&&!chargerRestTypes(s)){state.key=keyOf(s,f);state.sites=[];state.error='Choose at least one site type.';redraw();return;}state.accessRunning=false;state.accessStopped=false;var key=keyOf(s,f),run=++state.token,notes=0,end=root.Tasks&&Tasks.begin('rest-search',{text:'Finding rest sites along your route',cancel:function(){state.token++;state.busy=false;state.key=key;state.sites=[];state.error='Rest search cancelled.';redraw();},priority:20});state.key=key;state.busy=true;state.error='';state.chargerNote='';state.chargerDirectories=null;
    store.corridor(s.model,f,{valid:function(){return run===state.token;},note:function(reason){notes++;if(root.FLog)FLog.warn('rest','Rest inventory area failed',{reason:String(reason)});},progress:function(text,frac){if(run===state.token){state.phase=text;if(list&&list.wait)laterRender();}if(root.Tasks&&run===state.token)Tasks.upsert('rest-search',{text:text,frac:frac,priority:20});}}).then(async function(out){if(run!==state.token)return;if(root.FLog)FLog.info('rest','Rest inventories ready',{sites:out.sites.length,cells:out.cells,asked:out.asked,failed:out.failed,osmSlowStopped:out.osmSlowStopped,osmMs:out.osmMs,rvparky:out.rvparky,campendium:out.campendium});state.sites=out.sites.filter(function(x){var ends=endsOf(s.model),leg=x.leg==null?ends.findIndex(function(end){return x.d<=end;}):x.leg,from=leg?ends[leg-1]:0,to=ends[leg];return x.d>from+.001&&x.d<to-.001&&RestPlaces.check(effective(x.site),f).ok;});
    if(f.chargers&&f.chargers.mode!=='off'&&state.sites.length){
     state.phase='Matching compatible chargers near rest stops';laterRender();
@@ -575,10 +658,14 @@ if(!n.required)return html;
   // (minimum rest / charging) to the longest stay, hours and parking limits, each forecast for the rest of the trip.
   // Why there is no departure to choose: arriving too late for the stay (often because the trip's departure window passed).
   function noRoom(site,r,reached){var when=function(t){return new Date(t).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:site.timeZone||undefined});},late=C.departLate&&C.departLate(),why='You would reach '+(site.name||'this rest stop')+' about '+when(reached)+', too late for a '+r.minimumRest+'-minute rest before '+(r.overnight?'your nighttime hours end':'parking closes')+' ('+when(r.parkingCloses||r.nightEnd)+').';return why+' '+(late?late.note:'Remove this rest and choose another, or change its times.');}
+  function restSampleTimes(site,reached,ready,last){
+   var times=RestTiming.samples(ready,last).filter(function(t){return StopClock.hours(RestPlaces.stayHours(site),reached,site.timeZone,t).state!=='closed';});
+   if(site.userPricing&&site.userPricing.rows.length)times=times.filter(function(t){var q=applySavedPrice(site,reached,t,site.timeZone);return !q.priceUnverified&&CampPrice.check(q,RestPlaces.sourceFilter(RestPlaces.sourceId(q),filters())).ok;});
+   return spread(times,25);
+  }
   function sampleRest(s,index,valid,progress){return foreground(function(){return sampleRest0(s,index,valid,progress);});}
   async function sampleRest0(s,index,valid,progress){var initial=s.route.stops[index],priorRest=initial.rest,late=C.departLate&&C.departLate();if(late){var originalSite=effective(priorRest.site||initial),earliest=Math.max(C.arrival(endsOf(s.model)[index-1]),Date.now()+s.model.timeTo(endsOf(s.model)[index-1])*1000),closing=Math.min(priorRest.parkingCloses||Infinity,priorRest.nightEnd||Infinity);if(earliest+priorRest.minimumRest*60000>closing)throw Error(noRoom(Object.assign({},originalSite,{timeZone:clocks.get(originalSite)}),priorRest,earliest));}if(C.waitForPlan)await C.waitForPlan(index);if(!valid())throw Error('Rest timing cancelled');s=C.snapshot()||s;var p=s.route.stops[index],r=p.rest,site=effective(r.site||p),d=endsOf(s.model)[index-1];await clocks.load([site,s.route.stops[s.route.stops.length-1]],valid);site=Object.assign({},site,{timeZone:clocks.get(site)});if(r.site&&site.timeZone)r.site.timeZone=site.timeZone;
-   var reached=C.arrival(d),charge=r.chargeMinutes||0,ready=Math.max(r.leaveEarliest||0,reached+r.minimumRest*60000,reached+charge*60000)+(r.overlap===false?Math.min(r.minimumRest,charge)*60000:0),last=Math.min(reached+r.maximumStay*60000,r.parkingCloses||Infinity);if(!(last>=ready))throw Error(noRoom(site,r,reached));var times=RestTiming.samples(ready,last).filter(function(t){return StopClock.hours(RestPlaces.stayHours(site),reached,site.timeZone,t).state!=='closed';});
-   if(site.userPricing&&site.userPricing.rows.length){times=times.filter(function(t){var q=applySavedPrice(site,reached,t,site.timeZone);return !q.priceUnverified&&CampPrice.check(q,RestPlaces.sourceFilter(RestPlaces.sourceId(q),filters())).ok;});}if(!times.length)throw Error('No departure fits the rest, opening hours and parking limits at '+site.name+'.');if(times.length>25){var step=(times.length-1)/24,few=[];for(var k=0;k<25;k++)few.push(times[Math.round(k*step)]);times=Array.from(new Set(few));}
+   var reached=C.arrival(d),charge=r.chargeMinutes||0,ready=Math.max(r.leaveEarliest||0,reached+r.minimumRest*60000,reached+charge*60000)+(r.overlap===false?Math.min(r.minimumRest,charge)*60000:0),last=Math.min(reached+r.maximumStay*60000,r.parkingCloses||Infinity);if(!(last>=ready))throw Error(noRoom(site,r,reached));var times=restSampleTimes(site,reached,ready,last);if(!times.length)throw Error('No departure fits the rest, opening hours and parking limits at '+site.name+'.');
    var hz=C.horizon?C.horizon(d):null,reach=hz&&hz.stop!=null?s.route.stops[hz.stop]:null,reachName=reach?reach.short||reach.label||'':'',blocked=0,done=0,shared={},start=Date.now();
    var out=(await RestTiming.map(times,root.WorkerSettings?WorkerSettings.trafficCount(A):4,async function(t){try{var q=await C.forecast(d,t,valid,shared,Object.assign({},site,{nightArrivalEnd:r.nightArrivalEnd}));return {depart:t,arrive:q.arrival,drivingMinutes:q.seconds/60,freeMinutes:freeOf(q),coverage:q.coverage,reachMi:hz&&hz.mi,reachName:reachName};}catch(e){if(!valid())throw e;if(root.FLog)FLog.debug('rest','Rest departure forecast unavailable',{reason:String(e.message).slice(0,160)});if(/time window/.test(e.message)){blocked++;return null;}return {depart:t,arrive:null,drivingMinutes:null,error:e.message};}finally{if(progress)progress(++done,times.length);}},valid)).filter(Boolean);if(root.FLog){var unavailable=out.filter(function(x){return RestPlan.forecastZone(x)==='unknown';});FLog[unavailable.length?'warn':'info']('rest','Rest departure times checked',{samples:times.length,available:out.length-unavailable.length,unavailable:unavailable.length,blockedByWindows:blocked,reasons:Array.from(new Set(unavailable.map(function(x){return x.error;}))).slice(0,3),elapsedMs:Date.now()-start,readers:root.WorkerSettings?WorkerSettings.trafficCount(A):4});}
    if(!out.length)throw Error(blocked?'Every departure from '+site.name+' misses a destination time window. Choose a shorter rest or another stop.':'No departure could be checked.');return {site:site,samples:RestPlan.zones(out,C.tolerance(d)).map(RestPlan.compact),blocked:blocked};}

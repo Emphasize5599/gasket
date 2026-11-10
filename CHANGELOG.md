@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.440 - 2026-11-10
+
+- Visual trip windows with movable legs, five-minute handles, and estimated driving, overnight rest, charging and refueling. Gray hatching shows waiting during hours you won’t leave.
+- Optional first-night planning prepares departure forecasts for suggested rest stops and compatible charger rests first, then works through the other eligible stops in the background.
+- Compare uses the same circular remove buttons as the rest of the app.
+
 ## 0.0.439 - 2026-11-09
 
 - Faster Compare queues: automatic planning checks settings on a sampled set of stations and re-plans only the winner on every station; the first plan before the search is quick; saved price history is looked up directly instead of searched per station.

@@ -14,7 +14,7 @@
     if(pack)o.installedDcCurve=pack.points;
     return key(clean(o));
   }
-  function journey(route,trip){var windowPlan=clone(trip.windowPlan);if(windowPlan)delete windowPlan.priority;return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret,s.rest?[s.rest.leaveAt,s.rest.minimumRest,s.rest.maximumStay,s.rest.parkingCloses,s.rest.chargeMinutes,s.rest.overlap]:null];}),trip.windowPlan&&trip.windowPlan.enabled?windowPlan:trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.windowPlan&&trip.windowPlan.enabled?'':trip.backAt||'',!!trip.trafficForecast]);}
+  function journey(route,trip){var windowPlan=clone(trip.windowPlan);if(windowPlan){delete windowPlan.priority;delete windowPlan.confirmedPriority;delete windowPlan.exampleStarts;delete windowPlan.autoFirstNight;}return key([(route&&route.stops||[]).map(function(s){return [s.lat,s.lng,s.address||s.label||'',!!s.ret,s.rest?[s.rest.leaveAt,s.rest.minimumRest,s.rest.maximumStay,s.rest.parkingCloses,s.rest.chargeMinutes,s.rest.overlap]:null];}),trip.windowPlan&&trip.windowPlan.enabled?windowPlan:trip.departNow?'now':trip.depart,trip.returnTrip,trip.backAuto,trip.windowPlan&&trip.windowPlan.enabled?'':trip.backAt||'',!!trip.trafficForecast]);}
   function sum(rows,k){return rows.reduce(function(n,r){return n+(r[k]||0);},0);}
   function toll(t){return t&&t.has===false?0:t&&Number.isFinite(t.cost)&&t.cost>=0?t.cost:null;}
   function places(route){return key((route&&route.stops||[]).filter(function(p){return !Stops.isRest(p);}).map(function(p){return [p.lat,p.lng,p.label||p.address];}));}
