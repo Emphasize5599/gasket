@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.447 - 2026-11-10
+
+- Skip an estimated overnight rest in the Visual itinerary with its minus button. Use the chevron to restore that night. Saved drive-through choices also appear in Stops.
+
 ## 0.0.446 - 2026-11-10
 
 - The Visual itinerary shows hourly ticks. Blue window handles sit directly below the bar and use a second row only when they would overlap.

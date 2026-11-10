@@ -14,8 +14,9 @@
  function reconcile(v){if(!v||!v.route)return v;var routes=[seal(v.route)].concat((v.comparison||[]).map(function(c){return seal(c.route);})),copy=Object.assign({},v,{route:recoverOriginalRests(inherit(routes[0],routes))});if(v.comparison)copy.comparison=v.comparison.map(function(c,i){return c.route?Object.assign({},c,{route:recoverOriginalRests(inherit(routes[i+1],routes))}):c;});return copy;}
  function groups(r){var stops=r&&r.stops||[],out=[],from=0;for(var i=1;i<stops.length;i++)if(!isRest(stops[i])){out.push({index:out.length,from:from,to:i-1,start:from,end:i});from=i;}return out;}
  function group(r,leg){var all=groups(r);return all.find(function(g){return leg>=g.from&&leg<=g.to;})||all[0];}
+ function nightKey(route,g){var a=route.stops[g.from],b=route.stops[g.end];return JSON.stringify([g.index,a.lat,a.lng,b.lat,b.lng]);}
  function number(r,index){return (r.stops||[]).slice(0,index+1).filter(function(p){return !isRest(p);}).length;}
  function summaries(r,rows){return groups(r).map(function(g){var part=rows.slice(g.from,g.to+1),out={from:part[0].from,to:part[part.length-1].to};part.forEach(function(row){Object.keys(row).forEach(function(k){if(k!=='from'&&k!=='to'&&Number.isFinite(row[k]))out[k]=(out[k]||0)+row[k];});});return out;});}
- var api={needsTiming:needsTiming,isRest:isRest,pointKey:pointKey,samePath:samePath,seal:seal,reconcile:reconcile,groups:groups,group:group,number:number,summaries:summaries};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TripStops=api;
+ var api={needsTiming:needsTiming,isRest:isRest,pointKey:pointKey,samePath:samePath,seal:seal,reconcile:reconcile,groups:groups,group:group,nightKey:nightKey,number:number,summaries:summaries};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TripStops=api;
 })(typeof window==='undefined'?globalThis:window);
 

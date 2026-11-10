@@ -8,12 +8,12 @@
  function run(leg,start,rules){
   var at=start,parts=[];
   rules=TimeWindows.noLeaveRules(rules);
-  function add(kind,minutes){if(minutes>0){parts.push({kind:kind,start:at,end:at+minutes*MIN});at+=minutes*MIN;}}
+  function add(p){if(p.minutes>0||p.toggleNight){parts.push({kind:p.kind,start:at,end:at+p.minutes*MIN,night:p.night,toggleNight:p.toggleNight});at+=p.minutes*MIN;}}
   while(rules.length&&at-start<DAY&&TimeWindows.noLeave(WindowClock.wall(at,leg.zone),rules))at+=STEP;
   var blocked=!!(rules.length&&TimeWindows.noLeave(WindowClock.wall(at,leg.zone),rules));
   if(at>start)parts.push({kind:'wait',start:start,end:at});
   var departure=at;
-  leg.estimate(departure).forEach(function(p){add(p.kind,p.minutes);});
+  leg.estimate(departure).forEach(add);
   at=up(at);
   return {start:start,departure:departure,end:at,parts:parts,blocked:blocked};
  }
@@ -77,36 +77,38 @@
      drive=0;level=target;
     }
     level=Math.max(0,level-used);drive+=p.minutes-elapsed;
-    if(p.rest){if(drive>0)rows.push({kind:'drive',minutes:drive});rows.push({kind:'rest',minutes:p.rest});drive=0;}
+    if(p.rest){if(drive>0)rows.push({kind:'drive',minutes:drive});rows.push({kind:'rest',minutes:p.rest,night:p.restNight});drive=0;}
    });
    if(drive>0)rows.push({kind:'drive',minutes:drive});
    return rows;
   });
  }
- function restParts(parts,depart,leg,c,deadline){
+ function restParts(parts,depart,leg,c,deadline,skipped){
   if(!c)return parts;
-  var out=[],at=depart,notBefore=depart,restCount=0;
+  var out=[],at=depart,notBefore=depart,nights=0,skip=new Set(skipped||[]),
+      selected=new Set(parts.filter(function(p){return p.kind==='rest'&&p.night;}).map(function(p){return p.night;}));
   parts.forEach(function(p,i){
    var left=p.minutes;
    if(p.kind==='rest'){
     out.push(p);at+=left*MIN;
-    notBefore=at;
+    notBefore=Math.max(notBefore,at);
     return;
    }
    if(p.kind==='drive'){
     var remaining=parts.slice(i+1).reduce(function(n,q){return n+q.minutes*MIN;},0);
-    while(left>0&&restCount<14){
+    while(left>0&&nights<14){
      var w=Overnight.nextWindow(Math.max(at,notBefore),leg.zone,c,leg.point);
      if(!w)break;
      var rest=Math.min(w.arrivalEnd,w.end-w.preferred*MIN);
-     if(at+left*MIN+remaining<=rest)break;
-     notBefore=rest+MIN;
-     if(rest<at||at+left*MIN<rest||rest<w.start||rest+w.preferred*MIN<w.leaveStart)break;
-     if(at+left*MIN+remaining+w.preferred*MIN>=deadline)break;
+     if(at+left*MIN+remaining<=rest||at+left*MIN<rest)break;
+     notBefore=Math.min(w.arrivalEnd,w.end-w.minimum*MIN)+1;nights++;
+     if(rest<at||rest<w.start||rest+w.preferred*MIN<w.leaveStart||selected.has(w.date))continue;
+     var driveThrough=skip.has(w.date);
+     if(!driveThrough&&at+left*MIN+remaining+w.preferred*MIN>=deadline)continue;
      var drive=(rest-at)/MIN;
      if(drive>0)out.push({kind:'drive',minutes:drive});
-     out.push({kind:'rest',minutes:w.preferred});restCount++;
-     left-=drive;at=rest+w.preferred*MIN;
+     out.push({kind:driveThrough?'skip-rest':'rest',minutes:driveThrough?0:w.preferred,night:w.date,toggleNight:true});
+     left-=drive;at=rest+(driveThrough?0:w.preferred*MIN);
     }
    }
    if(left>0)out.push({kind:p.kind,minutes:left});
@@ -137,7 +139,7 @@
   }
   function draw(){
    if(!rows.length)return;
-   var values=rows.map(function(r,i){return edges(r,windows[i],rows[i+1]);}),days=new Set(),html='';
+   var values=rows.map(function(r,i){return edges(r,windows[i],rows[i+1]);}),days=new Set(),shownSkips=new Set(),html='';
    function include(from,to){
     var a=Date.parse(WindowClock.wall(from,clock).slice(0,10)+'T00:00:00Z'),
         b=Date.parse(WindowClock.wall(to,clock).slice(0,10)+'T00:00:00Z');
@@ -150,13 +152,25 @@
     var ymd=new Date(day).toISOString().slice(0,10),nextDay=new Date(day+DAY).toISOString().slice(0,10),
         a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),content='',span=(width<480?6:12)*H;
     if(!Number.isFinite(a)||!Number.isFinite(b))return;
-    for(var t=a;t<b;t+=span)content+=strip(t,Math.min(t+span,b),values,b);
+    for(var t=a;t<b;t+=span)content+=strip(t,Math.min(t+span,b),values,b,shownSkips);
     if(content)html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+content+'</section>';
    });
+   var restore='';
+   rows.forEach(function(_,i){
+    o.skippedNights(i).forEach(function(date){if(!shownSkips.has(i+'|'+date))restore+=nightButton(i,date,true);});
+   });
+   if(restore)html+='<div class="ws-skipped"><p class="lead small keep">Drive-through nights outside this view</p>'+restore+'</div>';
    host.innerHTML=html;
    o.onIssues(rows.flatMap(function(r,i){return issues(r,windows[i],rows[i+1],begin).map(function(text){return 'Leg '+(i+1)+' '+text;});}));
   }
-  function strip(a,b,values,dayEnd){
+  function nightButton(i,date,skip,position){
+   var label=(skip?'Restore rest':'Drive through')+' · Night of '+date+' · Leg '+(i+1),
+       attrs=' data-ws-night="'+o.esc(date)+'" data-ws-night-leg="'+i+'" data-ws-skip="'+(skip?'0':'1')+'"';
+   if(position==null)return '<button type="button" class="btn tonal sm"'+attrs+' aria-label="'+o.esc(label)+'">Restore rest · '+o.esc(date)+'</button>';
+   return '<button type="button" class="ws-night'+(skip?' ws-night-skipped':'')+'" style="left:clamp(12px,'+position+'%,calc(100% - 12px))"'+attrs+
+    ' aria-label="'+o.esc(label)+'" title="'+o.esc(label)+'">'+(skip?'⌃':'−')+'</button>';
+  }
+  function strip(a,b,values,dayEnd,shownSkips){
    function pc(t){return 100*(t-a)/(b-a);}
    function bar(kind,start,end){
     if(end<=start||start>=b||end<=a)return '';
@@ -166,7 +180,7 @@
     if(t<a||t>=b&&!(t===b&&b===dayEnd&&id==='end'))return '';
     return '<button type="button" class="ws-handle ws-h-'+id+(second?' ws-h-extra':'')+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+dateFmt.format(t)+' '+timeFmt.format(t))+'"></button>';
    }
-   var windows='',itinerary='',handles='',names='',tick='',blue=[];
+   var windows='',itinerary='',handles='',names='',tick='',nightActions='',blue=[];
    for(var t=a;t<b;t+=H){
     var wholeHour=WindowClock.wall(t,clock).endsWith(':00');
     tick+='<span data-ws-tick="'+t+'" style="left:'+pc(t)+'%">'+o.esc((wholeHour?hourFmt:timeFmt).format(t))+'</span>';
@@ -174,7 +188,12 @@
    rows.forEach(function(r,i){
     var w=values[i],times=Object.values(w);if(Math.min(r.start,...times)>=b||Math.max(r.end,...times)<a)return;
     windows+=bar('departure'+(w.ds>w.de?' ws-reversed':''),Math.min(w.ds,w.de),Math.max(w.ds,w.de))+bar('arrival'+(w.as>w.ae?' ws-reversed':''),Math.min(w.as,w.ae),Math.max(w.as,w.ae));
-    itinerary+=r.parts.map(function(p){return bar(p.kind,p.start,p.end);}).join('');
+    r.parts.forEach(function(p){
+     itinerary+=bar(p.kind,p.start,p.end);
+     if(!p.toggleNight||p.start<a||p.start>=b)return;
+     var skip=p.kind==='skip-rest';if(skip)shownSkips.add(i+'|'+p.night);
+     nightActions+=nightButton(i,p.night,skip,pc(p.start));
+    });
     Object.keys(w).forEach(function(key){if(w[key]>=a&&w[key]<b)blue.push({leg:i,edge:key,at:w[key]});});
     handles+=handle(i,'start',r.start)+handle(i,'end',r.end);
     var from=Math.max(a,r.start),to=Math.min(b,r.end);
@@ -188,7 +207,7 @@
     if(second)extra=true;
     handles+=handle(h.leg,h.edge,h.at,second);
    });
-   return windows||itinerary||handles?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+'</div></div></div>':'';
+   return windows||itinerary||handles||nightActions?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+nightActions+'</div></div></div>':'';
   }
   function change(i,id,t){
    var w=windows[i],row=rows[i];
@@ -227,6 +246,13 @@
   host.addEventListener('pointermove',function(e){if(!drag)return;cancelAnimationFrame(frame);frame=requestAnimationFrame(function(){move(e);});});
   host.addEventListener('pointerup',function(e){if(drag&&drag.id===e.pointerId){cancelAnimationFrame(frame);move(e);drag=null;}});
   host.addEventListener('lostpointercapture',function(){drag=null;});
+  host.addEventListener('click',function(e){
+   var b=e.target.closest('[data-ws-night]');if(!b)return;
+   var i=+b.dataset.wsNightLeg,date=b.dataset.wsNight;
+   o.setNight(i,date,b.dataset.wsSkip==='1');refresh();
+   var next=Array.from(host.querySelectorAll('[data-ws-night]')).find(function(el){return +el.dataset.wsNightLeg===i&&el.dataset.wsNight===date;});
+   if(next)next.focus({preventScroll:true});
+  });
   host.addEventListener('keydown',function(e){
    var b=button(e),sign={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1}[e.key];if(!b||!sign)return;
    var i=+b.dataset.wsLeg,id=b.dataset.wsEdge;e.preventDefault();

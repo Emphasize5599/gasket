@@ -303,9 +303,9 @@
           var road=(lists[i]||[])[hzSel(i)]||(lists[i]||[])[0],p=route.stops[i+1],r=p&&p.rest;
           if(!road)continue;
           var m=T.buildRoute(road,car);
-          parts.push({minutes:m.durationSec/60,energy:m.galTo(m.totalMi),rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0});
+          parts.push({minutes:m.durationSec/60,energy:m.galTo(m.totalMi),rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0,restNight:r&&r.overnight?r.nightDate:null});
         }
-        return {start:g.start,end:g.end,point:route.stops[g.start],parts:parts};
+        return {start:g.start,end:g.end,point:route.stops[g.start],nightKey:TripStops.nightKey(route,g),parts:parts};
       });
     },
     scheduleVehicle:function(priority){

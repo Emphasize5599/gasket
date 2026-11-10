@@ -15,8 +15,7 @@
   // narrow the rest finder to places you'd reach inside a night's hours with room for the minimum rest.
   var nightSource=null,nightValue=null;function nightly(){var c=A.S.trip&&A.S.trip.windowPlan;return c&&c.enabled&&c.planningMode==='overnight'&&root.Overnight?(nightSource===c.overnight?nightValue:(nightSource=c.overnight,nightValue=Overnight.defaults(c.overnight))):null;}
   var fitMemo=new WeakMap(),nightPlans=new WeakMap(),nightTraffic=new Map();
-  function nightKey(s,g){return JSON.stringify([g.index,s.route.stops[g.from].lat,s.route.stops[g.from].lng,s.route.stops[g.end].lat,s.route.stops[g.end].lng]);}
-  function nightSkips(s,g){var cfg=A.S.trip.windowPlan;return cfg.driveThroughNights&&cfg.driveThroughNights[nightKey(s,g)]||[];}
+  function nightSkips(s,g){var cfg=A.S.trip.windowPlan;return cfg.driveThroughNights&&cfg.driveThroughNights[TripStops.nightKey(s.route,g)]||[];}
   function nightDeadline(w){return Math.min(w.arrivalEnd,w.end-w.minimum*60000);}
   function nextNight(c,at,zone,point,skips){
    var w=Overnight.nextWindow(at,zone,c,point);
@@ -113,7 +112,7 @@ if(!n.required)return html;
    host.querySelectorAll('[data-rest-drive-night]').forEach(function(input){input.onchange=function(){
     var g=directoryGroup(s,leg),cfg=A.S.trip.windowPlan,skips=new Set(nightSkips(s,g)),date=input.dataset.restDriveNight;
     if(input.checked)skips.add(date);else skips.delete(date);
-    cfg.driveThroughNights=Object.assign({},cfg.driveThroughNights,{[nightKey(s,g)]:Array.from(skips)});
+    cfg.driveThroughNights=Object.assign({},cfg.driveThroughNights,{[TripStops.nightKey(s.route,g)]:Array.from(skips)});
     A.save();accessVer++;state.nightRevision=(state.nightRevision||0)+1;var current=C.snapshot();if(!current)return;
     redraw();runRestFollowups(current,state.token,true);
    };});
