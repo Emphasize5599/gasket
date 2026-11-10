@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.456 - 2026-11-10
+
+- Includes 0.0.455, which published no APK: Timing after Parameters, and the itinerary's driving time follows your default speed.
+- Bug fixes.
+
 ## 0.0.455 - 2026-11-10
 
 - Timing now comes after Parameters, since your fuel, charger and speed settings change how long the trip takes.

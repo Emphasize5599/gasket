@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.456 - overnight-ui follows the new step order (455 published no APK)
+
+455's CI failed overnight-ui line 114: Timing's Next expected step 4; it now goes to Hazards (5), whose review opens by itself. Test updated; no app change. 455's tag stays untouched.
+
 ## 0.0.455 - Timing after Parameters; itinerary drive time follows default speed
 
 Owner's 453 log: window plans failed "reached a destination before its arrival window even when leaving as late as allowed" (48/48 early): the itinerary's green legs used Google's durationSec, slower than the plan with the default speed rule, so windows set on it were too late. STEP_ORDER [1,2,3,4,10,5,8,6,7,9], ord(Timing)=4.5, reach checks fuel before timesNeed. scheduleLegs: drive minutes = durationSec/60 − ruleMinutes(flatSecs(choiceLimitModel(road)), speedFn) (±50% cap; starts ensureLimits if missing, so an itinerary opened before limits load still shows Google's time). EV charger types/curve were already in scheduleVehicle; per-road speed edits and hydrogen station types are NOT yet in the itinerary. Tests vehiclecompare-ui / windowplanning-ui: Timing → Next → Hazards. Minimal verification (owner low on usage).
