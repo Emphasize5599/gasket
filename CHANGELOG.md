@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.442 - 2026-11-10
+
+- Set rough departure and arrival windows first, then fine-tune them in the Visual itinerary. The itinerary follows changes to the window fields and identifies which leg needs an adjustment.
+
 ## 0.0.441 - 2026-11-10
 
 - Includes the visual trip windows, overlapping translucent bars, optional first-night departure previews and circular Compare buttons from 0.0.440.

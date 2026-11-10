@@ -1,4 +1,4 @@
-/* A movable example itinerary. The exact window inputs remain the source of truth. */
+/* A visual itinerary drawn from the window planner’s exact inputs. */
 (function(root){
  'use strict';
  var STEP=300000, MIN=60000, H=60*MIN, DAY=24*H;
@@ -21,6 +21,35 @@
   return !row.blocked&&(!prev||prev.end<=row.start)&&(!next||row.end<next.departure&&row.end<=next.start)&&
    row.departure>num(w.ds,-Infinity)&&row.departure<=num(w.de,Infinity)&&row.end>=num(w.as,-Infinity)&&row.end<num(w.ae,Infinity)&&
    (!next||num(w.ae,row.end)<next.departure);
+ }
+ function place(leg,w,from,held,rules){
+  var start=up(Math.max(from,num(w.ds,from-1)+1));
+  if(Number.isFinite(held)&&held>=start){
+   var saved=run(leg,held,rules);
+   if(fits(saved,w,null,null))return saved;
+  }
+  var row=run(leg,start,rules);
+  // A date supplied only as a latest departure still anchors the itinerary.
+  if(!Number.isFinite(w.ds)&&Number.isFinite(w.de)&&down(w.de)>start){
+   var near=run(leg,down(w.de),rules);
+   if(fits(near,w,null,null))return near;
+  }
+  for(var tries=0;tries<4&&row.end<num(w.as,-Infinity);tries++){
+   var later=run(leg,up(row.start+w.as-row.end),rules);
+   if(later.departure>num(w.de,Infinity)||later.end>=num(w.ae,Infinity))break;
+   row=later;
+  }
+  return row;
+ }
+ function issue(row,w,next){
+  if(w.invalid)return 'has a window time to check.';
+  if(row.blocked)return 'has no departure outside the hours you won’t leave.';
+  if(row.departure<=num(w.ds,-Infinity))return 'leaves before its departure window opens.';
+  if(row.departure>num(w.de,Infinity))return 'leaves after its departure window closes.';
+  if(row.end<num(w.as,-Infinity))return 'arrives before its arrival window opens.';
+  if(row.end>=num(w.ae,Infinity))return 'needs more time before the arrival deadline.';
+  if(next&&num(w.ae,row.end)>=next.departure)return 'has an arrival window that reaches the next departure.';
+  return '';
  }
  function sessions(legs,options){
   var cap=options.capacity, reserve=Math.min(cap*.9,Math.max(0,options.reserve||0)),ev=options.kind==='ev',curve=options.curve,
@@ -82,25 +111,19 @@
   return out;
  }
  function bind(host,o){
-  var starts=o.starts.slice(),rows=[],rules=[],drag=null,clock=o.zone,begin=up(o.now),limit=begin+14*DAY,
+  var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,clock=o.zone,begin=up(o.now),
       short=host.clientWidth<480,frame=0,
       marks={ds:'Earliest departure',de:'Latest departure',as:'Earliest arrival',ae:'Latest arrival',start:'Move leg from start',end:'Move leg from end'},
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
       timeFmt=new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',minute:'2-digit',hour12:!o.clock24});
   function refresh(){
-   rows=[];
-   rules=o.rules();
+   var current=o.legs.map(function(_,i){return o.read(i);}),firstChanged=current.findIndex(function(w,i){return windows[i]&&JSON.stringify(w)!==JSON.stringify(windows[i]);});
+   if(firstChanged>=0)starts.length=Math.min(starts.length,firstChanged);
+   windows=current;rows=[];rules=o.rules();
    o.legs.forEach(function(leg,i){
-    var w=o.read(i),prev=rows[i-1],from=prev?prev.end:begin,t=up(Math.max(from,num(w.ds,from))+STEP);
-    var requested=num(starts[i],t),localRules=i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[],r=run(leg,Math.max(from,requested),localRules);
-    if(!Number.isFinite(starts[i])&&Number.isFinite(w.as)){
-     for(var tries=0;tries<4&&r.end<w.as;tries++){
-      var later=run(leg,up(r.start+w.as-r.end),localRules);
-      if(later.departure>num(w.de,Infinity)||later.end>=num(w.ae,Infinity))break;
-      r=later;
-     }
-    }
-    rows.push(r);
+    var w=windows[i],from=i?rows[i-1].end+STEP:begin+STEP;
+    var localRules=i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[];
+    rows.push(place(leg,w,from,starts[i],localRules));
    });
    draw();
   }
@@ -109,34 +132,35 @@
   }
   function draw(){
    if(!rows.length)return;
-   var values=rows.map(function(r,i){return edges(r,o.read(i),rows[i+1]);}),times=values.flatMap(Object.values),
-       lo=Math.max(begin-DAY,Math.min(rows[0].start,Math.min.apply(null,times))),
-       hi=Math.min(limit+DAY,Math.max(rows[rows.length-1].end,Math.max.apply(null,times))),
-       date=WindowClock.wall(lo,clock).slice(0,10),html='';
-   for(var day=0;day<16;day++){
-    var ymd=new Date(Date.parse(date+'T00:00:00Z')+day*DAY).toISOString().slice(0,10),
-        nextDay=new Date(Date.parse(ymd+'T00:00:00Z')+DAY).toISOString().slice(0,10),
-        a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock);
-    if(a>=hi)break;
-    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=lo)continue;
-    html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>';
-    var count=short?4:2;
-    for(var k=0;k<count;k++)html+=strip(a+(b-a)*k/count,a+(b-a)*(k+1)/count,values,b);
-    html+='</section>';
+   var values=rows.map(function(r,i){return edges(r,windows[i],rows[i+1]);}),days=new Set(),html='';
+   function include(from,to){
+    var a=Date.parse(WindowClock.wall(from,clock).slice(0,10)+'T00:00:00Z'),
+        b=Date.parse(WindowClock.wall(to,clock).slice(0,10)+'T00:00:00Z');
+    if(!Number.isFinite(a)||!Number.isFinite(b))return;
+    days.add(b);
+    for(var day=Math.min(a,b),last=Math.max(a,b);day<=last&&day<=Math.min(a,b)+14*DAY;day+=DAY)days.add(day);
    }
+   rows.forEach(function(r,i){var w=values[i];include(r.start,r.end);include(w.ds,w.de);include(w.as,w.ae);});
+   Array.from(days).sort(function(a,b){return a-b;}).forEach(function(day){
+    var ymd=new Date(day).toISOString().slice(0,10),nextDay=new Date(day+DAY).toISOString().slice(0,10),
+        a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),content='',count=short?4:2;
+    if(!Number.isFinite(a)||!Number.isFinite(b))return;
+    for(var k=0;k<count;k++)content+=strip(a+(b-a)*k/count,a+(b-a)*(k+1)/count,values,b);
+    if(content)html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+content+'</section>';
+   });
    host.innerHTML=html;
-   var invalid=rows.some(function(r,i){return !fits(r,o.read(i),rows[i-1],rows[i+1]);});
-   o.status.textContent=invalid?'Some windows do not contain the example. Adjust the windows or move a leg.':'';
+   var issues=rows.map(function(r,i){var text=issue(r,windows[i],rows[i+1]);return text?'Leg '+(i+1)+' '+text:'';}).filter(Boolean);
+   o.status.textContent=issues.length?issues.join(' ')+' Adjust the windows or move a leg.':'';
   }
   function strip(a,b,values,dayEnd){
    function pc(t){return 100*(t-a)/(b-a);}
    function bar(kind,start,end){
-    if(start>=b||end<=a)return '';
+    if(end<=start||start>=b||end<=a)return '';
     return '<span aria-hidden="true" class="ws-bar ws-'+kind+'" style="left:'+pc(Math.max(a,start))+'%;right:'+(100-pc(Math.min(b,end)))+'%"></span>';
    }
    function handle(i,id,t){
     if(t<a||t>=b&&!(t===b&&b===dayEnd&&id==='end'))return '';
-    return '<button type="button" class="ws-handle ws-h-'+id+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+dateFmt.format(t)+' '+timeFmt.format(t))+'"></button>';
+    return '<button type="button" class="ws-handle ws-h-'+id+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+dateFmt.format(t)+' '+timeFmt.format(t))+'"></button>';
    }
    var windows='',itinerary='',handles='',names='',tick='';
    for(var j=0;j<4;j++){
@@ -144,7 +168,7 @@
     tick+='<span style="left:'+pc(t)+'%">'+o.esc(timeFmt.format(t))+'</span>';
    }
    rows.forEach(function(r,i){
-    var w=values[i];if(Math.min(w.ds,r.start)>=b||Math.max(w.ae,r.end)<a)return;
+    var w=values[i],times=Object.values(w);if(Math.min(r.start,...times)>=b||Math.max(r.end,...times)<a)return;
     windows+=bar('departure',w.ds,w.de)+bar('arrival',w.as,w.ae);
     itinerary+=r.parts.map(function(p){return bar(p.kind,p.start,p.end);}).join('');
     handles+=Object.keys(w).map(function(key){return handle(i,key,w[key]);}).join('')+handle(i,'start',r.start)+handle(i,'end',r.end);
@@ -154,12 +178,12 @@
    return windows||itinerary||handles?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track">'+windows+itinerary+names+handles+'</div></div></div>':'';
   }
   function change(i,id,t){
-   var w=o.read(i),row=rows[i],prev=rows[i-1],next=rows[i+1],v=edges(row,w,next);
+   var w=windows[i],row=rows[i],prev=rows[i-1],next=rows[i+1],v=edges(row,w,next),limit=Math.max(begin,num(windows[0].ds,rows[0].start))+14*DAY;
    if(id==='start'||id==='end'){
     var from=id==='end'?row.start+t-row.end:t;
     if(from<begin||from>limit)return false;
     var r=run(o.legs[i],from,i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[]);
-    if(!fits(r,w,prev,next)||prev&&num(o.read(i-1).ae,prev.end)>=r.departure)return false;
+    if(!fits(r,w,prev,next)||prev&&num(windows[i-1].ae,prev.end)>=r.departure)return false;
     starts[i]=r.start;rows[i]=r;draw();return true;
    }
    var lo={ds:prev?up(Math.max(prev.end,begin)):begin,de:up(row.departure),as:up(Math.max(row.departure,begin)),ae:up(row.end+1)},
@@ -170,11 +194,12 @@
    if(id==='de'&&next)hi.de=Math.min(hi.de,down(next.departure-1));
    if(lo[id]>hi[id])return false;
    var at=Math.max(lo[id],Math.min(hi[id],t));
+   if(w[id]===at)return true;
    if(!o.write(i,id,at))return false;
-   if(!Number.isFinite(starts[i]))starts[i]=row.start;
-   draw();return true;
+   windows[i]=o.read(i);starts[i]=row.start;
+   refresh();return true;
   }
-  function position(i,id){var r=rows[i];return id==='start'||id==='end'?r[id]:edges(r,o.read(i),rows[i+1])[id];}
+  function position(i,id){var r=rows[i];return id==='start'||id==='end'?r[id]:edges(r,windows[i],rows[i+1])[id];}
   function button(e){return e.target.closest('[data-ws-edge]');}
   host.addEventListener('pointerdown',function(e){
    var b=button(e);if(!b||e.button!==0)return;
@@ -202,8 +227,8 @@
   });
   var observer=new ResizeObserver(function(){var narrow=host.clientWidth<480;if(narrow!==short){short=narrow;draw();}});
   observer.observe(host);refresh();
-  return {refresh:refresh,starts:function(){return rows.map(function(r){return r.start;});},deadline:function(){var i=rows.length-1;return i<0?false:change(i,'ae',edges(rows[i],o.read(i)).ae);},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
+  return {refresh:refresh,starts:function(){return starts.slice();},deadline:function(){var i=rows.length-1;return i<0?false:change(i,'ae',edges(rows[i],windows[i]).ae);},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
  }
- var api={bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,step:STEP};
+ var api={bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,place:place,step:STEP};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WindowSchedule=api;
 })(typeof window==='undefined'?globalThis:window);
