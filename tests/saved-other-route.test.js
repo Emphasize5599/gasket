@@ -12,7 +12,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   A.KV.put('trips','trip|nokey',saved);A.KV.put('trips','index',[{id:'nokey',title:'Start → End',t:saved.savedT,mi:318,via:'Test route',n:5}]);
  });
  await p.click('#btnTrip');await p.click('[data-hist="nokey"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
- await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tDepart');
+ await p.evaluate(()=>__trip.step(3));await p.waitForSelector('#tRouteGo');
  assert.equal(await p.locator('#tRouteInfo .card').count(),0,'no route tile under the Route step');
  await p.evaluate(()=>{window.__disc=0;const o=KeylessGas.discover;KeylessGas.discover=function(){__disc++;return o.apply(this,arguments);};});
  await p.evaluate(()=>__trip.step(5));await p.waitForSelector('[data-hzk="1"]');await p.click('[data-hzk="1"]');await p.waitForFunction(()=>document.querySelector('[data-hzk="1"]').classList.contains('on'));

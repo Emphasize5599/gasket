@@ -29,7 +29,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert(await p.locator('#vcAdd').evaluate(e=>e.getBoundingClientRect().top>document.getElementById('vcCompare').getBoundingClientRect().bottom));
  await p.evaluate(()=>__app.S.cars.push(__otherVehicle));await p.click('#vcCompare');await p.click('[data-compare-car]');await p.waitForFunction(()=>__trip.state().step===2);assert.equal(await p.evaluate(()=>__app.S.carId),await p.evaluate(()=>__second));assert.equal(await p.evaluate(()=>__app.S.trip.fuel.miles),undefined,'never reuse another car’s fuel reading');assert.equal(await p.evaluate(()=>__app.S.trip.routeChoices.fixture),undefined,'alternative-route answers are not copied to another car');
  await p.evaluate(()=>{__app.S.trip.fuel={mode:'miles',miles:'210'};__app.S.trip.milesLeft='210';__app.S.trip.bufferMi=35;__app.S.trip.tankPrice=3.7;__app.S.trip.routeChoices.fixture={consider:false};__trip.step(5);});await p.click('#tNext');await p.click('#tNext');await p.waitForSelector('#tCompare');assert.equal(await p.locator('[data-vc-queue]:checked').count(),2,'a vehicle picked to compare is ticked');
- await p.click('[data-vc-plan="venza12"]');await p.waitForFunction(()=>__trip.state().step===3);
+ await p.click('[data-vc-plan="venza12"]');await p.waitForFunction(()=>__trip.state().step===10);
  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===4);
  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===5);
  await p.click('#tNext');await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);
@@ -70,7 +70,7 @@ assert.equal(await p.evaluate(()=>__expiredRefreshes.length),0,'switch off: no p
  await p.selectOption('[data-vc-priority="corolla20"]','cost');await p.selectOption('[data-vc-priority="venza12"]','time');
  assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'cost');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time');
  assert(await p.locator('[data-vc-priority="corolla20"]').evaluate(e=>e.closest('.vc-plan').previousElementSibling.classList.contains('vc-actions')),'the Trip planning box follows vehicle buttons');
- await p.evaluate(()=>__trip.step(3));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows this vehicle’s priority');await p.uncheck('#tAutoTripEnabled');await p.evaluate(()=>__trip.step(8));
+ await p.evaluate(()=>__trip.step(10));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows this vehicle’s priority');await p.uncheck('#tAutoTripEnabled');await p.evaluate(()=>__trip.step(8));
  assert.equal(await p.inputValue('[data-vc-priority="corolla20"]'),'cost');assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','another car’s priority is unchanged');
  assert(!await p.locator('#tCompare').evaluate(e=>e.scrollWidth>e.clientWidth),'priority dropdown stays inside narrow cards');
  // 0.0.424: plan the same vehicle another way. The new plan starts with the other priority, keeps its own settings,
@@ -86,7 +86,7 @@ assert.equal(await p.evaluate(()=>__expiredRefreshes.length),0,'switch off: no p
  const ownAuto=await p.isChecked('[data-vc-auto="venza12"]');await p.uncheck('[data-vc-auto="venza12#2"]');assert(!await p.isChecked('[data-vc-auto="venza12#2"]'));assert.equal(await p.isChecked('[data-vc-auto="venza12"]'),ownAuto,'automatic buffer/detour is independent per plan');await p.check('[data-vc-auto="venza12#2"]');assert.equal(await p.isChecked('[data-vc-auto="venza12"]'),ownAuto);
  await p.click('[data-vc-plan="venza12#2"]');await p.waitForFunction(()=>__trip.comparison().selected==='venza12#2');
  assert.equal(await p.evaluate(()=>__app.S.carId),'venza12','the extra plan uses the same garage vehicle');
- await p.evaluate(()=>__trip.step(3));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows the open plan’s priority');assert.match(await p.innerText('#tAutoTrip'),/extra comparison plan/);
+ await p.evaluate(()=>__trip.step(10));assert.equal(await p.inputValue('#tAutoTripPriority'),'cost','Route shows the open plan’s priority');assert.match(await p.innerText('#tAutoTrip'),/extra comparison plan/);
  await p.evaluate(()=>__trip.step(8));await p.waitForSelector('[data-vc-drop="venza12#2"]');
  assert.equal(await p.inputValue('[data-vc-priority="venza12"]'),'time','the vehicle’s own plan kept its priority');
  await p.click('[data-vc-drop="venza12#2"]');await p.waitForFunction(()=>!document.querySelector('[data-vc-card="venza12#2"]'));
