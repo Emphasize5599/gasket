@@ -1,7 +1,7 @@
 /* A visual itinerary drawn from the window planner’s exact inputs. */
 (function(root){
  'use strict';
- var STEP=300000, MIN=60000, H=60*MIN, DAY=24*H;
+ var MIN=60000, STEP=5*MIN, HANDLE_STEP=15*MIN, H=60*MIN, DAY=24*H;
  function up(t){return Math.ceil(t/STEP)*STEP;}
  function down(t){return Math.floor(t/STEP)*STEP;}
  function num(t,fallback){return Number.isFinite(t)?t:fallback;}
@@ -241,7 +241,7 @@
     var rect=strip.querySelector('.ws-track').getBoundingClientRect();
     t=+strip.dataset.wsFrom+(e.clientX-rect.left)/rect.width*(+strip.dataset.wsTo-+strip.dataset.wsFrom);
    }
-   change(drag.i,drag.edge,Math.round(t/STEP)*STEP);
+   change(drag.i,drag.edge,Math.round(t/HANDLE_STEP)*HANDLE_STEP);
   }
   host.addEventListener('pointermove',function(e){if(!drag)return;cancelAnimationFrame(frame);frame=requestAnimationFrame(function(){move(e);});});
   host.addEventListener('pointerup',function(e){if(drag&&drag.id===e.pointerId){cancelAnimationFrame(frame);move(e);drag=null;}});
@@ -260,7 +260,8 @@
   host.addEventListener('keydown',function(e){
    var b=button(e),sign={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1}[e.key];if(!b||!sign)return;
    var i=+b.dataset.wsLeg,id=b.dataset.wsEdge;e.preventDefault();
-   if(change(i,id,Math.round(position(i,id)/STEP)*STEP+sign*STEP))host.querySelector('[data-ws-leg="'+i+'"][data-ws-edge="'+id+'"]')?.focus({preventScroll:true});
+   var slot=position(i,id)/HANDLE_STEP,target=(sign>0?Math.floor(slot)+1:Math.ceil(slot)-1)*HANDLE_STEP;
+   if(change(i,id,target))host.querySelector('[data-ws-leg="'+i+'"][data-ws-edge="'+id+'"]')?.focus({preventScroll:true});
   });
   var observer=new ResizeObserver(function(){var nextWidth=host.clientWidth;if(nextWidth!==width){width=nextWidth;draw();}});
   observer.observe(host);refresh();

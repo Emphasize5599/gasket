@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.449 - 2026-11-10
+
+- Visual itinerary handles snap to 15-minute intervals. The Window planner tip points to the time fields for finer adjustments.
+- Includes anchored departures when skipping or restoring overnight rests.
+
 ## 0.0.448 - 2026-11-10
 
 - Skipping or restoring a rest in the Visual itinerary keeps the leg’s departure and earlier rests in place.
