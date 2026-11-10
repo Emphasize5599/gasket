@@ -58,16 +58,35 @@ assert(layout.arrivalOnly>0&&layout.close,'arrival-only rows put blue handles di
 if(process.env.GASKET_SCREENSHOTS){await p.locator('#twScheduleCard').screenshot({path:path.join(process.env.GASKET_SCREENSHOTS,'window-schedule-'+width+'.png')});}assert(await p.locator('#onSettings').evaluate(e=>!!(e.compareDocumentPosition(document.querySelector('#twJourney'))&Node.DOCUMENT_POSITION_FOLLOWING)),'nightly preferences precede chronology');let skippedNight;
 if(width===448){
  await p.locator('#twFinalEnd').evaluate(e=>{e.value=WindowClock.wall(Date.now()+6*86400000,'UTC');e.dispatchEvent(new Event('input',{bubbles:true}));});
- const remove=p.locator('[data-ws-skip="1"]').first();
- await remove.waitFor();
- skippedNight=await remove.getAttribute('data-ws-night');
+ const rests=p.locator('[data-ws-skip="1"]');
+ await rests.last().waitFor();
+ assert.equal(await rests.count(),2,'the fixture has two estimated rests');
+ const edge=id=>p.locator('[data-ws-leg="0"][data-ws-edge="'+id+'"]').first();
+ const setArrival=at=>p.locator('#twFinalStart').evaluate((el,t)=>{
+  el.value=t==null?'':WindowClock.wall(t,el.dataset.timeZone);
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+ },at);
+ const start=+await edge('start').getAttribute('data-ws-at'),arrival=+await edge('end').getAttribute('data-ws-at');
+ await setArrival(arrival);
+ const firstDate=await rests.first().getAttribute('data-ws-night'),first=p.locator('[data-ws-night="'+firstDate+'"][data-ws-skip="1"]');
+ const firstPosition=await first.getAttribute('style');
+ skippedNight=await rests.last().getAttribute('data-ws-night');
+ const remove=p.locator('[data-ws-night="'+skippedNight+'"][data-ws-skip="1"]');
  const restore=p.locator('[data-ws-night="'+skippedNight+'"][data-ws-skip="0"]');
  await remove.click();await restore.waitFor();
+ assert.equal(+await edge('start').getAttribute('data-ws-at'),start,'removing a later rest keeps departure anchored');
+ assert.equal(await first.getAttribute('style'),firstPosition,'the earlier rest keeps its position');
+ assert.equal(await rests.count(),1);
+ assert(+await edge('end').getAttribute('data-ws-at')<arrival);
+ assert(await p.isDisabled('#twSave'),'an early arrival is flagged instead of moving departure');
+ assert.match(await p.innerText('#twError'),/ends before its earliest arrival/);
  assert(!await p.evaluate(()=>__app.S.trip.windowPlan.driveThroughNights),'drive-through stays a draft before saving');
- await restore.click();
- const again=p.locator('[data-ws-night="'+skippedNight+'"][data-ws-skip="1"]');
- await again.waitFor();
- await again.click();await restore.waitFor();
+ await restore.click();await remove.waitFor();
+ assert.equal(+await edge('start').getAttribute('data-ws-at'),start);
+ assert.equal(+await edge('end').getAttribute('data-ws-at'),arrival);
+ assert.equal(await rests.count(),2);
+ await setArrival(null);
+ await remove.click();await restore.waitFor();
 }
 await p.selectOption('#onStartKind','dusk');assert(await p.locator('#onStart').evaluate(e=>e.classList.contains('hidden')));await p.selectOption('#onStartKind','clock');assert(!await p.locator('#onStart').evaluate(e=>e.classList.contains('hidden')));assert.equal(await p.locator('[data-rest-solar]').count(),4);await p.fill('#onMin','9');await p.fill('#onPref','8');assert(await p.isDisabled('#twSave'));assert.match(await p.innerText('#twError'),/preferred/i);await p.fill('#onMin','6');await p.locator('#onAddNight').evaluate(e=>e.closest('details').open=true);await p.click('#onAddNight');const row=p.locator('[data-on-night]');await row.locator('[data-on-date]').fill('2030-11-02');await p.fill('#on0Min','5');await p.fill('#on0Pref','7');await p.click('#twSave');assert.equal(await p.evaluate(()=>__app.S.trip.windowPlan.overnight.overrides[0].minimum),300);if(skippedNight)assert.deepEqual(await p.evaluate(()=>{const route=__trip.state().route,key=TripStops.nightKey(route,TripStops.groups(route)[0]);return __app.S.trip.windowPlan.driveThroughNights[key];}),[skippedNight],'Stops reads the same saved drive-through night');assert.equal(await p.locator('#twOvernight').count(),0,'no separate overnight approval step');assert.match(await p.innerText('#tpBody'),/Rest stops uses these nightly hours/);if(width===320)assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
 await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===4);assert.equal(await p.locator('.sub-page').count(),0,'Route does not open an overnight rest chooser');await p.click('#tNext');await p.waitForSelector('#twYes');assert.match(await p.innerText('#twReview'),/clear conditions/,'overnight mode goes straight to normal road and hazard screening');assert.equal(await p.evaluate(()=>__trip.state().route.stops.length),2,'no rests are inserted before Stops');assert.deepEqual(errors,[]);await p.close();}console.log('Overnight preferences and nightly overrides save; Route no longer requires choosing rests (they are picked in Stops) at 320/448.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

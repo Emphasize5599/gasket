@@ -249,7 +249,11 @@
   host.addEventListener('click',function(e){
    var b=e.target.closest('[data-ws-night]');if(!b)return;
    var i=+b.dataset.wsNightLeg,date=b.dataset.wsNight;
-   o.setNight(i,date,b.dataset.wsSkip==='1');refresh();
+   // A night edit changes the duration of this leg, while its departure stays fixed.
+   o.setNight(i,date,b.dataset.wsSkip==='1');
+   starts[i]=rows[i].start;
+   rows[i]=run(o.legs[i],starts[i],localRules(i));
+   draw();
    var next=Array.from(host.querySelectorAll('[data-ws-night]')).find(function(el){return +el.dataset.wsNightLeg===i&&el.dataset.wsNight===date;});
    if(next)next.focus({preventScroll:true});
   });

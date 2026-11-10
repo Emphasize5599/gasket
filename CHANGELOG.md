@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.448 - 2026-11-10
+
+- Skipping or restoring a rest in the Visual itinerary keeps the leg’s departure and earlier rests in place.
+
 ## 0.0.447 - 2026-11-10
 
 - Skip an estimated overnight rest in the Visual itinerary with its minus button. Use the chevron to restore that night. Saved drive-through choices also appear in Stops.
