@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.444 - 2026-11-10
+
+- Green leg handles sit above the itinerary bar. Blue departure and arrival handles sit below it.
+- Includes free dragging, live Save windows validation, and removal of the estimated deadline shortcut from 0.0.443.
+
 ## 0.0.443 - 2026-11-10
 
 - Drag windows and legs freely in the Visual itinerary. Conflicts appear above Save windows and prevent saving until resolved.
