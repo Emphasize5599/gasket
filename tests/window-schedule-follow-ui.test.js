@@ -39,7 +39,9 @@ const {chromium}=require('playwright');
    let worst=0,steps=0,x=start.x,y=start.y;
    const report=[];
    const step=async(dy)=>{
-    y=Math.min(745,y+dy);await touch('touchMove',x,y);await page.waitForTimeout(25);
+    y=Math.min(745,y+dy);await touch('touchMove',x,y);
+    // Measure after the app has handled the move (it redraws on the next animation frame).
+    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
     const h=await handle();steps++;
     const gap=h?Math.abs(h.y-y):Infinity;
     report.push({y:Math.round(y),handleY:h&&Math.round(h.y),gap:Math.round(gap)});

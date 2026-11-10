@@ -383,6 +383,10 @@
    if(!drag||!scroller)return;
    var view=scroller===document.scrollingElement||scroller===document.documentElement?{top:0,bottom:innerHeight}:scroller.getBoundingClientRect(),
        edge=56,speed=y<view.top+edge?-(view.top+edge-y):y>view.bottom-edge?y-(view.bottom-edge):0;
+   // Stop once the furthest row the handle may reach is on screen: scrolling further only carries it away from the thumb.
+   var top=host.getBoundingClientRect().top,last=drag.strips[drag.last],first=drag.strips[drag.first];
+   if(speed>0&&top+last.top+last.line+24<=view.bottom-edge/2)speed=0;
+   if(speed<0&&top+first.top+first.line-24>=view.top+edge/2)speed=0;
    if(!speed)return;
    scrollFrame=requestAnimationFrame(function(){
     if(!drag)return;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.453 - 2026-11-10
+
+- Includes 0.0.452, which published no APK.
+- Holding a handle near the screen edge stops scrolling once the furthest day it can reach is on screen, so it no longer drifts away from your thumb.
+
 ## 0.0.452 - 2026-11-10
 
 - Dragging a leg no longer makes overnight rests disappear. A rest that would miss your latest arrival is shortened first; if even the minimum rest won't fit, or the leg leaves during your rest hours, that night turns red.
