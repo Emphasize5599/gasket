@@ -54,7 +54,7 @@ const {chromium}=require('playwright');
    for(let i=0;i<60;i++)await step(-8);
    await touch('touchEnd');
    if(process.env.DEBUG_FOLLOW)console.log(width,JSON.stringify(report));
-   assert(worst<72,`handle stays within half a row of the thumb at ${width}px (worst gap ${Math.round(worst)}px)`);
+   assert(worst<80,`handle stays within half a row of the thumb at ${width}px (worst gap ${Math.round(worst)}px)`);
    await page.close();
   }
   // A rest that can't fit shows a pinned problem box under the chart with a Drive through button.

@@ -23,22 +23,22 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.ok(r.card&&/No plan keeps you/.test(r.msg),'Adjust shows its card and why, not a blank placeholder');
  // Leaving is required; Now fills in this minute
  const later=await p.evaluate(()=>{const d=new Date(Date.now()+864e5-new Date().getTimezoneOffset()*6e4);return d.toISOString().slice(0,16);});
- await p.evaluate(()=>__trip.step(3));await p.evaluate(()=>{document.querySelector('[data-src="typed"]').click();document.getElementById('tFrom').value='100 Main St';document.getElementById('tTo').value='200 Main St';});await p.fill('#tDepart','');await p.dispatchEvent('#tDepart','change');
+ await p.evaluate(()=>__trip.step(3));await p.evaluate(()=>{document.querySelector('[data-src="typed"]').click();document.getElementById('tFrom').value='100 Main St';document.getElementById('tTo').value='200 Main St';});await p.evaluate(()=>__trip.step(10));await p.fill('#tDepart','');await p.dispatchEvent('#tDepart','change');
  assert.equal(await p.evaluate(()=>document.querySelector('[data-step="5"]').classList.contains('dim')),true,'no Leaving: later steps gray');
- await p.click('#tNext');await p.waitForSelector('#tDepart.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),3,'Next points at Leaving');
+ await p.click('#tNext');await p.waitForSelector('#tDepart.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),10,'Next points at Leaving (on Timing)');
  await p.click('#tNow');
  const now=await p.evaluate(()=>[document.getElementById('tDepart').value,__app.S.trip.depart,Date.now()-new Date().getTimezoneOffset()*6e4]);
  assert.ok(now[0]&&now[0]===now[1]&&Math.abs(Date.parse(now[0]+'Z')-now[2])<120e3,'Now fills in this minute: '+now);
  assert.equal(await p.locator('#tDepart.need').count(),0);
  // round trip: Head back right away is a switch; off = a required time after leaving
- await p.check('#tRound');await p.waitForSelector('#tBackAutoBox:not(.hidden)');
+ await p.evaluate(()=>__trip.step(3));await p.check('#tRound');await p.evaluate(()=>__trip.step(10));await p.waitForSelector('#tBackAutoBox:not(.hidden)');
  assert.equal(await p.isChecked('#tBackAuto'),true);assert.equal(await p.isVisible('#tBackAt'),false,'right away: no date box');
  await p.evaluate(()=>{const s=document.getElementById('tBackAuto');s.checked=false;s.dispatchEvent(new Event('change'));});
  assert.equal(await p.isVisible('#tBackAt'),true);
- await p.click('#tNext');await p.waitForSelector('#tBackAt.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),3,'Head back is required when not right away');
+ await p.click('#tNext');await p.waitForSelector('#tBackAt.need',{state:'attached'});assert.equal(await p.evaluate(()=>__trip.state().step),10,'Head back is required when not right away');
  await p.fill('#tBackAt',later);await p.dispatchEvent('#tBackAt','change');assert.equal(await p.evaluate(()=>__app.S.trip.backAt),later);
  await p.evaluate(()=>{const s=document.getElementById('tBackAuto');s.checked=true;s.dispatchEvent(new Event('change'));});
- await p.evaluate(()=>{const s=document.getElementById('tRound');s.checked=false;s.dispatchEvent(new Event('change'));});
+ await p.evaluate(()=>__trip.step(3));await p.evaluate(()=>{const s=document.getElementById('tRound');s.checked=false;s.dispatchEvent(new Event('change'));});
  assert.equal(errors.length,0,errors.join('\n'));
  console.log('Saved trip on another route: falls back to discovery; required Leaving / Head back with Now and the right-away switch');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
