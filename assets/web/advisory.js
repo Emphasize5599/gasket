@@ -168,7 +168,7 @@
   function changed() { syncDot(); onChange(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }
   /** The dot on the Advisory step tab: something worth a look. */
   function syncDot() { var b = document.querySelector('#tpSteps [data-step="2"]'); if (b) b.classList.toggle('attn', attention() > 0); }
-  var listOpen = false;
+  var listOpen = false, drawnCar = null;
   // Draw only on screen; background lookups and ratings continue and wake catches up.
   var stale = false;
   function draw() {
@@ -178,6 +178,12 @@
     stale = false;
     var c = car();
     if (!c) { host.innerHTML = ''; return; }
+    // The DOM updates immediately, but its toggle event may still be queued when a background lookup redraws.
+    if (drawnCar === c) {
+      var list = host.querySelector('#advList');
+      if (list) listOpen = list.open;
+      host.querySelectorAll('details[data-open]').forEach(function (d) { rcOpen[d.dataset.open] = d.open; });
+    } else { drawnCar = c; listOpen = false; rcOpen = {}; }
     var h = window.UIKit?'<div class="card">'+UIKit.animation('Reserved illustration: prepare your vehicle before travel')+'</div>':'';
     h += recallCard(c) + (window.Gemma ? Gemma.card(c) : '') + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
@@ -325,8 +331,8 @@
     host.querySelectorAll('[data-cchk="recirc"]').forEach(function (b) { b.onchange = function () { if (window.Climate) Climate.setAck(b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     host.querySelectorAll('[data-tchk="tires"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setTiresAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
     host.querySelectorAll('[data-tchk="spare"]').forEach(function (b) { b.onchange = function () { if (window.Tires) Tires.setAired(c, b.checked); syncDot(); draw(); try { window.dispatchEvent(new Event('advisorychange')); } catch (e) { } }; });
-    if ($('advList')&&!$('advList').__advisoryBound) { $('advList').__advisoryBound=true;$('advList').addEventListener('toggle', function () { listOpen = this.open; if (listOpen) rateAll(restList); }); }
-    host.querySelectorAll('details[data-open]').forEach(function (d) { if(d.__advisoryBound)return;d.__advisoryBound=true;d.addEventListener('toggle', function (e) { if (e.target === d) rcOpen[d.dataset.open] = d.open; }); });
+    if ($('advList')&&!$('advList').__advisoryBound) { $('advList').__advisoryBound=true;$('advList').addEventListener('toggle', function () { if (!host.contains(this)) return; listOpen = this.open; if (listOpen) rateAll(restList); }); }
+    host.querySelectorAll('details[data-open]').forEach(function (d) { if(d.__advisoryBound)return;d.__advisoryBound=true;d.addEventListener('toggle', function (e) { if (e.target === d && host.contains(d)) rcOpen[d.dataset.open] = d.open; }); });
     host.querySelectorAll('[data-adv]').forEach(function (b) {
       b.onclick = function () {
         var a = adviceFor(c)[+b.dataset.adv]; if (!a) return;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.445 - 2026-11-10
+
+- Recall lists and open recall details stay expanded during background redraws.
+- Includes free itinerary dragging and the new handle placement from 0.0.444.
+
 ## 0.0.444 - 2026-11-10
 
 - Green leg handles sit above the itinerary bar. Blue departure and arrival handles sit below it.
