@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.446 - 2026-11-10
+
+- The Visual itinerary shows hourly ticks. Blue window handles sit directly below the bar and use a second row only when they would overlap.
+
 ## 0.0.445 - 2026-11-10
 
 - Recall lists and open recall details stay expanded during background redraws.

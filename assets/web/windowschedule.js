@@ -116,10 +116,11 @@
  }
  function bind(host,o){
   var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,clock=o.zone,begin=up(o.now),
-      short=host.clientWidth<480,frame=0,
+      width=host.clientWidth,frame=0,
       marks={ds:'Earliest departure',de:'Latest departure',as:'Earliest arrival',ae:'Latest arrival',start:'Move leg from start',end:'Move leg from end'},
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
-      timeFmt=new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',minute:'2-digit',hour12:!o.clock24});
+      timeFmt=new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',minute:'2-digit',hour12:!o.clock24}),
+      hourFmt=o.clock24?timeFmt:new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',hour12:true});
   function localRules(i){var w=windows[i];return i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[];}
   function refresh(){
    var current=o.legs.map(function(_,i){return o.read(i);}),firstChanged=current.findIndex(function(w,i){return windows[i]&&JSON.stringify(w)!==JSON.stringify(windows[i]);});
@@ -147,9 +148,9 @@
    rows.forEach(function(r,i){var w=values[i];include(r.start,r.end);include(w.ds,w.de);include(w.as,w.ae);});
    Array.from(days).sort(function(a,b){return a-b;}).forEach(function(day){
     var ymd=new Date(day).toISOString().slice(0,10),nextDay=new Date(day+DAY).toISOString().slice(0,10),
-        a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),content='',count=short?4:2;
+        a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),content='',span=(width<480?6:12)*H;
     if(!Number.isFinite(a)||!Number.isFinite(b))return;
-    for(var k=0;k<count;k++)content+=strip(a+(b-a)*k/count,a+(b-a)*(k+1)/count,values,b);
+    for(var t=a;t<b;t+=span)content+=strip(t,Math.min(t+span,b),values,b);
     if(content)html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+content+'</section>';
    });
    host.innerHTML=html;
@@ -161,24 +162,33 @@
     if(end<=start||start>=b||end<=a)return '';
     return '<span aria-hidden="true" class="ws-bar ws-'+kind+'" style="left:'+pc(Math.max(a,start))+'%;right:'+(100-pc(Math.min(b,end)))+'%"></span>';
    }
-   function handle(i,id,t){
+   function handle(i,id,t,second){
     if(t<a||t>=b&&!(t===b&&b===dayEnd&&id==='end'))return '';
-    return '<button type="button" class="ws-handle ws-h-'+id+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+dateFmt.format(t)+' '+timeFmt.format(t))+'"></button>';
+    return '<button type="button" class="ws-handle ws-h-'+id+(second?' ws-h-extra':'')+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+dateFmt.format(t)+' '+timeFmt.format(t))+'"></button>';
    }
-   var windows='',itinerary='',handles='',names='',tick='';
-   for(var j=0;j<4;j++){
-    var t=a+(b-a)*j/4;
-    tick+='<span style="left:'+pc(t)+'%">'+o.esc(timeFmt.format(t))+'</span>';
+   var windows='',itinerary='',handles='',names='',tick='',blue=[];
+   for(var t=a;t<b;t+=H){
+    var wholeHour=WindowClock.wall(t,clock).endsWith(':00');
+    tick+='<span data-ws-tick="'+t+'" style="left:'+pc(t)+'%">'+o.esc((wholeHour?hourFmt:timeFmt).format(t))+'</span>';
    }
    rows.forEach(function(r,i){
     var w=values[i],times=Object.values(w);if(Math.min(r.start,...times)>=b||Math.max(r.end,...times)<a)return;
     windows+=bar('departure'+(w.ds>w.de?' ws-reversed':''),Math.min(w.ds,w.de),Math.max(w.ds,w.de))+bar('arrival'+(w.as>w.ae?' ws-reversed':''),Math.min(w.as,w.ae),Math.max(w.as,w.ae));
     itinerary+=r.parts.map(function(p){return bar(p.kind,p.start,p.end);}).join('');
-    handles+=Object.keys(w).map(function(key){return handle(i,key,w[key]);}).join('')+handle(i,'start',r.start)+handle(i,'end',r.end);
+    Object.keys(w).forEach(function(key){if(w[key]>=a&&w[key]<b)blue.push({leg:i,edge:key,at:w[key]});});
+    handles+=handle(i,'start',r.start)+handle(i,'end',r.end);
     var from=Math.max(a,r.start),to=Math.min(b,r.end);
     if(pc(to)-pc(from)>=12)names+='<b style="left:'+pc(from)+'%;right:'+(100-pc(to))+'%">Leg '+(i+1)+'</b>';
    });
-   return windows||itinerary||handles?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track">'+windows+itinerary+names+handles+'</div></div></div>':'';
+   // Departure and arrival handles share the row below the bar when their hit areas fit.
+   function handleLeft(h){return pc(h.at)*Math.max(1,width-32)/100-(h.edge[1]==='s'?18.75:6.25);}
+   var depLeft=blue.filter(function(h){return h.edge[0]==='d';}).map(handleLeft),extra=false;
+   blue.forEach(function(h){
+    var second=h.edge[0]==='a'&&depLeft.some(function(x){return Math.abs(x-handleLeft(h))<25;});
+    if(second)extra=true;
+    handles+=handle(h.leg,h.edge,h.at,second);
+   });
+   return windows||itinerary||handles?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+'</div></div></div>':'';
   }
   function change(i,id,t){
    var w=windows[i],row=rows[i];
@@ -222,7 +232,7 @@
    var i=+b.dataset.wsLeg,id=b.dataset.wsEdge;e.preventDefault();
    if(change(i,id,Math.round(position(i,id)/STEP)*STEP+sign*STEP))host.querySelector('[data-ws-leg="'+i+'"][data-ws-edge="'+id+'"]')?.focus({preventScroll:true});
   });
-  var observer=new ResizeObserver(function(){var narrow=host.clientWidth<480;if(narrow!==short){short=narrow;draw();}});
+  var observer=new ResizeObserver(function(){var nextWidth=host.clientWidth;if(nextWidth!==width){width=nextWidth;draw();}});
   observer.observe(host);refresh();
   return {refresh:refresh,starts:function(){return starts.slice();},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
  }
