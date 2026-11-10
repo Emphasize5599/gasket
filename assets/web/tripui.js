@@ -285,12 +285,12 @@
   function restWindowIssues(timeline){if(!route||!windows||!windows.enabled()||!route.stops.some(function(x){return x.rest;}))return [];var arr=[];try{arr=windows.arrivals()||[];}catch(e){}
     var out=[],when=function(t,st){try{return new Date(t).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:st&&st.timeZone||undefined});}catch(e){return new Date(t).toLocaleString();}};
     route.stops.forEach(function(st,k){if(!k||st.rest)return;var name=stopName(st),inRow=timeline[k-1],outRow=timeline[k],a=arr[k-1],d=windowDestination(k-1);
-      if(inRow&&a&&Number.isFinite(a.end)&&inRow.arrive>a.end+60000)out.push('With your added rests you would reach '+name+' about '+when(inRow.arrive,st)+', after your arrival window ends ('+when(a.end,st)+'). Choose a shorter or different rest, or change the window in Route.');
-      var chosen=restDepartureAnchors()[k];if(outRow&&Number.isFinite(chosen)&&outRow.depart>chosen+1000)out.push('The rest cannot keep your chosen departure from '+name+'. Try another rest or adjust the first-leg window; your original later departure is kept.');if(outRow&&d.leaveStart&&d.leaveEnd){var ls=+new Date(d.leaveStart);if(Number.isFinite(ls)&&outRow.depart<ls-1000)out.push('Departure from '+name+' is before your departure window begins. Check rest timing again.');var le=+new Date(d.leaveEnd);if(Number.isFinite(le)&&outRow.depart>le+60000)out.push('With your added rests you would leave '+name+' about '+when(outRow.depart,st)+', after your departure window ends ('+when(le,st)+'). Choose a shorter or different rest, or change the window in Route.');}
+      if(inRow&&a&&Number.isFinite(a.end)&&inRow.arrive>a.end+60000)out.push('With your added rests you would reach '+name+' about '+when(inRow.arrive,st)+', after your arrival window ends ('+when(a.end,st)+'). Choose a shorter or different rest, or change the window in Timing.');
+      var chosen=restDepartureAnchors()[k];if(outRow&&Number.isFinite(chosen)&&outRow.depart>chosen+1000)out.push('The rest cannot keep your chosen departure from '+name+'. Try another rest or adjust the first-leg window; your original later departure is kept.');if(outRow&&d.leaveStart&&d.leaveEnd){var ls=+new Date(d.leaveStart);if(Number.isFinite(ls)&&outRow.depart<ls-1000)out.push('Departure from '+name+' is before your departure window begins. Check rest timing again.');var le=+new Date(d.leaveEnd);if(Number.isFinite(le)&&outRow.depart>le+60000)out.push('With your added rests you would leave '+name+' about '+when(outRow.depart,st)+', after your departure window ends ('+when(le,st)+'). Choose a shorter or different rest, or change the window in Timing.');}
     });return out;}
   // The flexible-time departure window has closed: the trip is timed from now, which can push rests past their nights.
   function departWindowPassed(){if(!windows||!windows.enabled()||futureDepart())return null;var ld=S.trip.legDepartures,t=ld&&Number.isFinite(ld[0])?ld[0]:S.trip.depart?+new Date(S.trip.depart):NaN;return Number.isFinite(t)&&t<Date.now()?t:null;}
-  function departWindowNote(at){return 'Your planned departure ('+new Date(at).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+') has passed, so the trip is timed from leaving now. Plan the time windows again in Route, or choose other rests.';}
+  function departWindowNote(at){return 'Your planned departure ('+new Date(at).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+') has passed, so the trip is timed from leaving now. Plan the time windows again in Timing, or choose other rests.';}
   function trafficWait(m){var ends=m&&m.legEnds||[];return S.trip.returnTrip&&(!windows||!windows.enabled())&&!backAuto()&&S.trip.backAt&&ends.length>1?{d:ends[ends.length-2],at:new Date(S.trip.backAt).getTime()}:null;}
   function trafficStops(plan,opts){if(!plan||(!plan.ok&&!plan.restTimingInvalid)||!opts)return [];return (plan.stops||[]).map(function(s){return {d:s.c.d,seconds:Math.max(0,T.stopDelay(opts,s)*60)};}).concat((plan.destinationCharges||[]).map(function(c){return {d:(opts.model.legEnds||[])[c.index],seconds:Math.max(0,c.minutes*60)};})).filter(function(s){return Number.isFinite(s.d)&&Number.isFinite(s.seconds)&&s.seconds>0;});}
   function trafficInvalidate(){result=null;compareReviewed=0;hzCache=new WeakMap();hzModels=new WeakMap();hzRiskAcks=new WeakMap();resetChoices(choiceSavedId);if(rawRoute)model=T.buildRoute(rawRoute,carModel());A.save();if(!$('trip').classList.contains('hidden'))renderStep();}
@@ -315,7 +315,7 @@
           var m=T.buildRoute(road,car);
           parts.push({minutes:m.durationSec/60,energy:m.galTo(m.totalMi),rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0,restNight:r&&r.overnight?r.nightDate:null});
         }
-        return {start:g.start,end:g.end,point:route.stops[g.start],nightKey:TripStops.nightKey(route,g),parts:parts};
+        return {start:g.start,end:g.end,point:route.stops[g.start],endPoint:route.stops[g.end],nightKey:TripStops.nightKey(route,g),parts:parts};
       });
     },
     scheduleVehicle:function(priority){
@@ -325,9 +325,9 @@
     },
     immediateAfter:function(i){return !!(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2);},
     isRestDestination:function(i){return !!(route&&route.stops[i+1]&&route.stops[i+1].rest);},fixedRoad:function(i){return restLegSolo(route,i);},legLabel:function(i){var g=TripStops.group(route,i);return 'Leg '+(g?g.index+1:i+1)+(restLegSolo(route,i)?' · added rest access':'');},origin:function(){var p=route&&route.stops[0];return p&&(p.label||p.address)||'Start';},destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
-    changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();built[ST_ROUTE]=null;renderStep();},
+    changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();built[ST_ROUTE]=null;built[ST_TIMING]=null;renderStep();},
     priority:function(){return planningPriority(Garage.car());},setPriority:function(p){var c=planTarget(activeKey()),old=planningPriority(Garage.car());if(old==='cost')S.trip.costAvoidTolls=!!S.trip.avoid.tolls;var on=AutoTrip.enabled(planView(activeKey()),S.autoTripPriority);c.planningPriority=p;c.autoTripPriority=on?p:'manual';S.trip.avoid.tolls=p==='time'?!tollPreference().allowPaid:!!S.trip.costAvoidTolls;},
-    enableForecast:function(){if(S.googleTraffic===false&&!(S.hereTraffic===true&&S.hereKey))return false;S.trip.trafficForecast=true;return true;},rows:windowRows,rerate:windowRerate,legMinutes:function(){if(!route||!model)return null;var n=hzLegs();if(!n)return null;var out=[];for(var i=0;i<n;i++){var secs=hzAlts(i).map(function(a){return parseInt(a&&a.duration,10);}).filter(function(x){return x>0;});if(!secs.length)return null;out.push(Math.min.apply(null,secs)/60);}return out;},needRoutes:function(){var b=$('tGetRoutes');if(b)flag(b,'pick');},read:function(row,control){return windowRead(row,null,control);},weatherStats:function(){return weatherTransport.counts();},forecastHtml:function(){return traffic?traffic.html():'';},
+    enableForecast:function(){if(S.googleTraffic===false&&!(S.hereTraffic===true&&S.hereKey))return false;S.trip.trafficForecast=true;return true;},rows:windowRows,rerate:windowRerate,legMinutes:function(){if(!route||!model)return null;var n=hzLegs();if(!n)return null;var out=[];for(var i=0;i<n;i++){var secs=hzAlts(i).map(function(a){return parseInt(a&&a.duration,10);}).filter(function(x){return x>0;});if(!secs.length)return null;out.push(Math.min.apply(null,secs)/60);}return out;},needRoutes:function(){if(step!==ST_ROUTE){collectSafe();step=ST_ROUTE;renderStep();}var b=$('tGetRoutes');if(b)flag(b,'pick');},read:function(row,control){return windowRead(row,null,control);},weatherStats:function(){return weatherTransport.counts();},forecastHtml:function(){return traffic?traffic.html():'';},
     canAuto:function(row){return !RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]).tires.length;},
     reviewed:function(s){windowReviewComplete(s);if(restPending()){restResume();return;}step=ST_COMPARE;renderStep();},
     confirm:async function(row){var car=S.carId,risk=RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),row.reading.hazards||[]);if(!risk.tires.length||!RouteWx.pendingHazards(car,risk.kinds).length)return true;var ok=await A.confirmDel({always:true,title:'Low tread in these conditions',body:hzRiskHtml({risk:risk},row.raw,row.leg),no:'Choose another time',action:'I understand',goClass:'primary'});if(ok&&S.carId===car)RouteWx.acknowledgeHazards(car,risk.kinds);return ok&&S.carId===car;},
@@ -693,7 +693,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function tollPolicyCheck(raw){var parts=raw&&raw._sel&&route&&route.legs?route.legs.map(function(l,i){return l.alts[raw._sel[i]];}):[raw];return AutoTrip.checkTolls(tollPreference(),parts.map(tollsOf),planningPriority(Garage.car()));}
   function tollRoutesReady(){if(planningPriority(Garage.car())!=='time'||!route)return true;var lists=choiceLists(),parts=lists.map(function(list){return list.map(tollsOf).filter(function(t){return t.has===false||Number.isFinite(t.cost);}).sort(function(a,b){return (a.cost||0)-(b.cost||0);})[0];});return AutoTrip.checkTolls(tollPreference(),parts,planningPriority(Garage.car())).ok;}
   function planningCard(){var c=Garage.car(),p=planningPriority(c),t=tollPreference(),required=windows&&windows.enabled();return '<h3>Trip planning</h3>'+(activeKey()!==S.carId?'<p class="lead small keep">These settings belong to this vehicle’s extra comparison plan; its other plans keep their own.</p>':'')+'<label class="nf"><span>Priority for this vehicle</span><select id="tAutoTripPriority">'+priorityOptions(p)+'</select></label>'+(windows&&windows.enabled()&&!windows.priorityConfirmed()?'<button class="btn tonal" id="tConfirmPriority">Confirm planning priority</button>':'')+'<label class="nf chk"><span>Adjust buffer and detour automatically</span><input type="checkbox" id="tAutoTripEnabled"'+(required||AutoTrip.enabled(c,S.autoTripPriority)?' checked':'')+(required?' disabled':'')+'></label>'+(required?'<p class="lead small keep">Time-window planning always adjusts buffer and detour automatically and uses this priority.</p>':'')+(p==='time'&&model&&!tollRoutesReady()?'<p class="warn">Current routes do not have verified toll prices within your preference.</p><button class="btn tonal" id="tUpdateTollRoutes">Update routes for toll preferences</button>':'')+(p==='time'?'<label class="nf chk"><span>I don’t mind paying tolls</span><input type="checkbox" id="tAllowPaidTolls"'+(t.allowPaid?' checked':'')+'></label>'+(t.allowPaid?'<label class="nf chk"><span>Set a maximum toll</span><input type="checkbox" id="tLimitTolls"'+(t.limited?' checked':'')+'></label>'+(t.limited?'<label class="nf">Toll budget applies to<select id="tTollScope"><option value="leg"'+(t.scope!=='trip'?' selected':'')+'>Each leg</option><option value="trip"'+(t.scope==='trip'?' selected':'')+'>Whole trip / round trip total</option></select></label><label class="nf"><span>Maximum toll '+(t.scope==='trip'?'for the whole trip':'per leg')+' ($) <span class="req">*</span></span><input id="tTollMax" type="number" min="0" step="0.01" required value="'+esc(t.max==null?'':t.max)+'"></label>':''):''):'');}
-  function refreshPlanningCard(){if(step===ST_ROUTE){var y=tpBody().scrollTop;built[ST_ROUTE]=null;renderStep();tpBody().scrollTop=y;return;}var box=$('tAutoTrip');if(!box)return;box.innerHTML=planningCard();bindPlanningCard();A.qify(box);var chip=document.querySelector('#tAvoid [data-av="tolls"]');if(chip){chip.classList.toggle('hidden',planningPriority(Garage.car())==='time');chip.classList.toggle('on',!!S.trip.avoid.tolls);}}
+  function refreshPlanningCard(){built[ST_ROUTE]=null;if(step===ST_TIMING||step===ST_ROUTE){var y=tpBody().scrollTop;built[step]=null;renderStep();tpBody().scrollTop=y;return;}var box=$('tAutoTrip');if(!box)return;box.innerHTML=planningCard();bindPlanningCard();A.qify(box);var chip=document.querySelector('#tAvoid [data-av="tolls"]');if(chip){chip.classList.toggle('hidden',planningPriority(Garage.car())==='time');chip.classList.toggle('on',!!S.trip.avoid.tolls);}}
   function bindPlanningCard(){
     if($('tConfirmPriority'))$('tConfirmPriority').onclick=function(){windows.confirmPriority();refreshPlanningCard();if(model)windows.configure();};
     $('tAutoTripPriority').onchange=function(){changeVehiclePriority(activeKey(),this.value);};$('tAutoTripEnabled').onchange=function(){changeVehiclePriority(activeKey(),planningPriority(Garage.car()),this.checked);};
@@ -1164,9 +1164,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   // ---------- the trip planner: Garage → Route → Stops → Departure ----------
   // One panel over the map, in four steps, with Back / Next pinned at the bottom. Next checks the step's required
   // fields first and points at the first one missing (red outline for a box, a pulse for something to pick).
-  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Compare', 'Departure'], step = 1;
-  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_COMPARE = 8, ST_DEPART = 9;
-  var STEP_ORDER=[1,2,3,4,5,8,6,7,9];
+  var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Compare', 'Departure', 'Timing'], step = 1;
+  var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_COMPARE = 8, ST_DEPART = 9, ST_TIMING = 10;
+  // 0.0.454: Timing (id 10) sits between Route and Parameters. ord() gives it a place in the old numeric checks.
+  var STEP_ORDER=[1,2,3,10,4,5,8,6,7,9];
+  function ord(k){return k===ST_TIMING?3.5:k;}
   function rank(k){return STEP_ORDER.indexOf(k);}
   function visibleSteps(){return autoPriority()?STEP_ORDER.filter(function(k){return k!==ST_ADJ;}):STEP_ORDER;}
   function nextStep(k){var order=visibleSteps(),i=order.indexOf(k);return k===ST_ADJ?ST_STOPS:order[Math.min(order.length-1,i+1)];}
@@ -1226,8 +1228,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(step===ST_COMPARE)compareCapture();else if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     if(window.VisualDiagnostics)VisualDiagnostics.redraw('trip_step');
     // Going back is a new review, not implicit consent to reuse this session's answers.
-    if(step===ST_HAZ&&shown>ST_HAZ)holdStopsCheckpoint();
-    if(step===ST_HAZ&&shown>ST_HAZ&&Garage.car().rememberRouteChoices!==true&&!acceptedRecoveryReview&&!(result&&result.trafficReviewPending)){
+    if(step===ST_HAZ&&ord(shown)>ST_HAZ)holdStopsCheckpoint();
+    if(step===ST_HAZ&&ord(shown)>ST_HAZ&&Garage.car().rememberRouteChoices!==true&&!acceptedRecoveryReview&&!(result&&result.trafficReviewPending)){
       compareReviewed=0;compareReviewKey=null;
       compareReviewProof=null;
       S.trip.routeChoices={};choiceReviewedAt=0;routeReview=null;choiceComplete=false;result=null;
@@ -1242,11 +1244,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     var pg = $('trip');
     if (!pg.classList.contains('tpanel')) initPanel(pg);
     show(pg, true);
-    var full = step < ST_HAZ || step===ST_COMPARE || recommendationActive();
+    var full = ord(step) < ST_HAZ || step===ST_COMPARE || recommendationActive();
     // coming down to the map: Hazards keeps the map big (the panel at 25%); the plan's list starts at 75% (drag it
     // anywhere from there) — straight away, not as a slide a busy screen could freeze halfway
-    if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzFitKey = null; hzLeg = shown > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
-    else if (!full && (!shown || shown < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
+    if (step === ST_HAZ && shown !== ST_HAZ) { pg.style.setProperty('--panel-h', '25vh'); hzFitKey = null; hzLeg = ord(shown) > ST_HAZ ? Math.max(0, hzLegs() - 1) : 0; }   // from Route: the first leg; back from later: the last
+    else if (!full && (!shown || ord(shown) < ST_ADJ)) pg.style.setProperty('--panel-h', '75vh');
     if(step===ST_HAZ&&routeReview){if(!reviewOrder().some(function(x){return x.key===routeReview.key;}))routeReview=null;else hzLeg=routeReview.leg;}
     if (step !== ST_DEPART && preDepartH != null) { if (!full && shown === ST_DEPART) pg.style.setProperty('--panel-h', preDepartH); preDepartH = null; }   // back from Departure: your height again
     if (!full && (pg.classList.contains('full') || !shown)) {
@@ -1256,16 +1258,16 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (!full && step !== ST_HAZ && (loadingTrip || (model && !(map.hasLayer(layer) && drawn.model === model)))) mapLoading(loadingTrip ? 'Opening your trip' : 'Drawing the route');
     if (full) mapLoaded();
     $('tpSteps').innerHTML = visibleSteps().map(function (k, i) {
-      var n=STEPS[k-1],sh = { Advisory: 'Advice', Hazards: 'Hazards', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart' }[n] || n;
+      var n=STEPS[k-1],sh = { Advisory: 'Advice', Hazards: 'Hazards', Parameters: 'Params', Adjustments: 'Adjust', Departure: 'Depart', Timing: 'Times' }[n] || n;
       var attn = k === ST_ADVISORY && window.Advisory && Advisory.attention() > 0;   // something worth a look
       return '<button data-step="' + k + '" aria-label="Step '+(i+1)+': '+n+'" title="'+n+'" class="' + (k === step ? 'on' : rank(k) < rank(step) ? 'done' : '') + (rank(k) > rank(reach()) ? ' dim' : '') + (attn ? ' attn' : '') + '"><b>' + (i+1) + '</b><span class="lf">' + n + '</span><span class="ls">' + sh + '</span></button>';
     }).join('');
     requestAnimationFrame(function(){var rail=$('tpSteps'),active=rail&&rail.querySelector('.on');if(active)rail.scrollLeft+=active.getBoundingClientRect().left-rail.getBoundingClientRect().left-(rail.clientWidth-active.offsetWidth)/2;});
     navRender();
-    var b = tpBody(), keepY = shown === step && step === ST_ROUTE ? b.scrollTop : null;   // 0.0.424: a setting that redraws Route keeps your place
+    var b = tpBody(), keepY = shown === step && (step === ST_ROUTE || step === ST_TIMING) ? b.scrollTop : null;   // 0.0.424: a setting that redraws Route keeps your place
     if (shown) { scrolls[shown] = b.scrollTop; var old = $('tpS' + shown); if (old) old.classList.add('hidden'); }
     var e = stepEl(step), c = built[step];
-    var fresh = !c || step === ST_COMPARE || step === ST_DEPART || step === ST_HAZ || step === ST_STOPS || step===ST_PARAMS&&KIND()==='ev' || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));
+    var fresh = !c || step === ST_COMPARE || step === ST_TIMING || step === ST_DEPART || step === ST_HAZ || step === ST_STOPS || step===ST_PARAMS&&KIND()==='ev' || c.off !== speedOff() || (onPlan(step) && (c.model !== model || c.result !== result));
     e.classList.remove('hidden'); shown = step;
     if(step===ST_PARAMS&&$('tRuleCap')&&(!S.speed.rule||S.speed.rule.capAuto||S.speed.rule.cap==null))$('tRuleCap').value=Garage.ruleCap();
     if (fresh) {
@@ -1284,11 +1286,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     requestAnimationFrame(function () { setTimeout(function () {
       if (step !== k0) return;
       if($('trip').classList.contains('hidden'))return;
-      if (model && step >= ST_ADJ && step!==ST_COMPARE) { if(!recommendationActive())drawRoute();else{layer.clearLayers();drawn={};} if (!userMoved) fitRoute(false); }
+      if (model && ord(step) >= ST_ADJ && step!==ST_COMPARE) { if(!recommendationActive())drawRoute();else{layer.clearLayers();drawn={};} if (!userMoved) fitRoute(false); }
       hzSync();
       fitBtn(); sheetSize();
       if (step === ST_DEPART) fitDepart();
-      if (model && (step >= ST_ADJ || step === ST_HAZ) && !busy&&!choicePlanning) mapLoaded();
+      if (model && (ord(step) >= ST_ADJ || step === ST_HAZ) && !busy&&!choicePlanning) mapLoaded();
     }, 0); });
   }
   /** Departure: the panel only as tall as its content, and the whole route centered above it again. */
@@ -1313,7 +1315,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       gateTabs(); return;
     }
     nav.innerHTML = (step > 1 ? '<button class="btn tonal" id="tBack">Back</button>' : '<span></span>') +
-      (step < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
+      (ord(step) < ST_DEPART ? '<button class="btn primary" id="tNext">Next</button>' : '<button class="btn primary" id="tOpen">' + MAPS_ICON + 'Open in Google Maps</button>');
     if(step===ST_HAZ&&routeReview){nav.insertAdjacentHTML('afterbegin','<button type="button" class="btn tonal route-review-back" id="tReviewBack" aria-label="Back to previous route"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>');$('tReviewBack').onclick=reviewBack;$('tBack').textContent='No';$('tNext').textContent='Yes';$('tBack').onclick=function(){reviewAnswer(false);};$('tNext').onclick=function(){reviewAnswer(true);};routeGate();return;}
     if ($('tBack')) $('tBack').onclick = function () { if (speedMode()) { discardSpeedMode(); return; } if (step === ST_HAZ && hzLeg > 0) { hzGoLeg(hzLeg - 1); return; } var previous=prevStep(step);while(rank(previous)>rank(ST_ADVISORY)&&jobLocked(previous))previous=prevStep(previous);if (jobLocked(previous)) return; leaveAsk(function () { closeLegs(); collectSafe(); step=previous; renderStep(); }); };
     if(step===ST_COMPARE&&restPending()&&$('tNext'))$('tNext').textContent='Set rest departure times';
@@ -1340,7 +1342,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       for (var s0 = step; rank(s0) < rank(to); s0=nextStep(s0)) {
         if (s0 === ST_ADVISORY || s0 === ST_PARAMS) { if (!(await ready(s0))) return; }
         else if(s0===ST_HAZ){if(!(await ready(s0)))return;} // A background scan must not skip route-consideration questions.
-        else if (s0 === ST_ROUTE && (!model || timesNeed())) return;
+        else if (s0 === ST_ROUTE && !model) return;
+        else if (s0 === ST_TIMING && timesNeed()) return;
       }
       step = to; renderStep(); return;
     }
@@ -1396,10 +1399,13 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       }
       var pick = document.querySelector('#tParsed .pick button');
       if (pick) { flag(document.querySelector('#tParsed .pick'), 'pick', 'Pick the right address.'); return false; }
+      if (!model) { flag($('tGetRoutes'), 'pick'); return false; }   // the flashing button says it
+      return true;
+    }
+    if (k === ST_TIMING) {
       var tollError=AutoTrip.tollInputError(tollPreference(),planningPriority(Garage.car()));if(tollError){flag($('tTollMax'),'box',tollError);return false;}
       var tm = timesNeed(); if (tm) { flag($(tm.id), 'box', tm.msg); return false; }
       if(model&&planningPriority(Garage.car())==='time'&&!tollRoutesReady()){flag($('tUpdateTollRoutes')||$('tTolls'),'pick','Check toll prices or update routes for your toll preference.');return false;}
-      if (!model) { flag($('tGetRoutes'), 'pick'); return false; }   // the flashing button says it
       return true;
     }
     if (k === ST_PARAMS) {
@@ -1475,7 +1481,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (window.Garage && Garage.ok && !Garage.ok()) return ST_GARAGE;
     if (window.Tires && Tires.airDue && Tires.airDue(Garage.car())) return ST_ADVISORY;
     if (window.Climate && Climate.ackDue()) return ST_ADVISORY;
-    if (!model || document.querySelector('#tParsed .pick button') || timesNeed()) return ST_ROUTE;
+    if (!model || document.querySelector('#tParsed .pick button')) return ST_ROUTE;
+    if (timesNeed()) return ST_TIMING;
     if (!hasFuel()) return ST_PARAMS;
     if(choicePending().length)return ST_HAZ;
 
@@ -1557,14 +1564,17 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       '<div class="chips" id="tAvoid">' + ['tolls', 'highways', 'ferries'].map(function (k) {
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
       '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div>' +
-        '<div class="field' + (t.returnTrip ? '' : ' hidden') + '" id="tBackAutoBox"><div class="lbl">Head back right away<small>Starts the way back as soon as you arrive; the weather on that leg is worked out for then. Off: pick when you\'ll head back.</small></div>' + sw('tBackAuto', backAuto()) + '</div>' +
-      '</div><div class="card" id="tAutoTrip">'+planningCard()+'</div>'+(windows?windows.modeHtml():'')+'<div class="card'+(windows&&windows.enabled()?' hidden':'')+'" id="tExactTiming"><div class="field col"><div class="lbl">Leaving<span class="req" aria-label="required">*</span><small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Now fills in this minute. Prices can change before you go.</small></div>' +
-        '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(S.trip.departNow ? localNow() : futureDepart() ? localStamp(+futureDepart()) : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
-        '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
-        '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' +
-        '</div><div id="tRouteGo"></div>' + (windows?windows.html():'') + (KIND()==='ev'?routeChargingHtml(t):'') +
+      '</div><div id="tRouteGo"></div>' + (KIND()==='ev'?routeChargingHtml(t):'') +
         '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Compare roads to and from added rest stops<small>Off by default: legs to and from a rest stop you add keep the road you were on, with no other routes to review. Turn on, then Get routes, to review Google\'s other roads there too.</small></div>'+sw('tRestRoutes',!!t.restRoutes)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
         '<div id="tRouteInfo"></div>';
+    }
+    if (k === ST_TIMING) {
+      // 0.0.454: when you travel, kept off Route so reviewing a vehicle can't change the places
+      return '<div class="card" id="tAutoTrip">'+planningCard()+'</div>'+(windows?windows.modeHtml():'')+'<div class="card'+(windows&&windows.enabled()&&!t.returnTrip?' hidden':'')+'" id="tExactTiming"><div class="field col'+(windows&&windows.enabled()?' hidden':'')+'" id="tLeaveBox"><div class="lbl">Leaving<span class="req" aria-label="required">*</span><small>Discounts that only apply on certain days (like Club CITGO\'s Tuesday and Friday bonuses) are counted for the day you\'ll reach each station. Now fills in this minute. Prices can change before you go.</small></div>' +
+        '<div class="dt-row"><input type="datetime-local" id="tDepart" value="' + esc(S.trip.departNow ? localNow() : futureDepart() ? localStamp(+futureDepart()) : '') + '"><button type="button" class="btn tonal sm" id="tNow">Now</button></div></div>' +
+        '<div class="field' + (t.returnTrip ? '' : ' hidden') + '" id="tBackAutoBox"><div class="lbl">Head back right away<small>Starts the way back as soon as you arrive; the weather on that leg is worked out for then. Off: pick when you\'ll head back.</small></div>' + sw('tBackAuto', backAuto()) + '</div>' +
+        '<div class="field col' + (t.returnTrip && !backAuto() ? '' : ' hidden') + '" id="tBackBox"><div class="lbl">Head back<span class="req" aria-label="required">*</span><small>When you\'ll start the way back, for the weather on that leg.</small></div>' +
+        '<input type="datetime-local" id="tBackAt" value="' + esc(t.backAt || '') + '"></div>' + '</div>' + (windows?windows.html():'');
     }
     if (k === ST_PARAMS) {
       fuel(); // apply a newly selected demo car's fuel and detour defaults before rendering inputs
@@ -1616,6 +1626,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       return;
     }
     if (k === ST_ROUTE) { bindRoute(); return; }
+    if (k === ST_TIMING) { bindTiming(); return; }
     if (k === ST_HAZ) { renderHz();if(windows&&windows.enabled()){if(!windows.ready())setTimeout(function(){windows.review();},0);}else hzPreload();return; }
     if (k === ST_PARAMS) { bindSettings(); return; }
     if (k === ST_COMPARE) { compareRender(); return; }
@@ -1651,7 +1662,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function bindRoute() {
     bindRouteCharging();
-    bindPlanningCard();var tollChip=document.querySelector('#tAvoid [data-av="tolls"]');if(tollChip)tollChip.classList.toggle('hidden',planningPriority(Garage.car())==='time');
+    var tollChip=document.querySelector('#tAvoid [data-av="tolls"]');if(tollChip)tollChip.classList.toggle('hidden',planningPriority(Garage.car())==='time');
     $('tTollCmp').onchange=function(){S.trip.tollCompare=this.checked;if(this.checked&&!S.trip.altCompare){S.trip.altCompare=true;$('tAltCmp').checked=true;$('tAltBox').classList.remove('hidden');}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
     $('tRestRoutes').onchange=function(){S.trip.restRoutes=this.checked;if(!this.checked&&route&&route.legs&&trimRestLegs(route)){rebuildAlts();rawRoute=alts[0];}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
     $('tAltCmp').onchange=function(){$('tAltBox').classList.toggle('hidden',!this.checked);S.trip.altCompare=this.checked;routeReview=null;choiceComplete=false;result=null;A.save();gateTabs();};
@@ -1664,20 +1675,6 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       $(id).addEventListener('input', function () { route = null; model = null; replay = null; result = null; autoRoute = true; renderInfo(); renderStops(); });
       $(id).addEventListener('change', function () { autoRoutes(); });   // done typing (left the box): fetch once both are in
     });
-    var dEl = $('tDepart'), bEl = $('tBackAt'), minNow = function () { dEl.min = bEl.min = localNow(); };
-    minNow(); dEl.addEventListener('focus', minNow); bEl.addEventListener('focus', minNow);
-    if(traffic)traffic.bind();if(windows){windows.bind();dEl.closest('.field.col').classList.toggle('hidden',windows.enabled());if(windows.enabled())$('tBackBox').classList.add('hidden');}
-    dEl.addEventListener('change', function () {
-      // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
-      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
-      S.trip.departNow = false;      // a time you picked: it stays put
-      collectSafe(); result = null;if(traffic&&traffic.enabled())trafficInvalidate();gateTabs();if(model&&futureDepart())hzPreload();
-    });
-    bEl.addEventListener('change', function () { collectSafe(); gateTabs();if(model&&futureDepart())hzPreload(); });
-    $('tNow').onclick = function () {
-      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); S.trip.departNow = true; A.save(); result = null;if(traffic&&traffic.enabled())trafficInvalidate();gateTabs();if(model)hzPreload();
-    };
-    $('tBackAuto').onchange = function () { collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto()); gateTabs(); };
     $('tHere').onclick = function () { $('tFrom').value = 'My location'; $('tFrom').dispatchEvent(new Event('input')); };
     $('tSrc').onclick = function (e) {
       var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
@@ -1688,7 +1685,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if (S.trip.src === 'link' && $('tLink').value.trim()) readLink().then(autoRoutes);
     };
     $('tRound').onchange = function () {
-      collectSafe(); $('tBackAutoBox').classList.toggle('hidden', !S.trip.returnTrip); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto());
+      collectSafe(); if ($('tpS' + ST_TIMING)) { $('tpS' + ST_TIMING).remove(); delete built[ST_TIMING]; }   // Timing's head-back fields follow round trip
       if (route && syncReturn(route)) { model = null; replay = null; result = null; autoRoute = false; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
       renderStops(); renderInfo();
     };
@@ -1698,6 +1695,24 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     };
     renderStops(); renderInfo();
     if (srcOf() === 'link' && t.link && !route) readLink().then(autoRoutes); else autoRoutes();
+  }
+  /** 0.0.454: Timing (priority, timing mode, leaving / head back, time windows). */
+  function bindTiming() {
+    bindPlanningCard();
+    var dEl = $('tDepart'), bEl = $('tBackAt'), minNow = function () { dEl.min = bEl.min = localNow(); };
+    minNow(); dEl.addEventListener('focus', minNow); bEl.addEventListener('focus', minNow);
+    if(traffic)traffic.bind();if(windows){windows.bind();if(windows.enabled())$('tBackBox').classList.add('hidden');}
+    dEl.addEventListener('change', function () {
+      // sanity check: you can't leave in the past (a few minutes' slack for the time it took to pick)
+      if (dEl.value && new Date(dEl.value).getTime() < Date.now() - 5 * 6e4) dEl.value = '';
+      S.trip.departNow = false;      // a time you picked: it stays put
+      collectSafe(); result = null;if(traffic&&traffic.enabled())trafficInvalidate();gateTabs();if(model&&futureDepart())hzPreload();
+    });
+    bEl.addEventListener('change', function () { collectSafe(); gateTabs();if(model&&futureDepart())hzPreload(); });
+    $('tNow').onclick = function () {
+      dEl.value = localNow(); dEl.classList.remove('need'); dEl.dispatchEvent(new Event('input')); collectSafe(); S.trip.departNow = true; A.save(); result = null;if(traffic&&traffic.enabled())trafficInvalidate();gateTabs();if(model)hzPreload();
+    };
+    $('tBackAuto').onchange = function () { collectSafe(); $('tBackBox').classList.toggle('hidden', !S.trip.returnTrip || backAuto() || !!(windows&&windows.enabled())); gateTabs(); };
   }
   function bindSettings() {
     if($('tBatteryTemp')){
@@ -4296,7 +4311,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   /** Steps closed while a search runs: the ones that would change what it uses (the car, the route), and Stops and
    *  Departure, whose answers it's about to change (Adjustments shows its progress). */
-  function jobLocked(k) { return !!priceReplanning||trafficRefreshing||!!schedulePlanning||queueWorking || !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
+  function jobLocked(k) { return !!priceReplanning||trafficRefreshing||!!schedulePlanning||queueWorking || !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_TIMING || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
   async function findStops1(force) {
     var preflightOwner=route,previousPlan=result,previousModel=model,previousContext=result&&result.plan&&result.plan.ok?PlannedTrip.identity(plannedSession(),plannedSettings()):null;await planningPreflight(force);if(route!==preflightOwner)return;
     busy = true;adjustError=''; jobCancel = false; searchCancelled = false; bgJob = false;
@@ -4451,7 +4466,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(refreshInfo)g.notes=g.notes.concat(refreshInfo.errors||[]);
     var cands = g.cands, notes = g.notes, unpriced = g.unpriced, stale = g.stale, grade = g.grade;
     finishScanPending('plan');prog(0.93, 'Choosing stops');
-    if (step >= ST_ADJ) mapLoading('Choosing stops', 0.93);
+    if (ord(step) >= ST_ADJ) mapLoading('Choosing stops', 0.93);
     var startGal = startFuel(model);
     if(KIND()!=='gas'){prog(.93,'Checking route energy and speed limits');await energyLimits(model,rawRoute);if(jobCancel)throw Error('cancelled while checking route energy');}
     await waitRestLimits(model,function(){return !jobCancel;});
@@ -4526,7 +4541,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     progEnd();
     await breathe();
     var t2 = Date.now();
-    if (step >= ST_ADJ) showResult();
+    if (ord(step) >= ST_ADJ) showResult();
     if(traffic&&traffic.enabled())hzPreload();
     LG.debug('plan', 'Results drawn in ' + (Date.now() - t2) + ' ms');
   }
@@ -4582,7 +4597,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     var put = function (sh, ah) { var note=result&&result.savedPlanAt?'<p class="lead small keep" data-saved-plan>Saved plan · '+esc(new Date(result.savedPlanAt).toLocaleString())+' · stored prices and traffic</p><button class="btn tonal" data-saved-plan-edit>Edit trip settings</button>':'';if(el)el.innerHTML=note+sh;if(ea)ea.innerHTML=note+(ah==null?sh:ah);[el,ea].filter(Boolean).forEach(function(host){var edit=host.querySelector('[data-saved-plan-edit]');if(edit)edit.onclick=function(){savedAdjustments=true;step=autoPriority()?ST_PARAMS:ST_ADJ;renderStep();};}); };
     queueStopsSnapshot();
     var r = result;
-    if(restPending()){var rests=restRows(),summary='<div class="card"><h3>Adding rest stops</h3><p class="lead keep">'+(restUI&&restUI.nightly()?'Choose when to leave each rest to see the next night.':'Keep adding stops, then choose when to leave each one.')+'</p>'+(route.restPlanError?'<p class="warn" role="alert">'+esc(route.restPlanError)+'</p><button class="btn tonal" data-rest-fix-windows>Review trip time windows</button>':'')+(route.restStartAdjustment?'<p class="lead keep">First-leg start moved earlier within your window to '+esc(new Date(S.trip.depart).toLocaleString())+' to keep your original later-leg departures.</p>':'')+rests.map(function(x){return '<p><b>'+esc(x.point.short||x.point.label)+'</b> · about '+Math.round((x.rest.roughDrivingMinutes||0)+x.rest.minimumRest)+' min added, including '+x.rest.minimumRest+' min rest</p>';}).join('')+'<p class="lead small keep">'+'Fuel planning waits until you finish rest timing. Arrival estimates reuse your previous fuel stops; final planning checks range and discovers missing stations if needed.'+'</p></div>';put(summary);[el,ea].filter(Boolean).forEach(function(host){var fix=host.querySelector('[data-rest-fix-windows]');if(fix)fix.onclick=function(){step=ST_ROUTE;renderStep();};});var active=step===ST_STOPS?el:ea;if(active){active.insertAdjacentHTML('beforeend',(autoPriority()?automaticRefreshTile():'')+restUI.tile());restUI.bind(active);}routeGate();return;}
+    if(restPending()){var rests=restRows(),summary='<div class="card"><h3>Adding rest stops</h3><p class="lead keep">'+(restUI&&restUI.nightly()?'Choose when to leave each rest to see the next night.':'Keep adding stops, then choose when to leave each one.')+'</p>'+(route.restPlanError?'<p class="warn" role="alert">'+esc(route.restPlanError)+'</p><button class="btn tonal" data-rest-fix-windows>Review trip time windows</button>':'')+(route.restStartAdjustment?'<p class="lead keep">First-leg start moved earlier within your window to '+esc(new Date(S.trip.depart).toLocaleString())+' to keep your original later-leg departures.</p>':'')+rests.map(function(x){return '<p><b>'+esc(x.point.short||x.point.label)+'</b> · about '+Math.round((x.rest.roughDrivingMinutes||0)+x.rest.minimumRest)+' min added, including '+x.rest.minimumRest+' min rest</p>';}).join('')+'<p class="lead small keep">'+'Fuel planning waits until you finish rest timing. Arrival estimates reuse your previous fuel stops; final planning checks range and discovers missing stations if needed.'+'</p></div>';put(summary);[el,ea].filter(Boolean).forEach(function(host){var fix=host.querySelector('[data-rest-fix-windows]');if(fix)fix.onclick=function(){step=ST_TIMING;renderStep();};});var active=step===ST_STOPS?el:ea;if(active){active.insertAdjacentHTML('beforeend',(autoPriority()?automaticRefreshTile():'')+restUI.tile());restUI.bind(active);}routeGate();return;}
     if(adjustError&&!busy){put('<div class="msg err">'+esc(adjustError)+'</div>');routeGate();return;}
     [ST_ADJ, ST_STOPS].forEach(function (k) { if (built[k]) { built[k].result = result; built[k].model = model; } });
     if (!r && loadingTrip) { put(skelStops('Opening your trip'), skelAdjust('Opening your trip')); return; }
@@ -5079,7 +5094,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(!valid())return;var opts=refreshed.opts,p=refreshed.plan,timeline=p.ok?T.scheduleTimeline(opts,p).map(function(t,i){var l=owner.legs&&owner.legs[i],a=l&&l.alts[l.sel||0];return Object.assign({},previous.schedule&&previous.schedule[i]||{},t,{raw:a,index:l&&l.sel||0,routeKey:a&&RouteChoices.key(i,a)});}):[],timingError='';delete opts._trafficExternal;Object.defineProperty(opts,'_trafficRaw',{value:raw,configurable:true});
       if(p.ok&&windows&&windows.enabled()){var arrivals=windows.arrivals(),ds=windows.config().destinations||[];timeline.forEach(function(t,i){var b=arrivals[i];if(b&&(t.arrive<b.start||t.arrive>b.end))timingError='Updated traffic misses an arrival window. Adjust your time windows.';var d=i&&ds[i-1];if(d&&d.leaveStart&&d.leaveEnd&&(t.depart<+new Date(d.leaveStart)||t.depart>+new Date(d.leaveEnd)))timingError='Updated traffic misses a departure window. Adjust your time windows.';if((opts.legDepartures||[])[i]!=null&&t.depart>(opts.legDepartures[i]+1000))timingError='Updated traffic no longer reaches leg '+(i+1)+' before its chosen departure. Adjust your time windows.';});}
       var next=Object.assign({},previous,{opts:opts,plan:p,cands:opts.cands,topSel:-1,sweep:null,dsweep:null,schedule:timeline});
-      if(!p.ok||timingError){if(timingError){p.ok=false;p.propulsionReason=timingError;}result=next;model=opts.model;recompute();step=timingError?ST_ROUTE:ST_STOPS;trafficRefreshError=timingError||p.propulsionReason||'Updated traffic needs different trip parameters.';A.toast(trafficRefreshError);}
+      if(!p.ok||timingError){if(timingError){p.ok=false;p.propulsionReason=timingError;}result=next;model=opts.model;recompute();step=timingError?ST_TIMING:ST_STOPS;trafficRefreshError=timingError||p.propulsionReason||'Updated traffic needs different trip parameters.';A.toast(trafficRefreshError);}
       else{
         var stops=trafficStops(p,opts).map(function(x){return {mi:x.d,min:x.seconds/60};}).concat(timeline.map(function(t,i){return i&&t.waitMinutes>0?{mi:t.from,min:t.waitMinutes}:null;}).filter(Boolean)),reading=await RouteWx.forRoute(opts.model,wxGet,{depart:depart,stops:stops,stateAt:window.Limits&&Limits.stateAt,counties:loadCounties,countyOf:function(f){return window.US_COUNTIES&&US_COUNTIES[f];}});if(!valid())return;
         var changed=RestPlan.changedHazards(prior,previous.opts.model,reading.hazards||[],opts.model),issues=TimeWindows.screeningIssues(reading),declined=false;
@@ -5632,7 +5647,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       document.body.appendChild(b);
       b.onclick = function () { userMoved = false; fitBtn(); fitRoute(true); };
     }
-    var on = userMoved && routeBounds && (step >= ST_ADJ || step === ST_HAZ) && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
+    var on = userMoved && routeBounds && (ord(step) >= ST_ADJ || step === ST_HAZ) && document.body.classList.contains('trip-on') && !$('trip').classList.contains('hidden');
     b.classList.toggle('hidden', !on);
     if (on) b.style.bottom = (sheetCover() + 12) + 'px';
   }
@@ -6084,8 +6099,9 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(compareLocked()){compareLater(function(){compareAdjust(id);});return;}
     if(!compareSwitch(id))return;
     var review=queueReviewStep(compareEntries.get(id),Garage.car());
-    step=review||ST_ROUTE;
-    if(step===ST_ROUTE&&!S.trip.link&&(srcOf()==='link'||!S.trip.from||!S.trip.to)){
+    // 0.0.454: reviewing a vehicle opens Timing (its windows and priority), not the places on Route
+    step=review===ST_GARAGE||review===ST_ADVISORY?review:model?ST_TIMING:ST_ROUTE;
+    if((step===ST_ROUTE||step===ST_TIMING)&&!S.trip.link&&(srcOf()==='link'||!S.trip.from||!S.trip.to)){
       var points=route.stops.filter(function(p){return !TripStops.isRest(p)&&!p.ret;});
       function address(p){return p.current?'My location':p.address||p.label||[p.lat,p.lng].join(',');}
       if(points.length>1){
@@ -6169,10 +6185,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     compareEntries.delete(key);if(compareOwner===key)compareOwner=baseId(key);if(planKey===key)planKey=null;if(queueEngine)queueEngine.select(queueEngine.state().jobs.map(function(j){return j.id;}).filter(function(x){return x!==key;}));
     comparePersist();queueEstimateMemo=null;step=ST_COMPARE;renderStep();
   }
-  window.__trip = { holdCompareLock:function(on){compareCalculating=!!on;}, call: call, callP: callP, open: openTrip, steps:{COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:activeKey(),rows:compareRows(),view:compareView};},addMode:function(id){return compareAddMode(id);},removeMode:function(id){compareRemoveMode(id);}, relogo: function () {
+  window.__trip = { holdCompareLock:function(on){compareCalculating=!!on;}, call: call, callP: callP, open: openTrip, steps:{ROUTE:ST_ROUTE,TIMING:ST_TIMING,PARAMS:ST_PARAMS,HAZ:ST_HAZ,COMPARE:ST_COMPARE,DEPART:ST_DEPART}, comparison:function(){compareCapture();return {selected:activeKey(),rows:compareRows(),view:compareView};},addMode:function(id){return compareAddMode(id);},removeMode:function(id){compareRemoveMode(id);}, relogo: function () {
       drawn = {};
       if (result && onPlan(step)) keepScroll(renderResults);
-      if (model && step >= ST_ADJ && map.hasLayer(layer)) drawRoute();
+      if (model && ord(step) >= ST_ADJ && map.hasLayer(layer)) drawRoute();
     }, close: closeTrip, blChanged: blChanged, discountsChanged: repriceRewards, openStopTile: openStopTile, guard: speedGuard, bufLimits: bufLimits, find: findStops,
     step: function (k) { collectSafe(); step = k; renderStep(); },
     restHorizon: function (d) { return restHorizon(d); },

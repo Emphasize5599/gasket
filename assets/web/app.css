@@ -2492,3 +2492,12 @@ input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
 .ws-night {position:absolute;top:24px;z-index:2;transform:translateX(-50%);width:23px;height:23px;padding:0;border:1px solid var(--save,#27874a);border-radius:4px;background:var(--surface-2);font-size:15px;font-weight:700;line-height:1;cursor:pointer;}
 .ws-night-skipped {border-style:dashed;}
 .ws-night:focus-visible,.ws-handle:focus-visible {outline:2px solid var(--blue,#619df2);outline-offset:0;border-radius:3px;}
+/* 0.0.454: dawn / sunrise / sunset / dusk markers on the visual itinerary */
+.ws-sun {position:relative;height:16px;}
+.ws-sun-ev {position:absolute;top:0;width:16px;height:16px;transform:translateX(-50%);pointer-events:none;}
+.ws-compact .ws-sun-ev {top:6px;}
+.ws-sun-icon {width:16px;height:16px;display:block;}
+.ws-legend .ws-sun-icon {width:1rem;height:1rem;}
+.ws-sun-sunriseEnd,.ws-sun-sunsetStart {color:#d98a1c;}
+.ws-sun-dawn,.ws-sun-dusk {color:#5f6fa8;}
+@media (prefers-color-scheme: dark){.ws-sun-dawn,.ws-sun-dusk{color:#9aa8de;}.ws-sun-sunriseEnd,.ws-sun-sunsetStart{color:#f0ac4b;}}

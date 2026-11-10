@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.454 - 2026-11-10
+
+- New Timing step between Route and Parameters. It holds the trip planning priority, the timing mode and traffic forecasts, Leaving / Head back, and time windows. Route keeps the places, avoid options, round trip, charger types and other routes.
+- Review setup / Adjust trip on a Compare card opens Timing, so you can change a vehicle's windows without touching the trip's places.
+- The visual itinerary shows when dawn begins, sunrise ends, sunset begins and dusk ends, timed roughly where the trip is then.
+- Bug fixes.
+
 ## 0.0.453 - 2026-11-10
 
 - Includes 0.0.452, which published no APK.

@@ -3,6 +3,15 @@
  'use strict';
  var MIN=60000, STEP=5*MIN, HANDLE_STEP=15*MIN, H=60*MIN, DAY=24*H;
  var OPPOSITE={ds:'de',de:'ds',as:'ae',ae:'as'};
+ // 0.0.454: civil dawn begins, sunrise ends, sunset begins, civil dusk ends (SunCalc's names), drawn as small icons.
+ var SUN_KINDS=['dawn','sunriseEnd','sunsetStart','dusk'],
+     SUN_NAMES={dawn:'Dawn begins',sunriseEnd:'Sunrise ends',sunsetStart:'Sunset begins',dusk:'Dusk ends'};
+ function sunIcon(kind){
+  var up=kind==='dawn'||kind==='sunriseEnd',full=kind==='sunriseEnd'||kind==='sunsetStart',
+      arrow=up?'<path d="M8 1.5v4.5M6.2 3.3 8 1.5l1.8 1.8"/>':'<path d="M8 1.5V6M6.2 4.2 8 6l1.8-1.8"/>',
+      sun=full?'<path d="M4.6 12a3.4 3.4 0 0 1 6.8 0z" fill="currentColor"/>':'<path d="M4.6 12a3.4 3.4 0 0 1 6.8 0" stroke-dasharray="1.4 1.3"/>';
+  return '<svg class="ws-sun-icon ws-sun-'+kind+'" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'+sun+arrow+'<path d="M1.5 12.5h13"/></svg>';
+ }
  function up(t){return Math.ceil(t/STEP)*STEP;}
  function down(t){return Math.floor(t/STEP)*STEP;}
  function num(t,fallback){return Number.isFinite(t)?t:fallback;}
@@ -171,6 +180,42 @@
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
       timeFmt=new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',minute:'2-digit',hour12:!o.clock24}),
       hourFmt=o.clock24?timeFmt:new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',hour12:true});
+  var sunMemo=new Map();
+  /** Roughly where the trip is at t: a leg's start before it, its end after, a straight line by time in between. */
+  function placeAt(t){
+   var L=o.legs;if(!L.length||!rows.length)return null;
+   function ok(p){return p&&Number.isFinite(+p.lat)&&Number.isFinite(+p.lng)?{lat:+p.lat,lng:+p.lng}:null;}
+   for(var i=0;i<rows.length;i++){
+    var r=rows[i],a=ok(L[i].point),b=ok(L[i].endPoint)||a;
+    if(t<r.start)return (i&&ok(L[i-1].endPoint))||a;
+    if(t<=r.end){if(!a)return b;var f=r.end>r.start?(t-r.start)/(r.end-r.start):0;return {lat:a.lat+(b.lat-a.lat)*f,lng:a.lng+(b.lng-a.lng)*f};}
+   }
+   var last=L[rows.length-1];return ok(last.endPoint)||ok(last.point);
+  }
+  function sunTimes(t,p){
+   var key=Math.round(t/H)+'|'+p.lat.toFixed(2)+'|'+p.lng.toFixed(2),hit=sunMemo.get(key);
+   if(!hit){if(sunMemo.size>400)sunMemo.clear();hit=root.SunCalc.getTimes(new Date(t),p.lat,p.lng);sunMemo.set(key,hit);}
+   return hit;
+  }
+  /** Solar events in [a, b), each timed where the trip roughly is then. */
+  function sunEvents(a,b){
+   if(!root.SunCalc)return [];
+   var out=[],mid=(a+b)/2;
+   [-DAY,0,DAY].forEach(function(off){
+    var t0=mid+off,p0=placeAt(t0);if(!p0)return;
+    var first=sunTimes(t0,p0);
+    SUN_KINDS.forEach(function(k){
+     var t=+first[k];if(!Number.isFinite(t))return;
+     var p=placeAt(t);if(p)t=+sunTimes(t0,p)[k];
+     if(Number.isFinite(t)&&t>=a&&t<b&&!out.some(function(e){return e.kind===k&&Math.abs(e.at-t)<6*H;}))out.push({kind:k,at:t});
+    });
+   });
+   return out;
+  }
+  function sunMarks(a,b){
+   return sunEvents(a,b).map(function(e){var label=SUN_NAMES[e.kind]+' · '+timeFmt.format(e.at);
+    return '<span class="ws-sun-ev" role="img" style="left:'+(100*(e.at-a)/(b-a))+'%" data-ws-sun="'+e.kind+'" aria-label="'+o.esc(label)+'" title="'+o.esc(label)+'">'+sunIcon(e.kind)+'</span>';}).join('');
+  }
   function localRules(i){var w=windows[i];return i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[];}
   function refresh(){
    var current=o.legs.map(function(_,i){return o.read(i);}),firstChanged=current.findIndex(function(w,i){return windows[i]&&JSON.stringify(w)!==JSON.stringify(windows[i]);});
@@ -248,7 +293,7 @@
      if(start<end)shading+='<span class="ws-compact-shade" style="left:'+pc(start)+'%;right:'+(100-pc(end))+'%"></span>';
     });
    });
-   return '<div class="ws-strip ws-compact" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-track">'+shading+labels+held+'</div></div>';
+   return '<div class="ws-strip ws-compact" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-track">'+shading+labels+sunMarks(a,b)+held+'</div></div>';
   }
   function waitButton(i,keys,skip,position){
    var fields=keys[0].split('|'),label=(skip?'Skip waiting':'Restore waiting')+' · Leg '+(i+1)+' · '+fields[0]+' '+fields[1]+'–'+fields[2],
@@ -309,7 +354,7 @@
     // Remember what this row looked like, so a drag can hold it in place.
     var chunk=layoutChunk(a);if(chunk){chunk.empty=!any;chunk.extra=extra;}
    }
-   return any||fixed?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+nightActions+'</div></div></div>':'';
+   return any||fixed?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-sun">'+sunMarks(a,b)+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+nightActions+'</div></div></div>':'';
   }
   function change(i,id,t){
    var w=windows[i],row=rows[i];
@@ -419,6 +464,6 @@
   observer.observe(host);refresh();
   return {refresh:refresh,starts:function(){return starts.slice();},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
  }
- var api={bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,issues:issues,place:place,step:STEP};
+ var api={sunIcon:sunIcon,SUN_NAMES:SUN_NAMES,bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,issues:issues,place:place,step:STEP};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WindowSchedule=api;
 })(typeof window==='undefined'?globalThis:window);
