@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.441 - 2026-11-10
+
+- Includes the visual trip windows, overlapping translucent bars, optional first-night departure previews and circular Compare buttons from 0.0.440.
+- Keeps the route lookup button stable through timing updates and verifies both automatic and manual overnight flows.
+
 ## 0.0.440 - 2026-11-10
 
 - Visual trip windows with movable legs, five-minute handles, and estimated driving, overnight rest, charging and refueling. Gray hatching shows waiting during hours you won’t leave.

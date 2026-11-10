@@ -23,7 +23,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.waitForSelector('#twPlanningMode');const y0=await p.evaluate(()=>{const b=document.getElementById('tpBody');b.scrollTop=b.scrollHeight;return b.scrollTop;});assert(y0>100,'the Route page scrolls at this size');
  await p.selectOption('#twPlanningMode','windows');await p.waitForFunction(()=>document.getElementById('twPlanningMode').value==='windows');assert(Math.abs(await p.evaluate(()=>document.getElementById('tpBody').scrollTop)-y0)<40,'the redraw kept the scroll position');
  await p.selectOption('#twPlanningMode','fixed');
- await p.click('#tGetRoutes');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
+ // Leaving the address field can start the same request automatically during the Route redraw.
+ await p.evaluate(()=>{const s=__trip.state(),b=document.querySelector('#tGetRoutes:not(:disabled)');if(!s.model&&!s.busy&&b)b.click();});
+ await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);
  const urls=await p.evaluate(()=>__gmapsUrls);assert(urls.some(u=>/avoid=tolls/.test(u))&&urls.some(u=>!/avoid=/.test(u)),'both the usual and the toll-free routes were asked for');
  let t=await p.evaluate(()=>__trip.tolls());
  assert.deepEqual(t[0].map(x=>x.via),['Turnpike','Old Hwy 1 · no tolls']);

@@ -1425,7 +1425,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(!resumeStopsCheckpoint()&&reviewedCheckpoint)result=null;
       compareCapture();
     }
-    if(k===ST_COMPARE){if(savedPlanCurrent())return true;if(restPending()){restResume();return false;}if(queueEngine&&queueEngine.state().jobs.length>1){await queueStart();return false;}compareCapture();var selected=compareEntries.get(activeKey());if(!comparePrepared(selected)){A.toast('Review this vehicle’s setup and hazards first.');return false;}if(autoPriority()){await autoChoose();return false;}if(restUI&&restUI.nightly&&restUI.nightly()&&!restRows().length){step=ST_STOPS;renderStep();if(!(windows&&windows.config().autoFirstNight))restUI.waitFirstLeg();LG.info('rest','Waiting in leg 1 rest stops after Compare',{});return false;}return true;}
+    if(k===ST_COMPARE){if(savedPlanCurrent())return true;if(restPending()){restResume();return false;}if(queueEngine&&queueEngine.state().jobs.length>1){await queueStart();return false;}compareCapture();var selected=compareEntries.get(activeKey());if(!comparePrepared(selected)){A.toast('Review this vehicle’s setup and hazards first.');return false;}if(autoPriority()){await autoChoose();return false;}if(restUI&&restUI.nightly&&restUI.nightly()&&!restRows().length){step=ST_STOPS;renderStep();if(windows&&windows.config().autoFirstNight)LG.info('rest','First-night preparation after Compare',{});else{restUI.waitFirstLeg();LG.info('rest','Waiting in leg 1 rest stops after Compare',{});}return false;}return true;}
     if(k===ST_STOPS){var closedRest=restRows().find(function(x){return restUI&&restUI.closure&&x.rest.site&&restUI.closure(x.rest.site);});if(closedRest){A.toast(restUI.closure(closedRest.rest.site)+'. Manage added rest stops to remove it or recheck its status.');return false;}if(savedPlanCurrent())return true;if(route&&route.priceRestReview&&!restRows().length){restUI.waitFirstLeg();return false;}if(restPending()){restUI.calculate();return false;}if(restUI&&restUI.openUnresolved())return false;var allowed=tollPolicyCheck(rawRoute);if(!allowed.ok){A.toast(allowed.reason);return false;}compareCapture();if(!comparePrepared(compareEntries.get(activeKey()))){A.toast('Your setup or hazard approval changed or is over an hour old. Please review it again.');step=ST_HAZ;renderStep();return false;}}
     if (onPlan(k)) {
       if (!result) { await findStops(); if (!result) return false; }
@@ -1444,10 +1444,11 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(queueWorking){if($('tNext'))$('tNext').disabled=true;gateTabs();return;}
     var el = $('tRouteGo');
     if (el && !(routing && $('tGetRoutes'))) {
-      el.innerHTML = model ? '<div class="rt-ready"><span class="okc">✓</span><span>' + (multiLeg(route) ? 'Routes ready' : alts.length > 1 ? alts.length + ' routes ready' : 'Route ready') +
+      var html = model ? '<div class="rt-ready"><span class="okc">✓</span><span>' + (multiLeg(route) ? 'Routes ready' : alts.length > 1 ? alts.length + ' routes ready' : 'Route ready') +
         (route && route.reused ? '<small class="rt-saved">from your saved trip · no lookups</small>' : '') + '</span><button type="button" class="btn tonal sm" id="tRefreshRoutes">Refresh routes</button></div>'
         : '<button type="button" class="btn primary" id="tGetRoutes">Get routes</button>';
-      if ($('tGetRoutes')) $('tGetRoutes').onclick = getRoutes;
+      if (el.dataset.routeGate !== html) { el.dataset.routeGate = html; el.innerHTML = html; }
+      var get=$('tGetRoutes');if(get){get.onclick=getRoutes;get.disabled=!!routing;}
       if ($('tRefreshRoutes')) $('tRefreshRoutes').onclick = refreshRoutes;
     }
     var n = $('tNext'); if (n){n.classList.toggle('dim', step === ST_ROUTE && !model);n.disabled=loadingTrip||busy&&onPlan(step)||routing&&step===ST_ROUTE;}
