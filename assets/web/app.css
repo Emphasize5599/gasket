@@ -2468,7 +2468,10 @@ input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
 .ws-bar {position:absolute;border-radius:3px;height:23px;top:24px;pointer-events:none;}
 .ws-drive {background:var(--ws-green);}
 .ws-norest {z-index:1;background:color-mix(in srgb,var(--danger,#d93025) 62%,transparent);border:1px solid var(--danger,#d93025);}
-.ws-legend .ws-norest {display:none;}
+.ws-problems {position:sticky;bottom:8px;z-index:3;margin:.8rem 0;padding:.6rem .75rem;border:1px solid var(--danger,#d93025);border-radius:12px;background:var(--surface,#fff);box-shadow:var(--shadow,none);font-size:.85rem;}
+.ws-problems ul {margin:.3rem 0 0;padding:0;list-style:none;display:grid;gap:.5rem;}
+.ws-problems li {display:grid;gap:.35rem;}
+.ws-problems .btn {justify-self:start;}
 .ws-rest,.ws-charge,.ws-fuel {background:repeating-linear-gradient(135deg,var(--ws-green) 0 4px,transparent 4px 7px);border:1px solid var(--ws-green);}
 .ws-charge {background:repeating-linear-gradient(45deg,var(--ws-green) 0 3px,transparent 3px 6px);}
 .ws-fuel {background:repeating-linear-gradient(90deg,var(--ws-green) 0 2px,transparent 2px 4px);}

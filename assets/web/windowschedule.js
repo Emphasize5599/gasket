@@ -9,7 +9,7 @@
  function run(leg,start,rules){
   var at=start,parts=[];
   rules=TimeWindows.noLeaveRules(rules);
-  function add(p){if(p.minutes>0||p.toggleNight){parts.push({kind:p.kind,start:at,end:at+p.minutes*MIN,night:p.night,toggleNight:p.toggleNight,until:p.until==null?null:at+p.until*MIN,shifted:p.shifted});at+=p.minutes*MIN;}}
+  function add(p){if(p.minutes>0||p.toggleNight){parts.push({kind:p.kind,start:at,end:at+p.minutes*MIN,night:p.night,toggleNight:p.toggleNight,until:p.until==null?null:at+p.until*MIN,shifted:p.shifted,shortened:p.shortened,why:p.why});at+=p.minutes*MIN;}}
   var keys=new Set(),excluded=new Set(leg.skippedWaits?leg.skippedWaits():[]);
   function blockedRules(){
    return rules.length?TimeWindows.noLeaveOccurrences(WindowClock.wall(at,leg.zone),rules).filter(function(rule){return !excluded.has(rule.key);}):[];
@@ -26,7 +26,7 @@
   at=up(at);
   // A night whose rest no longer fits (a stop ran past the latest rest departure) is shown red until the user drives through it.
   parts.forEach(function(p){if(p.kind==='norest')p.until=Math.min(p.until,at);});
-  return {start:start,departure:departure,end:at,parts:parts,blocked:blocked,missed:parts.filter(function(p){return p.kind==='norest';}).map(function(p){return p.night;})};
+  return {start:start,departure:departure,end:at,parts:parts,blocked:blocked,missed:parts.filter(function(p){return p.kind==='norest';}).map(function(p){return {night:p.night,why:p.why||'stop'};})};
  }
  function fits(row,w,prev,next){
   return !row.blocked&&(!prev||prev.end<=row.start)&&(!next||row.end<next.departure&&row.end<=next.start)&&
@@ -52,11 +52,17 @@
   }
   return row;
  }
+ var MISSED={
+  stop:'a fuel or charging stop runs past your latest rest departure',
+  deadline:'resting would make you miss your latest arrival',
+  depart:'it leaves during your nightly rest hours'
+ };
+ function missedText(m){return 'has no room to rest on the night of '+m.night+': '+(MISSED[m.why]||MISSED.stop)+'. Tap Drive through for that night, or drag the leg or change your windows or nightly hours.';}
  function issues(row,w,next,begin){
   var out=[];
   if(row.start<begin)out.push('starts in the past.');
   if(row.blocked)out.push('has no departure outside the hours you won’t leave.');
-  (row.missed||[]).forEach(function(night){out.push('has no room to rest on the night of '+night+': a fuel or charging stop runs past your latest rest departure. Tap − on the red stretch to drive through that night, or change your windows or nightly hours.');});
+  (row.missed||[]).forEach(function(m){out.push(missedText(m));});
   if(w.ds>w.de)out.push('has an earliest departure after its latest departure.');
   if(w.as>w.ae)out.push('has an earliest arrival after its latest arrival.');
   if(row.departure<=num(w.ds,-Infinity))out.push('must start after its earliest departure.');
@@ -99,6 +105,21 @@
   if(!c)return parts;
   var out=[],at=depart,notBefore=depart,nights=0,skip=new Set(skipped||[]),lastStop=null,
       selected=new Set(parts.filter(function(p){return p.kind==='rest'&&p.night;}).map(function(p){return p.night;}));
+  // Rest at `at` for this night: the preferred length, moved later if needed and shortened to
+  // the latest rest departure and the latest arrival. Less than the minimum = no rest (shown red).
+  function settle(w,after,why){
+   if(skip.has(w.date)){out.push({kind:'skip-rest',minutes:0,night:w.date,toggleNight:true});return;}
+   var planned=Math.min(w.arrivalEnd,w.end-w.preferred*MIN),room=(w.end-at)/MIN,stay=Math.min(w.preferred,room);
+   if(at+stay*MIN<w.leaveStart)stay=Math.min(room,(w.leaveStart-at)/MIN);
+   var fits=(deadline-STEP-at-after)/MIN;
+   if(why!=='depart'&&Math.min(stay,fits)>=w.minimum){
+    stay=Math.min(stay,fits);
+    out.push({kind:'rest',minutes:stay,night:w.date,toggleNight:true,shifted:at>planned+MIN||undefined,shortened:stay<w.preferred||undefined});
+    at+=stay*MIN;return;
+   }
+   if(why!=='depart'&&stay>=w.minimum)why='deadline';else if(why==='deadline')why='stop';
+   out.push({kind:'norest',minutes:0,night:w.date,toggleNight:true,until:Math.max(0,(w.end-at)/MIN),why:why});
+  }
   parts.forEach(function(p,i){
    var left=p.minutes;
    if(p.kind==='rest'){
@@ -108,18 +129,13 @@
    }
    if(p.kind==='drive'){
     var remaining=parts.slice(i+1).reduce(function(n,q){return n+q.minutes*MIN;},0);
-    // A fuel or charging stop was still going at this night's rest time: rest once it ends,
-    // as long as it can, up to the latest rest departure. Too short = no rest (shown red).
+    // A fuel or charging stop was still going at this night's rest time: rest once it ends.
     if(lastStop&&nights<14){
      var w0=Overnight.nextWindow(Math.max(lastStop.start,notBefore),leg.zone,c,leg.point),
          planned=w0&&Math.min(w0.arrivalEnd,w0.end-w0.preferred*MIN);
      if(w0&&planned>=lastStop.start&&planned<at&&planned>=w0.start&&!selected.has(w0.date)&&at<w0.end){
       nights++;notBefore=Math.max(notBefore,Math.min(w0.arrivalEnd,w0.end-w0.minimum*MIN)+1,at+1);
-      var through=skip.has(w0.date),room=(w0.end-at)/MIN,stay=Math.min(w0.preferred,room);
-      if(at+stay*MIN<w0.leaveStart)stay=Math.min(room,(w0.leaveStart-at)/MIN);
-      if(through)out.push({kind:'skip-rest',minutes:0,night:w0.date,toggleNight:true});
-      else if(stay>=w0.minimum&&at+left*MIN+remaining+stay*MIN<deadline){out.push({kind:'rest',minutes:stay,night:w0.date,toggleNight:true,shifted:true});at+=stay*MIN;}
-      else if(stay<w0.minimum)out.push({kind:'norest',minutes:0,night:w0.date,toggleNight:true,until:(w0.end-at)/MIN});
+      settle(w0,left*MIN+remaining,'stop');
      }
     }
     lastStop=null;
@@ -128,14 +144,18 @@
      if(!w)break;
      var rest=Math.min(w.arrivalEnd,w.end-w.preferred*MIN);
      if(at+left*MIN+remaining<=rest||at+left*MIN<rest)break;
-     notBefore=Math.min(w.arrivalEnd,w.end-w.minimum*MIN)+1;nights++;
-     if(rest<at||rest<w.start||rest+w.preferred*MIN<w.leaveStart||selected.has(w.date))continue;
-     var driveThrough=skip.has(w.date);
-     if(!driveThrough&&at+left*MIN+remaining+w.preferred*MIN>=deadline)continue;
+     notBefore=Math.max(notBefore,Math.min(w.arrivalEnd,w.end-w.minimum*MIN)+1);nights++;
+     if(rest<w.start||rest+w.preferred*MIN<w.leaveStart||selected.has(w.date))continue;
+     if(rest<at||rest===at&&at===depart){
+      // Leaving during this night's rest hours: no rest before it ends unless the leg is over by then.
+      if(at+left*MIN+remaining<=w.end-w.minimum*MIN)continue;
+      settle(w,left*MIN+remaining,out.length?'stop':'depart');
+      continue;
+     }
      var drive=(rest-at)/MIN;
      if(drive>0)out.push({kind:'drive',minutes:drive});
-     out.push({kind:driveThrough?'skip-rest':'rest',minutes:driveThrough?0:w.preferred,night:w.date,toggleNight:true});
-     left-=drive;at=rest+(driveThrough?0:w.preferred*MIN);
+     left-=drive;at=rest;
+     settle(w,left*MIN+remaining,'deadline');
     }
    }
    if(left>0)out.push({kind:p.kind,minutes:left});
@@ -145,7 +165,7 @@
   return out;
  }
  function bind(host,o){
-  var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,layout=[],building=null,scroller=null,clock=o.zone,begin=up(o.now),
+  var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,layout=[],building=null,scroller=null,drawn='',clock=o.zone,begin=up(o.now),
       width=host.clientWidth,frame=0,
       marks={ds:'Earliest departure',de:'Latest departure',as:'Earliest arrival',ae:'Latest arrival',start:'Move leg from start',end:'Move leg from end'},
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
@@ -196,6 +216,11 @@
     html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(d.a))+'</h4>'+(content||compactStrip(d.a,d.b,values,!!frozen))+'</section>';
    });
    layout=plan;
+   var problems='';
+   rows.forEach(function(r,i){(r.missed||[]).forEach(function(m){
+    problems+='<li><span>Leg '+(i+1)+' '+o.esc(missedText(m))+'</span><button type="button" class="btn tonal sm" data-ws-night="'+o.esc(m.night)+'" data-ws-night-leg="'+i+'" data-ws-skip="1">Drive through the night of '+o.esc(m.night)+'</button></li>';
+   });});
+   if(problems)html+='<div class="ws-problems" role="alert"><b>Rest problem</b><ul>'+problems+'</ul></div>';
    var restore='',waits='';
    rows.forEach(function(_,i){
     o.skippedNights(i).forEach(function(date){if(!shownSkips.has(i+'|'+date))restore+=nightButton(i,date,true);});
@@ -203,7 +228,8 @@
    });
    if(restore)html+='<div class="ws-skipped"><p class="lead small keep">Drive-through nights outside this view</p>'+restore+'</div>';
    if(waits)html+='<div class="ws-skipped"><p class="lead small keep">Skipped departure waits</p>'+waits+'</div>';
-   host.innerHTML=html;
+   // An unchanged chart isn't replaced, so a tap that blurs a field (whose change redraws) still lands.
+   if(html!==drawn||!host.firstChild){host.innerHTML=html;drawn=html;}
    o.onIssues(rows.flatMap(function(r,i){return issues(r,windows[i],rows[i+1],begin).map(function(text){return 'Leg '+(i+1)+' '+text;});}));
   }
   function layoutChunk(a){return building&&building.from===a?building:null;}

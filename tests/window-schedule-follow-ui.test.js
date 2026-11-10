@@ -55,6 +55,36 @@ const {chromium}=require('playwright');
    assert(worst<72,`handle stays within half a row of the thumb at ${width}px (worst gap ${Math.round(worst)}px)`);
    await page.close();
   }
+  // A rest that can't fit shows a pinned problem box under the chart with a Drive through button.
+  for(const width of [320,448]){
+   const page=await browser.newPage({viewport:{width,height:700},timezoneId:'UTC'});
+   await page.route(/^https?:\/\//,route=>route.abort());
+   await page.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
+   await page.evaluate(()=>{
+    const scroller=document.createElement('div');scroller.id='scroller';
+    scroller.style.cssText='position:fixed;inset:0;overflow:auto;z-index:10000;background:white';
+    const host=document.createElement('main');scroller.append(host);document.body.append(scroller);
+    const H=3600000,day=Date.parse('2030-11-03T12:00Z'),prefs=Overnight.defaults({minimum:360,preferred:480}),where={zone:'UTC',point:{lat:30,lng:-90}};
+    const windows=[{ds:day-H,de:day+H,ae:day+19*H}],skipped=new Set();
+    window.__fx={host,scroller,windows,skipped,issues:[]};
+    WindowSchedule.bind(host,{zone:'UTC',now:day-2*H,clock24:true,starts:[day],esc:__app.esc,read:i=>({...windows[i]}),write:()=>true,rules:()=>[],
+     skippedNights:()=>[...skipped],skippedWaits:()=>[],setNight(i,date,skip){if(skip)skipped.add(date);else skipped.delete(date);},setWait(){},onIssues(x){__fx.issues=x;},
+     legs:[{zone:'UTC',estimate:t=>WindowSchedule.restParts([{kind:'drive',minutes:18*60}],t,where,prefs,windows[0].ae,[...skipped])}]});
+   });
+   const box=page.locator('.ws-problems');
+   await box.waitFor();
+   assert.match(await box.innerText(),/miss your latest arrival/,'the problem says why');
+   assert(await page.locator('.ws-norest').count()>0,'the stretch is red');
+   assert(/latest arrival/.test((await page.evaluate(()=>__fx.issues)).join(' ')),'the same problem is listed above Save');
+   const visible=await page.evaluate(()=>{const b=document.querySelector('.ws-problems').getBoundingClientRect();return b.bottom<=innerHeight&&b.top<innerHeight;});
+   assert(visible,'the problem box stays on screen while the chart is scrolled to the top');
+   assert(!await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth||__fx.host.scrollWidth>__fx.host.clientWidth),'no sideways scrolling');
+   await box.locator('[data-ws-night]').click();
+   await page.waitForFunction(()=>!document.querySelector('.ws-problems'));
+   assert.equal(await page.locator('.ws-norest').count(),0,'driving through clears the red stretch');
+   assert.deepEqual(await page.evaluate(()=>__fx.issues),[]);
+   await page.close();
+  }
   console.log('Itinerary handles follow the thumb vertically across day rows');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

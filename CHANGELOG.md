@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.452 - 2026-11-10
+
+- Dragging a leg no longer makes overnight rests disappear. A rest that would miss your latest arrival is shortened first; if even the minimum rest won't fit, or the leg leaves during your rest hours, that night turns red.
+- A Rest problem box pinned under the itinerary says why and has a Drive through button for that night.
+- Bug fixes.
+
 ## 0.0.451 - 2026-11-10
 
 - Itinerary handles stay under your thumb when dragged up or down across days, and the chart scrolls when you hold near the screen edge.
