@@ -36,10 +36,12 @@ const {chromium}=require('playwright');
    await send('touchMove',geometry.x+i%2,geometry.y);
    await page.waitForTimeout(45);
   }
+  const held=await page.evaluate(()=>__fixture.draws);
   await send('touchEnd');
   const result=await page.evaluate(()=>({start:__fixture.windows[0].ds,end:__fixture.windows[0].de,draws:__fixture.draws}));
   assert.equal(result.start,result.end,'the handle stops at the opposite endpoint');
-  assert.equal(result.draws,1,'holding below the chart redraws once');
+  assert.equal(held,1,'holding below the chart redraws once');
+  assert(result.draws<=2,'releasing redraws at most once more (back to the normal layout)');
   await page.evaluate(()=>{
    const {windows,schedule,day}=__fixture;
    windows[0]={ds:day+8*3600000,de:day+18*3600000,ae:day+4*86400000+18*3600000};

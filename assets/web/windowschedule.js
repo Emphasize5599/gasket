@@ -9,7 +9,7 @@
  function run(leg,start,rules){
   var at=start,parts=[];
   rules=TimeWindows.noLeaveRules(rules);
-  function add(p){if(p.minutes>0||p.toggleNight){parts.push({kind:p.kind,start:at,end:at+p.minutes*MIN,night:p.night,toggleNight:p.toggleNight});at+=p.minutes*MIN;}}
+  function add(p){if(p.minutes>0||p.toggleNight){parts.push({kind:p.kind,start:at,end:at+p.minutes*MIN,night:p.night,toggleNight:p.toggleNight,until:p.until==null?null:at+p.until*MIN,shifted:p.shifted});at+=p.minutes*MIN;}}
   var keys=new Set(),excluded=new Set(leg.skippedWaits?leg.skippedWaits():[]);
   function blockedRules(){
    return rules.length?TimeWindows.noLeaveOccurrences(WindowClock.wall(at,leg.zone),rules).filter(function(rule){return !excluded.has(rule.key);}):[];
@@ -24,7 +24,9 @@
   var departure=at;
   leg.estimate(departure).forEach(add);
   at=up(at);
-  return {start:start,departure:departure,end:at,parts:parts,blocked:blocked};
+  // A night whose rest no longer fits (a stop ran past the latest rest departure) is shown red until the user drives through it.
+  parts.forEach(function(p){if(p.kind==='norest')p.until=Math.min(p.until,at);});
+  return {start:start,departure:departure,end:at,parts:parts,blocked:blocked,missed:parts.filter(function(p){return p.kind==='norest';}).map(function(p){return p.night;})};
  }
  function fits(row,w,prev,next){
   return !row.blocked&&(!prev||prev.end<=row.start)&&(!next||row.end<next.departure&&row.end<=next.start)&&
@@ -54,6 +56,7 @@
   var out=[];
   if(row.start<begin)out.push('starts in the past.');
   if(row.blocked)out.push('has no departure outside the hours you won’t leave.');
+  (row.missed||[]).forEach(function(night){out.push('has no room to rest on the night of '+night+': a fuel or charging stop runs past your latest rest departure. Tap − on the red stretch to drive through that night, or change your windows or nightly hours.');});
   if(w.ds>w.de)out.push('has an earliest departure after its latest departure.');
   if(w.as>w.ae)out.push('has an earliest arrival after its latest arrival.');
   if(row.departure<=num(w.ds,-Infinity))out.push('must start after its earliest departure.');
@@ -94,7 +97,7 @@
  }
  function restParts(parts,depart,leg,c,deadline,skipped){
   if(!c)return parts;
-  var out=[],at=depart,notBefore=depart,nights=0,skip=new Set(skipped||[]),
+  var out=[],at=depart,notBefore=depart,nights=0,skip=new Set(skipped||[]),lastStop=null,
       selected=new Set(parts.filter(function(p){return p.kind==='rest'&&p.night;}).map(function(p){return p.night;}));
   parts.forEach(function(p,i){
    var left=p.minutes;
@@ -105,6 +108,21 @@
    }
    if(p.kind==='drive'){
     var remaining=parts.slice(i+1).reduce(function(n,q){return n+q.minutes*MIN;},0);
+    // A fuel or charging stop was still going at this night's rest time: rest once it ends,
+    // as long as it can, up to the latest rest departure. Too short = no rest (shown red).
+    if(lastStop&&nights<14){
+     var w0=Overnight.nextWindow(Math.max(lastStop.start,notBefore),leg.zone,c,leg.point),
+         planned=w0&&Math.min(w0.arrivalEnd,w0.end-w0.preferred*MIN);
+     if(w0&&planned>=lastStop.start&&planned<at&&planned>=w0.start&&!selected.has(w0.date)&&at<w0.end){
+      nights++;notBefore=Math.max(notBefore,Math.min(w0.arrivalEnd,w0.end-w0.minimum*MIN)+1,at+1);
+      var through=skip.has(w0.date),room=(w0.end-at)/MIN,stay=Math.min(w0.preferred,room);
+      if(at+stay*MIN<w0.leaveStart)stay=Math.min(room,(w0.leaveStart-at)/MIN);
+      if(through)out.push({kind:'skip-rest',minutes:0,night:w0.date,toggleNight:true});
+      else if(stay>=w0.minimum&&at+left*MIN+remaining+stay*MIN<deadline){out.push({kind:'rest',minutes:stay,night:w0.date,toggleNight:true,shifted:true});at+=stay*MIN;}
+      else if(stay<w0.minimum)out.push({kind:'norest',minutes:0,night:w0.date,toggleNight:true,until:(w0.end-at)/MIN});
+     }
+    }
+    lastStop=null;
     while(left>0&&nights<14){
      var w=Overnight.nextWindow(Math.max(at,notBefore),leg.zone,c,leg.point);
      if(!w)break;
@@ -121,12 +139,13 @@
     }
    }
    if(left>0)out.push({kind:p.kind,minutes:left});
+   if(p.kind!=='drive'&&left>0)lastStop={start:at,end:at+left*MIN};
    at+=left*MIN;
   });
   return out;
  }
  function bind(host,o){
-  var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,clock=o.zone,begin=up(o.now),
+  var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,layout=[],building=null,scroller=null,clock=o.zone,begin=up(o.now),
       width=host.clientWidth,frame=0,
       marks={ds:'Earliest departure',de:'Latest departure',as:'Earliest arrival',ae:'Latest arrival',start:'Move leg from start',end:'Move leg from end'},
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
@@ -159,14 +178,24 @@
    rows.forEach(function(r,i){var w=values[i];include(r.start,r.end);include(w.ds,w.de);include(w.as,w.ae);});
    var activeDays=Array.from(days).sort(function(a,b){return a-b;});
    activeDays.forEach(function(day,i){var next=activeDays[i+1];for(var d=day+DAY;d<next&&d<=day+14*DAY;d+=DAY)days.add(d);});
-   Array.from(days).sort(function(a,b){return a-b;}).forEach(function(day){
+   // While a handle is held, the days and rows stay exactly as they were when it was grabbed,
+   // so the row under the thumb never moves (a compact day stays compact and shows the handle).
+   var frozen=drag&&drag.layout,plan=frozen||[];
+   if(!frozen)Array.from(days).sort(function(a,b){return a-b;}).forEach(function(day){
     var ymd=new Date(day).toISOString().slice(0,10),nextDay=new Date(day+DAY).toISOString().slice(0,10),
-        a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),content='',span=(width<480?6:12)*H;
+        a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),span=(width<480?6:12)*H;
     if(!Number.isFinite(a)||!Number.isFinite(b))return;
-    var detailed=rows.some(function(r,i){return r.start<b&&r.end>=a||Object.values(values[i]).some(function(t){return t>=a&&t<b;});});
-    if(detailed)for(var t=a;t<b;t+=span)content+=strip(t,Math.min(t+span,b),values,b,shownSkips);
-    html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+(content||compactStrip(a,b,values))+'</section>';
+    var detailed=rows.some(function(r,i){return r.start<b&&r.end>=a||Object.values(values[i]).some(function(t){return t>=a&&t<b;});}),chunks=[];
+    if(detailed)for(var t=a;t<b;t+=span)chunks.push({from:t,to:Math.min(t+span,b)});
+    plan.push({a:a,b:b,chunks:chunks});
    });
+   plan.forEach(function(d){
+    var content='';
+    d.chunks.forEach(function(c){building=c;content+=strip(c.from,c.to,values,d.b,shownSkips,frozen?c:null);});building=null;
+    if(!frozen)d.chunks=d.chunks.filter(function(c){return !c.empty;});
+    html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(d.a))+'</h4>'+(content||compactStrip(d.a,d.b,values,!!frozen))+'</section>';
+   });
+   layout=plan;
    var restore='',waits='';
    rows.forEach(function(_,i){
     o.skippedNights(i).forEach(function(date){if(!shownSkips.has(i+'|'+date))restore+=nightButton(i,date,true);});
@@ -177,9 +206,15 @@
    host.innerHTML=html;
    o.onIssues(rows.flatMap(function(r,i){return issues(r,windows[i],rows[i+1],begin).map(function(text){return 'Leg '+(i+1)+' '+text;});}));
   }
-  function compactStrip(a,b,values){
+  function layoutChunk(a){return building&&building.from===a?building:null;}
+  function compactStrip(a,b,values,live){
    function pc(t){return (t-a)*100/(b-a);}
-   var labels='',shading='';
+   var labels='',shading='',held='';
+   if(live)rows.forEach(function(r,i){
+    r.parts.forEach(function(p){var s=Math.max(a,p.start),e=Math.min(b,p.end);if(s<e)shading+='<span aria-hidden="true" class="ws-bar ws-'+p.kind+'" style="left:'+pc(s)+'%;right:'+(100-pc(e))+'%"></span>';});
+    var w=values[i];Object.keys(w).concat(['start','end']).forEach(function(id){var t=id==='start'||id==='end'?r[id]:w[id];
+     if(t>=a&&t<b)held+='<button type="button" tabindex="-1" class="ws-handle ws-h-'+id+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-hidden="true"></button>';});
+   });
    for(var t=a;t<b;t+=6*H)labels+='<span class="ws-compact-label" style="left:'+pc(t)+'%">'+o.esc(hourFmt.format(t))+'</span>';
    values.forEach(function(w){
     [[w.ds,w.de],[w.as,w.ae]].forEach(function(range){
@@ -187,7 +222,7 @@
      if(start<end)shading+='<span class="ws-compact-shade" style="left:'+pc(start)+'%;right:'+(100-pc(end))+'%"></span>';
     });
    });
-   return '<div class="ws-strip ws-compact" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-track">'+shading+labels+'</div></div>';
+   return '<div class="ws-strip ws-compact" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-track">'+shading+labels+held+'</div></div>';
   }
   function waitButton(i,keys,skip,position){
    var fields=keys[0].split('|'),label=(skip?'Skip waiting':'Restore waiting')+' · Leg '+(i+1)+' · '+fields[0]+' '+fields[1]+'–'+fields[2],
@@ -203,7 +238,7 @@
    return '<button type="button" class="ws-night'+(skip?' ws-night-skipped':'')+'" style="left:clamp(12px,'+position+'%,calc(100% - 12px))"'+attrs+
     ' aria-label="'+o.esc(label)+'" title="'+o.esc(label)+'">'+(skip?'⌃':'−')+'</button>';
   }
-  function strip(a,b,values,dayEnd,shownSkips){
+  function strip(a,b,values,dayEnd,shownSkips,fixed){
    function pc(t){return 100*(t-a)/(b-a);}
    function bar(kind,start,end){
     if(end<=start||start>=b||end<=a)return '';
@@ -222,7 +257,7 @@
     var w=values[i],times=Object.values(w);if(Math.min(r.start,...times)>=b||Math.max(r.end,...times)<a)return;
     windows+=bar('departure'+(w.ds>w.de?' ws-reversed':''),Math.min(w.ds,w.de),Math.max(w.ds,w.de))+bar('arrival'+(w.as>w.ae?' ws-reversed':''),Math.min(w.as,w.ae),Math.max(w.as,w.ae));
     r.parts.forEach(function(p){
-     itinerary+=bar(p.kind,p.start,p.end);
+     itinerary+=p.kind==='norest'?bar('norest',p.start,p.until):bar(p.kind,p.start,p.end);
      if(p.start<a||p.start>=b)return;
      if(p.waitKeys)nightActions+=waitButton(i,p.waitKeys,true,pc(p.start));
      if(!p.toggleNight)return;
@@ -240,9 +275,15 @@
    blue.forEach(function(h){
     var second=h.edge[0]==='a'&&depLeft.some(function(x){return Math.abs(x-handleLeft(h))<25;});
     if(second)extra=true;
-    handles+=handle(h.leg,h.edge,h.at,second);
+    handles+=handle(h.leg,h.edge,h.at,second&&(!fixed||fixed.extra));
    });
-   return windows||itinerary||handles||nightActions?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+nightActions+'</div></div></div>':'';
+   if(fixed)extra=fixed.extra;
+   var any=windows||itinerary||handles||nightActions;
+   if(!fixed){
+    // Remember what this row looked like, so a drag can hold it in place.
+    var chunk=layoutChunk(a);if(chunk){chunk.empty=!any;chunk.extra=extra;}
+   }
+   return any||fixed?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track'+(extra?' ws-track-extra':'')+'" style="--ws-hour:'+pc(a+H)+'%">'+windows+itinerary+names+handles+nightActions+'</div></div></div>':'';
   }
   function change(i,id,t){
    var w=windows[i],row=rows[i];
@@ -268,37 +309,66 @@
    var i=strips.findIndex(function(strip){return t>=strip.from&&t<strip.to;});
    return i<0?(t<strips[0].from?0:strips.length-1):i;
   }
+  function scrollParent(){
+   for(var el=host.parentElement;el;el=el.parentElement){
+    var y=getComputedStyle(el).overflowY;
+    if((y==='auto'||y==='scroll')&&el.scrollHeight>el.clientHeight)return el;
+   }
+   return document.scrollingElement||document.documentElement;
+  }
   host.addEventListener('pointerdown',function(e){
    var b=button(e);if(!b||e.button!==0)return;
-   var source=b.closest('.ws-strip'),i=+b.dataset.wsLeg,edge=b.dataset.wsEdge,at=position(i,edge);
-   // Keep hit testing independent of the layout changes this drag produces.
+   var source=b.closest('.ws-strip'),i=+b.dataset.wsLeg,edge=b.dataset.wsEdge,at=position(i,edge),
+       hostTop=host.getBoundingClientRect().top,hb=b.getBoundingClientRect(),handleY=hb.top+hb.height/2;
+   // Row geometry relative to the itinerary, so scrolling during the drag doesn't stale it.
    var strips=Array.from(host.querySelectorAll('.ws-strip')).map(function(el){
     var box=el.getBoundingClientRect(),track=el.querySelector('.ws-track').getBoundingClientRect();
-    return {from:+el.dataset.wsFrom,to:+el.dataset.wsTo,top:box.top,bottom:box.bottom,left:track.left,width:track.width};
+    return {el:el,from:+el.dataset.wsFrom,to:+el.dataset.wsTo,top:box.top-hostTop,trackTop:track.top-box.top,trackH:track.height,
+     compact:el.classList.contains('ws-compact'),left:track.left,width:track.width};
    });
-   var origin=strips.find(function(strip){return strip.from===+source.dataset.wsFrom;}),
+   var origin=strips.find(function(strip){return strip.el===source;}),
        peer=OPPOSITE[edge],limit=peer?stripAtTime(strips,position(i,peer)):null;
    if(!origin||!origin.width)return;
-   drag={id:e.pointerId,i:i,edge:edge,x:e.clientX,y:e.clientY,strips:strips,
+   // Where this handle's center sits inside a full row and inside a compact row.
+   var line=handleY-hostTop-origin.top;
+   strips.forEach(function(s){s.line=s.compact?s.trackTop+s.trackH/2:(origin.compact?s.trackTop+56:line);delete s.el;});
+   drag={id:e.pointerId,i:i,edge:edge,x:e.clientX,y:e.clientY,strips:strips,grab:e.clientY-handleY,layout:layout,
     offset:e.clientX-origin.left-origin.width*(at-origin.from)/(origin.to-origin.from),
     first:peer&&edge[1]==='e'?limit:0,last:peer&&edge[1]==='s'?limit:strips.length-1};
+   scroller=scrollParent();
    host.setPointerCapture(e.pointerId);e.preventDefault();
   });
   function move(e){
    if(!drag||e.pointerId!==drag.id)return;
    if(!drag.moved&&e.clientX===drag.x&&e.clientY===drag.y)return;
-   drag.moved=true;
-   var strips=drag.strips,row=0;
-   while(row<strips.length-1&&e.clientY>=(strips[row].bottom+strips[row+1].top)/2)row++;
-   var strip=strips[Math.max(drag.first,Math.min(row,drag.last))],
-       fraction=(e.clientX-drag.offset-strip.left)/strip.width;
+   drag.moved=true;drag.pointer={pointerId:e.pointerId,clientX:e.clientX,clientY:e.clientY};
+   // The handle follows the thumb: pick the row whose handle line is nearest the thumb (less the grab offset).
+   var strips=drag.strips,want=e.clientY-drag.grab-host.getBoundingClientRect().top,row=drag.first,best=Infinity;
+   for(var k=drag.first;k<=drag.last;k++){var d=Math.abs(strips[k].top+strips[k].line-want);if(d<best){best=d;row=k;}}
+   var strip=strips[row],fraction=(e.clientX-drag.offset-strip.left)/strip.width;
    if(OPPOSITE[drag.edge])fraction=Math.max(0,Math.min(1,fraction));
    var t=strip.from+fraction*(strip.to-strip.from);
    change(drag.i,drag.edge,Math.round(t/HANDLE_STEP)*HANDLE_STEP);
+   autoScroll(e.clientY);
+  }
+  var scrollFrame=0;
+  function autoScroll(y){
+   cancelAnimationFrame(scrollFrame);
+   if(!drag||!scroller)return;
+   var view=scroller===document.scrollingElement||scroller===document.documentElement?{top:0,bottom:innerHeight}:scroller.getBoundingClientRect(),
+       edge=56,speed=y<view.top+edge?-(view.top+edge-y):y>view.bottom-edge?y-(view.bottom-edge):0;
+   if(!speed)return;
+   scrollFrame=requestAnimationFrame(function(){
+    if(!drag)return;
+    var before=scroller.scrollTop;scroller.scrollTop+=Math.max(-18,Math.min(18,speed/3));
+    if(scroller.scrollTop!==before&&drag.pointer)move(drag.pointer);
+   });
   }
   host.addEventListener('pointermove',function(e){if(!drag)return;cancelAnimationFrame(frame);frame=requestAnimationFrame(function(){move(e);});});
-  host.addEventListener('pointerup',function(e){if(drag&&drag.id===e.pointerId){cancelAnimationFrame(frame);move(e);drag=null;}});
-  host.addEventListener('lostpointercapture',function(){drag=null;});
+  function release(){cancelAnimationFrame(frame);cancelAnimationFrame(scrollFrame);var was=drag;drag=null;if(was)draw();}
+  host.addEventListener('pointerup',function(e){if(drag&&drag.id===e.pointerId){cancelAnimationFrame(frame);move(e);release();}});
+  host.addEventListener('pointercancel',function(e){if(drag&&drag.id===e.pointerId)release();});
+  host.addEventListener('lostpointercapture',function(){if(drag)release();});
   host.addEventListener('click',function(e){
    var b=e.target.closest('[data-ws-night],[data-ws-wait]');if(!b)return;
    var i=+b.dataset.wsNightLeg,date=b.dataset.wsNight,keys=b.dataset.wsWait,skip=b.dataset.wsSkip==='1';

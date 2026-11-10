@@ -46,4 +46,35 @@ assert.equal(skipped.find(p=>p.kind==='skip-rest').night,night);
 assert(!skipped.some(p=>p.kind==='rest'));
 assert.equal(skipped.reduce((n,p)=>n+p.minutes,0),drive[0].minutes);
 assert.deepEqual(S.restParts(drive,nightStart,where,prefs,Infinity,[]),estimated);
+// A charging stop running at the planned rest time pushes the rest later instead of dropping it.
+{const plain=S.restParts(drive,nightStart,where,prefs,Infinity),restAt=plain.find(p=>p.kind==='rest');
+ const before=plain[0].minutes,w=Overnight.nextWindow(nightStart,'UTC',prefs,where.point);
+ const charged=[{kind:'drive',minutes:before-30},{kind:'charge',minutes:60},{kind:'drive',minutes:18*60-(before-30)}];
+ const shifted=S.restParts(charged,nightStart,where,prefs,Infinity),rest=shifted.find(p=>p.kind==='rest');
+ assert(rest,'the rest is kept after the charge');
+ assert.equal(rest.night,restAt.night);
+ assert(rest.shifted);
+ const restStart=nightStart+shifted.slice(0,shifted.indexOf(rest)).reduce((n,p)=>n+p.minutes*M,0);
+ assert.equal(restStart,nightStart+(before+30)*M,'it starts when the charge ends');
+ assert.equal(rest.minutes,Math.min(prefs.preferred,(w.end-restStart)/M),'it keeps the preferred length up to the latest rest departure');
+ assert(restStart+rest.minutes*M<=w.end);
+ // A charge ending so late that less than the minimum rest fits: no rest, shown red until driven through.
+ const lateEnd=w.end-(prefs.minimum-30)*M,lateMin=(lateEnd-nightStart)/M-(before-30);
+ const late=[{kind:'drive',minutes:before-30},{kind:'charge',minutes:lateMin},{kind:'drive',minutes:600}];
+ const missed=S.restParts(late,nightStart,where,prefs,Infinity);
+ assert(!missed.some(p=>p.kind==='rest'&&p.night===restAt.night),'no rest that night');
+ const red=missed.find(p=>p.kind==='norest');
+ assert.equal(red.night,restAt.night);assert(red.toggleNight);
+ assert.equal(missed.filter(p=>p.kind!=='norest').reduce((n,p)=>n+p.minutes,0),late.reduce((n,p)=>n+p.minutes,0),'nothing else changes');
+ const row=S.run({zone:'UTC',estimate:()=>missed},nightStart,[]);
+ assert.deepEqual(row.missed,[restAt.night]);
+ const flagged=S.issues(row,{},null,0);
+ assert(flagged.some(t=>/no room to rest on the night of/.test(t)),'the problem shows above Save');
+ const red2=row.parts.find(p=>p.kind==='norest');
+ assert.equal(red2.until,w.end,'the red stretch runs to the latest rest departure');
+ // Driving through that night resolves it.
+ const through=S.restParts(late,nightStart,where,prefs,Infinity,[restAt.night]);
+ assert(!through.some(p=>p.kind==='norest'));
+ assert(through.some(p=>p.kind==='skip-rest'&&p.night===restAt.night));
+ assert.deepEqual(S.run({zone:'UTC',estimate:()=>through},nightStart,[]).missed,[]);}
 console.log('Schedule windows, local no-leave wait, preferred rest, charging curve and fuel carryover passed');

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.451 - 2026-11-10
+
+- Itinerary handles stay under your thumb when dragged up or down across days, and the chart scrolls when you hold near the screen edge.
+- A fuel or charging stop that runs into a planned overnight rest now pushes the rest later instead of dropping it. If too little time is left before your latest rest departure, that stretch turns red with the problem above Save, and you can drive through that night.
+- Bug fixes.
+
 ## 0.0.450 - 2026-11-10
 
 - Itinerary window handles stop at their opposite handle. Dragging below the chart stays on the last allowed row without repeated redraws.

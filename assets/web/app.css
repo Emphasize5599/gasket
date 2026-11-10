@@ -2461,9 +2461,14 @@ input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
 .ws-compact .ws-track {height:28px;border:1px solid var(--surface-2);border-radius:4px;background:none;}
 .ws-compact-label {position:absolute;padding:4px;color:var(--sub);font-size:.72rem;}
 .ws-compact-shade {position:absolute;inset-block:0;background:var(--ws-blue);}
+.ws-compact .ws-bar {top:3px;height:20px;}
+.ws-compact .ws-handle,.ws-compact .ws-h-extra {top:2px;}
+.ws-compact .ws-handle::after {height:18px;}
 .ws-wait-action {border-color:var(--sub);}
 .ws-bar {position:absolute;border-radius:3px;height:23px;top:24px;pointer-events:none;}
 .ws-drive {background:var(--ws-green);}
+.ws-norest {z-index:1;background:color-mix(in srgb,var(--danger,#d93025) 62%,transparent);border:1px solid var(--danger,#d93025);}
+.ws-legend .ws-norest {display:none;}
 .ws-rest,.ws-charge,.ws-fuel {background:repeating-linear-gradient(135deg,var(--ws-green) 0 4px,transparent 4px 7px);border:1px solid var(--ws-green);}
 .ws-charge {background:repeating-linear-gradient(45deg,var(--ws-green) 0 3px,transparent 3px 6px);}
 .ws-fuel {background:repeating-linear-gradient(90deg,var(--ws-green) 0 2px,transparent 2px 4px);}
