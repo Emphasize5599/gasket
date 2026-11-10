@@ -25,6 +25,7 @@ const later=start+40*24*H;
 assert.equal(S.place(leg,{ds:later,de:later+H},start,start,[]).departure,later+S.step,'a stale visual placement yields to a new window');
 assert.equal(S.place(leg,{de:later},start,null,[]).departure,later,'a latest-only departure anchors the calendar');
 assert.equal(S.place(leg,{as:later,ae:later+H},start,null,[]).end,later,'the estimate moves to an earliest arrival when the window allows it');
+assert.deepEqual(S.issues(row,windows,{start:row.end-M,departure:row.end},start),['overlaps the next leg.','has a latest arrival that reaches or passes the next leg’s departure.']);
 const ev={kind:'ev',capacity:70,start:70,reserve:7,curve:[[0,150],[80,100],[100,20]],maxKw:150,stopMinutes:5};
 const trip=[[{minutes:450,energy:150}]];
 const charging=S.sessions(trip,{...ev,priority:'time'})[0];

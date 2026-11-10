@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.443 - 2026-11-10
+
+- Drag windows and legs freely in the Visual itinerary. Conflicts appear above Save windows and prevent saving until resolved.
+- Removed the estimated arrival deadline shortcut.
+
 ## 0.0.442 - 2026-11-10
 
 - Set rough departure and arrival windows first, then fine-tune them in the Visual itinerary. The itinerary follows changes to the window fields and identifies which leg needs an adjustment.

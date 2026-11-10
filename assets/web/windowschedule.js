@@ -41,15 +41,19 @@
   }
   return row;
  }
- function issue(row,w,next){
-  if(w.invalid)return 'has a window time to check.';
-  if(row.blocked)return 'has no departure outside the hours you won’t leave.';
-  if(row.departure<=num(w.ds,-Infinity))return 'leaves before its departure window opens.';
-  if(row.departure>num(w.de,Infinity))return 'leaves after its departure window closes.';
-  if(row.end<num(w.as,-Infinity))return 'arrives before its arrival window opens.';
-  if(row.end>=num(w.ae,Infinity))return 'needs more time before the arrival deadline.';
-  if(next&&num(w.ae,row.end)>=next.departure)return 'has an arrival window that reaches the next departure.';
-  return '';
+ function issues(row,w,next,begin){
+  var out=[];
+  if(row.start<begin)out.push('starts in the past.');
+  if(row.blocked)out.push('has no departure outside the hours you won’t leave.');
+  if(w.ds>w.de)out.push('has an earliest departure after its latest departure.');
+  if(w.as>w.ae)out.push('has an earliest arrival after its latest arrival.');
+  if(row.departure<=num(w.ds,-Infinity))out.push('must start after its earliest departure.');
+  if(row.departure>num(w.de,Infinity))out.push('starts after its latest departure.');
+  if(row.end<num(w.as,-Infinity))out.push('ends before its earliest arrival.');
+  if(row.end>=num(w.ae,Infinity))out.push('must end before its latest arrival.');
+  if(next&&row.end>next.start)out.push('overlaps the next leg.');
+  if(next&&Number.isFinite(w.ae)&&w.ae>=next.departure)out.push('has a latest arrival that reaches or passes the next leg’s departure.');
+  return out;
  }
  function sessions(legs,options){
   var cap=options.capacity, reserve=Math.min(cap*.9,Math.max(0,options.reserve||0)),ev=options.kind==='ev',curve=options.curve,
@@ -116,14 +120,14 @@
       marks={ds:'Earliest departure',de:'Latest departure',as:'Earliest arrival',ae:'Latest arrival',start:'Move leg from start',end:'Move leg from end'},
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
       timeFmt=new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',minute:'2-digit',hour12:!o.clock24});
+  function localRules(i){var w=windows[i];return i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[];}
   function refresh(){
    var current=o.legs.map(function(_,i){return o.read(i);}),firstChanged=current.findIndex(function(w,i){return windows[i]&&JSON.stringify(w)!==JSON.stringify(windows[i]);});
    if(firstChanged>=0)starts.length=Math.min(starts.length,firstChanged);
    windows=current;rows=[];rules=o.rules();
    o.legs.forEach(function(leg,i){
     var w=windows[i],from=i?rows[i-1].end+STEP:begin+STEP;
-    var localRules=i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[];
-    rows.push(place(leg,w,from,starts[i],localRules));
+    rows.push(place(leg,w,from,starts[i],localRules(i)));
    });
    draw();
   }
@@ -137,7 +141,7 @@
     var a=Date.parse(WindowClock.wall(from,clock).slice(0,10)+'T00:00:00Z'),
         b=Date.parse(WindowClock.wall(to,clock).slice(0,10)+'T00:00:00Z');
     if(!Number.isFinite(a)||!Number.isFinite(b))return;
-    days.add(b);
+    days.add(a);days.add(b);
     for(var day=Math.min(a,b),last=Math.max(a,b);day<=last&&day<=Math.min(a,b)+14*DAY;day+=DAY)days.add(day);
    }
    rows.forEach(function(r,i){var w=values[i];include(r.start,r.end);include(w.ds,w.de);include(w.as,w.ae);});
@@ -149,8 +153,7 @@
     if(content)html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+content+'</section>';
    });
    host.innerHTML=html;
-   var issues=rows.map(function(r,i){var text=issue(r,windows[i],rows[i+1]);return text?'Leg '+(i+1)+' '+text:'';}).filter(Boolean);
-   o.status.textContent=issues.length?issues.join(' ')+' Adjust the windows or move a leg.':'';
+   o.onIssues(rows.flatMap(function(r,i){return issues(r,windows[i],rows[i+1],begin).map(function(text){return 'Leg '+(i+1)+' '+text;});}));
   }
   function strip(a,b,values,dayEnd){
    function pc(t){return 100*(t-a)/(b-a);}
@@ -169,7 +172,7 @@
    }
    rows.forEach(function(r,i){
     var w=values[i],times=Object.values(w);if(Math.min(r.start,...times)>=b||Math.max(r.end,...times)<a)return;
-    windows+=bar('departure',w.ds,w.de)+bar('arrival',w.as,w.ae);
+    windows+=bar('departure'+(w.ds>w.de?' ws-reversed':''),Math.min(w.ds,w.de),Math.max(w.ds,w.de))+bar('arrival'+(w.as>w.ae?' ws-reversed':''),Math.min(w.as,w.ae),Math.max(w.as,w.ae));
     itinerary+=r.parts.map(function(p){return bar(p.kind,p.start,p.end);}).join('');
     handles+=Object.keys(w).map(function(key){return handle(i,key,w[key]);}).join('')+handle(i,'start',r.start)+handle(i,'end',r.end);
     var from=Math.max(a,r.start),to=Math.min(b,r.end);
@@ -178,26 +181,20 @@
    return windows||itinerary||handles?'<div class="ws-strip" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-axis">'+tick+'</div><div class="ws-lane"><div class="ws-track">'+windows+itinerary+names+handles+'</div></div></div>':'';
   }
   function change(i,id,t){
-   var w=windows[i],row=rows[i],prev=rows[i-1],next=rows[i+1],v=edges(row,w,next),limit=Math.max(begin,num(windows[0].ds,rows[0].start))+14*DAY;
+   var w=windows[i],row=rows[i];
    if(id==='start'||id==='end'){
     var from=id==='end'?row.start+t-row.end:t;
-    if(from<begin||from>limit)return false;
-    var r=run(o.legs[i],from,i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[]);
-    if(!fits(r,w,prev,next)||prev&&num(windows[i-1].ae,prev.end)>=r.departure)return false;
-    starts[i]=r.start;rows[i]=r;draw();return true;
+    if(from===row.start)return true;
+    starts[i]=from;
+    rows[i]=run(o.legs[i],from,localRules(i));
+   }else{
+    if(w[id]===t)return true;
+    if(!o.write(i,id,t))return false;
+    windows[i]=o.read(i);
+    starts[i]=row.start;
+    rows[i]=run(o.legs[i],row.start,localRules(i));
    }
-   var lo={ds:prev?up(Math.max(prev.end,begin)):begin,de:up(row.departure),as:up(Math.max(row.departure,begin)),ae:up(row.end+1)},
-       hi={ds:down(row.departure-1),de:down(v.ae),as:down(row.end),ae:next?down(next.departure-1):limit};
-   if(id==='ds')hi.ds=Math.min(hi.ds,down(v.de));
-   if(id==='as')hi.as=Math.min(hi.as,down(v.ae));
-   if(id==='ae')lo.ae=Math.max(lo.ae,up(v.as),up(v.de));
-   if(id==='de'&&next)hi.de=Math.min(hi.de,down(next.departure-1));
-   if(lo[id]>hi[id])return false;
-   var at=Math.max(lo[id],Math.min(hi[id],t));
-   if(w[id]===at)return true;
-   if(!o.write(i,id,at))return false;
-   windows[i]=o.read(i);starts[i]=row.start;
-   refresh();return true;
+   draw();return true;
   }
   function position(i,id){var r=rows[i];return id==='start'||id==='end'?r[id]:edges(r,windows[i],rows[i+1])[id];}
   function button(e){return e.target.closest('[data-ws-edge]');}
@@ -227,8 +224,8 @@
   });
   var observer=new ResizeObserver(function(){var narrow=host.clientWidth<480;if(narrow!==short){short=narrow;draw();}});
   observer.observe(host);refresh();
-  return {refresh:refresh,starts:function(){return starts.slice();},deadline:function(){var i=rows.length-1;return i<0?false:change(i,'ae',edges(rows[i],windows[i]).ae);},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
+  return {refresh:refresh,starts:function(){return starts.slice();},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
  }
- var api={bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,place:place,step:STEP};
+ var api={bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,issues:issues,place:place,step:STEP};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WindowSchedule=api;
 })(typeof window==='undefined'?globalThis:window);
