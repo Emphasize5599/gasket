@@ -2,6 +2,17 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.450 - itinerary drags, compact days, skipped waits, return-leg rests
+
+Finished Codex's interrupted patch (applied cleanly on 0.0.449).
+- windowschedule.js drag: row geometry is captured once at pointerdown (`drag.strips`: top/bottom/track left/width per `.ws-strip`), so the chart growing or shrinking by a row mid-gesture no longer changes which row is under the finger. That was the redraw loop when a start was held below the chart. `OPPOSITE` {ds:de, as:ae}: a start is limited to rows up to its end's row (`first`/`last`), the fraction is clamped to 0–1, and `change()` clamps start ≤ end, so window handles never cross. A no-movement pointermove is ignored.
+- Days between events get `.ws-compact` drop rows (`compactStrip`: 6-hour labels and blue window shading, ≤ 14 days).
+- "Hours I won't leave": `TimeWindows.noLeaveOccurrences(wall, rules)` returns {rule, key `date|from|to`}; an overnight rule's morning part belongs to the previous evening's date. `noLeave(wall, rules, excluded)` skips listed keys. `run()` records `waitKeys` on each gray wait. A − on the wait (`.ws-wait-action`, `data-ws-wait`) skips it, and "Skipped departure waits" restores it. Stored per original leg as `windowPlan.noLeaveSkips[TripStops.nightKey(route, group)]` (draft until Save windows; removed with the last rule). tripui `windowNoLeave` passes the leg's exclusions, so hourly screening (`windowRows`), `windowMiss` and the plan key all follow it.
+- Return-leg rests: `restUIArrival(d)` adds each later leg's start from the clock state's schedule (else `S.trip.legDepartures`) when no wait record covers it. Restored trips had no wait for the return leg, so its rest checks were timed from the turnaround arrival. The cause was inferred from code; not reproduced from a phone trip.
+- Tests: window-schedule-touch-ui (new, release: touch hold below the chart redraws once and stops at the end handle; drop on a compact day snaps to quarter hours), overnight-ui (handles stop at each other; skip/restore wait, saved per leg), timewindows (occurrence keys), rest-departure-anchors (return-leg arrival, per-leg skip in planning). Not phone-verified.
+
+Phone checks: Trip time windows → Visual itinerary: drag a departure start down past the chart (it stops at the latest-departure handle with no flicker); drag an arrival end onto a gray-free day row between events; add hours I won't leave so a gray wait shows, tap − (gone, plan may leave then), restore it from the list below; on a round trip with overnight rests, the return leg's rest list in Stops shows night-fitting places.
+
 ## 0.0.439 - faster Compare queues
 
 Owner: 3 cars × 2 priorities took ~1.5 h; suggested ordering by fuel type then model. 436 log per gas plan (non-window autoChoose): ~77 s traffic forecasts (departNow moved each plan: fetchedPieces 8–22 per route) + ~2 min hazard timing, ~2 min between "Using the stations saved" and "Batch cached-price check" (PriceHistoryRecovery: `groups().find` per station = 14,735 × all history groups), initial full plan 150–206 s on 3,235–3,619 candidates (+3 min non-lite extras), then the AutoTrip sweep 20–27 min (6 route combos × ~23 trials, all on full candidates; the time-priority plan's sweep took ~1 min, the cost one 20).

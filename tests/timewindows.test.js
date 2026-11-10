@@ -63,6 +63,9 @@ const projected=P.project(m,{kind:'ev',capacity:60},{startGal:60,waits:[{d:60,at
 
 // "Hours I won't leave": every night across midnight, one night only, a daytime range, bad rules ignored
 {const every=[{from:'22:00',to:'08:00',night:''}],one=[{from:'22:00',to:'08:00',night:'2026-11-12'}],day=[{from:'10:00',to:'14:00',night:''}];
+ const skip=W.noLeaveOccurrences('2026-11-13T03:00',every).map(x=>x.key);
+ assert.equal(skip[0],'2026-11-12|22:00|08:00');
+ assert(!W.noLeave('2026-11-12T23:30',every,skip)&&!W.noLeave('2026-11-13T03:00',every,skip)&&W.noLeave('2026-11-13T23:30',every,skip),'an exclusion applies to one overnight occurrence across midnight');
  assert(!W.noLeave('2026-11-12T21:59',every)&&W.noLeave('2026-11-12T22:00',every)&&W.noLeave('2026-11-13T07:59',every)&&!W.noLeave('2026-11-13T08:00',every));
  assert(W.noLeave('2026-11-12T23:30',one)&&W.noLeave('2026-11-13T03:00',one)&&!W.noLeave('2026-11-13T23:30',one)&&!W.noLeave('2026-11-12T03:00',one),'one night: that evening and the next morning only');
  assert(W.noLeave('2026-11-12T12:00',day)&&!W.noLeave('2026-11-12T14:00',day));

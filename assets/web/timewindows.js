@@ -139,9 +139,24 @@
    *  within a day applies on that date). `wall` is the local time 'YYYY-MM-DDTHH:MM' at the departure point. */
   function minutesOf(hm){var m=/^(\d{1,2}):(\d{2})$/.exec(String(hm||''));return m&&+m[1]<24&&+m[2]<60?+m[1]*60+ +m[2]:null;}
   function noLeaveRules(list){return (Array.isArray(list)?list:[]).filter(function(r){var a=minutesOf(r&&r.from),b=minutesOf(r&&r.to);return a!=null&&b!=null&&a!==b&&(!r.night||/^\d{4}-\d{2}-\d{2}$/.test(r.night));});}
-  function nextDay(d){var t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+1);return t.toISOString().slice(0,10);}
-  function noLeave(wall,list){var w=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(wall||''));if(!w)return null;var day=w[1],m=+w[2]*60+ +w[3];
-    return noLeaveRules(list).find(function(r){var a=minutesOf(r.from),b=minutesOf(r.to);if(a<b)return m>=a&&m<b&&(!r.night||r.night===day);return m>=a&&(!r.night||r.night===day)||m<b&&(!r.night||nextDay(r.night)===day);})||null;}
-  var api={HOUR:HOUR,noLeave:noLeave,noLeaveRules:noLeaveRules,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,approvalRules:approvalRules,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};
+  function noLeaveOccurrences(wall,list){
+    var w=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(String(wall||''));
+    if(!w)return [];
+    var day=w[1],m=+w[2]*60+ +w[3],previous;
+    return noLeaveRules(list).flatMap(function(r){
+      var a=minutesOf(r.from),b=minutesOf(r.to),date=day;
+      if(a<b?m<a||m>=b:m<a&&m>=b)return [];
+      if(a>b&&m<b){
+        if(!previous)previous=new Date(Date.parse(day+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+        date=previous;
+      }
+      return r.night&&r.night!==date?[]:[{rule:r,key:[date,r.from,r.to].join('|')}];
+    });
+  }
+  function noLeave(wall,list,excluded){
+    var match=noLeaveOccurrences(wall,list).find(function(x){return !excluded||!excluded.includes(x.key);});
+    return match?match.rule:null;
+  }
+  var api={HOUR:HOUR,noLeave:noLeave,noLeaveOccurrences:noLeaveOccurrences,noLeaveRules:noLeaveRules,hours:hours,ranges:ranges,coverageIssues:coverageIssues,screeningIssues:screeningIssues,dataNotices:dataNotices,weatherScore:weatherScore,approvalRules:approvalRules,autoReasons:autoReasons,autoAllowed:autoAllowed,canFit:canFit,signature:signature,group:group,groupDecision:groupDecision,create:create,readings:readings,better:better,search:search,shortlist:shortlist,recommend:recommend,count:count};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimeWindows=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -39,10 +39,10 @@ if(width===448){
  const x=size.x+size.width/2,y=size.y+size.height/2;
  await p.mouse.move(x,y);await p.mouse.down();
  await p.mouse.move(x+(earliest-900000-latest)/scale,y,{steps:4});await p.mouse.up();
- assert.equal(+await edge('de').getAttribute('data-ws-at'),earliest-900000,'pointer dragging crosses the other handle on the quarter hour');
+ assert.equal(+await edge('de').getAttribute('data-ws-at'),earliest,'the latest handle stops at the earliest handle');
  assert.equal(+await edge('ds').getAttribute('data-ws-at'),earliest,'dragging one end preserves the other');
  assert(await p.isDisabled('#twSave'));
- assert.match(await p.innerText('#twError'),/earliest departure after its latest departure/);
+ assert.match(await p.innerText('#twError'),/starts after its latest departure/);
  await p.locator('#twDepartEnd').evaluate((el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));},saved);
  assert(await p.isEnabled('#twSave'));
 }
@@ -89,5 +89,26 @@ if(width===448){
  await setArrival(null);
  await remove.click();await restore.waitFor();
 }
-await p.selectOption('#onStartKind','dusk');assert(await p.locator('#onStart').evaluate(e=>e.classList.contains('hidden')));await p.selectOption('#onStartKind','clock');assert(!await p.locator('#onStart').evaluate(e=>e.classList.contains('hidden')));assert.equal(await p.locator('[data-rest-solar]').count(),4);await p.fill('#onMin','9');await p.fill('#onPref','8');assert(await p.isDisabled('#twSave'));assert.match(await p.innerText('#twError'),/preferred/i);await p.fill('#onMin','6');await p.locator('#onAddNight').evaluate(e=>e.closest('details').open=true);await p.click('#onAddNight');const row=p.locator('[data-on-night]');await row.locator('[data-on-date]').fill('2030-11-02');await p.fill('#on0Min','5');await p.fill('#on0Pref','7');await p.click('#twSave');assert.equal(await p.evaluate(()=>__app.S.trip.windowPlan.overnight.overrides[0].minimum),300);if(skippedNight)assert.deepEqual(await p.evaluate(()=>{const route=__trip.state().route,key=TripStops.nightKey(route,TripStops.groups(route)[0]);return __app.S.trip.windowPlan.driveThroughNights[key];}),[skippedNight],'Stops reads the same saved drive-through night');assert.equal(await p.locator('#twOvernight').count(),0,'no separate overnight approval step');assert.match(await p.innerText('#tpBody'),/Rest stops uses these nightly hours/);if(width===320)assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+
+let savedWait;
+if(width===448){
+ const local=await p.evaluate(()=>{
+  const start=+document.querySelector('[data-ws-leg="0"][data-ws-edge="start"]').dataset.wsAt;
+  const zone=document.getElementById('twDepartStart').dataset.timeZone;
+  return {start,from:WindowClock.wall(start-15*60000,zone).slice(11),to:WindowClock.wall(start+45*60000,zone).slice(11)};
+ });
+ await p.click('#twNlAdd');
+ await p.fill('[data-nl-from]',local.from);
+ await p.fill('[data-nl-to]',local.to);
+ const skip=p.locator('[data-ws-wait][data-ws-skip="1"]'),restore=p.locator('[data-ws-wait][data-ws-skip="0"]');
+ await skip.waitFor();
+ savedWait=JSON.parse(await skip.getAttribute('data-ws-wait'))[0];
+ await skip.click();
+ assert.equal(await p.locator('.ws-bar.ws-wait').count(),0,'skipping removes the wait');
+ assert(!await p.evaluate(()=>__app.S.trip.windowPlan.noLeaveSkips),'the change stays a draft');
+ await restore.click();await skip.waitFor();
+ await skip.click();await restore.waitFor();
+ assert.equal(+await p.locator('[data-ws-leg="0"][data-ws-edge="start"]').first().getAttribute('data-ws-at'),local.start,'skipping does not move the start handle');
+}
+await p.selectOption('#onStartKind','dusk');assert(await p.locator('#onStart').evaluate(e=>e.classList.contains('hidden')));await p.selectOption('#onStartKind','clock');assert(!await p.locator('#onStart').evaluate(e=>e.classList.contains('hidden')));assert.equal(await p.locator('[data-rest-solar]').count(),4);await p.fill('#onMin','9');await p.fill('#onPref','8');assert(await p.isDisabled('#twSave'));assert.match(await p.innerText('#twError'),/preferred/i);await p.fill('#onMin','6');await p.locator('#onAddNight').evaluate(e=>e.closest('details').open=true);await p.click('#onAddNight');const row=p.locator('[data-on-night]');await row.locator('[data-on-date]').fill('2030-11-02');await p.fill('#on0Min','5');await p.fill('#on0Pref','7');await p.click('#twSave');assert.equal(await p.evaluate(()=>__app.S.trip.windowPlan.overnight.overrides[0].minimum),300);if(savedWait)assert.deepEqual(await p.evaluate(()=>{const route=__trip.state().route;return __app.S.trip.windowPlan.noLeaveSkips[TripStops.nightKey(route,TripStops.groups(route)[0])];}),[savedWait],'Save windows retains the skipped wait for the original leg');if(skippedNight)assert.deepEqual(await p.evaluate(()=>{const route=__trip.state().route,key=TripStops.nightKey(route,TripStops.groups(route)[0]);return __app.S.trip.windowPlan.driveThroughNights[key];}),[skippedNight],'Stops reads the same saved drive-through night');assert.equal(await p.locator('#twOvernight').count(),0,'no separate overnight approval step');assert.match(await p.innerText('#tpBody'),/Rest stops uses these nightly hours/);if(width===320)assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
 await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===4);assert.equal(await p.locator('.sub-page').count(),0,'Route does not open an overnight rest chooser');await p.click('#tNext');await p.waitForSelector('#twYes');assert.match(await p.innerText('#twReview'),/clear conditions/,'overnight mode goes straight to normal road and hazard screening');assert.equal(await p.evaluate(()=>__trip.state().route.stops.length),2,'no rests are inserted before Stops');assert.deepEqual(errors,[]);await p.close();}console.log('Overnight preferences and nightly overrides save; Route no longer requires choosing rests (they are picked in Stops) at 320/448.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

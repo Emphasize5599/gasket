@@ -2458,6 +2458,10 @@ input[type=range] { margin-left:0; margin-right:0; max-width:100%; }
 .ws-track {--ws-green:color-mix(in srgb,var(--save,#27874a) 49%,transparent);--ws-blue:color-mix(in srgb,var(--blue,#619df2) 32%,transparent);--ws-gray:rgba(139,144,153,.48);}
 .ws-track {position:relative;height:71px;background:repeating-linear-gradient(to right,var(--surface-2) 0 1px,transparent 1px var(--ws-hour));border-right:1px solid var(--surface-2);}
 .ws-track-extra {height:95px;}
+.ws-compact .ws-track {height:28px;border:1px solid var(--surface-2);border-radius:4px;background:none;}
+.ws-compact-label {position:absolute;padding:4px;color:var(--sub);font-size:.72rem;}
+.ws-compact-shade {position:absolute;inset-block:0;background:var(--ws-blue);}
+.ws-wait-action {border-color:var(--sub);}
 .ws-bar {position:absolute;border-radius:3px;height:23px;top:24px;pointer-events:none;}
 .ws-drive {background:var(--ws-green);}
 .ws-rest,.ws-charge,.ws-fuel {background:repeating-linear-gradient(135deg,var(--ws-green) 0 4px,transparent 4px 7px);border:1px solid var(--ws-green);}

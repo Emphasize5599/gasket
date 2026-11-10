@@ -50,7 +50,7 @@
    h+='<section class="card" id="twPlanner"><h3>Window planner</h3><p class="lead small keep">Only the final arrival deadline is required. Each stop uses its own local time zone.</p><ol class="nlist tw-journey" id="twJourney"><li><span class="nn">1</span><div class="nl-a"><b>'+A.esc(C.origin?C.origin():'Start')+'</b>'+tile('twDepart','Departure window',departure,zones[0],false)+'</div></li>';
    var destinationNumber=1;names.forEach(function(name,i){if(C.isRestDestination&&C.isRestDestination(i)){h+='<li class="route-rest"><span class="nn">R</span><div class="nl-a"><b>'+A.esc(name)+'</b><small>Added rest · manage its stay and departure in Rest stops.</small></div></li>';return;}var d=c.destinations[i]||{};h+='<li><span class="nn">'+(++destinationNumber)+'</span><div class="nl-a"><b>'+A.esc(name)+'</b>';if(i===last)h+=tile('twFinal','Arrival window',final,zones[i+1],true);else{h+=tile('twArr'+i,'Arrival window',Object.assign({on:!!(d.arriveOn||d.arriveStart||d.arriveEnd)},d.arriveInput||{start:d.arriveStart,end:d.arriveEnd}),zones[i+1],false);h+=tile('twLeave'+i,'Departure window',Object.assign({on:!!(d.leaveOn||d.leaveStart||d.leaveEnd)},d.leaveInput||{start:d.leaveStart,end:d.leaveEnd}),zones[i+1],false,'<label class="nf"><span>Extra waiting allowed (minutes)</span><input id="twWait'+i+'" type="number" min="0" max="1440" step="1" value="'+(+d.wait||0)+'"></label>');}h+='</div></li>';});
    h+='</ol></section>';
-   if(C.scheduleLegs&&WindowClock.zone(zones[0]))h+='<div class="card" id="twScheduleCard"><h3>Visual itinerary</h3><p class="lead small keep">Green handles above move legs. Blue handles below edit windows. Handles snap to 15-minute steps.</p>'+(c.planningMode==='overnight'?'<p class="lead small keep">Use − on an estimated rest to drive through that night. Tap the chevron to restore it.</p>':'')+'<div class="ws-legend"><span><i class="ws-drive"></i>Driving</span><span><i class="ws-rest"></i>Rest</span><span><i class="ws-charge"></i>Charging</span><span><i class="ws-fuel"></i>Fuel</span><span><i class="ws-wait"></i>Waiting to leave</span><span><i class="ws-blue"></i>Windows</span></div><p class="lead small keep">Calendar uses '+A.esc(zones[0].replace(/_/g,' '))+' time. Exact fields use each location’s time. Driving and stop durations are estimates.</p><div id="twSchedule"></div></div>';
+   if(C.scheduleLegs&&WindowClock.zone(zones[0]))h+='<div class="card" id="twScheduleCard"><h3>Visual itinerary</h3><p class="lead small keep">Green handles above move legs. Blue handles below edit windows. Handles snap to 15-minute steps. Tap − on a gray wait to allow departure during that block.</p>'+(c.planningMode==='overnight'?'<p class="lead small keep">Use − on an estimated rest to drive through that night. Tap the chevron to restore it.</p>':'')+'<div class="ws-legend"><span><i class="ws-drive"></i>Driving</span><span><i class="ws-rest"></i>Rest</span><span><i class="ws-charge"></i>Charging</span><span><i class="ws-fuel"></i>Fuel</span><span><i class="ws-wait"></i>Waiting to leave</span><span><i class="ws-blue"></i>Windows</span></div><p class="lead small keep">Calendar uses '+A.esc(zones[0].replace(/_/g,' '))+' time. Exact fields use each location’s time. Driving and stop durations are estimates.</p><div id="twSchedule"></div></div>';
    h+='<button class="btn tonal" id="twRetryZones">Retry time-zone lookup</button><div id="twError" class="warn" role="status"></div><button class="btn primary" id="twSave" aria-describedby="twError" disabled>Save windows</button>';
    var close=A.subPage('Trip time windows',h,function(b){
     if(c.planningMode==='overnight')OvernightUI.bindForm(A,b,c.overnight||{});
@@ -101,17 +101,19 @@
       try{var n=OvernightUI.readForm(b),key=JSON.stringify(n);if(key!==nightlyCache){nightlyCache=key;nightlyValue=n;}return nightlyValue;}
       catch(e){return null;}
      }
-     function skippedNights(i){return c.planningMode==='overnight'&&c.driveThroughNights&&c.driveThroughNights[legs[i].nightKey]||[];}
-     function setNight(i,date,skip){
-      var nights=new Set(skippedNights(i)),key=legs[i].nightKey;
-      if(skip)nights.add(date);else nights.delete(date);
-      var all=Object.assign({},c.driveThroughNights);
-      if(nights.size)all[key]=Array.from(nights).sort();else delete all[key];
-      if(Object.keys(all).length)c.driveThroughNights=all;else delete c.driveThroughNights;
+     function exclusions(field,i){return c[field]&&c[field][legs[i].nightKey]||[];}
+     function setExclusions(field,i,keys,skip){
+      var values=new Set(exclusions(field,i)),key=legs[i].nightKey;
+      keys.forEach(function(k){if(skip)values.add(k);else values.delete(k);});
+      var all=Object.assign({},c[field]);
+      if(values.size)all[key]=Array.from(values).sort();else delete all[key];
+      if(Object.keys(all).length)c[field]=all;else delete c[field];
      }
-     schedule=WindowSchedule.bind(calendar,{now:Date.now(),clock24:A.S.clock24,zone:zones[0],starts:c.visualStarts||[],esc:A.esc,read:read,write:write,rules:rules,skippedNights:skippedNights,setNight:setNight,onIssues:function(issues){visualIssues=issues;updateGate();},legs:legs.map(function(leg,i){
+     function skippedNights(i){return c.planningMode==='overnight'?exclusions('driveThroughNights',i):[];}
+     function skippedWaits(i){return exclusions('noLeaveSkips',i);}
+     schedule=WindowSchedule.bind(calendar,{now:Date.now(),clock24:A.S.clock24,zone:zones[0],starts:c.visualStarts||[],esc:A.esc,read:read,write:write,rules:rules,skippedNights:skippedNights,skippedWaits:skippedWaits,setNight:function(i,date,skip){setExclusions('driveThroughNights',i,[date],skip);},setWait:function(i,keys,skip){setExclusions('noLeaveSkips',i,keys,skip);},onIssues:function(issues){visualIssues=issues;updateGate();},legs:legs.map(function(leg,i){
       var location={zone:zones[leg.start],point:leg.point};
-      return {zone:location.zone,estimate:function(t){return WindowSchedule.restParts(parts[i],t,location,scheduleNight(),read(i).ae||Infinity,skippedNights(i));}};
+      return {zone:location.zone,skippedWaits:function(){return skippedWaits(i);},estimate:function(t){return WindowSchedule.restParts(parts[i],t,location,scheduleNight(),read(i).ae||Infinity,skippedNights(i));}};
      })});
     }else if(calendar)b.querySelector('#twScheduleCard').hidden=true;
     function readDraft(){
@@ -147,7 +149,7 @@
      var span=WindowClock.span(next,Date.now());
      next.mode='depart';next.start=new Date(span.depart.start).toISOString();next.end=new Date(span.depart.end).toISOString();
      next.otherEnabled=true;next.otherStart=new Date(span.arrival.start).toISOString();next.otherEnd=arr.end;
-     next.noLeave=nlRead();if(!next.noLeave.length)delete next.noLeave;
+     next.noLeave=nlRead();if(!next.noLeave.length){delete next.noLeave;delete next.noLeaveSkips;}
      next.earlyEnabled=b.querySelector('#twEarly').checked;next.delayMinutes=b.querySelector('#twDelay').value;
      next.priority=b.querySelector('#twPriority').value;
      next.destinations=points.map(function(d,i){

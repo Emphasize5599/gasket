@@ -2,6 +2,7 @@
 (function(root){
  'use strict';
  var MIN=60000, STEP=5*MIN, HANDLE_STEP=15*MIN, H=60*MIN, DAY=24*H;
+ var OPPOSITE={ds:'de',de:'ds',as:'ae',ae:'as'};
  function up(t){return Math.ceil(t/STEP)*STEP;}
  function down(t){return Math.floor(t/STEP)*STEP;}
  function num(t,fallback){return Number.isFinite(t)?t:fallback;}
@@ -9,9 +10,17 @@
   var at=start,parts=[];
   rules=TimeWindows.noLeaveRules(rules);
   function add(p){if(p.minutes>0||p.toggleNight){parts.push({kind:p.kind,start:at,end:at+p.minutes*MIN,night:p.night,toggleNight:p.toggleNight});at+=p.minutes*MIN;}}
-  while(rules.length&&at-start<DAY&&TimeWindows.noLeave(WindowClock.wall(at,leg.zone),rules))at+=STEP;
-  var blocked=!!(rules.length&&TimeWindows.noLeave(WindowClock.wall(at,leg.zone),rules));
-  if(at>start)parts.push({kind:'wait',start:start,end:at});
+  var keys=new Set(),excluded=new Set(leg.skippedWaits?leg.skippedWaits():[]);
+  function blockedRules(){
+   return rules.length?TimeWindows.noLeaveOccurrences(WindowClock.wall(at,leg.zone),rules).filter(function(rule){return !excluded.has(rule.key);}):[];
+  }
+  var matches=blockedRules();
+  while(matches.length&&at-start<DAY){
+   matches.forEach(function(rule){keys.add(rule.key);});
+   at+=STEP;matches=blockedRules();
+  }
+  var blocked=matches.length>0;
+  if(at>start)parts.push({kind:'wait',start:start,end:at,waitKeys:Array.from(keys)});
   var departure=at;
   leg.estimate(departure).forEach(add);
   at=up(at);
@@ -148,20 +157,44 @@
     for(var day=Math.min(a,b),last=Math.max(a,b);day<=last&&day<=Math.min(a,b)+14*DAY;day+=DAY)days.add(day);
    }
    rows.forEach(function(r,i){var w=values[i];include(r.start,r.end);include(w.ds,w.de);include(w.as,w.ae);});
+   var activeDays=Array.from(days).sort(function(a,b){return a-b;});
+   activeDays.forEach(function(day,i){var next=activeDays[i+1];for(var d=day+DAY;d<next&&d<=day+14*DAY;d+=DAY)days.add(d);});
    Array.from(days).sort(function(a,b){return a-b;}).forEach(function(day){
     var ymd=new Date(day).toISOString().slice(0,10),nextDay=new Date(day+DAY).toISOString().slice(0,10),
         a=Overnight.epoch(ymd,0,clock),b=Overnight.epoch(nextDay,0,clock),content='',span=(width<480?6:12)*H;
     if(!Number.isFinite(a)||!Number.isFinite(b))return;
-    for(var t=a;t<b;t+=span)content+=strip(t,Math.min(t+span,b),values,b,shownSkips);
-    if(content)html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+content+'</section>';
+    var detailed=rows.some(function(r,i){return r.start<b&&r.end>=a||Object.values(values[i]).some(function(t){return t>=a&&t<b;});});
+    if(detailed)for(var t=a;t<b;t+=span)content+=strip(t,Math.min(t+span,b),values,b,shownSkips);
+    html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(a))+'</h4>'+(content||compactStrip(a,b,values))+'</section>';
    });
-   var restore='';
+   var restore='',waits='';
    rows.forEach(function(_,i){
     o.skippedNights(i).forEach(function(date){if(!shownSkips.has(i+'|'+date))restore+=nightButton(i,date,true);});
+    o.skippedWaits(i).forEach(function(key){waits+=waitButton(i,[key],false);});
    });
    if(restore)html+='<div class="ws-skipped"><p class="lead small keep">Drive-through nights outside this view</p>'+restore+'</div>';
+   if(waits)html+='<div class="ws-skipped"><p class="lead small keep">Skipped departure waits</p>'+waits+'</div>';
    host.innerHTML=html;
    o.onIssues(rows.flatMap(function(r,i){return issues(r,windows[i],rows[i+1],begin).map(function(text){return 'Leg '+(i+1)+' '+text;});}));
+  }
+  function compactStrip(a,b,values){
+   function pc(t){return (t-a)*100/(b-a);}
+   var labels='',shading='';
+   for(var t=a;t<b;t+=6*H)labels+='<span class="ws-compact-label" style="left:'+pc(t)+'%">'+o.esc(hourFmt.format(t))+'</span>';
+   values.forEach(function(w){
+    [[w.ds,w.de],[w.as,w.ae]].forEach(function(range){
+     var start=Math.max(a,range[0]),end=Math.min(b,range[1]);
+     if(start<end)shading+='<span class="ws-compact-shade" style="left:'+pc(start)+'%;right:'+(100-pc(end))+'%"></span>';
+    });
+   });
+   return '<div class="ws-strip ws-compact" data-ws-from="'+a+'" data-ws-to="'+b+'"><div class="ws-track">'+shading+labels+'</div></div>';
+  }
+  function waitButton(i,keys,skip,position){
+   var fields=keys[0].split('|'),label=(skip?'Skip waiting':'Restore waiting')+' · Leg '+(i+1)+' · '+fields[0]+' '+fields[1]+'–'+fields[2],
+       attrs=' data-ws-wait="'+o.esc(JSON.stringify(keys))+'" data-ws-night-leg="'+i+'" data-ws-skip="'+(skip?'1':'0')+'"';
+   if(!skip)return '<button type="button" class="btn tonal sm"'+attrs+'>'+o.esc(label)+'</button>';
+   return '<button type="button" class="ws-night ws-wait-action" style="left:clamp(12px,'+position+'%,calc(100% - 12px))"'+attrs+
+    ' aria-label="'+o.esc(label)+'" title="'+o.esc(label)+'">−</button>';
   }
   function nightButton(i,date,skip,position){
    var label=(skip?'Restore rest':'Drive through')+' · Night of '+date+' · Leg '+(i+1),
@@ -190,7 +223,9 @@
     windows+=bar('departure'+(w.ds>w.de?' ws-reversed':''),Math.min(w.ds,w.de),Math.max(w.ds,w.de))+bar('arrival'+(w.as>w.ae?' ws-reversed':''),Math.min(w.as,w.ae),Math.max(w.as,w.ae));
     r.parts.forEach(function(p){
      itinerary+=bar(p.kind,p.start,p.end);
-     if(!p.toggleNight||p.start<a||p.start>=b)return;
+     if(p.start<a||p.start>=b)return;
+     if(p.waitKeys)nightActions+=waitButton(i,p.waitKeys,true,pc(p.start));
+     if(!p.toggleNight)return;
      var skip=p.kind==='skip-rest';if(skip)shownSkips.add(i+'|'+p.night);
      nightActions+=nightButton(i,p.night,skip,pc(p.start));
     });
@@ -217,6 +252,8 @@
     starts[i]=from;
     rows[i]=run(o.legs[i],from,localRules(i));
    }else{
+    var opposite=position(i,OPPOSITE[id]);
+    t=id[1]==='s'?Math.min(t,opposite):Math.max(t,opposite);
     if(w[id]===t)return true;
     if(!o.write(i,id,t))return false;
     windows[i]=o.read(i);
@@ -227,34 +264,49 @@
   }
   function position(i,id){var r=rows[i];return id==='start'||id==='end'?r[id]:edges(r,windows[i],rows[i+1])[id];}
   function button(e){return e.target.closest('[data-ws-edge]');}
+  function stripAtTime(strips,t){
+   var i=strips.findIndex(function(strip){return t>=strip.from&&t<strip.to;});
+   return i<0?(t<strips[0].from?0:strips.length-1):i;
+  }
   host.addEventListener('pointerdown',function(e){
    var b=button(e);if(!b||e.button!==0)return;
-   var strip=b.closest('.ws-strip'),rect=strip.querySelector('.ws-track').getBoundingClientRect();
-   drag={id:e.pointerId,i:+b.dataset.wsLeg,edge:b.dataset.wsEdge,x:e.clientX,y:e.clientY,at:position(+b.dataset.wsLeg,b.dataset.wsEdge),scale:(+strip.dataset.wsTo-+strip.dataset.wsFrom)/rect.width};
+   var source=b.closest('.ws-strip'),i=+b.dataset.wsLeg,edge=b.dataset.wsEdge,at=position(i,edge);
+   // Keep hit testing independent of the layout changes this drag produces.
+   var strips=Array.from(host.querySelectorAll('.ws-strip')).map(function(el){
+    var box=el.getBoundingClientRect(),track=el.querySelector('.ws-track').getBoundingClientRect();
+    return {from:+el.dataset.wsFrom,to:+el.dataset.wsTo,top:box.top,bottom:box.bottom,left:track.left,width:track.width};
+   });
+   var origin=strips.find(function(strip){return strip.from===+source.dataset.wsFrom;}),
+       peer=OPPOSITE[edge],limit=peer?stripAtTime(strips,position(i,peer)):null;
+   if(!origin||!origin.width)return;
+   drag={id:e.pointerId,i:i,edge:edge,x:e.clientX,y:e.clientY,strips:strips,
+    offset:e.clientX-origin.left-origin.width*(at-origin.from)/(origin.to-origin.from),
+    first:peer&&edge[1]==='e'?limit:0,last:peer&&edge[1]==='s'?limit:strips.length-1};
    host.setPointerCapture(e.pointerId);e.preventDefault();
   });
   function move(e){
    if(!drag||e.pointerId!==drag.id)return;
-   var strip=Array.from(host.querySelectorAll('.ws-strip')).find(function(s){var r=s.getBoundingClientRect();return e.clientY>=r.top&&e.clientY<r.bottom;});
-   var t=drag.at+(e.clientX-drag.x)*drag.scale;
-   if(strip&&Math.abs(e.clientY-drag.y)>34){
-    var rect=strip.querySelector('.ws-track').getBoundingClientRect();
-    t=+strip.dataset.wsFrom+(e.clientX-rect.left)/rect.width*(+strip.dataset.wsTo-+strip.dataset.wsFrom);
-   }
+   if(!drag.moved&&e.clientX===drag.x&&e.clientY===drag.y)return;
+   drag.moved=true;
+   var strips=drag.strips,row=0;
+   while(row<strips.length-1&&e.clientY>=(strips[row].bottom+strips[row+1].top)/2)row++;
+   var strip=strips[Math.max(drag.first,Math.min(row,drag.last))],
+       fraction=(e.clientX-drag.offset-strip.left)/strip.width;
+   if(OPPOSITE[drag.edge])fraction=Math.max(0,Math.min(1,fraction));
+   var t=strip.from+fraction*(strip.to-strip.from);
    change(drag.i,drag.edge,Math.round(t/HANDLE_STEP)*HANDLE_STEP);
   }
   host.addEventListener('pointermove',function(e){if(!drag)return;cancelAnimationFrame(frame);frame=requestAnimationFrame(function(){move(e);});});
   host.addEventListener('pointerup',function(e){if(drag&&drag.id===e.pointerId){cancelAnimationFrame(frame);move(e);drag=null;}});
   host.addEventListener('lostpointercapture',function(){drag=null;});
   host.addEventListener('click',function(e){
-   var b=e.target.closest('[data-ws-night]');if(!b)return;
-   var i=+b.dataset.wsNightLeg,date=b.dataset.wsNight;
-   // A night edit changes the duration of this leg, while its departure stays fixed.
-   o.setNight(i,date,b.dataset.wsSkip==='1');
+   var b=e.target.closest('[data-ws-night],[data-ws-wait]');if(!b)return;
+   var i=+b.dataset.wsNightLeg,date=b.dataset.wsNight,keys=b.dataset.wsWait,skip=b.dataset.wsSkip==='1';
+   if(keys)o.setWait(i,JSON.parse(keys),skip);else o.setNight(i,date,skip);
    starts[i]=rows[i].start;
    rows[i]=run(o.legs[i],starts[i],localRules(i));
    draw();
-   var next=Array.from(host.querySelectorAll('[data-ws-night]')).find(function(el){return +el.dataset.wsNightLeg===i&&el.dataset.wsNight===date;});
+   var next=Array.from(host.querySelectorAll(keys?'[data-ws-wait]':'[data-ws-night]')).find(function(el){return +el.dataset.wsNightLeg===i&&(keys?JSON.parse(el.dataset.wsWait).includes(JSON.parse(keys)[0]):el.dataset.wsNight===date);});
    if(next)next.focus({preventScroll:true});
   });
   host.addEventListener('keydown',function(e){

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.450 - 2026-11-10
+
+- Itinerary window handles stop at their opposite handle. Dragging below the chart stays on the last allowed row without repeated redraws.
+- Compact rows show days between itinerary events as drag targets. Gray departure waits can be skipped or restored for a specific leg and date.
+- Return-leg rest checks use the planned departure when a saved trip has no matching wait record.
+
 ## 0.0.449 - 2026-11-10
 
 - Visual itinerary handles snap to 15-minute intervals. The Window planner tip points to the time fields for finer adjustments.
