@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.455 - Timing after Parameters; itinerary drive time follows default speed
+
+Owner's 453 log: window plans failed "reached a destination before its arrival window even when leaving as late as allowed" (48/48 early): the itinerary's green legs used Google's durationSec, slower than the plan with the default speed rule, so windows set on it were too late. STEP_ORDER [1,2,3,4,10,5,8,6,7,9], ord(Timing)=4.5, reach checks fuel before timesNeed. scheduleLegs: drive minutes = durationSec/60 − ruleMinutes(flatSecs(choiceLimitModel(road)), speedFn) (±50% cap; starts ensureLimits if missing, so an itinerary opened before limits load still shows Google's time). EV charger types/curve were already in scheduleVehicle; per-road speed edits and hydrogen station types are NOT yet in the itinerary. Tests vehiclecompare-ui / windowplanning-ui: Timing → Next → Hazards. Minimal verification (owner low on usage).
+
+Phone checks: Parameters comes before Timing; set default +5 over limit, open the visual itinerary: legs shorter than Google's time; windows set on it plan without "arrived early".
+
 ## 0.0.454 - Timing step; sun events on the itinerary
 
 Owner: Review setup on Compare lands on Parameters/Route, so adjusting windows (esp. gas vs EV) risks editing places. New step `ST_TIMING` = 10 (STEPS[9] 'Timing', tab 'Times'), STEP_ORDER [1,2,3,10,4,5,8,6,7,9]; the old numeric step checks use `ord(k)` (Timing = 3.5). Route keeps the source/addresses/avoid/Round trip card, Get routes (`#tRouteGo`), EV charger types and Other routes and below. Timing (`stepHtml`/`bindTiming`, rebuilt each visit) = `#tAutoTrip` planning card, `windows.modeHtml()` (timing mode + forecast traffic), `#tExactTiming` (`#tLeaveBox` Leaving, `#tBackAutoBox`, `#tBackBox`), `windows.html()`. ready(): Route = places + routes; Timing = toll input, timesNeed, toll-route check; reach() returns ST_TIMING for timesNeed. compareAdjust opens Timing (Garage/Advisory reasons first, Route without routes). Round trip change on Route drops the built Timing step. jobLocked includes Timing. `needRoutes` goes to Route to flag Get routes. "Review trip time windows" and traffic timing errors go to Timing. `__trip.steps` has ROUTE/TIMING/PARAMS/HAZ too.

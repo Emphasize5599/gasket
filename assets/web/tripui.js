@@ -312,8 +312,10 @@
         for(var i=g.from;i<=g.to;i++){
           var road=(lists[i]||[])[hzSel(i)]||(lists[i]||[])[0],p=route.stops[i+1],r=p&&p.rest;
           if(!road)continue;
-          var m=T.buildRoute(road,car);
-          parts.push({minutes:m.durationSec/60,energy:m.galTo(m.totalMi),rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0,restNight:r&&r.overnight?r.nightDate:null});
+          var m=T.buildRoute(road,car),lm=choiceLimitModel(road),sf=Garage.speedFn&&Garage.speedFn(),saved=0;
+          // 0.0.455: driving time follows your default speed (over the limit / cruising speed) when the limits are in
+          if(lm&&!speedOff(lm)){if(!lm._lim)ensureLimits(lm);saved=Math.max(-m.durationSec/120,Math.min(m.durationSec/120,ruleMinutes(flatSecs(lm),sf)));}
+          parts.push({minutes:m.durationSec/60-saved,energy:m.galTo(m.totalMi),rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0,restNight:r&&r.overnight?r.nightDate:null});
         }
         return {start:g.start,end:g.end,point:route.stops[g.start],endPoint:route.stops[g.end],nightKey:TripStops.nightKey(route,g),parts:parts};
       });
@@ -1167,8 +1169,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   var STEPS = ['Garage', 'Advisory', 'Route', 'Parameters', 'Hazards', 'Adjustments', 'Stops', 'Compare', 'Departure', 'Timing'], step = 1;
   var ST_GARAGE = 1, ST_ADVISORY = 2, ST_ROUTE = 3, ST_HAZ = 5, ST_PARAMS = 4, ST_ADJ = 6, ST_STOPS = 7, ST_COMPARE = 8, ST_DEPART = 9, ST_TIMING = 10;
   // 0.0.454: Timing (id 10) sits between Route and Parameters. ord() gives it a place in the old numeric checks.
-  var STEP_ORDER=[1,2,3,10,4,5,8,6,7,9];
-  function ord(k){return k===ST_TIMING?3.5:k;}
+  var STEP_ORDER=[1,2,3,4,10,5,8,6,7,9];
+  function ord(k){return k===ST_TIMING?4.5:k;}
   function rank(k){return STEP_ORDER.indexOf(k);}
   function visibleSteps(){return autoPriority()?STEP_ORDER.filter(function(k){return k!==ST_ADJ;}):STEP_ORDER;}
   function nextStep(k){var order=visibleSteps(),i=order.indexOf(k);return k===ST_ADJ?ST_STOPS:order[Math.min(order.length-1,i+1)];}
@@ -1482,8 +1484,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (window.Tires && Tires.airDue && Tires.airDue(Garage.car())) return ST_ADVISORY;
     if (window.Climate && Climate.ackDue()) return ST_ADVISORY;
     if (!model || document.querySelector('#tParsed .pick button')) return ST_ROUTE;
-    if (timesNeed()) return ST_TIMING;
     if (!hasFuel()) return ST_PARAMS;
+    if (timesNeed()) return ST_TIMING;
     if(choicePending().length)return ST_HAZ;
 
     return ST_DEPART;

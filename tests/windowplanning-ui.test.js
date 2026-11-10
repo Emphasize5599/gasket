@@ -38,7 +38,6 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await p.click('[data-vc-plan="'+own+'"]');await p.waitForFunction(o=>__trip.comparison().selected===o,own);await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tCompare');rows=await reviewed();assert(rows.every(r=>r[1]),'and back: '+JSON.stringify(rows));
   const reads=await p.evaluate(()=>__weatherReads.length);
   await p.click('[data-vc-plan="'+own+'#2"]');await p.waitForFunction(()=>__trip.state().step===10);
-  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===4);
   await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===5);
   assert.equal(await p.locator('.time-review-page').count(),0,'a second plan for the same car has no duplicate review');
   await p.click('#tNext');await p.waitForSelector('#tCompare');

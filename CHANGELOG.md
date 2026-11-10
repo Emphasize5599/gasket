@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.455 - 2026-11-10
+
+- Timing now comes after Parameters, since your fuel, charger and speed settings change how long the trip takes.
+- The visual itinerary's driving time follows your default speed (over the limit or cruising speed) once the speed limits are in, so its green bars are closer to what planning will find.
+- Bug fixes.
+
 ## 0.0.454 - 2026-11-10
 
 - New Timing step between Route and Parameters. It holds the trip planning priority, the timing mode and traffic forecasts, Leaving / Head back, and time windows. Route keeps the places, avoid options, round trip, charger types and other routes.
