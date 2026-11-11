@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.461 - 2026-11-11
+
+- Flexible-time planning no longer overshoots into "arrives too late" when leaving later adds a night's rest.
+- Bug fixes.
+
 ## 0.0.460 - 2026-11-11
 
 - Includes 0.0.457–0.0.459, which published no APK: nightly rests in window checks, Review setup opens Parameters, the map finds you before drawing stations, and EV chargers thin out when zoomed out.

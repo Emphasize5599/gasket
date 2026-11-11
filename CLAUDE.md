@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.461 - window early-shift bisects; first miss logged
+
+Owner's 460 log: Nightly rest & windows plans all set aside `late` (33/33, 48/48; one run late + tolls). Likely cause (inferred, the log had no times): windowEvaluate's early shift moved the start by the full early gap, which can cross one more night (+ a minimum rest, windowRestRange), turning early into late. Now the loop (≤10) bisects between the last early start and the first late one (timeline only, no replan), never past the latest departure. "Hourly recommendations finished" adds `firstMiss` {why: {leg, depart, arrive, restMinutes [min,max], windowStart, windowEnd, startAt}} (UTC) per reason (`windowMissSample`), so the next log shows the real times. Tests run: windowplanning-ui, overnight-ui. Not phone-verified.
+
+Phone checks: same overnight trip with windows: Flexible-time planning finds a trip, or the log's firstMiss shows why.
+
 ## 0.0.460 - altfuel zoom listener guard (457–459 published no APK)
 
 459's CI failed ev-discovery / charger-download / chargerdata / ev-price-policy: those Node tests load altfuel.js with a stub map that has no `on`, and 0.0.458's top-level `map.on('zoomend', …)` threw. Now `if (map && map.on)`. 457–459 tags untouched.
