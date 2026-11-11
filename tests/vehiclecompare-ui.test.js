@@ -29,7 +29,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert(await p.locator('#vcAdd').evaluate(e=>e.getBoundingClientRect().top>document.getElementById('vcCompare').getBoundingClientRect().bottom));
  await p.evaluate(()=>__app.S.cars.push(__otherVehicle));await p.click('#vcCompare');await p.click('[data-compare-car]');await p.waitForFunction(()=>__trip.state().step===2);assert.equal(await p.evaluate(()=>__app.S.carId),await p.evaluate(()=>__second));assert.equal(await p.evaluate(()=>__app.S.trip.fuel.miles),undefined,'never reuse another car’s fuel reading');assert.equal(await p.evaluate(()=>__app.S.trip.routeChoices.fixture),undefined,'alternative-route answers are not copied to another car');
  await p.evaluate(()=>{__app.S.trip.fuel={mode:'miles',miles:'210'};__app.S.trip.milesLeft='210';__app.S.trip.bufferMi=35;__app.S.trip.tankPrice=3.7;__app.S.trip.routeChoices.fixture={consider:false};__trip.step(5);});await p.click('#tNext');await p.click('#tNext');await p.waitForSelector('#tCompare');assert.equal(await p.locator('[data-vc-queue]:checked').count(),2,'a vehicle picked to compare is ticked');
- await p.click('[data-vc-plan="venza12"]');await p.waitForFunction(()=>__trip.state().step===10);
+ await p.click('[data-vc-plan="venza12"]');await p.waitForFunction(()=>__trip.state().step===4);
+ await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===10);
  await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===5);
  await p.click('#tNext');await p.click('#tNext');await p.waitForFunction(()=>__trip.state().step===8);
  assert.equal(await p.evaluate(()=>__trip.comparison().selected),'venza12','the adjusted plan returns to Compare');

@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.457 - nightly rests in window checks; Review setup opens Parameters
+
+Owner's 456 log: Nightly rest & windows plans still all set aside `early` (48/48). scheduleTimeline has no nightly rests (they're picked in Stops), so overnight legs arrived a night or more before their windows. `windowRestRange(i, t)` (overnight mode only): walks the leg's drive from departure in the start point's zone, counting nightly starts it crosses (each adds the minimum rest), ≤ 14; windowMiss checks early against arrive + nights × full nightly span and late against arrive + nights × minimum. Heuristic: real rest placement still happens in Stops. compareAdjust opens ST_PARAMS (was Timing; owner: settings before Timing affect it). vehiclecompare-ui: Review setup → 4 → 10 → 5. Not phone-verified.
+
+Phone checks: overnight trip with windows that only fit with nightly rests: Flexible-time planning finds a trip. Compare → Review setup lands on Parameters.
+
 ## 0.0.456 - overnight-ui follows the new step order (455 published no APK)
 
 455's CI failed overnight-ui line 114: Timing's Next expected step 4; it now goes to Hazards (5), whose review opens by itself. Test updated; no app change. 455's tag stays untouched.

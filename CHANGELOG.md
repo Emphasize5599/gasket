@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.457 - 2026-11-11
+
+- Nightly-rest planning counts the rests a leg will need when checking arrival windows, instead of rejecting every trip as arriving early.
+- Review setup on Compare opens Parameters.
+- Bug fixes.
+
 ## 0.0.456 - 2026-11-10
 
 - Includes 0.0.455, which published no APK: Timing after Parameters, and the itinerary's driving time follows your default speed.

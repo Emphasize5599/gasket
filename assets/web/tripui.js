@@ -449,7 +449,15 @@ return conditions;
   function windowMiss(timeline){var arrivals=windows.arrivals();for(var i=0;i<timeline.length;i++){var t=timeline[i],a=arrivals[i],d=windowDestination(i-1);
     if(windowNoLeave(i,t.depart))return {why:'noLeave',leg:i};
     if(i&&d.leaveStart&&d.leaveEnd){var ls=+new Date(d.leaveStart),le=+new Date(d.leaveEnd);if(t.depart>le)return {why:'leave',leg:i};}else if(i&&t.waitMinutes>(+d.wait||0)+1e-7)return {why:'wait',leg:i};
-    if(a&&t.arrive<a.start)return {why:'early',leg:i,ms:a.start-t.arrive};if(a&&t.arrive>a.end)return {why:'late',leg:i};}return null;}
+    var r=windowRestRange(i,t),lo=t.arrive+r.min*60000,hi=t.arrive+r.max*60000;
+    if(a&&hi<a.start)return {why:'early',leg:i,ms:a.start-hi};if(a&&lo>a.end)return {why:'late',leg:i};}return null;}
+  // Nightly rests (Nightly rest & windows) aren't in the fuel plan's timeline: they're picked later in Stops. A leg that
+  // crosses N nights arrives between N minimum rests and N full nights later, so the arrival window is checked against that.
+  function windowRestRange(i,t){var c=windows.config();if(c.planningMode!=='overnight'||!t||!window.Overnight)return {min:0,max:0};var n=Overnight.defaults(c.overnight),hm=function(x){var q=String(x||'').split(':');return (+q[0]||0)*60+(+q[1]||0);},ns=hm(n.start),span=((hm(n.end)-ns+1440)%1440)||1440,
+    z=windowPointZone(i)||Intl.DateTimeFormat().resolvedOptions().timeZone,f=new Intl.DateTimeFormat('en-US',{timeZone:z,hour:'numeric',minute:'2-digit',hourCycle:'h23'}),local=function(x){var q=f.formatToParts(new Date(x)),h=+q.find(function(y){return y.type==='hour';}).value,m=+q.find(function(y){return y.type==='minute';}).value;return h*60+m;},
+    clock=t.depart,left=t.arrive-t.depart,nights=0;
+    while(left>0&&nights<14){var to=((ns-local(clock))+1440)%1440;if(to*60000>=left)break;left-=to*60000;clock+=to*60000+(+n.minimum)*60000;nights++;}
+    return {min:nights*(+n.minimum),max:nights*span};}
   function windowAlign(path,timeline){var session=windows.current(),rows=session.rows;return path.map(function(r,i){return rows.find(function(x){return x.leg===i&&x.routeKey===r.routeKey&&timeline[i].depart>=x.depart&&timeline[i].depart<x.depart+TimeWindows.HOUR&&session.consent.allowed(x);});});}
   // Why checked trips were set aside, so a failed search can say which constraint stopped it (and the log can too).
   var windowRejects={};function windowReject(why){windowRejects[why]=(windowRejects[why]||0)+1;return null;}
@@ -6102,7 +6110,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(!compareSwitch(id))return;
     var review=queueReviewStep(compareEntries.get(id),Garage.car());
     // 0.0.454: reviewing a vehicle opens Timing (its windows and priority), not the places on Route
-    step=review===ST_GARAGE||review===ST_ADVISORY?review:model?ST_TIMING:ST_ROUTE;
+    step=review===ST_GARAGE||review===ST_ADVISORY?review:model?ST_PARAMS:ST_ROUTE;
     if((step===ST_ROUTE||step===ST_TIMING)&&!S.trip.link&&(srcOf()==='link'||!S.trip.from||!S.trip.to)){
       var points=route.stops.filter(function(p){return !TripStops.isRest(p)&&!p.ret;});
       function address(p){return p.current?'My location':p.address||p.label||[p.lat,p.lng].join(',');}
