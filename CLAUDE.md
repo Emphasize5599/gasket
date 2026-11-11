@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.458 - map waits for your location; EV charger tiers
+
+Owner: drawing stations before the map is on you hangs the UI; EV chargers should thin out like gas when zoomed out. app.js `located` / `markLocated` / `whenLocated` (on `__app`): render() returns until the first fix (onLocation after setView), a location error, or 6 s; altfuel's startup showEv/showH2 waits on `A.whenLocated`. altfuel `evTier()` (on showEv and zoomend): `P.mapTier` over evList with rank = known published tariff price ($/kWh, ChargerData.tariff), else 10 − kW/100 (fastest first after priced); markers are built once per evList (`evDrawn`) and added/removed per tier. Hydrogen unchanged (few stations). Tests run: map-tiers-ui, map-zoom, map-scan-merge, setup-demo, map-refresh. Not phone-verified.
+
+Phone checks: open the app: the map centers on you, then stations appear (no hang). ⚡ mode: zoom out: fewer charger dots (priced/fastest stay); zoom in to a town: all.
+
 ## 0.0.457 - nightly rests in window checks; Review setup opens Parameters
 
 Owner's 456 log: Nightly rest & windows plans still all set aside `early` (48/48). scheduleTimeline has no nightly rests (they're picked in Stops), so overnight legs arrived a night or more before their windows. `windowRestRange(i, t)` (overnight mode only): walks the leg's drive from departure in the start point's zone, counting nightly starts it crosses (each adds the minimum rest), ≤ 14; windowMiss checks early against arrive + nights × full nightly span and late against arrive + nights × minimum. Heuristic: real rest placement still happens in Stops. compareAdjust opens ST_PARAMS (was Timing; owner: settings before Timing affect it). vehiclecompare-ui: Review setup → 4 → 10 → 5. Not phone-verified.

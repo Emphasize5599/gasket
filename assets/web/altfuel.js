@@ -306,9 +306,19 @@
   function showEv() {
     panes();
     if (!evLayer) evLayer = L.layerGroup().addTo(map);
-    if (evOn()) drawDots(evList, evLayer, P.ALT.ev.color); else evLayer.clearLayers();
+    if (evOn()) { if (evDrawn !== evList) { drawDots(evList, evLayer, P.ALT.ev.color); evDrawn = evList; } evTier(); } else { evLayer.clearLayers(); evDrawn = null; }
     syncVisibility();
   }
+  // Like gas stations: zoomed out, only the top chargers get a dot (cheapest published price first, then the fastest);
+  // every charger once a few towns across (P.mapTier).
+  var evDrawn = null, evTierT = 0;
+  function evRank(s) { var q = null; try { q = window.ChargerData && ChargerData.tariff(s, null, s.kw); } catch (e) {} return q && q.known && Number.isFinite(q.price) ? q.price : 10 - Math.min(9, (+s.kw || 0) / 100); }
+  function evTier() {
+    if (!evLayer || !evOn() || !P.mapTier) return;
+    var tier = P.mapTier(evList.map(function (s) { return { id: s.id, price: evRank(s) }; }), map.getZoom());
+    evList.forEach(function (s) { var m = marks[s.id]; if (!m) return; var on = tier.ids.has(s.id); if (on && !evLayer.hasLayer(m)) evLayer.addLayer(m); else if (!on && evLayer.hasLayer(m)) evLayer.removeLayer(m); });
+  }
+  map.on('zoomend', function () { clearTimeout(evTierT); evTierT = setTimeout(evTier, 0); });
   function carPlugs() { var G = window.Garage, c = G && G.car(); return c && G.kind(c) === 'ev' ? compatiblePlugs(c,G.plugs(c)) : null; }
 
   function openPanel() {
@@ -443,7 +453,7 @@
   } catch (e) { }
   window.addEventListener('garagechange', function () { if (h2On()) drawCoverage(); });
   // at start: the mode the app was left in (its stations, the selector)
-  setTimeout(function () { var G = window.Garage, c = G && G.car(); if (c) { var k = G.kind(c); lastKind = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas'; } if (A.altMode()) { showEv(); showH2(); A.rebuild(); } }, 0);
+  (A.whenLocated || function (f) { setTimeout(f, 0); })(function () { var G = window.Garage, c = G && G.car(); if (c) { var k = G.kind(c); lastKind = k === 'ev' ? 'ev' : k === 'h2' ? 'h2' : 'gas'; } if (A.altMode()) { showEv(); showH2(); A.rebuild(); } });
 
   // ---------- charging networks you can choose in Parameters (S.trip.evNetworksOff = {key: true} for unticked ones) ----------
   // Networks whose own published prices Gasket reads come first, then the rest (dimmed, still choosable); each A–Z.

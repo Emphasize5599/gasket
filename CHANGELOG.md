@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.458 - 2026-11-11
+
+- The map finds you and zooms in before drawing stations.
+- EV chargers show only the top ones when zoomed out, like gas stations.
+- Bug fixes.
+
 ## 0.0.457 - 2026-11-11
 
 - Nightly-rest planning counts the rests a leg will need when checking arrival windows, instead of rejecting every trip as arriving early.

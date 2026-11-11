@@ -306,7 +306,9 @@
   apiCount(); setInterval(apiCount, 4000);
 
   // ---------- location ----------
-  var firstFix = true;
+  var firstFix = true, located = false, locatedWait = [];
+  function markLocated() { if (located) return; located = true; var q = locatedWait; locatedWait = []; q.forEach(function (f) { try { f(); } catch (e) {} }); }
+  function whenLocated(fn) { if (located) fn(); else locatedWait.push(fn); }
   window.onLocation = function (lat, lng, acc) {
     me = { lat: lat, lng: lng, acc: acc };
     $('btnLocate').classList.add('live');
@@ -318,13 +320,14 @@
       firstFix = false;
       movedByUser = false;
       map.setView([lat, lng], zoomForRadius(S.radiusMi));
+      markLocated();
       var fresh = lastFetch && (Date.now() - lastFetch.ts < 30 * 60000) && P.haversineMi(lat, lng, lastFetch.lat, lastFetch.lng) < 3;
       // prices on opening only if you turned that on (each search uses Google lookups); otherwise the last prices stay up
       if (!fresh && S.autoRefresh && !justRestored && (S.apiKey || demo || Object.keys(SITES).some(siteOn))) fetchAround(lat, lng);
       else { render(); if (!fresh && !demo) status(lastFetch ? 'Prices from ' + ago(lastFetch.ts) + ' · tap ↻ for fresh ones' : 'Tap ↻ to get prices nearby'); }
     } else render();
   };
-  window.onLocationError = function (msg) { status(msg, true); };
+  window.onLocationError = function (msg) { status(msg, true); if (!located) { markLocated(); render(); } };
   function zoomForRadius(mi) { return mi <= 3 ? 14 : mi <= 6 ? 13 : mi <= 12 ? 12 : mi <= 25 ? 11 : 10; }
 
   // ---------- fetching ----------
@@ -514,6 +517,7 @@
   function shown(x) { return (!IG||!IG.has(x.s))&&(x.c || !S.hideUnpriced || x.s.id === selectedId); }
   var LIST_MAX = 200;   // rows in the list sheet: past that the page itself slows down
   function render() {
+    if (!located) return;   // stations draw once the map is on you (or the fix timed out): drawing them first hung the UI
     syncMain();
     // Trip pans/zooms have their own route/station layers. Do not rebuild the
     // hidden main-map list, thousands of markers and price bubbles behind it.
@@ -1589,6 +1593,7 @@
   render();
   // The short first-run walkthrough starts after all feature modules have loaded.
   N.locate();
+  setTimeout(function () { if (!located) { markLocated(); render(); } }, 6000);   // no fix: draw where the map is
   window.addEventListener('resize', sizeSheet);
   setTimeout(function () { loadLogos(); }, 0);
   /** Saved answers (searches, speed limits, routes) in the app's private storage: {t: saved ms, v: value}. */
@@ -1697,7 +1702,7 @@
     .observe(document.body, { childList: true, subtree: true });
   qify(document.body);
 
-  window.__app = { showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, ignore: IG, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
+  window.__app = { whenLocated: whenLocated, showSiteCheck:showSiteCheck, setMode: setMode, altMode: altMode, rebuild: function () { buildGrades(); render(); }, justRestored: justRestored, ldBar: function (label) { return '<div class="parse-load ind-load"><span>' + esc(label) + '</span><span class="pbar"><i></i></span></div>'; },  gAttr: gAttr, syncMapGAttr: syncMapGAttr, ignore: IG, bl: { buttons: blButtons, bind: bindBl, has: function (st) { return BL.has(st); } }, qBtn: qBtn, KV: KV, S: S, save: save, N: N, map: map, P: P, $: $, status: status, esc: esc, priceHtml: priceHtml, ago: ago,
     me: function () { return me; }, stations: function () { return stations.filter(function(st){return !IG.has(st);}); }, siteOn: siteOn, closeDetail: closeDetail, refreshStatus: refreshStatus,
     openDetail: openDetail, openSettings: openSettings, setDemo: function (v) { demo = v; }, fetchAround: fetchAround, render: render,
     logoHtml: logoHtml, badgeHtml: badgeHtml, confirmDel: confirmDel, job: function () { return job; }, jobStart: jobStart, jobProg: jobProg, jobEnd: jobEnd, jobDraw: jobDraw, jobShort: jobShort, toast: function (m) { toast(m); }, dotsRenderer: dotsRenderer, syncMain: syncMain, loader: loader, scrollHint: scrollHint, subPage: subPage, capMsg: capMsg, qify: qify, reloadLogos: function () { LOGO = {}; logoRun = false; try { KV.clear('logos'); } catch (e) { } loadLogos(); } };
