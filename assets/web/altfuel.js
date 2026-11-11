@@ -318,7 +318,7 @@
     var tier = P.mapTier(evList.map(function (s) { return { id: s.id, price: evRank(s) }; }), map.getZoom());
     evList.forEach(function (s) { var m = marks[s.id]; if (!m) return; var on = tier.ids.has(s.id); if (on && !evLayer.hasLayer(m)) evLayer.addLayer(m); else if (!on && evLayer.hasLayer(m)) evLayer.removeLayer(m); });
   }
-  map.on('zoomend', function () { clearTimeout(evTierT); evTierT = setTimeout(evTier, 0); });
+  if (map && map.on) map.on('zoomend', function () { clearTimeout(evTierT); evTierT = setTimeout(evTier, 0); });
   function carPlugs() { var G = window.Garage, c = G && G.car(); return c && G.kind(c) === 'ev' ? compatiblePlugs(c,G.plugs(c)) : null; }
 
   function openPanel() {

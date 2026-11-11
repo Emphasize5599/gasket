@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.460 - altfuel zoom listener guard (457–459 published no APK)
+
+459's CI failed ev-discovery / charger-download / chargerdata / ev-price-policy: those Node tests load altfuel.js with a stub map that has no `on`, and 0.0.458's top-level `map.on('zoomend', …)` threw. Now `if (map && map.on)`. 457–459 tags untouched.
+
 ## 0.0.459 - windowplanning-ui follows Review setup → Parameters (457/458 published no APK)
 
 457/458 CI failed windowplanning-ui line 40: opening a compare plan expected Timing (10), now Parameters (4) per 0.0.457. Test goes 4 → 10 → 5. No app change. 457/458 tags untouched.
