@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.462 - fewest-rests count uses the latest rest arrival
+
+Owner's 461 log firstMiss: leg 0 departs 23:30Z, raw arrival 19:58Z next day (~20.5 h), restMinutes [840,1500] = 2 nights, window 22:30Z–07:00Z, so lo = arrival + 14 h was late. windowRestRange counted a night whenever driving reached the nightly start; but you can drive until the latest rest arrival (Overnight.rules arrivalEnd clock, else start + span − minimum), and a drive ending before it needs no rest there. Now `count(late, stay)`: min = nights the drive runs past start + late (each + minimum rest), max = nightly starts crossed (each + the full span). Owner's case: min 1 night (7 h → 02:58Z, inside), max 2. Solar arrivalEnd falls back to span − minimum. Tests run: windowplanning-ui, overnight-ui. Not phone-verified.
+
+Phone checks: same overnight trip: Flexible-time planning finds a trip; else send the log (firstMiss).
+
 ## 0.0.461 - window early-shift bisects; first miss logged
 
 Owner's 460 log: Nightly rest & windows plans all set aside `late` (33/33, 48/48; one run late + tolls). Likely cause (inferred, the log had no times): windowEvaluate's early shift moved the start by the full early gap, which can cross one more night (+ a minimum rest, windowRestRange), turning early into late. Now the loop (≤10) bisects between the last early start and the first late one (timeline only, no replan), never past the latest departure. "Hourly recommendations finished" adds `firstMiss` {why: {leg, depart, arrive, restMinutes [min,max], windowStart, windowEnd, startAt}} (UTC) per reason (`windowMissSample`), so the next log shows the real times. Tests run: windowplanning-ui, overnight-ui. Not phone-verified.

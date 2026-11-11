@@ -455,9 +455,11 @@ return conditions;
   // crosses N nights arrives between N minimum rests and N full nights later, so the arrival window is checked against that.
   function windowRestRange(i,t){var c=windows.config();if(c.planningMode!=='overnight'||!t||!window.Overnight)return {min:0,max:0};var n=Overnight.defaults(c.overnight),hm=function(x){var q=String(x||'').split(':');return (+q[0]||0)*60+(+q[1]||0);},ns=hm(n.start),span=((hm(n.end)-ns+1440)%1440)||1440,
     z=windowPointZone(i)||Intl.DateTimeFormat().resolvedOptions().timeZone,f=new Intl.DateTimeFormat('en-US',{timeZone:z,hour:'numeric',minute:'2-digit',hourCycle:'h23'}),local=function(x){var q=f.formatToParts(new Date(x)),h=+q.find(function(y){return y.type==='hour';}).value,m=+q.find(function(y){return y.type==='minute';}).value;return h*60+m;},
-    clock=t.depart,left=t.arrive-t.depart,nights=0;
-    while(left>0&&nights<14){var to=((ns-local(clock))+1440)%1440;if(to*60000>=left)break;left-=to*60000;clock+=to*60000+(+n.minimum)*60000;nights++;}
-    return {min:nights*(+n.minimum),max:nights*span};}
+    // Fewest rests: you may keep driving until the latest rest arrival (nightly start + span − minimum, or the clock you set),
+    // so a night only costs a rest when the drive runs past it. Most: every nightly start crossed costs the full night.
+    rb=Overnight.rules?Overnight.rules(n):null,ae=rb&&rb.arrivalEnd&&rb.arrivalEnd.kind==='clock'?((hm(rb.arrivalEnd.time)-ns+1440)%1440):Math.max(0,span-(+n.minimum)),
+    count=function(late,stay){var clock=t.depart,left=t.arrive-t.depart,k=0;while(left>0&&k<14){var to=((ns-local(clock))+1440)%1440,go=to+late;if(go*60000>=left)break;left-=go*60000;clock+=go*60000+stay*60000;k++;}return k;};
+    return {min:count(ae,+n.minimum)*(+n.minimum),max:count(0,span)*span};}
   function windowAlign(path,timeline){var session=windows.current(),rows=session.rows;return path.map(function(r,i){return rows.find(function(x){return x.leg===i&&x.routeKey===r.routeKey&&timeline[i].depart>=x.depart&&timeline[i].depart<x.depart+TimeWindows.HOUR&&session.consent.allowed(x);});});}
   // Why checked trips were set aside, so a failed search can say which constraint stopped it (and the log can too).
   var windowRejects={},windowMissSeen={};

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.462 - 2026-11-11
+
+- Flexible-time planning counts a night's rest only when the drive runs past your latest rest arrival, so long legs that fit with one rest are no longer set aside as late.
+- Bug fixes.
+
 ## 0.0.461 - 2026-11-11
 
 - Flexible-time planning no longer overshoots into "arrives too late" when leaving later adds a night's rest.
