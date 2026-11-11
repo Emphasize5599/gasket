@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.459 - 2026-11-11
+
+- Includes 0.0.457 and 0.0.458, which published no APK: nightly rests in window checks, Review setup opens Parameters, the map finds you before drawing stations, and EV chargers thin out when zoomed out.
+- Bug fixes.
+
 ## 0.0.458 - 2026-11-11
 
 - The map finds you and zooms in before drawing stations.

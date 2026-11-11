@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.459 - windowplanning-ui follows Review setup → Parameters (457/458 published no APK)
+
+457/458 CI failed windowplanning-ui line 40: opening a compare plan expected Timing (10), now Parameters (4) per 0.0.457. Test goes 4 → 10 → 5. No app change. 457/458 tags untouched.
+
 ## 0.0.458 - map waits for your location; EV charger tiers
 
 Owner: drawing stations before the map is on you hangs the UI; EV chargers should thin out like gas when zoomed out. app.js `located` / `markLocated` / `whenLocated` (on `__app`): render() returns until the first fix (onLocation after setView), a location error, or 6 s; altfuel's startup showEv/showH2 waits on `A.whenLocated`. altfuel `evTier()` (on showEv and zoomend): `P.mapTier` over evList with rank = known published tariff price ($/kWh, ChargerData.tariff), else 10 − kW/100 (fastest first after priced); markers are built once per evList (`evDrawn`) and added/removed per tier. Hydrogen unchanged (few stations). Tests run: map-tiers-ui, map-zoom, map-scan-merge, setup-demo, map-refresh. Not phone-verified.
