@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.463 - 2026-11-12
+
+- Flexible-time planning checks overnight rests the same way the visual itinerary draws them, including drive-through nights, nightly overrides and sunrise/sunset bounds.
+- Bug fixes.
+
 ## 0.0.462 - 2026-11-11
 
 - Flexible-time planning counts a night's rest only when the drive runs past your latest rest arrival, so long legs that fit with one rest are no longer set aside as late.

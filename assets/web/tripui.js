@@ -453,7 +453,14 @@ return conditions;
     if(a&&hi<a.start)return {why:'early',leg:i,ms:a.start-hi};if(a&&lo>a.end)return {why:'late',leg:i};}return null;}
   // Nightly rests (Nightly rest & windows) aren't in the fuel plan's timeline: they're picked later in Stops. A leg that
   // crosses N nights arrives between N minimum rests and N full nights later, so the arrival window is checked against that.
-  function windowRestRange(i,t){var c=windows.config();if(c.planningMode!=='overnight'||!t||!window.Overnight)return {min:0,max:0};var n=Overnight.defaults(c.overnight),hm=function(x){var q=String(x||'').split(':');return (+q[0]||0)*60+(+q[1]||0);},ns=hm(n.start),span=((hm(n.end)-ns+1440)%1440)||1440,
+  // Same rest model as the visual itinerary (WindowSchedule.restParts): drive-through nights, per-date overrides and
+  // solar bounds count here too, so the green line and this check agree. Rests take between the minimum and what the
+  // itinerary plans (preferred, shifted or shortened).
+  function windowRestRange(i,t){var c=windows.config();if(c.planningMode!=='overnight'||!t||!window.Overnight)return {min:0,max:0};
+    if(window.WindowSchedule&&WindowSchedule.restParts&&route&&route.stops[i]){try{var nc=Overnight.defaults(c.overnight),g=TripStops.group(route,i),sk=g&&c.driveThroughNights&&c.driveThroughNights[TripStops.nightKey(route,g)]||[],
+      parts=WindowSchedule.restParts([{kind:'drive',minutes:Math.max(0,(t.arrive-t.depart)/60000)}],t.depart,{zone:windowPointZone(i)||Intl.DateTimeFormat().resolvedOptions().timeZone,point:route.stops[i]},nc,Infinity,sk),lo=0,hi=0;
+      parts.forEach(function(p){if(p.kind==='rest'){hi+=p.minutes;lo+=Math.min(p.minutes,+nc.minimum);}});return {min:lo,max:hi};}catch(e){}}
+    var n=Overnight.defaults(c.overnight),hm=function(x){var q=String(x||'').split(':');return (+q[0]||0)*60+(+q[1]||0);},ns=hm(n.start),span=((hm(n.end)-ns+1440)%1440)||1440,
     z=windowPointZone(i)||Intl.DateTimeFormat().resolvedOptions().timeZone,f=new Intl.DateTimeFormat('en-US',{timeZone:z,hour:'numeric',minute:'2-digit',hourCycle:'h23'}),local=function(x){var q=f.formatToParts(new Date(x)),h=+q.find(function(y){return y.type==='hour';}).value,m=+q.find(function(y){return y.type==='minute';}).value;return h*60+m;},
     // Fewest rests: you may keep driving until the latest rest arrival (nightly start + span − minimum, or the clock you set),
     // so a night only costs a rest when the drive runs past it. Most: every nightly start crossed costs the full night.

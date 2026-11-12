@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.463 - window rest check uses the itinerary's rest model
+
+Owner's Codex session (out of usage, unpushed; the uploaded patch was the old 0.0.450 one) found the final window check's rest estimate ignored drive-through nights, nightly overrides and solar bounds, so it disagreed with the visual itinerary. windowRestRange now calls WindowSchedule.restParts on the leg's drive (one drive part, start-point zone, route.stops[i], Overnight.defaults(c.overnight), driveThroughNights for TripStops.nightKey(route, group)): max = the itinerary's rest minutes, min = each rest capped at the minimum; skip-rest/norest add nothing. Falls back to 0.0.462's count when WindowSchedule is missing. Codex's EV preview energy work (speed-dependent energy, charging losses, temperature, charge cap in the green line) is NOT done. Tests run: windowplanning-ui, overnight-ui, window-schedule. Not phone-verified.
+
+Phone checks: overnight trip with windows and a drive-through night or nightly override: Flexible-time planning agrees with the visual itinerary (finds a trip the itinerary shows fitting).
+
 ## 0.0.462 - fewest-rests count uses the latest rest arrival
 
 Owner's 461 log firstMiss: leg 0 departs 23:30Z, raw arrival 19:58Z next day (~20.5 h), restMinutes [840,1500] = 2 nights, window 22:30Z–07:00Z, so lo = arrival + 14 h was late. windowRestRange counted a night whenever driving reached the nightly start; but you can drive until the latest rest arrival (Overnight.rules arrivalEnd clock, else start + span − minimum), and a drive ending before it needs no rest there. Now `count(late, stay)`: min = nights the drive runs past start + late (each + minimum rest), max = nightly starts crossed (each + the full span). Owner's case: min 1 night (7 h → 02:58Z, inside), max 2. Solar arrivalEnd falls back to span − minimum. Tests run: windowplanning-ui, overnight-ui. Not phone-verified.
