@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.470 - 2026-11-12
+
+- Includes the rest discovery, forecast, partial-preview and anchored return-leg cache fixes from 0.0.467–0.0.469.
+- Adding a rest defers new suggestions for its original leg until that rest has a departure time. Independently anchored later legs keep their completed work.
+
+
 ## 0.0.469 - 2026-11-12
 
 - Includes the inventory, recommendation and partial-preview reuse fixes from 0.0.467–0.0.468.
