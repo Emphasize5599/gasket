@@ -282,7 +282,7 @@ if(!n.required)return html;
   function siteRow(s,r){var x=r.x,access=accessCache.get(accessKey(s,x)),p=pricedSite(s,x,effective(x.site)),match=maps.peek(p),known=match&&match.state==='found',from=list&&list.leg?endsOf(s.model)[list.leg-1]:0,total=s.model.timeTo(x.d)+(access&&access.access&&access.access.outSeconds||0),since=total-s.model.timeTo(from),title='<b>'+esc(p.name)+'</b><small class="rest-source">Source: '+esc(source(p))+'</small>';
    var name=Recreation.id(p)?'<div class="rest-text">'+title+'</div>':known?'<div class="rest-text">'+title+'</div>':'<button class="rest-info-entrance rest-text" data-rest-site="'+r.k+'" aria-label="Details for '+esc(p.name)+'">'+title+'<small>'+(match&&match.state==='notfound'?'No matching Maps page found':match&&match.reason?'Maps lookup unavailable':'Details and Maps lookup')+' <span aria-hidden="true">›</span></small></button>';
    if(!screen.holding()&&!screen.hidden(p.id)&&C.access&&(!access||access.pending||access.factsOnly))return '<div class="rest-access-pending" role="status">Checking road access…</div>';
-   var suggested=recoFor(s,r.k);return '<div class="rest-row'+(suggested&&suggested.zone==='green'?' rest-suggested':'')+'"><span class="nn">'+(r.number||r.k+1)+'</span><div class="nl-a rest-name">'+name+'<div class="rest-views">'+viewPreview(p,r.k)+'</div><div class="rest-row-actions">'+siteLinks(p,match)+'<button type="button" class="rest-add"'+(screen.hidden(p.id)?' disabled':'')+' data-rest-add="'+r.k+'"'+(r.alternative?' data-rest-exception="'+r.alternative.kind+'"':'')+' aria-label="Add rest stop: '+esc(p.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button></div><small class="rest-kind">'+esc(KIND[p.kind]||'Rest stop')+' · '+x.offset.toFixed(1)+' mi off route'+esc(rateNote(p))+'</small>'+(isChargerRest(p)?'<small>'+esc(p.restChargeLevel==='dc_fast'?'DC fast':'Level '+p.restChargeLevel)+' · '+esc(p.restChargeKw)+' kW'+(p.restChargeEstimated?' estimated':'')+'</small>':chargerHtml(x))+toolsHtml(p,r.k)+''+(p.priceNotes?'<small>'+esc(p.priceNotes)+'</small>':'')+hoursNote(p,siteArrival(s,x))+(r.alternative?'<small class="warn">'+(r.alternative.kind==='shorter'?r.alternative.reduction+' min shorter than your minimum':'Arrival '+r.alternative.kind+' than your window')+'</small>':nightNote(s,x,p)+recoNote(s,r.k,p)+preparedNote(s,x,list&&list.chargerEntry))+'</div><span class="rest-t">'+hm(since)+'</span><span class="rest-local"><small>Arrive</small>'+stamp(siteArrival(s,x),p)+'</span><span class="rest-t">'+hm(total)+'</span></div>';}
+   var suggested=recoFor(s,r.k);return '<div class="rest-row'+(suggested&&suggested.zone==='green'?' rest-suggested':'')+'"><span class="nn">'+(r.number||r.k+1)+'</span><div class="nl-a rest-name">'+name+'<div class="rest-views">'+viewPreview(p,r.k)+'</div><div class="rest-row-actions">'+siteLinks(p,match)+'<button type="button" class="rest-add"'+(screen.hidden(p.id)?' disabled':'')+' data-rest-add="'+r.k+'"'+(r.alternative?' data-rest-exception="'+r.alternative.kind+'"':'')+' aria-label="Add rest stop: '+esc(p.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button></div><small class="rest-kind">'+esc(KIND[p.kind]||'Rest stop')+' · '+x.offset.toFixed(1)+' mi off route'+esc(rateNote(p))+'</small>'+(isChargerRest(p)?'<small>'+esc(p.restChargeLevel==='dc_fast'?'DC fast':'Level '+p.restChargeLevel)+' · '+esc(p.restChargeKw)+' kW'+(p.restChargeEstimated?' estimated':'')+'</small>':chargerHtml(x))+toolsHtml(p,r.k)+''+(p.priceNotes?'<small>'+esc(p.priceNotes)+'</small>':'')+hoursNote(p,siteArrival(s,x))+(r.alternative?'<small class="warn">'+(r.alternative.kind==='shorter'?r.alternative.reduction+' min shorter than your minimum':'Arrival '+r.alternative.kind+' than your window')+'</small>':nightNote(s,x,p)+recoNote(s,r.k,p))+'</div><span class="rest-t">'+hm(since)+'</span><span class="rest-local"><small>Arrive</small>'+stamp(siteArrival(s,x),p)+'</span><span class="rest-t">'+hm(total)+'</span></div>';}
   function nightNote(s,x,p){if(!nightly())return '';var f=overnightFit(s,x);if(!f)return '<small>Outside your nightly hours</small>';if(f.unknownZone)return '<small>Time zone unknown: nightly hours can’t be checked</small>';var until=StopClock.label(f.leave,clocks.get(p));return '<small class="rest-night">Overnight: rest '+(f.duration/60).toFixed(1)+' h, until '+esc(until?until.time:'')+(f.duration<f.preferred?' (short of your preferred '+(f.preferred/60).toFixed(1)+' h)':'')+'</small>';}
   function endpoint(s,index,d,ending){var p=s.route.stops[index]||{},rest=p.rest,hideArrival=ending&&index>0&&unresolved(s,index-1),leaving=!ending&&!rest&&index<s.route.stops.length-1,at=leaving&&C.departure?C.departure(index):d?C.arrival(d):s.depart,from=list.leg?endsOf(s.model)[list.leg-1]:0,total=s.model.timeTo(d);return '<li class="rest-dest'+(rest?' route-rest':'')+'"><span class="nn">'+(rest?'R':s.route.stops.slice(0,index+1).filter(function(p){return !p.rest;}).length)+'</span><span class="nl-a"><b>'+esc(p.short||p.label||(index?'Destination':'Start'))+'</b>'+(rest?'<small class="rest-source">Source: '+esc(source(rest.site||{}))+'</small>'+((typeof vehicleIssue==='function'&&vehicleIssue(rest.site||{},rest.overnight))?'<small class="warn">'+esc(vehicleIssue(rest.site||{},rest.overnight))+'</small>':'')+(mapsClosure(rest.site||{})?'<small class="warn">'+esc(closureText(mapsClosure(rest.site)))+'</small>':rest.recoveredIdentity?'<small>Recovered location · review stay details and parking permission.</small>':'')+'<span class="rest-acts"><button class="btn tonal sm" data-rest-edit="'+index+'">Change rest time</button><button class="btn tonal sm" data-rest-confirm="'+index+'">Confirm parking</button><button class="btn tonal sm caution" data-rest-remove="'+index+'">Remove</button></span>':'')+'</span><span class="rest-t">'+(d>from?hm(total-s.model.timeTo(from)):'')+'</span><span class="rest-local"><small>'+(leaving?'Depart':'Arrive')+'</small>'+(hideArrival?'After rest planning':stamp(at,p))+'</span><span class="rest-t">'+(d?hm(total):'')+'</span></li>';}
   function chargerDirectoryRows(s,leg,entry,showHidden,fallback){
@@ -461,7 +461,6 @@ if(!n.required)return html;
    for(var leg=group.from;leg<=group.to;leg++){
     var current=C.snapshot();if(charger.run!==state.token||!current||current.route!==s.route||!background&&(!list||list.chargerEntry!==charger))return;
     var saved=recoEntry(s,leg,charger);
-    if(force)retryPrepared(s,leg,charger);
     if((force||!saved)&&chargerDirectoryRows(s,leg,charger,false).some(function(row){return siteLeg(s,row.x)===leg;}))await startReco(leg,charger);
    }
   }
@@ -498,100 +497,16 @@ if(!n.required)return html;
     finally{if(end)end();}
    }
   }
-  function autoFirstNight(){var w=A.S.trip&&A.S.trip.windowPlan;return !!(nightly()&&w.autoFirstNight);}
-  var preparedFirstNight=new Map(),firstNightPass=null;
-  function retryPrepared(s,leg,charger){var prefix=recoKey(s,leg,charger)+'|';preparedFirstNight.forEach(function(_,key){if(key.startsWith(prefix))preparedFirstNight.delete(key);});if(firstNightPass)firstNightPass.cancelled=true;firstNightPass=null;}
-  function initialNight(s,g){var p=nightPlan(s,g.from);return p&&!p.pending&&p.leg===g.from&&p.required;}
-  function firstNightKey(s,x,charger){return recoKey(s,siteLeg(s,x),charger)+'|'+x.site.id+'|'+x.site.lat+','+x.site.lng;}
-  function preparedNote(s,x,charger){
-   if(!autoFirstNight())return '';
-   var held=preparedFirstNight.get(firstNightKey(s,x,charger));
-   return held?'<small>'+(held.available===held.count?'Departure preview ready':held.available?'Departure preview partly available':'Departure preview unavailable')+'</small>':'';
-  }
-  async function prepareFirstNight(s,run){
-   var groups=directoryGroups(s).filter(function(g){return initialNight(s,g);}),types=chargerRestTypes(s);
-   if(!groups.length)return;
-   var key=groups.map(function(g){return recoKey(s,g.from);}).join(';')+'|'+JSON.stringify(types);
-   if(firstNightPass&&firstNightPass.key===key&&firstNightPass.run===run)return;
-   var pass=firstNightPass={key:key,run:run},task='first-night-forecasts',total=0,done=0,unavailable=0,excluded=0;
-   function valid(){var current=C.snapshot();return firstNightPass===pass&&!pass.cancelled&&run===state.token&&!!current&&current.route===s.route&&autoFirstNight();}
-   var end=root.Tasks&&Tasks.begin(task,{text:'First-night forecasts · checking suggestions',priority:16,cancel:function(){pass.cancelled=true;}});
-   try{
-    var dirs=[];
-    await Promise.all(groups.map(async function(g){
-     if(!valid())return;
-     var charger=types?loadChargerDirectory(s,g,types,false,true):null,prior=recoEntry(s,g.from);
-     if(!prior||prior.busy)await startReco(g.from);
-     if(charger){await charger.promise;if(valid()&&!recoEntry(s,g.from,charger))await startReco(g.from,charger);}
-     dirs.push({leg:g.from,charger:charger});
-    }));
-    if(!valid())return;
-    var candidates=[],seen=new Set();
-    function collect(suggestedOnly){dirs.forEach(function(dir){
-     function add(rows,charger){
-      var reco=recoEntry(s,dir.leg,charger),suggested=new Set((reco&&reco.items||[]).filter(function(r){return r.zone==='green';}).map(function(r){return r.k;}));
-      rows.forEach(function(row){
-       var k=firstNightKey(s,row.x,charger),held=preparedFirstNight.get(k);
-       if(suggestedOnly&&!suggested.has(row.k)||seen.has(k)||held&&held.count>0)return;
-       seen.add(k);candidates.push({x:row.x,key:k,leg:dir.leg});
-      });
-     }
-     add(legSites(s,dir.leg));
-     if(dir.charger)add(chargerDirectoryRows(s,dir.leg,dir.charger,false,!suggestedOnly).filter(function(r){return nightVisible(s,r.x);}),dir.charger);
-    });}
-    collect(true);total=candidates.length;
-    var width=root.WorkerSettings?WorkerSettings.trafficCount(A):4,lastPaint=0;
-    for(var phase of ['suggested','remaining']){
-     if(phase==='remaining'){await bgAccess(s,run);if(!valid())return;collect(false);total=candidates.length;}
-     for(var candidate of candidates.slice(done)){
-      if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
-      if(!valid())return;
-      var x=candidate.x;if(screen.hidden(x.site.id)){done++;excluded++;continue;}
-      var record=C.access?await checkAccess(s,x,false,true):{ok:true},f=overnightFit(s,x);
-      if(!valid())return;
-      var p=effective(x.site),reached=siteArrival(s,x),ready=f&&Math.max(reached+f.minimum*60000,f.leaveEarliest||0),last=f&&Math.min(f.windowEnd,reached+(p.stayMinutes==null?1440:p.stayMinutes)*60000),
-          site=Object.assign({},p,{timeZone:clocks.get(p),nightArrivalEnd:f&&f.arrivalLatest}),samples=[],available=0;
-      if(record.ok&&!record.excluded&&f&&!f.unknownZone&&last>=ready){
-       try{
-        samples=restSampleTimes(site,reached,ready,last);
-        var road=null,shared={},back=(record.access&&record.access.backSeconds||0)*1000;
-        if(C.previewRoad)try{road=C.previewRoad(s,Object.assign({},x,{leg:candidate.leg}),site,record.access);}
-        catch(e){if(root.FLog)FLog.debug('rest','Using original road for the departure preview',{reason:e.message});}
-        await RestTiming.map(samples,width,async function(t){
-         if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
-         if(!valid())return;
-         try{
-          var q=road?await C.previewForecast(road,t,site,valid):await C.forecast(x.d,t+back,valid,shared,site);
-          if(q.coverage>=.999999)available++;
-         }catch(e){if(valid()&&root.FLog)FLog.debug('rest','First-night departure sample unavailable',{reason:String(e.message).slice(0,120)});}
-        },valid);
-       }catch(e){if(valid()&&root.FLog)FLog.warn('rest','First-night rest forecast could not be prepared',{site:p.name,reason:String(e.message||e)});}
-       if(valid()&&samples.length){
-        preparedFirstNight.set(candidate.key,{available:available,count:samples.length,until:Date.now()+(available===samples.length?(C.forecastTtl?C.forecastTtl():7200000):300000)});
-        if(preparedFirstNight.size>6000)preparedFirstNight.delete(preparedFirstNight.keys().next().value);
-       }
-      }
-      if(record.excluded||record.ok&&(!f||last<ready))excluded++;
-      else if(!samples.length||available<samples.length)unavailable++;
-      done++;
-      if(root.Tasks&&valid())Tasks.upsert(task,{text:'First-night forecasts · '+done+' / '+total+' stops · '+unavailable+' incomplete',frac:done/total,priority:16});
-      if(Date.now()-lastPaint>800){lastPaint=Date.now();laterRender();}
-     }
-    }
-    if(valid()&&root.FLog)FLog.info('rest','First-night forecasts finished',{checked:done,total:total,excluded:excluded,incomplete:unavailable});
-   }finally{if(end)end();if(valid())laterRender();}
-  }
   async function runRestFollowups(s,run,restart){
    if(screen.holding()||run!==state.token)return;
    if(state.followupRun===run){if(restart)state.followupRestart=run;return;}
    state.followupRun=run;
    try{
     if(C.prepareForecasts&&state.sites&&state.sites.length)C.prepareForecasts();
-    var full=autoFirstNight()&&C.forecast&&(!C.trafficEnabled||C.trafficEnabled());
-    await Promise.all([bgAccess(s,run),full?prepareFirstNight(s,run):autoReco(s,run)]);
+    await Promise.all([bgAccess(s,run),autoReco(s,run)]);
     if(run!==state.token||!C.snapshot())return;
     if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
-    if(run===state.token){await autoReco(C.snapshot()||s,run);if(!full&&autoFirstNight()&&C.forecast&&(!C.trafficEnabled||C.trafficEnabled()))await prepareFirstNight(C.snapshot()||s,run);await autoChargerDirectories(C.snapshot()||s,run);}
+    if(run===state.token){await autoReco(C.snapshot()||s,run);await autoChargerDirectories(C.snapshot()||s,run);}
     if(run===state.token)await warmNightTraffic(C.snapshot()||s,run);
    }catch(e){if(root.FLog)FLog.warn('rest','Rest background work interrupted',{reason:String(e.message||e)});}
    finally{if(state.followupRun===run)state.followupRun=null;if(state.followupRestart===run){state.followupRestart=null;var current=C.snapshot();if(current&&run===state.token)runRestFollowups(current,run);}}
@@ -617,7 +532,7 @@ if(!n.required)return html;
   function observeRows(){if(!list)return;var mine=list;if(mine.observer)mine.observer.disconnect();mine.observer=new IntersectionObserver(function(entries){entries.forEach(function(e){if(!e.isIntersecting)return;mine.observer.unobserve(e.target);var k=+e.target.dataset.restRow,x=state.sites[k];if(x){var p=effective(x.site);loadViews(p,mine);if(!Recreation.id(x.site))maps.resolve(p,function(){return list===mine&&mine.body.isConnected;});var snap=C.snapshot();if(!screen.holding()&&C.access&&snap){var a=accessCache.get(accessKey(snap,x));if(!a||a.pending&&a.runToken!==state.token||!a.pending&&(!a.ok||a.factsOnly)&&!a.excluded)checkAccess(snap,x,false,true).then(function(){if(list===mine)laterRender();});}}});},{root:mine.body.closest('.sub-body'),rootMargin:'80px'});mine.body.querySelectorAll('[data-rest-row]').forEach(function(el){mine.observer.observe(el);});}
   function bindRows(host){host.querySelectorAll('[data-rest-rate]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restRate];if(!x)return;var cur=effective(x.site,false).rating;saveUser(x.site,{rating:cur===b.dataset.rate?null:b.dataset.rate});updateRow(x.site);};});host.querySelectorAll('[data-rest-ugly]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restUgly];if(!x)return;saveUser(x.site,{unsightly:effective(x.site,false).unsightly?null:true});if(A.S.restHideUnsightly)renderList();else updateRow(x.site);redraw();};});host.querySelectorAll('[data-rest-hide]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restHide];if(x){screen.hide(x.site.id,!screen.hidden(x.site.id));accessVer++;redraw();}};});host.querySelectorAll('[data-rest-view-retry]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restViewRetry];if(x&&list){imagery.retry(x.site);loadViews(effective(x.site),list);updateViews(x.site);}};});host.querySelectorAll('.rest-preview').forEach(function(a){a.onclick=function(e){e.preventDefault();var row=a.closest('[data-rest-row]'),x=row&&state.sites[+row.dataset.restRow];if(x)openLiveSat(row,+row.dataset.restRow,effective(x.site),a.href);else A.N.openUrl(a.href);};});host.querySelectorAll('[data-rest-price]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restPrice];if(x&&list)editPricing(x,siteLeg(C.snapshot(),x));};});host.querySelectorAll('.rest-external').forEach(function(a){a.onclick=function(e){e.preventDefault();A.N.openUrl(a.href);};});host.querySelectorAll('[data-rest-site]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restSite];if(x&&list)info({site:effective(x.site),d:x.d,offset:x.offset,x:x,exception:b.closest('[data-rest-row]').querySelector('[data-rest-exception]')?.dataset.restException},siteLeg(C.snapshot(),x),null);};});host.querySelectorAll('[data-rest-add]').forEach(function(b){b.onclick=function(){var x=state.sites[+b.dataset.restAdd];if(x&&list)addDialog(x,siteLeg(C.snapshot(),x),b.dataset.restException);};});}
   function bindActions(host){host.querySelectorAll('[data-rest-edit]').forEach(function(b){b.onclick=function(){open(+b.dataset.restEdit);};});host.querySelectorAll('[data-rest-confirm]').forEach(function(b){b.onclick=function(){C.confirm(+b.dataset.restConfirm);};});host.querySelectorAll('[data-rest-remove]').forEach(function(b){b.onclick=function(){C.remove(+b.dataset.restRemove);};});}
-  function bindList(host){var charger=host.querySelector('[data-rest-at-charger-list]');if(charger)charger.onclick=function(){if(list)openChargerLeg(list.leg);};var cb=host.querySelector('[data-rest-closed-recheck]');if(cb)cb.onclick=function(){this.disabled=true;var s=C.snapshot();if(s&&list)refreshClosures(s,list.leg,function(){return !!list;},true);};bindScreen(host);bindAccessRetry(host);var rb=host.querySelector('[data-rest-reco]');if(rb)rb.onclick=function(){if(list){var snap=C.snapshot(),g=directoryGroup(snap,list.leg);(async function(){for(var i=g.from;i<=g.to;i++){retryPrepared(snap,i);await startReco(i);}if(autoFirstNight())runRestFollowups(snap,state.token,true);})();}};var allBtn=host.querySelector('[data-rest-all]');if(allBtn)allBtn.onclick=function(){if(!list)return;showAll[list.leg]=!showAll[list.leg];renderList();};host.querySelector('[data-rest-settings]').onclick=function(){var leg=list?list.leg:0;RestSettings.open(A,function(){state.token++;state.busy=false;search();backToLeg(leg);});};host.querySelector('[data-rest-retry]').onclick=function(){search();redraw();};bindRows(host);bindActions(host);observeRows();}
+  function bindList(host){var charger=host.querySelector('[data-rest-at-charger-list]');if(charger)charger.onclick=function(){if(list)openChargerLeg(list.leg);};var cb=host.querySelector('[data-rest-closed-recheck]');if(cb)cb.onclick=function(){this.disabled=true;var s=C.snapshot();if(s&&list)refreshClosures(s,list.leg,function(){return !!list;},true);};bindScreen(host);bindAccessRetry(host);var rb=host.querySelector('[data-rest-reco]');if(rb)rb.onclick=function(){if(list){var snap=C.snapshot(),g=directoryGroup(snap,list.leg);(async function(){for(var i=g.from;i<=g.to;i++){await startReco(i);}})();}};var allBtn=host.querySelector('[data-rest-all]');if(allBtn)allBtn.onclick=function(){if(!list)return;showAll[list.leg]=!showAll[list.leg];renderList();};host.querySelector('[data-rest-settings]').onclick=function(){var leg=list?list.leg:0;RestSettings.open(A,function(){state.token++;state.busy=false;search();backToLeg(leg);});};host.querySelector('[data-rest-retry]').onclick=function(){search();redraw();};bindRows(host);bindActions(host);observeRows();}
   function redraw(forceTolerance){var s=C.snapshot();if(s)syncAccessTask(s);document.querySelectorAll('[data-rest-tile]').forEach(function(el){var focused=document.activeElement;if(!forceTolerance&&focused&&el.contains(focused)&&focused.matches('[data-rest-tol]'))return;var t=el.querySelector('.rest-tol');if(t)tolOpen=t.open;var tmp=document.createElement('div');tmp.innerHTML=tile();var fresh=tmp.firstChild;el.__restRetiring=true;el.replaceWith(fresh);bindTile(fresh);});renderList();}
   var inventorySnapshot=null;
   function search(options){var s=C.snapshot(),f=filters();if(!s||state.busy)return;if(!f.kinds.length&&!chargerRestTypes(s)){state.key=keyOf(s,f);state.sites=[];state.error='Choose at least one site type.';redraw();return;}state.accessRunning=false;state.accessStopped=false;var key=keyOf(s,f),run=++state.token,notes=0,end=root.Tasks&&Tasks.begin('rest-search',{text:'Finding rest sites along your route',cancel:function(){state.token++;state.busy=false;state.key=key;state.sites=[];state.error='Rest search cancelled.';redraw();},priority:20});state.key=key;state.busy=true;state.error='';state.chargerNote='';state.chargerDirectories=null;

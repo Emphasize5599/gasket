@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.472 - 2026-11-12
+
+- Removed automatic full departure-forecast preparation for every eligible first-night rest stop and charger rest, along with its timing setting. Previously saved trips cannot restart this sweep.
+- Quick green suggestion screening remains independent for each leg. Full departure sliders are calculated when you choose a stop, reusing stored traffic data.
+- Overnight planning opens the first rest-stop list after Compare, without a bulk forecast preparation stage.
+
 ## 0.0.471 - 2026-11-12
 
 - Restored trips prepare traffic forecasting before suggestion screening, and retry screening if access checks enable traffic later. This fixes a path that could finish access checks without ever starting suggestions.

@@ -18,17 +18,11 @@ async function parallel(){
  vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  async function autoReco('),src.indexOf('  function recoNote(')),c);
  const work=c.autoReco(s,1);await tick();assert.deepEqual(started,[0,1],'a slow first leg must not prevent second-leg screening from starting');blocked.resolve();await work;
 }
-async function fullParallel(){
- const blocked=deferred(),started=[],s={route:{},model:{}};
- const c={root:{},A:{S:{trip:{windowPlan:{autoFirstNight:true}}}},C:{snapshot:()=>s,forecast(){}},state:{token:1},nightly:()=>({}),directoryGroups:()=>[{from:0},{from:1}],nightPlan:(_s,i)=>({leg:i,required:true,skips:[]}),chargerRestTypes:()=>null,recoKey:(_s,i)=>String(i),recoEntry:()=>null,startReco:i=>{started.push(i);return i===0?blocked.promise:Promise.resolve();},legSites:()=>[],bgAccess:async()=>{},screen:{hidden:()=>false},focusedTraffic:0,laterRender(){},RestTiming:Timing};
- vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  function autoFirstNight('),src.indexOf('  async function runRestFollowups(')),c);
- const work=c.prepareFirstNight(s,1);await tick();assert.deepEqual(started,[0,1],'full first-night mode also starts second-leg suggestions before the first leg finishes');blocked.resolve();await work;
-}
 async function lateEnable(){
  let enabled=false;const events=[],s={};const c={state:{token:1,sites:[{}]},screen:{holding:()=>false},focusedTraffic:0,C:{forecast(){},snapshot:()=>s,trafficEnabled:()=>enabled},root:{},autoFirstNight:()=>true,bgAccess:async()=>{await tick();enabled=true;},autoReco:async()=>{if(enabled)events.push('suggestions');},prepareFirstNight:async()=>events.push('previews'),autoChargerDirectories:async()=>{},warmNightTraffic:async()=>{}};
- vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  async function runRestFollowups('),src.indexOf('  async function autoReco(')),c);await c.runRestFollowups(s,1);assert.deepEqual(events,['suggestions','previews'],'restored trips retry quick suggestions after access enables traffic, before full previews');
+ vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  async function runRestFollowups('),src.indexOf('  async function autoReco(')),c);await c.runRestFollowups(s,1);assert.deepEqual(events,['suggestions'],'restored trips retry quick suggestions after access enables traffic without full-list previews');
  enabled=false;events.length=0;c.C.prepareForecasts=()=>{events.push('enabled');enabled=true;};await c.runRestFollowups(s,2); // cancelled generation does no work
  assert.deepEqual(events,[]);await c.runRestFollowups(s,1);assert.equal(events[0],'enabled','provider preparation runs before deciding whether forecasts are enabled');
  enabled=false;events.length=0;c.state.sites=[];c.bgAccess=async()=>{};await c.runRestFollowups(s,1);assert.deepEqual(events,[],'no rest candidates must not change traffic configuration or trigger previews');
 }
-Promise.all([progressive(),parallel(),fullParallel(),lateEnable()]).then(()=>console.log('Progressive verified highlights, independent legs and restored-trip forecast startup passed')).catch(e=>{console.error(e);process.exitCode=1;});
+Promise.all([progressive(),parallel(),lateEnable()]).then(()=>console.log('Progressive verified highlights, independent legs and restored-trip forecast startup passed')).catch(e=>{console.error(e);process.exitCode=1;});

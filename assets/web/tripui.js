@@ -145,21 +145,6 @@
       var miles=T.hav(point,site)*1.4+.2,sec=miles/30*3600;out={seconds:sec,meters:miles*1609.344,pts:null};back={seconds:sec,meters:miles*1609.344,pts:null};}else{out=await traffic.between(point,site,t,valid);if(RestAccess.returnTooLong(out.seconds,T.hav(point,site),RestSettings.limit(A))){var early=Error('Road access exceeds your rest-stop extra driving limit (outbound route and minimum return).');early.code='rest_detour_limit';throw early;}back=await traffic.between(site,point,t+out.seconds*1000,valid);}if((out.seconds+back.seconds)/60>RestSettings.limit(A)){var e=Error('Road access exceeds your rest-stop extra driving limit. Adjust it in Settings → Rest stops or choose a closer site.');e.code='rest_detour_limit';throw e;}return {outSeconds:out.seconds,backSeconds:back.seconds,outPts:out.pts,backPts:back.pts,outMeters:out.meters,backMeters:back.meters};},
     // 0.0.347: a rest's departure is compared over the rest of its own leg only (to the next destination or rest).
     horizon:function(d){return restHorizon(d);},
-    // Forecast the same return road the draft will use, without inserting a waypoint or changing the trip.
-    previewRoad:function(s,x,site,access){
-      if(!access||!access.backPts||!access.outPts)return null;
-      var clock=restClockState(),change=RestPlan.insert(s.route,rawRoute,carModel(),x.leg,x.d,site,access,{},s.model),next=T.buildRoute(change.raw,carModel()),
-          d=next.legEnds[change.index-1],to=next.legEnds[change.index],delta=next.totalMi-model.totalMi,arrivals=windows.arrivals(),
-          stops=trafficStops(clock&&clock.plan,clock&&clock.opts).filter(function(st){return st.d>x.d&&st.d<model.legEnds[x.leg]-.001;})
-           .map(function(st){return {d:st.d+delta-d,seconds:st.seconds};}).filter(function(st){return st.d>0&&st.d<to-d-.001;});
-      return {m:Traffic.slice(next,d,to),stops:stops,arrival:arrivals[x.leg],anchor:(S.trip.legDepartures||[])[x.leg+1],sourceLeg:x.leg,snapshot:s};
-    },
-    previewForecast:async function(road,t,site,valid){
-      var p=await readRestRoad(road.m,t,{stops:road.stops,waits:[],waitAt:null,avoid:S.trip.avoid,valid:valid});
-      var at=p.legs[0]&&p.legs[0].arrival||t+p.seconds*1000,more=restUI.laterNight(road.snapshot,road.sourceLeg,t,at,site);
-      if(road.arrival&&((!more&&at<road.arrival.start)||at>road.arrival.end)||Number.isFinite(road.anchor)&&at>road.anchor+1000)throw Error('This departure misses a destination time window');
-      return p;
-    },
     forecast:async function(d,t,valid,shared,restSite){shared=shared||{};if(shared.raw!==rawRoute||shared.model!==model){shared.raw=rawRoute;shared.model=model;shared.base=T.buildRoute(rawRoute,carModel());shared.parts=new Map();}var hz=restHorizon(d),baseRest=shared.base,partKey=d+'|'+hz.to,m=shared.parts.get(partKey);if(!m){m=Traffic.slice(baseRest,d,Math.min(baseRest.totalMi,hz.to));shared.parts.set(partKey,m);}var ends=(model.legEnds||[model.totalMi]).filter(function(x){return x>d&&x<hz.to-.001;}).map(function(x){return x-d;}).concat([m.totalMi]);m.legEnds=ends;
       var clock=restClockState(),stops=trafficStops(clock&&clock.plan,clock&&clock.opts).filter(function(x){return x.d>d&&x.d<hz.to-.001;}).map(function(x){return {d:x.d-d,seconds:x.seconds};}),wait=trafficWait(model),ws=restClockWaits(model).filter(function(w){return w.d>d&&w.d<hz.to-.001;}).map(function(w){return {d:w.d-d,at:w.at};});
       var p=await readRestRoad(m,t,{stops:stops,waits:ws,waitAt:wait&&wait.d>d&&wait.d<hz.to-.001?{d:wait.d-d,at:wait.at}:null,avoid:S.trip.avoid,valid:valid});
@@ -1497,7 +1482,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(!resumeStopsCheckpoint()&&reviewedCheckpoint)result=null;
       compareCapture();
     }
-    if(k===ST_COMPARE){if(savedPlanCurrent())return true;if(restPending()){restResume();return false;}if(queueEngine&&queueEngine.state().jobs.length>1){await queueStart();return false;}compareCapture();var selected=compareEntries.get(activeKey());if(!comparePrepared(selected)){A.toast('Review this vehicle’s setup and hazards first.');return false;}if(autoPriority()){await autoChoose();return false;}if(restUI&&restUI.nightly&&restUI.nightly()&&!restRows().length){step=ST_STOPS;renderStep();if(windows&&windows.config().autoFirstNight)LG.info('rest','First-night preparation after Compare',{});else{restUI.waitFirstLeg();LG.info('rest','Waiting in leg 1 rest stops after Compare',{});}return false;}return true;}
+    if(k===ST_COMPARE){if(savedPlanCurrent())return true;if(restPending()){restResume();return false;}if(queueEngine&&queueEngine.state().jobs.length>1){await queueStart();return false;}compareCapture();var selected=compareEntries.get(activeKey());if(!comparePrepared(selected)){A.toast('Review this vehicle’s setup and hazards first.');return false;}if(autoPriority()){await autoChoose();return false;}if(restUI&&restUI.nightly&&restUI.nightly()&&!restRows().length){step=ST_STOPS;renderStep();restUI.waitFirstLeg();LG.info('rest','Waiting in leg 1 rest stops after Compare',{});return false;}return true;}
     if(k===ST_STOPS){var closedRest=restRows().find(function(x){return restUI&&restUI.closure&&x.rest.site&&restUI.closure(x.rest.site);});if(closedRest){A.toast(restUI.closure(closedRest.rest.site)+'. Manage added rest stops to remove it or recheck its status.');return false;}if(savedPlanCurrent())return true;if(route&&route.priceRestReview&&!restRows().length){restUI.waitFirstLeg();return false;}if(restPending()){restUI.calculate();return false;}if(restUI&&restUI.openUnresolved())return false;var allowed=tollPolicyCheck(rawRoute);if(!allowed.ok){A.toast(allowed.reason);return false;}compareCapture();if(!comparePrepared(compareEntries.get(activeKey()))){A.toast('Your setup or hazard approval changed or is over an hour old. Please review it again.');step=ST_HAZ;renderStep();return false;}}
     if (onPlan(k)) {
       if (!result) { await findStops(); if (!result) return false; }
