@@ -5,7 +5,7 @@ const a={site:{id:'a'},d:1},b={site:{id:'b'},d:2},charger={site:{id:'charger'},d
 let task,seen=[],recos=[],warm=false;
 const ctx={
  root:{Tasks:true},Tasks:{begin:(name,o)=>{assert.equal(name,'first-night-forecasts');task=o;return ()=>{};},upsert(){}},
- C:{snapshot:()=>snap,access:true,previewRoad:(_s,x)=>x,previewForecast:async(x,t)=>{seen.push([x.site.id,t]);return {coverage:1};}},
+ C:{snapshot:()=>snap,access:true,previewRoad:(_s,x)=>x,previewForecast:async(x,t)=>{seen.push([x.site.id,t]);return {coverage:x.site.id==='a'?.9:1};}},
  nightly:()=>({}),A:{S:{trip:{windowPlan:{autoFirstNight:true}}}},state,
  directoryGroups:()=>[{from:0},{from:1}],nightPlan:(_s,i)=>({leg:i===1?2:i,required:true,skips:[]}),
  chargerRestTypes:()=>['dc_fast'],recoKey:(_s,i,e)=>i+'|'+(e?'ev':'regular'),
@@ -29,5 +29,7 @@ vm.runInContext(code.slice(code.indexOf('  function autoFirstNight('),code.index
  const count=seen.length;
  await ctx.prepareFirstNight(snap,1);
  assert.equal(seen.length,count,'opening the same directory should not restart work');
+ state.token++;await ctx.prepareFirstNight(snap,state.token);assert.equal(seen.length,count,'an unrelated waypoint generation reuses incomplete previews as well as complete ones');
+ ctx.retryPrepared(snap,0);await ctx.prepareFirstNight(snap,state.token);assert(seen.length>count,'an explicit retry can refill the incomplete previews');
  console.log('First-night pass prepares suggested normal and charger stops, then all eligible stops, without restarting or precomputing a later night');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.468 - 2026-11-12
+
+- Includes the rest-inventory and unchanged-leg forecast reuse fixes from 0.0.467.
+- Incomplete first-night departure previews also survive unrelated waypoint edits, retaining their partial/unavailable status. Explicit rechecks retry those samples without discarding other legs’ prepared previews.
+
+
 ## 0.0.467 - 2026-11-12
 
 - Adding a rest stop reuses searched inventory areas and only discovers new areas needed for its detour. Search again still explicitly continues or refreshes discovery.
