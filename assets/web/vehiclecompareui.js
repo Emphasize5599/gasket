@@ -1,7 +1,10 @@
 (function(root){
   'use strict';
-  var A=root.__app,V=root.VehicleCompare,maps=[];
-  function dispose(){maps.forEach(function(m){m.remove();});maps=[];}
+  var A=root.__app,V=root.VehicleCompare,maps=[],tap=null,pendingRender=null,renderTimer=null,boundHosts=new WeakSet();
+  function dispose(){clearTimeout(renderTimer);renderTimer=null;tap=null;pendingRender=null;maps.forEach(function(m){m.remove();});maps=[];}
+  function finishTap(e){if(!tap||e&&e.pointerId!=null&&e.pointerId!==tap.pointerId)return;tap=null;clearTimeout(renderTimer);renderTimer=setTimeout(function(){renderTimer=null;var next=pendingRender;pendingRender=null;if(next&&next.el.isConnected)render(next.el,next.config);},0);}
+  root.addEventListener('pointerup',finishTap,true);root.addEventListener('pointercancel',finishTap,true);root.addEventListener('blur',function(){finishTap();});
+  function bindTap(el){if(boundHosts.has(el))return;boundHosts.add(el);el.addEventListener('pointerdown',function(e){if(e.button===0&&e.target.closest('button,input,select,summary'))tap={el:el,pointerId:e.pointerId};},true);}
   function duration(n){if(!Number.isFinite(n))return '—';if(n>0&&n<1)return '&lt;1 min';n=Math.round(n);return n>=60?Math.floor(n/60)+' h '+n%60+' min':n+' min';}
   function money(n){return Number.isFinite(n)?'$'+n.toFixed(2):'—';}
   function queueVehicle(car,queue){
@@ -30,7 +33,9 @@
     return h+'</div>';
   }
   function render(el,c){
-    dispose();
+    // Keep the pressed control alive until its click is delivered; background completion may redraw the menu.
+    if(tap&&tap.el===el){pendingRender={el:el,config:c};return;}
+    dispose();bindTap(el);
     if(c.restPending){el.innerHTML='<div class="card" id="vcRestPending"><h3>Finish rest departure times</h3><p>Your added rest stops still need departure times. Set them in Stops before comparing or planning vehicles.</p><button class="btn primary" data-vc-start>Go to Stops</button></div>';el.querySelector('[data-vc-start]').onclick=c.start;return;}
     var view=c.view,rows=V.sorted(c.rows(),view.sort),base=rows.find(function(x){return x.id===c.selected();}),complete=rows.filter(function(x){return x.metrics.ready&&Number.isFinite(x.metrics.cost);}).sort(function(a,b){return a.metrics.cost-b.metrics.cost;}),fast=rows.filter(function(x){return x.metrics.ready&&Number.isFinite(x.metrics.minutes);}).sort(function(a,b){return a.metrics.minutes-b.metrics.minutes;});
     var h='<div class="card vc-controls"><h3>Compare vehicles</h3><div class="seg" aria-label="Comparison summary"><button data-vc-scope="trip" class="'+(view.scope==='trip'?'on':'')+'">Whole trip</button><button data-vc-scope="leg" class="'+(view.scope==='leg'?'on':'')+'"'+(c.legs().length<2?' disabled':'')+'>Per leg</button></div>';

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.473 - 2026-11-12
+
+- Fixed comparison buttons losing taps when a background completion redraws their menu between press and release. Redraws wait until the tap is delivered, and cancelled gestures still apply pending updates.
+- Includes the removal of automatic first-night departure-forecast sweeps from 0.0.472; quick suggestions and departure forecasting for selected stops remain.
+- Added a browser regression that forces a comparison redraw during the add-planning-mode tap.
+
 ## 0.0.472 - 2026-11-12
 
 - Removed automatic full departure-forecast preparation for every eligible first-night rest stop and charger rest, along with its timing setting. Previously saved trips cannot restart this sweep.
