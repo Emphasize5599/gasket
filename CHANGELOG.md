@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.467 - 2026-11-12
+
+- Adding a rest stop reuses searched inventory areas and only discovers new areas needed for its detour. Search again still explicitly continues or refreshes discovery.
+- Unchanged legs retain completed rest suggestions and prepared departure samples across earlier rest insertions and provider-age expiry. Explicit traffic refreshes and changed timing/settings still invalidate affected forecasts.
+- Recommendations wait until rest-site positions match the updated route, preventing empty passes from replacing completed work.
+- Campground verification defers hidden sites and nights that are not currently eligible. Skipped-night choices and original later departures remain anchored when adding a rest.
+
+
 ## 0.0.466 - 2026-11-12
 
 - Window feasibility, final weather checks and comparison now share a rest-aware timeline. Kept and skipped nights use the same preferred-rest rules as the visual itinerary, including overrides and solar bounds.

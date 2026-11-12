@@ -9,3 +9,13 @@ const arrival=Date.parse('2030-11-08T05:59Z'),display={unresolved:()=>false,maps
 const tripSource=fs.readFileSync('assets/web/tripui.js','utf8'),deadline={route:{stops:[{},{},{}]},windows:{enabled:()=>true,config:()=>deadline.cfg},cfg:{clockVersion:2,windowTimes:{arrival:{end:'2030-11-15T12:00:00Z'}},destinations:[{},{}]},restDepartureAnchors:()=>[0,at]};vm.createContext(deadline);vm.runInContext(tripSource.split('\n').find(l=>l.includes('function restForecastContext(')),deadline);const finalContext=deadline.restForecastContext(1);deadline.route.stops.splice(1,0,{rest:{}});deadline.cfg.destinations.splice(0,0,{});assert.equal(deadline.restForecastContext(2),finalContext,'final-arrival context survives an earlier rest insertion');deadline.cfg.windowTimes.arrival.end='2030-11-16T12:00:00Z';assert.notEqual(deadline.restForecastContext(2),finalContext,'a changed final arrival deadline invalidates affected suggestions');
 
 const labels={directoryGroup:(_s,i)=>i<2?{index:0,from:0,to:1}:{index:1,from:2,to:2}};vm.createContext(labels);vm.runInContext(lines.find(l=>l.includes('function forecastLabel(')),labels);assert.equal(labels.forecastLabel({},1),'leg 1 · section 2 / 2');assert.equal(labels.forecastLabel({},2),'leg 2');
+
+// A completed future forecast survives provider-age expiry while its route/clock/settings key is unchanged.
+memo.reco.set(old,{items:[{id:site.id,relative:'10.000',k:0,name:'Return place'}],until:Date.now()-1});memo.C.forecastContext=()=> 'same window';
+assert(memo.recoEntry({model:after},2),'completed recommendations do not disappear on a timer while browsing the same plan');
+memo.state.busy=true;memo.startReco=async()=>assert.fail('no forecasts may start against stale site projection');
+memo.autoReco({model:after},8).catch(e=>{console.error(e);process.exitCode=1;});memo.state.busy=false;
+memo.siteLeg=(s,x)=>s.model.legEnds.findIndex(d=>x.d<=d);vm.runInContext(lines.find(l=>l.includes('function firstNightKey(')),memo);
+assert.equal(memo.firstNightKey({model:before},{site,d:before.legEnds[0]+10}),memo.firstNightKey({model:after},{site,d:after.legEnds[1]+10.047}),'prefix length and projection drift do not erase prepared return-leg samples');
+console.log('Completed forecasts and prepared samples survive expiry and an earlier rest insertion');
+deadline.restForecastVersion=1;assert.notEqual(deadline.restForecastContext(2),finalContext,'an explicit traffic refresh invalidates retained recommendations');

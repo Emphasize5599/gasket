@@ -96,3 +96,13 @@ assert.equal(R.sourceFilter('campendium',{sources:{campendium:{radius:150,radius
  console.log('Free-only RV Parky and public-land-only Campendium passed');})().catch(e=>{console.error(e);process.exitCode=1;});
 
 (async()=>{const filter={sources:{ntad:{enabled:false},osm:{enabled:false},rvparky:{enabled:false},campendium:{enabled:true,radius:37,radiusMax:80}}},mem=new Map();const out=await R.create({get:k=>mem.get(k),put:(k,v)=>mem.set(k,v),fetch:async()=>({locations:[]}),campendium:async()=>({places:[]})}).corridor(m,filter,{});assert.equal(out.campendium.cells,R.cellsFor(m,37).length,'Campendium discovery honors the full chosen radius rather than clipping at 25');console.log('Campendium full configured discovery radius passed');})().catch(e=>{console.error(e);process.exitCode=1;});
+
+(async()=>{const mem=new Map(),filter={sources:{ntad:{enabled:false},osm:{enabled:false},rvparky:{enabled:false},campendium:{enabled:true,radius:50}}};
+ let reads=0;const store=R.create({get:k=>mem.get(k),put:(k,v)=>mem.set(k,v),campendium:async()=>{reads++;return {places:[{name:'Snapshot campground',lat:34.1,lng:-92.01,url:'/snapshot',kind:'Public Land'}]};}});
+ const long=T.buildRoute({distanceMeters:1200000,duration:'60000s',polyline:{encodedPolyline:T.encodePolyline([{lat:34,lng:-92},{lat:44,lng:-92}])},legs:[{distanceMeters:1200000,duration:'60000s',steps:[]}]},{});const first=await store.corridor(long,filter,{});assert(first.campendium.left>0,'fixture has undiscovered pages');const count=reads;
+ const reused=await store.corridor(long,filter,{reuseAreas:first.areas});assert.equal(reads,count,'adding a waypoint does not advance untouched-area discovery');assert.equal(reused.campendium.asked,0);
+ await store.corridor(long,filter,{});assert(reads>count,'Search again can explicitly continue partial provider coverage');
+ const far=T.buildRoute({distanceMeters:200000,duration:'7200s',polyline:{encodedPolyline:T.encodePolyline([{lat:36,lng:-110},{lat:37,lng:-110}])},legs:[{distanceMeters:200000,duration:'7200s',steps:[]}]},{}),before=reads;
+ await store.corridor(far,filter,{reuseAreas:first.areas});assert(reads>before,'new detour areas still discover missing data');
+ console.log('Waypoint inventory snapshots reuse known areas, preserve explicit refresh and fill new areas');
+})().catch(e=>{console.error(e);process.exitCode=1;});

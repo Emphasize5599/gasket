@@ -84,12 +84,13 @@
   }
   /** Every rest site along the whole route: national NTAD + downloaded RIDB + OSM by cell (only cells not searched in
    *  the last 30 days are asked; a failed cell is not remembered, so the next search asks again). */
-  async function corridor(model,filter,control){var c=control||{},valid=c.valid||function(){return true;},f=defaults(filter),places=[],cells=cellsFor(model,f.sources?sourceFilter('osm',f).radius:f.radius),fresh=0,failed=0,done=0;
+  async function corridor(model,filter,control){var c=control||{},valid=c.valid||function(){return true;},f=defaults(filter),places=[],cells=cellsFor(model,f.sources?sourceFilter('osm',f).radius:f.radius),fresh=0,failed=0,done=0,areas={osm:cells.map(function(c){return c.key;}),rvparky:[],campendium:[]};
+   function reused(source,key){return c.reuseAreas&&c.reuseAreas[source]&&c.reuseAreas[source].includes(key);}
    function refreshMatches(p){var cfg=f.sources?sourceFilter(sourceId(p),f):defaults(f);cfg=Object.assign({},cfg,{freeOnly:false,maxNightly:null,deferPrices:true});return check(p,cfg).ok&&T.project(model,p).offset<=cfg.radius;}
    if(c.progress)c.progress('Loading saved rest locations',0);try{if(!f.sources||!f.sources.ntad||f.sources.ntad.enabled!==false)places=await inventory(valid);}catch(e){if(c.note)c.note(e.message);places=io.get('national')||[];}if(!valid())throw Error('Rest search cancelled');
    var found=[],groups=new Map(),cool=io.get('osm-cooldown')||{},osmOn=!SOURCES.osm.disabled&&(!f.sources||!f.sources.osm||f.sources.osm.enabled!==false);
    function held(cell){return io.get('osmcell|'+cell.key,CELL_TTL)||io.get('osm|'+cell.i+'|'+cell.j,CELL_TTL);}
-   if(osmOn)cells.forEach(function(cell){var old=held(cell);if(old){found=found.concat(old);done++;return;}var i=Math.floor(cell.i/4)*4,j=Math.floor(cell.j/4)*4,key=i+'|'+j;if(!groups.has(key))groups.set(key,{i:i,j:j,key:key,span:4,cells:[]});groups.get(key).cells.push(cell);});
+   if(osmOn)cells.forEach(function(cell){var old=held(cell);if(!old&&reused('osm',cell.key))old=io.get('osmcell|'+cell.key)||[];if(old){found=found.concat(old);done++;return;}var i=Math.floor(cell.i/4)*4,j=Math.floor(cell.j/4)*4,key=i+'|'+j;if(!groups.has(key))groups.set(key,{i:i,j:j,key:key,span:4,cells:[]});groups.get(key).cells.push(cell);});
    /* 0.0.335: a big box that times out (or gets a 502 / 504) is asked again as four smaller ones down to one cell; only a
     * 429, three failures in a row or six slow boxes stop asking (cool-down), so one slow area no longer marks the whole route failed. */
    var osmStarted=(io.now||Date.now)(),osmBudget=false;
@@ -105,22 +106,22 @@
    }
    var osmMs=(io.now||Date.now)()-osmStarted;
    var rvOn=!f.sources||!f.sources.rvparky||f.sources.rvparky.enabled!==false,rv={asked:0,failed:0,cells:0};
-   if(rvOn){var rvCells=cellsFor(model,f.sources?sourceFilter('rvparky',f).radius:f.radius),rvGroups=new Map(),rvStop=false,rvStreak=0;rv.cells=rvCells.length;
-    rvCells.forEach(function(cell){var held=io.get('rvpcell|'+cell.key,(io.refreshMs?io.refreshMs():RATE_TTL));if(held){found=found.concat(held.map(savedRv));return;}var saved=io.get('rvpcell|'+cell.key,0);found=found.concat((saved||[]).map(durableOnly));if(saved&&!saved.some(refreshMatches))return;var i=Math.floor(cell.i/2)*2,j=Math.floor(cell.j/2)*2,k=i+'|'+j;if(!rvGroups.has(k))rvGroups.set(k,{i:i,j:j,key:k,span:2,cells:[]});rvGroups.get(k).cells.push(cell);});
+   if(rvOn){var rvCells=cellsFor(model,f.sources?sourceFilter('rvparky',f).radius:f.radius),rvGroups=new Map(),rvStop=false,rvStreak=0;rv.cells=rvCells.length;areas.rvparky=rvCells.map(function(c){return c.key;});
+    rvCells.forEach(function(cell){var held=io.get('rvpcell|'+cell.key,reused('rvparky',cell.key)?0:(io.refreshMs?io.refreshMs():RATE_TTL));if(!held&&reused('rvparky',cell.key))return;if(held){found=found.concat(held.map(savedRv));return;}var saved=io.get('rvpcell|'+cell.key,0);found=found.concat((saved||[]).map(durableOnly));if(saved&&!saved.some(refreshMatches))return;var i=Math.floor(cell.i/2)*2,j=Math.floor(cell.j/2)*2,k=i+'|'+j;if(!rvGroups.has(k))rvGroups.set(k,{i:i,j:j,key:k,span:2,cells:[]});rvGroups.get(k).cells.push(cell);});
     var rq=Array.from(rvGroups.values()),rvDone=0;for(var ri=0;ri<rq.length;ri++){if(!valid())throw Error('Rest search cancelled');var g=rq[ri];if(rvStop){rv.failed+=g.cells.length;continue;}rv.asked++;
      try{var rows=rvparkyRows(await io.fetch(rvparkyUrl(g)),Date.now());if(rows.capped&&g.span>1){rq.splice.apply(rq,[ri+1,0].concat(split(g)));continue;}
       if(valid())for(var gi=g.i;gi<g.i+g.span;gi++)for(var gj=g.j;gj<g.j+g.span;gj++)io.put('rvpcell|'+gi+'|'+gj,rows.filter(function(p){return Math.floor(p.lat/CELL)===gi&&Math.floor(p.lng/CELL)===gj;}));found=found.concat(rows);rvStreak=0;}
      catch(e){var w=String(e&&e.message||e);if(c.note)c.note('RV Parky: '+w);rv.failed+=g.cells.length;if(/40[13]|429/.test(w)||++rvStreak>=3)rvStop=true;}
      rvDone+=g.cells.length;if(c.progress)c.progress('Searching RV Parky · '+rvDone+' / '+rvCells.length,rvDone/Math.max(1,rvCells.length));}}
    var cpOn=io.campendium&&(!f.sources||!f.sources.campendium||f.sources.campendium.enabled!==false),cp={asked:0,failed:0,cells:0,left:0,found:0};
-   if(cpOn){var cpCells=cellsFor(model,f.sources?sourceFilter('campendium',f).radius:f.radius),cpGroups=new Map();cp.cells=cpCells.length;
-    cpCells.forEach(function(cell){var held=io.get('cpdcell-v4|'+cell.key,(io.refreshMs?io.refreshMs():RATE_TTL));if(held){found=found.concat(held);return;}var saved=io.get('cpdcell-v4|'+cell.key,0)||io.get('cpdcell-v3|'+cell.key,0);found=found.concat((saved||[]).map(durableOnly));if(saved&&!saved.some(refreshMatches))return;var i=Math.floor(cell.i/4)*4,j=Math.floor(cell.j/4)*4,k=i+'|'+j;if(!cpGroups.has(k))cpGroups.set(k,{i:i,j:j,key:k,span:4,cells:[]});cpGroups.get(k).cells.push(cell);});
+   if(cpOn){var cpCells=cellsFor(model,f.sources?sourceFilter('campendium',f).radius:f.radius),cpGroups=new Map();cp.cells=cpCells.length;areas.campendium=cpCells.map(function(c){return c.key;});
+    cpCells.forEach(function(cell){var held=io.get('cpdcell-v4|'+cell.key,reused('campendium',cell.key)?0:(io.refreshMs?io.refreshMs():RATE_TTL));if(!held&&reused('campendium',cell.key))held=io.get('cpdcell-v3|'+cell.key,0);if(!held&&reused('campendium',cell.key))return;if(held){found=found.concat(held);return;}var saved=io.get('cpdcell-v4|'+cell.key,0)||io.get('cpdcell-v3|'+cell.key,0);found=found.concat((saved||[]).map(durableOnly));if(saved&&!saved.some(refreshMatches))return;var i=Math.floor(cell.i/4)*4,j=Math.floor(cell.j/4)*4,k=i+'|'+j;if(!cpGroups.has(k))cpGroups.set(k,{i:i,j:j,key:k,span:4,cells:[]});cpGroups.get(k).cells.push(cell);});
     var cq=Array.from(cpGroups.values());for(var ci=0;ci<cq.length;ci++){if(!valid())throw Error('Rest search cancelled');var cg=cq[ci];if(cp.asked>=CPD_PER_SEARCH||cpdUnknown>=2){cp.left+=cg.cells.length;continue;}cp.asked++;if(c.progress)c.progress('Reading Campendium · area '+cp.asked+' / '+Math.min(cq.length,CPD_PER_SEARCH),ci/Math.max(1,cq.length));
      try{var res=await io.campendium(campendiumUrl(cg),cg);if(res&&res.blocked){cp.failed+=cg.cells.length;cpdUnknown=2;if(c.note)c.note('Campendium wants a check');continue;}if(res&&res.error)throw Error(res.error);var crow=campendiumRows(res,Date.now());if(!crow.length){cpdUnknown++;cp.failed+=cg.cells.length;continue;}cpdUnknown=0;cp.found+=crow.length;
       if(valid())for(var hi=cg.i;hi<cg.i+cg.span;hi++)for(var hj=cg.j;hj<cg.j+cg.span;hj++)io.put('cpdcell-v4|'+hi+'|'+hj,crow.filter(function(p){return Math.floor(p.lat/CELL)===hi&&Math.floor(p.lng/CELL)===hj;}));found=found.concat(crow);}
      catch(e){cp.failed+=cg.cells.length;if(c.note)c.note('Campendium: '+String(e&&e.message||e));}}}
    var camps=f.sources&&f.sources.ridb&&f.sources.ridb.enabled===false?[]:ridb(io.get('ridb'));if(camps.length){places=merge(places,camps);found=found.filter(function(o){return o.kind!=='campground'||!camps.some(function(x){return Math.abs(x.lat-o.lat)<.003&&Math.abs(x.lng-o.lng)<.004;});});}
-   places=merge(places,found);places=places.map(classify);if(io.transform)places=places.map(io.transform);var sites=onRoute(model,places,f);return {sites:sites,cells:cells.length,asked:fresh,failed:failed,osmSlowStopped:osmBudget,osmMs:osmMs,rvparky:rv,campendium:cp};
+   places=merge(places,found);places=places.map(classify);if(io.transform)places=places.map(io.transform);var sites=onRoute(model,places,f);return {sites:sites,areas:areas,cells:cells.length,asked:fresh,failed:failed,osmSlowStopped:osmBudget,osmMs:osmMs,rvparky:rv,campendium:cp};
   }
   return {search:search,inventory:inventory,corridor:corridor};
  }
