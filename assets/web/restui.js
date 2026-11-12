@@ -419,22 +419,43 @@ if(!n.required)return html;
   function recoEntry(s,leg,charger){var r=reco.get(recoKey(s,leg,charger));if(r&&r.until&&r.until<=Date.now()&&!((r.results||r.items)&& (r.results||r.items).length)){if(typeof root!=='undefined'&&root.FLog)FLog.info('rest','Rest suggestions expired',{leg:directoryGroup(s,leg).index+1,section:leg-directoryGroup(s,leg).from+1,expiredAt:new Date(r.until).toISOString()});reco.delete(recoKey(s,leg,charger));return null;}if(!r||!r.items)return r;if(r.mappedSites!==state.sites||r.mappedModel!==s.model||r.mappedLeg!==leg){var from=legStart(s,leg),to=endsOf(s.model)[leg],positions=new Map(),prior=r.mappedSites;state.sites.forEach(function(x,k){if(x.d>from+.001&&x.d<to-.001){var rows=positions.get(x.site.id)||[];rows.push({x:x,k:k});positions.set(x.site.id,rows);}});if(!r.results)r.results=r.items.slice();r.items=r.results.map(function(item){var rows=(positions.get(item.id)||[]).filter(function(row){return item.lat==null||Math.abs(row.x.site.lat-item.lat)<.0001&&Math.abs(row.x.site.lng-item.lng)<.0001;});rows.sort(function(a,b){return Math.abs(a.x.d-from-(+item.relative||0))-Math.abs(b.x.d-from-(+item.relative||0));});return rows.length?Object.assign({},item,{k:rows[0].k,name:effective(rows[0].x.site,false).name||item.name}):null;}).filter(Boolean);r.mappedSites=state.sites;r.mappedModel=s.model;r.mappedLeg=leg;if((prior||r.sourceLeg!=null&&r.sourceLeg!==leg)&&typeof root!=='undefined'&&root.FLog)FLog.info('rest','Rest suggestions retained',{fromLeg:r.sourceOriginalLeg==null?null:r.sourceOriginalLeg+1,leg:directoryGroup(s,leg).index+1,previousPhysicalSection:r.sourceLeg==null?null:r.sourceLeg+1,physicalSection:leg+1,places:r.items.length,original:r.results.length});}return r;}
   function recoFor(s,k){if(!list||state.sites[k]&&screen.hidden(state.sites[k].site.id))return null;var r=recoEntry(s,state.sites[k]?siteLeg(s,state.sites[k]):list.leg,list.chargerEntry);return r&&r.items&&r.items.find(function(x){return x.k===k;})||null;}
   function spread(rows,n){if(rows.length<=n)return rows;var out=[],step=(rows.length-1)/(n-1);for(var i=0;i<n;i++)out.push(rows[Math.round(i*step)]);return Array.from(new Set(out));}
-  async function recommendLeg(s,leg,valid,progress,charger){var tol=C.tolerance(legStart(s,leg)),night=nightly(),pool=(charger?chargerDirectoryRows(s,leg,charger,false).filter(function(row){return siteLeg(s,row.x)===leg;}):legSites(s,leg)).filter(function(r){var a=accessCache.get(accessKey(s,r.x));return !(a&&a.excluded&&!a.pending);});
-   // 0.0.339 (owner: recommended stops couldn't be added, still checking road access): check road access first (up to twice as
-   // many candidates as recommended, so places that fail still leave enough), and recommend only places that passed
-   var cand=spread(pool,RECO_SITES*2),checked=0;if(progress)progress(0,cand.length,'Sample access');
-   var res=await Promise.all(cand.map(function(r){return (C.access?checkAccess(s,r.x,false,true):Promise.resolve({ok:true})).then(function(a){checked++;if(progress)progress(checked,cand.length,'Sample access');return a;});}));
-   if(!valid())throw Error('Rest search cancelled');
-   var shared={},rows=spread(cand.filter(function(r,i){var a=res[i];return a&&!a.excluded&&(!C.access||a.access);}),RECO_SITES),items=[],expires=Infinity,done=0,total=rows.length*RECO_TIMES;if(progress)progress(0,total,'Departure forecasts');
-   for(var i=0;i<rows.length;i++){var r=rows[i],p=effective(r.x.site),at=siteArrival(s,r.x),f=night?overnightFit(s,r.x):null;if(night&&(!f||f.unknownZone)){done+=RECO_TIMES;continue;}
-    var a=accessCache.get(accessKey(s,r.x)),back=(a&&a.access&&a.access.backSeconds||0)*1000,ready=Math.max(at+(f?f.minimum:30)*60000,f&&f.leaveEarliest||0),last=f?f.windowEnd:at+120*60000;if(!(last>=ready)){done+=RECO_TIMES;continue;}
-    var times=spread(RestTiming.samples(ready,last),RECO_TIMES),out=[];
-    await RestTiming.map(times,root.WorkerSettings?WorkerSettings.trafficCount(A):4,async function(t){if(!valid())throw Error('Rest search cancelled');try{var q=await C.forecast(r.x.d,t+back,valid,shared,f?Object.assign({},p,{nightArrivalEnd:f.arrivalLatest}):p);if(Number.isFinite(q.at))expires=Math.min(expires,q.at+(C.forecastTtl?C.forecastTtl():7200000));out.push({depart:t,drivingMinutes:q.seconds/60,freeMinutes:freeOf(q),coverage:q.coverage,reachMi:q.horizon&&q.horizon.mi,reachName:q.horizon&&q.horizon.stop!=null&&s.route.stops[q.horizon.stop]?s.route.stops[q.horizon.stop].short||s.route.stops[q.horizon.stop].label||'':''});}catch(e){if(!valid())throw e;}done++;if(progress)progress(done,total);},valid);out.sort(function(a,b){return a.depart-b.depart;});
-    done+=RECO_TIMES-times.length;var z=RestPlan.zones(out,tol).filter(function(x){return x.zone!=='unknown';});if(!z.length)continue;var best=z.reduce(function(m,x){return x.delayMinutes<m.delayMinutes?x:m;});items.push({k:r.k,id:p.id,lat:p.lat,lng:p.lng,relative:(r.x.d-legStart(s,leg)).toFixed(3),name:p.name,leave:best.depart,delay:best.delayMinutes,zone:best.zone,reachMi:best.reachMi,reachName:best.reachName,checked:z.length});}
-   var order={green:0,yellow:1,red:2};items.sort(function(x,y){return order[x.zone]-order[y.zone]||x.delay-y.delay;});return {items:items,checked:rows.length,until:Number.isFinite(expires)?expires:Date.now()+300000};}
+  async function recommendLeg(s,leg,valid,progress,charger,publish){
+   var tol=C.tolerance(legStart(s,leg)),night=nightly(),pool=(charger?chargerDirectoryRows(s,leg,charger,false).filter(function(row){return siteLeg(s,row.x)===leg;}):legSites(s,leg)).filter(function(r){var a=accessCache.get(accessKey(s,r.x));return !(a&&a.excluded&&!a.pending);}),
+       cached=pool.filter(function(r){var a=accessCache.get(accessKey(s,r.x));return a&&a.ok&&(!C.access||a.access);}),
+       cand=spread(cached,RECO_SITES).concat(spread(pool.filter(function(r){return !cached.includes(r);}),RECO_SITES*2)),
+       items=[],shared={},accepted=0,checked=0,done=0,expires=Infinity,order={green:0,yellow:1,red:2},total=Math.min(RECO_SITES,cand.length)*RECO_TIMES;
+   function snapshot(){return {items:items.slice().sort(function(a,b){return order[a.zone]-order[b.zone]||a.delay-b.delay;}),checked:checked,until:Number.isFinite(expires)?expires:Date.now()+300000};}
+   function emit(){if(valid()&&publish)publish(snapshot());}
+   if(progress)progress(0,total,'Sample access');
+   await RestTiming.map(cand,2,async function(r){
+    if(accepted>=RECO_SITES)return;
+    var access=C.access?await checkAccess(s,r.x,false,true):{ok:true};checked++;if(!accepted&&progress)progress(checked,cand.length,'Sample access');
+    if(!valid())throw Error('Rest search cancelled');
+    if(!access||access.excluded||C.access&&!access.access||accepted>=RECO_SITES)return;
+    var p=effective(r.x.site),at=siteArrival(s,r.x),fit=night?overnightFit(s,r.x):null;
+    if(night&&(!fit||fit.unknownZone))return;
+    var back=(access.access&&access.access.backSeconds||0)*1000,ready=Math.max(at+(fit?fit.minimum:30)*60000,fit&&fit.leaveEarliest||0),last=fit?fit.windowEnd:at+120*60000;
+    if(last<ready)return;
+    accepted++;var times=spread(RestTiming.samples(ready,last),RECO_TIMES),out=[];
+    await RestTiming.map(times,Math.min(3,root.WorkerSettings?WorkerSettings.trafficCount(A):4),async function(t){
+     if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
+     if(!valid())throw Error('Rest search cancelled');
+     try{var q=await C.forecast(r.x.d,t+back,valid,shared,fit?Object.assign({},p,{nightArrivalEnd:fit.arrivalLatest}):p);
+      if(Number.isFinite(q.at))expires=Math.min(expires,q.at+(C.forecastTtl?C.forecastTtl():7200000));
+      out.push({depart:t,drivingMinutes:q.seconds/60,freeMinutes:freeOf(q),coverage:q.coverage,reachMi:q.horizon&&q.horizon.mi,reachName:q.horizon&&q.horizon.stop!=null&&s.route.stops[q.horizon.stop]?s.route.stops[q.horizon.stop].short||s.route.stops[q.horizon.stop].label||'':''});
+      var z=RestPlan.zones(out.slice().sort(function(a,b){return a.depart-b.depart;}),tol).filter(function(x){return x.zone!=='unknown';});
+      if(z.length){var best=z.reduce(function(m,x){return x.delayMinutes<m.delayMinutes?x:m;}),item={k:r.k,id:p.id,lat:p.lat,lng:p.lng,relative:(r.x.d-legStart(s,leg)).toFixed(3),name:p.name,leave:best.depart,delay:best.delayMinutes,zone:best.zone,reachMi:best.reachMi,reachName:best.reachName,checked:z.length},index=items.findIndex(function(x){return x.k===r.k;});if(index<0)items.push(item);else items[index]=item;emit();}
+     }catch(e){if(!valid())throw e;}
+     done++;if(progress)progress(done,total,'Departure forecasts');
+    },valid);
+   },valid);
+   return snapshot();
+  }
   function pendingGroup(s,leg){var g=directoryGroup(s,leg);return s.route.stops.slice(g.from+1,g.to+2).some(function(p){return p.rest&&(p.rest.pendingTiming||!(p.rest.leaveAt>0));});}
-  function startReco(leg,charger){if(screen.holding())return Promise.resolve();var s=C.snapshot();if(!s||state.busy||state.key!==keyOf(s,filters())||pendingGroup(s,leg))return Promise.resolve();var plan=nightPlan(s,leg);if(plan&&(plan.pending||plan.leg!==leg))return Promise.resolve();var key=recoKey(s,leg,charger),existing=reco.get(key);if(existing&&existing.busy&&existing.runToken===state.token)return existing.promise;var run=state.token,entry={busy:true,runToken:run,sourceLeg:leg,sourceOriginalLeg:directoryGroup(s,leg).index},started=Date.now(),label=(charger?'Charger rest departure forecasts · ':'Checking traffic after rest stops · ')+forecastLabel(s,leg);reco.set(key,entry);renderList();var alive=function(){var current=C.snapshot();return !screen.holding()&&!focusedTraffic&&run===state.token&&reco.get(key)===entry&&!!current&&recoKey(current,leg,charger)===key;},end=root.Tasks&&Tasks.begin(charger?'charger-rest-reco':'rest-reco',{text:label,estimateMs:Math.max(2000,RECO_SITES*RECO_TIMES*2000/(root.WorkerSettings?WorkerSettings.trafficCount(A):4)),cancel:function(){reco.delete(key);renderList();},priority:15});
-   return entry.promise=recommendLeg(s,leg,alive,function(i,n,what){if(root.Tasks&&alive())Tasks.upsert(charger?'charger-rest-reco':'rest-reco',{text:(charger?'Charger rest suggestions · ':'Rest suggestions · ')+forecastLabel(s,leg)+' · '+(what||'Departure forecasts')+' · '+i+' / '+n,frac:n?i/n:0,estimateMs:i?Math.max(0,(Date.now()-started)*(n-i)/i):null,priority:15});},charger).then(function(r){if(!alive())return;entry.busy=false;entry.items=r.items;entry.checked=r.checked;entry.until=r.until;if(root.FLog)FLog.info('rest',charger?'Charger rest traffic recommendations':'Rest traffic recommendations',{leg:directoryGroup(s,leg).index+1,section:leg-directoryGroup(s,leg).from+1,sections:directoryGroup(s,leg).to-directoryGroup(s,leg).from+1,physicalSection:leg+1,checked:r.checked,green:r.items.filter(function(x){return x.zone==='green';}).length,best:r.items[0]&&Math.round(r.items[0].delay)});},function(e){if(!alive())return;entry.busy=false;entry.error=String(e.message||e);entry.until=Date.now()+300000;}).finally(function(){if(end)end();if(reco.get(key)===entry){if(entry.busy)reco.delete(key);if(!focusedTraffic)renderList();}});}
+  function startReco(leg,charger){if(screen.holding())return Promise.resolve();var s=C.snapshot();if(!s||state.busy||state.key!==keyOf(s,filters())||pendingGroup(s,leg))return Promise.resolve();var plan=nightPlan(s,leg);if(plan&&(plan.pending||plan.leg!==leg))return Promise.resolve();var key=recoKey(s,leg,charger),existing=reco.get(key);if(existing&&existing.busy&&existing.runToken===state.token)return existing.promise;var run=state.token,entry={busy:true,items:[],runToken:run,sourceLeg:leg,sourceOriginalLeg:directoryGroup(s,leg).index},started=Date.now(),task=(charger?'charger-rest-reco':'rest-reco')+':'+leg,label=(charger?'Charger rest departure forecasts · ':'Checking traffic after rest stops · ')+forecastLabel(s,leg);reco.set(key,entry);renderList();var alive=function(){var current=C.snapshot();return !screen.holding()&&run===state.token&&reco.get(key)===entry&&!!current&&recoKey(current,leg,charger)===key;},end=root.Tasks&&Tasks.begin(task,{text:label,estimateMs:Math.max(2000,RECO_SITES*RECO_TIMES*2000/(root.WorkerSettings?WorkerSettings.trafficCount(A):4)),cancel:function(){reco.delete(key);renderList();},priority:15});
+   if(root.FLog)FLog.info('rest','Rest suggestion screening started',{leg:directoryGroup(s,leg).index+1,physicalSection:leg+1});
+   var lastLog=started;
+   return entry.promise=recommendLeg(s,leg,alive,function(i,n,what){if(alive()&&root.FLog&&Date.now()-lastLog>=15000){lastLog=Date.now();FLog.info('rest','Rest suggestion screening progress',{leg:directoryGroup(s,leg).index+1,phase:what,done:i,total:n,elapsedMs:Date.now()-started});}if(root.Tasks&&alive())Tasks.upsert(task,{text:(charger?'Charger rest suggestions · ':'Rest suggestions · ')+forecastLabel(s,leg)+' · '+(what||'Departure forecasts')+' · '+i+' / '+n,frac:n?i/n:0,estimateMs:i?Math.max(0,(Date.now()-started)*(n-i)/i):null,priority:15});},charger,function(r){if(!alive())return;entry.items=r.items;entry.results=r.items.slice();entry.checked=r.checked;entry.until=r.until;entry.mappedSites=null;if(r.items.length&&!entry.published){entry.published=true;if(root.FLog)FLog.info('rest','First rest suggestion ready',{leg:directoryGroup(s,leg).index+1,elapsedMs:Date.now()-started,green:r.items.filter(function(x){return x.zone==='green';}).length});}laterRender();}).then(function(r){if(!alive())return;entry.busy=false;entry.items=r.items;entry.results=r.items.slice();entry.checked=r.checked;entry.until=r.until;if(root.FLog)FLog.info('rest',charger?'Charger rest traffic recommendations':'Rest traffic recommendations',{leg:directoryGroup(s,leg).index+1,section:leg-directoryGroup(s,leg).from+1,sections:directoryGroup(s,leg).to-directoryGroup(s,leg).from+1,physicalSection:leg+1,checked:r.checked,green:r.items.filter(function(x){return x.zone==='green';}).length,best:r.items[0]&&Math.round(r.items[0].delay)});},function(e){if(!alive())return;entry.busy=false;entry.error=String(e.message||e);entry.until=Date.now()+300000;}).finally(function(){if(end)end();if(reco.get(key)===entry){if(entry.busy){if(entry.items&&entry.items.length)entry.busy=false;else reco.delete(key);}if(!focusedTraffic)renderList();}});}
   async function autoChargerReco(s,group,charger,force,background){
    if(screen.holding()||focusedTraffic||!C.forecast||C.trafficEnabled&&!C.trafficEnabled())return;
    for(var leg=group.from;leg<=group.to;leg++){
@@ -497,13 +518,13 @@ if(!n.required)return html;
    var end=root.Tasks&&Tasks.begin(task,{text:'First-night forecasts · checking suggestions',priority:16,cancel:function(){pass.cancelled=true;}});
    try{
     var dirs=[];
-    for(var g of groups){
+    await Promise.all(groups.map(async function(g){
      if(!valid())return;
      var charger=types?loadChargerDirectory(s,g,types,false,true):null,prior=recoEntry(s,g.from);
      if(!prior||prior.busy)await startReco(g.from);
      if(charger){await charger.promise;if(valid()&&!recoEntry(s,g.from,charger))await startReco(g.from,charger);}
      dirs.push({leg:g.from,charger:charger});
-    }
+    }));
     if(!valid())return;
     var candidates=[],seen=new Set();
     function collect(suggestedOnly){dirs.forEach(function(dir){
@@ -565,16 +586,20 @@ if(!n.required)return html;
    if(state.followupRun===run){if(restart)state.followupRestart=run;return;}
    state.followupRun=run;
    try{
+    if(C.prepareForecasts&&state.sites&&state.sites.length)C.prepareForecasts();
     var full=autoFirstNight()&&C.forecast&&(!C.trafficEnabled||C.trafficEnabled());
     await Promise.all([bgAccess(s,run),full?prepareFirstNight(s,run):autoReco(s,run)]);
     if(run!==state.token||!C.snapshot())return;
     if(focusedTraffic)await new Promise(function(resolve){resumeAccess.add(resolve);});
-    if(run===state.token){if(full)await autoReco(C.snapshot()||s,run);await autoChargerDirectories(C.snapshot()||s,run);}
+    if(run===state.token){await autoReco(C.snapshot()||s,run);if(!full&&autoFirstNight()&&C.forecast&&(!C.trafficEnabled||C.trafficEnabled()))await prepareFirstNight(C.snapshot()||s,run);await autoChargerDirectories(C.snapshot()||s,run);}
     if(run===state.token)await warmNightTraffic(C.snapshot()||s,run);
    }catch(e){if(root.FLog)FLog.warn('rest','Rest background work interrupted',{reason:String(e.message||e)});}
    finally{if(state.followupRun===run)state.followupRun=null;if(state.followupRestart===run){state.followupRestart=null;var current=C.snapshot();if(current&&run===state.token)runRestFollowups(current,run);}}
   }
-  async function autoReco(s,run){if(state.busy||typeof keyOf==='function'&&state.key!==keyOf(s,filters()))return;if(screen.holding()||focusedTraffic||!C.forecast||C.trafficEnabled&&!C.trafficEnabled())return;for(var keep=0;keep<endsOf(s.model).length;keep++)if(typeof recoEntry==='function')recoEntry(s,keep);for(var leg=0;leg<endsOf(s.model).length;leg++){if(run!==state.token||!C.snapshot())return;var saved=reco.get(recoKey(s,leg));if(!legSites(s,leg).length||saved&&((saved.results||saved.items)&&(saved.results||saved.items).length||!saved.until||saved.until>Date.now())&&(!saved.busy||saved.runToken===run))continue;await startReco(leg);}}
+  async function autoReco(s,run){if(state.busy||typeof keyOf==='function'&&state.key!==keyOf(s,filters()))return;if(screen.holding()||focusedTraffic||!C.forecast||C.trafficEnabled&&!C.trafficEnabled())return;
+   var work=[];for(var leg=0;leg<endsOf(s.model).length;leg++){if(run!==state.token||!C.snapshot())return;var saved=typeof recoEntry==='function'?recoEntry(s,leg):reco.get(recoKey(s,leg));if(!legSites(s,leg).length||saved&&((saved.results||saved.items)&&(saved.results||saved.items).length||!saved.until||saved.until>Date.now())&&(!saved.busy||saved.runToken===run))continue;work.push(leg);}
+   await Promise.all(work.map(function(leg){return startReco(leg);}));
+  }
   function recoNote(s,k,p){var x=recoFor(s,k);return x&&x.zone==='green'?'<small class="rest-reco-note">Suggested · lighter traffic · leave about '+stamp(x.leave,p)+'</small>':'';}
   function recoHtml(s,leg,charger){if(screen.holding())return '';var g=directoryGroup(s,leg),rows=[];for(var i=g.from;i<=g.to;i++)rows.push(recoEntry(s,i,charger));var busy=rows.some(function(r){return r&&r.busy;}),error=rows.find(function(r){return r&&r.error;}),green=rows.some(function(r){return r&&r.items&&r.items.some(function(x){return x.zone==='green';});}),text=busy?'Checking departure forecasts for suggested stops…':error?'Some suggestions could not be checked: '+error.error:green?'Green outlines mark suggested stops with lighter traffic.':charger&&rows.some(function(r){return r&&r.items;})?(rows.some(function(r){return r&&r.items&&r.items.length;})?'No lighter-traffic charger rests found in the checked forecasts.':rows.some(function(r){return r&&r.checked;})?'Departure forecasts were unavailable for the stations checked.':'No charger rests passed the access and timing checks.'):'Suggestions appear as green outlines in this list.';if(pendingGroup(s,leg))text='Set departures for added rests before refreshing forecasts for this leg.';if(rows.some(function(r){return r&&r.until<Date.now()&&(r.results||r.items)&& (r.results||r.items).length;}))text='Saved forecasts · '+text;return '<div class="rest-suggestions-status" role="status"><p class="lead small keep">'+esc(text)+'</p>'+(!busy?'<button class="btn tonal" data-rest-reco>Check suggestions again</button>':'')+'</div>';}
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.471 - 2026-11-12
+
+- Restored trips prepare traffic forecasting before suggestion screening, and retry screening if access checks enable traffic later. This fixes a path that could finish access checks without ever starting suggestions.
+- Each leg starts suggestion screening independently, with its own progress and cancel control. Normal and charger-rest first-night suggestions no longer wait for earlier legs to finish.
+- Verified green suggestions appear progressively as usable departure samples arrive. Cached access checks are used first; slower sites and the rest of the sampled departures continue in the background.
+- Background suggestion reads pause while you choose a rest departure, retaining published suggestions. Full slider preparation remains separate from the initial green suggestions.
+- Added per-leg screening start/progress and first-result diagnostics.
+
+
 ## 0.0.470 - 2026-11-12
 
 - Includes the rest discovery, forecast, partial-preview and anchored return-leg cache fixes from 0.0.467–0.0.469.

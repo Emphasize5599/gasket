@@ -82,6 +82,7 @@
   var restForecastVersion=0;
   var restUI=window.RestUI&&RestUI.init(A,{
     dormant:function(){return savedPlanCurrent()&&!savedRestBrowsing;},activate:function(){savedRestBrowsing=true;},trafficEnabled:function(){return !!(traffic&&traffic.enabled()&&(!savedPlanCurrent()||savedRestBrowsing));},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(d){return restTolerance(d);},trafficSegments:function(){return restSegments();},restTraffic:function(){return restTrafficCfg();},setRestTraffic:function(c){S.trip.restTraffic=Object.assign({},c,{sig:restSegSig()});A.save();},
+    prepareForecasts:function(){if(!S.trip.trafficForecast&&(S.googleTraffic!==false||S.hereTraffic===true&&S.hereKey)){S.trip.trafficForecast=true;A.save();}},
     waitForPlan:restPrepareTiming,call:call,timezoneFetch:timezoneFetch,snapshot:restSnapshot,
     restChargers:async function(s,sites,filter){
       var car=Garage.car(),plugs=AltFuel.compatiblePlugs(car,Garage.plugs(car)),radiusMi=filter.radius/1609.344;
