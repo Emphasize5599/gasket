@@ -83,7 +83,7 @@
   return out;
  }
  function sessions(legs,options){
-  var cap=options.capacity, reserve=Math.min(cap*.9,Math.max(0,options.reserve||0)),ev=options.kind==='ev',curve=options.curve,
+  var cap=options.capacity,fillCap=Math.min(cap,options.fillCap||cap), reserve=Math.min(cap*.9,Math.max(0,options.reserve||0)),ev=options.kind==='ev',curve=options.curve,
       level=Math.min(cap,num(options.start,cap)),goal=options.priority==='time'?Math.max(.8,reserve/cap+.1):.95;
   return legs.map(function(leg){
    var rows=[],drive=0;
@@ -92,12 +92,15 @@
     if(cap>0&&used>0&&(!ev||curve))while(used>Math.max(0,level-reserve)+.0001){
      var distance=Math.max(0,level-reserve),minutes=p.minutes*distance/p.energy;
      drive+=minutes;elapsed+=minutes;used-=distance;
-     var target=ev?Math.min(cap,Math.max(cap*goal,Math.min(cap,reserve+used)*.85,reserve+cap*.05)):cap,
-         buy=target-reserve,service;
+     var target=ev?Math.min(fillCap,Math.max(cap*goal,Math.min(cap,reserve+used)*.85,reserve+cap*.05)):cap,
+         arrival=Math.min(level,reserve),buy=target-arrival,service;
+     if(target<=reserve)throw Error('The charging limit must leave energy above your reserve.');
      if(ev){
       service=0;
       var steps=Math.ceil(buy/cap*100);
-      for(var i=0;i<steps;i++)service+=60*buy/steps/Math.min(options.maxKw||150,ChargeCurve.at(curve,(reserve+buy*(i+.5)/steps)/cap));
+      for(var i=0;i<steps;i++)service+=60*buy/steps/Math.min(options.maxKw||150,ChargeCurve.at(curve,(arrival+buy*(i+.5)/steps)/cap));
+      // Same charging losses and temperature derating as final planning when the vehicle profile is available.
+      if(options.profile&&root.Propulsion){var charged=Propulsion.charge({profile:options.profile,soc:arrival/cap,target:target/cap,cap:fillCap/cap,temperature:Number.isFinite(p.chargeTemperature)?p.chargeTemperature:20,kw:options.maxKw||150,level:options.chargeLevel||'dc_fast',timeout:7*86400});if(!charged.ok)throw Error('Charging could not be estimated ('+charged.reason+'). Review the vehicle and allowed charger types.');service=charged.minutes;}
      }else service=Trip.serviceMinutes({c:{},buyGal:buy},options.kind);
      if(drive>0)rows.push({kind:'drive',minutes:drive});
      rows.push({kind:ev?'charge':'fuel',minutes:service+options.stopMinutes});
@@ -172,6 +175,33 @@
    at+=left*MIN;
   });
   return out;
+ }
+ // Shared by the calendar and checked plans. Preserve each fuel stop's position and duration.
+ function plannedTimeline(o,p,contexts){
+  var base=Trip.scheduleTimeline(o,p),clock=o.rewardDepartAt,m=o.model;
+  function drive(a,b){var minutes=(m.timeTo(b)-m.timeTo(a))/60;
+   (o.drivingRates||[]).forEach(function(r){minutes+=Math.max(0,Math.min(b,r.to)-Math.max(a,r.from))*r.rate*60;});
+   return Math.max(0,minutes);
+  }
+  return base.map(function(t,i){
+   var ctx=contexts[i]||{},depart=Math.max(clock,t.depart),parts=[],from=t.from;
+   (p.stops||[]).filter(function(s){return s.c.d>t.from&&s.c.d<=t.to;}).slice().sort(function(a,b){return a.c.d-b.c.d;}).forEach(function(s){
+    if(s.c.d>from)parts.push({kind:'drive',minutes:drive(from,s.c.d)});
+    parts.push({kind:o.fuelKind==='ev'?'charge':'fuel',minutes:Trip.stopDelay(o,s)});from=s.c.d;
+   });
+   if(from<t.to)parts.push({kind:'drive',minutes:drive(from,t.to)});
+   var estimated=restParts(parts,depart,ctx,ctx.nightly,ctx.deadline==null?Infinity:ctx.deadline,ctx.skips),
+       rest=estimated.filter(function(p){return p.kind==='rest';}).reduce(function(n,p){return n+p.minutes;},0),
+       arrive=depart+estimated.reduce(function(n,p){return n+p.minutes*MIN;},0),ready=arrive+t.destinationMinutes*MIN;
+   var elapsedDrive=0,restStops=[];
+   estimated.forEach(function(part){if(part.kind==='drive')elapsedDrive+=part.minutes;else if(part.kind==='rest'){
+    var lo=t.from,hi=t.to;for(var k=0;k<24;k++){var mid=(lo+hi)/2;if(drive(t.from,mid)<elapsedDrive)lo=mid;else hi=mid;}
+    restStops.push({d:(lo+hi)/2,minutes:part.minutes,night:part.night});
+   }});
+   var result=Object.assign({},t,{estimatedRestStops:restStops,depart:depart,arrive:arrive,ready:ready,waitMinutes:(depart-clock)/MIN,
+    restMinutes:rest,restParts:estimated,missedRests:estimated.filter(function(p){return p.kind==='norest';})});
+   clock=ready;return result;
+  });
  }
  function bind(host,o){
   var starts=o.starts.slice(),rows=[],windows=[],rules=[],drag=null,layout=[],building=null,scroller=null,drawn='',clock=o.zone,begin=up(o.now),
@@ -462,8 +492,8 @@
   });
   var observer=new ResizeObserver(function(){var nextWidth=host.clientWidth;if(nextWidth!==width){width=nextWidth;draw();}});
   observer.observe(host);refresh();
-  return {refresh:refresh,starts:function(){return starts.slice();},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
+  return {refresh:refresh,starts:function(){return starts.slice();},estimates:function(){return rows.map(function(r){return {depart:r.departure,arrive:r.end,parts:r.parts.map(function(p){return {kind:p.kind,minutes:(p.end-p.start)/MIN,night:p.night};})};});},close:function(){observer.disconnect();cancelAnimationFrame(frame);}};
  }
- var api={sunIcon:sunIcon,SUN_NAMES:SUN_NAMES,bind:bind,sessions:sessions,restParts:restParts,run:run,fits:fits,issues:issues,place:place,step:STEP};
+ var api={sunIcon:sunIcon,SUN_NAMES:SUN_NAMES,bind:bind,sessions:sessions,restParts:restParts,plannedTimeline:plannedTimeline,run:run,fits:fits,issues:issues,place:place,step:STEP};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WindowSchedule=api;
 })(typeof window==='undefined'?globalThis:window);

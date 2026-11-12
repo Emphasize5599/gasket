@@ -25,6 +25,7 @@ vm.runInContext(code.slice(code.indexOf('  function autoFirstNight('),code.index
  assert(task.cancel);
  assert.deepEqual(recos,[false,true]);
  assert.deepEqual(seen.map(x=>x[0]),['b','b','b','charger','charger','charger','a','a','a']);
+ const originalNightPlan=ctx.nightPlan;ctx.nightPlan=()=>({leg:0,required:true,skips:['2030-11-04'],window:{date:'2030-11-03'}});assert(ctx.initialNight(snap,{from:0}),'skipping a later night must not disable forecasts for the kept first rest');ctx.nightPlan=originalNightPlan;
  const count=seen.length;
  await ctx.prepareFirstNight(snap,1);
  assert.equal(seen.length,count,'opening the same directory should not restart work');

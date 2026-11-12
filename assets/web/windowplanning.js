@@ -50,7 +50,7 @@
    h+='<section class="card" id="twPlanner"><h3>Window planner</h3><p class="lead small keep">Only the final arrival deadline is required. Each stop uses its own local time zone.</p><ol class="nlist tw-journey" id="twJourney"><li><span class="nn">1</span><div class="nl-a"><b>'+A.esc(C.origin?C.origin():'Start')+'</b>'+tile('twDepart','Departure window',departure,zones[0],false)+'</div></li>';
    var destinationNumber=1;names.forEach(function(name,i){if(C.isRestDestination&&C.isRestDestination(i)){h+='<li class="route-rest"><span class="nn">R</span><div class="nl-a"><b>'+A.esc(name)+'</b><small>Added rest · manage its stay and departure in Rest stops.</small></div></li>';return;}var d=c.destinations[i]||{};h+='<li><span class="nn">'+(++destinationNumber)+'</span><div class="nl-a"><b>'+A.esc(name)+'</b>';if(i===last)h+=tile('twFinal','Arrival window',final,zones[i+1],true);else{h+=tile('twArr'+i,'Arrival window',Object.assign({on:!!(d.arriveOn||d.arriveStart||d.arriveEnd)},d.arriveInput||{start:d.arriveStart,end:d.arriveEnd}),zones[i+1],false);h+=tile('twLeave'+i,'Departure window',Object.assign({on:!!(d.leaveOn||d.leaveStart||d.leaveEnd)},d.leaveInput||{start:d.leaveStart,end:d.leaveEnd}),zones[i+1],false,'<label class="nf"><span>Extra waiting allowed (minutes)</span><input id="twWait'+i+'" type="number" min="0" max="1440" step="1" value="'+(+d.wait||0)+'"></label>');}h+='</div></li>';});
    h+='</ol></section>';
-   if(C.scheduleLegs&&WindowClock.zone(zones[0]))h+='<div class="card" id="twScheduleCard"><h3>Visual itinerary</h3><p class="lead small keep">Green handles above move legs. Blue handles below edit windows. Handles snap to 15-minute steps. Tap − on a gray wait to allow departure during that block.</p>'+(c.planningMode==='overnight'?'<p class="lead small keep">Use − on an estimated rest to drive through that night. Tap the chevron to restore it.</p>':'')+'<div class="ws-legend"><span><i class="ws-drive"></i>Driving</span><span><i class="ws-rest"></i>Rest</span><span><i class="ws-charge"></i>Charging</span><span><i class="ws-fuel"></i>Fuel</span><span><i class="ws-wait"></i>Waiting to leave</span><span><i class="ws-blue"></i>Windows</span>'+['dawn','sunriseEnd','sunsetStart','dusk'].map(function(k){return '<span>'+WindowSchedule.sunIcon(k)+WindowSchedule.SUN_NAMES[k]+'</span>';}).join('')+'</div><p class="lead small keep">Calendar uses '+A.esc(zones[0].replace(/_/g,' '))+' time. Exact fields use each location’s time. Driving and stop durations are estimates.</p><div id="twSchedule"></div></div>';
+   if(C.scheduleLegs&&WindowClock.zone(zones[0]))h+='<div class="card" id="twScheduleCard"><h3>Visual itinerary</h3><p class="lead small keep">Green handles above move legs. Blue handles below edit windows. Handles snap to 15-minute steps. Tap − on a gray wait to allow departure during that block.</p>'+(c.planningMode==='overnight'?'<p class="lead small keep">Use − on an estimated rest to drive through that night. Tap the chevron to restore it.</p>':'')+'<div class="ws-legend"><span><i class="ws-drive"></i>Driving</span><span><i class="ws-rest"></i>Rest</span><span><i class="ws-charge"></i>Charging</span><span><i class="ws-fuel"></i>Fuel</span><span><i class="ws-wait"></i>Waiting to leave</span><span><i class="ws-blue"></i>Windows</span>'+['dawn','sunriseEnd','sunsetStart','dusk'].map(function(k){return '<span>'+WindowSchedule.sunIcon(k)+WindowSchedule.SUN_NAMES[k]+'</span>';}).join('')+'</div><p class="lead small keep">Calendar uses '+A.esc(zones[0].replace(/_/g,' '))+' time. Exact fields use each location’s time. Uses saved traffic and vehicle estimates. Charger power, locations and detours are checked during planning.</p><div id="twSchedule"></div></div>';
    h+='<button class="btn tonal" id="twRetryZones">Retry time-zone lookup</button><div id="twError" class="warn" role="status"></div><button class="btn primary" id="twSave" aria-describedby="twError" disabled>Save windows</button>';
    var close=A.subPage('Trip time windows',h,function(b){
     if(c.planningMode==='overnight')OvernightUI.bindForm(A,b,c.overnight||{});
@@ -66,7 +66,7 @@
     b.querySelectorAll('[data-tw-window]').forEach(function(tile){var id=tile.dataset.twWindow,on=b.querySelector('#'+id+'On'),start=b.querySelector('#'+id+'Start'),end=b.querySelector('#'+id+'End');if(on){on.onchange=function(){show(id+'Fields',this.checked);summarize(tile);};on.onchange();}function update(edited){var choices=WindowClock.candidates(edited.value,tile.dataset.zone),fold=b.querySelector('#'+edited.id+'FoldField');fold.classList.toggle('hidden',choices.length!==2);var pick=b.querySelector('#'+edited.id+'Fold');if(edited.dataset.foldWall!==edited.value&&choices.length===2)pick.value='';edited.dataset.foldWall=edited.value;if(choices.length===2){pick.options[1].textContent='First occurrence · '+WindowClock.name(choices[0],tile.dataset.zone).split(' · ')[0];pick.options[2].textContent='Second occurrence · '+WindowClock.name(choices[1],tile.dataset.zone).split(' · ')[0];}summarize(tile);if(id==='twDepart')nowPlaceholder();scheduleDusk();}start.addEventListener('input',function(){update(start,end);});start.addEventListener('change',function(){update(start,end);});end.addEventListener('input',function(){update(end,start);});end.addEventListener('change',function(){update(end,start);});start.addEventListener('windowadjust',function(){update(start,end);});end.addEventListener('windowadjust',function(){update(end,start);});update(start,end);update(end,start);});b.querySelectorAll('select[id$="Fold"]').forEach(function(el){el.addEventListener('change',scheduleDusk);});duskHints();nowPlaceholder();var timer=setInterval(nowPlaceholder,10000);root.addEventListener('devicezonechange',nowPlaceholder);
     b.querySelector('#twRetryZones').onclick=function(){close();configure();};b.querySelector('#twRetryZones').classList.toggle('hidden',zones.length===names.length+1&&zones.every(WindowClock.zone));
     function value(prefix){var tile=b.querySelector('[data-tw-window="'+prefix+'"]'),on=b.querySelector('#'+prefix+'On'),result={on:!on||on.checked,start:'',end:''};if(!result.on)return result;['Start','End'].forEach(function(k){var el=b.querySelector('#'+prefix+k);if(el.value)result[k.toLowerCase()]=WindowClock.iso(el.value,tile.dataset.zone,b.querySelector('#'+el.id+'Fold').value);});return result;}
-    var schedule=null,calendar=b.querySelector('#twSchedule'),legs=calendar?C.scheduleLegs():[],
+    var schedule=null,calendar=b.querySelector('#twSchedule'),legs=calendar?C.scheduleLegs(c):[],
         save=b.querySelector('#twSave'),errors=b.querySelector('#twError'),visualIssues=[];
     if(calendar&&legs.length){
      var fields={ds:'Start',de:'End',as:'Start',ae:'End'};
@@ -94,7 +94,10 @@
      function rules(){
       return Array.from(b.querySelectorAll('[data-tw-nl]')).map(function(row){return {from:row.querySelector('[data-nl-from]').value,to:row.querySelector('[data-nl-to]').value,night:row.querySelector('[data-nl-when]').value==='one'?row.querySelector('[data-nl-night]').value||'incomplete':''};});
      }
-     var parts=WindowSchedule.sessions(legs.map(function(leg){return leg.parts;}),C.scheduleVehicle(c.priority));
+     var vehicle=C.scheduleVehicle(c.priority),sourceParts=legs.map(function(leg){return leg.parts;}),parts=[],estimateProblem='';
+     function rebuildParts(){try{parts=WindowSchedule.sessions(sourceParts,vehicle);estimateProblem='';}catch(e){parts=[];estimateProblem=e.message;}}
+     rebuildParts();
+     function timedParts(i,t){if(legs[i].partsAt){var current=legs[i].partsAt(t);if(sourceParts[i]!==current){sourceParts[i]=current;rebuildParts();}}return parts[i]||[];}
      var nightlyCache='',nightlyValue=null;
      function scheduleNight(){
       if(c.planningMode!=='overnight')return null;
@@ -113,7 +116,7 @@
      function skippedWaits(i){return exclusions('noLeaveSkips',i);}
      schedule=WindowSchedule.bind(calendar,{now:Date.now(),clock24:A.S.clock24,zone:zones[0],starts:c.visualStarts||[],esc:A.esc,read:read,write:write,rules:rules,skippedNights:skippedNights,skippedWaits:skippedWaits,setNight:function(i,date,skip){setExclusions('driveThroughNights',i,[date],skip);},setWait:function(i,keys,skip){setExclusions('noLeaveSkips',i,keys,skip);},onIssues:function(issues){visualIssues=issues;updateGate();},legs:legs.map(function(leg,i){
       var location={zone:zones[leg.start],point:leg.point};
-      return {zone:location.zone,point:leg.point,endPoint:leg.endPoint,skippedWaits:function(){return skippedWaits(i);},estimate:function(t){return WindowSchedule.restParts(parts[i],t,location,scheduleNight(),read(i).ae||Infinity,skippedNights(i));}};
+      return {zone:location.zone,point:leg.point,endPoint:leg.endPoint,skippedWaits:function(){return skippedWaits(i);},estimate:function(t){return WindowSchedule.restParts(timedParts(i,t),t,location,scheduleNight(),read(i).ae||Infinity,skippedNights(i));}};
      })});
     }else if(calendar)b.querySelector('#twScheduleCard').hidden=true;
     function readDraft(){
@@ -166,7 +169,7 @@
      if(errors.innerHTML!==html)errors.innerHTML=html;
     }
     function updateGate(){
-     var problems=visualIssues.slice();
+     var problems=visualIssues.slice();if(estimateProblem)problems.unshift(estimateProblem);
      try{readDraft();}catch(e){problems.unshift(e.message);}
      renderProblems(problems);
     }
@@ -176,11 +179,11 @@
     b.addEventListener('click',function(e){if(e.target.closest('#onAddNight,[data-on-remove],#twNlAdd,[data-nl-remove]'))editChanged();});
     updateGate();
     save.onclick=function(){
-     if(visualIssues.length)return;
+     if(visualIssues.length||estimateProblem)return;
      try{
       var next=readDraft();
       if(next.earlyEnabled&&C.enableForecast&&!C.enableForecast())throw Error('Enable a traffic forecast provider in Settings → Connections first.');
-      if(schedule){delete next.exampleStarts;next.visualStarts=schedule.starts();}
+      if(schedule){delete next.exampleStarts;next.visualStarts=schedule.starts();if(root.FLog&&schedule.estimates)FLog.info('timing','Visual itinerary saved',{priority:c.priority,legs:schedule.estimates(),overnight:next.overnight,driveThroughNights:next.driveThroughNights||{}});}
       A.S.trip.windowPlan=next;
       A.S.earlyDepartOn=next.earlyEnabled;A.S.earlyDepartMin=next.delayMinutes===''?20:+next.delayMinutes;
       if(C.setPriority)C.setPriority(next.priority);

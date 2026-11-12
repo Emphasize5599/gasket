@@ -305,25 +305,38 @@
   var windowStopClocks=StopClock.create({get:function(k){var r=A.KV.get('restplaces',k,180*86400000);return r&&r.v;},put:function(k,v){A.KV.put('restplaces',k,v);},fetch:async function(u){var r=await call('fetchJson',u);if(r.error)throw Error(r.error);return typeof r.body==='string'?JSON.parse(r.body):r;}});
   var windows=window.WindowPlanning&&WindowPlanning.init(A,{
     key:function(){return windowStateKey({id:activeKey(),trip:S.trip,speed:S.speed,route:route,alts:alts});},keyFor:windowStateKey,owner:function(){return S.carId;},ownerFor:function(s){return baseId(s.id);},pointZone:windowPointZone,timeZones:async function(){var owner=route,points=owner&&owner.stops||[];await windowStopClocks.load(points.filter(function(p){return Number.isFinite(p.lat)&&Number.isFinite(p.lng);}),function(){return route===owner;});if(route!==owner)throw Error('Trip locations changed while reading time zones.');return points.map(function(p){var z=p.timeZone||p.rest&&p.rest.site&&p.rest.site.timeZone||windowStopClocks.get(p);if(z)p.timeZone=z;return z;});},routes:windowRoutes,duskRoutes:function(i,t){return (choiceLists()[i]||[]).slice(0,3).map(function(a){var car=carModel(),key=JSON.stringify(car),held=duskBaseMemo.get(a);if(!held||held.key!==key){held={key:key,model:T.buildRoute(a,car)};duskBaseMemo.set(a,held);}var p=traffic&&traffic.profile(a,t);return {model:p?Traffic.overlay(held.model,p):held.model,trafficKnown:!!p};});},selected:function(i){return hzSel(i);},
-    scheduleLegs:function(){
-      var lists=choiceLists(),car=carModel();
+    scheduleLegs:function(draft){
+      var lists=choiceLists(),car=carModel(),vehicle=makeBaseOpts(model,[],hasFuel()?startFuel(model):Garage.tank(),rawRoute);
       return TripStops.groups(route).map(function(g){
-        var parts=[];
+        var cache=new Map();function calculate(at){var key=Math.floor(at/3600000),held=cache.get(key);if(held)return held;var parts=[];
         for(var i=g.from;i<=g.to;i++){
           var road=(lists[i]||[])[hzSel(i)]||(lists[i]||[])[0],p=route.stops[i+1],r=p&&p.rest;
           if(!road)continue;
-          var m=T.buildRoute(road,car),lm=choiceLimitModel(road),sf=Garage.speedFn&&Garage.speedFn(),saved=0;
-          // 0.0.455: driving time follows your default speed (over the limit / cruising speed) when the limits are in
-          if(lm&&!speedOff(lm)){if(!lm._lim)ensureLimits(lm);saved=Math.max(-m.durationSec/120,Math.min(m.durationSec/120,ruleMinutes(flatSecs(lm),sf)));}
-          parts.push({minutes:m.durationSec/60-saved,energy:m.galTo(m.totalMi),rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0,restNight:r&&r.overnight?r.nightDate:null});
+          var m=T.buildRoute(road,car),lm=choiceLimitModel(road),sf=Garage.speedFn&&Garage.speedFn(),saved=0,temperature=null;
+          var forecast=traffic&&traffic.cachedForecast&&traffic.cachedForecast(m,at);if(forecast)m=Traffic.overlay(m,forecast);
+          if(lm&&lm._lim&&lm._lim!=='loading')m._lim=lm._lim;
+          if(vehicle.propulsion&&window.Propulsion){
+            var ctx=Object.assign({},propulsionContext(m,road),{departAt:at,waitAt:null,waits:[],startGal:vehicle.startGal}),
+                projection=Propulsion.project(m,vehicle.propulsion,ctx,null);
+            m=T.restoreModel(projection.model);temperature=projection.temperature;
+          }else if(lm&&!speedOff(lm)){
+            if(!lm._lim)ensureLimits(lm);var secs=flatSecs(lm);
+            saved=ruleMinutes(secs,sf);
+            if(sf)m=T.withSpeeds(m,T.speedRates(secs,secs.map(function(sc){return Garage.ruleOff(sc.limit);}),sf.f,sf.lo,sf.hi));
+          }
+          parts.push({minutes:Math.max(0,m.durationSec/60-saved),energy:m.galTo(m.totalMi),chargeTemperature:temperature,rest:r?Math.max(r.minimumRest||0,r.preferredRest||0,r.overlap===false?(r.minimumRest||0)+(r.chargeMinutes||0):r.chargeMinutes||0):0,restNight:r&&r.overnight?r.nightDate:null});
+          at+=(parts[parts.length-1].minutes+parts[parts.length-1].rest)*60000;
         }
-        return {start:g.start,end:g.end,point:route.stops[g.start],endPoint:route.stops[g.end],nightKey:TripStops.nightKey(route,g),parts:parts};
+        if(cache.size>=32)cache.delete(cache.keys().next().value);cache.set(key,parts);return parts;}
+        var cfg=draft||windows.config(),d=g.start&&cfg.destinations&&cfg.destinations[g.start-1],at=cfg.visualStarts&&cfg.visualStarts[g.index]||Date.parse(d&&d.leaveStart||cfg.windowTimes&&cfg.windowTimes.depart.start||cfg.start)||departAt().getTime();
+        return {partsAt:calculate,start:g.start,end:g.end,point:route.stops[g.start],endPoint:route.stops[g.end],nightKey:TripStops.nightKey(route,g),parts:calculate(at)};
       });
     },
     scheduleVehicle:function(priority){
       var kind=KIND(),car=Garage.car(),curve=kind==='ev'?ChargeCurve.selected(car):null,types=AltFuel.tripTypes(S.trip.evChargers),
           kw=curve&&(types.dc?curve.peak:types.l2?Math.min(+car.acKw||7.2,7.2):1.44);
-      return {kind:kind,priority:priority,capacity:Garage.tank(),reserve:tripBuf()*model.combGpm,start:hasFuel()?startFuel(model):Garage.tank(),curve:curve&&curve.points,maxKw:kw,stopMinutes:kind==='ev'?5:3};
+      var opts=makeBaseOpts(model,[],hasFuel()?startFuel(model):Garage.tank(),rawRoute);
+      return {kind:kind,priority:priority,profile:opts.propulsion,fillCap:opts.fillCap,capacity:Garage.tank(),reserve:tripBuf()*model.combGpm,start:hasFuel()?startFuel(model):Garage.tank(),curve:curve&&curve.points,maxKw:kw,chargeLevel:types.dc?'dc_fast':types.l2?'2':'1',stopMinutes:kind==='ev'?5:3};
     },
     immediateAfter:function(i){return !!(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2);},
     isRestDestination:function(i){return !!(route&&route.stops[i+1]&&route.stops[i+1].rest);},fixedRoad:function(i){return restLegSolo(route,i);},legLabel:function(i){var g=TripStops.group(route,i);return 'Leg '+(g?g.index+1:i+1)+(restLegSolo(route,i)?' · added rest access':'');},origin:function(){var p=route&&route.stops[0];return p&&(p.label||p.address)||'Start';},destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
@@ -426,12 +439,12 @@
     o.rewardPriceAt=function(c,model,stops){var arrival=new Date(T.travelClock(model,c.d,o.rewardDepartAt,stops,o.waits,o));if(c.est||!c.station||c.station.brand!=='citgo')return Object.assign({},c,{rewardMonth:P.monthKey(arrival)});return P.tripPrice(c.station,gradeOf(),S,new Date(),arrival)||c;};return o;
   }
   async function windowConditions(path,o,p,changed,valid){
-var timeline=T.scheduleTimeline(o,p),cfg=windows.config(),conditions=[];
+var timeline=windowTimeline(o,p),cfg=windows.config(),conditions=[];
         for(var i=0;i<timeline.length;i++){
           var t=timeline[i],row=path[i],dest=windowDestination(i-1),leave=i&&dest.leaveStart&&dest.leaveEnd?{start:+new Date(dest.leaveStart),end:+new Date(dest.leaveEnd)}:null,previous=i?timeline[i-1]:null;
           if(t.depart<row.depart||t.depart>=row.depart+TimeWindows.HOUR||previous&&(leave?(t.depart<leave.start||t.depart>leave.end):t.waitMinutes>(+dest.wait||0)+1e-7))return null;
           var arrival=windows.arrivals()[i];if(arrival&&(t.arrive<arrival.start||t.arrive>arrival.end))return null;
-          var lm=Traffic.slice(o.model,t.from,t.to),stops=p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-t.from,min:T.stopDelay(o,s)};}),reading=await windowRead(Object.assign({},row,{depart:t.depart,model:lm,actual:true}),stops),sig=TimeWindows.signature(reading),decision=windows.current().consent.decision(row,sig);
+          var lm=Traffic.slice(o.model,t.from,t.to),stops=p.stops.filter(function(s){return (s.c.leg||0)===i;}).map(function(s){return {mi:s.c.d-t.from,min:T.stopDelay(o,s)};}).concat((t.estimatedRestStops||[]).map(function(r){return {mi:r.d-t.from,min:r.minutes};})),reading=await windowRead(Object.assign({},row,{depart:t.depart,model:lm,actual:true}),stops),sig=TimeWindows.signature(reading),decision=windows.current().consent.decision(row,sig);
           conditions.push(Object.assign({},t,{routeKey:row.routeKey,signature:sig,reading:reading,raw:row.raw,model:row.model,index:row.index}));
           // An hour you already approved whose forecast moved on asks again only for something extreme (tornado, flooding, tropical storm, a severe warning).
           if(decision==null&&windows.current().consent.allowed(row)&&!windowExtreme(reading)&&!RouteWx.tireRisk(TirePolicy.snapshot(Garage.car(),TireMath),reading.hazards||[]).tires.length){windows.current().consent.answer({rows:[row],signature:sig},true);decision=true;LG.debug('timing','Forecast changed on an approved hour: accepted (nothing extreme)',{leg:i});}
@@ -449,31 +462,32 @@ return conditions;
   function windowMiss(timeline){var arrivals=windows.arrivals();for(var i=0;i<timeline.length;i++){var t=timeline[i],a=arrivals[i],d=windowDestination(i-1);
     if(windowNoLeave(i,t.depart))return {why:'noLeave',leg:i};
     if(i&&d.leaveStart&&d.leaveEnd){var ls=+new Date(d.leaveStart),le=+new Date(d.leaveEnd);if(t.depart>le)return {why:'leave',leg:i};}else if(i&&t.waitMinutes>(+d.wait||0)+1e-7)return {why:'wait',leg:i};
-    var r=windowRestRange(i,t),lo=t.arrive+r.min*60000,hi=t.arrive+r.max*60000;
+    if(t.missedRests&&t.missedRests.length)return {why:'rest',leg:i};var lo=t.arrive,hi=t.arrive;
     if(a&&hi<a.start)return {why:'early',leg:i,ms:a.start-hi};if(a&&lo>a.end)return {why:'late',leg:i};}return null;}
-  // Nightly rests (Nightly rest & windows) aren't in the fuel plan's timeline: they're picked later in Stops. A leg that
-  // crosses N nights arrives between N minimum rests and N full nights later, so the arrival window is checked against that.
-  // Same rest model as the visual itinerary (WindowSchedule.restParts): drive-through nights, per-date overrides and
-  // solar bounds count here too, so the green line and this check agree. Rests take between the minimum and what the
-  // itinerary plans (preferred, shifted or shortened).
-  function windowRestRange(i,t){var c=windows.config();if(c.planningMode!=='overnight'||!t||!window.Overnight)return {min:0,max:0};
-    if(window.WindowSchedule&&WindowSchedule.restParts&&route&&route.stops[i]){try{var nc=Overnight.defaults(c.overnight),g=TripStops.group(route,i),sk=g&&c.driveThroughNights&&c.driveThroughNights[TripStops.nightKey(route,g)]||[],
-      parts=WindowSchedule.restParts([{kind:'drive',minutes:Math.max(0,(t.arrive-t.depart)/60000)}],t.depart,{zone:windowPointZone(i)||Intl.DateTimeFormat().resolvedOptions().timeZone,point:route.stops[i]},nc,Infinity,sk),lo=0,hi=0;
-      parts.forEach(function(p){if(p.kind==='rest'){hi+=p.minutes;lo+=Math.min(p.minutes,+nc.minimum);}});return {min:lo,max:hi};}catch(e){}}
-    var n=Overnight.defaults(c.overnight),hm=function(x){var q=String(x||'').split(':');return (+q[0]||0)*60+(+q[1]||0);},ns=hm(n.start),span=((hm(n.end)-ns+1440)%1440)||1440,
-    z=windowPointZone(i)||Intl.DateTimeFormat().resolvedOptions().timeZone,f=new Intl.DateTimeFormat('en-US',{timeZone:z,hour:'numeric',minute:'2-digit',hourCycle:'h23'}),local=function(x){var q=f.formatToParts(new Date(x)),h=+q.find(function(y){return y.type==='hour';}).value,m=+q.find(function(y){return y.type==='minute';}).value;return h*60+m;},
-    // Fewest rests: you may keep driving until the latest rest arrival (nightly start + span − minimum, or the clock you set),
-    // so a night only costs a rest when the drive runs past it. Most: every nightly start crossed costs the full night.
-    rb=Overnight.rules?Overnight.rules(n):null,ae=rb&&rb.arrivalEnd&&rb.arrivalEnd.kind==='clock'?((hm(rb.arrivalEnd.time)-ns+1440)%1440):Math.max(0,span-(+n.minimum)),
-    count=function(late,stay){var clock=t.depart,left=t.arrive-t.depart,k=0;while(left>0&&k<14){var to=((ns-local(clock))+1440)%1440,go=to+late;if(go*60000>=left)break;left-=go*60000;clock+=go*60000+stay*60000;k++;}return k;};
-    return {min:count(ae,+n.minimum)*(+n.minimum),max:count(0,span)*span};}
+  function windowTimeline(o,p){
+    var c=windows.config();if(c.planningMode!=='overnight')return T.scheduleTimeline(o,p);
+    var arrivals=windows.arrivals(),nightly=Overnight.defaults(c.overnight),ends=o.model.legEnds;
+    return WindowSchedule.plannedTimeline(o,p,(ends&&ends.length?ends:[o.model.totalMi]).map(function(_,i){
+      var group=TripStops.group(route,i),key=group&&TripStops.nightKey(route,group),skips=(c.driveThroughNights&&c.driveThroughNights[key]||[]).slice();
+      // A selected rest already contributes its real stay to this group.
+      if(group)route.stops.slice(group.start+1,group.end+1).forEach(function(p){if(p.rest&&p.rest.nightDate)skips.push(p.rest.nightDate);});
+      return {zone:windowPointZone(i),point:route.stops[i],nightly:nightly,deadline:arrivals[i]&&arrivals[i].end,skips:skips};
+    }));
+  }
+  function windowRestRange(i,t){
+    var c=windows.config();if(c.planningMode!=='overnight')return {min:0,max:0};
+    var g=TripStops.group(route,i),skips=g&&c.driveThroughNights&&c.driveThroughNights[TripStops.nightKey(route,g)]||[],
+      parts=WindowSchedule.restParts([{kind:'drive',minutes:Math.max(0,(t.arrive-t.depart)/60000)}],t.depart,{zone:windowPointZone(i),point:route.stops[i]},Overnight.defaults(c.overnight),Infinity,skips),
+      rest=parts.filter(function(p){return p.kind==='rest';}).reduce(function(n,p){return n+p.minutes;},0);
+    return {min:rest,max:rest};
+  }
   function windowAlign(path,timeline){var session=windows.current(),rows=session.rows;return path.map(function(r,i){return rows.find(function(x){return x.leg===i&&x.routeKey===r.routeKey&&timeline[i].depart>=x.depart&&timeline[i].depart<x.depart+TimeWindows.HOUR&&session.consent.allowed(x);});});}
   // Why checked trips were set aside, so a failed search can say which constraint stopped it (and the log can too).
   var windowRejects={},windowMissSeen={};
   // The first trip set aside for each reason, with its times (UTC) and the nights' rest estimate, for the log.
-  function windowMissSample(miss,timeline){if(windowMissSeen[miss.why])return;var i=miss.leg,t=timeline[i],a=windows.arrivals()[i],r=windowRestRange(i,t),iso=function(x){return Number.isFinite(+x)&&+x?new Date(+x).toISOString():null;};windowMissSeen[miss.why]={leg:i,depart:iso(t&&t.depart),arrive:iso(t&&t.arrive),restMinutes:[r.min,r.max],windowStart:iso(a&&a.start),windowEnd:iso(a&&a.end),startAt:iso(timeline[0]&&timeline[0].depart)};}
+  function windowMissSample(miss,timeline){if(windowMissSeen[miss.why])return;var i=miss.leg,t=timeline[i],a=windows.arrivals()[i],iso=function(x){return Number.isFinite(+x)&&+x?new Date(+x).toISOString():null;};windowMissSeen[miss.why]={leg:i,depart:iso(t&&t.depart),arrive:iso(t&&t.arrive),restMinutes:t&&t.restMinutes||0,missedRests:t&&t.missedRests||[],windowStart:iso(a&&a.start),windowEnd:iso(a&&a.end),startAt:iso(timeline[0]&&timeline[0].depart)};}
 function windowReject(why){windowRejects[why]=(windowRejects[why]||0)+1;return null;}
-  var WINDOW_WHY={passed:'its departure hour had already passed',tolls:'it used paid tolls your toll setting does not allow',stations:'station coverage for that road was missing',limits:'speed limits did not load',tollPrice:'a toll price was unknown',plan:'no fuel plan worked',reserve:'it started below your reserve',windows:'arrival or departure fell outside your time windows',noLeave:'it left during hours you chose not to leave',early:'it reached a destination before its arrival window even when leaving as late as allowed',late:'it reached a destination after its arrival window',leave:'it reached a stop after the time you need to leave it',wait:'it waited longer than you allow at a destination',hours:'stops or waits moved it out of the approved hours',trafficDelay:'traffic exceeded the delay allowance',trafficForecast:'a traffic forecast was unavailable',conditions:'conditions changed and need your review'};
+  var WINDOW_WHY={rest:'a nightly rest could not fit its arrival, departure and minimum-stay bounds',passed:'its departure hour had already passed',tolls:'it used paid tolls your toll setting does not allow',stations:'station coverage for that road was missing',limits:'speed limits did not load',tollPrice:'a toll price was unknown',plan:'no fuel plan worked',reserve:'it started below your reserve',windows:'arrival or departure fell outside your time windows',noLeave:'it left during hours you chose not to leave',early:'it reached a destination before its arrival window even when leaving as late as allowed',late:'it reached a destination after its arrival window',leave:'it reached a stop after the time you need to leave it',wait:'it waited longer than you allow at a destination',hours:'stops or waits moved it out of the approved hours',trafficDelay:'traffic exceeded the delay allowance',trafficForecast:'a traffic forecast was unavailable',conditions:'conditions changed and need your review'};
   function windowRejectText(){var keys=Object.keys(windowRejects).sort(function(a,b){return windowRejects[b]-windowRejects[a];}).slice(0,2);return keys.length?' Most checked trips were set aside because '+keys.map(function(k){return (WINDOW_WHY[k]||k)+' ('+windowRejects[k]+')';}).join('; ')+'.':'';}
   async function windowEvaluate(originalPath,valid,changed,optimize,attempt){
     var began=performance.now(),phase={modelMs:0,optionsMs:0,skippedReserve:0,kernelMs:0,kernelWaitMs:0,conditionsMs:0,plans:0,previewStations:0,stations:0},path=originalPath.slice();if(!valid())return null;
@@ -504,24 +518,36 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       // A sampled pool may miss a bridge or an eligibility tier. Never declare
       // an infeasible trip on that evidence alone.
       if((!p.ok||p.firstDip)&&selected.length<full.length){o.cands=full;p=await runPlan();if(!valid())return null;}
-      if(!p.ok)return windowReject('plan');if(p.firstDip)return windowReject('reserve');var timeline=T.scheduleTimeline(o,p),miss=windowMiss(timeline);
-      // Arriving before a destination's window: leave later instead (the start moves; later legs follow it). Traffic,
+      if(!p.ok)return windowReject('plan');if(p.firstDip)return windowReject('reserve');var timeline=windowTimeline(o,p),miss=windowMiss(timeline);
+      // Arriving before a destination window: move its nearest independently adjustable departure. Traffic,
       // reserves and stops come from this approved hour; a start pushed into another hour is re-planned on that hour's
       // forecast by the alignment below. Never past the trip's latest departure.
       // A later start can cross one more night (one more rest), so a full shift may overshoot into "late": then try
       // starts between the last early one and that one (the timeline is cheap to rebuild; the plan isn't redone).
-      var bound=null;try{bound=windows.bounds().depart;}catch(e){}var maxStart=bound&&Number.isFinite(bound.end)?bound.end:Infinity,earlyAt=null,lateAt=null,setStart=function(at){o.rewardDepartAt=at;o.legDepartures[0]=at;timeline=T.scheduleTimeline(o,p);miss=windowMiss(timeline);};
-      for(var shift=0;miss&&shift<10;shift++){var at=o.rewardDepartAt,next;
-        if(miss.why==='early'){earlyAt=at;next=lateAt!=null?Math.round((at+lateAt)/120000)*60000:Math.min(maxStart,at+Math.ceil(miss.ms/60000)*60000);}
-        else if(miss.why==='late'&&earlyAt!=null){lateAt=at;next=Math.round((earlyAt+at)/120000)*60000;}else break;
-        if(!(next>(earlyAt||0))||next===at||next>maxStart||lateAt!=null&&next>=lateAt)break;setStart(next);}
+      var brackets={};
+      for(var shift=0;miss&&shift<24;shift++){
+        var anchor=miss.leg;
+        while(anchor>0){var destination=windowDestination(anchor-1);if(destination.leaveStart&&destination.leaveEnd)break;anchor--;}
+        var bounds=anchor?{start:+new Date(destination.leaveStart),end:+new Date(destination.leaveEnd)}:windows.bounds().depart,
+            at=timeline[anchor].depart,bracket=brackets[anchor]||(brackets[anchor]={}),next;
+        if(miss.why==='early'){bracket.early=at;next=bracket.late!=null?Math.round((at+bracket.late)/120000)*60000:Math.min(bounds.end,at+Math.ceil(miss.ms/60000)*60000);}
+        else if((miss.why==='late'||miss.why==='rest')&&bracket.early!=null){bracket.late=at;next=Math.round((bracket.early+at)/120000)*60000;}else break;
+        if(!(next>(bracket.early||0))||next===at||next>bounds.end||next<bounds.start||bracket.late!=null&&next>=bracket.late)break;
+        if(anchor===0){o.rewardDepartAt=next;if(o.propulsionContext)o.propulsionContext.departAt=next;}
+        o.legDepartures[anchor]=next;
+        var distance=anchor?o.model.legEnds[anchor-1]:0;
+        o.waits=o.waits.filter(function(w){return Math.abs(w.d-distance)>.001;});
+        if(anchor)o.waits.push({d:distance,at:next});
+        if(o.propulsionContext)o.propulsionContext.waits=o.waits;
+        timeline=windowTimeline(o,p);miss=windowMiss(timeline);
+      }
       if(miss){windowMissSample(miss,timeline);return windowReject(miss.why);}var leave=o.rewardDepartAt;
       var finish=timeline[timeline.length-1].ready,cost=choiceCost({plan:p,startGal:o.startGal});return {cost:cost==null||toll.cost==null?null:cost+toll.cost,minutes:(finish-leave)/60000,weather:path.reduce(function(n,r){return n+TimeWindows.weatherScore(r.reading);},0),waitMinutes:timeline.reduce(function(n,t){return n+t.waitMinutes;},0),depart:leave,legs:timeline,plan:p,opts:o,bundle:bundle,candidates:g,buffer:x.buffer,detour:x.detour};
     }
     var best=optimize?await AutoTrip.search({floor:bufFloor(),buffer:tripBuf(),detour:Math.max(1,Math.min(30,+S.trip.maxDetourMin||10)),detours:DET_STEPS,priority:priority,width:Planner.size(),valid:valid,evaluate:params}):await params({buffer:bufFloor(),detour:30});
     if(!best||!valid())return null;
     if(optimize){best.opts.cands=g.cands;best.opts.lite=false;best.plan=await planAsync(best.opts,valid,10);var tm=best.opts._plannerTiming;phase.plans++;if(tm){phase.kernelMs+=tm.runMs;phase.kernelWaitMs+=tm.waitMs;}if(!valid()||!best.plan.ok||best.plan.firstDip)return null;}
-    var timeline=T.scheduleTimeline(best.opts,best.plan),aligned=windowAlign(path,timeline);if(aligned.some(function(r){return !r;}))return windowReject('hours');
+    var timeline=windowTimeline(best.opts,best.plan),finalMiss=windowMiss(timeline);if(finalMiss){windowMissSample(finalMiss,timeline);return windowReject(finalMiss.why);}var aligned=windowAlign(path,timeline);if(aligned.some(function(r){return !r;}))return windowReject('hours');
     if(aligned.some(function(r,i){return r.depart!==path[i].depart;})){if((attempt||0)>=3)return windowReject('hours');return windowEvaluate(aligned,valid,changed,optimize,(attempt||0)+1);}
     best.trafficDelay=path.reduce(function(n,r){return n+(Number.isFinite(r.trafficDelay)?r.trafficDelay:Infinity);},0);
     if(run&&run.trafficLimit!=null){

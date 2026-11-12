@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.466 - 2026-11-12
+
+- Window feasibility, final weather checks and comparison now share a rest-aware timeline. Kept and skipped nights use the same preferred-rest rules as the visual itinerary, including overrides and solar bounds.
+- Adjusting a later leg to its arrival window now uses that leg’s departure window and keeps earlier departures anchored. Final optimized plans are checked against the windows again.
+- Keeping the first rest while skipping a later night no longer disables automatic first-night forecasts.
+- Green itinerary estimates use the planner’s speed-dependent energy model, charging losses, temperature limits, charging cap and saved traffic. Failed charging estimates show a reason and block Save.
+- Added complete browser-flow checks for keeping, skipping and restoring different nights and independently adjusting the return departure.
+
+
 ## 0.0.465 - 2026-11-12
 
 - Flexible-time planning picks which trips to check with your nightly rests counted, so it stops trying departures that only fit if you drive without sleeping.

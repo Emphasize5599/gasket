@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
+ const p=await browser.newPage({viewport:{width,height:950},timezoneId:'UTC'}),errors=[];p.on('pageerror',e=>errors.push(e.message));
+ await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.evaluate(()=>{
+  const A=__app,S=A.S,c=DemoCars.create().find(c=>c.power==='ev');S.cars=[c];S.carId=c.id;S.limitLookup=false;S.googleTraffic=false;S.hereTraffic=false;
+  const original=A.N.fetchJson;A.N.fetchJson=(id,u)=>{if(u.includes('timezone=auto')){const count=new URL(u).searchParams.get('latitude').split(',').length;onNativeResult(id,{body:JSON.stringify(count===1?{timezone:'UTC'}:Array.from({length:count},()=>({timezone:'UTC'})))});}else original(id,u);};
+  const pts=[{lat:35,lng:-92},{lat:35,lng:-67}],mi=Trip.hav(...pts),raw={description:'Long EV route',distanceMeters:mi*1609.344,duration:Math.round(mi/70*3600)+'s',polyline:{encodedPolyline:Trip.encodePolyline(pts)},legs:[{distanceMeters:mi*1609.344,duration:Math.round(mi/70*3600)+'s',steps:[]}]},start=Math.ceil((Date.now()+2*86400000)/86400000)*86400000+12*3600000;
+  const trip={depart:new Date(start).toISOString(),departNow:false,returnTrip:false,backAuto:true,fuel:{mode:'pct',pct:'80'},bufferMi:20,fillUp:true,evChargers:{dc:true,l2:false,l1:false,superchargers:true},windowPlan:{enabled:true,clockVersion:2,planningMode:'overnight',priority:'time',confirmedPriority:'time',windowTimes:{zones:['UTC','UTC'],depart:{start:new Date(start).toISOString(),end:new Date(start+3600000).toISOString()},arrival:{start:'',end:new Date(start+3*86400000).toISOString()}},destinations:[{}],overnight:{start:'22:00',end:'08:00',minimum:420,preferred:480}}};c.planningPriority='time';
+  const saved={route:{stops:pts.map((p,i)=>({...p,label:i?'End':'Start'})),legs:[{sel:0,alts:[raw]}]},alts:[raw],altSel:0,altSure:true,trip,stations:{kind:'ev',official:[],google:[]},savedT:Date.now()};A.KV.put('trips','trip|estimate-ev',saved);A.KV.put('trips','index',[{id:'estimate-ev',title:'EV estimate',t:Date.now(),mi,n:2}]);
+  window.__projects=[];window.__charges=[];const project=Propulsion.project,charge=Propulsion.charge;
+  Propulsion.project=(m,s,c,p)=>{const r=project(m,s,c,p);__projects.push({before:m.galTo(m.totalMi),after:Trip.restoreModel(r.model).galTo(m.totalMi)});return r;};
+  Propulsion.charge=o=>{__charges.push({cap:o.cap,temp:o.temperature,curve:!!o.profile.curve});return charge(o);};
+ });
+ await p.click('#btnTrip');await p.click('[data-hist="estimate-ev"]');await p.waitForFunction(()=>__trip.state().model&&!__trip.state().busy);await p.evaluate(()=>{__app.S.trip.fillUp=true;__trip.step(10);});await p.click('#twConfigure');await p.waitForSelector('#twSchedule .ws-charge');
+ const state=await p.evaluate(()=>({projects:__projects,charges:__charges}));assert(state.projects.some(p=>Math.abs(p.after-p.before)>.1),'the itinerary uses projected road energy');assert(state.charges.some(c=>c.curve&&Math.abs(c.cap-.8)<1e-8&&Number.isFinite(c.temp)),'the itinerary applies the installed curve, thermal estimate and trip charging cap: '+JSON.stringify(state));
+ assert(await p.locator('#twSchedule .ws-rest').count()>0,JSON.stringify(await p.evaluate(()=>({config:__app.S.trip.windowPlan,text:document.querySelector('#twSchedule').textContent}))));assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+ const green=p.locator('[data-ws-leg="0"][data-ws-edge="start"]').first();const was=+await green.getAttribute('data-ws-at');await green.press('ArrowRight');assert.equal(+await green.getAttribute('data-ws-at'),Math.ceil((was+1)/900000)*900000);
+ if(process.env.GASKET_SCREENSHOTS)await p.locator('#twScheduleCard').screenshot({path:path.join(process.env.GASKET_SCREENSHOTS,'window-ev-'+width+'.png')});
+ assert(await p.isEnabled('#twSave'));await p.click('#twSave');
+ assert(await p.evaluate(()=>FLog.entries().some(e=>e.a==='timing'&&e.m==='Visual itinerary saved')),'the displayed itinerary is logged');
+ await p.evaluate(()=>{Propulsion.charge=()=>({ok:false,reason:'charger_power_insufficient'});});await p.click('#twConfigure');await p.waitForSelector('#twSave');assert(await p.isDisabled('#twSave'));assert.match(await p.innerText('#twError'),/Charging could not be estimated/);
+ assert.deepEqual(errors,[]);await p.close();
+}console.log('EV visual itinerary uses planner energy, thermal charging, cap and draggable estimates at 320/448');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

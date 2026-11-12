@@ -477,7 +477,7 @@ if(!n.required)return html;
   }
   function autoFirstNight(){var w=A.S.trip&&A.S.trip.windowPlan;return !!(nightly()&&w.autoFirstNight);}
   var preparedFirstNight=new Map(),firstNightPass=null;
-  function initialNight(s,g){var p=nightPlan(s,g.from);return p&&!p.pending&&p.leg===g.from&&p.required&&!p.skips.length;}
+  function initialNight(s,g){var p=nightPlan(s,g.from);return p&&!p.pending&&p.leg===g.from&&p.required;}
   function firstNightKey(s,x,charger){return recoKey(s,siteLeg(s,x),charger)+'|'+x.site.id+'|'+x.d.toFixed(3);}
   function preparedNote(s,x,charger){
    if(!autoFirstNight())return '';
