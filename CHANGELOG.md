@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.475 - 2026-11-12
+
+- Completed comparison clicks apply pending redraws immediately, keeping scope selectors and vehicle checkboxes in sync. Controls remain protected between release and delayed click delivery.
+- Automatic full first-night departure-forecast sweeps remain removed; quick suggestions and forecasts for selected rests remain available.
+
 ## 0.0.474 - 2026-11-12
 
 - Comparison redraws now wait for the click after pointer release, including browsers that deliver it in a later event task. Cancelled gestures and releases without a click still apply pending menu updates.

@@ -35,6 +35,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await p.waitForTimeout(50); // Browser click delivery may follow release in a later event task.
   assert(await p.evaluate(()=>__pendingModeButton.isConnected),'a background redraw must retain the released button until its click arrives');
   await p.evaluate(()=>__pendingModeButton.click());await p.waitForSelector('[data-vc-card="'+own+'#2"]');
+  const scopeOptions=await p.evaluate(()=>{const b=document.querySelector('[data-vc-scope="leg"]');b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:2}));b.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:2}));b.click();return document.querySelector('#vcLeg')?.options.length||0;});assert.equal(scopeOptions,2,'completed scope clicks update the comparison immediately');await p.click('[data-vc-scope="trip"]');
   const reviewed=()=>p.evaluate(()=>__trip.comparison().rows.map(r=>[r.id,r.reviewed]));let rows=await reviewed();assert.equal(rows.length,2);assert(rows.every(r=>r[1]),'the other-priority plan shares the hazard review: '+JSON.stringify(rows));
   await p.click('[data-vc-plan="'+own+'#2"]');await p.waitForFunction(()=>__trip.comparison().selected.endsWith('#2'));await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tCompare');
   rows=await reviewed();assert(rows.every(r=>r[1]),'opening one plan keeps both reviews: '+JSON.stringify(rows));
