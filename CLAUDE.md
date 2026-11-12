@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.465 - window screening counts nightly rests
+
+Owner's 464 log (Prius, overnight + windows): every run set aside late/early; firstMiss late = leg 1 departs 22:00Z, continuous arrival 18:36Z, window 21:00–23:30Z, restMinutes [420,540] (one night can't fit). The final check was right; the cheap screening (TimeWindows.shortlist) placed arrivals with no rests, so it shortlisted departures that fit only without sleeping. shortlist now takes `c.restRange(i,{depart,arrive})` (tripui passes windowRestRange): window penalty uses [drive + min, drive + max] and the next leg starts from that range clamped to the window start (else drive + min). Tests run: timewindows, window-recommendations, windowplanning-ui, overnight-ui. Not phone-verified.
+
+Phone checks: same overnight Prius trip: Flexible-time planning finds a trip, or firstMiss/setAside in the log shows a smaller late/early count.
+
 ## 0.0.464 - edge-scroll test waits for a frame (463 published no APK)
 
 463's CI failed window-schedule-follow-ui line 53 (scrollTop 0 after holding at the bottom edge; passes 6/6 locally in parallel). autoScroll runs per animation frame, so a slow runner may not have scrolled yet: the test waits up to 3 s for scrollTop > 0 before asserting. No app change; 463's tag untouched.

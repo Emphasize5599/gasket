@@ -591,7 +591,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       while(valid()){
         state.trafficLimit=cfg.earlyEnabled?(minimumTraffic?240:+cfg.delayMinutes):null;
         var changed=new Map(),longTrip=model.totalMi>=500,previewLimit=longTrip?6:12;progress('Screening approved hourly routes');
-        var found=await TimeWindows.recommend({legs:legs,consent:session.consent,priority:cfg.priority,earlyEnabled:!!cfg.earlyEnabled,delayMinutes:state.trafficLimit,minimumTraffic:minimumTraffic,departures:windows.bounds().depart,arrivals:windows.arrivals(),waits:waits,departWindows:depWindows,valid:valid,estimate:windowEstimate,initial:previewLimit,width:Math.min(2,Planner.size()),
+        var found=await TimeWindows.recommend({restRange:function(i,t){try{return windowRestRange(i,t);}catch(e){return null;}},legs:legs,consent:session.consent,priority:cfg.priority,earlyEnabled:!!cfg.earlyEnabled,delayMinutes:state.trafficLimit,minimumTraffic:minimumTraffic,departures:windows.bounds().depart,arrivals:windows.arrivals(),waits:waits,departWindows:depWindows,valid:valid,estimate:windowEstimate,initial:previewLimit,width:Math.min(2,Planner.size()),
           progress:function(done,total){progress('Screening hourly routes · '+done+' / '+total,done/Math.max(1,total));},
           planProgress:function(n,best,total){checked=n;progress('Planning promising trips · '+n+' / '+Math.min(best?previewLimit:48,total),n/Math.max(1,Math.min(best?previewLimit:48,total)));},
           planKey:function(path){return JSON.stringify(path.map(function(r,i){var d=windowDestination(i-1);return [r.routeKey,!i||d.leaveStart&&d.leaveEnd||(+d.wait||0)>0?r.depart:null];}));},

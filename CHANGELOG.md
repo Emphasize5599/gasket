@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.465 - 2026-11-12
+
+- Flexible-time planning picks which trips to check with your nightly rests counted, so it stops trying departures that only fit if you drive without sleeping.
+- Bug fixes
+
 ## 0.0.464 - 2026-11-12
 
 - Same app as 0.0.463 (its build failed a test timing check before publishing).
