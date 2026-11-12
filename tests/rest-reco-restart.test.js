@@ -19,3 +19,16 @@ memo.siteLeg=(s,x)=>s.model.legEnds.findIndex(d=>x.d<=d);vm.runInContext(lines.f
 assert.equal(memo.firstNightKey({model:before},{site,d:before.legEnds[0]+10}),memo.firstNightKey({model:after},{site,d:after.legEnds[1]+10.047}),'prefix length and projection drift do not erase prepared return-leg samples');
 console.log('Completed forecasts and prepared samples survive expiry and an earlier rest insertion');
 deadline.restForecastVersion=1;assert.notEqual(deadline.restForecastContext(2),finalContext,'an explicit traffic refresh invalidates retained recommendations');
+
+// Access checks use the actual leg departure, including a fixed destination wait.
+const accessFns=fs.readFileSync('assets/web/restui.js','utf8'),ac={snapKeys:new WeakMap(),legGeometry:new WeakMap(),Trip:T,Traffic:F,accessContext:()=> 'unchanged',endsOf:m=>m.legEnds,C:{arrival:()=>at-24*3600000,departure:()=>at}};
+vm.createContext(ac);vm.runInContext(accessFns.slice(accessFns.indexOf('  function accessKey('),accessFns.indexOf('  function checkAccess(')),ac);
+const beforeAccess=ac.accessKey({model:before,maxDetourMin:60},{site,d:before.legEnds[0]+10,leg:1});
+ac.C.arrival=()=>at-12*3600000;
+const afterAccess=ac.accessKey({model:after,maxDetourMin:60},{site,d:after.legEnds[1]+10,leg:2});assert.equal(afterAccess,beforeAccess,'an outbound rest cannot invalidate access on the unchanged anchored return leg');
+ac.C.departure=()=>at+3600000;ac.snapKeys=new WeakMap();assert.notEqual(ac.accessKey({model:after,maxDetourMin:60},{site,d:after.legEnds[1]+10,leg:2}),beforeAccess,'a real return departure change invalidates its access timing');
+console.log('Access-cache clock remains anchored to the unchanged return departure');
+(async()=>{let current={route:{},model:before},reads=0,epoch=0;const warm={nightly:()=>({}),focusedTraffic:0,state:{token:1,nightRevision:0},root:{},nightTraffic:new Map(),C:{snapshot:()=>current,trafficEnabled:()=>true,prefetchNightTraffic:async()=>{reads++;return false;}},directoryGroups:s=>[{from:s.model===before?1:2,index:1}],nightPlan:(_s,i)=>({leg:i,pending:false,zone:'UTC'}),nightRoad:()=>({depart:at}),recoKey:()=> 'same-return-'+epoch,legStart:(s,i)=>s.model.legEnds[i-1],Overnight:{trafficHorizon:()=>({rests:[{d:(current.model===before?before.legEnds[0]:after.legEnds[1])+10,at:at+86400000}],skipped:[]})}};
+vm.createContext(warm);const a=accessFns.indexOf('  async function warmNightTraffic('),b=accessFns.indexOf('  function autoFirstNight(',a);vm.runInContext(accessFns.slice(a,b),warm);await warm.warmNightTraffic(current,1);assert.equal(reads,1);
+current={route:{},model:after};warm.state.token=2;await warm.warmNightTraffic(current,2);assert.equal(reads,1,'unchanged return-leg lookahead retains partial data despite a shifted trip prefix');epoch++;await warm.warmNightTraffic(current,2);assert.equal(reads,2,'explicit changed forecast context retries partial lookahead');
+console.log('Later-night traffic is keyed to relative leg distances and retained until its context changes');})().catch(e=>{console.error(e);process.exitCode=1;});

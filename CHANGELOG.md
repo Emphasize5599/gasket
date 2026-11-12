@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.469 - 2026-11-12
+
+- Includes the inventory, recommendation and partial-preview reuse fixes from 0.0.467–0.0.468.
+- Access checks for a later leg are keyed to its actual departure, preserving them when an earlier rest changes arrival at the preceding destination but the later departure is fixed.
+- Later-night traffic previews use leg-relative distances and retain partial results until their forecast context changes, avoiding another pass on unaffected legs.
+
+
 ## 0.0.468 - 2026-11-12
 
 - Includes the rest-inventory and unchanged-leg forecast reuse fixes from 0.0.467.
