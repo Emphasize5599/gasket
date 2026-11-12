@@ -2,6 +2,10 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.464 - edge-scroll test waits for a frame (463 published no APK)
+
+463's CI failed window-schedule-follow-ui line 53 (scrollTop 0 after holding at the bottom edge; passes 6/6 locally in parallel). autoScroll runs per animation frame, so a slow runner may not have scrolled yet: the test waits up to 3 s for scrollTop > 0 before asserting. No app change; 463's tag untouched.
+
 ## 0.0.463 - window rest check uses the itinerary's rest model
 
 Owner's Codex session (out of usage, unpushed; the uploaded patch was the old 0.0.450 one) found the final window check's rest estimate ignored drive-through nights, nightly overrides and solar bounds, so it disagreed with the visual itinerary. windowRestRange now calls WindowSchedule.restParts on the leg's drive (one drive part, start-point zone, route.stops[i], Overnight.defaults(c.overnight), driveThroughNights for TripStops.nightKey(route, group)): max = the itinerary's rest minutes, min = each rest capped at the minimum; skip-rest/norest add nothing. Falls back to 0.0.462's count when WindowSchedule is missing. Codex's EV preview energy work (speed-dependent energy, charging losses, temperature, charge cap in the green line) is NOT done. Tests run: windowplanning-ui, overnight-ui, window-schedule. Not phone-verified.

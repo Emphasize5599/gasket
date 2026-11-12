@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.464 - 2026-11-12
+
+- Same app as 0.0.463 (its build failed a test timing check before publishing).
+- Bug fixes
+
 ## 0.0.463 - 2026-11-12
 
 - Flexible-time planning checks overnight rests the same way the visual itinerary draws them, including drive-through nights, nightly overrides and sunrise/sunset bounds.

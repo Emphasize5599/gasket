@@ -49,6 +49,8 @@ const {chromium}=require('playwright');
    };
    // Down slowly well past three day rows, then back up.
    for(let i=0;i<60;i++)await step(8);
+   // Auto-scroll runs once per animation frame; a slow runner may need a moment more at the edge.
+   await page.waitForFunction(()=>__fixture.scroller.scrollTop>0,null,{timeout:3000}).catch(()=>{});
    const scrolled=await page.evaluate(()=>__fixture.scroller.scrollTop);
    assert(scrolled>0,'holding the thumb near the bottom edge scrolls the itinerary');
    for(let i=0;i<60;i++)await step(-8);
