@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.474 - 2026-11-12
+
+- Comparison redraws now wait for the click after pointer release, including browsers that deliver it in a later event task. Cancelled gestures and releases without a click still apply pending menu updates.
+- Retains the removal of automatic first-night forecast sweeps. Departure sliders are prepared for selected rests, while quick suggestions continue independently per leg.
+- Strengthened the comparison regression with delayed click delivery; it fails with the prior release and passes with this fix.
+
 ## 0.0.473 - 2026-11-12
 
 - Fixed comparison buttons losing taps when a background completion redraws their menu between press and release. Redraws wait until the tap is delivered, and cancelled gestures still apply pending updates.

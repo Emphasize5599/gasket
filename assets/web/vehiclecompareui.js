@@ -2,8 +2,10 @@
   'use strict';
   var A=root.__app,V=root.VehicleCompare,maps=[],tap=null,pendingRender=null,renderTimer=null,boundHosts=new WeakSet();
   function dispose(){clearTimeout(renderTimer);renderTimer=null;tap=null;pendingRender=null;maps.forEach(function(m){m.remove();});maps=[];}
-  function finishTap(e){if(!tap||e&&e.pointerId!=null&&e.pointerId!==tap.pointerId)return;tap=null;clearTimeout(renderTimer);renderTimer=setTimeout(function(){renderTimer=null;var next=pendingRender;pendingRender=null;if(next&&next.el.isConnected)render(next.el,next.config);},0);}
+  function flushTap(){clearTimeout(renderTimer);renderTimer=null;tap=null;var next=pendingRender;pendingRender=null;if(next&&next.el.isConnected)render(next.el,next.config);}
+  function finishTap(e){if(!tap||e&&e.pointerId!=null&&e.pointerId!==tap.pointerId)return;if(e&&e.type==='pointerup'){tap.released=true;clearTimeout(renderTimer);renderTimer=setTimeout(flushTap,500);return;}flushTap();}
   root.addEventListener('pointerup',finishTap,true);root.addEventListener('pointercancel',finishTap,true);root.addEventListener('blur',function(){finishTap();});
+  root.addEventListener('click',function(){if(tap&&tap.released){clearTimeout(renderTimer);renderTimer=setTimeout(flushTap,0);}});
   function bindTap(el){if(boundHosts.has(el))return;boundHosts.add(el);el.addEventListener('pointerdown',function(e){if(e.button===0&&e.target.closest('button,input,select,summary'))tap={el:el,pointerId:e.pointerId};},true);}
   function duration(n){if(!Number.isFinite(n))return '—';if(n>0&&n<1)return '&lt;1 min';n=Math.round(n);return n>=60?Math.floor(n/60)+' h '+n%60+' min':n+' min';}
   function money(n){return Number.isFinite(n)?'$'+n.toFixed(2):'—';}

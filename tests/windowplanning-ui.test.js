@@ -31,10 +31,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  if(mode==='noleave')assert(result.schedule[0].depart>=result.start+3600000,'the first hour is in “Hours I won’t leave”: '+new Date(result.schedule[0].depart).toISOString());
  if(mode==='noleave'){// A second priority for the same car uses the same review of these roads and hours.
   await p.evaluate(()=>__trip.step(8));await p.waitForSelector('[data-vc-mode-add]');const own=await p.evaluate(()=>__trip.comparison().selected);
-  const addMode=p.locator('[data-vc-mode-add="'+own+'"]');await addMode.scrollIntoViewIfNeeded();const addBox=await addMode.boundingBox();
-  await p.mouse.move(addBox.x+addBox.width/2,addBox.y+addBox.height/2);await p.mouse.down();
-  await p.evaluate(()=>document.querySelector('#vcSort').dispatchEvent(new Event('change'))); // Background completion uses the same comparison redraw.
-  await p.mouse.up();await p.waitForSelector('[data-vc-card="'+own+'#2"]');
+  await p.evaluate(o=>{const b=document.querySelector('[data-vc-mode-add="'+o+'"]');window.__pendingModeButton=b;b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:1}));document.querySelector('#vcSort').dispatchEvent(new Event('change'));b.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:1}));},own);
+  await p.waitForTimeout(50); // Browser click delivery may follow release in a later event task.
+  assert(await p.evaluate(()=>__pendingModeButton.isConnected),'a background redraw must retain the released button until its click arrives');
+  await p.evaluate(()=>__pendingModeButton.click());await p.waitForSelector('[data-vc-card="'+own+'#2"]');
   const reviewed=()=>p.evaluate(()=>__trip.comparison().rows.map(r=>[r.id,r.reviewed]));let rows=await reviewed();assert.equal(rows.length,2);assert(rows.every(r=>r[1]),'the other-priority plan shares the hazard review: '+JSON.stringify(rows));
   await p.click('[data-vc-plan="'+own+'#2"]');await p.waitForFunction(()=>__trip.comparison().selected.endsWith('#2'));await p.evaluate(()=>__trip.step(8));await p.waitForSelector('#tCompare');
   rows=await reviewed();assert(rows.every(r=>r[1]),'opening one plan keeps both reviews: '+JSON.stringify(rows));
