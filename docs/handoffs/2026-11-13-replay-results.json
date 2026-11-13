@@ -1,0 +1,100 @@
+[
+  {
+    "scenario": "allowance",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 10
+  },
+  {
+    "scenario": "allowance-decline",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 0
+  },
+  {
+    "scenario": "baseline",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "commute",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "decline",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 0
+  },
+  {
+    "scenario": "google",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 102
+  },
+  {
+    "scenario": "narrow",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "no-leave",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "road",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "roads",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "skipped",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 8
+  },
+  {
+    "scenario": "time",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "warm",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  },
+  {
+    "scenario": "weekend",
+    "finalStep": 9,
+    "unapprovedTrafficReads": 0,
+    "durableNetworkReads": 0,
+    "trafficReads": 9
+  }
+]
