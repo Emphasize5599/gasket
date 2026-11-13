@@ -83,6 +83,7 @@ public class MainActivity extends Activity {
         String code="window.onTripQueueOpen?onTripQueueOpen("+payload+"):(window.__pendingQueueOpen="+payload+")";if(pageReady)js(code);else pendingQueue=code;
     }
     private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|[1-4][0-9]|50)?"); }
+    private static boolean isOemVin(String key) { return "toyotaparts".equals(key) || "lexusparts".equals(key); }
     private volatile int gasReaderRecycles = 0, gasRendererLosses = 0;
 
     private static final int REQ_LOC = 42, REQ_CAM = 43;
@@ -362,6 +363,9 @@ public class MainActivity extends Activity {
         workers.put("xom", new SiteWorker("xom", "https://www.exxonmobilfuels.com/en", "https://www.exxonmobilfuels.com/"));
         // Campendium's free-camping map (maps.campendium.com), read signed out for places near a route
         workers.put("campendium", new SiteWorker("campendium", "https://maps.campendium.com/", "https://maps.campendium.com/"));
+        // Toyota's and Lexus's own parts stores, signed out: their "shop by VIN" lookup names the trim (grade) NHTSA can't
+        workers.put("toyotaparts", new SiteWorker("toyotaparts", "https://autoparts.toyota.com/", "https://autoparts.toyota.com/"));
+        workers.put("lexusparts", new SiteWorker("lexusparts", "https://parts.lexus.com/", "https://parts.lexus.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || sw.key.equals("traffic") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -609,7 +613,7 @@ public class MainActivity extends Activity {
                 JSONObject answer = new JSONObject(json); String check = answer.optString("verificationUrl", "");
                 if (answer.optBoolean("blocked") && check.startsWith("https://www.google.com/sorry/")) verificationUrl = check;
             } catch (Exception ignored) { }
-            if (("chargepoint".equals(key) || "tesla".equals(key) || "xom".equals(key)) && view != null) {
+            if (("chargepoint".equals(key) || "tesla".equals(key) || "xom".equals(key) || isOemVin(key)) && view != null) {
                 try { if (new JSONObject(json).optBoolean("blocked")) {
                     String at = view.getUrl(); if (at != null && at.startsWith(origin)) verificationUrl = at;
                 } } catch (Exception ignored) { }
@@ -917,7 +921,7 @@ public class MainActivity extends Activity {
                         return;
                     }
                     // Ignore late/duplicate background replies. Visible reads and price workers use onSiteResult.
-                    if ("tirerack".equals(key) || isGasWorker(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
+                    if ("tirerack".equals(key) || isGasWorker(key) || isOemVin(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
                     js("window.onSiteResult&&onSiteResult(" + q(key) + "," + id + ",JSON.parse(" + q(payload) + "))");
                 }
             });
@@ -2567,7 +2571,7 @@ public class MainActivity extends Activity {
             main.post(new Runnable() {
                 public void run() {
                     SiteWorker w = ensureWorker(key);
-                    String script = w != null ? asset((isGasWorker(key) ? "gasweb" : key) + "_worker.js") : "";
+                    String script = w != null ? asset((isGasWorker(key) ? "gasweb" : isOemVin(key) ? "oemvin" : key) + "_worker.js") : "";
                     if ("restmaps".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/restmaps.js") + "\nreturn (" + script + ")(reqId,args);}";
                     if ("brave".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
                     boolean gasDiscovery = false;
@@ -2585,6 +2589,8 @@ public class MainActivity extends Activity {
                             || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
                             || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
                             || ("xom".equals(key) && url.equals("https://www.exxonmobilfuels.com/en"))
+                            || ("toyotaparts".equals(key) && url.equals("https://autoparts.toyota.com/"))
+                            || ("lexusparts".equals(key) && url.equals("https://parts.lexus.com/"))
                             || ("campendium".equals(key) && url.startsWith("https://maps.campendium.com/?"))
                             || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
                             || ("restmaps".equals(key) && (url.startsWith("https://www.google.com/maps/search/?api=1&query=") || restMapsPlaceUrl(url)))
@@ -2614,7 +2620,7 @@ public class MainActivity extends Activity {
                     w.gasCommandReusing = reuseGas;
                     w.queue.clear();
                     // Picker steps share the same page and cookies. Reuse it instead of racing same-URL reload callbacks.
-                    if (reuseGas || (("tirerack".equals(key) || "xom".equals(key)) && w.ready && url.equals(w.view.getUrl()))) w.runRead();
+                    if (reuseGas || (("tirerack".equals(key) || "xom".equals(key) || isOemVin(key)) && w.ready && url.equals(w.view.getUrl()))) w.runRead();
                     else { w.ready = false; w.view.loadUrl(url); }
                     // and if the page never says it's drawn or finished, start the reader anyway after a few seconds
                     final SiteWorker fw = w; final int fr = reqId;
@@ -2637,7 +2643,7 @@ public class MainActivity extends Activity {
                         JSONObject arguments = new JSONObject(argsJson);
                         discoveryRead = "discover".equals(arguments.optString("mode"));
                     } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "brave".equals(key) ? 150000 : "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
+                    main.postDelayed(fw.readDeadline, "brave".equals(key) ? 150000 : "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) || isOemVin(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;

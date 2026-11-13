@@ -42,6 +42,19 @@
   }
   /** The list's own spelling of a trim (case and punctuation aside), or ''. */
   function find(list, trim) { var k = norm(trim); if (!k) return ''; for (var i = 0; i < (list || []).length; i++) if (norm(list[i]) === k) return list[i]; return ''; }
-  var api = { parse: parse, merge: merge, find: find, norm: norm, modelName: modelName };
+  // Toyota's and Lexus's own parts catalogs (autoparts.toyota.com, parts.lexus.com) decode a VIN into a "grade" such as
+  // "TRD OFFROAD DOUBLE CAB", "XSE SEDAN", "TWO SEDAN", "LE" or, for Lexus, "STANDARD SUV" / "BASE SUV" / "SUV". Strip the
+  // body words; what's left is the trim, written the way the model's trim list spells it when it's there. Lexus sells its
+  // packages (Premium, Luxury, F Sport) outside the grade, so a bare STANDARD / BASE says nothing about the trim: ''.
+  var BODY = /\b(DOUBLE CAB|ACCESS CAB|REGULAR CAB|CREWMAX|CREW MAX|XTRACAB|SEDAN|HATCHBACK|LIFTBACK|COUPE|CONVERTIBLE|WAGON|SUV|VAN|MINIVAN|PICKUP|TRUCK|CAB CHASSIS|[0-9]-DOOR|[0-9]DR|[0-9]-PASSENGER|[0-9] PASSENGER)\b/g;
+  function oemGrade(grade, brand, list) {
+    var g = String(grade || '').toUpperCase().replace(BODY, ' ').replace(/\s+/g, ' ').trim();
+    if (!g || g.length > 30 || /^(STANDARD|BASE|GRADE|N\/A|NONE)$/.test(g) && /lexus/i.test(brand || '') || /^(STANDARD|N\/A|NONE)$/.test(g)) return '';
+    var have = find(list, g) || find(list, g.replace(/OFFROAD/, 'OFF-ROAD')) || find(list, g.replace(/OFFROAD/, 'OFF ROAD'));
+    if (have) return have;
+    return g.split(' ').map(function (w) { return /[0-9]/.test(w) || /^(LE|SE|XLE|XSE|TRD|SR|CE|GR|GT|XP|FWD|AWD|RWD|LX|GX|NX|RX|UX|TX|ES|IS|LS|LC|RC|HV|PHEV)$/.test(w) ? w : w.split('-').map(function (x) { return x.charAt(0) + x.slice(1).toLowerCase(); }).join('-'); })
+      .join(' ').replace(/\bOffroad\b/, 'Off-Road');
+  }
+  var api = { parse: parse, merge: merge, find: find, norm: norm, modelName: modelName, oemGrade: oemGrade };
   if (typeof module === 'object' && module.exports) module.exports = api; else root.TrimMath = api;
 })(typeof window !== 'undefined' ? window : globalThis);

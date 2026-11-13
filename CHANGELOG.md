@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.477 - 2026-11-13
+
+- Toyota and Lexus trims NHTSA can't name (Prius Two, Sienna LE, Tacoma TRD Pro, RX F Sport) come from Toyota's / Lexus's own parts catalog for your VIN, and are locked like other VIN trims.
+- Bug fixes
+
 ## 0.0.476 - 2026-11-13
 
 - A trim read from your VIN is shown as "from your VIN" and can't be changed by mistake.

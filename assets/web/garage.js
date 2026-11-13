@@ -392,8 +392,29 @@
     if (kind(c) === 'ev' && v && tankKey(c)) dcFind(c, false);
   }
   function vinTrim(c) { return c.trimSrc === 'vin' && !!c.vin && !!c.trim; }
+  // NHTSA can't name most Toyota / Lexus trims (Prius "One/Two", Sienna "E grade"). Toyota's and Lexus's own parts stores
+  // decode the VIN into the grade, asked from the store's own page (siteRead toyotaparts / lexusparts, assets/oemvin_worker.js).
+  // Once per VIN a session; a failure leaves the trim menu as it was.
+  var oemAsked = {};
+  function oemBrand(c) { var m = String(c.make || ''); return /^lexus$/i.test(m) ? 'lexus' : /^(toyota|scion)$/i.test(m) ? 'toyota' : ''; }
+  async function oemTrim(c, vin) {
+    var brand = oemBrand(c); if (!brand || vinTrim(c) || !call || !N.siteRead || oemAsked[vin]) return;
+    oemAsked[vin] = true;
+    var key = brand + 'parts', url = brand === 'lexus' ? 'https://parts.lexus.com/' : 'https://autoparts.toyota.com/', r;
+    try { r = await call('siteRead', key, JSON.stringify({ url: url, vin: vin, bg: true })); } catch (e) { r = { error: String(e && e.message || e) }; }
+    r = r || {};
+    var recs = (r.records || []).filter(function (x) { return !c.year || !x.year || +x.year === +c.year; });
+    var trims = recs.map(function (x) { return TrimMath.oemGrade(x.grade, brand, trimList(c)); }).filter(Boolean);
+    var t = trims.length && trims.every(function (x) { return x === trims[0]; }) ? trims[0] : '';
+    LG.info('car', 'Parts catalog trim', { brand: brand, records: (r.records || []).length, found: !!t, blocked: !!r.blocked, error: r.error || null, grade: recs[0] ? recs[0].grade : null });
+    if (r.blocked) { delete oemAsked[vin]; return; }
+    if (!t || c.vin !== vin || vinTrim(c) || S.cars.indexOf(c) < 0) return;
+    if (t !== String(c.trim || '')) setTrim(c, t);
+    c.trimSrc = 'vin'; c.trimBy = brand; delete c.noTrim;
+    changed(); draw();
+  }
   function trimHtml(c) {
-    if (vinTrim(c)) return '<label class="nf wide"><span>Trim<small>from your VIN</small></span><input type="text" id="gTrim" value="' + esc(vehicleLabel(c, c.trim)) + '" readonly disabled aria-readonly="true"></label>';
+    if (vinTrim(c)) return '<label class="nf wide"><span>Trim<small>' + (c.trimBy ? 'from your VIN (' + (c.trimBy === 'lexus' ? 'Lexus' : 'Toyota') + ' parts catalog)' : 'from your VIN') + '</small></span><input type="text" id="gTrim" value="' + esc(vehicleLabel(c, c.trim)) + '" readonly disabled aria-readonly="true"></label>';
     var st = trimState(c), list = trimList(c), have = TrimMath.find(list, vehicleLabel(c,c.trim)), other = trimOther[c.id] || (!!c.trim && !have);
     var none = '<label class="nf chk wide no-trim"><input type="checkbox" id="gNoTrim"' + (c.noTrim ? ' checked' : '') + '><span>This car has no trim<small>some models come in only one version</small></span></label>';
     if (c.noTrim) return none;
@@ -1414,7 +1435,7 @@
     }catch(e){failed=true;if(car()===c&&$(ids[i])===el)eMsg('Could not load '+labels[i].toLowerCase()+' choices. Tap the field to retry; your saved selection is kept.',true);}}));}
     finally{grid.dataset.epaHydrating='0';if($(ids[0])===els[0])els[0].dataset.savedEpa=failed?'1':'0';editorGate(c);}
   }
-  function detachVin(c){if(!c.vin)return;['vin','vinDecodeRev','vinHints','vpicModel','recalls','recallCheck','trimSrc'].forEach(function(k){delete c[k];});var i=c.info||{},src=i.src||{},fs=i.featSrc||{};Object.keys(src).forEach(function(k){if(src[k]==='vin'){delete i[k];delete src[k];}});i.features=(i.features||[]).filter(function(k){if(fs[k]==='vin'){delete fs[k];return false;}return true;});}
+  function detachVin(c){if(!c.vin)return;['vin','vinDecodeRev','vinHints','vpicModel','recalls','recallCheck','trimSrc','trimBy'].forEach(function(k){delete c[k];});var i=c.info||{},src=i.src||{},fs=i.featSrc||{};Object.keys(src).forEach(function(k){if(src[k]==='vin'){delete i[k];delete src[k];}});i.features=(i.features||[]).filter(function(k){if(fs[k]==='vin'){delete fs[k];return false;}return true;});}
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {
     // another EPA version (say the Blazer after the Blazer EV): its details replace the old version's, not just the blanks
@@ -1542,7 +1563,7 @@
     var prior=vinStates.get(c);if(prior&&prior.pending)return;
     vinStates.set(c,{pending:'',fields:new Set(),blinked:new Set()});
     if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { needVinFields(c,['gVin'],'invalid format');vMsg('A VIN is 17 letters and numbers (never I, O or Q).', true); return; }
-    if (vin === c.vin && c.vinDecodeRev===130 && hasEpa(c) && c.epaId) { vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
+    if (vin === c.vin && c.vinDecodeRev===130 && hasEpa(c) && c.epaId) { if (!vinTrim(c)) oemTrim(c, vin); vMsg('Already looked up: ' + esc([c.year, c.make, c.model].join(' ')) + '.'); if (window.Advisory && Advisory.init) Advisory.init(call); return; }
     var ui=vinStates.get(c);ui.pending='Decoding VIN';syncVinUi(c);vMsg('');eMsg('');
     var epoch=editSnap,identityEpoch=epaEpoch.get(c);
     try {
@@ -1556,6 +1577,7 @@
       c.vin = vin; c.vinDecodeRev=130;c.year = d.year; c.make = d.make; c.model = d.model; c.vpicModel = d.model;
       if (d.body) { c.info = c.info || {}; c.info.body = d.body; }   // the doodle's body style
       if (d.trim) { c.trim = d.trim; c.trimSrc = 'vin'; delete c.noTrim; } else delete c.trimSrc;   // a trim the VIN names is the car's trim
+      delete c.trimBy;
       c.power = d.power; if (d.diesel) c.grade = 'diesel';
       c.vinHints = { two: !!d.twoWheel, flex: !!d.flex, diesel: !!d.diesel };   // for matching the EPA's versions (not shown)
       if (c.power === 'hybrid') c.type = 'hybrid';
@@ -1576,7 +1598,8 @@
       LG.info('car', 'VIN decoded', { year: c.year, make: c.make, model: c.model, power: c.power,engineDecoded:!!d.info.engine,transmissionDecoded:!!d.info.trans,driveDecoded:!!d.info.drive,engineKnown:!!i.engine,transmissionKnown:!!i.trans,driveKnown:!!i.drive,sourceWarning:!!d.warn });
       changed();
       var note = d.warn && /check digit/i.test(d.warn) ? ' <b>Note:</b> the VIN\'s check digit doesn\'t add up — double-check you typed it right.' : '';
-      var hint = !d.trim ? 'Trim not identified by NHTSA; optional.' : '';
+      var hint = !d.trim ? (oemBrand(c) ? 'Asking ' + (oemBrand(c) === 'lexus' ? 'Lexus' : 'Toyota') + '\'s parts catalog for the trim…' : 'Trim not identified by NHTSA; optional.') : '';
+      if (!d.trim) oemTrim(c, vin);
       vMsg(hint+note);
       // now the EPA's mileage for it: same year, make and model, then the engine / transmission
       editing = true; epaOpen = true; draw(); epaOpen = false;

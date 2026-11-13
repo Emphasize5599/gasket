@@ -68,7 +68,7 @@ public class ReaderTest {
   ${finish}
  }
  SiteWorker verifying=null;Main main=new Main();Root root=new Root();int gasReaderRecycles=0,replies=0;Map<String,SiteWorker> workers=new HashMap<>();
- boolean isGasWorker(String k){return k.equals("gasweb");}String q(String s){return s;}void js(String s){replies++;}void endVerify(){verifying=null;}
+ boolean isGasWorker(String k){return k.equals("gasweb");}boolean isOemVin(String k){return "toyotaparts".equals(k)||"lexusparts".equals(k);}String q(String s){return s;}void js(String s){replies++;}void endVerify(){verifying=null;}
  static JSONObject answer(String key,String code,int count,boolean blocked,boolean cancelled){JSONObject a=new JSONObject();a.put("stores",new JSONArray(count));a.put("code",code);a.put("blocked",blocked);a.put("cancelled",cancelled);JSONObject.answers.put(key,a);return a;}
  static void laneWarmTests(ReaderTest app){
   SiteWorker lane=app.new SiteWorker();JSONObject a=answer("warm","limited",2,false,false),d=new JSONObject();d.put("commandReusable",true);a.put("detail",d);lane.finishRead(1,"warm");check(lane.view.loads==0&&lane.gasCommandReady&&lane.ready&&app.replies==1,"successful command page was not retained");

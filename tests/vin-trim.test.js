@@ -13,5 +13,5 @@ assert.equal(vinTrim({trimSrc:'vin',vin:'X',trim:'RS'}),true,'a trim the VIN nam
 assert.equal(vinTrim({trimSrc:'vin',trim:'RS'}),false,'no VIN, no lock');
 assert.equal(vinTrim({vin:'X',trim:'RS'}),false,'a picked trim stays editable');
 assert.ok(/if \(vinTrim\(c\)\) return;/.test(source),'setTrim refuses to change a VIN trim');
-assert.ok(/'trimSrc'\]/.test(source),'detaching the VIN unlocks the trim');
+assert.ok(/'trimSrc','trimBy'\]/.test(source),'detaching the VIN unlocks the trim');
 console.log('Primary/secondary trim handling rejects ambiguous and internal grade codes');
