@@ -4,7 +4,7 @@
 
 All 257 release regressions passed in run **43528471736**, job **132239967798**. Native checks and both signed APK builds also passed, including ABI/version/signature/alignment validation. Publication safely refused because the immutable v0.0.482 tag points to 9bad094 while this build used cfc0313; build-apk.yml explicitly requires release_sha == GITHUB_SHA. Do NOT weaken that check or retag the old release.
 
-A fresh version **0.0.483 / code 483** is being pushed with this update so release entry and signed workflow identify the exact same commit. Follow its NEW release/build runs, not the old failed publication run. Expected final assets:
+Fresh version **0.0.483 / code 483** is pushed as **df46f26**. Release workflow **43529494231** succeeded. The CURRENT signed-APK run is **43529494474**, in progress: https://github.com/Emphasize5599/gasket/actions/runs/43529494474 . Release entry and build identify the same commit. Follow its NEW release/build runs, not the old failed publication run. Expected final assets:
 - https://github.com/Emphasize5599/gasket/releases/download/v0.0.483/Gasket-0.0.483-arm64-v8a.apk
 - https://github.com/Emphasize5599/gasket/releases/download/v0.0.483/Gasket-0.0.483-universal.apk
 
