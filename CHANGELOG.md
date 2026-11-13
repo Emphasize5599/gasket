@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.481 — 2026-11-13
+
+- Repair the full saved-trip hazard review when old copied rest departure windows remove all samples for onward sections. Rest records supply the clocks; obsolete times reopen departure selection while keeping sites, original destination windows and unaffected rests.
+- Recompute overnight bounds for a rest that needs new timing, include minimum/maximum dwell in onward hourly coverage, and report missing sections explicitly instead of looping through approvals.
+- Add saved-trip regressions for stale clocks on one or both legs, mismatched copies, and a multi-day overnight trip that successfully saves its replacement rest departure.
+
 ## 0.0.480 — 2026-11-13
 
 - Keep weather coverage and source disclosures readable in light theme, with their expand arrows inside the cards.

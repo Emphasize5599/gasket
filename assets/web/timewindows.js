@@ -8,7 +8,7 @@
     if(end-start>14*24*HOUR)throw Error('Choose a window of at most 14 days');
     var out=[];for(var t=start;t<=end;t+=HOUR)out.push(t);return out;
   }
-  function ranges(depart,legs){var earliest=depart.start,latest=depart.end;return legs.map(function(leg,i){var fixed=leg.window;if(fixed){earliest=Math.max(earliest,fixed.start);latest=fixed.end;}var range={start:i&&!fixed?Math.floor(earliest/HOUR)*HOUR:earliest,end:latest};earliest=range.start+leg.minMinutes*60000;latest=range.end+(leg.maxMinutes+(leg.delayMax||0))*60000;return range;});}
+  function ranges(depart,legs){var earliest=depart.start,latest=depart.end;return legs.map(function(leg,i){var fixed=leg.window;if(fixed){earliest=Math.max(earliest,fixed.start);latest=fixed.end;}var range={start:i&&!fixed?Math.floor(earliest/HOUR)*HOUR:earliest,end:latest};earliest=range.start+(leg.minMinutes+(leg.delayMin||0))*60000;latest=range.end+(leg.maxMinutes+(leg.delayMax||0))*60000;return range;});}
   function stable(x){if(Array.isArray(x))return '['+x.map(stable).join(',')+']';if(x&&typeof x==='object')return '{'+Object.keys(x).sort().map(function(k){return JSON.stringify(k)+':'+stable(x[k]);}).join(',')+'}';return JSON.stringify(x);}
   function coverageIssues(reading){
     if(!reading||reading.error)return [{code:'unavailable',text:reading&&reading.error||'Forecast unavailable.'}];
