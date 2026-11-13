@@ -14,6 +14,10 @@ on:
       - src/**
       - res/**
       - assets/**
+      - tests/old-rest-trip-ui.test.js
+      - tests/fixtures/old-rest-trip.js
+      - tests/tripdates.test.js
+      - tests/rest-access-cancel-ui.test.js
       - tests/tirerack.test.js
       - tests/tires.test.js
       - tests/keylessgas.test.js
