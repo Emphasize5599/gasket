@@ -20,7 +20,7 @@ function load(store,at,speed=50,hold){
     r[0]=[];r[0][1]='Generic road';r[0][2]=[meters];r[0][10]=[[seconds],null,3,null,[seconds*.9,seconds*1.2]];r[3]=[[[0,0],[meters,seconds]]];root[1]=[r];
     root[7]=[[[Math.round(a.lat*1e7),Math.round((b.lat-a.lat)*1e7)],[Math.round(a.lng*1e7),Math.round((b.lng-a.lng)*1e7)]]];root[11]='!8j'+clock+'!3e0';return {body:JSON.stringify([root])};
   }
-  const flow=ctx.TrafficFlow.init(A,call,{invalidate(){}});return {flow,calls,ctx,settings:A.S,KV};
+  const flow=ctx.TrafficFlow.init(A,call,{invalidate(){}});return {flow,calls,ctx,settings:A.S,KV,A};
 }
 (async()=>{
   const store=new Map(),T=require('../assets/web/trip.js'),pts=[{lat:34.01,lng:-92.01},{lat:34.06,lng:-92.01}],mi=T.hav(pts[0],pts[1]);
@@ -131,5 +131,7 @@ function load(store,at,speed=50,hold){
    assert.equal(gaps.size,0,'stored sections satisfy the probe');
    assert.equal(x.calls.google,0);
   }
+  for(const allow of [true,false]){const c=load(new Map());let prompts=0,answer;const pending={days:3};c.settings.trip.trafficDateShiftPending=pending;c.settings.trip.windowPlan={earlyEnabled:true};c.A.save=()=>{};c.A.confirmDel=()=>{prompts++;return new Promise(r=>answer=r);};const waits=[c.flow.authorizeNewDates(),c.flow.authorizeNewDates()];assert.equal(prompts,1,'date consent is shared');assert.equal(c.calls.google,0);answer(allow);await Promise.all(waits);assert.equal(c.settings.trip.trafficForecast,allow);assert.equal(c.settings.trip.windowPlan.earlyEnabled,allow,'normal times disable an incompatible traffic allowance');assert.equal(c.settings.trip.trafficDateShiftPending,undefined);await c.flow.authorizeNewDates();assert.equal(prompts,1,'answered choice is not repeated');}
+  {const c=load(new Map());let answer;c.settings.trip.trafficDateShiftPending={days:3};c.A.save=()=>{};c.A.confirmDel=()=>new Promise(r=>answer=r);const p=c.flow.authorizeNewDates();c.settings.trip={trafficForecast:true};answer(false);await assert.rejects(p,/trip changed/);assert.equal(c.settings.trip.trafficForecast,true,'late answers cannot change another trip');}
   console.log('Traffic forecast/access cache: restart, direction/settings identity, shared/batched timezones, bounded cache and diagnostics passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

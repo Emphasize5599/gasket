@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.482 — 2026-11-13
+
+- Keep selected overnight stops when all original windows move by the same whole days. Move their dependent clocks and date-specific skipped nights, departure restrictions and nightly overrides together; recompute local overnight bounds and require review when a moved departure no longer fits.
+- Preserve saved station pools through window-only planning and comparison snapshots instead of reporting missing coverage or rediscovering remembered stations.
+- Ask before checking traffic for moved trip dates. Choosing normal times continues planning without new traffic requests; old forecast samples and source observation dates are never relabeled as fresh.
+- Retry cancelled rest-site access checks when opening a leg instead of leaving the sites permanently unverified.
+- Add a fresh multi-night round-trip UI regression that advances the app clock exactly three days, edits every original window, cold-reopens the trip and reaches Depart while checking durable-data reuse. Cover additional priorities, traffic/cache choices, skipped nights and departure restrictions, plus solar/time-zone/DST date translations.
+
 ## 0.0.481 — 2026-11-13
 
 - Repair the full saved-trip hazard review when old copied rest departure windows remove all samples for onward sections. Rest records supply the clocks; obsolete times reopen departure selection while keeping sites, original destination windows and unaffected rests.
