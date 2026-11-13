@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.476 - VIN-decoded trims are locked
+
+Owner: a trim the VIN decodes (2024 Blazer RS) shouldn't be changeable. lookupVin sets `c.trimSrc = 'vin'` when fromVpic gives a trim (deletes it otherwise, clears noTrim); `vinTrim(c)` (trimSrc vin + vin + trim) makes trimHtml show a readonly disabled `#gTrim` "from your VIN" (no menu, no no-trim box) and setTrim refuse; detachVin drops trimSrc (unlocks). Cars decoded before 466 have no trimSrc and stay editable until the VIN is looked up again. vPIC on the owner's 7 VINs (not committed): Charger SXT, Civic EX-T, Blazer RS decoded; Prius "One/Two" (ambiguous, rejected), Sienna 2011/2020 Trim/Trim2 "E grade" (internal grade, rejected), 2005 Mustang none (VDS T80 = V6 coupe, not the package). No manufacturer VIN-to-trim source was wired in (none public without sign-in found yet). Test vin-trim (lock helper, setTrim guard, detach). Not phone-verified.
+
+Phone checks: Garage → edit a car → look up a VIN whose trim decodes (e.g. a Blazer RS): Trim shows "from your VIN", can't be edited; change the identity / clear the VIN: trim becomes editable.
+
 ## 0.0.465 - window screening counts nightly rests
 
 Owner's 464 log (Prius, overnight + windows): every run set aside late/early; firstMiss late = leg 1 departs 22:00Z, continuous arrival 18:36Z, window 21:00–23:30Z, restMinutes [420,540] (one night can't fit). The final check was right; the cheap screening (TimeWindows.shortlist) placed arrivals with no rests, so it shortlisted departures that fit only without sleeping. shortlist now takes `c.restRange(i,{depart,arrive})` (tripui passes windowRestRange): window penalty uses [drive + min, drive + max] and the next leg starts from that range clamped to the window start (else drive + min). Tests run: timewindows, window-recommendations, windowplanning-ui, overnight-ui. Not phone-verified.

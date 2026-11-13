@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.476 - 2026-11-13
+
+- A trim read from your VIN is shown as "from your VIN" and can't be changed by mistake.
+- Bug fixes
+
 ## 0.0.475 - 2026-11-12
 
 - Completed comparison clicks apply pending redraws immediately, keeping scope selectors and vehicle checkboxes in sync. Controls remain protected between release and delayed click delivery.

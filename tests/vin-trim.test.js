@@ -8,4 +8,10 @@ assert.equal(decode({Trim:'Two/Three',Trim2:'Sport'}).trim,'','ambiguous primary
 assert.equal(decode({Trim:'',Series:'LE'}).trim,'','series is not blindly treated as marketing trim');
 assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).power,'diesel','diesel VIN uses diesel powertrain');
 assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).info.features.includes('Regenerative braking'),false,'plain diesel does not get EV features');
+const vt=source.match(/function vinTrim\(c\) \{[^\n]*\}/)[0],vinTrim=Function(vt+';return vinTrim;')();
+assert.equal(vinTrim({trimSrc:'vin',vin:'X',trim:'RS'}),true,'a trim the VIN named is locked');
+assert.equal(vinTrim({trimSrc:'vin',trim:'RS'}),false,'no VIN, no lock');
+assert.equal(vinTrim({vin:'X',trim:'RS'}),false,'a picked trim stays editable');
+assert.ok(/if \(vinTrim\(c\)\) return;/.test(source),'setTrim refuses to change a VIN trim');
+assert.ok(/'trimSrc'\]/.test(source),'detaching the VIN unlocks the trim');
 console.log('Primary/secondary trim handling rejects ambiguous and internal grade codes');

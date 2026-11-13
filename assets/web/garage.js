@@ -383,6 +383,7 @@
   /** A trim chosen or typed: a different trim can have a different tank, so the box empties and Brave is asked again. */
   function setTrim(c, v) {
     v = String(v || '').trim(); if (v === String(c.trim || '')) return;
+    if (vinTrim(c)) return;   // the VIN named it
     c.trim = v; LG.info('car', 'Trim ' + (v ? 'set' : 'cleared'));
     if (kind(c) === 'gas') { c.tank = ''; c.tankSrc = ''; c.tankLookup = null; }
     if (kind(c) === 'ev' && c.dcKwSrc !== 'you entered it') { c.dcKw = ''; c.dcKwSrc = ''; c.dcKwLookup = null; }   // trims can charge at different rates
@@ -390,7 +391,9 @@
     if (kind(c) === 'gas' && v && tankKey(c)) tankFind(c, false);
     if (kind(c) === 'ev' && v && tankKey(c)) dcFind(c, false);
   }
+  function vinTrim(c) { return c.trimSrc === 'vin' && !!c.vin && !!c.trim; }
   function trimHtml(c) {
+    if (vinTrim(c)) return '<label class="nf wide"><span>Trim<small>from your VIN</small></span><input type="text" id="gTrim" value="' + esc(vehicleLabel(c, c.trim)) + '" readonly disabled aria-readonly="true"></label>';
     var st = trimState(c), list = trimList(c), have = TrimMath.find(list, vehicleLabel(c,c.trim)), other = trimOther[c.id] || (!!c.trim && !have);
     var none = '<label class="nf chk wide no-trim"><input type="checkbox" id="gNoTrim"' + (c.noTrim ? ' checked' : '') + '><span>This car has no trim<small>some models come in only one version</small></span></label>';
     if (c.noTrim) return none;
@@ -1411,7 +1414,7 @@
     }catch(e){failed=true;if(car()===c&&$(ids[i])===el)eMsg('Could not load '+labels[i].toLowerCase()+' choices. Tap the field to retry; your saved selection is kept.',true);}}));}
     finally{grid.dataset.epaHydrating='0';if($(ids[0])===els[0])els[0].dataset.savedEpa=failed?'1':'0';editorGate(c);}
   }
-  function detachVin(c){if(!c.vin)return;['vin','vinDecodeRev','vinHints','vpicModel','recalls','recallCheck'].forEach(function(k){delete c[k];});var i=c.info||{},src=i.src||{},fs=i.featSrc||{};Object.keys(src).forEach(function(k){if(src[k]==='vin'){delete i[k];delete src[k];}});i.features=(i.features||[]).filter(function(k){if(fs[k]==='vin'){delete fs[k];return false;}return true;});}
+  function detachVin(c){if(!c.vin)return;['vin','vinDecodeRev','vinHints','vpicModel','recalls','recallCheck','trimSrc'].forEach(function(k){delete c[k];});var i=c.info||{},src=i.src||{},fs=i.featSrc||{};Object.keys(src).forEach(function(k){if(src[k]==='vin'){delete i[k];delete src[k];}});i.features=(i.features||[]).filter(function(k){if(fs[k]==='vin'){delete fs[k];return false;}return true;});}
   /** Take a fueleconomy.gov vehicle record: mileage (or efficiency), powertrain, and any details you haven't filled in. */
   function applyEpa(c, v, id, opt, force) {
     // another EPA version (say the Blazer after the Blazer EV): its details replace the old version's, not just the blanks
@@ -1552,7 +1555,7 @@
       if(c.addMode==='fuel'&&d.power==='ev'){vMsg('This is an EV: choose one of the EV vehicle types, or Custom.',true);return;}
       c.vin = vin; c.vinDecodeRev=130;c.year = d.year; c.make = d.make; c.model = d.model; c.vpicModel = d.model;
       if (d.body) { c.info = c.info || {}; c.info.body = d.body; }   // the doodle's body style
-      if (d.trim) c.trim = d.trim;
+      if (d.trim) { c.trim = d.trim; c.trimSrc = 'vin'; delete c.noTrim; } else delete c.trimSrc;   // a trim the VIN names is the car's trim
       c.power = d.power; if (d.diesel) c.grade = 'diesel';
       c.vinHints = { two: !!d.twoWheel, flex: !!d.flex, diesel: !!d.diesel };   // for matching the EPA's versions (not shown)
       if (c.power === 'hybrid') c.type = 'hybrid';
