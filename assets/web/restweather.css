@@ -1,6 +1,6 @@
 /* Header and horizontal forecast layout adapted from weather-app-clone,
  * Copyright (c) 2022 Jack Labbe, MIT. Full notice in THIRD_PARTY_NOTICES.md. */
-.rest-weather{--wx-line:rgba(255,255,255,.25);background:linear-gradient(155deg,#24557e,#273a58);color:#fff;border-radius:22px;padding:20px;max-width:760px;margin:0 auto;overflow-wrap:anywhere;min-width:0}
+.rest-weather{--accent:#cbe0ff;--wx-line:rgba(255,255,255,.25);background:linear-gradient(155deg,#24557e,#273a58);color:#fff;border-radius:22px;padding:20px;max-width:760px;margin:0 auto;overflow-wrap:anywhere;min-width:0}
 .rest-weather.rest-wx-night{background:linear-gradient(155deg,#202d49,#30334c)}
 .rest-wx-header,.rest-wx-hero{display:flex;flex-direction:column;align-items:center;text-align:center}
 .rest-wx-header h2{font-size:clamp(25px,6vw,34px);font-weight:500;margin:4px 0 12px;color:inherit}
@@ -16,3 +16,5 @@
 @media(prefers-reduced-motion:reduce){.rest-weather *{scroll-behavior:auto;animation:none!important;transition:none!important}}
 
 .rest-wx-metric:last-child{grid-column:1/-1}.rest-wx-metric:last-child strong{font-size:18px}
+.sub-page .sub-body .rest-weather details{background:rgba(0,0,0,.18);border-color:rgba(255,255,255,.25);color:#fff}
+.sub-page .sub-body .rest-weather details>summary{position:relative;background:transparent;color:#fff}

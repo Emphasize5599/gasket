@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.480 — 2026-11-13
+
+- Keep weather coverage and source disclosures readable in light theme, with their expand arrows inside the cards.
+
 ## 0.0.479 — 2026-11-13
 
 - Fix reopened saved trips getting stuck after approving an added rest-access segment: changed-condition reviews finish independently of the full hourly review. Keep fixed rest-access roads out of new route-interest questions.
