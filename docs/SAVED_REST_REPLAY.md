@@ -4,7 +4,7 @@
 
 `tests/old-rest-trip-ui.test.js` builds a new North Little Rock–Los Angeles–North Little Rock trip through the real UI and planner, selects multiple overnight rests, completes departure timing, advances the app clock exactly 259,200,000 ms, moves every original window by that same amount, closes/reopens, and continues through Depart. The browser-only clock starts at November 13, 2026, 22:00 UTC for repeatability; the operating-system clock is untouched.
 
-Provider boundary fixtures supply repeatable routing, fuel, rest-area, weather and traffic responses. Business logic, selection UI, permissions, planning, cache identity and storage remain real. HTTPS requests outside these boundaries are blocked. Cold reopening flushes pagehide storage and reloads persistent native-storage stand-ins. This validates app behavior rather than third-party service availability or Android process lifecycle.
+Provider boundary fixtures supply repeatable routing, fuel, rest-area, weather and traffic responses. Business logic, selection UI, permissions, planning, cache identity and storage remain real. HTTPS requests outside these boundaries are blocked. Cold reopening flushes pagehide storage and reloads persistent native-storage stand-ins, including preferences and the controlled clock. Browser session storage is deliberately cleared: Chromium file origins can discard it on reload. Vehicle profile, provider settings and exact clock offset are asserted before replay. This validates app behavior rather than third-party service availability or Android process lifecycle.
 
 ## Bugs repaired
 
