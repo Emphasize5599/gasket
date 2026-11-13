@@ -2203,6 +2203,18 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        @JavascriptInterface
+        public void restWeatherRequest(final int reqId, final String args) {
+            new Thread(new Runnable() {
+                public void run() {
+                    JSONObject out;
+                    try { out=RestWeatherHttp.request(new JSONObject(args), android.webkit.WebSettings.getDefaultUserAgent(MainActivity.this)); }
+                    catch(Exception e){out=new JSONObject();try{out.put("error","Weather request could not start");}catch(Exception ignored){}}
+                    reply(reqId,out);
+                }
+            }).start();
+        }
+
         private byte[] iconBytes(String url, String[] finalUrl) throws Exception {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
             c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setInstanceFollowRedirects(true);

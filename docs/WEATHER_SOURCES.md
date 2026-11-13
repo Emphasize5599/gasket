@@ -5,7 +5,9 @@ dangerously cold or hot and humid stop; pollen and air quality where available. 
 avoid Open-Meteo where a better source exists, **one primary and at most one fallback per data point**, and never
 call a source in a country it doesn't cover.
 
-Status: research done, owner approval of the plan pending. **No app code yet.** Nothing here is bundled.
+Status: initial stay-window submenu implemented in 0.0.479. Candidate stops use estimated arrival/stay; added rests use their selected departure. Forecasts load on demand and reuse point records for 45 minutes. US comfort uses NWS, then AccuWeather for missing hours; elsewhere AccuWeather is available. Air uses the existing Open-Meteo/CAMS fallback. NWS alerts are US-only. Pollen uses AccuWeather, then TWC in the US; CA/MX pollen is not requested pending coverage validation. Missing coverage remains explicit. WU is deferred: its captured client key and fixtures are only on the owner's inaccessible Linux machine. The owner authorized hardcoding it when available; track this in TODO 61.
+
+Validation: live NWS point/grid/hourly access checked from Windows; fixture tests cover parsing, units, clipping, fallback routing, caching and restrictions. The Accu endpoint returned 403 to a desktop request; Android uses its actual WebView user agent and reports refusals without bypassing them. Accu/TWC live phone payload validation remains open. UI uses the MIT layout patterns from j-labbe/weather-app-clone with Gasket fonts and original icons; license in THIRD_PARTY_NOTICES.md and assets/web/vendor/weather-layout-LICENSE.txt.
 
 ## How this was tested
 

@@ -1,0 +1,18 @@
+/* Header and horizontal forecast layout adapted from weather-app-clone,
+ * Copyright (c) 2022 Jack Labbe, MIT. Full notice in THIRD_PARTY_NOTICES.md. */
+.rest-weather{--wx-line:rgba(255,255,255,.25);background:linear-gradient(155deg,#24557e,#273a58);color:#fff;border-radius:22px;padding:20px;max-width:760px;margin:0 auto;overflow-wrap:anywhere;min-width:0}
+.rest-weather.rest-wx-night{background:linear-gradient(155deg,#202d49,#30334c)}
+.rest-wx-header,.rest-wx-hero{display:flex;flex-direction:column;align-items:center;text-align:center}
+.rest-wx-header h2{font-size:clamp(25px,6vw,34px);font-weight:500;margin:4px 0 12px;color:inherit}
+.rest-wx-window{margin:0 0 8px;font-size:15px}.rest-wx-hero>svg{width:54px;height:54px;margin:18px 0 4px}
+.rest-wx-hero>strong{font-size:clamp(40px,13vw,76px);font-weight:300;line-height:1.15}.rest-wx-hero p{font-size:20px;margin:8px 0}.rest-wx-hero time{font-size:14px;opacity:.85}
+.rest-wx-highlow{text-align:center;font-size:15px;margin:14px 0}.rest-wx-today-parent{display:flex;flex-direction:column;background:rgba(0,0,0,.15);border-radius:15px;margin:18px 0;min-width:0;overflow:hidden}
+.rest-wx-today-parent>h3{font-size:14px;font-weight:500;margin:10px 12px;color:inherit}.rest-wx-hours{display:flex;flex-direction:row;overflow-x:auto;max-width:100%;border-top:1px solid var(--wx-line);gap:2px;scrollbar-width:thin}
+.rest-wx-hour{display:flex;flex-direction:column;justify-content:space-between;align-items:center;gap:12px;flex:0 0 80px;padding:14px 6px;border:2px solid transparent;border-radius:12px;background:transparent;color:inherit;min-height:124px;cursor:pointer;font:inherit}
+.rest-wx-hour svg{width:27px;height:27px}.rest-wx-hour time{font-size:14px;white-space:normal}.rest-wx-hour[aria-pressed=true]{border-color:#bbd7ff;background:rgba(255,255,255,.12)}
+.rest-wx-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.rest-wx-metric{background:rgba(0,0,0,.17);border-radius:16px;padding:14px;min-width:0}.rest-wx-metric h3{font-size:14px;font-weight:500;margin:0 0 12px;color:#e2eaf4}.rest-wx-metric strong{font-size:clamp(18px,5vw,26px);font-weight:500;display:block}.rest-wx-metric small{display:block;font-size:12px;margin-top:9px;color:#e2eaf4}
+.rest-wx-notices,.rest-wx-alerts,.rest-wx-sources{background:rgba(0,0,0,.18);border-radius:14px;margin:14px 0;padding:12px;font-size:14px}.rest-wx-alerts{border:1px solid #ffd08b}.rest-weather summary{color:inherit;min-height:28px}.rest-weather a{color:#cbe0ff}.rest-weather .warn{color:#ffe0a6}.rest-wx-sources{margin-bottom:0}.rest-wx-sources p,.rest-wx-notices p{font-size:14px}
+@media(max-width:350px){.rest-weather{padding:12px}.rest-wx-grid{gap:8px}.rest-wx-metric{padding:11px}.rest-wx-metric strong{font-size:19px}}
+@media(prefers-reduced-motion:reduce){.rest-weather *{scroll-behavior:auto;animation:none!important;transition:none!important}}
+
+.rest-wx-metric:last-child{grid-column:1/-1}.rest-wx-metric:last-child strong{font-size:18px}

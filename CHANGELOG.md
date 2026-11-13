@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.479 — 2026-11-13
+
+- Fix reopened saved trips getting stuck after approving an added rest-access segment: changed-condition reviews finish independently of the full hourly review. Keep fixed rest-access roads out of new route-interest questions.
+- Add Weather during rest for candidate and added rest stops, with stay-only hourly cards, temperature, humidity, wind, air quality and available pollen/alerts. Reuse forecasts for 45 minutes and show unavailable coverage explicitly. WU integration remains in the backlog until its captured key is accessible.
+
 ## 0.0.478 - 2026-11-13
 
 - Comma-separated VIN trim choices no longer lock the vehicle to an ambiguous trim or suppress the existing manufacturer lookup. Original hints are retained; clean single trims stay unchanged.

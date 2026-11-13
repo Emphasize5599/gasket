@@ -69,7 +69,7 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 33. [ ] **More animated explanation menus.** Use short, focused animations or interactive demonstrations to explain concepts where they communicate more clearly than verbose text. Build on the existing animated tire explanations.
 34. [ ] **Visual help behind question marks.** Let applicable (?) controls open video, image or animation explanations when those are more effective than text. Choose the format for the topic rather than using media everywhere; retain a concise accessible text explanation.
 
-61. [ ] **Rest-stop weather comfort from better sources.** Research done, plan awaiting approval: [docs/WEATHER_SOURCES.md](docs/WEATHER_SOURCES.md). Hourly temp/feels-like/humidity at each rest stop's stay (NWS → WU in the US; WU → AccuWeather elsewhere), pollen (AccuWeather → TWC, US/UK only), air quality (WU → Open-Meteo), alerts (NWS → WU). Needs COMPLIANCE #18 sign-off and the WU key bundling decision.
+61. [ ] **Complete rest-weather provider validation and WU integration.** Initial stay-window submenu shipped in 0.0.479 with NWS → AccuWeather comfort, Open-Meteo/CAMS air, US NWS alerts and AccuWeather → TWC US pollen. Add the owner-authorized hardcoded WU client key and captured fixtures when the Linux ~/Development/weather-captures folder becomes available; it is inaccessible from Windows. Wire WU into the researched primary/fallback order, validate real Android Accu/TWC payloads and CA/MX pollen coverage, and retain restriction cooldowns and explicit missing coverage. See [docs/WEATHER_SOURCES.md](docs/WEATHER_SOURCES.md).
 
 ## perf — measurements and efficiency
 

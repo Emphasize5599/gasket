@@ -33,6 +33,7 @@
       if (fn === 'visualSnapshot') timeout = 5000;
       if (fn === 'fetchHere' || fn === 'fetchGoogleTraffic') timeout = 45000;
       if (fn === 'restImagery') timeout = 30000;
+      if (fn === 'restWeatherRequest') timeout = 40000;
       if (fn === 'siteRead' && args[0] === 'traffic') timeout = 60000;if(fn==='siteRead'&&args[0]==='restmaps')timeout=40000;if(fn==='siteRead'&&args[0]==='campendium')timeout=65000;
       if (fn === 'tripQueue') timeout = 15000;
       if (timeout) timer = setTimeout(function () {
@@ -80,8 +81,12 @@
     return mergeRouteStations(saved.concat(candidates)).filter(function(st){return !stationHidden(st);});
   }
   var restForecastVersion=0;
+  var restWeather=RestWeather.create({get:function(k,ttl){var r=A.KV.get('wx',k,ttl);return r&&r.v;},put:function(k,v){A.KV.put('wx',k,v);},fetch:wxGet,country:function(p){return window.Limits&&Limits.stateAt(p.lat,p.lng)?'US':'';},request:function(provider,p,key){return call('restWeatherRequest',JSON.stringify({provider:provider,lat:p.lat,lng:p.lng,key:key||''}));}});
+  var restWeatherUI=RestWeatherUI.init(A,{load:restWeather.load});
+  window.addEventListener('cacheclear',function(){restWeather.clear();});
   var restUI=window.RestUI&&RestUI.init(A,{
     dormant:function(){return savedPlanCurrent()&&!savedRestBrowsing;},activate:function(){savedRestBrowsing=true;},trafficEnabled:function(){return !!(traffic&&traffic.enabled()&&(!savedPlanCurrent()||savedRestBrowsing));},addDraft:restAddDraft,setTime:restSetTime,commit:restCommit,departLate:function(){var e=departWindowPassed();return e?{at:e,note:departWindowNote(e)}:null;},tolerance:function(d){return restTolerance(d);},trafficSegments:function(){return restSegments();},restTraffic:function(){return restTrafficCfg();},setRestTraffic:function(c){S.trip.restTraffic=Object.assign({},c,{sig:restSegSig()});A.save();},
+    weather:function(stay){restWeatherUI.open(stay);},
     prepareForecasts:function(){if(!S.trip.trafficForecast&&(S.googleTraffic!==false||S.hereTraffic===true&&S.hereKey)){S.trip.trafficForecast=true;A.save();}},
     waitForPlan:restPrepareTiming,call:call,timezoneFetch:timezoneFetch,snapshot:restSnapshot,
     restChargers:async function(s,sites,filter){
@@ -326,7 +331,7 @@
       return {kind:kind,priority:priority,profile:opts.propulsion,fillCap:opts.fillCap,capacity:Garage.tank(),reserve:tripBuf()*model.combGpm,start:hasFuel()?startFuel(model):Garage.tank(),curve:curve&&curve.points,maxKw:kw,chargeLevel:types.dc?'dc_fast':types.l2?'2':'1',stopMinutes:kind==='ev'?5:3};
     },
     immediateAfter:function(i){return !!(S.trip.returnTrip&&backAuto()&&i===choiceLists().length-2);},
-    isRestDestination:function(i){return !!(route&&route.stops[i+1]&&route.stops[i+1].rest);},fixedRoad:function(i){return restLegSolo(route,i);},legLabel:function(i){var g=TripStops.group(route,i);return 'Leg '+(g?g.index+1:i+1)+(restLegSolo(route,i)?' · added rest access':'');},origin:function(){var p=route&&route.stops[0];return p&&(p.label||p.address)||'Start';},destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
+    restTiming:function(){step=ST_STOPS;renderStep();restUI.review();},isRestDestination:function(i){return !!(route&&route.stops[i+1]&&route.stops[i+1].rest);},fixedRoad:function(i){return restLegSolo(route,i);},legLabel:function(i){var g=TripStops.group(route,i);return 'Leg '+(g?g.index+1:i+1)+(restLegSolo(route,i)?' · added rest access':'');},origin:function(){var p=route&&route.stops[0];return p&&(p.label||p.address)||'Start';},destinations:function(){return route?route.stops.slice(1).map(function(s){return s.label||s.address||'Destination';}):[];},
     changed:function(){delete S.trip.legDepartures;result=null;compareReviewed=0;compareReviewProof=null;resetChoices(choiceSavedId);if(windows.enabled())try{S.trip.depart=windowLocal(windows.bounds().depart.start);S.trip.departNow=false;}catch(e){}A.save();built[ST_ROUTE]=null;built[ST_TIMING]=null;renderStep();},
     priority:function(){return planningPriority(Garage.car());},setPriority:function(p){var c=planTarget(activeKey()),old=planningPriority(Garage.car());if(old==='cost')S.trip.costAvoidTolls=!!S.trip.avoid.tolls;var on=AutoTrip.enabled(planView(activeKey()),S.autoTripPriority);c.planningPriority=p;c.autoTripPriority=on?p:'manual';S.trip.avoid.tolls=p==='time'?!tollPreference().allowPaid:!!S.trip.costAvoidTolls;},
     enableForecast:function(){if(S.googleTraffic===false&&!(S.hereTraffic===true&&S.hereKey))return false;S.trip.trafficForecast=true;return true;},rows:windowRows,rerate:windowRerate,legMinutes:function(){if(!route||!model)return null;var n=hzLegs();if(!n)return null;var out=[];for(var i=0;i<n;i++){var secs=hzAlts(i).map(function(a){return parseInt(a&&a.duration,10);}).filter(function(x){return x>0;});if(!secs.length)return null;out.push(Math.min.apply(null,secs)/60);}return out;},needRoutes:function(){if(step!==ST_ROUTE){collectSafe();step=ST_ROUTE;renderStep();}var b=$('tGetRoutes');if(b)flag(b,'pick');},read:function(row,control){return windowRead(row,null,control);},weatherStats:function(){return weatherTransport.counts();},forecastHtml:function(){return traffic?traffic.html():'';},
@@ -695,10 +700,10 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function choiceLists(){return Array.from({length:hzLegs()},function(_,i){return hzAlts(i);});}
   function choiceSelections(){return choiceLists().map(function(_,i){return hzSel(i);});}
   function choiceEntries(){return RouteChoices.entries(choiceLists(),choiceSelections(),choiceAnswers());}
-  function choicePending(){return routeFlow()?RouteChoices.pending(choiceLists(),choiceSelections(),choiceAnswers()):[];}
+  function choicePending(){return routeFlow()?RouteChoices.pending(choiceLists(),choiceSelections(),choiceAnswers()).filter(function(x){return !restLegSolo(route,x.leg);}):[];}
   function reviewShow(item){routeReview=item||null;if(item)hzLeg=item.leg;hzFitKey=null;renderHz();drawHaz();hzPill();navRender();tpBody().scrollTop=0;hzLoadLeg(hzLeg);return !!item;}
   function reviewStart(){return reviewShow(choicePending()[0]);}
-  function reviewOrder(){return RouteChoices.pending(choiceLists(),choiceSelections(),{});}
+  function reviewOrder(){return RouteChoices.pending(choiceLists(),choiceSelections(),{}).filter(function(x){return !restLegSolo(route,x.leg);});}
   function reviewBack(){if(!routeReview)return;var order=reviewOrder(),at=order.findIndex(function(x){return x.key===routeReview.key;});if(at>0)reviewShow(order[at-1]);else{hzLeg=Math.max(0,hzLegs()-1);reviewShow(null);}}
   async function reviewAnswer(yes){if(!routeReview)return;var current=routeReview;if(yes&&!await hzConfirmRisk(hzAlts(current.leg)[current.k],current.leg,function(){return routeReview===current;}))return;if(routeReview!==current)return;var id=current.key,order=reviewOrder(),at=order.findIndex(function(x){return x.key===id;});choiceAnswers()[id]=Object.assign({},choiceAnswers()[id],{consider:yes,goal:planningPriority(Garage.car())==='time'?'time':'cost'});if(!choiceReviewedAt)choiceReviewedAt=Date.now();saveChoices();routeReview=null;choiceComplete=false;result=null;A.save();if(!reviewShow(order[at+1]))advance(ST_COMPARE);}
   // Trip-wide, optional recommendations. Planning reuses the unique approved legs' station projections.
@@ -2398,7 +2403,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function legKey(r, i) { return [r.stops[i], r.stops[i + 1]].map(function (st) { return st.current ? 'here' : st.lat != null ? st.lat.toFixed(4) + ',' + st.lng.toFixed(4) : st.address; }).join('>') + '|' + JSON.stringify(S.trip.avoid) + (tollPricing() ? '|tolls' : ''); }
   // A leg to or from an added rest stop keeps one road unless the trip opts in to comparing others there.
-  function restLegSolo(r, i) { return !S.trip.restRoutes && !!(r && r.stops && (r.stops[i] && r.stops[i].rest || r.stops[i + 1] && r.stops[i + 1].rest)); }
+  function restLegSolo(r, i) { return !S.trip.restRoutes && !!(r && r.stops && (TripStops.isRest(r.stops[i]) || TripStops.isRest(r.stops[i + 1]))); }
   function trimRestLegs(r) { var changed = false; if (r && r.legs) r.legs.forEach(function (L, i) { if (L && L.alts && L.alts.length > 1 && restLegSolo(r, i)) { L.alts = [L.alts[L.sel || 0] || L.alts[0]]; L.sel = 0; changed = true; } }); return changed; }
   async function routeLeg(r, i) {
     var prev = r.legs && r.legs[i];

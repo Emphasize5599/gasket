@@ -471,3 +471,29 @@ Offline sunrise, sunset and civil-twilight calculations by Vladimir Agafonkin, B
 ## Digitized EV charging profiles
 
 Hannah Morin, Aeka Chatra, Jeremy Michalek and Jay Whitacre, [Digitized Electric Vehicle Fast-Charging Profiles by Model, v1](https://doi.org/10.6084/m9.figshare.30570653.v1), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Selected Tesla curves in `assets/web/chargecurve.js` were sampled and rounded from the dataset, with inferred endpoints. Original curve publishers and model applicability are documented in `docs/TESLA_PACKS.md`.
+
+## Rest weather layout
+
+Header and horizontal forecast layout adapted from [Weather App Clone](https://github.com/j-labbe/weather-app-clone). No Apple fonts or SF Symbols are bundled.
+
+MIT License
+
+Copyright (c) 2022 Jack Labbe
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

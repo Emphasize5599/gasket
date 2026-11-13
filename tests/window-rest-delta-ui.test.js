@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+(async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const accepted of [true,false]){
+ const p=await browser.newPage({viewport:{width:320,height:950}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);
+ await p.evaluate(()=>{const A=__app,start=Date.now()+86400000,model={durationSec:600,totalMi:10};A.S.trip.windowPlan={enabled:true,clockVersion:2,windowTimes:{depart:{start:new Date(start).toISOString(),end:new Date(start+3600000).toISOString()},arrival:{end:new Date(start+86400000).toISOString()},zones:['UTC','UTC','UTC']},destinations:[]};
+  window.__done=null;window.__full=0;window.__row={leg:0,routeKey:'access',depart:start,model,reading:{hazards:[],stats:{points:1,weather:1,errors:0}}};
+  window.__w=WindowPlanning.init(A,{key:()=> 'reopened-snapshot',routes:()=>[[{key:'access',index:0,name:'Selected roads / Road to campground',model}],[{key:'onward',index:0,name:'Selected roads / Onward',model}]],destinations:()=>['Rest','End'],fixedRoad:()=>true,selected:()=>0,canAuto:()=>false,confirm:async()=>true,reviewed:()=>__full++});
+  // A persisted completed plan has no in-memory full hourly review after app restart.
+  __w.reviewChanges([__row]).then(ok=>__done=ok);
+ });
+ await p.waitForFunction(()=>/Are these hazards/.test(document.querySelector('#twReview')?.textContent||''));await p.click(accepted?'#twYes':'#twNo');await p.waitForFunction(()=>__done!==null,null,{timeout:3000});
+ assert.equal(await p.evaluate(()=>__done),true,'the delta review returns control to its caller');assert.equal(await p.evaluate(()=>__w.current().consent.decision(__row)),accepted);assert.equal(await p.evaluate(()=>__full),0);assert.equal(await p.evaluate(()=>__w.current().reviewed),false,'reviewing one delta does not claim a full trip review');assert.equal(await p.locator('#twReview').count(),0);assert.deepEqual(errors,[]);await p.close();
+ }console.log('Reopened saved-plan delta hazard approvals finish without requiring unrelated hourly rows; Yes and No retained.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
