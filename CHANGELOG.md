@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.483 — 2026-11-13
+
+- Publish the saved overnight-trip date-shift, station-reuse and interrupted-access repairs from 0.0.482 with the corrected cold-storage regression harness. The version tag now identifies the exact commit being tested and signed; 0.0.482 did not publish an APK.
+- Verify cold reopening without browser session storage, preserving native preferences, vehicle profiles, provider choices and the exact three-day clock shift.
+- Include replay fixtures and regressions in signed-build workflow triggers, and publish a continuation handoff plus the 14-scenario audit results.
+
 ## 0.0.482 — 2026-11-13
 
 - Keep selected overnight stops when all original windows move by the same whole days. Move their dependent clocks and date-specific skipped nights, departure restrictions and nightly overrides together; recompute local overnight bounds and require review when a moved departure no longer fits.

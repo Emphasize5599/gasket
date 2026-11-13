@@ -1,5 +1,15 @@
 # Saved multi-night trip replay: continuation handoff
 
+## LATEST UPDATE — supersedes the initial status below
+
+All 257 release regressions passed in run **43528471736**, job **132239967798**. Native checks and both signed APK builds also passed, including ABI/version/signature/alignment validation. Publication safely refused because the immutable v0.0.482 tag points to 9bad094 while this build used cfc0313; build-apk.yml explicitly requires release_sha == GITHUB_SHA. Do NOT weaken that check or retag the old release.
+
+A fresh version **0.0.483 / code 483** is being pushed with this update so release entry and signed workflow identify the exact same commit. Follow its NEW release/build runs, not the old failed publication run. Expected final assets:
+- https://github.com/Emphasize5599/gasket/releases/download/v0.0.483/Gasket-0.0.483-arm64-v8a.apk
+- https://github.com/Emphasize5599/gasket/releases/download/v0.0.483/Gasket-0.0.483-universal.apk
+
+The stricter cold-storage sequence has now PASSED all four cases: decline, allowance-decline, skipped and google. Local session 97101 finished successfully. Source is committed; remaining work is the new version's CI/signing/upload verification and final user report. The original 0.0.482 entry has no published APK and is superseded. This is a release-version correction, not an additional planner-code change.
+
 ## User request and standing authorization
 
 Create a fresh long trip with multiple selected overnight rests, starting a few hours after app-now. Advance only the app clock EXACTLY three days, move ALL original windows by that amount, cold-reopen, and click Next through Depart. Traffic reads require an actual app prompt; durable inventory should reuse. Fix each discovered bug and restart from scratch. Test many settings paths. Push fixes with conventional commits and release; monitor GitHub through successful tests, signing and downloadable APKs. The user is low on usage and explicitly requested this repository handoff so another agent can continue.
