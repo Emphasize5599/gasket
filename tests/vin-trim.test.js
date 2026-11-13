@@ -5,6 +5,15 @@ assert.equal(decode({Trim:'LE'}).trim,'LE');
 assert.equal(decode({Trim:'',Trim2:'Sport'}).trim,'Sport');
 assert.equal(decode({Trim:'',Trim2:'E grade',Series:'XYZ/ABC'}).trim,'');
 assert.equal(decode({Trim:'Two/Three',Trim2:'Sport'}).trim,'','ambiguous primary trim is not overridden');
+for (const trim of ['Value, SEL, Sport, Limited, Ultimate','4Motion SE, SE R-Line Black, SEL']) {
+  const d=decode({Trim:trim,Trim2:'Sport'});
+  assert.equal(d.trim,'','comma-separated choices must not lock the trim or suppress the fallback');
+  assert.equal(d.trimHint,trim,'keep the original ambiguous hint for matching');
+}
+assert.equal(decode({Trim:'',Trim2:'SE, SEL'}).trim,'','ambiguous secondary trims also stay editable');
+assert.equal(decode({Trim:'Limited+M/R+NAVI(HK)'}).trim,'','Subaru option codes stay unknown until a verified cleanup rule exists');
+assert.equal(decode({Trim:'350 F Sport High'}).trim,'350 F Sport High');
+assert.equal(decode({Trim:'GT Coupe'}).trim,'GT Coupe');
 assert.equal(decode({Trim:'',Series:'LE'}).trim,'','series is not blindly treated as marketing trim');
 assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).power,'diesel','diesel VIN uses diesel powertrain');
 assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).info.features.includes('Regenerative braking'),false,'plain diesel does not get EV features');

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.478 - 2026-11-13
+
+- Comma-separated VIN trim choices no longer lock the vehicle to an ambiguous trim or suppress the existing manufacturer lookup. Original hints are retained; clean single trims stay unchanged.
+- Added browser coverage for a Toyota parts-catalog fallback after an ambiguous vPIC trim, plus Hyundai, VW and Subaru parser regressions.
+- Recorded signed-out VIN lookup findings and remaining verification limits in `docs/VIN_TRIM_RESEARCH.md`. No unverified manufacturer integration was added.
+
 ## 0.0.477 - 2026-11-13
 
 - Toyota and Lexus trims NHTSA can't name (Prius Two, Sienna LE, Tacoma TRD Pro, RX F Sport) come from Toyota's / Lexus's own parts catalog for your VIN, and are locked like other VIN trims.

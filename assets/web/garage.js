@@ -1524,7 +1524,7 @@
     if (power !== 'gas' && power !== 'diesel') feats.push('Regenerative braking');
     // Secondary trim may name the marketing trim, but internal "E grade" codes
     // and chassis/body series are not a trustworthy marketing-trim decode.
-    var trimHint=g('Trim')||g('Trim2'),trim=trimHint;if (/\/|\bgrade\b/i.test(trim)) trim = '';
+    var trimHint=g('Trim')||g('Trim2'),trim=trimHint;if (/[\/,]|\bgrade\b/i.test(trim)) trim = '';
     // dual rear wheels: the VIN's wheel count, or "DRW" in its names; a weight class of 1–2 or a passenger body rules it out
     var wheels = parseInt(g('Wheels'), 10) || 0, cls = /Class\s*(\d)/i.exec(g('GVWR')), names = [g('Series'), g('Series2'), g('Trim'), g('Trim2'), g('Model')].join(' ');
     var drw = wheels >= 6 || /\bDRW\b|dual rear/i.test(names) ? 'yes' : (cls && +cls[1] <= 2) || /sedan|coupe|hatchback|wagon|convertible|sport utility|minivan|crossover/i.test(g('BodyClass')) ? 'no' : '';
