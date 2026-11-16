@@ -35,3 +35,17 @@ const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.85
  assert(M.choose({...plaza,direction:'W'},[page]),'exact name with its direction suffix matches');assert.equal(M.choose({...plaza,direction:'E'},[page]),null,'opposite direction rejected');
  const none=M.create({get:()=>null,put:()=>{},read:async()=>({complete:true,places:[]}),blocked:()=>{}});assert.equal((await none.resolve({...plaza,id:'ntad:78'})).state,'notfound');
  console.log('Direction-suffixed Maps searches for U.S. DOT/BTS rest areas passed');})().catch(e=>{console.error(e);process.exitCode=1;});
+
+// Names can differ by punctuation or omit part of a source label at a nearby pin.
+{const pin=(name,lat=35,lng=-92)=>({name,url:'https://www.google.com/maps/place/Test/data=!3d'+lat+'!4d'+lng});
+ assert(M.choose({...site,name:'I-71 Rest Area'},[pin('I71 Rest Area')]));
+ assert(M.choose({...site,name:'Interstate 71 Rest Area'},[pin('I-71 Rest Stop')]));
+ assert(M.choose({...site,name:'Sample Woods Rest Area'},[pin('Woods Rest Stop',35.0003)]));
+ assert(M.choose({...site,name:'Pennyrile Forest State Park Campground',kind:'campground'},[pin('Pennyrile Campground',35.0004)]));
+ assert(!M.choose({...site,name:'I-71 Rest Area'},[pin('I75 Rest Area')]),'different highway numbers are not interchangeable');
+ assert(!M.choose({...site,name:'I-71 Rest Area'},[pin('I71 Rest Area SB')]),'punctuation normalization cannot bypass direction');
+ assert(!M.choose({...site,name:'Sample Woods Rest Area'},[pin('Woods Rest Stop',35.005)]),'partial text needs a close pin');
+ assert(!M.choose({...site,name:'Sample Woods Campground',kind:'campground'},[pin('Unrelated Campground')]),'generic facility words are insufficient');
+ assert(!M.choose({...site,name:'Sample Woods Rest Area'},[pin('Woods Rest Stop',35.0003),pin('Woods Rest Stop',34.9997)]),'equally close partial matches stay ambiguous');
+ console.log('Nearby partial names and I71/I-71 normalization preserve highway, direction, generic-name and ambiguity safeguards');
+}

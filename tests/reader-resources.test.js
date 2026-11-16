@@ -61,6 +61,7 @@ public class ReaderTest {
  static class Main {int removed=0;void removeCallbacks(Runnable r){removed++;}void post(Runnable r){r.run();}}
  static class Root {void removeView(View v){}}
  class SiteWorker {
+  void scheduleIdleRelease(){}
   int readReq=1,showReq=-1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
   long gasReadStarted=System.nanoTime()/1000000L,gasRetryAt;String gasFirstStop="";int gasFirstRows;AtomicIntegerArray omittedGasResources=new AtomicIntegerArray(4);View view=new View();Runnable readDeadline=()->{};JSONArray partialGasStores=null;String gasRequestedGrade="regular",verificationUrl=null,gasTargetUrl=null;boolean gasCommandReady=false,gasCommandReusing=false;
   // Android-only NHTSA storage recovery is outside this gas-reader harness.

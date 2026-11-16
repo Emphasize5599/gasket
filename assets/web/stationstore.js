@@ -16,6 +16,10 @@
    if(found.size>10000)throw Error('This route needs more than 10,000 search cells. Split the trip.');
   });});return Array.from(found.values());
  }
+ async function routeCellsAsync(models,T,P,pad,valid){var found=new Map(),work=typeof module!=='undefined'&&module.exports?require('./uiwork'):root.UiWork;pad=pad==null?8:pad;
+  for(var m of models){await work.each(T.samplePoints(m,4),function(p){var r=pad+2,dy=r/69,dx=r/(69.17*Math.max(.08,Math.cos(p.lat*Math.PI/180)));cells([Math.max(-85,p.lat-dy),Math.max(-180,p.lng-dx),Math.min(85,p.lat+dy),Math.min(180,p.lng+dx)]).forEach(function(c){if(P.haversineMi(c.lat,c.lng,p.lat,p.lng)<=r+7.2)found.set(c.id,c);});if(found.size>10000)throw Error('This route needs more than 10,000 search cells. Split the trip.');},valid);}
+  return Array.from(found.values());
+ }
  function create(KV,P){var memo=new Map(),index=null,rowIndex=new Map();
   function indexRows(){if(!index){var v=KV.get(NS,'index-v1');index=new Set(v&&Array.isArray(v.v)?v.v:[]);}return index;}
   function columns(y){if(!rowIndex.has(y)){var v=KV.get(NS,'row|'+y);rowIndex.set(y,new Set(v&&Array.isArray(v.v)?v.v:[]));}return rowIndex.get(y);}
@@ -74,7 +78,7 @@
  async function seedHistory(valid){if(seeding)return seeding;var A=root.__app;if(!root.PriceHistory||A.KV.get(NS,'history-import-v1'))return;
   seeding=(async function(){var old=root.PriceHistory.near([-85,-180,85,180]).filter(function(s){return s.brand!=='ev'&&s.brand!=='h2';});for(var i=0;i<old.length;i+=100){if(valid&&!valid())return;if(!current().observe(old.slice(i,i+100),'gas'))return;await new Promise(function(resolve){setTimeout(resolve,0);});}A.KV.put(NS,'history-import-v1',{stations:old.length});})();try{return await seeding;}finally{seeding=null;}
  }
- var api={cell:at,cells:cells,routeCells:routeCells,create:create,seedHistory:seedHistory,observe:function(){return current().observe.apply(null,arguments);},rows:function(){return current().rows.apply(null,arguments);},covered:function(){return current().covered.apply(null,arguments);},complete:function(){return current().complete.apply(null,arguments);},query:function(){return current().query.apply(null,arguments);},routeRows:function(){return current().routeRows.apply(null,arguments);},routeCoverage:function(){return current().routeCoverage.apply(null,arguments);},rememberRoute:function(){return current().rememberRoute.apply(null,arguments);},routeCovered:function(){return current().routeCovered.apply(null,arguments);},uncoveredRuns:function(){return current().uncoveredRuns.apply(null,arguments);},priceScope:function(c){return /tesla/i.test(c&&c.make||'')?'tesla-owner':'guest';},reset:function(){if(store)store.reset();}};
+ var api={cell:at,cells:cells,routeCells:routeCells,routeCellsAsync:routeCellsAsync,create:create,seedHistory:seedHistory,observe:function(){return current().observe.apply(null,arguments);},rows:function(){return current().rows.apply(null,arguments);},covered:function(){return current().covered.apply(null,arguments);},complete:function(){return current().complete.apply(null,arguments);},query:function(){return current().query.apply(null,arguments);},routeRows:function(){return current().routeRows.apply(null,arguments);},routeCoverage:function(){return current().routeCoverage.apply(null,arguments);},rememberRoute:function(){return current().rememberRoute.apply(null,arguments);},routeCovered:function(){return current().routeCovered.apply(null,arguments);},uncoveredRuns:function(){return current().uncoveredRuns.apply(null,arguments);},priceScope:function(c){return /tesla/i.test(c&&c.make||'')?'tesla-owner':'guest';},reset:function(){if(store)store.reset();}};
  api.activeRows=function(){return current().activeRows.apply(null,arguments);};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.StationStore=api;
  if(root.addEventListener){root.addEventListener('cacheclear',api.reset);root.addEventListener('stationsreset',api.reset);}

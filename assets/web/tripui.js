@@ -659,7 +659,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       compareReviewed=Date.now();compareReviewKey=compareSafetyKey();compareReviewProof={context:compareReviewContext(),routes:choiceLists().map(function(list,i){return list.filter(function(a){return session.consent.roadAllowed(i,RouteChoices.key(i,a));}).map(function(a){return RouteChoices.key(i,a);});})};choiceComplete=true;recompute();compareCapture();A.save();if(choicePool){var savedRows=(choicePool.official||[]).concat.apply(choicePool.official||[],choicePool.google||[]);saveTrip({official:mergeRouteStations(savedRows).map(function(st){var c=Object.assign({},st);delete c.detourExact;delete c.detourMi;delete c.detourRange;return c;}),google:[[]],kind:choicePool.kind||KIND()},[altSel]);}step=ST_STOPS;state.completed=true;session.createdAt=Date.now();
       LG.info('schedule','Verified flexible-time trip ready',{checked:checked,priority:cfg.priority,cost:best.cost,minutes:best.minutes,legs:best.legs.map(function(t){return {depart:t.depart,arrive:t.arrive,waitMinutes:t.waitMinutes};})});
     }catch(e){result=oldResult;model=oldModel;rawRoute=oldRaw;A.toast(e.message);LG.warn('schedule','Flexible-time planning stopped',{reason:e.message,checked:checked});adjustError=e.message;step=ST_STOPS;renderStep();}
-    finally{if(state.lost&&!state.cancelled&&!state.completed&&schedulePlanning===state){adjustError='Trip settings changed while planning, so the approved roads and hours need another look. Review hazards again.';LG.warn('schedule','Flexible-time planning stopped: approved hours no longer match the trip',{car:car});}scheduleCollecting=false;session.planning=false;if(state.cancelled){result=oldResult;model=oldModel;rawRoute=oldRaw;step=ST_COMPARE;}if(schedulePlanning===state)schedulePlanning=null;if(window.Tasks)Tasks.remove('window-trip');if(!queueWorking)queueNotify('finish',state.cancelled?'Flexible-time planning cancelled.':state.completed?'Flexible-time trip ready.':'Flexible-time planning needs input.',car);if(document.body.classList.contains('trip-on'))renderStep();else navRender();}
+    finally{if(!state.completed&&restUI&&restUI.clearQueued)restUI.clearQueued();if(state.lost&&!state.cancelled&&!state.completed&&schedulePlanning===state){adjustError='Trip settings changed while planning, so the approved roads and hours need another look. Review hazards again.';LG.warn('schedule','Flexible-time planning stopped: approved hours no longer match the trip',{car:car});}scheduleCollecting=false;session.planning=false;if(state.cancelled){result=oldResult;model=oldModel;rawRoute=oldRaw;step=ST_COMPARE;}if(schedulePlanning===state)schedulePlanning=null;if(window.Tasks)Tasks.remove('window-trip');if(!queueWorking)queueNotify('finish',state.cancelled?'Flexible-time planning cancelled.':state.completed?'Flexible-time trip ready.':'Flexible-time planning needs input.',car);if(document.body.classList.contains('trip-on'))renderStep();else navRender();}
   }
   // what happened on the last trip, for the troubleshooting report
   var dbg = {};
@@ -3398,7 +3398,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       var tasks = [];
       if(webDiscovery||cellApi){
         weight.google=1;
-        tasks.push((cellApi?KeylessGas.discoverAPI:KeylessGas.discover)(areaPlan||KeylessGas.discoveryAreas(models,T,P),function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover'||force===true).then(function(r){
+        var discoveryPlan=areaPlan||await KeylessGas.discoveryAreasAsync(models,T,P,function(){return !jobCancel;});
+        tasks.push((cellApi?KeylessGas.discoverAPI:KeylessGas.discover)(discoveryPlan,function(f,text){part.google=f;label=text;tick();},gradeOf(),force==='discover'||force===true).then(function(r){
           dbgS.keyless={areas:r.areas,completed:r.completedAreas,stations:r.stations.length,websiteLoads:r.websiteLoads,cancelled:r.cancelled,blocked:r.blocked,apiCalls:0};
           r.stations.forEach(function(s){if(!S.brands[s.brand])return;models.forEach(function(m,i){if(T.project(m,s).offset<=maxOff)perModel[i].push(s);});});
           notes=notes.concat(r.errors||[]);if(r.errors&&r.errors.length&&!r.cancelled&&!r.blocked)notes.push('Some website discovery work failed; completed station results are kept.');if(r.cancelled)notes.push('Website discovery cancelled; completed stations kept.');if(r.pricesSkipped&&notes.indexOf(SKIP_NOTE)<0)notes.push(SKIP_NOTE);
@@ -4388,6 +4389,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function jobLocked(k) { return !!priceReplanning||trafficRefreshing||!!schedulePlanning||queueWorking || !!autoPlanning || busy && !loadingTrip && (k === ST_GARAGE || k === ST_ROUTE || k === ST_TIMING || k === ST_HAZ || k === ST_STOPS || k === ST_DEPART); }
   async function findStops1(force) {
     var preflightOwner=route,previousPlan=result,previousModel=model,previousContext=result&&result.plan&&result.plan.ok?PlannedTrip.identity(plannedSession(),plannedSettings()):null;await planningPreflight(force);if(route!==preflightOwner)return;
+    if(restUI&&restUI.queuePlanned)restUI.queuePlanned({legs:route?TripStops.groups(route).length:1,kind:KIND(),forecast:(S.googleTraffic!==false||S.hereTraffic&&S.hereKey)&&!!(S.trip.trafficForecast||windows&&windows.enabled())});
     busy = true;adjustError=''; jobCancel = false; searchCancelled = false; bgJob = false;
     pricesSkipped=false;if(window.KeylessGas&&KeylessGas.priceRefresh)KeylessGas.priceRefresh(!batchSkipsPrices());
     choiceCandidates.clear();      // a new search: per-leg candidates from an earlier one (and their prices) are out of date
@@ -4399,12 +4401,14 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (A.jobStart) A.jobStart({ kind: 'trip', label: 'Finding stations', cancel: function(){cancelSearch(true);}, inline: tripShowsJob });
     mapLoaded();
     gateTabs();
-    try { await findStops0(force); }
+    await afterPaint();
+    try { if(!jobCancel)await findStops0(force); }
     catch (e) {
       if (jobCancel) { searchCancelled = true; LG.info('stations', 'Search stopped: ' + (e.message || e)); }
       else {adjustError=e.message||String(e); LG.error('plan', e.message || String(e),{stack:String(e.stack||'').slice(0,1800),restDraft:restPending(),legCount:route&&route.stops.length-1}); toastMsg(e.message || String(e)); }
       if(previousContext&&route===preflightOwner&&previousContext===PlannedTrip.identity(Object.assign({},plannedSession(),{result:previousPlan}),plannedSettings())){result=previousPlan;model=previousModel;adjustError='';built[ST_ADJ]=null;built[ST_STOPS]=null;var kept='Refresh did not finish; the previous completed plan is kept.';result.notes=result.notes||[];if(result.notes.indexOf(kept)<0)result.notes.push(kept);LG.info('plan','Previous completed plan retained after interrupted refresh',{});}else result=null;
     }
+    if((jobCancel||!scheduleCollecting&&!(result&&result.plan&&result.plan.ok))&&restUI&&restUI.clearQueued)restUI.clearQueued();
     clearScanPending();busy = false; priceRefreshActive=false;progEnd();
     var shown = tripShowsJob();
     if (A.jobEnd) A.jobEnd(shown ? null : searchCancelled ? { text: 'Station search cancelled' } :
@@ -4485,7 +4489,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       var keepKs = okKs.filter(function (k) { return partialKs.indexOf(k) < 0; }), modelOf = function (k) { return okModels[okKs.indexOf(k)]; };
       var kept = await gatherAll(keepKs.map(modelOf), function () { }, {}, false, rpSt, keepKs);
       var legOnly = partialKs.map(function (k) { var a = alts[k]; return legsMode() && a._leg != null ? hzModel(hzAlts(a._leg)[a._sel[a._leg]]) : modelOf(k); });
-      var cover = discovering || !S.apiKey || S.keylessRegular ? KeylessGas.discoveryPhases([okModels[0]], legOnly, T, P) : null, missDebug = {};
+      var cover = discovering || !S.apiKey || S.keylessRegular ? await KeylessGas.discoveryPhasesAsync([okModels[0]], legOnly, T, P, function(){return !jobCancel;}) : null, missDebug = {};
       scanPending('alternatives', 'Searching approved alternative routes', 20); finishScanPending('alternatives');
       var found = await gatherAll(legOnly, function (f, l) { prog(.02 + f * .85, 'Approved alternatives · ' + l); }, missDebug, S.apiKey && !S.keylessRegular ? false : 'discover-cache', null, partialKs, cover && cover.alternatives);
       var pool = (rpSt.official || []).concat.apply(rpSt.official || [], rpSt.google.map(function (g) { return g.list || []; }));
@@ -4506,7 +4510,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     else if(others.length&&!rpSt){
       var firstDebug={},restDebug={};
       var extraModels=okKs.slice(1).map(function(k,i){var a=alts[k];return legsMode()&&a._leg!=null?hzModel(hzAlts(a._leg)[a._sel[a._leg]]):okModels[i+1];});
-      var coverage=discovering?KeylessGas.discoveryPhases([okModels[0]],extraModels,T,P):null;
+      var coverage=discovering?await KeylessGas.discoveryPhasesAsync([okModels[0]],extraModels,T,P,function(){return !jobCancel;}):null;
       if(coverage)LG.info('keyless','Shared primary/alternative coverage',{primaryAreas:coverage.primary.length,alternativeAreas:coverage.alternatives.length,reusedPrimaryAreas:coverage.alternatives.plan.reusedPrimaryAreas});
       var sharedAreas=coverage&&coverage.primary.concat(coverage.alternatives);if(sharedAreas)finishScanPending('alternatives');if(sharedAreas)sharedAreas.plan=Object.assign({},coverage.primary.plan,{cells:sharedAreas.length,alternativeAreas:coverage.alternatives.length});
       var first=await gatherAll([okModels[0]],function(f,l){prog(.02+f*.45,'Approved routes · '+l);},firstDebug,force,altReplay,[okKs[0]],sharedAreas);
@@ -5905,10 +5909,12 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function closeTrip() {
     if(queueWorking){queueCancel();return;}
     if(autoPlanning)autoPlanning.cancelled=true;if(schedulePlanning)schedulePlanning.cancelled=true;
+    if(!bgJob){if(restUI&&restUI.stopBackground)restUI.stopBackground();else if(restUI&&restUI.clearQueued)restUI.clearQueued();}
     collectSafe();compareCapture();if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     hzRiskAcks=new WeakMap();
     closePage();mapLoaded();
     resetAdjust();
+    if(window.Planner&&Planner.releaseIdle)Planner.releaseIdle();
     closeLegs(); clearSel(); if ($('spdSel')) $('spdSel').classList.add('hidden'); collectSafe(); closePage(); closeQ(); mapLoaded();
     layer.clearLayers(); drawn = {}; if (map.hasLayer(layer)) map.removeLayer(layer);
     stopRecommendations();clearRecommendationMaps();

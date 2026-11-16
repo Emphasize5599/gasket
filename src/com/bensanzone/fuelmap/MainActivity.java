@@ -178,7 +178,19 @@ public class MainActivity extends Activity {
         return gemma;
     }
 
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+            for (SiteWorker worker : workers.values()) worker.releaseIfIdle();
+    }
+
     @Override protected void onDestroy() {
+        for (SiteWorker worker : workers.values()) {
+            worker.cancelIdleRelease();
+            if (worker.readDeadline != null) main.removeCallbacks(worker.readDeadline);
+            if (worker.view != null) { worker.view.stopLoading(); root.removeView(worker.view); worker.view.destroy(); worker.view = null; }
+        }
+        workers.clear();
         trafficRequests.shutdownNow();
         imageryRequests.shutdownNow();
         main.removeCallbacks(frameTick);if(frameThread!=null)frameThread.quitSafely();
@@ -371,6 +383,7 @@ public class MainActivity extends Activity {
         workers.put("mazdaparts", new SiteWorker("mazdaparts", "https://parts.mazdausa.com/", "https://parts.mazdausa.com/"));
         workers.put("audiparts", new SiteWorker("audiparts", "https://parts.audiusa.com/", "https://parts.audiusa.com/"));
         for (SiteWorker sw : workers.values()) {
+            if (sw.view == null) continue;
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || sw.key.equals("traffic") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
             else root.addView(sw.view, new FrameLayout.LayoutParams(-1, -1));
@@ -551,6 +564,7 @@ public class MainActivity extends Activity {
         int readReq = -1;   // set while a page is read in the background by siteRead (answered once)
         String readCall = null;   // its reader: run on every load of the page (it may reload itself), once per load
         Runnable readDeadline = null;
+        Runnable idleRelease = null;
         volatile boolean leanGasResources = true;
         boolean retriedGasResources = false;
         long gasReadStarted, gasRetryAt;
@@ -700,7 +714,7 @@ public class MainActivity extends Activity {
                 if (!gasCommandReady && completedReads % 4 == 0) {
                     final SiteWorker old = this;
                     main.post(new Runnable() { public void run() {
-                        if (old.readReq >= 0 || verifying == old || workers.get(old.key) != old || old.view == null) return;
+                        if (workers.get(old.key) != old || old.view == null || !ReaderRetention.canRelease(old.readReq, old.showReq, verifying == old, old.queue.size())) return;
                         // Only WebView RAM resource cache; never cookies, lookup answers or app storage.
                         gasReaderRecycles++;
                         root.removeView(old.view); old.view.destroy(); old.view = null;
@@ -708,13 +722,30 @@ public class MainActivity extends Activity {
                     }});
                 }
             }
+            scheduleIdleRelease();
             js("window.onNativeResult&&onNativeResult(" + reqId + ",JSON.parse(" + q(json) + "))");
+        }
+
+        void cancelIdleRelease() { if (idleRelease != null) main.removeCallbacks(idleRelease); idleRelease = null; }
+        boolean releaseIfIdle() {
+            if (workers.get(key) != this || view == null || !ReaderRetention.canRelease(readReq, showReq, verifying == this, queue.size())) return false;
+            cancelIdleRelease();
+            view.stopLoading(); root.removeView(view); view.destroy(); view = null;
+            ready = false; gasCommandReady = false; queue.clear(); return true;
+        }
+        void scheduleIdleRelease() {
+            cancelIdleRelease();
+            idleRelease = new Runnable() { public void run() { releaseIfIdle(); } };
+            main.postDelayed(idleRelease, isGasWorker(key) ? 15000 : 1500);
         }
 
         SiteWorker(String key, String home, String origin) { this(key, home, origin, false); }
 
-        SiteWorker(String key, String home, String origin, boolean desktop) {
+        SiteWorker(String key, String home, String origin, boolean desktop) { this(key, home, origin, desktop, false); }
+
+        SiteWorker(String key, String home, String origin, boolean desktop, boolean createView) {
             this.key = key; this.home = home; this.origin = origin;
+            if (!createView) return; // provider definitions allocate no renderer until a real request
             view = new WebView(MainActivity.this);
             WebSettings ws = view.getSettings();
             ws.setJavaScriptEnabled(true);
@@ -885,14 +916,14 @@ public class MainActivity extends Activity {
         SiteWorker old = workers.get(key);
         if (old == null) {
             if (!isGasWorker(key) && !"restmaps".equals(key)) return null;
-            SiteWorker fresh = new SiteWorker(key, "https://www.google.com/maps", "https://www.google.com/", true);
+            SiteWorker fresh = new SiteWorker(key, "https://www.google.com/maps", "https://www.google.com/", true, true);
             workers.put(key, fresh);
             root.addView(fresh.view, 0, new FrameLayout.LayoutParams(1280, 900));
             return fresh;
         }
-        if (old.view != null) return old;
+        if (old.view != null) { old.cancelIdleRelease(); return old; }
         boolean desktop = isGasWorker(key) || "gmaps".equals(key) || "traffic".equals(key) || "restmaps".equals(key);
-        SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop);
+        SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop, true);
         fresh.verificationUrl = old.verificationUrl;
         workers.put(key, fresh);
         root.addView(fresh.view, 0, new FrameLayout.LayoutParams(desktop ? 1280 : -1, desktop ? 900 : -1));
@@ -926,6 +957,7 @@ public class MainActivity extends Activity {
                     }
                     // Ignore late/duplicate background replies. Visible reads and price workers use onSiteResult.
                     if ("tirerack".equals(key) || isGasWorker(key) || isOemVin(key) || (("nhtsa".equals(key) || "brave".equals(key)) && (w == null || w.showReq != id))) return;
+                    if (w != null) w.scheduleIdleRelease();
                     js("window.onSiteResult&&onSiteResult(" + q(key) + "," + id + ",JSON.parse(" + q(payload) + "))");
                 }
             });
@@ -983,7 +1015,9 @@ public class MainActivity extends Activity {
         wmDone.setText("Done \u2014 back to the map");
         String key = verifying != null ? verifying.key : "";
         if (verifying != null) { verifying.verificationUrl=null;showMargins(verifying, false); if(isGasWorker(verifying.key)||"restmaps".equals(verifying.key))verifying.view.getSettings().setBlockNetworkImage(true); }
+        SiteWorker closedReader = verifying;
         verifying = null;
+        if (closedReader != null) closedReader.scheduleIdleRelease();
         wmDone.setVisibility(View.GONE);
         web.setVisibility(View.VISIBLE);
         web.bringToFront();
@@ -1900,9 +1934,7 @@ public class MainActivity extends Activity {
             if (!isGasWorker(key)) return;
             main.post(new Runnable() { public void run() {
                 SiteWorker worker = workers.get(key);
-                if (worker == null || worker.readReq >= 0 || verifying == worker || worker.view == null) return;
-                worker.view.stopLoading(); root.removeView(worker.view); worker.view.destroy();
-                worker.view = null; worker.ready = false;
+                if (worker != null) worker.releaseIfIdle();
             }});
         }
 
@@ -1910,9 +1942,7 @@ public class MainActivity extends Activity {
         public void releaseGasReaders() {
             main.post(new Runnable() { public void run() {
                 for (SiteWorker worker : workers.values()) {
-                    if (!isGasWorker(worker.key) || worker.readReq >= 0 || verifying == worker || worker.view == null) continue;
-                    worker.view.stopLoading(); root.removeView(worker.view); worker.view.destroy();
-                    worker.view = null; worker.ready = false;
+                    if (isGasWorker(worker.key)) worker.releaseIfIdle();
                 }
             }});
         }
@@ -2680,12 +2710,12 @@ public class MainActivity extends Activity {
         public void cancelSiteRead(final String key) {
             main.post(new Runnable() { public void run() {
                 SiteWorker w = workers.get(key);
-                if (!(isGasWorker(key) || "walmart".equals(key) || "murphy".equals(key)) || w == null || w.view == null || w.readReq < 0) return;
+                if (w == null || w.view == null || w.readReq < 0 || verifying == w || w.showReq >= 0) return;
                 w.view.stopLoading();
                 w.finishRead(w.readReq, "{\"cancelled\":true}");
                 w.ready = false;
-                // Destroy the old reader's document and timers, not just its navigation.
-                w.view.loadUrl("about:blank");
+                // Explicit cancellation releases the abandoned document immediately.
+                w.queue.clear(); w.releaseIfIdle();
             }});
         }
 

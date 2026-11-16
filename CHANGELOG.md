@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.488 — 2026-11-16
+
+- Keep rest-stop rows, images and focused controls in place during background updates. Load more directory rows as you scroll, and defer background redraws during touch and scrolling.
+- Break shared station and rest-source coverage setup into cancellable chunks, remove repeated coverage calculations and use spatial indexes for rest-site duplicates.
+- Show future rest inventory, detail, access, suggestion and eligible charging-station stages in the expanded status list before reaching their menus. Long task lists scroll without resetting on progress updates.
+- Create reader WebViews only when requested, release idle readers safely, and retire idle planning workers. Protect active requests, queued commands and visible verification pages.
+- Accept nearby partial Google Maps listing names, including I71 / I-71, while rejecting conflicting highway numbers, opposite directions and ambiguous matches.
+- Add repeatable interaction, coverage-parity, cancellation and reader-lifecycle regression checks.
+
 ## 0.0.487 — 2026-11-16
 
 - Speed up automatic rest suggestions with separate access and forecast lanes. A slow departure forecast no longer prevents other sites from passing access screening; ready sites receive initial samples before refinements.

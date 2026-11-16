@@ -42,12 +42,12 @@
   function span(ms){var sec=Math.ceil(ms/1000);return sec<90?sec+' s':Math.round(sec/60)+' min';}
   function upsert(id, value) {
     var fresh=!tasks.has(id);if (fresh) tasks.set(id, { id: id, started: Date.now() });
-    var t=tasks.get(id),same=!fresh&&value&&Object.keys(value).every(function(k){return /^(frac|text|estimateMs|detail)$/.test(k)||t[k]===value[k];});Object.assign(t, value); completion = null; clearTimeout(completionTimer); queue(same);
+    var t=tasks.get(id),same=!fresh&&value&&Object.keys(value).every(function(k){return /^(frac|text|estimateMs|detail)$/.test(k)||t[k]===value[k];});Object.assign(t, value); if(t.state!=='pending'){completion = null; clearTimeout(completionTimer);} queue(same);
     if(root.VisualDiagnostics)VisualDiagnostics.redraw('task_status_update');
   }
   function remove(id, done) {
     var task=tasks.get(id);if(task&&task.state!=='pending'&&!task.cancelling&&Date.now()-task.started>100){var key=etaKey(task),r=rates(),elapsed=Date.now()-task.started;r[key]=r[key]?r[key]*.7+elapsed*.3:elapsed;try{if(root.__app)root.__app.KV.put('traffic','task-durations',r);}catch(e){}}tasks.delete(id);
-    if (done && done.text && !tasks.size) { completion = done; clearTimeout(completionTimer); completionTimer = setTimeout(function(){completion=null;queue();}, 10000); }
+    if (done && done.text && !Array.from(tasks.values()).some(function(t){return t.state!=='pending';})) { completion = done; clearTimeout(completionTimer); completionTimer = setTimeout(function(){completion=null;queue();}, 10000); }
     queue();
   }
   function sorted() { return Array.from(tasks.values()).sort(function(a,b){return (a.state==='pending')-(b.state==='pending')||(b.priority||0)-(a.priority||0)||(a.order||0)-(b.order||0)||a.started-b.started;}); }
@@ -72,6 +72,7 @@
   }
   function paintRow(el,t,main) {
     if(t.state==='pending'){
+      if(el.dataset.taskId===t.id&&el.dataset.taskState==='pending'&&el.querySelector('.jb-t')&&el.querySelector('.jb-t').textContent===taskText(t))return;
       el.dataset.taskId=t.id;el.dataset.taskState='pending';el.dataset.fullText=t.text||'Pending';
       el.innerHTML=(main?messageButton():'')+'<span class="jb-t"'+(main?' id="jobMessage"':'')+'>'+esc(taskText(t))+'</span><span class="task-state">Pending</span>';return;
     }
@@ -95,7 +96,7 @@
     var hub = doc.getElementById('taskHub');
     if (!hub) {
       hub = doc.createElement('div'); hub.id='taskHub'; hub.className='task-hub hidden';
-      hub.innerHTML='<div class="task-top"><div id="jobBar" class="job-bar" role="status" aria-live="polite"></div><button id="taskMore" class="task-more hidden" aria-label="Show background tasks" aria-controls="taskList" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button></div><div id="taskList" class="task-list hidden" aria-label="Background tasks"></div>';
+      hub.innerHTML='<div class="task-top"><div id="jobBar" class="job-bar" role="status" aria-live="polite"></div><button id="taskMore" class="task-more hidden" aria-label="Show background tasks" aria-controls="taskList" aria-expanded="false"><span class="chev" aria-hidden="true"></span></button></div><div id="taskList" class="task-list hidden" role="region" tabindex="0" aria-label="Background tasks"></div>';
       doc.body.appendChild(hub);
 
       doc.getElementById('taskMore').onclick=function(){expanded=!expanded;draw();};
@@ -108,7 +109,8 @@
     var hint=doc.getElementById('taskNotice');if(!hint){hint=doc.createElement('div');hint.id='taskNotice';hint.className='task-notice hidden';hint.setAttribute('role','status');hint.setAttribute('aria-live','polite');hint.innerHTML='<span></span><button type="button" aria-label="Dismiss screen flicker tip">✕</button>';hub.insertBefore(hint,doc.getElementById('taskList'));hint.querySelector('button').onclick=function(){dismissNotice(hint.dataset.noticeId);};}
     hint.classList.toggle('hidden',!notice);if(notice){hint.dataset.noticeId=notice.id;var noticeText=hint.querySelector('span');if(noticeText.textContent!==notice.text)noticeText.textContent=notice.text;}
     var marker=doc.getElementById('visualMarkerRow');if(!marker){marker=doc.createElement('div');marker.id='visualMarkerRow';marker.className='hidden';marker.innerHTML='<button type="button" class="btn tonal sm" id="visualMarker">Mark visual glitch</button>';hub.insertBefore(marker,doc.getElementById('taskList'));marker.querySelector('button').onclick=function(){if(root.VisualDiagnostics)VisualDiagnostics.mark();};}marker.classList.toggle('hidden',!(root.VisualDiagnostics&&VisualDiagnostics.wantMarker()));
-    var primary=all[0], bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
+    var primary=all.find(function(t){return t.state!=='pending';})||(!completion?all[0]:null), bar=doc.getElementById('jobBar'), more=doc.getElementById('taskMore'), list=doc.getElementById('taskList');
+    multiple=all.length+(!primary&&completion?1:0)>1;
     var nextId=primary?primary.id:completion?'completion':'';if(nextId!==primaryId){messageExpanded=false;primaryId=nextId;}
     // One dock stays visible on every screen, even when a tile also offers inline progress.
     hub.classList.toggle('hidden',!primary&&!completion);
@@ -129,8 +131,9 @@
     else {
       var rest=all.filter(function(t){return !primary||t.id!==primary.id;}),keep=new Set(rest.map(function(t){return t.id;}));
       Array.from(list.children).forEach(function(el){if(!keep.has(el.dataset.taskId))el.remove();});
+      var rowMap=new Map(Array.from(list.children).map(function(el){return [el.dataset.taskId,el];}));
       rest.forEach(function(t,index){
-        var el=Array.from(list.children).find(function(child){return child.dataset.taskId===t.id;});
+        var el=rowMap.get(t.id);
         if(!el){el=doc.createElement('div');el.className='task-row';}
         paintRow(el,t,false);if(list.children[index]!==el)list.insertBefore(el,list.children[index]||null);
       });

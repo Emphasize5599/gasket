@@ -121,6 +121,8 @@
     rest.plan=Object.assign({},union.plan,{primaryAreas:first.length,reusedPrimaryAreas:discoveryAreas(alternatives,T,P).length-rest.length});
     return {primary:first,alternatives:rest};
   }
+  async function discoveryAreasAsync(models,T,P,valid){if(!Grid||!Grid.routeCellsAsync)return discoveryAreas(models,T,P);var cells=await Grid.routeCellsAsync(models,T,P,(30-1)*25/60/2/1.3,valid);cells.plan={routeMi:Math.round(models.reduce(function(n,m){return n+(m.totalMi||0);},0)),cells:cells.length,gridVersion:1,radiusMi:8};return cells;}
+  async function discoveryPhasesAsync(primary,alternatives,T,P,valid){var first=await discoveryAreasAsync(primary,T,P,valid),extra=await discoveryAreasAsync(alternatives,T,P,valid),seen=new Set(first.map(function(c){return c.id||c.cellId;})),rest=extra.filter(function(c){return !seen.has(c.id||c.cellId);});rest.plan=Object.assign({},first.plan,{routeMi:Math.round(primary.concat(alternatives).reduce(function(n,m){return n+(m.totalMi||0);},0)),cells:first.length+rest.length,primaryAreas:first.length,reusedPrimaryAreas:extra.length-rest.length});return {primary:first,alternatives:rest};}
   function dedupeDiscovery(stations,P){
     stations=P.reconcileStations(stations);
     var out=[],ids=new Map(),bins=new Map();
@@ -239,7 +241,7 @@
     return {begin:function(key){active.set(key,Date.now());maxActive=Math.max(maxActive,active.size);},end:function(key){active.delete(key);},complete:function(cache){done++;if(cache)cached++;},retire:function(){retired++;},persist:function(ms){checkpoints++;persistMs+=ms;},tick:function(){if(Date.now()-sampleAt>=5000)sampleMemory();if(Date.now()-last>=15000){last=Date.now();write('running');}},finish:function(status){if(!finished){finished=true;write(status|| (control.cancelled?'cancelled':control.blocked?'restricted':'finished'));}}};
   }
   function readerKeys(count){return Array.from({length:count},function(_,i){return i?'gasweb'+(i+1):'gasweb';});}
-  var math={networkDuration:networkDuration,netStep:netStep,retryable:function(r){return retryable(r);},searched:function(r){return searched(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
+  var math={networkDuration:networkDuration,netStep:netStep,retryable:function(r){return retryable(r);},searched:function(r){return searched(r);},workerWarning:workerWarning,discoveryPhases:discoveryPhases,discoveryPhasesAsync:discoveryPhasesAsync,discoveryAreasAsync:discoveryAreasAsync,poolTarget:poolTarget,mapAreas:mapAreas,area:area,osmUrl:osmUrl,webUrl:webUrl,normalizeOsm:normalizeOsm,merge:merge,updateKnown:updateKnown,knownAreas:knownAreas,knownKey:knownKey,discoveryAreas:discoveryAreas,dedupeDiscovery:dedupeDiscovery,discoveryReport:discoveryReport,autoWorkers:autoWorkers,readerCount:readerCount,readerKeys:readerKeys};
   if(typeof module!=='undefined'&&module.exports)module.exports=math;
   if(!root.document)return;
   var busy=null,lastOsm=0,lastWeb=0;

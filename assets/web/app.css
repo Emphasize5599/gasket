@@ -1954,7 +1954,7 @@ body .task-hub.compact.full-message .job-bar { height:auto; }
 body .task-hub.compact.full-message .jb-t { white-space:normal; }
 .task-more { flex:0 0 42px; width:42px; min-height:44px; border-radius:12px; background:var(--surface); color:var(--accent); border:1px solid var(--line); font-size:25px; display:grid; place-items:center; }
 .task-more.hidden { display:none; }
-.task-list { margin-top:6px; border:1px solid var(--line); border-radius:16px; padding:4px 10px; background:var(--surface); box-shadow:0 4px 20px #0002; max-height:35vh; overflow:auto; }
+.task-list { margin-top:6px; border:1px solid var(--line); border-radius:16px; padding:4px 10px; background:var(--surface); box-shadow:0 4px 20px #0002; max-height:35vh; max-height:min(60dvh,calc(100dvh - var(--task-space,60px) - var(--st) - 24px)); overflow:auto; overscroll-behavior:contain; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
 .task-list.hidden { display:none; }
 .vc-batch-estimate { margin:16px 0 4px; padding:16px; border:1px solid var(--accent); border-radius:16px; }
 .vc-batch-estimate strong { display:block; color:var(--accent); font-size:1.25rem; }

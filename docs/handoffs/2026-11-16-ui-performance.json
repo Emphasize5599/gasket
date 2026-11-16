@@ -1,0 +1,245 @@
+{
+  "baselineVersion": "0.0.487",
+  "baselineBlockedMs": 97405,
+  "method": "4x CPU; provider mocks; see audit limitations",
+  "after": {
+    "throttle": 4,
+    "rows": [
+      {
+        "label": "Open trips list",
+        "paintMs": 91,
+        "longestMs": 98,
+        "blockedMs": 98,
+        "lagMs": 1200,
+        "longTasks": 1,
+        "wallMs": 3551
+      },
+      {
+        "label": "Open saved long trip",
+        "paintMs": 284,
+        "longestMs": 283,
+        "blockedMs": 524,
+        "lagMs": 1728,
+        "longTasks": 3,
+        "wallMs": 4017
+      },
+      {
+        "label": "Step tab 1",
+        "paintMs": 2,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 0,
+        "longTasks": 0,
+        "wallMs": 2934
+      },
+      {
+        "label": "Step tab 2",
+        "paintMs": 86,
+        "longestMs": 88,
+        "blockedMs": 88,
+        "lagMs": 0,
+        "longTasks": 1,
+        "wallMs": 3411
+      },
+      {
+        "label": "Step tab 3",
+        "paintMs": 118,
+        "longestMs": 121,
+        "blockedMs": 121,
+        "lagMs": 90,
+        "longTasks": 1,
+        "wallMs": 3473
+      },
+      {
+        "label": "Step tab 5",
+        "paintMs": 159,
+        "longestMs": 188,
+        "blockedMs": 188,
+        "lagMs": 152,
+        "longTasks": 1,
+        "wallMs": 3545
+      },
+      {
+        "label": "Step tab 4",
+        "paintMs": 29,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 58,
+        "longTasks": 0,
+        "wallMs": 2632
+      },
+      {
+        "label": "Step tab 6",
+        "paintMs": 39,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 0,
+        "longTasks": 0,
+        "wallMs": 2990
+      },
+      {
+        "label": "Step tab 8",
+        "paintMs": 165,
+        "longestMs": 172,
+        "blockedMs": 298,
+        "lagMs": 205,
+        "longTasks": 2,
+        "wallMs": 4807
+      },
+      {
+        "label": "Step tab 9",
+        "paintMs": 18,
+        "longestMs": 120,
+        "blockedMs": 120,
+        "lagMs": 0,
+        "longTasks": 1,
+        "wallMs": 4598
+      },
+      {
+        "label": "Back to Garage (step 1)",
+        "paintMs": 33,
+        "longestMs": 241,
+        "blockedMs": 241,
+        "lagMs": 209,
+        "longTasks": 1,
+        "wallMs": 4702
+      },
+      {
+        "label": "Next from step 1 (Next)",
+        "paintMs": 31,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 0,
+        "longTasks": 0,
+        "wallMs": 2970
+      },
+      {
+        "label": "Next from step 2 (Next)",
+        "paintMs": 28,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 0,
+        "longTasks": 0,
+        "wallMs": 2948
+      },
+      {
+        "label": "Next from step 3 (Next)",
+        "paintMs": 28,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 0,
+        "longTasks": 0,
+        "wallMs": 2956
+      },
+      {
+        "label": "Next from step 4 (Next)",
+        "paintMs": 41,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 43,
+        "longTasks": 0,
+        "wallMs": 2993
+      },
+      {
+        "label": "Next from step 10 (Next)",
+        "paintMs": 197,
+        "longestMs": 202,
+        "blockedMs": 652,
+        "lagMs": 680,
+        "longTasks": 5,
+        "wallMs": 6159
+      },
+      {
+        "label": "Next from step 5 (Next)",
+        "paintMs": 75,
+        "longestMs": 121,
+        "blockedMs": 203,
+        "lagMs": 186,
+        "longTasks": 2,
+        "wallMs": 4703
+      },
+      {
+        "label": "Next from step 8 (Next)",
+        "paintMs": 43,
+        "longestMs": 922,
+        "blockedMs": 3588,
+        "lagMs": 3485,
+        "longTasks": 14,
+        "wallMs": 34212
+      },
+      {
+        "label": "Next from step 6 (Next)",
+        "paintMs": 132,
+        "longestMs": 152,
+        "blockedMs": 840,
+        "lagMs": 585,
+        "longTasks": 10,
+        "wallMs": 9068
+      },
+      {
+        "label": "Open rest directory (leg 1)",
+        "paintMs": 193,
+        "longestMs": 202,
+        "blockedMs": 493,
+        "lagMs": 735,
+        "longTasks": 5,
+        "wallMs": 7796
+      },
+      {
+        "label": "Tap + on a rest area",
+        "paintMs": 37,
+        "longestMs": 74,
+        "blockedMs": 74,
+        "lagMs": 111,
+        "longTasks": 1,
+        "wallMs": 3155
+      },
+      {
+        "label": "Confirm add",
+        "paintMs": 145,
+        "longestMs": 329,
+        "blockedMs": 734,
+        "lagMs": 707,
+        "longTasks": 5,
+        "wallMs": 4258
+      },
+      {
+        "label": "Reopen rest directory",
+        "paintMs": 108,
+        "longestMs": 118,
+        "blockedMs": 552,
+        "lagMs": 656,
+        "longTasks": 7,
+        "wallMs": 6598
+      },
+      {
+        "label": "Tap + on a second rest area",
+        "paintMs": 25,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 48,
+        "longTasks": 0,
+        "wallMs": 2750
+      },
+      {
+        "label": "Confirm second add",
+        "paintMs": 93,
+        "longestMs": 125,
+        "blockedMs": 387,
+        "lagMs": 245,
+        "longTasks": 4,
+        "wallMs": 4044
+      },
+      {
+        "label": "Next (Calculate rest timing)",
+        "paintMs": 50,
+        "longestMs": 123,
+        "blockedMs": 175,
+        "lagMs": 144,
+        "longTasks": 2,
+        "wallMs": 4809
+      }
+    ],
+    "errors": []
+  }
+}

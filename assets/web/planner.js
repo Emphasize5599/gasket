@@ -6,6 +6,9 @@
   'use strict';
   var candIds=new WeakMap(),candSeq=0,workers=[],pending=new Map(),queue=[],seq=0,disabled=false,scheduled=false,finished=0,dropped=0;
   function stats(){return {active:workers.filter(function(w){return !!w.busy;}).length,queued:queue.length,finished:finished,dropped:dropped};}
+  var idleTimer=0,idleEpoch=0;
+  function releaseIdle(){if(queue.length||pending.size)return false;workers.forEach(function(w){w.worker.terminate();});workers=[];if(url&&URL.revokeObjectURL)URL.revokeObjectURL(url);url=null;return true;}
+  function idleLater(){if(idleTimer&&typeof clearTimeout==='function')clearTimeout(idleTimer);var epoch=++idleEpoch;idleTimer=setTimeout(function(){if(epoch===idleEpoch)releaseIdle();},5000);if(idleTimer&&idleTimer.unref)idleTimer.unref();}
   function requestDrain(){if(scheduled)return;scheduled=true;Promise.resolve().then(function(){scheduled=false;drain();});}
   function timing(p){Object.defineProperty(p.opts,'_plannerTiming',{configurable:true,value:{waitMs:(p.started||Date.now())-p.at,runMs:p.started?Date.now()-p.started:0}});}
   function boot(){
@@ -53,7 +56,7 @@
   function spawn(){
     if(!url)url=URL.createObjectURL(new Blob([root.EVTariffs?root.EVTariffs.workerSource:'',root.AuxLoad?root.AuxLoad.workerSource:'',root.TrafficModel?root.TrafficModel.workerSource:'',root.Propulsion?root.Propulsion.workerSource:'',root.Trip.workerSource,root.Pricing.workerSource,'('+boot.toString()+')();'],{type:'text/javascript'}));
     var w={worker:new Worker(url),busy:0,ids:new Set(),cands:[]};
-    w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);if(d.error)p.reject(new Error(d.error));else{if(d.candidates)d.plan.cands=d.candidates.map(function(x){if(typeof x==='number')return p.opts.cands[x];if(Object.prototype.hasOwnProperty.call(x,'value'))return x.value;var c=Object.assign({},p.opts.cands[x.index],x.patch);x.removed.forEach(function(k){delete c[k];});return c;});p.opts.refPrice=d.refPrice;if(d.plan.propulsionModel){if(!p.opts.propulsionBase){p.opts.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){p.opts.propulsionBase[k]=p.opts.model[k];});}p.opts.model=root.Trip.restoreModel(Object.assign({},p.opts.model,d.plan.propulsionModel));}p.resolve(d.plan);}requestDrain();};
+    w.worker.onmessage=function(e){var d=e.data,p=pending.get(d.id);w.ids.delete(d.id);w.busy=0;if(!p){requestDrain();return;}pending.delete(d.id);finished++;timing(p);idleLater();if(d.error)p.reject(new Error(d.error));else{if(d.candidates)d.plan.cands=d.candidates.map(function(x){if(typeof x==='number')return p.opts.cands[x];if(Object.prototype.hasOwnProperty.call(x,'value'))return x.value;var c=Object.assign({},p.opts.cands[x.index],x.patch);x.removed.forEach(function(k){delete c[k];});return c;});p.opts.refPrice=d.refPrice;if(d.plan.propulsionModel){if(!p.opts.propulsionBase){p.opts.propulsionBase={};['totalMi','durationSec','segs','legEnds','cityGpm','hwyGpm','combGpm'].forEach(function(k){p.opts.propulsionBase[k]=p.opts.model[k];});}p.opts.model=root.Trip.restoreModel(Object.assign({},p.opts.model,d.plan.propulsionModel));}p.resolve(d.plan);}requestDrain();};
     w.worker.onerror=function(){
       w.worker.terminate();workers.splice(workers.indexOf(w),1);if(!workers.length)disabled=true;
       w.ids.forEach(function(id){var p=pending.get(id);if(p){pending.delete(id);p.reject(new Error('Background planner unavailable. Please reopen this trip.'));}});
@@ -83,7 +86,7 @@
       w.busy=1;w.ids.add(p.id);try{w.worker.postMessage({id:p.id,options:clean,rates:m.speedRates,context:context,candsId:candsId});if(candsId&&clean.cands){w.cands.push(candsId);if(w.cands.length>4)w.cands.shift();}}catch(e){pending.delete(p.id);w.busy=0;w.ids.delete(p.id);p.reject(e);}
     }
   }
-  root.Planner={size:size,workers:function(){return workers.length;},stats:stats,run:function(options,context){
+  root.Planner={releaseIdle:releaseIdle,size:size,workers:function(){return workers.length;},stats:stats,run:function(options,context){
     return new Promise(function(resolve,reject){var p={id:++seq,resolve:resolve,reject:reject,opts:options,context:context,valid:context&&context.valid,priority:context&&context.priority!=null?context.priority:options.lite?1:10,at:Date.now()};pending.set(p.id,p);queue.push(p);requestDrain();});
   }};
 })(window);

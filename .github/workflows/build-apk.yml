@@ -110,6 +110,10 @@ on:
       - tests/rest-departure-ui.test.js
       - tests/rest-tolerance-ui.test.js
       - tests/rest-traffic-leg.test.js
+      - tests/uiwork.test.js
+      - tests/ui-background-input.test.js
+      - tests/planner-retention.test.js
+      - tests/reader-retention.test.js
       - tests/rest-suggestion-budget.test.js
       - tests/rest-suggestion-progress.test.js
       - tests/rest-reco-restart.test.js
@@ -298,6 +302,7 @@ jobs:
           GASKET_NATIVE_TESTS=1 node tests/backup-io.test.js
           GASKET_NATIVE_TESTS=1 node tests/kv-store.test.js
           GASKET_NATIVE_TESTS=1 node tests/reader-resources.test.js
+          GASKET_NATIVE_TESTS=1 node tests/reader-retention.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-processor.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-gpu-support.test.js
           GASKET_NATIVE_TESTS=1 node tests/gemma-stability.test.js
