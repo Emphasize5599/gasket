@@ -1,5 +1,11 @@
 # Saved multi-night trip replay: continuation handoff
 
+## COMPLETED — verified 2026-11-16
+
+The 0.0.483 release and signed-build runs recorded below both succeeded; both signed APK download URLs returned HTTP 200. No release-monitoring work remains for that task. Historical in-progress notes below are superseded by this completion notice.
+
+The owner's subsequent slow Sample access report has also been repaired and released in **0.0.487**. See [the sampling performance audit](../REST_SUGGESTION_SAMPLING.md) for evidence, regressions and successful CI/APK publication. All source, tests and continuation information are on main.
+
 ## LATEST UPDATE — supersedes the initial status below
 
 All 257 release regressions passed in run **43528471736**, job **132239967798**. Native checks and both signed APK builds also passed, including ABI/version/signature/alignment validation. Publication safely refused because the immutable v0.0.482 tag points to 9bad094 while this build used cfc0313; build-apk.yml explicitly requires release_sha == GITHUB_SHA. Do NOT weaken that check or retag the old release.

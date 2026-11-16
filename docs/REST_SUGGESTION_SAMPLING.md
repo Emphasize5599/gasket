@@ -20,3 +20,7 @@ node tests/run-node.js rest-suggestion-budget rest-suggestion-progress rest-reco
 ```
 
 To repeat the negative control, export the prior `assets/web/restui.js` to a temporary file and set `GASKET_RECO_SOURCE` to that file for the budget test. The fixture deliberately blocks two access reads; the old implementation cannot publish later verified candidates.
+
+## Release verification
+
+Released as [0.0.487](https://github.com/Emphasize5599/gasket/releases/tag/v0.0.487), production commit `1bd9aeb`. Release run `43917349553` and signed-build run `43917349641` both succeeded. All 258 JavaScript/browser release regressions passed, followed by native/reference checks and signed APK verification. Both arm64-v8a and universal asset URLs returned HTTP 200.
