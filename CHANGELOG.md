@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.492 — 2026-11-16
+
+- Publish the optional extensive rest forecasting and uncapped final timing from 0.0.491. The earlier version produced no APK because its window-planning fixture included unrequested rest-area spurs and retained a timeout for the old coarse grid.
+- Correct that fixture, require full forecast coverage, and budget its wait from the actual five-minute grid and six-request-per-second limiter. Runtime forecasting retains every valid departure in both modes.
+
 ## 0.0.491 — 2026-11-16
 
 - Add Extensive rest forecasts directly below Forecast traffic in Timing. Off by default: keep quick suggestions for up to eight candidates at three departures each. On: automatically check every eligible rest stop and charging station at every valid five-minute departure for the current night, respecting filters, stay limits and deadlines.
