@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.486 — 2026-11-16
+
+- MINI trims (Cooper, Cooper S, John Cooper Works) from NHTSA's VIN decoder, which lists them as the series.
+
 ## 0.0.485 — 2026-11-16
 
 - Mazda and Audi trims from their parts catalogs, as a fallback when NHTSA's decoder gives no clean trim (e.g. some Mazda3s). Mazda's catalog answers "Base" for trims it doesn't know, so that answer is ignored.

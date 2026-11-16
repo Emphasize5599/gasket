@@ -18,6 +18,8 @@ assert.equal(decode({Make:'SUBARU',Trim:'Sport',Trim2:'ES+HK+SMART'}).trim,'Spor
 assert.equal(decode({Trim:'350 F Sport High'}).trim,'350 F Sport High');
 assert.equal(decode({Trim:'GT Coupe'}).trim,'GT Coupe');
 assert.equal(decode({Trim:'',Series:'LE'}).trim,'','series is not blindly treated as marketing trim');
+assert.equal(decode({Make:'MINI',Trim:'',Series:'Cooper S'}).trim,'Cooper S','MINI: NHTSA puts the trim in Series (2020 Hardtop dealer VINs)');
+assert.equal(decode({Make:'MINI',Trim:'',Series:'F56'}).trim,'','a MINI chassis code is not a trim');
 assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).power,'diesel','diesel VIN uses diesel powertrain');
 assert.equal(decode({FuelTypePrimary:'Diesel',EngineCylinders:'6'}).info.features.includes('Regenerative braking'),false,'plain diesel does not get EV features');
 const vt=source.match(/function vinTrim\(c\) \{[^\n]*\}/)[0],vinTrim=Function(vt+';return vinTrim;')();

@@ -23,7 +23,22 @@ Environment: Android emulator Capture34 (Android 14, Chrome 113 user agent, unmo
 | Nissan | vPIC named 2021 Rogue SV on 2/2 | vPIC sufficient (sampled) |
 | GM (Chevrolet) | vPIC named 2021 Equinox "LT (1LT)" on 2/2 (listing: LT) | vPIC sufficient (sampled) |
 | Stellantis (Jeep) | vPIC named 2021 Grand Cherokee Limited on 2/2 | vPIC sufficient (sampled) |
-| Acura, Infiniti, Mitsubishi, GMC, Buick, Cadillac, Ram, Dodge, Chrysler, BMW, MINI, Mercedes-Benz, Volvo, Polestar, JLR, Porsche | Not sampled this session | Not yet tested |
+| Acura | vPIC: 2021 RDX "SH-AWD A-SPEC" 2/2 | vPIC sufficient |
+| BMW | vPIC: 2021 X3 "xDrive30i" 2/2 | vPIC sufficient |
+| MINI | vPIC Trim blank, Series "Cooper S" 2/2 → 0.0.486 uses Series for MINI | vPIC sufficient (Series) |
+| Mercedes-Benz | vPIC: 2021 GLC "GLC300-4M" 2/2 | vPIC sufficient (code-style) |
+| Volvo | vPIC: 2021 XC60 "Momentum" 2/2 | vPIC sufficient |
+| Land Rover | vPIC: 2021 Velar "S" 2/2 (listing P250 S) | vPIC sufficient |
+| Jaguar | vPIC: 2021 F-Pace "P250 S" 2/2 | vPIC sufficient |
+| Porsche | vPIC: 2021 Macan "S" 2/2 | vPIC sufficient |
+| Lincoln | vPIC: 2021 Corsair "Reserve" 2/2 | vPIC sufficient |
+| Rivian | vPIC: 2022 R1T "Adventure" 2/2 | vPIC sufficient |
+| Lucid | vPIC: 2022 Air "Grand Touring" 2/2 | vPIC sufficient |
+| Infiniti | vPIC blank (2019–2020 QX60 ×3); parts.infinitiusa.com VIN search lands on "problem selecting your vehicle" with Luxe / Pure | **No source** |
+| Mitsubishi | vPIC blank (2021 Outlander Sport ×2); parts.mitsubishicars.com same platform, lists BE / ES / LE / SE | **No source** |
+| Genesis | vPIC lists every GV80 trim ("2.5T, 2.5T Advanced, 2.5T Prestige"); no manufacturer parts store resolves | **No source** |
+| Tesla, Polestar | vPIC blank (2021 Model Y LR ×2, 2021 Polestar 2 ×2); the EPA model names carry the version (Model Y Long Range AWD) | EPA model list covers it |
+| GM (GMC, Buick, Cadillac), Stellantis (Ram, Dodge, Chrysler, Fiat, Alfa Romeo) | Not sampled at the owner's request (trims decode from the VIN) | Skipped |
 | Tesla, Rivian, Lucid | Not researched | Not yet tested |
 
 ### Ford / Lincoln (priority 1)
