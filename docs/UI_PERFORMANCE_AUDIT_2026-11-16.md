@@ -64,3 +64,7 @@ The separate 4x-CPU cancellation/scroll audit completed all 38 actions, includin
 ## Limits and device follow-up
 
 There is no attached Android device/emulator or local Android/JDK toolchain in this workspace. Native code is built and lifecycle tests execute in GitHub CI. No Android PSS/RSS reduction or safe 50-reader concurrency claim is made from browser measurements. On a device, compare cold/warm trips, cancellation and navigation with `dumpsys meminfo`, reader counts, frame/input latency and real verification pages. Existing backlog items 16/17/48 remain the place for actual-phone throughput and memory tuning. Keep durable provider caches: releasing renderers must not force another national download or discard a saved trip.
+
+## Release verification
+
+0.0.490 was pushed at `50b6f37`. The [signed build](https://github.com/Emphasize5599/gasket/actions/runs/43941710342) completed successfully: 263 release regressions, enforced native reader/resource/lifecycle checks, signing and APK verification. Both `Gasket-0.0.490-arm64-v8a.apk` and `Gasket-0.0.490-universal.apk` returned HTTP 200 from the [release](https://github.com/Emphasize5599/gasket/releases/tag/v0.0.490). The final navigation correction passed the saved-trip, full rest-directory/timing, explicit access-cancellation and background-search focused checks before push.

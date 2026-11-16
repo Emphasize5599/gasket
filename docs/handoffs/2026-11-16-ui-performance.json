@@ -672,5 +672,16 @@
       }
     ],
     "errors": []
+  },
+  "releaseVerification": {
+    "commit": "50b6f37",
+    "workflowRun": 43941710342,
+    "conclusion": "success",
+    "releaseRegressions": 263,
+    "nativeLifecycleChecks": "passed",
+    "apkHttpStatus": {
+      "arm64-v8a": 200,
+      "universal": 200
+    }
   }
 }
