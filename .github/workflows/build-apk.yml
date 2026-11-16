@@ -112,6 +112,7 @@ on:
       - tests/rest-traffic-leg.test.js
       - tests/uiwork.test.js
       - tests/ui-background-input.test.js
+      - tests/rest-controller-ui.test.js
       - tests/planner-retention.test.js
       - tests/reader-retention.test.js
       - tests/rest-suggestion-budget.test.js

@@ -241,5 +241,88 @@
       }
     ],
     "errors": []
-  }
+  },
+  "releaseVersion": "0.0.489",
+  "replayMatrix": [
+    {
+      "case": "baseline",
+      "taps": 52,
+      "p95PaintMs": 112,
+      "maxPaintMs": 249,
+      "jsHeapMiB": 173.8,
+      "domNodes": 2526,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "warm",
+      "taps": 52,
+      "p95PaintMs": 127,
+      "maxPaintMs": 272,
+      "jsHeapMiB": 230.5,
+      "domNodes": 4965,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "time",
+      "taps": 52,
+      "p95PaintMs": 126,
+      "maxPaintMs": 245,
+      "jsHeapMiB": 174.1,
+      "domNodes": 2592,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "roads",
+      "taps": 58,
+      "p95PaintMs": 106,
+      "maxPaintMs": 210,
+      "jsHeapMiB": 174.8,
+      "domNodes": 2526,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "narrow",
+      "taps": 52,
+      "p95PaintMs": 111,
+      "maxPaintMs": 233,
+      "jsHeapMiB": 173.7,
+      "domNodes": 2526,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "skipped",
+      "taps": 48,
+      "p95PaintMs": 111,
+      "maxPaintMs": 187,
+      "jsHeapMiB": 137.9,
+      "domNodes": 2493,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "no-leave",
+      "taps": 53,
+      "p95PaintMs": 114,
+      "maxPaintMs": 215,
+      "jsHeapMiB": 173.6,
+      "domNodes": 2526,
+      "activePlans": 0,
+      "queuedPlans": 0
+    },
+    {
+      "case": "decline",
+      "taps": 56,
+      "p95PaintMs": 109,
+      "maxPaintMs": 235,
+      "jsHeapMiB": 149.7,
+      "domNodes": 2496,
+      "activePlans": 0,
+      "queuedPlans": 0
+    }
+  ]
 }

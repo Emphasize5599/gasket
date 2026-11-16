@@ -9,7 +9,7 @@ release.push('station-reconcile','map-scan-merge');
 release.push('routechoices','routechoices-ui','vehicle-required','vehicle-identity-edit');
 release.push('adaptive-readers');
 release.push('tire-estimate-ui','planner-worker');
-release.push('planner-queue','uiwork','ui-background-input','planner-retention','reader-retention');
+release.push('planner-queue','uiwork','ui-background-input','rest-controller-ui','planner-retention','reader-retention');
 release.push('map-zoom');
 release.push('hazard-zones');
 release.push('tasks','gemma','gemma-ui');

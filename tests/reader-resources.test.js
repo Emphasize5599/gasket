@@ -43,7 +43,7 @@ console.log('Reader resource policy: narrow graphics/logging filters; scripts, C
 if(spawnSync('javac',['-version']).error){if(process.env.GASKET_NATIVE_TESTS==='1')throw Error('JDK required');console.log('Native reader resource/fallback execution needs a JDK; enforced in CI');process.exit(0);}
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gasket-reader-policy-')),pkg=path.join(dir,'com/bensanzone/fuelmap');fs.mkdirSync(pkg,{recursive:true});
 fs.copyFileSync('src/com/bensanzone/fuelmap/GasReaderResources.java',path.join(pkg,'GasReaderResources.java'));
-const finish=native.slice(native.indexOf('        void finishRead(int reqId, String json)'),native.indexOf('        SiteWorker(String key, String home, String origin)'));
+const finish=native.slice(native.indexOf('        void finishRead(int reqId, String json)'),native.indexOf('        void cancelIdleRelease()'));
 const java=`package com.bensanzone.fuelmap;
 import java.util.*;import java.net.*;import java.util.concurrent.atomic.*;
 public class ReaderTest {
@@ -62,7 +62,7 @@ public class ReaderTest {
  static class Root {void removeView(View v){}}
  class SiteWorker {
   void scheduleIdleRelease(){}
-  int readReq=1,showReq=-1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
+  List<String> queue=new ArrayList<>();int readReq=1,showReq=-1,completedReads=0;String readCall="reader",key="gasweb",origin="https://www.google.com/";boolean leanGasResources=true,retriedGasResources=false,ready=true;
   long gasReadStarted=System.nanoTime()/1000000L,gasRetryAt;String gasFirstStop="";int gasFirstRows;AtomicIntegerArray omittedGasResources=new AtomicIntegerArray(4);View view=new View();Runnable readDeadline=()->{};JSONArray partialGasStores=null;String gasRequestedGrade="regular",verificationUrl=null,gasTargetUrl=null;boolean gasCommandReady=false,gasCommandReusing=false;
   // Android-only NHTSA storage recovery is outside this gas-reader harness.
   boolean recoverNhtsa(int reqId,String json){return false;}
@@ -98,7 +98,8 @@ public class ReaderTest {
   System.out.println("Actual Java reader filter and finishRead: one retry, original deadline, same ID, partial results, restrictions, cancellation, stale replies and visible checks passed");
  }
 }`;
+fs.copyFileSync('src/com/bensanzone/fuelmap/ReaderRetention.java',path.join(pkg,'ReaderRetention.java'));
 fs.writeFileSync(path.join(pkg,'ReaderTest.java'),java);
-for(const [cmd,args] of [['javac',['com/bensanzone/fuelmap/GasReaderResources.java','com/bensanzone/fuelmap/ReaderTest.java']],['java',['-cp',dir,'com.bensanzone.fuelmap.ReaderTest']]]){
+for(const [cmd,args] of [['javac',['com/bensanzone/fuelmap/GasReaderResources.java','com/bensanzone/fuelmap/ReaderRetention.java','com/bensanzone/fuelmap/ReaderTest.java']],['java',['-cp',dir,'com.bensanzone.fuelmap.ReaderTest']]]){
  const r=spawnSync(cmd,args,{cwd:dir,encoding:'utf8',timeout:30000});assert.equal(r.status,0,r.stdout+r.stderr);if(r.stdout)process.stdout.write(r.stdout);
 }

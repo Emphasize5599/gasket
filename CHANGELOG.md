@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.489 — 2026-11-16
+
+- Publish the UI/discovery/reader improvements from 0.0.488 with corrected native regression extraction. 0.0.488 did not produce an APK.
+- Scope rest-tile redraws to their owning controller so delayed work cannot overwrite a different rest directory.
+
 ## 0.0.488 — 2026-11-16
 
 - Keep rest-stop rows, images and focused controls in place during background updates. Load more directory rows as you scroll, and defer background redraws during touch and scrolling.

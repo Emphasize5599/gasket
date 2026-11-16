@@ -51,6 +51,14 @@ node tests/run-node.js --release
 
 `GASKET_PERF_AUDIT=2` on `tests/old-rest-trip-ui.test.js` records trusted-click paint timings, long tasks, post-GC JS heap and DOM counts for `GASKET_REPLAY_CASE`. Cases include baseline, warm, time, roads, narrow, skipped, no-leave and decline. Provider mock state and serialized cold-storage strings live in browser JS, so their heap figures overstate the corresponding native-storage application heap.
 
+## Saved-trip settings matrix
+
+All eight three-day replays passed at 2x CPU slowdown: cold restore, warm restore, shortest-time objective, compare rest access roads, 320px phone, a skipped later night, excluded departure hours, and declined traffic refresh. Across 423 trusted clicks, per-case p95 click-to-painted-response ranged from 106–127 ms and maxima from 187–272 ms. Every case finished with zero active or queued planner jobs. These are click-handler-to-paint measurements, not hardware input-queue latency.
+
+Post-GC browser heap was 138–231 MiB. These figures include the test's mocked native KV data (a cold replay serializes roughly 153 million characters), so they cannot be reported as Android memory consumption or memory savings. Warm restore retained more heap/DOM than cold restore; this audit does not prove absence of leaks. Device PSS and repeated-session retention remain required follow-up.
+
+The 0.0.488 CI gate caught a Java extraction-boundary mistake and an intermittent empty-list failure; it produced no APK. The replacement 0.0.489 separates the resource and retention harnesses and scopes each controller's redraw to its own tiles. A deterministic two-controller regression fails without that ownership guard: controller B overwrites A's original-leg labels. It passes with the guard. The final CI gate contains 263 tests.
+
 ## Limits and device follow-up
 
 There is no attached Android device/emulator or local Android/JDK toolchain in this workspace. Native code is built and lifecycle tests execute in GitHub CI. No Android PSS/RSS reduction or safe 50-reader concurrency claim is made from browser measurements. On a device, compare cold/warm trips, cancellation and navigation with `dumpsys meminfo`, reader counts, frame/input latency and real verification pages. Existing backlog items 16/17/48 remain the place for actual-phone throughput and memory tuning. Keep durable provider caches: releasing renderers must not force another national download or discard a saved trip.
