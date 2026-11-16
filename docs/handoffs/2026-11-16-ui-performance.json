@@ -242,7 +242,7 @@
     ],
     "errors": []
   },
-  "releaseVersion": "0.0.489",
+  "releaseVersion": "0.0.490",
   "replayMatrix": [
     {
       "case": "baseline",
@@ -324,5 +324,353 @@
       "activePlans": 0,
       "queuedPlans": 0
     }
-  ]
+  ],
+  "cancellationScrollTimingAudit": {
+    "throttle": 4,
+    "rows": [
+      {
+        "label": "Open trips list",
+        "paintMs": 45,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 904,
+        "longTasks": 0,
+        "wallMs": 2984
+      },
+      {
+        "label": "Open saved long trip",
+        "paintMs": 143,
+        "longestMs": 198,
+        "blockedMs": 256,
+        "lagMs": 2009,
+        "longTasks": 2,
+        "wallMs": 3650
+      },
+      {
+        "label": "Stops then \u00e2\u0153\u2022 after 300 ms",
+        "paintMs": 16,
+        "longestMs": 208,
+        "blockedMs": 273,
+        "lagMs": 2992,
+        "longTasks": 2,
+        "wallMs": 5634
+      },
+      {
+        "label": "Open Settings right after",
+        "paintMs": 120,
+        "longestMs": 121,
+        "blockedMs": 121,
+        "lagMs": 1882,
+        "longTasks": 1,
+        "wallMs": 3462
+      },
+      {
+        "label": "Close Settings",
+        "paintMs": 15,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1701,
+        "longTasks": 0,
+        "wallMs": 2915
+      },
+      {
+        "label": "Open trips list again",
+        "paintMs": 53,
+        "longestMs": 54,
+        "blockedMs": 54,
+        "lagMs": 1668,
+        "longTasks": 1,
+        "wallMs": 3385
+      },
+      {
+        "label": "Reopen saved trip",
+        "paintMs": 53,
+        "longestMs": 53,
+        "blockedMs": 53,
+        "lagMs": 1607,
+        "longTasks": 1,
+        "wallMs": 3466
+      },
+      {
+        "label": "Back to Garage (step 1)",
+        "paintMs": 1,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1842,
+        "longTasks": 0,
+        "wallMs": 2913
+      },
+      {
+        "label": "Next from step 1 (Next)",
+        "paintMs": 30,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1612,
+        "longTasks": 0,
+        "wallMs": 2944
+      },
+      {
+        "label": "Next from step 2 (Next)",
+        "paintMs": 21,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1425,
+        "longTasks": 0,
+        "wallMs": 2938
+      },
+      {
+        "label": "Next from step 3 (Next)",
+        "paintMs": 23,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1528,
+        "longTasks": 0,
+        "wallMs": 2967
+      },
+      {
+        "label": "Next from step 4 (Next)",
+        "paintMs": 30,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1739,
+        "longTasks": 0,
+        "wallMs": 2965
+      },
+      {
+        "label": "Next from step 10 (Next)",
+        "paintMs": 106,
+        "longestMs": 109,
+        "blockedMs": 327,
+        "lagMs": 2012,
+        "longTasks": 4,
+        "wallMs": 5631
+      },
+      {
+        "label": "Next from step 5 (Next)",
+        "paintMs": 62,
+        "longestMs": 73,
+        "blockedMs": 137,
+        "lagMs": 1746,
+        "longTasks": 2,
+        "wallMs": 4640
+      },
+      {
+        "label": "Next from Compare, then \u00e2\u0153\u2022 after 1 s",
+        "paintMs": 8,
+        "longestMs": 339,
+        "blockedMs": 571,
+        "lagMs": 458,
+        "longTasks": 4,
+        "wallMs": 6300
+      },
+      {
+        "label": "Cancel search (dialog)",
+        "paintMs": 29,
+        "longestMs": 424,
+        "blockedMs": 615,
+        "lagMs": 2978,
+        "longTasks": 4,
+        "wallMs": 5224
+      },
+      {
+        "label": "Tap Settings while it winds down",
+        "paintMs": 87,
+        "longestMs": 93,
+        "blockedMs": 93,
+        "lagMs": 1861,
+        "longTasks": 1,
+        "wallMs": 3467
+      },
+      {
+        "label": "Close Settings",
+        "paintMs": 386,
+        "longestMs": 390,
+        "blockedMs": 390,
+        "lagMs": 2264,
+        "longTasks": 1,
+        "wallMs": 3738
+      },
+      {
+        "label": "Reopen trips list",
+        "paintMs": 12,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1701,
+        "longTasks": 0,
+        "wallMs": 2962
+      },
+      {
+        "label": "Reopen saved trip",
+        "paintMs": 71,
+        "longestMs": 76,
+        "blockedMs": 76,
+        "lagMs": 1845,
+        "longTasks": 1,
+        "wallMs": 3512
+      },
+      {
+        "label": "Back to Compare",
+        "paintMs": 35,
+        "longestMs": 75,
+        "blockedMs": 75,
+        "lagMs": 2550,
+        "longTasks": 1,
+        "wallMs": 5057
+      },
+      {
+        "label": "Compare: Review setup (reopened trip)",
+        "paintMs": 33,
+        "longestMs": 58,
+        "blockedMs": 58,
+        "lagMs": 2558,
+        "longTasks": 1,
+        "wallMs": 4610
+      },
+      {
+        "label": "Next from step 4 (Next)",
+        "paintMs": 42,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 1643,
+        "longTasks": 0,
+        "wallMs": 2992
+      },
+      {
+        "label": "Next from step 10 (Next)",
+        "paintMs": 73,
+        "longestMs": 74,
+        "blockedMs": 74,
+        "lagMs": 1441,
+        "longTasks": 1,
+        "wallMs": 3467
+      },
+      {
+        "label": "Next from step 5 (Next)",
+        "paintMs": 67,
+        "longestMs": 69,
+        "blockedMs": 133,
+        "lagMs": 2587,
+        "longTasks": 2,
+        "wallMs": 5102
+      },
+      {
+        "label": "Next from step 8 (Next)",
+        "paintMs": 30,
+        "longestMs": 314,
+        "blockedMs": 533,
+        "lagMs": 367,
+        "longTasks": 4,
+        "wallMs": 5173
+      },
+      {
+        "label": "Next from step 6 (Next)",
+        "paintMs": 114,
+        "longestMs": 115,
+        "blockedMs": 248,
+        "lagMs": 1372,
+        "longTasks": 3,
+        "wallMs": 4139
+      },
+      {
+        "label": "Open rest directory (leg 1)",
+        "paintMs": 67,
+        "longestMs": 96,
+        "blockedMs": 205,
+        "lagMs": 1411,
+        "longTasks": 3,
+        "wallMs": 5251
+      },
+      {
+        "label": "Scroll rest directory while working",
+        "paintMs": 0,
+        "longestMs": 59,
+        "blockedMs": 210,
+        "lagMs": 1578,
+        "longTasks": 4,
+        "wallMs": 5625
+      },
+      {
+        "label": "Tap + on a rest area",
+        "paintMs": 34,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 661,
+        "longTasks": 0,
+        "wallMs": 3026
+      },
+      {
+        "label": "Confirm add",
+        "paintMs": 76,
+        "longestMs": 194,
+        "blockedMs": 274,
+        "lagMs": 1263,
+        "longTasks": 2,
+        "wallMs": 3929
+      },
+      {
+        "label": "Reopen rest directory",
+        "paintMs": 58,
+        "longestMs": 61,
+        "blockedMs": 114,
+        "lagMs": 1432,
+        "longTasks": 2,
+        "wallMs": 4833
+      },
+      {
+        "label": "Tap + on a second rest area",
+        "paintMs": 15,
+        "longestMs": 0,
+        "blockedMs": 0,
+        "lagMs": 732,
+        "longTasks": 0,
+        "wallMs": 2938
+      },
+      {
+        "label": "Confirm second add",
+        "paintMs": 58,
+        "longestMs": 71,
+        "blockedMs": 133,
+        "lagMs": 1233,
+        "longTasks": 2,
+        "wallMs": 3931
+      },
+      {
+        "label": "Next (Calculate rest timing)",
+        "paintMs": 35,
+        "longestMs": 86,
+        "blockedMs": 86,
+        "lagMs": 314,
+        "longTasks": 1,
+        "wallMs": 5057
+      },
+      {
+        "label": "Choose rest departure 1",
+        "paintMs": 36,
+        "longestMs": 89,
+        "blockedMs": 176,
+        "lagMs": 0,
+        "longTasks": 2,
+        "wallMs": 3848
+      },
+      {
+        "label": "Choose rest departure 2",
+        "paintMs": 31,
+        "longestMs": 85,
+        "blockedMs": 149,
+        "lagMs": 1700,
+        "longTasks": 2,
+        "wallMs": 3814
+      },
+      {
+        "label": "Finish rest timing review",
+        "paintMs": 6,
+        "longestMs": 567,
+        "blockedMs": 567,
+        "lagMs": 897,
+        "longTasks": 1,
+        "wallMs": 3570
+      }
+    ],
+    "errors": []
+  }
 }

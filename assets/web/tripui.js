@@ -5909,7 +5909,6 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function closeTrip() {
     if(queueWorking){queueCancel();return;}
     if(autoPlanning)autoPlanning.cancelled=true;if(schedulePlanning)schedulePlanning.cancelled=true;
-    if(!bgJob){if(restUI&&restUI.stopBackground)restUI.stopBackground();else if(restUI&&restUI.clearQueued)restUI.clearQueued();}
     collectSafe();compareCapture();if(window.VehicleCompareUI)VehicleCompareUI.dispose();
     hzRiskAcks=new WeakMap();
     closePage();mapLoaded();

@@ -139,7 +139,6 @@ if(!n.required)return html;
   function pendingTask(stage){return 'rest-pending:'+stage;}
   function completePending(stage){var id=pendingTask(stage);plannedTasks.delete(id);if(root.Tasks)Tasks.remove(id);}
   function clearQueued(){plannedTasks.forEach(function(id){if(root.Tasks)Tasks.remove(id);});plannedTasks.clear();}
-  function stopBackground(){state.token++;state.key=null;state.busy=false;state.accessRunning=false;state.followupRestart=null;clearQueued();if(renderTimer)clearTimeout(renderTimer);renderTimer=null;if(screenTimer)clearTimeout(screenTimer);screenTimer=null;resumeAccess.forEach(function(go){go();});resumeAccess.clear();if(A.N&&A.N.cancelSiteRead)['restmaps','campendium'].forEach(function(key){A.N.cancelSiteRead(key);});}
   function queuePlanned(o){clearQueued();if(!root.Tasks||C.dormant&&C.dormant())return;o=o||{};function add(stage,text,order){var id=pendingTask(stage);plannedTasks.add(id);Tasks.upsert(id,{state:'pending',text:text,order:order});}
    add('inventory','Finding rest sites',120);add('details','Checking rest-site details and local times',125);add('access','Checking rest-site road access',130);
    if(o.forecast)for(var i=0;i<(o.legs||1);i++)add('suggestions:'+i,'Rest suggestions · leg '+(i+1),140+i);
@@ -659,7 +658,7 @@ if(!n.required)return html;
     bindAll();b.querySelector('#restReviewDone').onclick=async function(){var btn=this;btn.disabled=true;b.querySelector('#restReviewError').textContent='';try{var outstanding=outstandingGroup();if(outstanding){close();openLeg(outstanding.from);return;}var fresh=C.snapshot();restIndexes(fresh).forEach(function(i){verifySavedPrice(fresh,i,fresh.route.stops[i].rest.leaveAt);});var ok=await foreground(function(){return C.commit();});if(ok!==false)close();else btn.disabled=false;}catch(e){b.querySelector('#restReviewError').textContent=e.message;btn.disabled=false;}};return function(){};},function(){});}
   function outstandingGroup(){var s=C.snapshot();return s&&directoryGroups(s).find(function(g){var n=nightPlan(s,g.from);return n&&(n.pending||n.required);});}
   function waitFirstLeg(){openLeg(0,{wait:true});}
-  return {stopBackground:stopBackground,queuePlanned:queuePlanned,clearQueued:clearQueued,unresolved:function(leg){var s=C.snapshot();return !!s&&unresolved(s,leg);},laterNight:laterNight,openUnresolved:function(){var g=outstandingGroup();if(!g)return false;openLeg(g.from);return true;},closure:function(p){var m=mapsClosure(effective(p,false));return m?closureText(m):null;},tile:tile,bind:bind,open:open,openLeg:openLeg,calculate:calculate,review:review,nightly:function(){return !!nightly();},waitFirstLeg:waitFirstLeg};
+  return {queuePlanned:queuePlanned,clearQueued:clearQueued,unresolved:function(leg){var s=C.snapshot();return !!s&&unresolved(s,leg);},laterNight:laterNight,openUnresolved:function(){var g=outstandingGroup();if(!g)return false;openLeg(g.from);return true;},closure:function(p){var m=mapsClosure(effective(p,false));return m?closureText(m):null;},tile:tile,bind:bind,open:open,openLeg:openLeg,calculate:calculate,review:review,nightly:function(){return !!nightly();},waitFirstLeg:waitFirstLeg};
  }
  root.RestUI={init:init};
 })(window);

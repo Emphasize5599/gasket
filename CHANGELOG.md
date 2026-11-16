@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.490 — 2026-11-16
+
+- Keep useful rest discovery and suggestions running when leaving the trip screen. Closing a menu is not a cancellation; completed reader views still retire automatically when idle.
+
 ## 0.0.489 — 2026-11-16
 
 - Publish the UI/discovery/reader improvements from 0.0.488 with corrected native regression extraction. 0.0.488 did not produce an APK.
