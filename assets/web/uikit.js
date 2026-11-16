@@ -2,7 +2,7 @@
 (function(root){'use strict';
  var serial=0,disclosures=new Map();
  // Behavior preferences use switches. Memberships, vehicle facts, filters and acknowledgements stay checkboxes.
- var toggles='#prefClock24,[data-clock24],#tTraffic,#obRound,#obHide,#obGuestApps,#gPrecondition,[data-rest-unsightly],[data-night-enabled],[data-rs][data-option="enabled"]';
+ var toggles='#prefClock24,[data-clock24],#tTraffic,#tRestForecastExtensive,#obRound,#obHide,#obGuestApps,#gPrecondition,[data-rest-unsightly],[data-night-enabled],[data-rs][data-option="enabled"]';
  function animation(label){return '<div class="ux-animation-slot" role="img" aria-label="'+String(label).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];})+'"></div>';}
  function name(input,host){if(input.hasAttribute('aria-label')||input.hasAttribute('aria-labelledby'))return;var text=host&&host.querySelector(':scope > .lbl,:scope > span:not(.switch)');if(text){if(!text.id)text.id='ux-label-'+(++serial);input.setAttribute('aria-labelledby',text.id);}}
  function enhance(scope){if(!scope||!scope.querySelectorAll)return;

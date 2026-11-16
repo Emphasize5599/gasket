@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.491 — 2026-11-16
+
+- Add Extensive rest forecasts directly below Forecast traffic in Timing. Off by default: keep quick suggestions for up to eight candidates at three departures each. On: automatically check every eligible rest stop and charging station at every valid five-minute departure for the current night, respecting filters, stay limits and deadlines.
+- Final rest departure timing always checks every valid five-minute departure in either mode; remove the separate 25-sample cap. Reuse stored traffic data, keep unknown/failed forecasts explicit, and retain bounded request concurrency and cooperative UI yields.
+- Save forecast depth with each trip, keep quick/extensive recommendation caches separate, and change depth without discarding the route/fuel plan.
+
 ## 0.0.490 — 2026-11-16
 
 - Keep useful rest discovery and suggestions running when leaving the trip screen. Closing a menu is not a cancellation; completed reader views still retire automatically when idle.
