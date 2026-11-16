@@ -101,6 +101,16 @@ function load(store,at,speed=50,hold){
    for(let i=0;i<2000;i++){const start=when+86400000+i*60000,rows=[{from:0,to:m.totalMi,seconds:300,baseSeconds:300,forecast:true}];c.put('future-'+i,{identity:'future-'+i,profile:{at:origin,seconds:300,rows},observation:{pts:m.pts,cum:m.cum,rows,depart:start,avoidKey:'false|false|false'}});}c.flush();
    a=load(data,origin+3600000);await a.flow.forecast(m,when);a.ctx.dispatch('pagehide');assert.equal(a.calls.google,1);assert.equal(a.calls.cacheReads,0,'2000 future profiles are considered through metadata, not 2000 synchronous payload reads');
   }
+  {// Future-day profiles beginning inside this road must not carve today's request into tiny fetches.
+   const data=new Map(),origin=Date.UTC(2027,0,4,12),when=origin+86400000;let a=load(data,origin),c=a.ctx.TrafficCache.create(a.KV);const F=require('../assets/web/traffic');
+   for(let i=0;i<24;i++){const part=F.slice(m,m.totalMi*(i+1)/30,m.totalMi*(i+3)/30),seconds=part.totalMi/50*3600,rows=[{from:0,to:part.totalMi,seconds,baseSeconds:seconds,forecast:true}];c.put('future-part-'+i,{identity:'future-part-'+i,profile:{at:origin,seconds,rows},observation:{pts:part.pts,cum:part.cum,rows,depart:when+86400000+i*60000,avoidKey:'false|false|false'}});}c.flush();
+   a=load(data,origin+3600000);const result=await a.flow.forecast(m,when);a.ctx.dispatch('pagehide');console.log('Future partial profile regression:',JSON.stringify({requests:a.calls.google,miles:m.totalMi,seconds:result.seconds,coverage:result.coverage}));assert.equal(a.calls.google,1,'unusable future profiles must not fragment one whole-road request');assert(result.coverage>.999,'the whole road still has verified coverage');assert(Math.abs(result.seconds-m.totalMi/50*3600)<.1,'all remaining miles are evaluated, with no shorter horizon');
+  }
+  {// A profile at the current clock but far down-road is also wrong for our later arrival there.
+   const data=new Map(),origin=Date.UTC(2027,0,4,12),when=origin+86400000;let a=load(data,origin),c=a.ctx.TrafficCache.create(a.KV);const F=require('../assets/web/traffic');
+   for(let i=0;i<20;i++){const part=F.slice(m,m.totalMi*(.8+i*.005),m.totalMi*(.82+i*.005)),seconds=part.totalMi/50*3600,rows=[{from:0,to:part.totalMi,seconds,baseSeconds:seconds,forecast:true}];c.put('wrong-arrival-'+i,{identity:'wrong-arrival-'+i,profile:{at:origin,seconds,rows},observation:{pts:part.pts,cum:part.cum,rows,depart:when,avoidKey:'false|false|false'}});}c.flush();
+   a=load(data,origin+3600000);const result=await a.flow.forecast(m,when);a.ctx.dispatch('pagehide');assert.equal(a.calls.google,1,'loaded observations must not cause incompatible arrival-time fragments either');assert(result.coverage>.999);assert(Math.abs(result.seconds-m.totalMi/50*3600)<.1);
+  }
   {// A long-running request emits enough state to distinguish network waits from cache work or verification.
    let release;const held=new Promise(r=>release=r),origin=Date.UTC(2027,0,4,12),a=load(new Map(),origin,50,held),ticks=[],logs=[];
    a.ctx.setInterval=fn=>{ticks.push(fn);return ticks.length;};a.ctx.clearInterval=()=>{};a.ctx.FLog={info:(_a,m,d)=>logs.push({m,d}),debug(){},warn(){}};

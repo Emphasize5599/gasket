@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.493 — 2026-11-16
+
+- Fix a traffic-cache defect that made rest suggestions needlessly slow: sections cached for incompatible arrival hours/days could split one fresh road forecast into many small requests. Use cached interior boundaries only when their times plausibly match arrival there; continue verifying road geometry and actual forecast clocks before reuse.
+- Preserve the full remaining-leg forecast in quick mode. Keep extensive screening, complete final departure grids, stored-data reuse and existing request limits unchanged.
+- Add regressions for future-day and wrong-arrival partial records. The reproduced case falls from 25 requests to one with complete road coverage, rather than shortening the traffic horizon.
+
 ## 0.0.492 — 2026-11-16
 
 - Publish the optional extensive rest forecasting and uncapped final timing from 0.0.491. The earlier version produced no APK because its window-planning fixture included unrequested rest-area spurs and retained a timeout for the old coarse grid.

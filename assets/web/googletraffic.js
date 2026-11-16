@@ -122,11 +122,14 @@
    if(!o.force&&held&&held.identity===identity){if(held.unmatched&&Number.isFinite(held.at)&&held.at>=fresh&&now-held.at<10*MINUTE)return Object.assign(unmatched(m,held.unmatched),{at:held.at,depart:t,cached:true});var hp=held.profile;if(usable(hp))return Object.assign({},hp,{cached:true});}
    if(!o.force&&tune.tolerance>0)for(var dm=1;dm<=tune.tolerance;dm++)for(var sg=-1;sg<=1;sg+=2){var qd=query(m.pts[0],m.pts[m.pts.length-1],clock+sg*dm*60,o.avoid),hd=get('google-v1|'+hash(qd+'|'+line),ttl);if(hd&&hd.identity===qd+'|'+line&&usable(hd.profile))return Object.assign({},hd.profile,{cached:true,nearMinutes:sg*dm});}
    if(!o.force&&io.observations){
+    // A cached interior section is a useful split only near its forecast arrival.
+    // Otherwise future-hour/day records fragment a fresh whole-road request into tiny fetches.
+    // This gates split hints, never traffic values: actual reuse stays road/clock-checked and missing data is fetched.
     var gap=null,checked=0,positions=new Map();
     function position(p){var k=p.lat+'|'+p.lng,r=positions.get(k);if(!r){r=T.project(m,p);positions.set(k,r);}return r;}
     for(var record of io.observations(m,t,ttl,o.avoid)||[]){
       if(++checked%16===0){await new Promise(function(r){setTimeout(r,0);});if(!valid())throw Error('Traffic lookup cancelled');}
-      if(record.gap){var gs=position(record.gap.first),ge=position(record.gap.last);if(gs.offset<=.015&&gs.along>.02&&gs.along<m.totalMi-.02&&ge.along>gs.along+.02)gap=gap==null?gs.along:Math.min(gap,gs.along);continue;}
+      if(record.gap){var delta=record.gap.depart-t;if(!Number.isFinite(delta)||delta< -150000||delta>m.durationSec*1000+150000)continue;var gs=position(record.gap.first),ge=position(record.gap.last);if(gs.offset<=.015&&gs.along>.02&&gs.along<m.totalMi-.02&&ge.along>gs.along+.02&&Number.isFinite(record.gap.depart)&&Math.abs(record.gap.depart-t-m.timeTo(gs.along)*1000)<=150000)gap=gap==null?gs.along:Math.min(gap,gs.along);continue;}
       var ob=record.observation;if(!ob||!ob.pts||!ob.pts.length||ob.avoidKey!==avoidKey(o.avoid)||!usable(record.profile))continue;
       var shared=await reuse(ob,m,t,valid);if(!valid())throw Error('Traffic lookup cancelled');
       if(shared)return Object.assign(shared,{at:record.profile.at,depart:t,cached:true,sharedRoads:true});
@@ -138,7 +141,7 @@
         if(part){part=Object.assign(part,{at:record.profile.at,depart:t,cached:true,sharedRoads:true});var tail=await piece(F.slice(m,end.along,m.totalMi),t+part.seconds*1000,o);return joined(part,tail,end.along,m,t);}
       }
       var start=position(ob.pts[0]);
-      if(start.offset<=.015&&start.along>.02&&start.along<m.totalMi-.02&&end.along>start.along+.02&&ob.depart>=t-150000)gap=gap==null?start.along:Math.min(gap,start.along);
+      if(start.offset<=.015&&start.along>.02&&start.along<m.totalMi-.02&&end.along>start.along+.02&&Number.isFinite(ob.depart)&&Math.abs(ob.depart-t-m.timeTo(start.along)*1000)<=150000)gap=gap==null?start.along:Math.min(gap,start.along);
     }
     if(gap!=null){var left=await piece(F.slice(m,0,gap),t,o),right=await piece(F.slice(m,gap,m.totalMi),t+left.seconds*1000,o);return joined(left,right,gap,m,t);}
    }
