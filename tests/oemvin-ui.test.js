@@ -47,6 +47,49 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
       assert.deepEqual(errors, []);
       await p.close();
     }
-    console.log('Toyota parts-catalog trim is asked once NHTSA has none, locked when named, editable otherwise');
+    // Subaru: NHTSA's trim carries option codes ('Premium +BSD'), so Subaru's parts store (same platform as Kia's) is asked
+    for (const mode of ['found', 'disagree']) {
+      const p = await browser.newPage({ viewport: { width: 320, height: 900 } }), errors = [];
+      p.on('pageerror', (e) => errors.push(e.stack));
+      await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
+      await p.evaluate(() => __app.S.setupDone = true); await require('./onboarding-ui')(p);
+      await p.evaluate(fs.readFileSync('tests/trip_mocks.js', 'utf8'));
+      await p.evaluate((mode) => {
+        const menu = (xs) => ({ menuItem: xs.map((x) => ({ text: x, value: x })) });
+        __mocks.epa = (url) => {
+          if (url.includes('menu/year')) return menu(['2019']); if (url.includes('menu/make')) return menu(['Subaru']); if (url.includes('menu/model')) return menu(['Crosstrek']);
+          if (url.includes('menu/options')) return { menuItem: [{ text: 'Auto(AV-S7), 4 cyl, 2.0 L', value: 'test-crosstrek' }] };
+          if (url.endsWith('/test-crosstrek')) return { id: 'test-crosstrek', year: 2019, make: 'Subaru', model: 'Crosstrek', displ: 2.0, cylinders: 4, trany: 'Automatic (AV-S7)', drive: 'All-Wheel Drive', fuelType1: 'Regular Gasoline', city08: 27, highway08: 33, comb08: 29, VClass: 'Small Sport Utility Vehicle 4WD' };
+          return { menuItem: [] };
+        };
+        __mocks.vpic = () => ({ Results: [{ ModelYear: '2019', Make: 'SUBARU', Model: 'Crosstrek', Trim: 'Premium +BSD', Trim2: '', FuelTypePrimary: 'Gasoline', DisplacementL: '2.0', EngineCylinders: '4', ErrorCode: '0' }] });
+        const prior = __mocks.siteRead;
+        __mocks.siteRead = (key, args) => {
+          if (key === 'subaruparts') {
+            window.__oem = (window.__oem || []).concat([{ key, args }]);
+            return { descriptions: mode === 'found' ? ['2019 Crosstrek 2.0L CVT Premium'] : ['2019 Crosstrek 2.0L CVT Premium', '2019 Crosstrek 2.0L CVT Limited'] };
+          }
+          return prior ? prior(key, args) : { error: 'offline' };
+        };
+      }, mode);
+      await p.click('#btnTrip'); await p.click('[data-car="+"]');
+      await p.fill('#gVin', 'JF2GTAAC0K0000001'); await p.click('#gVinGo');
+      await p.waitForFunction(() => (window.__oem || []).length > 0, null, { timeout: 15000 });
+      const asked = await p.evaluate(() => __oem[0]);
+      assert.equal(asked.args.url, 'https://parts.subaru.com/'); assert.equal(asked.args.store, 'simplepart'); assert.equal(asked.args.vin, 'JF2GTAAC0K0000001');
+      if (mode === 'found') {
+        await p.waitForFunction(() => Garage.car().trimSrc === 'vin', null, { timeout: 15000 });
+        assert.equal(await p.evaluate(() => Garage.car().trim), 'Premium');
+        await p.waitForSelector('#gTrim[readonly]');
+        assert.match(await p.$eval('#gTrim', (e) => decodeURIComponent(e.closest('label').innerHTML)), /from your VIN \(Subaru parts catalog\)/);
+      } else {
+        await p.waitForTimeout(400);
+        assert.notEqual(await p.evaluate(() => Garage.car().trimSrc), 'vin', 'disagreeing descriptions keep the trim editable');
+        assert.equal(await p.$('#gTrim[readonly]'), null);
+      }
+      assert.deepEqual(errors, []);
+      await p.close();
+    }
+    console.log('Toyota / Subaru parts-catalog trims are asked once NHTSA has no clean one, locked when named, editable otherwise');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

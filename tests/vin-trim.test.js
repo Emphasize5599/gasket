@@ -12,6 +12,9 @@ for (const trim of ['Value, SEL, Sport, Limited, Ultimate','4Motion SE, SE R-Lin
 }
 assert.equal(decode({Trim:'',Trim2:'SE, SEL'}).trim,'','ambiguous secondary trims also stay editable');
 assert.equal(decode({Trim:'Limited+M/R+NAVI(HK)'}).trim,'','Subaru option codes stay unknown until a verified cleanup rule exists');
+for (const t of ['Premium +BSD','Limited+M/R+NAVI(HK)']) assert.equal(decode({Make:'SUBARU',Trim:t}).trim,'','Subaru option codes ('+t+') leave the trim to the Subaru parts catalog');
+assert.equal(decode({Make:'SUBARU',Trim:'Premium'}).trim,'Premium','a clean Subaru vPIC trim is kept');
+assert.equal(decode({Make:'SUBARU',Trim:'Sport',Trim2:'ES+HK+SMART'}).trim,'Sport','option codes in Trim2 do not spoil a clean Trim');
 assert.equal(decode({Trim:'350 F Sport High'}).trim,'350 F Sport High');
 assert.equal(decode({Trim:'GT Coupe'}).trim,'GT Coupe');
 assert.equal(decode({Trim:'',Series:'LE'}).trim,'','series is not blindly treated as marketing trim');

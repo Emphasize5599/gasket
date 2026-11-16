@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.484 — 2026-11-16
+
+- Subaru and Kia trims from the makers' own parts catalogs: when NHTSA's decoder gives no clean trim (Kia "FE, LXS", Subaru option codes like "Premium +BSD"), Gasket asks parts.subaru.com / parts.kia.com once per VIN from the store's own page and locks the trim it names. Answers that disagree leave the trim editable; a security check is shown to you, never got around.
+- Bug fixes.
+
 ## 0.0.483 — 2026-11-13
 
 - Publish the saved overnight-trip date-shift, station-reuse and interrupted-access repairs from 0.0.482 with the corrected cold-storage regression harness. The version tag now identifies the exact commit being tested and signed; 0.0.482 did not publish an APK.

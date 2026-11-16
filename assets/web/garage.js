@@ -392,21 +392,36 @@
     if (kind(c) === 'ev' && v && tankKey(c)) dcFind(c, false);
   }
   function vinTrim(c) { return c.trimSrc === 'vin' && !!c.vin && !!c.trim; }
-  // NHTSA can't name most Toyota / Lexus trims (Prius "One/Two", Sienna "E grade"). Toyota's and Lexus's own parts stores
-  // decode the VIN into the grade, asked from the store's own page (siteRead toyotaparts / lexusparts, assets/oemvin_worker.js).
-  // Once per VIN a session; a failure leaves the trim menu as it was.
+  // NHTSA can't name most Toyota / Lexus trims (Prius "One/Two", Sienna "E grade"), gives choices for some Kias
+  // ("FE, LXS") and option codes for some Subarus ("Premium +BSD"). The makers' own parts stores decode the VIN, asked from
+  // the store's own page (siteRead toyotaparts / lexusparts / subaruparts / kiaparts, assets/oemvin_worker.js). Subaru's
+  // and Kia's run on another platform (store 'simplepart'): its answer is vehicle descriptions (TrimMath.descTrim).
+  // Once per VIN a session; a failure or disagreeing answers leave the trim menu as it was.
   var oemAsked = {};
-  function oemBrand(c) { var m = String(c.make || ''); return /^lexus$/i.test(m) ? 'lexus' : /^(toyota|scion)$/i.test(m) ? 'toyota' : ''; }
+  var OEM = {
+    toyota: { key: 'toyotaparts', url: 'https://autoparts.toyota.com/', label: 'Toyota' },
+    lexus: { key: 'lexusparts', url: 'https://parts.lexus.com/', label: 'Lexus' },
+    subaru: { key: 'subaruparts', url: 'https://parts.subaru.com/', label: 'Subaru', store: 'simplepart' },
+    kia: { key: 'kiaparts', url: 'https://parts.kia.com/', label: 'Kia', store: 'simplepart' }
+  };
+  function oemBrand(c) { var m = String(c.make || ''); return /^lexus$/i.test(m) ? 'lexus' : /^(toyota|scion)$/i.test(m) ? 'toyota' : /^subaru$/i.test(m) ? 'subaru' : /^kia$/i.test(m) ? 'kia' : ''; }
   async function oemTrim(c, vin) {
     var brand = oemBrand(c); if (!brand || vinTrim(c) || !call || !N.siteRead || oemAsked[vin]) return;
     oemAsked[vin] = true;
-    var key = brand + 'parts', url = brand === 'lexus' ? 'https://parts.lexus.com/' : 'https://autoparts.toyota.com/', r;
-    try { r = await call('siteRead', key, JSON.stringify({ url: url, vin: vin, bg: true })); } catch (e) { r = { error: String(e && e.message || e) }; }
+    var o = OEM[brand], r;
+    try { r = await call('siteRead', o.key, JSON.stringify({ url: o.url, vin: vin, store: o.store, bg: true })); } catch (e) { r = { error: String(e && e.message || e) }; }
     r = r || {};
-    var recs = (r.records || []).filter(function (x) { return !c.year || !x.year || +x.year === +c.year; });
-    var trims = recs.map(function (x) { return TrimMath.oemGrade(x.grade, brand, trimList(c)); }).filter(Boolean);
+    var trims, n;
+    if (o.store) {
+      var ds = r.descriptions || []; n = ds.length;
+      trims = ds.map(function (d) { return TrimMath.descTrim(d, c.year, trimList(c)); });
+      if (trims.some(function (x) { return !x; })) trims = [];
+    } else {
+      var recs = (r.records || []).filter(function (x) { return !c.year || !x.year || +x.year === +c.year; }); n = (r.records || []).length;
+      trims = recs.map(function (x) { return TrimMath.oemGrade(x.grade, brand, trimList(c)); }).filter(Boolean);
+    }
     var t = trims.length && trims.every(function (x) { return x === trims[0]; }) ? trims[0] : '';
-    LG.info('car', 'Parts catalog trim', { brand: brand, records: (r.records || []).length, found: !!t, blocked: !!r.blocked, error: r.error || null, grade: recs[0] ? recs[0].grade : null });
+    LG.info('car', 'Parts catalog trim', { brand: brand, records: n, found: !!t, blocked: !!r.blocked, error: r.error || null, answer: o.store ? (r.descriptions || [])[0] || null : ((r.records || [])[0] || {}).grade || null });
     if (r.blocked) { delete oemAsked[vin]; return; }
     if (!t || c.vin !== vin || vinTrim(c) || S.cars.indexOf(c) < 0) return;
     if (t !== String(c.trim || '')) setTrim(c, t);
@@ -414,7 +429,7 @@
     changed(); draw();
   }
   function trimHtml(c) {
-    if (vinTrim(c)) return '<label class="nf wide"><span>Trim<small>' + (c.trimBy ? 'from your VIN (' + (c.trimBy === 'lexus' ? 'Lexus' : 'Toyota') + ' parts catalog)' : 'from your VIN') + '</small></span><input type="text" id="gTrim" value="' + esc(vehicleLabel(c, c.trim)) + '" readonly disabled aria-readonly="true"></label>';
+    if (vinTrim(c)) return '<label class="nf wide"><span>Trim<small>' + (c.trimBy && OEM[c.trimBy] ? 'from your VIN (' + OEM[c.trimBy].label + ' parts catalog)' : 'from your VIN') + '</small></span><input type="text" id="gTrim" value="' + esc(vehicleLabel(c, c.trim)) + '" readonly disabled aria-readonly="true"></label>';
     var st = trimState(c), list = trimList(c), have = TrimMath.find(list, vehicleLabel(c,c.trim)), other = trimOther[c.id] || (!!c.trim && !have);
     var none = '<label class="nf chk wide no-trim"><input type="checkbox" id="gNoTrim"' + (c.noTrim ? ' checked' : '') + '><span>This car has no trim<small>some models come in only one version</small></span></label>';
     if (c.noTrim) return none;
@@ -1524,7 +1539,7 @@
     if (power !== 'gas' && power !== 'diesel') feats.push('Regenerative braking');
     // Secondary trim may name the marketing trim, but internal "E grade" codes
     // and chassis/body series are not a trustworthy marketing-trim decode.
-    var trimHint=g('Trim')||g('Trim2'),trim=trimHint;if (/[\/,]|\bgrade\b/i.test(trim)) trim = '';
+    var trimHint=g('Trim')||g('Trim2'),trim=trimHint;if (/[\/,]|\bgrade\b/i.test(trim) || /\+/.test(trim) && /^subaru$/i.test(g('Make'))) trim = '';
     // dual rear wheels: the VIN's wheel count, or "DRW" in its names; a weight class of 1–2 or a passenger body rules it out
     var wheels = parseInt(g('Wheels'), 10) || 0, cls = /Class\s*(\d)/i.exec(g('GVWR')), names = [g('Series'), g('Series2'), g('Trim'), g('Trim2'), g('Model')].join(' ');
     var drw = wheels >= 6 || /\bDRW\b|dual rear/i.test(names) ? 'yes' : (cls && +cls[1] <= 2) || /sedan|coupe|hatchback|wagon|convertible|sport utility|minivan|crossover/i.test(g('BodyClass')) ? 'no' : '';
@@ -1598,7 +1613,7 @@
       LG.info('car', 'VIN decoded', { year: c.year, make: c.make, model: c.model, power: c.power,engineDecoded:!!d.info.engine,transmissionDecoded:!!d.info.trans,driveDecoded:!!d.info.drive,engineKnown:!!i.engine,transmissionKnown:!!i.trans,driveKnown:!!i.drive,sourceWarning:!!d.warn });
       changed();
       var note = d.warn && /check digit/i.test(d.warn) ? ' <b>Note:</b> the VIN\'s check digit doesn\'t add up — double-check you typed it right.' : '';
-      var hint = !d.trim ? (oemBrand(c) ? 'Asking ' + (oemBrand(c) === 'lexus' ? 'Lexus' : 'Toyota') + '\'s parts catalog for the trim…' : 'Trim not identified by NHTSA; optional.') : '';
+      var hint = !d.trim ? (oemBrand(c) ? 'Asking ' + OEM[oemBrand(c)].label + '\'s parts catalog for the trim…' : 'Trim not identified by NHTSA; optional.') : '';
       if (!d.trim) oemTrim(c, vin);
       vMsg(hint+note);
       // now the EPA's mileage for it: same year, make and model, then the engine / transmission
