@@ -14,12 +14,16 @@ Environment: Android emulator Capture34 (Android 14, Chrome 113 user agent, unmo
 | Ford | Parts store and support page raw answers carry no trim/series/package; window sticker = placeholder for 2019–2020 VINs | Accessible, no trim |
 | Lincoln | Not tested separately | Not yet tested |
 | Volkswagen | parts.vw.com returns every possible trim for a VIN (SE / SEL / SE R-Line Black, AWD and FWD) | Accessible but ambiguous |
-| Audi, Mazda | Same store platform as Subaru/Kia (parts.audiusa.com, parts.mazdausa.com: Cloudflare from Linux); no VINs submitted | Not yet tested |
-| Hyundai | parts.hyundaiusa.com does not resolve (DNS) from Linux or the emulator; owner portal needs sign-in (earlier) | Blocked / needs sign-in |
+| Mazda | parts.mazdausa.com: every Mazda3 / CX-30 trim right (5/5 incl. a vPIC-blank 2020 Mazda3), but **BASE for two CX-5 Grand Tourings** (vPIC names those right) | **Useful fallback, BASE ignored** (0.0.485) |
+| Audi | parts.audiusa.com (Cloudflare check): 4/4 right (A4 Premium, A4 Premium Plus, Q5 Premium Plus ×2); vPIC also names these | **Verified, fallback only** (0.0.485) |
+| Hyundai | No manufacturer parts store found: parts.hyundaiusa.com, www.hyundaiparts.com, shop/accessories.hyundaiusa.com, parts.hyundai.com don't resolve; hyundaipartsdeal.com / AutoNation are dealers (earlier: lists all four Tucson trims); owner portal needs sign-in. vPIC lists every Tucson trim | **No source** |
 | Genesis | parts.genesis.com did not resolve | Not yet tested |
 | Nissan, Infiniti, Mitsubishi | Store hosts answer 403 to Linux; not opened in the emulator | Not yet tested |
-| Honda, Acura, BMW, MINI, Mercedes-Benz, Volvo, Polestar, JLR, Porsche | No reachable official parts host found from Linux; not opened in the emulator | Not yet tested |
-| GM, Stellantis | Earlier samples: vPIC trims usually clean; no OEM lookup researched | Not yet tested |
+| Honda | vPIC named 2021 CR-V EX on 2/2 dealer VINs | vPIC sufficient (sampled) |
+| Nissan | vPIC named 2021 Rogue SV on 2/2 | vPIC sufficient (sampled) |
+| GM (Chevrolet) | vPIC named 2021 Equinox "LT (1LT)" on 2/2 (listing: LT) | vPIC sufficient (sampled) |
+| Stellantis (Jeep) | vPIC named 2021 Grand Cherokee Limited on 2/2 | vPIC sufficient (sampled) |
+| Acura, Infiniti, Mitsubishi, GMC, Buick, Cadillac, Ram, Dodge, Chrysler, BMW, MINI, Mercedes-Benz, Volvo, Polestar, JLR, Porsche | Not sampled this session | Not yet tested |
 | Tesla, Rivian, Lucid | Not researched | Not yet tested |
 
 ### Ford / Lincoln (priority 1)
@@ -32,7 +36,28 @@ Environment: Android emulator Capture34 (Android 14, Chrome 113 user agent, unmo
 
 A direct replay of the server action from Linux was refused by this session's safety check and was not retried; the emulator capture above is the evidence. Lincoln was not tested.
 
-### Subaru / Kia / VW store platform (reproducible request)
+### vPIC trims for the sampled major brands (2026-11-16, Linux)
+
+| VIN | Listing | vPIC Trim |
+|---|---|---|
+| `WA1BAAFY7M2105339`, `WA1BAAFY5M2134340` | 2021 Audi Q5 Premium Plus | `quattro Premium Plus` |
+| `WAUHMAF41LA072179` / `WAUGMAF41LN010558` | 2020 Audi A4 Premium Plus / Premium | `Premium Plus` / `Premium` |
+| `2HKRW2H5XMH658385`, `2HKRW2H51MH654192` | 2021 Honda CR-V EX | `EX` |
+| `5N1AT3BB9MC815728`, `5N1AT3BB4MC812400` | 2021 Nissan Rogue SV | `SV` |
+| `3GNAXKEVXMS104985`, `3GNAXKEV6ML302473` | 2021 Chevrolet Equinox LT | `LT (1LT)` |
+| `1C4RJFBG8MC541576`, `1C4RJFBG5MC618565` | 2021 Jeep Grand Cherokee Limited | `Limited` |
+| `JM3KFBDM8M1429491`, `JM3KFBDM3M1378319` | 2021 Mazda CX-5 Grand Touring | `Grand Touring` (Mazda store: BASE) |
+| `JM3KFBCM5M0455666`, `JM3KFBCM0M0404995` | 2021 Mazda CX-5 Touring | `Touring` (store: Touring) |
+| `JM1BPADL4L1165482` | 2020 Mazda3 sedan Preferred | *(blank)* (store: PREFERRED) |
+| `JM1BPABL8M1327098` / `JM1BPBNM7L1155252` / `JM1BPBMM7L1162204` | 2021 Mazda3 Select / 2020 HB Premium / 2020 HB Preferred | `Mazda3 with Select Package` / `…Premium package` / `…Preferred package` (store: SELECT / PREMIUM / PREFERRED) |
+| `JM1BPBLM0L1175698` | 2020 Mazda3 HB (listed Base) | `PSP` (store: BASE) |
+| `3MVDMBDM6MM221375` | 2021 Mazda CX-30 Premium | `Premium Package` (store: S PREMIUM) |
+| `1FTEW1E49LFA08332` | 2020 F-150 Lariat | *(blank)* |
+| `KM8J3CAL4MU379391`, `KM8J33AL9MU282977` | 2021 Hyundai Tucson SEL | `Value, SEL, Sport, Limited, Ultimate` |
+
+The parts catalogs are asked only when vPIC has no clean trim, so they're a fallback. Remaining real gaps with no signed-out source: Hyundai (and likely Genesis) and Ford/Lincoln.
+
+### Subaru / Kia / Mazda / Audi / VW store platform (reproducible request)
 
 The stores' VIN box makes this same-origin request with the page's cookies (Cloudflare `cf_clearance` after the user's check):
 

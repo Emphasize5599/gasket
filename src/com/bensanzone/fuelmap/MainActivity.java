@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
         String code="window.onTripQueueOpen?onTripQueueOpen("+payload+"):(window.__pendingQueueOpen="+payload+")";if(pageReady)js(code);else pendingQueue=code;
     }
     private static boolean isGasWorker(String key) { return key != null && key.matches("gasweb(?:[2-9]|[1-4][0-9]|50)?"); }
-    private static boolean isOemVin(String key) { return "toyotaparts".equals(key) || "lexusparts".equals(key) || "subaruparts".equals(key) || "kiaparts".equals(key); }
+    private static boolean isOemVin(String key) { return "toyotaparts".equals(key) || "lexusparts".equals(key) || "subaruparts".equals(key) || "kiaparts".equals(key) || "mazdaparts".equals(key) || "audiparts".equals(key); }
     private volatile int gasReaderRecycles = 0, gasRendererLosses = 0;
 
     private static final int REQ_LOC = 42, REQ_CAM = 43;
@@ -368,6 +368,8 @@ public class MainActivity extends Activity {
         workers.put("lexusparts", new SiteWorker("lexusparts", "https://parts.lexus.com/", "https://parts.lexus.com/"));
         workers.put("subaruparts", new SiteWorker("subaruparts", "https://parts.subaru.com/", "https://parts.subaru.com/"));
         workers.put("kiaparts", new SiteWorker("kiaparts", "https://parts.kia.com/", "https://parts.kia.com/"));
+        workers.put("mazdaparts", new SiteWorker("mazdaparts", "https://parts.mazdausa.com/", "https://parts.mazdausa.com/"));
+        workers.put("audiparts", new SiteWorker("audiparts", "https://parts.audiusa.com/", "https://parts.audiusa.com/"));
         for (SiteWorker sw : workers.values()) {
             // the hidden Google Maps page gets a desktop-sized window so it lays out like the desktop site
             if (sw.key.equals("gmaps") || sw.key.equals("traffic") || isGasWorker(sw.key)) root.addView(sw.view, new FrameLayout.LayoutParams(1280, 900));
@@ -2607,6 +2609,8 @@ public class MainActivity extends Activity {
                             || ("lexusparts".equals(key) && url.equals("https://parts.lexus.com/"))
                             || ("subaruparts".equals(key) && url.equals("https://parts.subaru.com/"))
                             || ("kiaparts".equals(key) && url.equals("https://parts.kia.com/"))
+                            || ("mazdaparts".equals(key) && url.equals("https://parts.mazdausa.com/"))
+                            || ("audiparts".equals(key) && url.equals("https://parts.audiusa.com/"))
                             || ("campendium".equals(key) && url.startsWith("https://maps.campendium.com/?"))
                             || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
                             || ("restmaps".equals(key) && (url.startsWith("https://www.google.com/maps/search/?api=1&query=") || restMapsPlaceUrl(url)))

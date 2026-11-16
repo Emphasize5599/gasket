@@ -55,19 +55,21 @@
     return g.split(' ').map(function (w) { return /[0-9]/.test(w) || /^(LE|SE|XLE|XSE|TRD|SR|CE|GR|GT|XP|FWD|AWD|RWD|LX|GX|NX|RX|UX|TX|ES|IS|LS|LC|RC|HV|PHEV)$/.test(w) ? w : w.split('-').map(function (x) { return x.charAt(0) + x.slice(1).toLowerCase(); }).join('-'); })
       .join(' ').replace(/\bOffroad\b/, 'Off-Road');
   }
-  // Subaru / Kia parts stores describe a VIN as '2021 Subaru Outback 2.5L CVT Limited' or '2021 Sportage 2.4L AT 4WD
-  // 4 DOOR S': the trim is what follows the engine size, minus transmission / drive / body words and 'w/…' equipment.
-  // '' when there's no engine size, a different model year, or nothing left. The VW store's answer lists every trim
-  // the VIN could be (SE / SEL / R-Line): those disagree, so the caller keeps none.
-  var DESC_SKIP = /^(CVT|AT|A\/T|MT|M\/T|AUTO|AUTOMATIC|MANUAL|DCT|IVT|[0-9]+-?SPD|[0-9]+-?SPEED|AWD|FWD|RWD|4WD|2WD|4X4|4X2|[0-9]+|DOOR|DR|SEDAN|HATCHBACK|WAGON|COUPE|CONVERTIBLE|SPORT UTILITY|UTILITY|SUV|VAN|TURBO|HYBRID)$/i;
+  // Subaru / Kia / Mazda / Audi parts stores describe a VIN as '2021 Subaru Outback 2.5L CVT Limited', '2021 Sportage 2.4L
+  // AT 4WD 4 DOOR S', '2020 Mazda3 2.5L AT 2WD SEDAN PREFERRED (VIN Begins: JM1)' or '2021 Q5 2.0L MILD HYBRID EV-GAS
+  // (MHEV) A/T Premium Plus Sport Utility': the trim is what follows the engine size, minus (…) notes, fuel / transmission /
+  // drive / door / body words and 'w/…' equipment; all-caps words are title-cased. '' when there's no engine size, a
+  // different model year, or nothing left. The VW store's answer lists every trim the VIN could be (SE / SEL / R-Line):
+  // those disagree, so the caller keeps none.
+  var DESC_SKIP = /^(CVT|AT|A\/T|MT|M\/T|AUTO|AUTOMATIC|MANUAL|DCT|IVT|[0-9]+-?SPD|[0-9]+-?SPEED|AWD|FWD|RWD|4WD|2WD|4X4|4X2|[0-9]+|DOOR|DR|SEDAN|HATCHBACK|WAGON|COUPE|CONVERTIBLE|UTILITY|SUV|VAN|TURBO|HYBRID|MILD|PLUG-IN|ELECTRIC|EV-GAS|GAS|DIESEL|MHEV|PHEV|HEV|QUATTRO)$/i;
   function descTrim(desc, year, list) {
-    var s = String(desc || '').replace(/\s+/g, ' ').trim(), y = /^(\d{4})\b/.exec(s);
+    var s = String(desc || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim(), y = /^(\d{4})\b/.exec(s);
     if (!y || (year && +y[1] !== +year)) return '';
     var m = /\b\d\.\dL\b(.*)$/i.exec(s); if (!m) return '';
     var rest = m[1].replace(/\bw\/.*$/i, '').replace(/\bsport utility\b/gi, ' ').trim().split(' ').filter(Boolean);
     while (rest.length && DESC_SKIP.test(rest[0])) rest.shift();
     while (rest.length && DESC_SKIP.test(rest[rest.length - 1])) rest.pop();
-    var t = rest.join(' ');
+    var t = rest.map(function (w) { return /^[A-Z]{4,}$/.test(w) ? w.charAt(0) + w.slice(1).toLowerCase() : w; }).join(' ');
     if (!t || t.length > 30) return '';
     return find(list, t) || t;
   }

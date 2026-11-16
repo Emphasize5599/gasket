@@ -395,16 +395,20 @@
   // NHTSA can't name most Toyota / Lexus trims (Prius "One/Two", Sienna "E grade"), gives choices for some Kias
   // ("FE, LXS") and option codes for some Subarus ("Premium +BSD"). The makers' own parts stores decode the VIN, asked from
   // the store's own page (siteRead toyotaparts / lexusparts / subaruparts / kiaparts, assets/oemvin_worker.js). Subaru's
-  // and Kia's run on another platform (store 'simplepart'): its answer is vehicle descriptions (TrimMath.descTrim).
+  // Kia's, Mazda's and Audi's run on another platform (store 'simplepart'): its answer is vehicle descriptions
+  // (TrimMath.descTrim). Only asked when NHTSA gives no clean trim: it's a fallback.
   // Once per VIN a session; a failure or disagreeing answers leave the trim menu as it was.
   var oemAsked = {};
   var OEM = {
     toyota: { key: 'toyotaparts', url: 'https://autoparts.toyota.com/', label: 'Toyota' },
     lexus: { key: 'lexusparts', url: 'https://parts.lexus.com/', label: 'Lexus' },
     subaru: { key: 'subaruparts', url: 'https://parts.subaru.com/', label: 'Subaru', store: 'simplepart' },
-    kia: { key: 'kiaparts', url: 'https://parts.kia.com/', label: 'Kia', store: 'simplepart' }
+    kia: { key: 'kiaparts', url: 'https://parts.kia.com/', label: 'Kia', store: 'simplepart' },
+    // Mazda's store answered BASE for two CX-5 Grand Tourings: its Base is a placeholder, never a trim
+    mazda: { key: 'mazdaparts', url: 'https://parts.mazdausa.com/', label: 'Mazda', store: 'simplepart', generic: /^base$/i },
+    audi: { key: 'audiparts', url: 'https://parts.audiusa.com/', label: 'Audi', store: 'simplepart' }
   };
-  function oemBrand(c) { var m = String(c.make || ''); return /^lexus$/i.test(m) ? 'lexus' : /^(toyota|scion)$/i.test(m) ? 'toyota' : /^subaru$/i.test(m) ? 'subaru' : /^kia$/i.test(m) ? 'kia' : ''; }
+  function oemBrand(c) { var m = String(c.make || ''); return /^lexus$/i.test(m) ? 'lexus' : /^(toyota|scion)$/i.test(m) ? 'toyota' : /^subaru$/i.test(m) ? 'subaru' : /^kia$/i.test(m) ? 'kia' : /^mazda$/i.test(m) ? 'mazda' : /^audi$/i.test(m) ? 'audi' : ''; }
   async function oemTrim(c, vin) {
     var brand = oemBrand(c); if (!brand || vinTrim(c) || !call || !N.siteRead || oemAsked[vin]) return;
     oemAsked[vin] = true;
@@ -414,7 +418,7 @@
     var trims, n;
     if (o.store) {
       var ds = r.descriptions || []; n = ds.length;
-      trims = ds.map(function (d) { return TrimMath.descTrim(d, c.year, trimList(c)); });
+      trims = ds.map(function (d) { var x = TrimMath.descTrim(d, c.year, trimList(c)); return o.generic && o.generic.test(x) ? '' : x; });
       if (trims.some(function (x) { return !x; })) trims = [];
     } else {
       var recs = (r.records || []).filter(function (x) { return !c.year || !x.year || +x.year === +c.year; }); n = (r.records || []).length;

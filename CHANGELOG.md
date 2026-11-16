@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.485 — 2026-11-16
+
+- Mazda and Audi trims from their parts catalogs, as a fallback when NHTSA's decoder gives no clean trim (e.g. some Mazda3s). Mazda's catalog answers "Base" for trims it doesn't know, so that answer is ignored.
+
 ## 0.0.484 — 2026-11-16
 
 - Subaru and Kia trims from the makers' own parts catalogs: when NHTSA's decoder gives no clean trim (Kia "FE, LXS", Subaru option codes like "Premium +BSD"), Gasket asks parts.subaru.com / parts.kia.com once per VIN from the store's own page and locks the trim it names. Answers that disagree leave the trim editable; a security check is shown to you, never got around.

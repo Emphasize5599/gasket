@@ -25,7 +25,13 @@ const desc = [
   ['2021 Subaru Outback 2.5L CVT Limited', 'Limited'], ['2021 Outback 2.5L Limited', 'Limited'],
   ['2021 Subaru Outback 2.5L CVT Premium', 'Premium'], ['2021 Subaru Forester 2.5L CVT Sport w/EyeSight', 'Sport'],
   ['2019 Crosstrek 2.0L CVT Premium', 'Premium'], ['2021 Sorento 2.5L AT LX', 'LX'], ['2020 Forte 2.0L AT LXS', 'LXS'],
-  ['2021 Sportage 2.4L AT 4 DOOR LX', 'LX'], ['2021 Sportage 2.4L AT 4WD 4 DOOR S', 'S']
+  ['2021 Sportage 2.4L AT 4 DOOR LX', 'LX'], ['2021 Sportage 2.4L AT 4WD 4 DOOR S', 'S'],
+  // Mazda (parts.mazdausa.com) and Audi (parts.audiusa.com), same day, same way
+  ['2020 Mazda3 2.5L AT 2WD SEDAN PREFERRED (VIN Begins: JM1)', 'Preferred'], ['2021 Mazda3 2.5L AT 2WD SEDAN SELECT (VIN Begins: JM1)', 'Select'],
+  ['2020 Mazda3 2.5L AT 4WD HATCHBACK PREMIUM', 'Premium'], ['2020 Mazda3 2.5L AT 4WD HATCHBACK PREFERRED', 'Preferred'],
+  ['2021 CX-30 2.5L AT 4WD S PREMIUM', 'S Premium'], ['2021 CX-5 2.5L AT 4WD Touring', 'Touring'],
+  ['2020 A4 2.0L A/T FWD Premium Sedan', 'Premium'], ['2020 A4 2.0L A/T FWD Premium Plus Sedan', 'Premium Plus'],
+  ['2021 Q5 2.0L MILD HYBRID EV-GAS (MHEV) A/T Premium Plus Sport Utility', 'Premium Plus']
 ];
 for (const [d, t] of desc) assert.equal(T.descTrim(d, null), t, d);
 assert.equal(T.descTrim('2021 Outback 2.5L Limited', 2021, ['Base', 'Premium', 'Limited']), 'Limited');
@@ -87,15 +93,19 @@ async function run(vin, reply, page, store) {
   assert.ok(java.includes('("lexusparts".equals(key) && url.equals("https://parts.lexus.com/"))'));
   assert.ok(java.includes('("subaruparts".equals(key) && url.equals("https://parts.subaru.com/"))'));
   assert.ok(java.includes('("kiaparts".equals(key) && url.equals("https://parts.kia.com/"))'));
+  assert.ok(java.includes('("mazdaparts".equals(key) && url.equals("https://parts.mazdausa.com/"))'));
+  assert.ok(java.includes('("audiparts".equals(key) && url.equals("https://parts.audiusa.com/"))'));
   assert.ok(/"subaruparts"\.equals\(key\) \|\| "kiaparts"\.equals\(key\)/.test(java), 'Subaru / Kia use the shared parts-store reader');
   assert.ok(/isOemVin\(key\) \? "oemvin"/.test(java));
   assert.ok(/"xom"\.equals\(key\) \|\| isOemVin\(key\)\) && view != null/.test(java), 'a check page can be shown to the user');
   const app = fs.readFileSync('assets/web/app.js', 'utf8');
-  assert.ok(/brave\|nhtsa\|tirerack\|toyotaparts\|lexusparts\|subaruparts\|kiaparts\)\$\/\.test\(key\)\)return;/.test(app), 'closing a parts-store check never searches stations');
+  assert.ok(/brave\|nhtsa\|tirerack\|toyotaparts\|lexusparts\|subaruparts\|kiaparts\|mazdaparts\|audiparts\)\$\/\.test\(key\)\)return;/.test(app), 'closing a parts-store check never searches stations');
   const garage = fs.readFileSync('assets/web/garage.js', 'utf8');
   assert.ok(/if \(!d\.trim\) oemTrim\(c, vin\)/.test(garage), 'asked only when NHTSA has no clean trim');
   assert.ok(/c\.trimSrc = 'vin'; c\.trimBy = brand/.test(garage), 'a catalog trim is locked like a VIN trim');
   assert.ok(/subaru: \{ key: 'subaruparts'[^}]*store: 'simplepart' \}/.test(garage) && /kia: \{ key: 'kiaparts'[^}]*store: 'simplepart' \}/.test(garage));
+  assert.ok(/mazda: \{ key: 'mazdaparts'[^}]*generic: \/\^base\$\/i \}/.test(garage), "Mazda's BASE (said for CX-5 Grand Tourings) is never a trim");
+  assert.ok(/audi: \{ key: 'audiparts'[^}]*store: 'simplepart' \}/.test(garage));
   assert.ok(/trims\.some\(function \(x\) \{ return !x; \}\)\) trims = \[\]/.test(garage), 'an unreadable description keeps no trim');
-  console.log('Toyota / Lexus / Subaru / Kia parts-catalog trims parse, read and stay inside their stores');
+  console.log('Toyota / Lexus / Subaru / Kia / Mazda / Audi parts-catalog trims parse, read and stay inside their stores');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -48,7 +48,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
       await p.close();
     }
     // Subaru: NHTSA's trim carries option codes ('Premium +BSD'), so Subaru's parts store (same platform as Kia's) is asked
-    for (const mode of ['found', 'disagree']) {
+    for (const mode of ['found', 'disagree', 'mazdabase']) {
       const p = await browser.newPage({ viewport: { width: 320, height: 900 } }), errors = [];
       p.on('pageerror', (e) => errors.push(e.stack));
       await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
@@ -62,9 +62,13 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
           if (url.endsWith('/test-crosstrek')) return { id: 'test-crosstrek', year: 2019, make: 'Subaru', model: 'Crosstrek', displ: 2.0, cylinders: 4, trany: 'Automatic (AV-S7)', drive: 'All-Wheel Drive', fuelType1: 'Regular Gasoline', city08: 27, highway08: 33, comb08: 29, VClass: 'Small Sport Utility Vehicle 4WD' };
           return { menuItem: [] };
         };
-        __mocks.vpic = () => ({ Results: [{ ModelYear: '2019', Make: 'SUBARU', Model: 'Crosstrek', Trim: 'Premium +BSD', Trim2: '', FuelTypePrimary: 'Gasoline', DisplacementL: '2.0', EngineCylinders: '4', ErrorCode: '0' }] });
+        if (mode === 'mazdabase') {
+          const e = __mocks.epa; __mocks.epa = (url) => url.includes('menu/make') ? menu(['Mazda']) : url.includes('menu/model') ? menu(['CX-5']) : url.endsWith('/test-crosstrek') ? Object.assign(e(url), { make: 'Mazda', model: 'CX-5' }) : e(url);
+        }
+        __mocks.vpic = () => mode === 'mazdabase' ? { Results: [{ ModelYear: '2019', Make: 'MAZDA', Model: 'CX-5', Trim: '', Trim2: '', FuelTypePrimary: 'Gasoline', DisplacementL: '2.5', EngineCylinders: '4', ErrorCode: '0' }] } : ({ Results: [{ ModelYear: '2019', Make: 'SUBARU', Model: 'Crosstrek', Trim: 'Premium +BSD', Trim2: '', FuelTypePrimary: 'Gasoline', DisplacementL: '2.0', EngineCylinders: '4', ErrorCode: '0' }] });
         const prior = __mocks.siteRead;
         __mocks.siteRead = (key, args) => {
+          if (key === 'mazdaparts') { window.__oem = (window.__oem || []).concat([{ key, args }]); return { descriptions: ['2019 CX-5 2.5L AT 4WD BASE'] }; }
           if (key === 'subaruparts') {
             window.__oem = (window.__oem || []).concat([{ key, args }]);
             return { descriptions: mode === 'found' ? ['2019 Crosstrek 2.0L CVT Premium'] : ['2019 Crosstrek 2.0L CVT Premium', '2019 Crosstrek 2.0L CVT Limited'] };
@@ -76,7 +80,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
       await p.fill('#gVin', 'JF2GTAAC0K0000001'); await p.click('#gVinGo');
       await p.waitForFunction(() => (window.__oem || []).length > 0, null, { timeout: 15000 });
       const asked = await p.evaluate(() => __oem[0]);
-      assert.equal(asked.args.url, 'https://parts.subaru.com/'); assert.equal(asked.args.store, 'simplepart'); assert.equal(asked.args.vin, 'JF2GTAAC0K0000001');
+      assert.equal(asked.args.url, mode === 'mazdabase' ? 'https://parts.mazdausa.com/' : 'https://parts.subaru.com/'); assert.equal(asked.args.store, 'simplepart'); assert.equal(asked.args.vin, 'JF2GTAAC0K0000001');
       if (mode === 'found') {
         await p.waitForFunction(() => Garage.car().trimSrc === 'vin', null, { timeout: 15000 });
         assert.equal(await p.evaluate(() => Garage.car().trim), 'Premium');
@@ -84,12 +88,12 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
         assert.match(await p.$eval('#gTrim', (e) => decodeURIComponent(e.closest('label').innerHTML)), /from your VIN \(Subaru parts catalog\)/);
       } else {
         await p.waitForTimeout(400);
-        assert.notEqual(await p.evaluate(() => Garage.car().trimSrc), 'vin', 'disagreeing descriptions keep the trim editable');
+        assert.notEqual(await p.evaluate(() => Garage.car().trimSrc), 'vin', mode + ': disagreeing descriptions or Mazda\'s BASE keep the trim editable');
         assert.equal(await p.$('#gTrim[readonly]'), null);
       }
       assert.deepEqual(errors, []);
       await p.close();
     }
-    console.log('Toyota / Subaru parts-catalog trims are asked once NHTSA has no clean one, locked when named, editable otherwise');
+    console.log('Toyota / Subaru / Mazda parts-catalog trims are asked once NHTSA has no clean one, locked when named, editable otherwise');
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });
