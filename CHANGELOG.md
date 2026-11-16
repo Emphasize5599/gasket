@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.487 — 2026-11-16
+
+- Speed up automatic rest suggestions with separate access and forecast lanes. A slow departure forecast no longer prevents other sites from passing access screening; ready sites receive initial samples before refinements.
+- Use three coarse departure samples (beginning, middle and end) for up to eight automatic candidates: at most 24 onward forecasts per leg instead of 48. Choosing a stop still checks its full five-minute departure slider; suggestions describe only the sampled departures.
+- Limit suggestion forecasting to two active routes per leg instead of multiplying site and departure concurrency. Keep complete-coverage requirements, cached data reuse and independent leg progress.
+- Reuse failed campground metadata checks during access screening instead of fetching the same missing record again. Keep missing-record failures for five minutes instead of automatically retrying the same 404 after 30 seconds; explicit Retry checks still retries immediately. Report the actual forecast phase before the first answer and log waiting/failure diagnostics.
+
 ## 0.0.486 — 2026-11-16
 
 - MINI trims (Cooper, Cooper S, John Cooper Works) from NHTSA's VIN decoder, which lists them as the series.

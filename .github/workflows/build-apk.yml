@@ -110,6 +110,8 @@ on:
       - tests/rest-departure-ui.test.js
       - tests/rest-tolerance-ui.test.js
       - tests/rest-traffic-leg.test.js
+      - tests/rest-suggestion-budget.test.js
+      - tests/rest-suggestion-progress.test.js
       - tests/rest-reco-restart.test.js
       - tests/userrestprice.test.js
       - tests/userrestprice-ui.test.js
