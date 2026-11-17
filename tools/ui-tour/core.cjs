@@ -35,7 +35,7 @@ async function back(p, before) {
     else if (t === 'picker') await p.keyboard.press('Escape');
     else if (t.startsWith('sub')) await p.evaluate(() => { const b = [...document.querySelectorAll('.page.sub-page .sub-back')].pop(); if (window.__subClose) window.__subClose(true); else if (b) b.click(); });
     else if (t.startsWith('settings:') && before.startsWith('settings')) await p.evaluate(() => { const b = document.getElementById('settingsBack'); if (b) b.click(); });
-    else if (t === 'blPage' || t === 'licPage') await p.evaluate(t => { const b = document.querySelector('#' + t + ' .sub-back, #' + t + ' [data-back], #' + t + ' .back'); if (b) b.click(); else document.getElementById(t).classList.add('hidden'); }, t);
+    else if (t === 'blPage' || t === 'licPage') await p.evaluate(t => document.getElementById(t).classList.add('hidden'), t);
     else return false;
     await wait(p, 250);
   }
@@ -73,13 +73,16 @@ async function variants(p, note, max = 40) {
     if (r.kind === 'select') {
       for (const v of r.opts) {
         await p.evaluate(([i, v]) => { const e = document.querySelector('[data-tour-v="' + i + '"]'); if (e) { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); } }, [i, v]).catch(() => {});
-        await wait(p, 350); if (await cap(p, note + ' · option')) n++; await back(p, before);
+        await wait(p, 350);
+        const changed = (await top(p)) !== before || await p.evaluate(c0 => [...document.querySelectorAll('input,select,button,textarea,h3,h4,summary')].filter(x => x.getClientRects().length).length !== c0, r.c0);
+        if (changed && await cap(p, note + ' · option')) n++; await back(p, before);
       }
       await p.evaluate(([i, v]) => { const e = document.querySelector('[data-tour-v="' + i + '"]'); if (e) { e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); } }, [i, r.old]).catch(() => {});
       await wait(p, 250); continue;
     }
-    await wait(p, 400); await expand(p);
-    if (await cap(p, note + ' · option')) n++;
+    await wait(p, 400);
+    const changed = (await top(p)) !== before || await p.evaluate(c0 => [...document.querySelectorAll('input,select,button,textarea,h3,h4,summary')].filter(x => x.getClientRects().length).length !== c0, r.c0);
+    if (changed) { await expand(p); if (await cap(p, note + ' · option')) n++; }
     if ((await top(p)) !== before) { await back(p, before); }
     await p.evaluate(i => {
       const e = document.querySelector('[data-tour-v="' + i + '"]');
@@ -151,8 +154,9 @@ async function run(rawDir, browser, logger) {
   }
   await p.evaluate(() => { const d = document.getElementById('sDone') || document.getElementById('settingsDone'); if (d) d.click(); }); await wait(p, 400);
   if ((await top(p)).startsWith('settings')) await p.evaluate(() => __app.closeSettings && __app.closeSettings());
+  await p.evaluate(() => ['licPage', 'blPage'].forEach(i => document.getElementById(i).classList.add('hidden')));
   // 4. Garage and Advisory for each demo vehicle
-  await p.click('#btnTrip'); await wait(p, 800);
+  await p.evaluate(() => document.getElementById('btnTrip').click()); await wait(p, 800);
   const cars = await p.evaluate(() => __app.S.cars.map(c => c.id));
   for (const id of cars) {
     await p.evaluate(id => { __app.S.carId = id; __app.save && __app.save(); document.dispatchEvent(new CustomEvent('garagechange')); __trip.step(1); }, id); await wait(p, 900);

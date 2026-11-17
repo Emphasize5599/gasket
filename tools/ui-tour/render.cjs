@@ -30,6 +30,7 @@ async function render(rawDir, outDir, opts = {}) {
       await page.goto(pathToFileURL(shellFile).href);
       const entries = [];
       for (const s of snaps) {
+        if (s.png) { const name = s.id + '.png'; fs.writeFileSync(path.join(img, name), Buffer.from(s.png, 'base64')); entries.push({ id: s.id, title: s.title, category: s.category, source: s.source, note: s.note + ' (live screenshot, original theme and width)', height: 0, parts: ['img/' + name] }); continue; }
         await page.setViewportSize({ width: 412, height: 915 });
         await page.evaluate(({ s, theme }) => {
           const h = document.documentElement; h.setAttribute('style', s.htmlAttrs.style || ''); h.dataset.theme = theme;

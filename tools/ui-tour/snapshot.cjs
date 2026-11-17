@@ -21,7 +21,6 @@ module.exports = function snapshot(seenKey) {
   } else title = 'Map · ' + clean((document.querySelector('#btnMode') || {}).textContent);
   const parts = [];
   root.querySelectorAll('h1,h2,h3,h4,summary,.sub-ent b,.lbl,.settings-link b,label,button,.seg .on,.chip.on').forEach(e => { if (shown(e)) { const t = clean(e.firstChild && e.firstChild.nodeType === 3 ? e.firstChild.textContent : e.textContent); if (t) parts.push(e.tagName[0] + t); } });
-  root.querySelectorAll('input[type=checkbox],input[type=radio]').forEach(e => { if (shown(e.closest('label') || e)) parts.push(e.checked ? '1' : '0'); });
   const sig = (surface ? (surface.id || surface.className) : 'map') + '|' + title + '|' + [...new Set(parts)].join('~');
   if (seen.has(sig)) return null;
   seen.add(sig);

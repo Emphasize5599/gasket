@@ -9,6 +9,7 @@ async function capture(page, dir, source, note) {
   if (!snap) return false;
   const file = path.join(dir, hash(snap.sig) + '.json');
   if (fs.existsSync(file)) return false;
+  if (snap.whole) { try { snap.png = (await page.screenshot()).toString('base64'); } catch (e) { } }
   snap.source = source; snap.note = note || ''; snap.t = Date.now();
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(snap));
