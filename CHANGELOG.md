@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.505 — 2026-11-17
+
+- Removed access-check headers, resolved/verified/excluded counters and the redundant unavailable-count warning from Stops. Access progress remains in the top task bar; detailed failure/closure explanations remain expandable.
+- Stops now has one expandable Warnings tile for the yellow-marker trip warnings and missing-Google-API/traffic estimate notices. Planning errors remain visible.
+- Removed the saved-plan Edit trip settings button.
+
+
 ## 0.0.504 — 2026-11-17
 
 - Reopening saved rest-timing reviews now recolors stored forecasts against the current per-leg allowance. This preserves measured delays, departure times and coverage and performs no new traffic lookups.

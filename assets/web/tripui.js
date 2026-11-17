@@ -1111,7 +1111,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     else refreshTripPrices(true);
   });
   var RF_ICON='<svg class="rf-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
-  var priceTileOpen=false,priceReplanning=null,priceRefreshNote='';
+  var priceTileOpen=false,priceReplanning=null,priceRefreshNote='',stopsWarningsOpen=false;
+  document.addEventListener('toggle',function(e){if(e.target.matches&&e.target.matches('[data-stops-warnings]')&&e.target.isConnected)stopsWarningsOpen=e.target.open;},true);
   document.addEventListener('toggle',function(e){if(e.target.matches&&e.target.matches('[data-price-tile]'))priceTileOpen=e.target.open;},true);
   document.addEventListener('change',function(e){if(e.target.matches('[data-price-reroute]')){S.trip.priceReroute=e.target.checked;A.save();rememberSel();}});
   function restHelp(text){return '<button type="button" class="qi" aria-label="More info" data-q="'+encodeURIComponent(text)+'">?</button>';}
@@ -4717,7 +4718,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(autoPlanning){if(el)el.innerHTML='<div class="card"><h3>Choosing your trip</h3><p class="lead keep">Comparing approved routes, buffer and detour. Your speed settings stay unchanged.</p></div>';return;}
     clearRecommendationMaps();
     if(recommendationActive()&&result&&result.plan.ok){startRecommendations();el.innerHTML=recommendationsHtml();bindRecommendations();return;}
-    var put = function (sh, ah) { var note=result&&result.savedPlanAt?'<p class="lead small keep" data-saved-plan>Saved plan · '+esc(new Date(result.savedPlanAt).toLocaleString())+' · stored prices and traffic</p><button class="btn tonal" data-saved-plan-edit>Edit trip settings</button>':'';if(el)el.innerHTML=note+sh;if(ea)ea.innerHTML=note+(ah==null?sh:ah);[el,ea].filter(Boolean).forEach(function(host){var edit=host.querySelector('[data-saved-plan-edit]');if(edit)edit.onclick=function(){savedAdjustments=true;step=autoPriority()?ST_PARAMS:ST_ADJ;renderStep();};}); };
+    var put = function (sh, ah) { var note=result&&result.savedPlanAt?'<p class="lead small keep" data-saved-plan>Saved plan · '+esc(new Date(result.savedPlanAt).toLocaleString())+' · stored prices and traffic</p>':'';if(el)el.innerHTML=note+sh;if(ea)ea.innerHTML=note+(ah==null?sh:ah); };
+
     queueStopsSnapshot();
     var r = result;
     if(restPending()){var rests=restRows(),summary='<div class="card"><h3>Adding rest stops</h3><p class="lead keep">'+(restUI&&restUI.nightly()?'Choose when to leave each rest to see the next night.':'Keep adding stops, then choose when to leave each one.')+'</p>'+(route.restPlanError?'<p class="warn" role="alert">'+esc(route.restPlanError)+'</p><button class="btn tonal" data-rest-fix-windows>Review trip time windows</button>':'')+(route.restStartAdjustment?'<p class="lead keep">First-leg start moved earlier within your window to '+esc(new Date(S.trip.depart).toLocaleString())+' to keep your original later-leg departures.</p>':'')+rests.map(function(x){return '<p><b>'+esc(x.point.short||x.point.label)+'</b> · about '+Math.round((x.rest.roughDrivingMinutes||0)+x.rest.minimumRest)+' min added, including '+x.rest.minimumRest+' min rest</p>';}).join('')+'<p class="lead small keep">'+'Fuel planning waits until you finish rest timing. Arrival estimates reuse your previous fuel stops; final planning checks range and discovers missing stations if needed.'+'</p></div>';put(summary);[el,ea].filter(Boolean).forEach(function(host){var fix=host.querySelector('[data-rest-fix-windows]');if(fix)fix.onclick=function(){step=ST_TIMING;renderStep();};});var active=step===ST_STOPS?el:ea;if(active){active.insertAdjacentHTML('beforeend',(autoPriority()?automaticRefreshTile():'')+restUI.tile());restUI.bind(active);}routeGate();return;}
@@ -4760,15 +4762,17 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(KIND()==='gas'&&(r.notes||[]).some(function(n){return /Some website discovery work failed/.test(n);}))w.push({t:'Retry incomplete website work without discarding completed results. Recently cached areas are reused.',html:' <button class="btn tonal" data-trip-refresh="retry">Retry incomplete scan</button>'});
     var wm = $('wmCheck'); if (wm && !wm.classList.contains('hidden')) w.push({ t: $('wmCheckTitle').textContent + ' before its prices can load.', html: ' <a href="#" id="tsSiteCheck">Open</a>' });
     if (r.cachedAgeMs > 0) w.push({ t: r.fromHistory ? 'Saved trip · original discovery from ' + agoText(r.cachedAgeMs) + ' (no lookups used).' : 'Prices from ' + agoText(r.cachedAgeMs) + '.', cls: 'saved' });
+    if(p.rewardTimingUncertain)w.push({t:'Monthly CITGO specials omitted: stop timing is too close to a date change to count them reliably.'});
+    function warningRows(rows){return rows.map(function(x){return '<div class="'+(x.err?'msg err':'note')+(x.cls?' '+x.cls:'')+'">'+esc(x.t)+(x.html||'')+'</div>';}).join('');}
+    var estimateWarnings=costEst(),stopsWarnHtml=warningRows(w.filter(function(x){return x.err;}))+((w.some(function(x){return !x.err;})||estimateWarnings)?'<details class="card stops-warnings" data-stops-warnings'+(stopsWarningsOpen?' open':'')+'><summary>Warnings</summary><div class="warns">'+warningRows(w.filter(function(x){return !x.err;}))+estimateWarnings+'</div></details>':'');
     var warnHtml = w.length ? '<div class="warns pre">' + w.map(function (x) { return '<div class="' + (x.err ? 'msg err' : 'note') + (x.cls ? ' ' + x.cls : '') + '">' + esc(x.t) + (x.html || '') + '</div>'; }).join('') + '</div>' : '';
     if (!p.ok) {
-      h += warnHtml + routeBox();
+      h += stopsWarnHtml + routeBox();
       ah = warnHtml + refreshCard();   // only the errors, plus a new search (it can fix them); no sliders or tips
     } else {
       var t = p.totals;
-      h += warnHtml;
-      if(p.rewardTimingUncertain)h+='<div class="msg">Monthly CITGO specials omitted: stop timing is too close to a date change to count them reliably.</div>';
-      h += costEst();
+      h += stopsWarnHtml;
+
       var whyN = r.cands.length + ' priced station' + (r.cands.length === 1 ? '' : 's') + ' along your route' +
         (p.tooFar ? '; ' + p.tooFar + ' more were over ' + S.trip.maxDetourMin + ' min out of the way' : '') +
         (r.unpriced ? '; ' + r.unpriced + ' had no ' + gradeLabel(r.grade).toLowerCase() + ' price' : '') + (p.cands.some(function(c){return c.citgo;})?'. CITGO monthly rewards and purchase quantities are weighed across the entire trip; a simple station-for-station price comparison would miss later reward changes.':'. Tap a stop for the cheaper stations it was weighed against.');
