@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.506 — 2026-11-17
+
+- Updated saved-price regression coverage to expand Stops' Warnings tile before inspecting its notices and retry actions.
+
 ## 0.0.505 — 2026-11-17
 
 - Removed access-check headers, resolved/verified/excluded counters and the redundant unavailable-count warning from Stops. Access progress remains in the top task bar; detailed failure/closure explanations remain expandable.

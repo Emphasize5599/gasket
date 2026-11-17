@@ -55,7 +55,8 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   assert.equal(first.saved.stations.google[0].list[0].prices.premium.price,4.99);
   assert.equal(first.saved.stations.google[0].list[0].detourMi,1.2);
   assert.equal(JSON.stringify(first.saved.alts),routeBefore);
-  await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tsResults');
+  await p.evaluate(()=>__trip.step(7));await p.waitForSelector('#tsResults [data-stops-warnings]');
+  await p.locator('#tsResults [data-stops-warnings] > summary').click();
   assert.match(await p.innerText('#tsResults'),/No new stations discovered/);
   assert.equal(await p.evaluate(()=>__trip.state().result.stale),1,'only the retained genuinely old price counts as old');
   assert.match(await p.innerText('#tsResults'),/unknown pump-update times/);
