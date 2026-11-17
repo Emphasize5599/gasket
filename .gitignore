@@ -21,3 +21,5 @@ __pycache__/
 .idea/
 .vscode/
 node_modules/
+# UI tour output
+/tmp/ui-tour/

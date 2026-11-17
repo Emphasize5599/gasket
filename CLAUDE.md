@@ -2,6 +2,8 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+UI screenshot tour (on demand, every screen at 412 px, light and dark): `tools/ui-tour`, Actions → UI screenshot tour; see [docs/UI_TOUR.md](docs/UI_TOUR.md). New UI tests can be added to its list in `tools/ui-tour/run.cjs`.
+
 ## 0.0.500 - Timing tile, windows page cleanup, itinerary zones and overlap, early-arrival fixes, hazard rules step (pass 4)
 
 Owner's pass-4 list (Timing, windows submenu, itinerary, Hazards, Compare). Answers: "green area" = the green driving bars.
