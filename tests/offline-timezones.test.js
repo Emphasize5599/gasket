@@ -14,3 +14,7 @@ const border={module:{exports:{}},require:()=>((lat)=>lat>0?'America/New_York':'
  const saved=ctx.StopClock.create({get:()=>({zone:'America/New_York'}),put(){},fetch(){assert.fail();}});assert.equal(saved.get(points[0]),'America/New_York','durable exact lookup wins');
  console.log('Offline zones, boundary guard, provider/saved precedence, missing forecast fetching and cached reuse under timezone quota exhaustion passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+// Near a boundary the exact coordinate atlas is still available when online lookup cannot run.
+assert.equal(border.module.exports.at({lat:0,lng:10}),'America/Chicago');
+assert.equal(Z.at({lat:34,lng:-92}),'America/Chicago');

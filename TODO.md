@@ -2,7 +2,7 @@
 
 The single backlog for Gasket: features, defects, validation and release decisions. Updated through **0.0.234**, 2026-10-22, including the owner's completed-item confirmations. Add new work here. Remove completed work; move retired, irrelevant or out-of-scope ideas to [RETIRED_WORK.md](RETIRED_WORK.md). Historical implementation notes stay in `CHANGELOG.md`, `CLAUDE.md` and `KEYLESS_EXPERIMENT.md`; `COMPLIANCE.md` is a service/rights reference, not a second task list.
 
-Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 61 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
+Keep existing item numbers so references remain valid; gaps are intentional. New entries start at 63 (do not reuse completed/retired numbers). Items are grouped by category, so numeric order does not imply priority.
 
 Latest research additions: **2026-10-27**, after 0.0.282; older entries were not re-audited in this pass.
 
@@ -33,6 +33,8 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 9. [ ] **Tire dry-rot and aging information screen.** Cover sidewall cracking/dry rot, age-related rubber hardening and reduced grip even when tread remains, date-code reading, inspection and tire-maker age/replacement guidance. Keep age/condition separate from the generalized tread estimate; research the guidance before writing the screen.
 
 ### Route hazards and climate
+
+62. [ ] **Rest-stop temperature filters.** Let users set upper and lower temperatures and how long a stay may remain above or below each threshold. Evaluate the actual stay window, show forecast freshness and missing coverage, and explain exclusions. Reuse rest-weather providers and coordinate with item 61.
 
 47. [ ] **Redesign hazard warning menus with animations.** Use concise, focused animations to make each hazard and its vehicle-specific consequences understandable without a text wall. Preserve accessible text, reduced-motion support and explicit acknowledgment where required.
 
@@ -89,5 +91,3 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 21. [ ] **Data-service capacity and distribution model.** Decide whether personal-use service limits fit the intended audience. Recheck Open-Meteo's plan if use becomes commercial and choose hosted/regional OSM data if public Overpass cannot support the audience. No service purchase is authorized merely by this task.
 22. [ ] **Keyless experiment promotion.** After device acceptance and the relevant service decisions, decide when to merge into `main`. Preserve the regular app's package/resource identity rather than copying the separate test-app identity blindly. Public beta readiness is a separate decision from merging personal test improvements.
 23. [ ] **Beta release setup — later milestone.** Set up the proposed beta/RC version naming and distribution process when a beta candidate is ready; keep Android version codes increasing.
-
-62. [ ] **Rest-stop temperature filters.** Let users set upper and lower temperatures and how long a stay may remain above or below each threshold. Evaluate the actual stay window, show forecast freshness and missing coverage, and explain exclusions. Reuse rest-weather providers and coordinate with item 61.

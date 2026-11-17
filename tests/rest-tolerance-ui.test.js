@@ -9,14 +9,15 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    restTraffic:()=>({mode:__cfg.mode==='leg'?'leg':'trip',minutes:__cfg.minutes!=null?__cfg.minutes:30,legs:__cfg.legs||{},fallback:30}),setRestTraffic:c=>{window.__cfg=c;},trafficSegments:()=>[{index:0,from:'Testville',to:'Capitol'},{index:1,from:'Capitol',to:'Testville'}],tolerance:()=>30});
   RestPlaces.create=create;const host=document.createElement('div');host.id='tol';host.innerHTML=ui.tile();document.body.appendChild(host);ui.bind(host);
  });
- await p.waitForSelector('#tol .rest-tol');await p.click('#tol .rest-tol > summary');assert.match(await p.innerText('#tol .rest-tol > summary'),/30 min/);
- assert.equal(await p.locator('#tol [data-rest-tol]').count(),1,'whole trip: one box');
- await p.selectOption('#tol [data-rest-tol-mode]','leg');await p.waitForSelector('#tol [data-rest-tol="1"]');assert.equal(await p.evaluate(()=>__cfg.mode),'leg');
- assert.match(await p.innerText('#tol .rest-tol'),/Leg 1: Testville → Capitol[\s\S]*Leg 2: Capitol → Testville/);assert.match(await p.innerText('#tol .rest-tol > summary'),/per leg/);
- const before45=await p.locator('#tol [data-rest-tol="1"]').elementHandle();await p.fill('#tol [data-rest-tol="1"]','45');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');await p.waitForFunction(()=>__cfg.legs&&__cfg.legs[1]===45);await p.waitForFunction(el=>!el.isConnected,before45);assert.equal(await p.getAttribute('#tol [data-rest-tol="0"]','placeholder'),'30','a blank leg shows the whole-trip value');
- await p.fill('#tol [data-rest-tol="1"]','999');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');assert.equal(await p.evaluate(()=>__cfg.legs[1]),45,'out-of-range is refused');
- const beforeBlank=await p.locator('#tol [data-rest-tol="1"]').elementHandle();await p.fill('#tol [data-rest-tol="1"]','');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');await p.waitForFunction(()=>!('1' in __cfg.legs));await p.waitForFunction(el=>!el.isConnected,beforeBlank);
- await p.selectOption('#tol [data-rest-tol-mode]','trip');await p.waitForSelector('#tol [data-rest-tol="trip"]');assert.equal(await p.evaluate(()=>__cfg.mode),'trip');assert.equal(await p.locator('#tol [data-rest-tol]').count(),1);
- const retired=await p.locator('#tol [data-rest-tol="trip"]').elementHandle();await p.fill('#tol [data-rest-tol="trip"]','44');await p.locator('#tol [data-rest-tol="trip"]').dispatchEvent('change');await p.waitForFunction(el=>!el.isConnected,retired);await retired.evaluate(el=>{el.value='99';el.dispatchEvent(new Event('change'));});assert.equal(await p.evaluate(()=>__cfg.minutes),44,'a detached old input cannot overwrite current tolerance');assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'fits '+width);assert.deepEqual(errors,[]);await p.close();}
- console.log('Rest traffic tolerance: whole trip or each leg, blank legs use the trip value, at 320/448px');
+ await p.waitForSelector('#tol .rest-tol');await p.click('#tol .rest-tol > summary',{position:{x:8,y:10}});
+ assert.equal(await p.locator('#tol [data-rest-tol-mode]').count(),0,'per-leg controls only');
+ assert.equal(await p.locator('#tol [data-rest-tol]').count(),2);
+ assert.equal(await p.inputValue('#tol [data-rest-tol="0"]'),'30','legacy default becomes each leg default');
+ assert.match(await p.innerText('#tol .rest-tol'),/Leg 1: Testville → Capitol[\s\S]*Leg 2: Capitol → Testville/);
+ await p.fill('#tol [data-rest-tol="1"]','5');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');await p.waitForFunction(()=>__cfg.mode==='leg'&&__cfg.legs[1]===5);
+ assert.equal(await p.inputValue('#tol [data-rest-tol="0"]'),'30','leg 1 is independent');
+ await p.fill('#tol [data-rest-tol="1"]','999');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');assert.equal(await p.evaluate(()=>__cfg.legs[1]),5,'invalid value refused');
+ const retired=await p.locator('#tol [data-rest-tol="1"]').elementHandle();await p.fill('#tol [data-rest-tol="1"]','15');await p.locator('#tol [data-rest-tol="1"]').dispatchEvent('change');await p.waitForFunction(el=>!el.isConnected,retired);await retired.evaluate(el=>{el.value='99';el.dispatchEvent(new Event('change'));});assert.equal(await p.evaluate(()=>__cfg.legs[1]),15,'detached input cannot overwrite');
+ assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),'fits '+width);assert.deepEqual(errors,[]);await p.close();}
+ console.log('Rest traffic tolerance: per-leg inputs, legacy defaults, independent values and retired-input protection, at 320/448px');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

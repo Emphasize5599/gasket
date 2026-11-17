@@ -49,3 +49,7 @@ const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.85
  assert(!M.choose({...site,name:'Sample Woods Rest Area'},[pin('Woods Rest Stop',35.0003),pin('Woods Rest Stop',34.9997)]),'equally close partial matches stay ambiguous');
  console.log('Nearby partial names and I71/I-71 normalization preserve highway, direction, generic-name and ambiguity safeguards');
 }
+
+// User choice is explicit identity evidence even when the displayed name differs.
+{const store=new Map(),io={get:k=>store.get(k),put:(k,v)=>store.set(k,v),now:()=>123456789,read:async()=>({complete:true,places:[]})},picker=M.create(io),choice={url:row.url,name:'Different listing title',closure:'temporarily_closed'};
+ picker.select(site,choice);assert.equal(picker.peek(site).url,choice.url);assert.equal(picker.peek(site).closure,'temporarily_closed');assert(picker.peek(site).userSelected);assert.equal(M.create(io).peek(site).name,choice.name);assert.throws(()=>picker.select(site,{url:'https://evil.test/maps/place/no'}));}

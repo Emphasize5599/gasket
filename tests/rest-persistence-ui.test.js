@@ -8,8 +8,8 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
  });
  await p.waitForFunction(()=>__accessCalls===1681&&FLog.entries().some(e=>e.m==='Rest road access checked'&&/"verified":1681/.test(e.d)));
  await p.evaluate(()=>__mount());await p.waitForFunction(()=>FLog.entries().some(e=>e.m==='Saved rest access reused'&&/"places":1681/.test(e.d)));assert.equal(await p.evaluate(()=>__accessCalls),1681,'new trip with the same roads needs zero new road-access reads');
- assert.equal(await p.locator('#persistence-test .rest-access-status').count(),0,'warm results do not show another bulk-resolution progress task');
-  await p.evaluate(()=>__mount());await p.waitForFunction(()=>document.querySelector('#persistence-test [data-rest-leg]')?.textContent.includes('1680'));assert.equal(await p.evaluate(()=>__accessCalls),1681,'changed arrival hours are evaluated locally using stored access');
- await p.evaluate(()=>__mount());await p.waitForFunction(()=>document.querySelector('#persistence-test [data-rest-leg]')?.textContent.includes('1680'));assert.equal(await p.evaluate(()=>__accessCalls),1681,'a changed stay limit is reevaluated without repeating access requests');
+ assert.equal(await p.locator('#persistence-test [data-rest-access-retry]').count(),0,'warm results require no retry');assert(!await p.evaluate(()=>Tasks.list().some(t=>t.id==='rest-access')),'warm results do not launch a bulk-resolution task');
+  await p.evaluate(()=>__mount());await p.waitForFunction(()=>FLog.entries().some(e=>e.m==='Saved rest access reused'&&/places/.test(e.d)));assert.equal(await p.evaluate(()=>__accessCalls),1681,'changed arrival hours are evaluated locally using stored access');
+ await p.evaluate(()=>__mount());await p.waitForFunction(()=>FLog.entries().some(e=>e.m==='Saved rest access reused'&&/places/.test(e.d)));assert.equal(await p.evaluate(()=>__accessCalls),1681,'a changed stay limit is reevaluated without repeating access requests');
  assert(!await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth));assert.deepEqual(errors,[]);console.log('1,681 rest sites: cold storage, different-trip/time warm reuse with no new access requests or bulk progress, and changed hours reevaluated locally');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

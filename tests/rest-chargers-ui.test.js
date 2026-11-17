@@ -97,7 +97,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   assert(await page.evaluate(()=>__chargerForecasts.includes(.6)&&!__chargerForecasts.includes(.02)));
   assert.equal(await page.evaluate(()=>__stationRestReads),1,'opening the directory reuses the background inventory');
   assert.equal(await page.evaluate(()=>__chargerForecasts.length),readsBeforeOpen,'opening a minute later reuses completed departure forecasts');
-  assert.match(await page.locator('[data-rest-list]').innerText(),/at your own risk/);
+  await page.locator('[data-rest-list] .rest-warnings > summary').click();assert.match(await page.locator('[data-rest-list]').innerText(),/at your own risk/);
   assert.equal(await rows.count(),1,'the separate charger list is independent of the nearby Level 2 requirement');
   await page.getByRole('button',{name:'Add rest stop: Direct DC charger'}).click();
   await page.waitForSelector('#restAddGo');
@@ -185,7 +185,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
    };
   });
   await page.locator('#multi-night [data-rest-need="0"]').click();
-  await page.getByRole('heading',{name:'Night of 2030-11-12'}).waitFor();
+  await page.locator('[data-rest-drive-night="2030-11-12"]:not(:checked)').waitFor();
   assert.deepEqual(await page.locator('[data-rest-row] [data-rest-add]').evaluateAll(rows=>rows.map(r=>r.getAttribute('aria-label'))),['Add rest stop: Place 10']);
   assert.match(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
   await page.waitForFunction(()=>__nightForecasts.length>0);
@@ -196,16 +196,16 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
   await page.getByRole('button',{name:'Set rest departure'}).waitFor();
   assert.equal(await page.locator('[data-rest-row]').count(),0);
   await page.evaluate(()=>__confirmFirstNight());
-  await page.getByRole('heading',{name:'Night of 2030-11-13'}).waitFor();
+  await page.locator('[data-rest-drive-night="2030-11-13"]:not(:checked)').waitFor();
   assert.deepEqual(await page.locator('[data-rest-row] [data-rest-add]').evaluateAll(rows=>rows.map(r=>r.getAttribute('aria-label'))),['Add rest stop: Place 24']);
   await page.check('[data-rest-drive-night="2030-11-13"]');
-  await page.getByRole('heading',{name:'Night of 2030-11-14'}).waitFor();
+  await page.locator('[data-rest-drive-night="2030-11-14"]:not(:checked)').waitFor();
   assert.deepEqual(await page.locator('[data-rest-row] [data-rest-add]').evaluateAll(rows=>rows.map(r=>r.getAttribute('aria-label'))),['Add rest stop: Place 48']);
   await page.check('[data-rest-drive-night="2030-11-14"]');
   assert.equal(await page.getByRole('heading',{name:/Night of 2030-11-/}).count(),0);
   assert.doesNotMatch(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
   await page.uncheck('[data-rest-drive-night="2030-11-13"]');
-  await page.getByRole('heading',{name:'Night of 2030-11-13'}).waitFor();
+  await page.locator('[data-rest-drive-night="2030-11-13"]:not(:checked)').waitFor();
   assert.match(await page.locator('.rest-dest').last().innerText(),/After rest planning/);
   await page.evaluate(()=>__tightenNightDeadline());
   await page.getByText(/A rest would miss the arrival deadline/).first().waitFor();

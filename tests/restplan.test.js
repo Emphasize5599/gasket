@@ -38,3 +38,8 @@ console.log('RestPlan: local insertion/removal, free-flow colors with gray unkno
 
 // Pending dwell starts after actual arrival, including a fuel stop before the rest.
 {const opts={model:nm,rewardDepartAt:1700000000000,stopMinutes:8,waits:[{d:nm.legEnds[0],at:1700000000000+nm.timeTo(nm.legEnds[0])*1000+30*60000}]},plan={stops:[{c:{d:1,detourMin:5},buyGal:2}]},stops=ins.route.stops.map(p=>({...p,rest:p.rest?{...p.rest,minimumRest:30,maximumStay:120}:undefined})),waits=P.alignWaits(opts,plan,stops),t=T.scheduleTimeline({...opts,waits},plan);assert(t[1].depart>=t[0].arrive+30*60000);assert(waits[0].at>opts.waits[0].at,'refueling delays shift the minimum departure');assert.deepEqual(P.alignWaits({...opts,waits},plan,stops),waits,'alignment settles');}
+
+// A long leg must not turn a five-minute allowance into a 5%-of-hours green band.
+const smallTolerance=P.zones([{drivingMinutes:600,freeMinutes:600,coverage:1},{drivingMinutes:602,freeMinutes:600,coverage:1},{drivingMinutes:605,freeMinutes:600,coverage:1},{drivingMinutes:606,freeMinutes:600,coverage:1}],5);
+assert.deepEqual(smallTolerance.map(s=>s.zone),['green','yellow','yellow','red']);
+assert.equal(P.zones([{drivingMinutes:601,freeMinutes:600,coverage:.2}],5)[0].zone,'unknown');

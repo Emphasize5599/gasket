@@ -31,12 +31,12 @@
   var free=good.reduce(function(min,s){return Math.min(min,s.drivingMinutes,Number.isFinite(s.freeMinutes)?s.freeMinutes:Infinity);},Infinity);
   return samples.map(function(s){
    var delay=forecastZone(s)==='unknown'?null:Math.max(0,s.drivingMinutes-free);
-   var zone=delay==null?'unknown':delay>tolerance?'red':delay<=Math.min(3,tolerance*.2)?'green':'yellow';
+   var zone=delay==null?'unknown':delay>tolerance?'red':delay<=Math.min(Math.max(3,free*.05),tolerance*.2)?'green':'yellow';
    return Object.assign({},s,{freeFlowMinutes:Number.isFinite(free)?free:null,delayMinutes:delay,zone:zone});
   });
  }
  /** Compact sample for storage: no traffic profile, just what the slider and review need. */
- function compact(s){return {depart:s.depart,arrive:s.arrive,drivingMinutes:Number.isFinite(s.drivingMinutes)?Math.round(s.drivingMinutes*10)/10:null,delayMinutes:s.delayMinutes==null?null:Math.round(s.delayMinutes*10)/10,zone:s.zone,coverage:s.coverage==null?null:Math.round(s.coverage*100)/100,error:s.error?String(s.error).slice(0,120):undefined,reachMi:Number.isFinite(s.reachMi)?Math.round(s.reachMi):undefined,reachName:s.reachName||undefined};}
+ function compact(s){return {depart:s.depart,arrive:s.arrive,drivingMinutes:Number.isFinite(s.drivingMinutes)?Math.round(s.drivingMinutes*10)/10:null,delayMinutes:s.delayMinutes==null?null:Math.round(s.delayMinutes*10)/10,zone:s.zone,freeFlowMinutes:s.freeFlowMinutes,coverage:s.coverage==null?null:Math.round(s.coverage*100)/100,error:s.error?String(s.error).slice(0,120):undefined,reachMi:Number.isFinite(s.reachMi)?Math.round(s.reachMi):undefined,reachName:s.reachName||undefined};}
  // Hazard review after rests: a current hazard is already reviewed when a previously shown hazard of the same kind (and
  // event, for alerts), at least as severe, covers the same place (every 2 mi of it within 5 mi of the old stretch). Rests
  // move times, not roads, so a known stretch that is still there needs no second Yes; new roads or worse conditions do.

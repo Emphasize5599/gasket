@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.502 — 2026-11-17
+
+- Corrected narrow-phone action-group wrapping and satellite-caption alignment after visual review. Kept the remaining-leg traffic comparison and made even small per-leg allowances show yellow/red correctly.
+- Empty-list relaxed filtering reuses the already loaded inventory and preserves vehicle/closure/access exclusions. Source-reported closures now remain available in diagnostics even when excluded from the selectable list.
+- Updated regression coverage for the requested menu changes and added expired-rate confirmation, owner-selected Maps closures, coordinate-clock fallback and small-tolerance tests.
+
+
 ## 0.0.501 — 2026-11-17
 
 - Rest browsing: concise leg entrances; per-leg traffic tolerance above them; explanations behind (?) controls; expandable warnings and unavailable/closed-source details.

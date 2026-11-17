@@ -2575,12 +2575,12 @@ details:not([open]) > summary .sum-edit { display:none; }
 .rest-heading {display:flex; align-items:flex-start; gap:12px; text-align:left;}
 .rest-heading > .rest-text {flex:1; min-width:0;}
 .rest-heading > .rest-add {flex:none; margin:0;}
-.rest-row-actions {display:flex; flex-direction:column; align-items:stretch; gap:10px;}
+.rest-row-actions {display:grid; grid-template-columns:minmax(0,1fr); align-items:stretch; gap:10px;}
 .rest-edit-line {display:flex; flex-wrap:wrap; gap:8px; align-items:center;}
 .rest-edit-line .btn {width:auto; min-width:0; white-space:normal; height:auto; min-height:40px;}
 .rest-inspect,.rest-visibility {display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px;}
 .rest-visibility {border-top:1px solid var(--line); padding-top:8px;}
-.rest-preview .rest-preview-caption {display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px; text-align:left;}
+.rest-list .rest-preview small.rest-preview-caption {display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; text-align:left; width:100%;}
 .rest-preview-caption span:last-child {margin-left:auto; text-align:right;}
 .rest-list > li.rest-list-options {display:block; padding-left:36px;}
 .rest-list-options:empty {display:none;}
