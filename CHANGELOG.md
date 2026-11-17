@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.495 — 2026-11-17
+
+- Stops → Rest stops is one entrance per leg, styled like the app's other menu entrances; a leg that needs an overnight rest is outlined. Sources and filters and the overnight-stop shortcut moved inside each leg's list.
+- Each rest place has one row of buttons under its satellite picture: a small Edit (rates and amenities) on the left, and Weather, Hide, Not pleasing (landscape icon), the map links and + as icon buttons on the right; they wrap on narrow screens. The satellite picture is smaller, and the green suggestion outline no longer runs off the screen.
+- Bug fixes
+
 ## 0.0.494 — 2026-11-17
 
 - Publish 0.0.493, which produced no APK: two UI checks raced the status bar and the Timing redraw on a fast build machine.

@@ -2187,6 +2187,9 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 
 /* Per-leg rest directories: source under the name; external link and add stay separate. */
 .rest-leg-entry { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; margin-top:10px; }
+.sub-ent.rest-leg-entry { position:relative; margin:6px 0; gap:10px; }
+.sub-ent.rest-leg-entry small { margin-top:1px; }
+.sub-ent.empty { border-color: var(--accent); }
 .rest-leg-entry > span:first-child { min-width:0; }
 .rest-leg-entry b, .rest-leg-entry small { display:block; white-space:normal; }
 .rest-leg-entry small { font-size:12.5px; color:var(--ink-2); margin-top:4px; }
@@ -2195,11 +2198,18 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-name > .rest-kind, .rest-name > small { grid-column:1 / -1; }
 .rest-info-entrance { border:0; background:none; color:inherit; font:inherit; padding:0; margin:0; text-align:left; cursor:pointer; width:100%; }
 .rest-source { display:block; font-size:12px; font-weight:400; color:var(--ink-2); line-height:1.35; margin:3px 0 0; overflow-wrap:anywhere; }
-.rest-row-actions { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:flex-end; gap:4px; grid-column:1 / -1; }
+.rest-row-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; grid-column:1 / -1; }
+.rest-row-actions .rest-icons, .rest-row-actions .rest-links { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:4px; min-width:0; }
+.rest-row-actions .rest-icons { margin-left:auto; }
+.rest-row-actions .rest-links:empty { display:none; }
+.rest-row-actions .rest-edit-btn { margin:0; display:inline-flex; align-items:center; gap:4px; width:auto; min-height:36px; padding:6px 12px 6px 9px; flex:none; }
+.rest-row-actions .rest-edit-btn svg { width:17px; height:17px; }
+.rest-row-actions .rest-icon { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; border-radius:12px; color:var(--ink); background:var(--surface-2); cursor:pointer; }
+.rest-row-actions .rest-icon[aria-pressed="true"] { background:var(--warn); color:#fff; }
 .rest-views { grid-column:1 / -1; min-width:0; }
-.rest-preview { display:block; width:100%; margin:0; text-decoration:none; color:var(--ink-2); }
+.rest-preview { display:block; width:100%; max-width:260px; margin:0; text-decoration:none; color:var(--ink-2); }
 .rest-preview-image { display:block; position:relative; overflow:hidden; border-radius:12px; aspect-ratio:1; }
-.rest-preview-loading { width:100%; aspect-ratio:1; border-radius:12px; background:var(--surface-2); }
+.rest-preview-loading { width:100%; max-width:260px; aspect-ratio:1; border-radius:12px; background:var(--surface-2); }
 .rest-preview img { display:block; width:100%; height:auto; }
 .rest-preview small { display:block; font-size:11px; text-align:right; margin:3px 0; }
 .rest-preview-marker { position:absolute; width:12px; height:12px; border:2px solid white; background:#2878e8; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 1px 4px #000; }
@@ -2313,6 +2323,7 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 /* 0.0.335: rest stops recommended for lighter traffic after leaving */
 .rest-reco { border: 2px solid var(--save); }
 .rest-list .rest-row.rest-suggested { outline: 2px solid var(--save); outline-offset: 4px; border-radius: 12px; }
+.rest-candidate-list { padding-right:6px; }
 .rest-suggestions-status { margin: 12px 0; }
 .rest-reco-note { color: var(--save); font-weight: 650; display: block; }
 /* 0.0.346 rest price distribution (Settings → Rest stops) */
@@ -2329,7 +2340,6 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 /* 0.0.355 rest list: per-place buttons, waiting state, live satellite, status-bar pause */
 .rest-tools { grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:6px 0 2px; }
 .rest-tools .btn.sm { min-height:36px; padding:6px 12px; white-space:normal; max-width:100%; }
-.rest-tools .rest-ugly-btn.on, .rest-tools .rest-hide-btn[aria-pressed="true"] { background:var(--warn); color:#fff; }
 .rest-rate { display:inline-flex; gap:2px; border:1px solid var(--line); border-radius:999px; padding:2px; }
 .rest-rate-btn { width:36px; height:32px; border:0; border-radius:999px; background:none; font-size:20px; line-height:1; padding:0; cursor:pointer; filter:grayscale(1); opacity:.55; }
 .rest-rate-btn.on { background:var(--surface-2); filter:none; opacity:1; box-shadow:inset 0 0 0 2px var(--accent); }
