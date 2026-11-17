@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.503 — 2026-11-17
+
+- Kept empty-list explanations inside unavailable-stop diagnostics, without repeating them below leg entrances. Missing-access explanations remain behind the header's (?).
+- Corrected the closure regression test for preserved disclosure state and deferred UI updates.
+
+
 ## 0.0.502 — 2026-11-17
 
 - Corrected narrow-phone action-group wrapping and satellite-caption alignment after visual review. Kept the remaining-leg traffic comparison and made even small per-leg allowances show yellow/red correctly.
