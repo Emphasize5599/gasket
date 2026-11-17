@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.498 — 2026-11-17
+
+- Removed the dashed placeholder boxes reserved for illustrations (Advisory, trip planning, time windows, setup).
+- Garage: the fuel economy (?) buttons sit beside the numbers, with no dashed borders; About this car loses its source sentence, and its Edit button sits beside the arrow when the tile is open; its detail tiles are centered; Best cruising speed is a normal tile instead of a tile inside a tile.
+- Advisory: no open recalls says when Gasket checks again ("Gasket will check in 6 days 3 hours"); the red Tires tile's header takes the tile's color; open Details menus keep even space below their text.
+- Bug fixes
+
 ## 0.0.497 — 2026-11-17
 
 - Rest stop rows: a Reported price tile (the price on its own line, the unit below it), all tile text centered, and the times labeled Since last rest and Since leg start.

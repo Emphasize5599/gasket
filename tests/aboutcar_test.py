@@ -71,7 +71,7 @@ with sync_playwright() as p:
         assert 'All-wheel drive' in ft(pg, '.ac-tiles') and pg.locator('#gVers').count() == 0
         # a VIN settles it: no ▾
         pg.evaluate("() => { window.Garage.car().vin = '4T3ZK3BB0CU000001'; window.Garage.redraw(); }"); pg.wait_for_timeout(250)
-        assert pg.locator('.ac-tiles .ac-dd').count() == 0 and 'From your VIN' in ft(pg, '.ac-src')
+        assert pg.locator('.ac-tiles .ac-dd').count() == 0 and pg.locator('.ac-src').count() == 0
         # ---- the Corolla Hybrid: one version, so plain tiles ----
         pick(pg, 'corolla20')
         pg.wait_for_function("window.Garage.car().variants && window.Garage.car().variants.list.length === 1", timeout=5000); pg.wait_for_timeout(200)

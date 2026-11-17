@@ -1208,7 +1208,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function skelCard(title, body) { return '<div class="card skel"><div class="sk-h">' + esc(title) + '</div>' + (body || '') + '</div>'; }
   function skelRows(n) { var h = ''; for (var i = 0; i < n; i++) h += '<div class="sk-row"><span class="sk-dot"></span><span class="sk-lines"><span></span><span></span></span><span class="sk-price"></span></div>'; return h; }
   function skelStops(label) {
-    return (window.UIKit?skelCard('Planning your trip',UIKit.animation('Reserved illustration: prepare while Gasket plans')):'')+skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', skelRows(2)) +
+    return skelCard(KIND() === 'ev' ? 'Charging stops' : 'Fuel stops', skelRows(2)) +
       '<div class="gas-tiles skel-tiles">' + skelCard(KIND() === 'ev' ? 'Charge to leave with' : 'Gas to leave with', '<div class="sk-big"></div>') +
       skelCard(KIND() === 'ev' ? 'Charge when you arrive' : 'Gas when you arrive', '<div class="sk-big"></div>') + '</div>';
   }

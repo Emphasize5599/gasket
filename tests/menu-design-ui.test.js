@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),{pathToFileURL}=require('url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){const p=await b.newPage({viewport:{width,height:940},colorScheme:width===320?'light':'dark'}),errors=[];p.on('pageerror',e=>errors.push(e.stack));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
- assert.equal(await p.locator('.ux-animation-slot').first().textContent(),'','animation placeholder is a blank outline');assert.equal(await p.locator('.ux-animation-slot svg,.ux-animation-slot img').count(),0);
+ assert.equal(await p.locator('.ux-animation-slot').count(),0,'no placeholder outlines (0.0.498)');
  await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await require('./settings-ui')(p,'trip');assert.equal(await p.getAttribute('#prefClock24','role'),'switch');const before=await p.evaluate(()=>!!__app.S.clock24);await p.focus('#prefClock24');await p.keyboard.press('Space');assert.equal(await p.evaluate(()=>!!__app.S.clock24),!before,'switch works with keyboard and saves');
  await require('./settings-ui')(p,'savings');assert.notEqual(await p.getAttribute('[data-k="walmartPlus"]','role'),'switch','membership selectors retain their existing deliberate setting behavior');

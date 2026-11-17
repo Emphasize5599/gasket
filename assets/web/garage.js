@@ -116,7 +116,7 @@
     var q = '<b>Range</b>: how far a full ' + (ev ? 'charge' : 'tank') + ' goes in mixed driving: ' + r2(+c.tank) + ' ' + U.unit + (c.tankSrc ? ' (' + esc(c.tankSrc) + ')' : '') + ' at ' + (mine ? 'your logged mileage' : 'the EPA combined rating') + '.' +
       (ev && c.epa && c.epa.range > 0 ? ' The EPA rates this car at ' + c.epa.range + ' mi.' + (!mine && r < c.epa.range * .95 ? ' This is lower because the EPA measures energy at the wall plug, charging losses included, and Gasket counts the battery capacity here against those figures. That errs on the safe side; pick the car\'s battery pack under Energy & charging estimates for the exact match.' : '') : '') +
       ' Steady highway driving at 70+ mph goes less far; trip plans work out each road\'s speed and the weather' + (ev ? ', and charge each stop only as much as the trip needs (usually below 80%, where charging slows), so stops come well before this' : '') + '.';
-    return '<div class="rng"><b>' + Math.round(r) + '</b><span>Range, mi' + A.qBtn(q) + '</span></div>';
+    return '<div class="rng"><b>' + Math.round(r) + A.qBtn(q) + '</b><span>Range, mi</span></div>';
   }
   /** Miles on a full tank / charge, from your mileage (or the EPA's) and the tank size. */
   function rangeMi(c) { c = c || car(); var m = obsHwy(c) && obsCity(c) ? harm(obsCity(c), obsHwy(c)) : 0; return m > 0 && +c.tank > 0 ? m * +c.tank : (c.epa && +c.epa.range) || 0; }
@@ -310,11 +310,11 @@
     var h = '<div class="card g-car"><div class="g-top"><h3>Your car</h3><span class="g-top-btns">' + (publicPhoto(c) ? '<button class="btn tonal sm g-newpic" id="gNewPic">' + REFRESH + 'New photo</button>' : '') + '<button class="btn tonal sm" id="gEdit">Edit</button><button type="button" class="btn primary sm g-add" data-car="+">+ Add car</button></span></div>' + (editing ? '' : carousel(c));
     h += '<section class="g-econ g-car-section"><h4>' + U.econ + '</h4>';
     if (hasEpa(c)) {
-      var kwh = k === 'ev' && c.epa.kwh, tile = function (v, label, q, w) { return '<div><b>' + fmtPer(v) + '</b><span>' + label + A.qBtn(q + (EPA_Q[k] || '') + (kwh && kwh[w] ? ' EPA label: ' + kwh[w] + ' kWh per 100 mi.' : '')) + '</span></div>'; };
+      var kwh = k === 'ev' && c.epa.kwh, tile = function (v, label, q, w) { return '<div><b>' + fmtPer(v) + A.qBtn(q + (EPA_Q[k] || '') + (kwh && kwh[w] ? ' EPA label: ' + kwh[w] + ' kWh per 100 mi.' : '')) + '</b><span>' + label + '</span></div>'; };
       h += '<div class="epa-tiles">' + tile(c.epa.city, 'City', EPA_Q.city, 'city') + tile(c.epa.hwy, 'Highway', EPA_Q.hwy, 'hwy') +
         tile(c.epa.comb || harm(c.epa.city, c.epa.hwy), 'Combined', EPA_Q.comb, 'comb') + rangeTile(c) + '</div>';
     } else h += '<p class="lead small keep">No EPA rating. Enter your observed mileage below.</p>';
-    h += '</section><details class="g-obs g-info g-car-section" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary>About this car</summary>' + infoView(c);
+    h += '</section><details class="g-obs g-info g-car-section" id="gInfo"' + (infoOpen ? ' open' : '') + '><summary>About this car<button type="button" class="btn tonal sm sum-edit" id="gInfoEdit">Edit</button></summary>' + infoView(c);
     if(c.demoMileage)h += '<p class="lead small keep demo-data-note" style="color:var(--warn)">Demo setup values are illustrative; verify them before travel.'+(hasEpa(c)?' EPA mileage is sourced from the EPA.':' Mileage is illustrative, not EPA data.')+'</p>';
     if(c.demoFeatures)h+='<p class="lead small keep">Demo coverage: '+esc(c.demoFeatures)+'</p>';
     h += '</details></div><div class="card spd" id="tSpeed"></div>';
@@ -954,8 +954,6 @@
     h += '</div>';
     var fs = i.featSrc || {}, on = (i.features || []).filter(function (x) { return FEATURES.some(function (f) { return f.key === x && featApplies(f, c); }); });
     h += '<div class="ac-fview"><div class="sub-h">Features</div>' + (on.length ? '<ul>' + on.map(function (x) { var f = FEATURES.filter(function (y) { return y.key === x; })[0]; return '<li>' + esc(f.label) + (fs[x] === 'vin' ? ' <small>from your VIN</small>' : fs[x] === 'epa' ? ' <small>from the EPA</small>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="lead small keep">None listed.</p>') + '</div>';
-    h += '<div class="ac-src-row"><span class="lead small keep ac-src">' + (isCustom(c) ? 'Your own entries.' : c.vin ? 'From your VIN' + (c.epaId ? ' and the EPA\'s record' : '') + '.' : 'From the EPA\'s record for this version.') + ' To change any of this, edit the car.</span>' +
-      '<button type="button" class="btn tonal sm" id="gInfoEdit">Edit</button></div>';
     return h;
   }
   function infoPanel(c) {
@@ -1225,7 +1223,7 @@
     ['gEngine', 'gAsp', 'gTrans', 'gDrive'].forEach(function (id) { var el = $(id); if (el) el.addEventListener('change', function () { markUser({ gEngine: 'engine', gAsp: 'asp', gTrans: 'trans', gDrive: 'drive' }[id]); }); });
     // the editable details live in the editor; the Garage page only reads them
     var both = function (sel) { var out = Array.prototype.slice.call(host.querySelectorAll(sel)); if (ed && ed.body) out = out.concat(Array.prototype.slice.call(ed.body.querySelectorAll(sel))); return out; };
-    if ($('gInfoEdit')) $('gInfoEdit').onclick = function () { if (!editing) editSnap = { id: c.id, before: JSON.stringify(c), previous: S.carId }; editing = true; detOpen = true; draw(); setTimeout(function () { var d = $('gDetails'); if (d) d.scrollIntoView({ block: 'start' }); }, 50); };
+    if ($('gInfoEdit')) $('gInfoEdit').onclick = function (e) { if (e) { e.preventDefault(); e.stopPropagation(); } if (!editing) editSnap = { id: c.id, before: JSON.stringify(c), previous: S.carId }; editing = true; detOpen = true; draw(); setTimeout(function () { var d = $('gDetails'); if (d) d.scrollIntoView({ block: 'start' }); }, 50); };
     if ($('gDetails')) $('gDetails').addEventListener('toggle', function () { detOpen = this.open; });
     if ($('gEnergy')) $('gEnergy').addEventListener('toggle', function () { if (this.isConnected) energyOpen = this.open; });
     both('[data-set]').forEach(function (sel) {

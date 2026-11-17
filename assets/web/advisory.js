@@ -57,6 +57,8 @@
   }
   function onRecord(c) { c = c || car(); return c.recalls && c.recalls.list && c.recalls.key === recallKey(c) ? c.recalls.list : null; }
   /** The VIN check, if it's for this car's current VIN. */
+  /** 0.0.498: "Gasket will check in 6 days 3 hours" instead of a sentence about the weekly VIN check. */
+  function nextCheck(chk) { var ms = Math.max(0, chk.t + AUTO_DAYS * 864e5 - Date.now()), d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5); return ms < 36e5 ? 'Gasket will check again soon' : 'Gasket will check in ' + (d ? d + ' day' + (d === 1 ? '' : 's') + (h ? ' ' : '') : '') + (h || !d ? h + ' hour' + (h === 1 ? '' : 's') : ''); }
   function vinCheck(c) { c = c || car(); return c.vin && c.recallCheck && c.recallCheck.vin === c.vin ? c.recallCheck : null; }
 
   // ---------- reading NHTSA's VIN page: in the background like the price sites (siteRead), or shown to you (siteShow).
@@ -184,7 +186,7 @@
       if (list) listOpen = list.open;
       host.querySelectorAll('details[data-open]').forEach(function (d) { rcOpen[d.dataset.open] = d.open; });
     } else { drawnCar = c; listOpen = false; rcOpen = {}; }
-    var h = window.UIKit?'<div class="card">'+UIKit.animation('Reserved illustration: prepare your vehicle before travel')+'</div>':'';
+    var h = '';
     h += recallCard(c) + (window.Gemma ? Gemma.card(c) : '') + tireCard(c) + roadsideCard() + climateCard(c) + adviceCards(c);
     host.innerHTML = h;
     bind(c);
@@ -214,7 +216,7 @@
         h += '<div class="adv-state bad"><b>' + chk.open + ' open recall' + (chk.open === 1 ? '' : 's') + ' on your car</b><small>Any ' + esc(c.make) + ' dealer fixes ' + (chk.open === 1 ? 'it' : 'them') + ' for free. Call one to book it, ideally before a long drive. Checked ' + esc(when) + '.</small></div>';
         if (openL.length) h += bySeverity(openL).map(recallItem).join('');
         else if ((chk.items || []).length) h += chk.items.map(function (t) { return '<div class="rc"><p>' + esc(t) + '</p></div>'; }).join('');
-      } else h += '<div class="adv-state good"><b>No open recalls on your car</b><small>Checked with your VIN at NHTSA ' + esc(when) + '. Gasket checks again every week.</small></div>';
+      } else h += '<div class="adv-state good"><b>No open recalls on your car <span class="adv-next">(' + nextCheck(chk) + ')</span></b></div>';
       // no button: the VIN is checked again by itself in the background (weekly), so this is always fresh
     } else if (c.vin && (autoBusy[c.id] || (!(c.recallAuto && c.recallAuto.vin === c.vin && c.recallAuto.failed) && N.siteRead && (autoCheck(c), autoBusy[c.id])))) {
       h += A.ldBar('Checking your VIN with NHTSA') + '<div class="adv-state"><small>' + (n ? n + ' recall' + (n === 1 ? '' : 's') + ' on record for the ' + esc(nm) + '. Finding out which are still open on yours.' : 'Finding out whether any recalls are open on your car.') + '</small></div>';

@@ -209,7 +209,7 @@ with sync_playwright() as p:
         assert ev['power'] == 'ev' and abs(ev['epa']['city'] - 3.98) < 0.02 and ev['tank'] == 92 and ev['plug'] == 'NACS'
         econ = ft(pg, '.g-econ').replace('MI/KWH', 'mi/kWh'); print('  EV econ:', econ.replace('\n', ' | '))
         assert 'mi/kWh' in econ and '25 / 27 / 26 kWh per 100 mi' in econ and '353 mi range' in econ
-        rng = pg.evaluate("(() => { const t = document.querySelector('.epa-tiles .rng'); return t ? { v: +t.querySelector('b').textContent, q: decodeURIComponent(t.querySelector('.qi').dataset.q) } : null; })()")
+        rng = pg.evaluate("(() => { const t = document.querySelector('.epa-tiles .rng'); return t ? { v: +t.querySelector('b').firstChild.textContent, q: decodeURIComponent(t.querySelector('.qi').dataset.q) } : null; })()")
         print('  range tile:', rng['v'], rng['q'][:120]); assert rng and rng['v'] > 200 and 'highway' in rng['q'] and '80%' in rng['q'], 'range at highway mileage, with the 80% note in its (?)'
         assert 'Usable battery (kWh)' in ft(pg, '.g-edit') and pg.locator('#gDcKw').count() == 1 and pg.locator('#gType').count() == 0
         pg.fill('#gDcKw', '250'); pg.dispatch_event('#gDcKw', 'change'); pg.wait_for_timeout(100)

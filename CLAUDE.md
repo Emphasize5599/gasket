@@ -2,6 +2,16 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.498 - placeholders gone, Garage/Advisory tile cleanup (pass 2); 497 published no APK
+
+497 shipped with 3 failing release tests I missed (read only the tail of the run): rest-links-prices-ui, userrestprice-ui, recreation-ui matched the old one-line price text. Now `/Reported price\s*\$25\.00–\$30\.00\s*\/night/`, `Reported price$5.00–$6.00/stay`, `\$25.00\s*\/night`, and "clearing restores provider pricing" checks no `/stay`. Always grep the run log for FAIL, not just the tail.
+- `UIKit.animation` returns '' (owner: no placeholder outlines until illustrations exist); advisory's placeholder card and the 'Planning your trip' skeleton card removed; menu-design-ui asserts no `.ux-animation-slot`.
+- Garage: EPA tiles `<b>num + qBtn</b><span>label</span>` (range too; garage_test.py reads `b.firstChild`), `.epa-tiles b` flex centered, dashed border gone. About this car: the source sentence (`.ac-src-row`) removed; `#gInfoEdit` is `.sum-edit` inside the summary (hidden while closed; click preventDefault + stopPropagation); `.ac-tile` centered. Best cruising speed: `.card.spd > details.spd-card` loses the `.tp-body details` tile border (!important: that rule's :not() chain outranks it); summary text plain, not uppercase.
+- Advisory: `nextCheck(chk)` = chk.t + AUTO_DAYS − now as "Gasket will check in N days M hours" in `.adv-next` beside "No open recalls on your car" (the small sentence removed). Sticky tile headers (`.card > h3`, `.g-top`, `.sec-row`, `details > summary`) `background: inherit` (the red Tires tile kept a surface-colored band). Open `.tp-body` / `.sub-body` details get padding-bottom 12px.
+- Release 265/265 (the 3 above rerun alone after the fix). Not phone-verified.
+
+Phone checks: Garage: tiles 55 (?) / City with no dashed outline; open About this car: Edit beside the arrow, centered tiles, no "From your VIN" line; Best cruising speed looks like Observed mileage. Advisory: no blank outlined box at the top; a car with a VIN checked shows "(Gasket will check in …)"; the red Tires tile header is red (also in dark mode); open Details: even padding below.
+
 ## 0.0.497 - rest tiles, rest length on sliders, partial forecasts, review loop
 
 Owner (496 phone + log 11-17 16:06): price tile titled Reported price with the unit wrapped below; tile text centered; labels Since last rest / Since leg start; rest departure slider should say the resulting rest length; a rest stop's incomplete forecasts never completed on the same major roads; Prius Review setup loop (Compare still says review after reviewing; added rest in leg); Skip allowance -> Use on-device data / Use local incomplete data. Pass 1 of a multi-pass vertical-space UI overhaul (pass 2 Garage/Advisory, pass 3 Route/Parameters, pass 4 Timing/windows/Hazards/Compare).
