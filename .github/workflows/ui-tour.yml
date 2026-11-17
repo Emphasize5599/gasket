@@ -1,0 +1,57 @@
+name: UI screenshot tour
+# On demand: Actions → UI screenshot tour → Run workflow. Download the gasket-ui-tour artifact
+# (light/ and dark/ folders, open index.html or viewer.html).
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: 'Only these UI tests (comma list), blank = the default set'
+        required: false
+        default: ''
+      only_core:
+        description: 'Demo walk only (faster, no existing tests)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  tour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache pinned browser test runtime
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/gasket-tests
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-gasket-playwright-1.63.0-headless-v1
+      - name: Prepare browser test runtime
+        run: |
+          if [ '${{ steps.browser-cache.outputs.cache-hit }}' != 'true' ]; then
+            npm install --prefix "$RUNNER_TEMP/gasket-tests" playwright@1.63.0
+            "$RUNNER_TEMP/gasket-tests/node_modules/.bin/playwright" install chromium --only-shell
+          fi
+          export NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules"
+          if ! node -e 'require("playwright").chromium.launch().then(b=>b.close()).catch(e=>{console.error(e.message);process.exit(1)})'; then
+            "$RUNNER_TEMP/gasket-tests/node_modules/.bin/playwright" install --with-deps chromium --only-shell
+          fi
+      - name: Run the tour
+        env:
+          TESTS: ${{ inputs.tests }}
+          ONLY_CORE: ${{ inputs.only_core }}
+        run: |
+          export NODE_PATH="$RUNNER_TEMP/gasket-tests/node_modules"
+          set -- "$RUNNER_TEMP/ui-tour"
+          if [ "$ONLY_CORE" = 'true' ]; then set -- "$@" --only-core; fi
+          if [ -n "$TESTS" ]; then set -- "$@" --tests "$TESTS"; fi
+          TOUR_JOBS=3 node tools/ui-tour/run.cjs "$@"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gasket-ui-tour
+          path: |
+            ${{ runner.temp }}/ui-tour/light
+            ${{ runner.temp }}/ui-tour/dark
+          retention-days: 14
