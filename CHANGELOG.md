@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.500 — 2026-11-17
+
+- Timing: one tile with your planning mode ("How should Gasket plan your departure and arrival times?"), forecast traffic, the traffic planning cache and "Leave earlier if traffic adds less than"; fewer explanation lines (now behind (?) buttons); Set time windows is a menu entrance.
+- Trip time windows: Trip preferences moved to Timing; Hours I won't leave, Nightly rest, Window planner and Visual itinerary explain themselves behind a (?); the tip has its light bulb; Remove buttons match the rest of the app.
+- Visual itinerary: times follow the time zone you're in, and departure and arrival windows always overlap their leg's driving by at least 15 minutes.
+- When every checked plan arrives early, Gasket offers to rest longer, allow arriving earlier, or allow leaving later by the time it needs (rounded up to 15 minutes).
+- Hazards: the review starts by confirming which hazards are approved automatically; the "Reading hourly conditions" line is gone.
+- Compare: the (?) sits beside Order by, the tick hint beside Vehicles to compare, and unticked vehicles no longer say "Not compared".
+- Bug fixes
+
 ## 0.0.499 — 2026-11-17
 
 - Route: tapping Avoid tolls first explains why a toll road is often the cheaper, more comfortable trip, offers to add a HERE key (so Gasket can price the tolls), and asks Consider tolls or Avoid tolls.

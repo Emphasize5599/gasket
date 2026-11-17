@@ -4,7 +4,7 @@
 const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
  const p=await b.newPage({viewport:{width:360,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());
- await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);
+ await p.addInitScript(()=>{window.__skipHazardRulesStep=true;});await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);
  await p.evaluate(()=>{const A=__app,start=Date.now()+86400000,local=t=>new Date(t-new Date(t).getTimezoneOffset()*60000).toISOString().slice(0,16),model={totalMi:100,durationSec:7200};
   A.S.trip.windowPlan={enabled:true,mode:'depart',start:local(start),end:local(start+3600000),destinations:[]};
   window.__key='before';window.__roads=[{key:'road',model,name:'Test road'}];window.__done=0;

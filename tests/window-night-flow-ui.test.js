@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{const browser=await chromium.launch({executablePath:process.env.CHROME||undefined});try{
  for(const mode of (process.env.WINDOW_NIGHT_ONLY?[process.env.WINDOW_NIGHT_ONLY]:['keep-both','skip-second','skip-first','skip-both','restore-second','return-shift'])){
  const p=await browser.newPage({viewport:{width:mode==='skip-second'?320:448,height:950},timezoneId:'UTC'}),errors=[];p.setDefaultTimeout(20000);p.on('pageerror',e=>errors.push(e.message));
- await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
+ await p.route(/^https?:\/\//,r=>r.abort());await p.addInitScript(()=>{window.__skipHazardRulesStep=true;});await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);await require('./onboarding-ui')(p);await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(mode=>{
   const A=__app,S=A.S,H=3600000,M=60000,iso=t=>new Date(t).toISOString(),start=Math.ceil((Date.now()+2*86400000)/86400000)*86400000+12*H,back=start+7*86400000;
   S.limitLookup=false;S.googleTraffic=false;S.hereTraffic=false;S.speed.rule={on:false};S.apiKey='TEST';S.walmartPlus=false;S.cars.forEach(c=>c.tires={aired:Date.now(),spare:{kind:'none'}});A.siteOn=()=>false;

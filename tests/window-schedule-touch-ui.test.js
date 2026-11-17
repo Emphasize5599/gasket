@@ -39,7 +39,7 @@ const {chromium}=require('playwright');
   const held=await page.evaluate(()=>__fixture.draws);
   await send('touchEnd');
   const result=await page.evaluate(()=>({start:__fixture.windows[0].ds,end:__fixture.windows[0].de,draws:__fixture.draws}));
-  assert.equal(result.start,result.end,'the handle stops at the opposite endpoint');
+  assert(result.start<=result.end,'the handle stops at or before the opposite endpoint (0.0.500: also 15 min before its leg ends)');
   assert.equal(held,1,'holding below the chart redraws once');
   assert(result.draws<=2,'releasing redraws at most once more (back to the normal layout)');
   await page.evaluate(()=>{

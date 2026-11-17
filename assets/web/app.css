@@ -2555,3 +2555,10 @@ details:not([open]) > summary .sum-edit { display:none; }
 .tw-journey li.route-rest::before { left:-15px; top:0; }
 .tw-journey li.route-rest .nn { width:24px; height:24px; font-size:12px; }
 .tw-journey li.route-rest:has(+ li.route-rest)::after { left:11px; top:24px; }
+/* 0.0.500: no divider under the last visible row of a tile (a hidden row after it left a stray line) */
+.field:not(:has(~ :not(.hidden))) { border-bottom:0; }
+.early-btns { display:grid; gap:8px; margin-top:14px; }
+.early-btns .btn { width:100%; margin:0; min-height:46px; height:auto; white-space:normal; }
+.vc-lbl { display:inline-flex; align-items:center; gap:4px; }
+.vc-batch-h { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; }
+.vc-batch-h small { font-size:12.5px; font-weight:500; color:var(--ink-2); text-transform:none; letter-spacing:0; }

@@ -209,7 +209,14 @@
       marks={ds:'Earliest departure',de:'Latest departure',as:'Earliest arrival',ae:'Latest arrival',start:'Move leg from start',end:'Move leg from end'},
       dateFmt=new Intl.DateTimeFormat([], {timeZone:clock,weekday:'short',month:'short',day:'numeric'}),
       timeFmt=new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',minute:'2-digit',hour12:!o.clock24}),
-      hourFmt=o.clock24?timeFmt:new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',hour12:true});
+      hourFmt=o.clock24?timeFmt:new Intl.DateTimeFormat([], {timeZone:clock,hour:'numeric',hour12:true}),
+      fmts=new Map();
+  // 0.0.500: times read in the zone you're in at that moment (each leg drives in its start's zone, and you wait at a stop
+  // in that stop's zone); day rows still split at the start's midnights.
+  function zoneAt(t){var zone=(o.legs[0]&&o.legs[0].zone)||clock;for(var i=0;i<rows.length;i++){var r=rows[i];if(!r||!(r.start<=t))break;zone=t<=r.end?(o.legs[i]&&o.legs[i].zone)||zone:(o.legs[i+1]&&o.legs[i+1].zone)||o.endZone||zone;}return WindowClock.zone(zone)?zone:clock;}
+  function fmtIn(kind,zone){var key=kind+'|'+zone,f=fmts.get(key);if(!f){f=new Intl.DateTimeFormat([],kind==='date'?{timeZone:zone,weekday:'short',month:'short',day:'numeric'}:kind==='abbr'?{timeZone:zone,timeZoneName:'short',hour:'numeric'}:kind==='hour'&&!o.clock24?{timeZone:zone,hour:'numeric',hour12:true}:{timeZone:zone,hour:'numeric',minute:'2-digit',hour12:!o.clock24});fmts.set(key,f);}return f;}
+  function local(kind,t){var z=zoneAt(t);return fmtIn(kind,z).format(t);}
+  function abbr(t){var z=zoneAt(t);if(z===clock)return '';var p=fmtIn('abbr',z).formatToParts(t).find(function(x){return x.type==='timeZoneName';});return p?p.value:'';}
   var sunMemo=new Map();
   /** Roughly where the trip is at t: a leg's start before it, its end after, a straight line by time in between. */
   function placeAt(t){
@@ -243,7 +250,7 @@
    return out;
   }
   function sunMarks(a,b){
-   return sunEvents(a,b).map(function(e){var label=SUN_NAMES[e.kind]+' · '+timeFmt.format(e.at);
+   return sunEvents(a,b).map(function(e){var label=SUN_NAMES[e.kind]+' · '+local('time',e.at);
     return '<span class="ws-sun-ev" role="img" style="left:'+(100*(e.at-a)/(b-a))+'%" data-ws-sun="'+e.kind+'" aria-label="'+o.esc(label)+'" title="'+o.esc(label)+'">'+sunIcon(e.kind)+'</span>';}).join('');
   }
   function localRules(i){var w=windows[i];return i===0||Number.isFinite(w.ds)||Number.isFinite(w.de)?rules:[];}
@@ -288,7 +295,7 @@
     var content='';
     d.chunks.forEach(function(c){building=c;content+=strip(c.from,c.to,values,d.b,shownSkips,frozen?c:null);});building=null;
     if(!frozen)d.chunks=d.chunks.filter(function(c){return !c.empty;});
-    html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(d.a))+'</h4>'+(content||compactStrip(d.a,d.b,values,!!frozen))+'</section>';
+    var dz=abbr(d.a+12*H);html+='<section class="ws-day"><h4>'+o.esc(dateFmt.format(d.a)+(dz?' · times in '+dz:''))+'</h4>'+(content||compactStrip(d.a,d.b,values,!!frozen))+'</section>';
    });
    layout=plan;
    var problems='';
@@ -316,7 +323,7 @@
     var w=values[i];Object.keys(w).concat(['start','end']).forEach(function(id){var t=id==='start'||id==='end'?r[id]:w[id];
      if(t>=a&&t<b)held+='<button type="button" tabindex="-1" class="ws-handle ws-h-'+id+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-hidden="true"></button>';});
    });
-   for(var t=a;t<b;t+=6*H)labels+='<span class="ws-compact-label" style="left:'+pc(t)+'%">'+o.esc(hourFmt.format(t))+'</span>';
+   for(var t=a;t<b;t+=6*H)labels+='<span class="ws-compact-label" style="left:'+pc(t)+'%">'+o.esc(local('hour',t))+'</span>';
    values.forEach(function(w){
     [[w.ds,w.de],[w.as,w.ae]].forEach(function(range){
      var start=Math.max(a,range[0]),end=Math.min(b,range[1]);
@@ -347,12 +354,12 @@
    }
    function handle(i,id,t,second){
     if(t<a||t>=b&&!(t===b&&b===dayEnd&&id==='end'))return '';
-    return '<button type="button" class="ws-handle ws-h-'+id+(second?' ws-h-extra':'')+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+dateFmt.format(t)+' '+timeFmt.format(t))+'"></button>';
+    return '<button type="button" class="ws-handle ws-h-'+id+(second?' ws-h-extra':'')+'" style="left:'+pc(t)+'%" data-ws-leg="'+i+'" data-ws-edge="'+id+'" data-ws-at="'+t+'" aria-label="'+o.esc('Leg '+(i+1)+' · '+marks[id]+' · '+local('date',t)+' '+local('time',t))+'"></button>';
    }
    var windows='',itinerary='',handles='',names='',tick='',nightActions='',blue=[];
    for(var t=a;t<b;t+=H){
-    var wholeHour=WindowClock.wall(t,clock).endsWith(':00');
-    tick+='<span data-ws-tick="'+t+'" style="left:'+pc(t)+'%">'+o.esc((wholeHour?hourFmt:timeFmt).format(t))+'</span>';
+    var tz=zoneAt(t),wholeHour=WindowClock.wall(t,tz).endsWith(':00');
+    tick+='<span data-ws-tick="'+t+'" style="left:'+pc(t)+'%">'+o.esc(fmtIn(wholeHour?'hour':'time',tz).format(t))+'</span>';
    }
    rows.forEach(function(r,i){
     var w=values[i],times=Object.values(w);if(Math.min(r.start,...times)>=b||Math.max(r.end,...times)<a)return;
@@ -389,13 +396,17 @@
   function change(i,id,t){
    var w=windows[i],row=rows[i];
    if(id==='start'||id==='end'){
-    var from=id==='end'?row.start+t-row.end:t;
+    var from=id==='end'?row.start+t-row.end:t,span=row.end-row.start;
+    // 0.0.500: each window keeps at least 15 minutes of overlap with its leg's driving (owner)
+    ['ds','as'].forEach(function(k){if(w&&Number.isFinite(w[k]))from=Math.max(from,w[k]-span+HANDLE_STEP);});
+    ['de','ae'].forEach(function(k){if(w&&Number.isFinite(w[k]))from=Math.min(from,w[k]-HANDLE_STEP);});
     if(from===row.start)return true;
     starts[i]=from;
     rows[i]=run(o.legs[i],from,localRules(i));
    }else{
     var opposite=position(i,OPPOSITE[id]);
     t=id[1]==='s'?Math.min(t,opposite):Math.max(t,opposite);
+    if(row&&Number.isFinite(row.start)&&Number.isFinite(row.end)&&row.end-row.start>2*HANDLE_STEP){var lim=id[1]==='s'?row.end-HANDLE_STEP:row.start+HANDLE_STEP;if(id[1]==='s'?t>lim&&opposite>lim:t<lim&&opposite<lim)t=lim;}
     if(w[id]===t)return true;
     if(!o.write(i,id,t))return false;
     windows[i]=o.read(i);
@@ -428,7 +439,7 @@
      compact:el.classList.contains('ws-compact'),left:track.left,width:track.width};
    });
    var origin=strips.find(function(strip){return strip.el===source;}),
-       peer=OPPOSITE[edge],limit=peer?stripAtTime(strips,position(i,peer)):null;
+       peer=OPPOSITE[edge],limit=peer?stripAtTime(strips,edge[1]==='s'?Math.min(position(i,peer),rows[i].end-HANDLE_STEP):Math.max(position(i,peer),rows[i].start+HANDLE_STEP)):null;
    if(!origin||!origin.width)return;
    // Where this handle's center sits inside a full row and inside a compact row.
    var line=handleY-hostTop-origin.top;

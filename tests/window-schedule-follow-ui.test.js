@@ -25,7 +25,7 @@ const {chromium}=require('playwright');
     window.__fixture.schedule=WindowSchedule.bind(host,{
      zone:'UTC',now:day,clock24:true,starts:[],esc:__app.esc,read:i=>({...windows[i]}),
      write:(i,id,t)=>{windows[i][id]=t;return true;},rules:()=>[],skippedNights:()=>[],skippedWaits:()=>[],
-     setNight(){},setWait(){},onIssues(){},legs:[{zone:'UTC',estimate:()=>[{kind:'drive',minutes:240}]}]
+     setNight(){},setWait(){},onIssues(){},legs:[{zone:'UTC',estimate:()=>[{kind:'drive',minutes:6000}]}]
     });
    });
    const cdp=await page.context().newCDPSession(page);
