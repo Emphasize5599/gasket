@@ -181,9 +181,9 @@ async function tripTour(browser, carId) {
   await crawl(p, 'route (empty) · ' + carId, 1);
   await p.fill('#tFrom', '100 Main St, Testville').catch(() => {}); await p.fill('#tTo', 'Dallas, TX').catch(() => {});
   await p.click('#tGetRoutes').catch(() => {}); await wait(p, 2500);
-  const seen = new Set();
-  for (let i = 0; i < 40; i++) {
-    await p.waitForFunction(() => !__trip.state().busy, null, { timeout: 60000 }).catch(() => {});
+  let lastKey = '', same = 0; const seen = new Set(), until = Date.now() + 240000;
+  for (let i = 0; i < 40 && Date.now() < until; i++) {
+    await p.waitForFunction(() => !__trip.state().busy, null, { timeout: 30000 }).catch(() => {});
     await wait(p, 600);
     const t = await top(p);
     const step = await p.evaluate(() => __trip.state().step);
@@ -195,6 +195,8 @@ async function tripTour(browser, carId) {
     if (step === 9) break;
     const moved = await p.evaluate(() => { const yes = document.querySelector('#twYes, [data-tw-yes], #hzYes'); const n = yes && yes.offsetParent ? yes : document.getElementById('tNext'); if (!n || n.disabled) return false; n.click(); return true; });
     if (!moved) { log('trip stuck at step', step, carId); break; }
+    if (key === lastKey && ++same > 2) { log('trip not advancing at step', step, carId); break; }
+    if (key !== lastKey) { lastKey = key; same = 0; }
     await wait(p, 900);
   }
   // visit each step directly too, so steps the flow skipped still get a look
