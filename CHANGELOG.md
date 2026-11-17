@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.504 — 2026-11-17
+
+- Reopening saved rest-timing reviews now recolors stored forecasts against the current per-leg allowance. This preserves measured delays, departure times and coverage and performs no new traffic lookups.
+
+
 ## 0.0.503 — 2026-11-17
 
 - Kept empty-list explanations inside unavailable-stop diagnostics, without repeating them below leg entrances. Missing-access explanations remain behind the header's (?).
