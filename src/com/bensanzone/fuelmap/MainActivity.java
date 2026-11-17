@@ -358,6 +358,8 @@ public class MainActivity extends Activity {
         workers.put("murphy", new SiteWorker("murphy", "https://service.murphydriverewards.com/mapmodule/", "https://service.murphydriverewards.com/"));
         workers.put("gmaps", new SiteWorker("gmaps", "https://www.google.com/maps", "https://www.google.com/", true));
         workers.put("traffic", new SiteWorker("traffic", "https://www.google.com/maps", "https://www.google.com/", true));
+        // A user-controlled picker must not replace the background Maps identity reader.
+        workers.put("restmapschoose", new SiteWorker("restmapschoose", "https://www.google.com/maps", "https://www.google.com/", true));
         // Dedicated gas reader: never replaces an in-progress directions import.
         // Gas readers are created lazily for the configured pool, not at startup.
         // NHTSA's recall lookup by VIN: read in the background (siteRead), or shown to the user (siteShow)
@@ -1006,6 +1008,19 @@ public class MainActivity extends Activity {
     }
 
     private void endVerify() {
+        if (verifying != null && "restmapschoose".equals(verifying.key) && verifying.showReq >= 0) {
+            final SiteWorker picker = verifying;
+            final int request = picker.showReq;
+            picker.showReq = -1;
+            // Read the selected listing only when Done is tapped, never the initial search results.
+            String script = "(function(){" + asset("web/restmaps.js") + "\nvar rows=RestMaps.extract(document,location.href),p=rows.find(function(r){return r.primary;});return p?{url:p.url,name:p.name,closure:p.closure,statusChecked:true}:{closed:true};})()";
+            picker.view.evaluateJavascript(script, value -> {
+                if (verifying != picker) return;
+                js("window.onNativeResult&&onNativeResult(" + request + "," + (value == null || "null".equals(value) ? "{closed:true}" : value) + ")");
+                endVerify();
+            });
+            return;
+        }
         if (verifying != null && verifying.showReq >= 0) {
             // closed before (or after) the page answered: the app's call ends either way
             js("window.onNativeResult&&onNativeResult(" + verifying.showReq + ",{closed:true})");
@@ -2738,6 +2753,26 @@ public class MainActivity extends Activity {
                     }
                     if (verifying != null) endVerify();
                     startShow(w, reqId, url, "(" + script + ")(" + reqId + "," + argsJson + ")");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void restMapsChoose(final int reqId, final String argsJson) {
+            main.post(() -> {
+                try {
+                    JSONObject args = new JSONObject(argsJson);
+                    double lat = args.getDouble("lat"), lng = args.getDouble("lng");
+                    if (Double.isNaN(lat) || Double.isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Exception("Invalid coordinates");
+                    if (verifying != null) { js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Close the current website first.'})"); return; }
+                    SiteWorker picker = ensureWorker("restmapschoose");
+                    if (picker == null) throw new Exception("Maps picker unavailable");
+                    String query = args.optString("name", "Rest stop") + " near " + lat + "," + lng;
+                    String url = "https://www.google.com/maps/search/?api=1&query=" + java.net.URLEncoder.encode(query, "UTF-8");
+                    startShow(picker, reqId, url, "");
+                    wmDone.setText("Done — use selected place");
+                } catch (Exception e) {
+                    js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Could not open Maps selection.'})");
                 }
             });
         }

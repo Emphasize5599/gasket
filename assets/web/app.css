@@ -2562,3 +2562,38 @@ details:not([open]) > summary .sum-edit { display:none; }
 .vc-lbl { display:inline-flex; align-items:center; gap:4px; }
 .vc-batch-h { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; }
 .vc-batch-h small { font-size:12.5px; font-weight:500; color:var(--ink-2); text-transform:none; letter-spacing:0; }
+
+/* Saved-trip buttons contain a vertical connected itinerary, never an inline flex row. */
+.tpick-list .hist-open {display:block; width:100%;}
+.tpick-list .hist-open > .nlist {display:block; width:100%; text-align:left;}
+.tpick .nlist li {display:flex; width:auto; text-align:left;}
+.tpick .nlist .nl-a {display:block; white-space:normal; overflow-wrap:anywhere;}
+.tpick .nlist .nn {display:grid; flex:0 0 24px; width:24px; height:24px;}
+.tpick .nlist.sm li:not(:last-child)::before {left:11px; top:24px;}
+.tpick .nlist.sm li.route-rest::before {left:-17px; top:0;}
+.tpick .nlist.sm li.route-rest:has(+ li.route-rest)::after {left:11px; top:24px;}
+.rest-heading {display:flex; align-items:flex-start; gap:12px; text-align:left;}
+.rest-heading > .rest-text {flex:1; min-width:0;}
+.rest-heading > .rest-add {flex:none; margin:0;}
+.rest-row-actions {display:flex; flex-direction:column; align-items:stretch; gap:10px;}
+.rest-edit-line {display:flex; flex-wrap:wrap; gap:8px; align-items:center;}
+.rest-edit-line .btn {width:auto; min-width:0; white-space:normal; height:auto; min-height:40px;}
+.rest-inspect,.rest-visibility {display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px;}
+.rest-visibility {border-top:1px solid var(--line); padding-top:8px;}
+.rest-preview .rest-preview-caption {display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px; text-align:left;}
+.rest-preview-caption span:last-child {margin-left:auto; text-align:right;}
+.rest-list > li.rest-list-options {display:block; padding-left:36px;}
+.rest-list-options:empty {display:none;}
+.rest-list-options::before {display:none;}
+.rest-warnings {margin:12px 0;}
+.rest-access-status .btn,.rest-list-options .btn {max-width:100%; white-space:normal; height:auto; min-height:44px;}
+
+.rest-heading > .rest-add {display:grid; place-items:center; width:44px; height:44px; padding:0; border-radius:50%; background:var(--save); color:var(--bg);}
+.rest-heading > .rest-add svg {width:24px; height:24px; fill:currentColor;}
+.rest-heading .rest-text {text-align:left;}
+.rest-row-actions .rest-edit-line {justify-content:flex-start;}
+
+.rest-fact.rest-traffic-green {background:color-mix(in srgb,var(--save) 22%,var(--surface));}
+.rest-fact.rest-traffic-yellow {background:color-mix(in srgb,#e0a800 28%,var(--surface));}
+.rest-fact.rest-traffic-red {background:color-mix(in srgb,#c62828 24%,var(--surface));}
+.rest-fact.rest-traffic-unknown {background:var(--surface-2);}

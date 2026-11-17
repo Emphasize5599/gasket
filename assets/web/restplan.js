@@ -31,7 +31,7 @@
   var free=good.reduce(function(min,s){return Math.min(min,s.drivingMinutes,Number.isFinite(s.freeMinutes)?s.freeMinutes:Infinity);},Infinity);
   return samples.map(function(s){
    var delay=forecastZone(s)==='unknown'?null:Math.max(0,s.drivingMinutes-free);
-   var zone=delay==null?'unknown':delay<=Math.max(3,free*.05)?'green':delay<=tolerance?'yellow':'red';
+   var zone=delay==null?'unknown':delay>tolerance?'red':delay<=Math.min(3,tolerance*.2)?'green':'yellow';
    return Object.assign({},s,{freeFlowMinutes:Number.isFinite(free)?free:null,delayMinutes:delay,zone:zone});
   });
  }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.501 — 2026-11-17
+
+- Rest browsing: concise leg entrances; per-leg traffic tolerance above them; explanations behind (?) controls; expandable warnings and unavailable/closed-source details.
+- Rest rows: top-right Add, separate condition/visibility controls, a manual Google Maps listing picker, satellite captions and an outlier-resistant off-route gradient. Earlier alternatives follow the departure point; relaxed-filter results are offered only when no matching stops remain.
+- Saved-trip numbered itineraries keep their vertical layout and recover rest identity from older saved records. Coordinate time zones fall back to the bundled offline boundary map, including campgrounds, while saved/provider zones retain precedence.
+- Saved user rates expire on the configured rest-data refresh interval. Stops remain listed and Add requires confirming the rate table or reviewing it. Editing amenities does not renew rate freshness.
+- Traffic colors respect the per-leg minute allowance even on long drives. Added temperature-duration filtering to open work.
+
+
 ## 0.0.500 — 2026-11-17
 
 - Timing: one tile with your planning mode ("How should Gasket plan your departure and arrival times?"), forecast traffic, the traffic planning cache and "Leave earlier if traffic adds less than"; fewer explanation lines (now behind (?) buttons); Set time windows is a menu entrance.

@@ -30,7 +30,7 @@
      }catch(e){zoneStats.zoneFailures+=batch.length;batch.forEach(function(x){x.reject(Error('Origin timezone unavailable: '+String(e.message).slice(0,180)));});}finally{zoneActive--;pumpZones();}})(batch,generation);}}
     async function zone(p,valid,cacheOnly){valid=valid||function(){return true;};if(!valid())throw Error('Traffic lookup cancelled');var suffix=p.lat.toFixed(5)+'|'+p.lng.toFixed(5),k='zone|'+suffix,shared='timezone|'+suffix;
      if(zoneOK(p.timeZone)){zoneStats.zoneCacheHits++;return p.timeZone;}if(zones.has(k)){zoneStats.zoneCacheHits++;return zones.get(k);}var r=A.KV.get('restplaces',shared,180*86400000)||A.KV.get('traffic',k,180*86400000);if(r&&r.v&&zoneOK(r.v.zone)){zoneStats.zoneCacheHits++;zones.set(k,r.v.zone);return r.v.zone;}
-     var local=root.PointZone&&PointZone.resolve(p);if(zoneOK(local)){zoneStats.zoneOffline=(zoneStats.zoneOffline||0)+1;zones.set(k,local);return local;}
+     var local=root.PointZone&&(PointZone.resolve(p)||PointZone.at&&PointZone.at(p));if(zoneOK(local)){zoneStats.zoneOffline=(zoneStats.zoneOffline||0)+1;zones.set(k,local);return local;}
      if(cacheOnly)return null;
      var task=zoneFlights.get(k);if(!task){task=new Promise(function(resolve,reject){zoneQueue.push({p:p,k:k,shared:shared,resolve:resolve,reject:reject});if(!zoneTimer)zoneTimer=setTimeout(pumpZones,0);}).finally(function(){if(zoneFlights.get(k)===task)zoneFlights.delete(k);});zoneFlights.set(k,task);}else zoneStats.zoneShared++;var z=await task;if(!valid())throw Error('Traffic lookup cancelled');return z;
     }
