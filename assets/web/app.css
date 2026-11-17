@@ -909,7 +909,7 @@ details.g-obs[open] { padding-bottom: 12px; }
 .nlist { list-style: none; margin: 8px 0; padding: 0; }
 .nlist li { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 0 0 14px; font-size: 14.5px; line-height: 1.35; }
 .nlist li:last-child { padding-bottom: 2px; }
-.nlist li:not(:last-child)::before { content: ''; position: absolute; left: 11px; top: 24px; bottom: 2px; width: 2px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.nlist li:not(:last-child)::before { content: ''; position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .nlist .nn { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 12.5px; font-weight: 800; }
 .nlist .nl-a { flex: 1; min-width: 0; padding-top: 2px; overflow-wrap: anywhere; }
 .nlist li.route-rest { margin-left:28px; color:var(--save); }
@@ -2537,3 +2537,21 @@ details:not([open]) > summary .sum-edit { display:none; }
 .card > h3, .card > .g-top, .card > .sec-row, .card > details > summary, .card > .tile-header { background: inherit; }
 /* 0.0.498: an open submenu keeps the same space below its text as at its sides */
 .tp-body details[open]:not(.epa):not(.g-info):not(.g-tires):not(.rc-tile):not(.spd-card), .sub-body details[open]:not(.epa):not(.settings-help) { padding-bottom: 12px; }
+.toll-ask ul { margin:6px 0 8px; padding-left:20px; }
+.toll-ask li { margin:3px 0; }
+.toll-ask .field { border:0; padding:6px 0; }
+.toll-ask .in-btn { display:flex; gap:8px; width:100%; }
+.toll-ask .in-btn input { flex:1; min-width:0; }
+.toll-ask-ok { color:var(--save); font-weight:600; }
+/* 0.0.499: more room left of a switch, so a label and its (?) wrap together */
+.field > .switch, .field > label.switch { margin-left:14px; }
+.card-h4 { font-size:15px; font-weight:700; color:var(--accent); margin:16px 0 4px; }
+/* 0.0.499: the blue line runs past added rests to the next numbered place; rests get their own green line only
+   between two rests in a row */
+.nlist li.route-rest::before { content:''; position:absolute; left:-17px; top:0; bottom:0; width:2px; border-radius:0; background:color-mix(in srgb, var(--accent) 35%, transparent); }
+.nlist li.route-rest:has(+ li.route-rest)::after { content:''; position:absolute; left:11px; top:24px; bottom:0; width:2px; border-radius:2px; background:color-mix(in srgb, var(--save) 45%, transparent); }
+.nlist.sm li.route-rest::before { left:-20px; }
+.nlist.sm li.route-rest:has(+ li.route-rest)::after { left:8px; top:18px; }
+.tw-journey li.route-rest::before { left:-15px; top:0; }
+.tw-journey li.route-rest .nn { width:24px; height:24px; font-size:12px; }
+.tw-journey li.route-rest:has(+ li.route-rest)::after { left:11px; top:24px; }

@@ -16,9 +16,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   __app.S.trip.avoid={tolls:false,highways:false,ferries:false};__app.S.trip.tollAmounts={};
  });
  await p.click('#btnTrip');await p.evaluate(()=>__trip.step(3));await p.click('#tSrc [data-src="typed"]');
- await p.evaluate(()=>{const x=document.getElementById('tTollCmp');x.checked=true;x.onchange();});
+ await p.evaluate(()=>{const x=document.getElementById('tAltCmp');x.checked=true;x.onchange();});assert.equal(await p.locator('#tTollCmp').count(),0,'toll comparison is built in (0.0.499)');
  await p.fill('#tFrom','100 Main St, Testville');await p.fill('#tTo','200 Main St, Testville');
- assert.equal(await p.evaluate(()=>__app.S.trip.tollCompare&&__app.S.trip.altCompare),true,'comparing tolls turns on the route comparison');
+ assert.equal(await p.evaluate(()=>__app.S.trip.altCompare),true);
  // 0.0.424: a setting that redraws Route keeps your place instead of jumping to the top
  await p.evaluate(()=>__trip.step(10));await p.waitForSelector('#twPlanningMode');const vp=p.viewportSize();await p.setViewportSize({width:vp.width,height:420});const y0=await p.evaluate(()=>{const b=document.getElementById('tpBody');b.scrollTop=b.scrollHeight;return b.scrollTop;});assert(y0>100,'the Timing page scrolls at this size');
  await p.selectOption('#twPlanningMode','windows');await p.waitForFunction(()=>document.getElementById('twPlanningMode').value==='windows');await p.waitForFunction(y=>Math.abs(document.getElementById('tpBody').scrollTop-y)<40,y0,{timeout:3000}).catch(()=>{});   // the redraw settles a frame later on a fast runner
@@ -74,7 +74,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(stops=>{
   const poly=Trip.encodePolyline(Array.from({length:16},(_,i)=>({lat:34.7+i*.01,lng:-92.29})));
   const opt={description:'Turnpike',distanceMeters:Math.round(__tollMi*1609.344),duration:'1260s',hereTolls:{ok:false,why:'old failed answer'},polyline:{encodedPolyline:poly},legs:[{distanceMeters:Math.round(__tollMi*1609.344),duration:'1260s',steps:[]}]};
-  __app.KV.put('trips','trip|old',{route:{stops,avoid:{tolls:false,highways:false,ferries:false},legs:null},alts:[opt],altSel:0,trip:{avoid:{tolls:false,highways:false,ferries:false}},stations:{official:[],google:[],kind:'gas'},savedT:Date.now()-3600e3});
+  __app.KV.put('trips','trip|old',{route:{stops,avoid:{tolls:false,highways:false,ferries:false},legs:null},alts:[opt],altSel:0,trip:{altCompare:true,avoid:{tolls:false,highways:false,ferries:false}},stations:{official:[],google:[],kind:'gas'},savedT:Date.now()-3600e3});
   __app.KV.put('trips','index',[{id:'old',t:Date.now()-3600e3,title:'Old trip',mi:7,via:'Turnpike',n:2}]);
   __hereQ.length=0;
  },stops);

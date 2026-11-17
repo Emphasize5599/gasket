@@ -1643,7 +1643,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         return '<button data-av="' + k + '" class="' + (t.avoid[k] ? 'on' : '') + '">Avoid ' + k + '</button>'; }).join('') + '</div>' +
       '<div class="field"><div class="lbl">Round trip<small>Comes back to the start. The way back is its own leg, so you pick its roads too.</small></div>' + sw('tRound', !!t.returnTrip) + '</div>' +
       '</div><div id="tRouteGo"></div>' + (KIND()==='ev'?routeChargingHtml(t):'') +
-        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare with and without tolls<small>Also gets each leg\'s toll-free routes, and the comparisons count each route\'s tolls. '+(S.apiKey?'Google estimates the amounts (for a car with no toll pass).':'Without the API key Google only says a route has tolls: type the amounts below once the routes are in.')+'</small></div>'+sw('tTollCmp',!!t.tollCompare)+'</div><div class="field"><div class="lbl">Compare roads to and from added rest stops<small>Off by default: legs to and from a rest stop you add keep the road you were on, with no other routes to review. Turn on, then Get routes, to review Google\'s other roads there too.</small></div>'+sw('tRestRoutes',!!t.restRoutes)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
+        '<div class="card"><h3>Other routes</h3><div class="field"><div class="lbl">Check Google\'s other routes too<small>After choosing your routes in Hazards, decide Yes or No for every remaining option. Only approved alternatives are searched, after your primary choices.</small></div>'+sw('tAltCmp',t.altCompare)+'</div><div class="field"><div class="lbl">Compare roads to and from added rest stops<small>Off by default: legs to and from a rest stop you add keep the road you were on, with no other routes to review. Turn on, then Get routes, to review Google\'s other roads there too.</small></div>'+sw('tRestRoutes',!!t.restRoutes)+'</div><div class="field"><div class="lbl">Remember alternative-route answers for this vehicle<small>Off by default. Saved trips only; a new trip always asks again. Forecasts change—review answers after an hour.</small></div>'+sw('tRememberRoutes',Garage.car().rememberRouteChoices===true)+'</div><div class="grid2'+(t.altCompare?'':' hidden')+'" id="tAltBox">'+num('tAltSave','Worth switching if it saves at least ($)',t.altMinSave,0.01,'for the whole trip')+'<span></span></div></div>'+
         '<div id="tRouteInfo"></div>';
     }
     if (k === ST_TIMING) {
@@ -1664,7 +1664,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
       (kd==='ev'?'<button type="button" class="btn tonal" id="tRouteChargers">Charger types on Route</button>'+netListHtml():'')+
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
-      '<div class="sub-h">Is a stop or detour worth it?</div>' +
+      '<h4 class="card-h4">Is a stop or detour worth it?</h4>' +
       '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (1.0–30.0 min)', t.maxDetourMin, 0.1, 'extra driving per stop',1,30) + '</div>' +
       '<div class="sub-h">When you get there <button type="button" class="qi" id="tArriveQ" aria-label="More info">?</button></div>' +
       '<div class="seg2 arrive-seg'+(kd==='ev'?' ev-arrival-selector':'')+'" id="tArrive">'+(kd==='ev'?'<button data-a="destination" class="'+(arriveNow()==='destination'?'on':'')+'">At least one of my destinations will have a charger</button>':'')+'<button data-a="buffer" class="' + (arriveNow() === 'buffer' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (arriveNow() === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
@@ -1741,7 +1741,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function bindRoute() {
     bindRouteCharging();
     var tollChip=document.querySelector('#tAvoid [data-av="tolls"]');if(tollChip)tollChip.classList.toggle('hidden',planningPriority(Garage.car())==='time');
-    $('tTollCmp').onchange=function(){S.trip.tollCompare=this.checked;if(this.checked&&!S.trip.altCompare){S.trip.altCompare=true;$('tAltCmp').checked=true;$('tAltBox').classList.remove('hidden');}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
+
     $('tRestRoutes').onchange=function(){S.trip.restRoutes=this.checked;if(!this.checked&&route&&route.legs&&trimRestLegs(route)){rebuildAlts();rawRoute=alts[0];}model=null;replay=null;result=null;routeReview=null;choiceComplete=false;autoRoute=false;A.save();renderInfo();gateTabs();};
     $('tAltCmp').onchange=function(){$('tAltBox').classList.toggle('hidden',!this.checked);S.trip.altCompare=this.checked;routeReview=null;choiceComplete=false;result=null;A.save();gateTabs();};
     $('tRememberRoutes').onchange=function(){choiceOwnerSync();Garage.car().rememberRouteChoices=this.checked;saveChoices();A.save();};
@@ -1767,12 +1767,35 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if (route && syncReturn(route)) { model = null; replay = null; result = null; autoRoute = false; LG.info('route', S.trip.returnTrip ? 'Round trip: added the way back' : 'Round trip off'); }
       renderStops(); renderInfo();
     };
-    $('tAvoid').onclick = function (e) {
+    $('tAvoid').onclick = async function (e) {
       var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.av === 'tolls' && !b.classList.contains('on') && !await tollAvoidAsk()) return;
       b.classList.toggle('on'); collectSafe(); model = null; replay = null; result = null; autoRoute = false; renderInfo();   // changed options: Get routes again by hand
     };
     renderStops(); renderInfo();
     if (srcOf() === 'link' && t.link && !route) readLink().then(autoRoutes); else autoRoutes();
+  }
+  /** 0.0.499: before avoiding tolls, say why toll roads are often worth it and offer the HERE key that prices them.
+   *  -> Promise<true = avoid tolls>. */
+  function tollAvoidAsk() {
+    return new Promise(function (resolve) {
+      var old = $('tollAsk'); if (old) old.remove();
+      var bg = document.createElement('div'); bg.className = 'cfm-bg'; bg.id = 'tollAsk';
+      bg.innerHTML = '<div class="cfm toll-ask" role="alertdialog" aria-modal="true" aria-labelledby="tollAskT"><div class="cfm-t" id="tollAskT">Avoid toll roads?</div><div class="cfm-b">' +
+        '<p>A toll road is often the cheaper trip overall:</p><ul><li>Sitting in traffic on a free road can cost more fuel than the toll.</li><li>Toll roads are usually built for steady speeds, so you use less fuel.</li><li>Gas along a no-toll route can cost more per gallon.</li><li>The drive is often just more comfortable.</li></ul>' +
+        (S.hereKey ? '<p>Gasket prices the tolls with your HERE key and can compare both for you, so you don\'t have to avoid them.</p>' :
+          '<p>Gasket can easily work out whether the tolls are worth it if you add a HERE key.</p><label class="field col"><span class="lbl">HERE routing key</span><span class="in-btn"><input type="password" id="tollAskKey" autocomplete="off" spellcheck="false" placeholder="Paste your key"><button type="button" class="btn tonal sm" id="tollAskSave">Save</button></span></label><p class="small"><a href="#" id="tollAskHow">Get a free HERE key</a></p>') +
+        '</div><div class="cfm-btns"><button class="btn tonal" id="tollAskNo">Consider tolls</button><button class="btn cfm-go" id="tollAskYes">Avoid tolls</button></div></div>';
+      document.body.appendChild(bg);requestAnimationFrame(function () { bg.classList.add('on'); });
+      var done = function (v) { window.__cfmClose = null; bg.classList.remove('on'); setTimeout(function () { bg.remove(); }, 160); resolve(v); };
+      window.__cfmClose = function () { done(false); };
+      bg.onclick = function (e) { if (e.target === bg) done(false); };
+      var save = function () { var k = $('tollAskKey'); if (!k || !k.value.trim()) return false; S.hereKey = k.value.trim(); A.save(); if (A.apiCount) A.apiCount(); LG.info('route', 'HERE key added from the toll question'); return true; };
+      if ($('tollAskSave')) $('tollAskSave').onclick = function () { if (save()) { this.closest('.field').outerHTML = '<p class="toll-ask-ok">HERE key saved. Gasket will price the tolls.</p>'; } else $('tollAskKey').focus(); };
+      if ($('tollAskHow')) $('tollAskHow').onclick = function (e) { e.preventDefault(); N.openUrl('https://platform.here.com/'); };
+      $('tollAskNo').onclick = function () { save(); done(false); };
+      $('tollAskYes').onclick = function () { save(); done(true); };
+    });
   }
   /** 0.0.454: Timing (priority, timing mode, leaving / head back, time windows). */
   function bindTiming() {
@@ -1967,7 +1990,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if (v('tBackAt') != null) t.backAt = v('tBackAt') || '';
     if (segOn('tSrc', 'src')) t.src = segOn('tSrc', 'src');
     if ((!windows||!windows.enabled())&&v('tDepart') != null) t.depart = v('tDepart') || '';
-    if (on('tTollCmp') != null) t.tollCompare = on('tTollCmp');
+    
     if (on('tRestRoutes') != null) t.restRoutes = on('tRestRoutes');
     if (on('tAltCmp') != null) { t.altCompare = on('tAltCmp'); t.altMinSave = Math.max(0, parseFloat(v('tAltSave')) || 0); }
     if (v('tTankPrice') != null) t[tankPriceKey()] = v('tTankPrice').trim();
@@ -2247,7 +2270,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   /** The trip's places as a numbered list (1, 2, 3 …); extra(stop, i) adds anything under a place (an error, a "which one?"). */
   function numList(stops, extra) {
     return '<ol class="nlist">' + stops.map(function (st, i) {
-      return '<li'+(st.rest?' class="route-rest"':'')+' data-route-stop="'+i+'"><span class="nn">' + (st.rest?'R':TripStops.number({stops:stops},i)) + '</span><div class="nl-a">' + esc(stopLine(st)) + (extra ? extra(st, i) : '') + '</div></li>';
+      return '<li'+(st.rest?' class="route-rest"':'')+' data-route-stop="'+i+'"><span class="nn">' + (st.rest?TripStops.restTag(stops.map(function(p){return !!p.rest;}),i):TripStops.number({stops:stops},i)) + '</span><div class="nl-a">' + esc(stopLine(st)) + (extra ? extra(st, i) : '') + '</div></li>';
     }).join('') + '</ol>';
   }
   function pickedRoute(r) {
@@ -2779,6 +2802,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
    */
   async function tollFreeForSaved() {
     var r = route; if (!r || !tollPair() || !window.Tolls) return false;
+    // 0.0.499: comparison is built in now, so an opened saved trip never spends paid Routes calls on it by itself
+    if (S.apiKey && S.trip.tollCompare !== true) return false;
     var multi = !!(r.legs && r.legs.length && multiLeg(r)), lists = multi ? r.legs.map(function (L, i) { return r.stops[i].rest || r.stops[i + 1].rest ? null : L.alts; }).filter(Boolean) : [alts];
     if (!lists.length) return false;
     if (tollFreeChecked([].concat.apply([], lists))||lists.every(function(list){return list.some(function(a){return tollsOf(a).has===false;});})) return false;
@@ -2804,7 +2829,8 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   /** Whether a list of options was compared with its toll-free routes (saved with the trip). */
   function tollFreeChecked(list) { return (list || []).some(function (a) { return a.tollFreeAsked; }); }
   function plainBody(b) { b = Object.assign({}, b); delete b.extraComputations; return b; }
-  function tollPair() { return (!!S.trip.tollCompare||planningPriority(Garage.car())==='time'&&tollPreference().allowPaid&&tollPreference().limited) && !(S.trip.avoid || {}).tolls; }
+  // 0.0.499: toll comparison is built in whenever other routes are compared (the Avoid tolls chip is the off switch).
+  function tollPair() { return (!!S.trip.altCompare||planningPriority(Garage.car())==='time'&&tollPreference().allowPaid&&tollPreference().limited) && !(S.trip.avoid || {}).tolls; }
   function tollPricing(){return tollPair()||planningPriority(Garage.car())==='time';}
   function tollsOf(a) { return window.Tolls ? Tolls.ofRoute(a, S.trip.tollAmounts) : { has: null, cost: null }; }
   async function withTollFree(r, list, body) {
@@ -5468,7 +5494,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   /** A trip's places as a small numbered list. */
   function miniList(names) {
-    var number=0;return '<ol class="nlist sm">'+names.map(function(n){var rest=n&&typeof n==='object'&&n.rest,name=typeof n==='object'?n.name:n;return '<li'+(rest?' class="route-rest"':'')+'><span class="nn">'+(rest?'R':++number)+'</span><div class="nl-a">'+esc(name)+'</div></li>';}).join('')+'</ol>';
+    var number=0,flags=names.map(function(n){return !!(n&&typeof n==='object'&&n.rest);});return '<ol class="nlist sm">'+names.map(function(n,i){var rest=flags[i],name=typeof n==='object'?n.name:n;return '<li'+(rest?' class="route-rest"':'')+'><span class="nn">'+(rest?TripStops.restTag(flags,i):++number)+'</span><div class="nl-a">'+esc(name)+'</div></li>';}).join('')+'</ol>';
   }
   function histPts(x) {
     if (x.pts && x.pts.length) return x.pts;

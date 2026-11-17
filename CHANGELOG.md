@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.499 — 2026-11-17
+
+- Route: tapping Avoid tolls first explains why a toll road is often the cheaper, more comfortable trip, offers to add a HERE key (so Gasket can price the tolls), and asks Consider tolls or Avoid tolls.
+- The "Compare with and without tolls" switch is gone: comparing other routes now always compares toll and toll-free roads (unless you avoid tolls).
+- The numbered place lists (Route, rest stops, window planner) draw one unbroken line between numbered places; added rests only get a line between them when a leg has several, labeled R1, R2…
+- More room left of each switch, so a label and its (?) wrap together; Parameters' "Is a stop or detour worth it?" is a header.
+- Bug fixes
+
 ## 0.0.498 — 2026-11-17
 
 - Removed the dashed placeholder boxes reserved for illustrations (Advisory, trip planning, time windows, setup).
