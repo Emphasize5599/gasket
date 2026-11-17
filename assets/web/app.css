@@ -2198,9 +2198,10 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-row-actions .rest-edit-line .rest-tools { margin:0; grid-column:auto; }
 /* Facts under the buttons: tiles like Departure's, tinted against the other places (light yellow = worst, green = best) */
 .rest-facts { grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 6.5em), 1fr)); gap:8px; margin:8px 0 4px; }
-.rest-fact { background:var(--surface-2); border-radius:14px; padding:8px 10px; text-align:center; min-width:0; }
+.rest-fact { background:var(--surface-2); border-radius:14px; padding:8px 10px; text-align:center; min-width:0; display:flex; flex-direction:column; justify-content:center; align-items:center; }
 .rest-fact span { display:block; font-size:12px; color:var(--ink-2); }
 .rest-fact b { display:block; font-size:17px; overflow-wrap:anywhere; }
+.rest-fact b > small { display:block; font-size:12px; font-weight:500; }
 .rest-fact.rel { background:hsl(calc(52 + var(--q) * 82) 80% 84%); }
 .rest-fact.rel span, .rest-fact.rel b { color:#15181d; }
 :root[data-theme="dark"] .rest-fact.rel { background:hsl(calc(52 + var(--q) * 82) 45% 27%); }

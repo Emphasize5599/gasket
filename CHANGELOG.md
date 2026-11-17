@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.497 — 2026-11-17
+
+- Rest stop rows: a Reported price tile (the price on its own line, the unit below it), all tile text centered, and the times labeled Since last rest and Since leg start.
+- The rest departure slider now says how long the rest becomes at each departure time.
+- Rest departure forecasts that Google matched only partly are read again instead of staying gray; Fetch missing forecasts now really reads them again.
+- Fixed a vehicle asking to Review setup again in Compare right after its review (when the planner moved an added rest's departure).
+- The traffic-allowance question's second button now uses the forecasts already on your phone ("Use local incomplete data") instead of skipping the allowance.
+- Bug fixes
+
 ## 0.0.496 — 2026-11-17
 
 - Rest stop rows: the satellite picture is full width again; your rating sits right of Edit, with the icon buttons on the line below (Not pleasing is now a crossed-out tree).

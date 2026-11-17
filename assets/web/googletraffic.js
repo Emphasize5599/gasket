@@ -119,8 +119,8 @@
    var valid=o.valid||function(){return true;},zone=await io.zone(m.pts[0],valid,!!o.missing);if(o.missing&&!zone){o.missing('zone|'+T.encodePolyline(m.pts)+'|'+Math.floor(t/60000));return Object.assign(unmatched(m,'No stored timezone'),{at:Date.now(),depart:t});}var clock=wall(Math.ceil(t/MINUTE)*MINUTE,zone),q=query(m.pts[0],m.pts[m.pts.length-1],clock,o.avoid),line=T.encodePolyline(m.pts),identity=q+'|'+line,key='google-v1|'+hash(identity),now=io.now?io.now():Date.now(),ttl=o.cachePolicy.ttl,held=get(key,ttl),fresh=o.freshAfter||0;
    function usable(hp){return hp&&Array.isArray(hp.rows)&&hp.rows.length&&Number.isFinite(hp.at)&&hp.at>=fresh&&now-hp.at<ttl&&hp.seconds>0;}
    if(!valid())throw Error('Traffic lookup cancelled');
-   if(!o.force&&held&&held.identity===identity){if(held.unmatched&&Number.isFinite(held.at)&&held.at>=fresh&&now-held.at<10*MINUTE)return Object.assign(unmatched(m,held.unmatched),{at:held.at,depart:t,cached:true});var hp=held.profile;if(usable(hp))return Object.assign({},hp,{cached:true});}
-   if(!o.force&&tune.tolerance>0)for(var dm=1;dm<=tune.tolerance;dm++)for(var sg=-1;sg<=1;sg+=2){var qd=query(m.pts[0],m.pts[m.pts.length-1],clock+sg*dm*60,o.avoid),hd=get('google-v1|'+hash(qd+'|'+line),ttl);if(hd&&hd.identity===qd+'|'+line&&usable(hd.profile))return Object.assign({},hd.profile,{cached:true,nearMinutes:sg*dm});}
+   var partial=function(hp){return o.retryPartial&&hp&&!(hp.coverage>=.95);};if(!o.force&&held&&held.identity===identity){if(held.unmatched&&!o.retryPartial&&Number.isFinite(held.at)&&held.at>=fresh&&now-held.at<10*MINUTE)return Object.assign(unmatched(m,held.unmatched),{at:held.at,depart:t,cached:true});var hp=held.profile;if(usable(hp)&&!partial(hp))return Object.assign({},hp,{cached:true});}
+   if(!o.force&&tune.tolerance>0)for(var dm=1;dm<=tune.tolerance;dm++)for(var sg=-1;sg<=1;sg+=2){var qd=query(m.pts[0],m.pts[m.pts.length-1],clock+sg*dm*60,o.avoid),hd=get('google-v1|'+hash(qd+'|'+line),ttl);if(hd&&hd.identity===qd+'|'+line&&usable(hd.profile)&&!partial(hd.profile))return Object.assign({},hd.profile,{cached:true,nearMinutes:sg*dm});}
    if(!o.force&&io.observations){
     // A cached interior section is a useful split only near its forecast arrival.
     // Otherwise future-hour/day records fragment a fresh whole-road request into tiny fetches.
@@ -147,7 +147,7 @@
    }
 
    if(o.missing){o.missing(key);return Object.assign(unmatched(m,'No stored forecast'),{at:now,depart:t});}
-   var pendingKey=identity+(fresh?'|after|'+fresh:o.force?'|force':'');
+   var pendingKey=identity+(fresh?'|after|'+fresh:o.force?'|force':o.retryPartial?'|retry':'');
    if(o.onQueue)o.onQueue();
    // 0.0.363: a shared read stays wanted while ANY caller still wants it; one caller's cancellation (the comparison
    // queue's previous car) must not cancel another caller's identical piece.
