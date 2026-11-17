@@ -40,7 +40,7 @@ ctx.S.trip.legDepartures=[0,null,120000];assert(ctx.restWindowIssues([{}, {arriv
  calls.length=0;c.restReplan=async()=>{calls.push(false);return {plan:{ok:false,restTimingInvalid:true},opts:{}};};
  await assert.rejects(c.restCommit());assert.deepEqual(calls,[false],'timing violations do not trigger pointless station discovery');
  const rest=fs.readFileSync('assets/web/restui.js','utf8'),legs=[],r={screen:{holding:()=>false},focusedTraffic:0,C:{forecast:()=>{},trafficEnabled:()=>true,snapshot:()=>({})},state:{token:7},endsOf:()=>[10,20,30],legSites:()=>[{}],reco:new Map(),recoKey:(_s,i)=>i,startReco:async i=>legs.push(i)};
- vm.createContext(r);vm.runInContext(rest.slice(rest.indexOf('  async function autoReco('),rest.indexOf('  function recoNote(')),r);
+ vm.createContext(r);vm.runInContext(rest.slice(rest.indexOf('  async function autoReco('),rest.indexOf('  function recoHtml(')),r);
  await r.autoReco({model:{}},7);assert.deepEqual(legs,[0,1,2],'suggestions start for every original leg');
  legs.length=0;await r.autoReco({model:{}},6);assert.equal(legs.length,0,'superseded searches stop automatic recommendations');
  console.log('Missing-station recovery runs once; timing failures skip it; automatic rest recommendations cover all legs and respect cancellation');

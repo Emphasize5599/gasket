@@ -15,7 +15,7 @@ async function progressive(){
 async function parallel(){
  const blocked=deferred(),started=[],s={model:{},route:{}};
  const c={state:{token:1,busy:false},screen:{holding:()=>false},focusedTraffic:0,C:{snapshot:()=>s,forecast(){},trafficEnabled:()=>true},endsOf:()=>[1,2],legSites:()=>[{}],recoEntry:()=>null,startReco:i=>{started.push(i);return i===0?blocked.promise:Promise.resolve();}};
- vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  async function autoReco('),src.indexOf('  function recoNote(')),c);
+ vm.createContext(c);vm.runInContext(src.slice(src.indexOf('  async function autoReco('),src.indexOf('  function recoHtml(')),c);
  const work=c.autoReco(s,1);await tick();assert.deepEqual(started,[0,1],'a slow first leg must not prevent second-leg screening from starting');blocked.resolve();await work;
 }
 async function lateEnable(){

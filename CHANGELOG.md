@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.496 — 2026-11-17
+
+- Rest stop rows: the satellite picture is full width again; your rating sits right of Edit, with the icon buttons on the line below (Not pleasing is now a crossed-out tree).
+- Under the buttons each place shows only two tiles, distance off route and rest length (tinted light yellow to green against the other places in the list), a price tile when one is known, and its hours when the source lists them (U.S. DOT rest areas are treated as open around the clock).
+- Each row and stop now labels four times: since your last rest, driving on this leg, arrival and estimated departure.
+- Bug fixes
+
 ## 0.0.495 — 2026-11-17
 
 - Stops → Rest stops is one entrance per leg, styled like the app's other menu entrances; a leg that needs an overnight rest is outlined. Sources and filters and the overnight-stop shortcut moved inside each leg's list.
