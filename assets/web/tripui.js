@@ -1349,6 +1349,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       built[step] = { model: model, result: result, off: speedOff() };
       bindStep(step);
       b.scrollTop = keepY == null ? 0 : keepY;
+      if (keepY != null && Math.abs(b.scrollTop - keepY) > 1) { var keepStep = step; requestAnimationFrame(function () { if (shown === keepStep && tpBody() === b) b.scrollTop = keepY; }); }   // new content not laid out to full height yet: the browser clamped it
     } else {
       b.scrollTop = scrolls[step] || 0;
       if (step === ST_ADVISORY && window.Advisory && Advisory.wake) Advisory.wake();   // a car switch while it was hidden

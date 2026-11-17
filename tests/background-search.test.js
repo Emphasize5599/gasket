@@ -39,7 +39,8 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
     await discover();
     await p.waitForSelector('#jobBar:not(.hidden)',{timeout:2000}).catch(()=>{});   // the dock paints on the next animation frame
     assert.equal(await p.locator('#jobBar:not(.hidden)').count(), 1, 'The global status bar remains visible above Adjustments');
-    assert.equal(await p.locator('#taResults .prog-load').count(),0,'no duplicate progress inside the menu');assert.equal(await p.locator('#jobBar [data-cancel="stations"]').count(),1,'cancellation stays available in the dock');assert.equal(await p.isDisabled('#tNext'),true);assert.equal(await p.innerText('#tNext'),'Next');
+    assert.equal(await p.locator('#taResults .prog-load').count(),0,'no duplicate progress inside the menu');await p.waitForSelector('#jobBar [data-cancel="stations"]',{state:'attached',timeout:5000}).catch(()=>{});   // the stations row paints a frame after the dock shows
+    assert.equal(await p.locator('#jobBar [data-cancel="stations"]').count(),1,'cancellation stays available in the dock');assert.equal(await p.isDisabled('#tNext'),true);assert.equal(await p.innerText('#tNext'),'Next');
     assert.equal(await p.locator('#taResults .card.skel .prog-load').count(),0,'buffer/detour skeletons do not repeat station discovery progress');
     assert.equal(await p.locator('#taResults .price-refresh-card .prog-load').count(),0,'refresh tile only shows CSS placeholders');assert.equal(await p.locator('#taResults .scan-pending').count(),1);
     assert.deepEqual(await p.evaluate(() => [1, 2, 3, 4, 5, 7, 8, 9].map((k) => document.querySelector('#tpSteps [data-step="' + k + '"]').disabled)), [true, false, true, false, true, true, false, true],

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.494 — 2026-11-17
+
+- Publish 0.0.493, which produced no APK: two UI checks raced the status bar and the Timing redraw on a fast build machine.
+- A redraw that keeps your place on Route or Timing reapplies it a frame later if the page wasn't fully laid out yet.
+- Bug fixes
+
 ## 0.0.493 — 2026-11-16
 
 - Fix a traffic-cache defect that made rest suggestions needlessly slow: sections cached for incompatible arrival hours/days could split one fresh road forecast into many small requests. Use cached interior boundaries only when their times plausibly match arrival there; continue verifying road geometry and actual forecast clocks before reuse.

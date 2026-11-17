@@ -2,6 +2,12 @@
 
 Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the owner's design questionnaire and decisions. It describes target behavior; it does not mark those features implemented. Consult it before redesigning the planning flow.
 
+## 0.0.494 - two CI races (493 published no APK)
+
+493's CI run 43976379136 failed tolls-ui line 24 ("the redraw kept the scroll position") and background-search line 42 ("cancellation stays available in the dock", 0 vs 1), both within ~1.5 s on a fast runner; neither reproduced locally (alone, 6× parallel, CPU throttled 4×). background-search: Tasks draws on the next animation frame, so the `#jobBar:not(.hidden)` wait could pass on an earlier task before the stations row (with its ✕) was drawn; the test now waits for `#jobBar [data-cancel="stations"]` (5 s) before the count. tolls-ui: cause not proven; likely the Timing redraw's `b.scrollTop = keepY` clamping while the new content wasn't at full height. renderStep now reapplies keepY on the next frame when the browser clamped it (only while the same step is shown); the test waits ≤ 3 s for the scroll to settle within 40 px before the same assertion. No assertion weakened. 493's tag untouched. Not phone-verified.
+
+Phone check: Timing (or Route) scrolled down → change "How should Gasket plan your times?": the page stays where you were.
+
 ## 0.0.486 - MINI trim from vPIC Series; remaining-brand VIN coverage
 
 Owner: test the remaining brands except GM / Stellantis, primary source first, no more fallbacks. vPIC (2 dealer VINs each, table in docs/VIN_TRIM_RESEARCH.md) names the trim for Acura, BMW, Mercedes ("GLC300-4M"), Volvo, Land Rover, Jaguar, Porsche, Lincoln, Rivian, Lucid. MINI: Trim blank, Series "Cooper S" → fromVpic uses Series when Make MINI and Series is Cooper / Cooper S / Cooper SE / John Cooper Works. No source: Infiniti, Mitsubishi (vPIC blank; their stores' VIN search lands on "problem selecting your vehicle" with every trim), Genesis (vPIC lists every trim, no store), plus Hyundai and Ford from before. Tesla / Polestar vPIC blank but the EPA model names carry the version. Test vin-trim (MINI Series, chassis code ignored). Not phone-verified.

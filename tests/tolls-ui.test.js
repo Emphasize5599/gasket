@@ -21,7 +21,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  assert.equal(await p.evaluate(()=>__app.S.trip.tollCompare&&__app.S.trip.altCompare),true,'comparing tolls turns on the route comparison');
  // 0.0.424: a setting that redraws Route keeps your place instead of jumping to the top
  await p.evaluate(()=>__trip.step(10));await p.waitForSelector('#twPlanningMode');const vp=p.viewportSize();await p.setViewportSize({width:vp.width,height:420});const y0=await p.evaluate(()=>{const b=document.getElementById('tpBody');b.scrollTop=b.scrollHeight;return b.scrollTop;});assert(y0>100,'the Timing page scrolls at this size');
- await p.selectOption('#twPlanningMode','windows');await p.waitForFunction(()=>document.getElementById('twPlanningMode').value==='windows');assert(Math.abs(await p.evaluate(()=>document.getElementById('tpBody').scrollTop)-y0)<40,'the redraw kept the scroll position');
+ await p.selectOption('#twPlanningMode','windows');await p.waitForFunction(()=>document.getElementById('twPlanningMode').value==='windows');await p.waitForFunction(y=>Math.abs(document.getElementById('tpBody').scrollTop-y)<40,y0,{timeout:3000}).catch(()=>{});   // the redraw settles a frame later on a fast runner
+ assert(Math.abs(await p.evaluate(()=>document.getElementById('tpBody').scrollTop)-y0)<40,'the redraw kept the scroll position');
  await p.selectOption('#twPlanningMode','fixed');await p.setViewportSize(vp);await p.evaluate(()=>__trip.step(3));
  // Leaving the address field can start the same request automatically during the Route redraw.
  await p.evaluate(()=>{const s=__trip.state(),b=document.querySelector('#tGetRoutes:not(:disabled)');if(!s.model&&!s.busy&&b)b.click();});
