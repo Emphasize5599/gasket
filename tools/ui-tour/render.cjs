@@ -4,7 +4,7 @@ const fs = require('fs'), path = require('path'), { pathToFileURL } = require('u
 const WEB = path.resolve(__dirname, '../../assets/web');
 const UNROLL = `
 html,body{height:auto!important;min-height:0!important;overflow:visible!important}
-body{position:static!important}
+body{position:static!important;background:var(--bg)!important}
 #startupScreen,.scroll-hint,.sub-hint,#taskHub,#apiCount{display:none!important}
 [data-tour-surface]{position:relative!important;inset:auto!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;height:auto!important;max-height:none!important;min-height:0!important;transform:none!important;overflow:visible!important;width:100%!important}
 [data-tour-surface] *{max-height:none!important}

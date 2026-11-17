@@ -45,13 +45,13 @@ async function back(p, before) {
 async function variants(p, note, max = 40) {
   const list = await surfaceEval(p, (s, vis, skip) => {
     const out = [];
-    s.querySelectorAll('input[type=checkbox], input[type=radio], .seg button, select').forEach((e, i) => {
+    s.querySelectorAll('input[type=checkbox], input[type=radio], .seg button, .seg2 button, select').forEach((e, i) => {
       if (e.closest(skip) || e.matches(skip) || e.disabled) return;
       const shown = vis(e) || (e.closest('label') && vis(e.closest('label')));
       if (!shown) return;
       if (e.tagName === 'SELECT' && (e.options.length < 2 || e.options.length > 8)) return;
       if (e.type === 'radio' && e.checked) return;
-      if (e.matches('.seg button') && (e.classList.contains('on') || e.getAttribute('aria-pressed') === 'true')) return;
+      if (e.matches('.seg button, .seg2 button') && (e.classList.contains('on') || e.getAttribute('aria-pressed') === 'true')) return;
       e.setAttribute('data-tour-v', String(i)); out.push(i);
     });
     return out;
@@ -175,32 +175,37 @@ async function tripTour(browser, carId) {
   await require(path.join(ROOT, 'tests/onboarding-ui.js'))(p);
   await p.evaluate(id => { Garage.installDemo(); __app.S.carId = id; Tires.airDue = () => false; Climate.ackDue = () => false; }, carId);
   await p.evaluate(fs.readFileSync(path.join(ROOT, 'tests/trip_mocks.js'), 'utf8'));
-  await p.evaluate(() => { const A = __app; A.S.trip.fuel = { mode: 'miles', miles: '120' }; A.S.trip.milesLeft = '120'; A.S.trip.tankPrice = '3.50'; A.S.trip.evTankPrice = '.30'; A.S.trip.departNow = true; window.__skipHazardRulesStep = false; });
+  await p.evaluate(() => { const A = __app; A.S.trip.fuel = { mode: 'miles', miles: '120' }; A.S.trip.milesLeft = '120'; A.S.trip.tankPrice = '3.50'; A.S.trip.evTankPrice = '.30'; A.S.trip.departNow = true; A.S.apiKey = 'AIzaSyTESTKEY0123456789abcdefghijklmnop'; A.S.keylessRegular = false; const P = { '100 Main St, Testville': ['tour-a', 34.7695, -92.2671], '200 Main St, Testville': ['tour-b', 32.7767, -96.797] }, find = window.__mocks.find; window.__mocks.find = (q, ...a) => P[q.trim()] ? { places: [{ id: P[q.trim()][0], displayName: { text: q }, formattedAddress: q + ', USA', location: { latitude: P[q.trim()][1], longitude: P[q.trim()][2] } }] } : find ? find(q, ...a) : { places: [] }; });
   await p.click('#btnTrip'); await wait(p, 600);
   await p.evaluate(() => __trip.step(3)); await wait(p, 500);
   await crawl(p, 'route (empty) · ' + carId, 1);
-  await p.fill('#tFrom', '100 Main St, Testville').catch(() => {}); await p.fill('#tTo', 'Dallas, TX').catch(() => {});
+  await p.click('#tSrc [data-src="typed"]').catch(() => {});
+  await p.fill('#tFrom', '100 Main St, Testville').catch(() => {}); await p.fill('#tTo', '200 Main St, Testville').catch(() => {});
   await p.click('#tGetRoutes').catch(() => {}); await wait(p, 2500);
-  let lastKey = '', same = 0; const seen = new Set(), until = Date.now() + 240000;
+  let lastKey = '', same = 0; const seen = new Set(), until = Date.now() + 480000;
   for (let i = 0; i < 40 && Date.now() < until; i++) {
     await p.waitForFunction(() => !__trip.state().busy, null, { timeout: 30000 }).catch(() => {});
     await wait(p, 600);
     const t = await top(p);
     const step = await p.evaluate(() => __trip.state().step);
     const key = t + '|' + await p.evaluate(() => (document.querySelector('#tNext') || {}).textContent || '');
-    if (!seen.has(key)) { seen.add(key); await crawl(p, 'trip · ' + carId + ' · step ' + step, 2, { max: 25 }); }
+    if (!seen.has(key)) { seen.add(key); await crawl(p, 'trip · ' + carId + ' · step ' + step, 2, { variants: false }); }
     else await cap(p, 'trip · ' + carId);
     if (t === 'cfm') { await p.evaluate(() => document.getElementById('cfmYes').click()); continue; }
     if (t.startsWith('sub')) { await back(p, 'trip:' + step); continue; }
     if (step === 9) break;
+    // trying Route's options (round trip, avoid…) drops the routes; fetch them again before moving on
+    if (step === 3 && await p.evaluate(() => { const g = document.getElementById('tGetRoutes'); return !!(g && g.offsetParent && !__trip.state().route); })) { await p.click('#tGetRoutes').catch(() => {}); await wait(p, 2500); }
+    for (const id of await p.evaluate(() => [...document.querySelectorAll('#trip input.need')].filter(e => e.offsetParent && !e.value).map(e => e.id))) await p.fill('#' + id, '120').catch(() => {});
     const moved = await p.evaluate(() => { const yes = document.querySelector('#twYes, [data-tw-yes], #hzYes'); const n = yes && yes.offsetParent ? yes : document.getElementById('tNext'); if (!n || n.disabled) return false; n.click(); return true; });
+    if (key === lastKey) log('state', step, JSON.stringify(await p.evaluate(() => ({ model: !!__trip.state().model, next: (document.getElementById('tNext') || {}).textContent, need: [...document.querySelectorAll('.need')].map(e => e.id || e.className), toast: (document.querySelector('.toast') || {}).textContent, text: (document.querySelector('#trip .tp-body') || {}).innerText.slice(0, 900) }))));
     if (!moved) { log('trip stuck at step', step, carId); break; }
     if (key === lastKey && ++same > 2) { log('trip not advancing at step', step, carId); break; }
     if (key !== lastKey) { lastKey = key; same = 0; }
     await wait(p, 900);
   }
   // visit each step directly too, so steps the flow skipped still get a look
-  for (const s of [3, 4, 10, 5, 8, 6, 7, 9]) { await p.evaluate(s => __trip.step(s), s).catch(() => {}); await wait(p, 1200); await crawl(p, 'trip · ' + carId + ' · step ' + s, 1, { max: 15 }); }
+  for (const s of [3, 4, 10, 5, 8, 6, 7, 9]) { await p.evaluate(s => __trip.step(s), s).catch(() => {}); await wait(p, 1200); await crawl(p, 'trip · ' + carId + ' · step ' + s, 1, { max: 25 }); }
   await p.close();
 }
-module.exports = { run, crawl, capture: cap };
+module.exports = { run, crawl, capture: cap, tripTour, init: (d, l) => { dir = d; if (l) log = l; } };
