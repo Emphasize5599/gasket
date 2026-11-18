@@ -1620,6 +1620,8 @@
   // a (?) that would wrap alone takes the word before it along (the pair never splits)
   function glueQ(q){
     if(q.dataset.glued||!q.parentNode||q.parentNode.matches('.in-q,.obs-row,.tz-same,.qglue'))return;q.dataset.glued='1';
+    // a flex / grid parent would make the word its own item (a new line): only plain text flow
+    if(!/^(inline|block|inline-block|list-item|table-cell)$/.test(getComputedStyle(q.parentNode).display))return;
     var p=q.previousSibling;while(p&&p.nodeType===3&&!p.textContent.trim())p=p.previousSibling;
     if(!p||p.nodeType!==3)return;var t=p.textContent,m=t.match(/(\S+)\s*$/);if(!m)return;
     var span=document.createElement('span');span.className='qglue';p.textContent=t.slice(0,m.index);
