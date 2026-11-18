@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.508 — 2026-11-18
+
+- The DEMO_KEY hint is back on the DOE charger key (where a blank key really uses the shared demo key), not the car pictures key.
+- Bug fixes
+
 ## 0.0.507 — 2026-11-18
 
 - Station details: Don't use this station is a caution (yellow) button.

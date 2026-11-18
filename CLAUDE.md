@@ -4,6 +4,10 @@ Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the ow
 
 UI screenshot tour (on demand, every screen at 412 px, light and dark): `tools/ui-tour`, Actions → UI screenshot tour; see [docs/UI_TOUR.md](docs/UI_TOUR.md). New UI tests can be added to its list in `tools/ui-tour/run.cjs`.
 
+## 0.0.508 - DEMO_KEY hint on the DOE key
+
+507's APK (a3820a6) shipped DEMO_KEY as the Fuel API key placeholder; e0bc99a put it back on `#nrelKey` (no version bump, so its build stopped at the tag guard). 508 ships that. Phone check: Settings → Connections: DOE key shows DEMO_KEY, Fuel API key blank.
+
 ## 0.0.507 - small UI tweaks from the screenshot tour
 
 Owner's 2026-11-18 list items 3–10 (the rest is TODO 63–70). app.js `glueQ` / `glueAll` + a document MutationObserver (one rAF per batch): each `.qi` whose previous text node ends in a word gets wrapped with that word in `.qglue` (nowrap), skipped inside `.in-q`, `.obs-row`, `.tz-same` and when the parent is flex / grid (the word would become its own item on a new line: caught by ev-feasibility / keyless-discovery-ui); `data-glued` marks done. Removed 0.0.499's `.field > .switch` margin-left. Station details `bl-add caution`. garage: `#tEpa` summary small only when no EPA identity; `.ac-src` line gone; Features summary = "Features (?)" (note moved into the qBtn; the click handler's preventDefault keeps the details from toggling), no "N checked"; `#gDetails[open] > summary small` hidden. Dark `--danger-bg` is opaque (`color-mix(#ff7a73 14%, var(--surface))`) so the sticky red Tires header doesn't show content through it. tires `.tz-retry-row` (two buttons, one row). advisory roadsideCard: `#advTowHelp` is now a `.sub-ent` "Find out why" (same id, same handler). DEMO_KEY placeholder stays on `#nrelKey` (DOE: a blank key really uses the shared DEMO_KEY; the owner mixed it up with Fuel API.s demo key and asked to keep it). UI tour: render makes the surface a 915px-min flex column with its last child pushed to the bottom; viewer keeps scrollY across screens (waits for the images). Not phone-verified.
