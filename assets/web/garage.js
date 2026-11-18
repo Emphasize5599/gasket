@@ -724,7 +724,7 @@
     // its toggle event comes a task later: a redraw before it folded the tile you just opened (read it live instead)
     var yOld = $('tEpa'); if (yOld && yOld.isConnected && !yOld.hasAttribute('data-forced')) epaStay = yOld.open ? c.id : (epaStay === c.id ? null : epaStay);
     var yFold = hasEpa(c) && !epaOpen && epaStay !== c.id, yForced = yFold && !trimOk(c);
-    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (yFold && !yForced ? '' : ' open') + (yForced ? ' data-forced' : '') + '><summary>' + ymmTitle + '<small>' + (hasEpa(c) && c.year ? esc(vehicleLabel(c,[c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))) : 'no VIN? pick your car here') + '</small></summary>' +
+    if(!custom)h += '<details class="epa ymm" id="tEpa"' + (yFold && !yForced ? '' : ' open') + (yForced ? ' data-forced' : '') + '><summary>' + ymmTitle + (hasEpa(c) && c.year ? '' : '<small>no VIN? pick your car here</small>') + '</summary>' +
       '<div id="vinLookupLoading" role="status"></div><div class="epa-grid">'+[['eYear','Year'],['eMake','Make'],['eModel','Model'],['eOpt','Engine / transmission']].map(function(x,i){var value=c.epaId&&hasEpa(c)?[c.year,c.make,c.model,c.epaId][i]:'',label=i===3?c.epaOption||'Saved EPA selection':i===2?vehicleLabel(c,value):value;return '<label class="nf"><span>'+x[1]+'<span class="req" aria-label="required">*</span></span><select id="'+x[0]+'" aria-label="'+x[1]+'" required'+(x[0]==='eYear'&&value?' data-saved-epa="1"':'')+(x[0]==='eYear'||value?'':' disabled')+'><option value="">'+x[1]+'</option>'+(value?'<option selected value="'+esc(value)+'">'+esc(label)+'</option>':'')+'</select></label>';}).join('')+'</div>' +
       '<div class="epa-msg" id="eMsg"></div>' + trimHtml(c) + '</details>';
     if(custom)h += '<button type="button" class="btn tonal sm" id="gCatalog">Browse vehicles (NHTSA)</button>';
@@ -919,7 +919,6 @@
       h += '<div class="ac-vers" id="gVers"><div class="sub-h">Which version is yours?</div><p class="lead small keep">The EPA lists ' + list.length + ' for the ' + esc(c.year + ' ' + c.make + ' ' + baseOf(c)) + '. Your owner\'s manual or window sticker says which. Adding your VIN settles it for good.</p>' +
         list.map(function (x) { return '<button type="button" data-vid="' + esc(x.id) + '" class="' + (x.id === c.epaId ? 'on' : '') + '">' + esc(variantText(x.p) || x.text) + '</button>'; }).join('') + '</div>';
     }
-    h += '<div class="lead small keep ac-src">' + (c.vin ? 'From your VIN' + (c.epaId ? ' and the EPA\'s record' : '') + '.' : 'From the EPA\'s record for this model.' + (list.length > 1 ? ' Tap ▾ if yours is another version.' : '')) + '</div>';
     return h;
   }
   function customPanel(c) {
@@ -936,12 +935,12 @@
     var i = c.info || {}, on = i.features || [], fs = i.featSrc || {};
     var fl = FEATURES.filter(function (f) { return featApplies(f, c); }).sort(function (a, b) { return a.label.localeCompare(b.label); });
     var n = fl.filter(function (f) { return on.indexOf(f.key) >= 0; }).length;
-    return '<details class="ac-feats" id="gFeats"' + (featOpen ? ' open' : '') + '><summary><span>Features<small>' + n + ' checked</small></span></summary>' +
+    return '<details class="ac-feats" id="gFeats"' + (featOpen ? ' open' : '') + '><summary><span>Features ' + A.qBtn('Checked ones marked "from your VIN" or "from the EPA" are confirmed. Check anything else your car has: Advisory uses this list.') + '</span></summary>' +
       '<div class="ac-flist">' + fl.map(function (f) {
         var chk = on.indexOf(f.key) >= 0, conf = chk && (fs[f.key] === 'vin' || fs[f.key] === 'epa');
         return '<div class="ac-f"><label><input type="checkbox" data-feat="' + esc(f.key) + '"' + (chk ? ' checked' : '') + '><span>' + esc(f.label) +
           (conf ? '<small>' + (fs[f.key] === 'vin' ? 'from your VIN' : 'from the EPA') + '</small>' : '') + '</span></label>' + A.qBtn(f.q) + '</div>';
-      }).join('') + '</div><div class="lead small keep">Checked ones marked "from your VIN" or "from the EPA" are confirmed. Check anything else your car has: Advisory uses this list.</div></details>';
+      }).join('') + '</div></details>';
   }
   /** The Garage page's About this car: what's known, to read. Changing it is in Edit (the Details section). */
   function infoView(c) {

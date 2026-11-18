@@ -864,7 +864,7 @@
   window.undoToast = undoToast;
   /** Buttons for a station's details: mark / unmark a bad CITGO, and count Walmart+ on its diesel at your own risk. */
   function blButtons(st, idp, grade) {
-    var ig = IG.has(st), igh = ig ? '<div class="bl-on"><span>Gasket won\'t use this station.</span><button class="btn tonal sm" id="' + idp + 'IgRm">Use again</button></div>' : '<button class="btn tonal bl-add" id="' + idp + 'IgAdd">Don\'t use this station</button>';
+    var ig = IG.has(st), igh = ig ? '<div class="bl-on"><span>Gasket won\'t use this station.</span><button class="btn tonal sm" id="' + idp + 'IgRm">Use again</button></div>' : '<button class="btn tonal bl-add caution" id="' + idp + 'IgAdd">Don\'t use this station</button>';
     if (st.brand !== 'citgo') return '<div class="bl-box">' + igh + '</div>';
     var bad = BL.has(st), h = '<div class="bl-box">';
     if (bad) h += '<div class="bl-on"><span>On your bad CITGO list — no Walmart+ here.</span><button class="btn tonal sm" id="' + idp + 'BlRm">Remove</button></div>';
@@ -1275,7 +1275,7 @@
       '<div class="field"><div class="lbl">Google website traffic forecasts<small>Keyless, estimated traffic at your projected arrival. Sends route sections and departure times to Google; origin timezone lookup uses Open-Meteo. Verification may be required. © Google.</small></div>' + sw('googleTraffic', S.googleTraffic !== false).replace('<input ', '<input id="googleTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">Use HERE for traffic forecasts<small>Optional alternative to Google website forecasts. Uses the shared HERE allowance; toll estimates remain independent.</small></div>' + sw('hereTraffic', S.hereTraffic === true).replace('<input ', '<input id="hereTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">HERE routing lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); traffic forecasts and toll lookups share this cap. Check your HERE account allowance.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
-      '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
+      '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" placeholder="DEMO_KEY" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
       '<div class="field"><div class="lbl">Fast-charging price estimate ($/kWh)<small>Used only if you allow chargers without published prices and the route has too few known rates. Also estimates your starting battery cost.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
       '<div class="field"><div class="lbl">Hydrogen price ($/kg)<small>What you expect to pay. California stations have been around $30–36.</small></div><input type="number" id="h2Price" min="0" max="100" step="0.5" value="' + (S.h2Price || 36) + '"></div></div>';
     h += '<div class="card"><h3>Station lists</h3>' +
@@ -1617,6 +1617,16 @@
   function qBtn(html) { return '<button type="button" class="qi" aria-label="More info" data-q="' + encodeURIComponent(html) + '">?</button>'; }
   function cleanNumber(input){if(!input||!input.matches||!input.matches('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"]'))return;var value=input.value,next=value.replace(/^([+-]?)\.(?=\d)/,'$10.');if(next!==value){var at=input.selectionStart;input.value=next;if(at!=null)try{input.setSelectionRange(at+1,at+1);}catch(e){}}}
   ['input','change','blur'].forEach(function(type){document.addEventListener(type,function(e){cleanNumber(e.target);},true);});
+  // a (?) that would wrap alone takes the word before it along (the pair never splits)
+  function glueQ(q){
+    if(q.dataset.glued||!q.parentNode||q.parentNode.matches('.in-q,.obs-row,.tz-same,.qglue'))return;q.dataset.glued='1';
+    var p=q.previousSibling;while(p&&p.nodeType===3&&!p.textContent.trim())p=p.previousSibling;
+    if(!p||p.nodeType!==3)return;var t=p.textContent,m=t.match(/(\S+)\s*$/);if(!m)return;
+    var span=document.createElement('span');span.className='qglue';p.textContent=t.slice(0,m.index);
+    span.textContent=m[1]+'\u00a0';q.parentNode.insertBefore(span,q);span.appendChild(q);
+  }
+  function glueAll(root){if(root&&root.querySelectorAll)root.querySelectorAll('.qi:not([data-glued])').forEach(glueQ);}
+  if(window.MutationObserver){var glueFrame=0;new MutationObserver(function(){if(!glueFrame)glueFrame=requestAnimationFrame(function(){glueFrame=0;glueAll(document.body);});}).observe(document.documentElement,{childList:true,subtree:true});}
   function qify(root) {
     if(window.UIKit)UIKit.enhance(root);
     if(root&&root.querySelectorAll)root.querySelectorAll('input[type="number"],input[inputmode="decimal"],input[inputmode="numeric"]').forEach(cleanNumber);

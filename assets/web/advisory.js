@@ -283,7 +283,7 @@
     return list.slice().sort(function (a, b) { return lv(b) - lv(a) || ((dmy(b.date) || 0) - (dmy(a.date) || 0)); });
   }
   function tireAdvice(c) { return window.Tires ? Tires.advice(c) : []; }
-  function roadsideCard(){return '<div class="card adv-card" id="advRoadside"><h3>Emergency cash <button type="button" class="qi" data-sub-help id="advTowHelp" aria-label="Emergency towing cash guidance">?</button></h3><p class="lead small keep">Some operators require cash. Consider a $250 tow reserve; confirm price and payment first.</p></div>';}
+  function roadsideCard(){return '<div class="card adv-card" id="advRoadside"><h3>Emergency cash</h3><p class="lead small keep">Some operators require cash. Consider a $250 tow reserve; confirm price and payment first.</p><button type="button" class="sub-ent" id="advTowHelp"><span><b>Find out why</b><small>Tow costs, cash-only operators and your rights</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg></button></div>';}
   function more(html,label){return '<details class="adv-more"><summary>'+esc(label||'Details')+'</summary>'+html+'</details>';}
   function roadsideHelp(){
     if(window.__closeQ)window.__closeQ();

@@ -1158,8 +1158,8 @@ details.g-obs[open] { padding-bottom: 12px; }
 
 /* ---------- 3.25: delete confirmations, garage, recalls, EV & hydrogen ---------- */
 :root { --danger: #c62828; --danger-bg: #fdecea; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --danger: #ff7a73; --danger-bg: rgba(255, 122, 115, .14); } }
-:root[data-theme="dark"] { --danger: #ff7a73; --danger-bg: rgba(255, 122, 115, .14); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --danger: #ff7a73; --danger-bg: color-mix(in srgb, #ff7a73 14%, var(--surface)); } }
+:root[data-theme="dark"] { --danger: #ff7a73; --danger-bg: color-mix(in srgb, #ff7a73 14%, var(--surface)); }
 .btn.danger, .btn.danger-sm { color: var(--danger); }
 .btn.danger-sm.armed { background: var(--danger); color: #fff; }
 .cfm-bg { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 10, 14, 0); transition: background .16s; }
@@ -2544,7 +2544,6 @@ details:not([open]) > summary .sum-edit { display:none; }
 .toll-ask .in-btn input { flex:1; min-width:0; }
 .toll-ask-ok { color:var(--save); font-weight:600; }
 /* 0.0.499: more room left of a switch, so a label and its (?) wrap together */
-.field > .switch, .field > label.switch { margin-left:14px; }
 .card-h4 { font-size:15px; font-weight:700; color:var(--accent); margin:16px 0 4px; }
 /* 0.0.499: the blue line runs past added rests to the next numbered place; rests get their own green line only
    between two rests in a row */
@@ -2597,3 +2596,8 @@ details:not([open]) > summary .sum-edit { display:none; }
 .rest-fact.rest-traffic-yellow {background:color-mix(in srgb,#e0a800 28%,var(--surface));}
 .rest-fact.rest-traffic-red {background:color-mix(in srgb,#c62828 24%,var(--surface));}
 .rest-fact.rest-traffic-unknown {background:var(--surface-2);}
+
+.qglue { white-space:nowrap; }
+#gDetails[open] > summary small { display:none; }
+.tz-retry-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(0, 1fr)); gap:8px; margin:8px 0; }
+.tz-retry-row > .btn { width:100%; margin:0; white-space:normal; }

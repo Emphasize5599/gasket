@@ -1225,8 +1225,8 @@
     var failed = !t.size ? (tr && tr.failed ? tr : SL.failed && v && SL.key === verKey(c) + '|' + vn ? SL : tr && tr.clarFail && !v ? tr.clarError || { failed: 'error' } : null) : t.list && t.list.failed ? t.list : null;
     if (!busy[c.id] && failed) {
       hv += '<div class="lead small keep" role="status" id="tzLookupError">' + (failed.failed === 'unknown' ? 'Tire Rack has no sizes for the ' + esc(yr + vn) + '. Pick another version, or type the size from the sticker inside the driver\'s door.' : esc(failureText(failed))) + '</div>';
-      hv += '<button type="button" class="btn tonal sm" id="tzRetry">Retry Tire Rack lookup</button>';
-      if (N.openUrl) hv += '<button type="button" class="btn tonal sm" id="tzOpenSite">Open Tire Rack in browser</button>';
+      hv += '<div class="tz-retry-row"><button type="button" class="btn tonal sm" id="tzRetry">Retry Tire Rack lookup</button>' +
+        (N.openUrl ? '<button type="button" class="btn tonal sm" id="tzOpenSite">Open Tire Rack in browser</button>' : '') + '</div>';
       if (!t.size) hv += '<div class="lead small keep">You can enter the tire size from the sticker inside the driver\'s door.</div>';
     }
     // no size yet: what Tire Rack still needs from you (your version, a failed lookup) comes first, then the size box

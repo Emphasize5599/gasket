@@ -11,6 +11,8 @@ body{position:static!important;background:var(--bg)!important}
 [data-tour-surface] .tp-body,[data-tour-surface] .sub-body,[data-tour-surface] .settings-body,[data-tour-surface] .ob-body,[data-tour-surface] .sheet-body,[data-tour-surface] .page-body,[data-tour-surface] .scroll,[data-tour-surface] .cfm-body,[data-tour-surface] .ap-list{overflow:visible!important;flex:none!important;height:auto!important}
 *,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}
 .tour-whole{position:relative;width:100%;height:915px}
+[data-tour-surface]:not(.tour-whole){display:flex!important;flex-direction:column!important;min-height:915px!important}
+[data-tour-surface]:not(.tour-whole) > :last-child{margin-top:auto!important}
 `;
 async function render(rawDir, outDir, opts = {}) {
   const { chromium } = require('playwright');
@@ -70,7 +72,7 @@ const indexHtml = (list, theme) => `<!doctype html><meta charset="utf-8"><meta n
 const viewerHtml = (list, theme) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gasket UI tour viewer</title>${style(theme)}
 <div class="nav"><button onclick="go(-1)">‹ Prev</button><b id="t"></b><button onclick="go(1)">Next ›</button><a href="index.html">Index</a></div><div id="v"></div>
 <script>const L=${JSON.stringify(list.map(e => ({ t: e.title, c: e.category, s: e.source, p: e.parts })))};let i=0;
-function show(){i=Math.max(0,Math.min(L.length-1,+location.hash.slice(1)||0));const e=L[i];document.getElementById('t').textContent=(i+1)+' / '+L.length+' · '+e.t+' ('+e.c+', '+e.s+')';document.getElementById('v').innerHTML=e.p.map(p=>'<img src="'+p+'" loading="lazy">').join('');scrollTo(0,0);}
+function show(){i=Math.max(0,Math.min(L.length-1,+location.hash.slice(1)||0));const e=L[i];document.getElementById('t').textContent=(i+1)+' / '+L.length+' · '+e.t+' ('+e.c+', '+e.s+')';const y=scrollY;document.getElementById('v').innerHTML=e.p.map(p=>'<img src="'+p+'">').join('');const im=[...document.querySelectorAll('#v img')];Promise.all(im.map(x=>x.complete?0:new Promise(r=>{x.onload=x.onerror=r;}))).then(()=>scrollTo(0,y));}
 function go(d){location.hash=Math.max(0,Math.min(L.length-1,i+d));}addEventListener('hashchange',show);addEventListener('keydown',e=>{if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);});show();</script>`;
 module.exports = { render };
 if (require.main === module) render(process.argv[2], process.argv[3]).catch(e => { console.error(e); process.exit(1); });

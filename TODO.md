@@ -8,6 +8,17 @@ Latest research additions: **2026-10-27**, after 0.0.282; older entries were not
 
 ## feat — product features
 
+### Owner's 2026-11-18 UI list (from the screenshot tour)
+
+63. [ ] **Data downloads submenu.** Move every data download (DOE chargers, RIDB campgrounds, larger AI model…) into its own Settings submenu, its entrance above Map & stations.
+64. [ ] **Trip planner settings in several tiles.** Split them; anything that isn't a small app behavior goes in the planning defaults, including Leave earlier when traffic allows (+ minutes) and Raise traffic allowance to fit windows.
+65. [ ] **No typed fast-charging / hydrogen prices.** Remove the user price estimates; always estimate from nearby or average published prices.
+66. [ ] **Connections & usage layout.** General settings at the top; one expandable tile per key with its relevant settings; advanced settings (guest sources) folded at the bottom of the EV tile.
+67. [ ] **Export / import / delete checklists.** Inside Your data, an expandable tile with checkboxes: All general data (garage without VINs, station locations and prices, traffic data, rest-stop ratings / not-pleasing marks / added amenities), station preferences (use / don't use), bad CITGO lists. All ↔ each box stay in sync; Choose a folder… at the bottom. Import = Browse, then a submenu with the file's data types ticked (types the file lacks disabled), Confirm / Cancel. A folded delete tile (where Delete bad CITGO list is now) deletes any of these types.
+68. [ ] **Trailer spares and extra spares.** Trailer spare tire (drawn to the side like the car's; dropdowns below the car's, no lookups). An "additional spares" checkbox + count per vehicle. Each spare is Front / Rear / All (default All). Graphic: one All/Rear spare in the back middle; more than one go to the side in a column down the vehicle's length, then a new column; front-only spares sit toward the front, rear ones move toward the rear.
+69. [ ] **Bulk Ask Brave for features.** For features not from the EPA or VIN, one yes/no Brave prompt each, several readers at once.
+70. [ ] **Towing payment rights outside NYC.** Research cash-only / card-acceptance rules for tows in other states and cities for the Emergency cash page.
+
 ### Vehicles and fuels
 
 3. [ ] **Full plug-in hybrid planning.** Import EPA electric range and electricity consumption, accept starting charge, account for battery depletion and gasoline use, offer optional charging stops/destination charging, and split trip cost between electricity and fuel. Current PHEV planning uses gasoline mileage and tank capacity.

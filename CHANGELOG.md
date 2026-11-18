@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.507 — 2026-11-18
+
+- Station details: Don't use this station is a caution (yellow) button.
+- A (?) that would wrap onto its own line now takes the word before it along; switches are back to their normal spacing.
+- Car editor: no summary line under Year / make / model / trim or on the open Details tile, no "From the EPA's record…" line; Features' note is a (?) beside its header.
+- Advisory: Emergency cash has a Find out why entrance; the red Tires tile header stays solid in dark mode.
+- Tire Rack retry and open buttons sit side by side; DEMO_KEY hint moved to the car pictures key.
+- UI tour: footers stay at the bottom of short screens; the viewer keeps your scroll position between screens.
+- Bug fixes
+
 ## 0.0.506 — 2026-11-17
 
 - Updated saved-price regression coverage to expand Stops' Warnings tile before inspecting its notices and retry actions.
