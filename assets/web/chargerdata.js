@@ -102,6 +102,32 @@
    all=all.concat(rows.map(normOCM).filter(Boolean));if(rows.length<1000){KV.put('afdc',ck,all);return all;}var next=Math.max.apply(null,rows.map(function(s){return +s.ID||0;}));if(next<=last)break;last=next;
   }var e=new Error('Open Charge Map coverage is incomplete; more results remain.');e.stations=all;throw e;})();pending.set(ck,task);try{return await task;}finally{pending.delete(ck);}
  }
+ function hydrogenRate(st){
+  var match=String(st.pricing||'').match(/^\s*\$\s*(\d+(?:\.\d{1,2})?)\s*(?:\/|per\s+)(?:kg|kilogram)\s*$/i);
+  return match&&+match[1]>0?+match[1]:null;
+ }
+ var referenceCache={};
+ function referencePrice(kind){
+  var A=root.__app,loc=A&&A.me(),stationStore=root.StationStore;
+  var scope=kind==='ev'&&stationStore?stationStore.priceScope(root.Garage&&Garage.car()):undefined;
+  var key=JSON.stringify([loc&&loc.lat,loc&&loc.lng,scope,root.__stationRev,Math.floor(Date.now()/60000)]);
+  if(referenceCache[kind]&&referenceCache[kind].key===key)return referenceCache[kind].rate;
+  var remember=function(rate){referenceCache[kind]={key:key,rate:rate};return rate;};
+  if(loc&&stationStore){
+   for(var radius of [.4,4]){
+    var stations=stationStore.query([loc.lat-radius,loc.lng-radius,loc.lat+radius,loc.lng+radius],kind,scope);
+    var rates=stations.map(function(st){
+     if(kind==='h2')return hydrogenRate(st);
+     if(!(st.kw>=50))return null;
+     var rate=tariff(st,null,st.kw);return rate.known&&rate.complete!==false?rate.price:null;
+    }).filter(function(n){return Number.isFinite(n)&&n>0;}).sort(function(a,b){return a-b;});
+    if(rates.length)return remember((rates[Math.floor((rates.length-1)/2)]+rates[Math.floor(rates.length/2)])/2);
+   }
+  }
+  // Published reference averages. CEC, 2025 Hydrogen Refueling Network assessment, Q2 2025.
+  // Paren, US EV Fast Charging Q2 2026, nationwide $0.538/kWh.
+  return remember(kind==='h2'?35.47:.538);
+ }
  function settingsHtml(){return '<div class="field col" id="chargerSettings"><label for="nrelKey">DOE station-finder key (optional)</label><input type="password" id="nrelKey" placeholder="DEMO_KEY" autocomplete="off" spellcheck="false" value="'+esc(S.nrelKey||'')+'">'+
   '<details class="settings-help"><summary>Get a free DOE key</summary><ol class="steps"><li>Open <a href="#" data-url="https://developer.nlr.gov/signup/">DOE key signup</a> and complete the form.</li><li>Copy your API key into the box above, then tap Done.</li></ol><p>Demo: 30 requests/hour and 50/day per public IP. Personal keys normally allow 1,000/hour. No Google Cloud setup. Keys are excluded from ordinary exports and logs.</p></details>'+
   '<label for="ocmKey">Open Charge Map key (optional)</label><input type="password" id="ocmKey" autocomplete="off" spellcheck="false" value="'+esc(S.ocmKey||'')+'">'+
@@ -147,6 +173,6 @@
   button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
   button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
  }
- root.ChargerData={restRate:restRate,potentiallyComplimentary:potentiallyComplimentary,firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
+ root.ChargerData={restRate:restRate,potentiallyComplimentary:potentiallyComplimentary,firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,referencePrice:referencePrice,hydrogenRate:hydrogenRate,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();
 })(window);

@@ -25,7 +25,7 @@
       var discovery=fn==='siteRead'&&/^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0])&&/"mode"\s*:\s*"discover"/.test(args[1]||'');
       var timeout = fn === 'siteRead' && args[0] === 'tirerack' ? 80000 : fn === 'siteRead' && /^gasweb(?:[2-9]|[1-4]\d|50)?$/.test(args[0]) ? (discovery?215000:45000) : fn === 'siteRead' && /^(walmart|murphy)$/.test(args[0]) ? 95000 : fn === 'fetchJson' && /^https:\/\/overpass-api\.de\//.test(args[0] || '') ? 80000 : 0;
       if (fn === 'aiGenerate') timeout = 610000;   // native ends a run itself (GPU 120 s, CPU 600 s) and the GPU can fall back to the CPU mid-request
-      if(fn==='siteRead'&&args[0]==='brave')timeout=160000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
+      if(fn==='siteRead'&&/^brave(?:feature[1-3])?$/.test(args[0]))timeout=160000;if(fn==='siteRead'&&args[0]==='tesla')timeout=100000;if(fn==='siteRead'&&args[0]==='chargepoint')timeout=40000;if(fn==='siteRead'&&args[0]==='xom')timeout=95000;if(fn==='fetchFrancis')timeout=45000;
       if(fn==='siteShow'&&args[0]==='brave')timeout=195000;
       if(fn==='fetchEvGuest')timeout=120000;if(fn==='evGuestConfig')timeout=15000;
       if(fn==='fetchJson'&&/^https:\/\/www\.recreation\.gov\//.test(args[0]||''))timeout=33000;
@@ -213,7 +213,7 @@
   // Added rests still waiting for their departure times: the trip continues in Stops (Calculate rest timing), not in
   // Compare (which only records finished trips) or the start of the trip steps.
   function restClockState(){return restPending()&&restDraft&&restDraft.owner===route?restDraft:result;}
-  function refreshRestDraft(previous,cut,delta,recover){if(!route||!model)return;previous=previous||restClockState();var old=previous&&previous.plan||{},shift=function(d){return Number.isFinite(cut)&&d>cut?Math.max(0,d+(delta||0)):d;},plan={ok:true,stops:(old.stops||[]).map(function(st){return Object.assign({},st,{c:Object.assign({},st.c,{d:shift(st.c.d)})});}).filter(function(st){return st.c.d>=0&&st.c.d<=model.totalMi;}),destinationCharges:KIND()==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),S.evPrice):[]},opts=Object.assign({},previous&&previous.opts||{},{model:model,rewardDepartAt:departAt().getTime(),fuelKind:KIND(),stopMinutes:KIND()==='ev'?5:3,legDepartures:null,waits:restClockWaits(model)}),fit;if(recover)route.restPlanError='';try{fit=fitRestStart(opts,plan,route.stops,S.trip.legDepartures);}catch(e){if(!recover)throw e;route.restPlanError=String(e.message||e);LG.warn('rest','Saved rest timing needs correction',{reason:route.restPlanError});}if(fit){applyRestStart(fit.depart);opts.rewardDepartAt=fit.depart;opts.waits=fit.waits;}else opts.waits=RestPlan.anchoredTiming(opts,plan,route.stops,restDepartureAnchors()).waits;restDraft={owner:route,opts:opts,plan:plan,schedule:T.scheduleTimeline(opts,plan)};}
+  function refreshRestDraft(previous,cut,delta,recover){if(!route||!model)return;previous=previous||restClockState();var old=previous&&previous.plan||{},shift=function(d){return Number.isFinite(cut)&&d>cut?Math.max(0,d+(delta||0)):d;},plan={ok:true,stops:(old.stops||[]).map(function(st){return Object.assign({},st,{c:Object.assign({},st.c,{d:shift(st.c.d)})});}).filter(function(st){return st.c.d>=0&&st.c.d<=model.totalMi;}),destinationCharges:KIND()==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),ChargerData.referencePrice('ev')):[]},opts=Object.assign({},previous&&previous.opts||{},{model:model,rewardDepartAt:departAt().getTime(),fuelKind:KIND(),stopMinutes:KIND()==='ev'?5:3,legDepartures:null,waits:restClockWaits(model)}),fit;if(recover)route.restPlanError='';try{fit=fitRestStart(opts,plan,route.stops,S.trip.legDepartures);}catch(e){if(!recover)throw e;route.restPlanError=String(e.message||e);LG.warn('rest','Saved rest timing needs correction',{reason:route.restPlanError});}if(fit){applyRestStart(fit.depart);opts.rewardDepartAt=fit.depart;opts.waits=fit.waits;}else opts.waits=RestPlan.anchoredTiming(opts,plan,route.stops,restDepartureAnchors()).waits;restDraft={owner:route,opts:opts,plan:plan,schedule:T.scheduleTimeline(opts,plan)};}
   function queueRestSave(){clearTimeout(restSaveTimer);var owner=route;restSaveTimer=setTimeout(function(){restSaveTimer=null;if(route!==owner||!restPending())return;var inventory=replay&&replay.stations||restSession&&restSession.inventory||{official:[],google:[],kind:KIND()};afterPaint(function(){if(route===owner&&restPending())saveTrip({official:inventory.official||[],google:(inventory.google||[]).map(function(g){return g.list||[];}),kind:inventory.kind||KIND()},(inventory.google||[]).map(function(g){return g.k||0;}));});},750);}
   function restResume(){if(!route||!model)return;restRows().forEach(function(x){if(TripStops.needsTiming(x.rest))x.rest.pendingTiming=true;});if(restRows().some(function(x){return TripStops.needsTiming(x.rest);}))route.restEditing=true;refreshRestDraft(null,null,null,true);step=ST_STOPS;renderStep();}
   function restUIArrival(d){
@@ -401,7 +401,7 @@
   function windowDestination(i){return windows.config().destinations&&windows.config().destinations[i]||{};}
   function windowRoutes(){return choiceLists().map(function(list,i){return list.map(function(a,k){var m=T.buildRoute(a,carModel());return {key:RouteChoices.key(i,a),index:k,raw:a,name:a.description||'Route '+(k+1),model:m};});});}
   function windowRows(roads,bounds){
-    var lists=windowRoutes(),out=[],policies=[];if(KIND()==='ev'&&window.EVCharging&&model)try{policies=EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),S.evPrice);}catch(e){}
+    var lists=windowRoutes(),out=[],policies=[];if(KIND()==='ev'&&window.EVCharging&&model)try{policies=EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),ChargerData.referencePrice('ev'));}catch(e){}
     var specs=lists.map(function(list,i){var d=windowDestination(i-1),next=windowDestination(i),charge=policies.find(function(p){return p.index===i;}),delay=charge?T.destinationCharge(charge,0,Garage.tank()).minutes:0,rest=route&&route.stops[i+1]&&route.stops[i+1].rest,minimum=rest?(rest.overlap===false?(+rest.minimumRest||0)+delay:Math.max(+rest.minimumRest||0,delay)):0,originRest=i&&route.stops[i].rest;return {window:i&&d.leaveStart&&d.leaveEnd?{start:+new Date(d.leaveStart),end:+new Date(d.leaveEnd)}:originRest&&originRest.pendingTiming&&originRest.overnight&&Number.isFinite(originRest.leaveEarliest)&&Number.isFinite(originRest.nightEnd)?{start:originRest.leaveEarliest,end:originRest.nightEnd}:null,delayMin:minimum,minMinutes:Math.min.apply(null,list.map(function(r){return r.model.durationSec/120;})),maxMinutes:Math.max.apply(null,list.map(function(r){return r.model.durationSec/60*3;})),delayMax:Math.max(KIND()==='ev'?240:60,delay||0,minimum,rest&&+rest.maximumStay||0)+(+next.wait||0)};}),ranges=TimeWindows.ranges(bounds.depart,specs);
     lists.forEach(function(list,i){var span=Object.assign({},ranges[i]);if(bounds.arrival)span.end=Math.min(span.end,bounds.arrival.end);if(span.end<span.start)return;roads.filter(function(r){return r.leg===i;}).forEach(function(r){TimeWindows.hours(span.start,span.end).forEach(function(t){if(windowNoLeave(i,t))return;out.push(Object.assign({},r,{depart:t,arrive:t+r.model.durationSec*1000}));});});});return out;
   }
@@ -582,7 +582,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   }
   function windowEstimate(row){
     var session=schedulePlanning&&schedulePlanning.session||windows.current(),cache=session.estimateCache||(session.estimateCache=new Map()),proxy=cache.get(row.routeKey),m=row.model;
-    if(!proxy){var kind=KIND(),capacity=Garage.tank(),energy=m.totalMi*m.combGpm,stops=Math.max(0,Math.ceil(Math.max(0,energy-startFuel(m)+bufFloor()*m.combGpm)/Math.max(.001,capacity-bufFloor()*m.combGpm))),g=choiceCandidates.get(row.routeKey),prices=(g&&g.cands||[]).map(function(c){return c.price;}).filter(function(p){return Number.isFinite(p)&&p>=0;}),rate=prices.length?prices.reduce(function(n,p){return n+p;},0)/prices.length:Number(kind==='ev'?S.evPrice:kind==='h2'?S.h2Price:S.trip.tankPrice),toll=tripTolls(row.raw).cost;
+    if(!proxy){var kind=KIND(),capacity=Garage.tank(),energy=m.totalMi*m.combGpm,stops=Math.max(0,Math.ceil(Math.max(0,energy-startFuel(m)+bufFloor()*m.combGpm)/Math.max(.001,capacity-bufFloor()*m.combGpm))),g=choiceCandidates.get(row.routeKey),prices=(g&&g.cands||[]).map(function(c){return c.price;}).filter(function(p){return Number.isFinite(p)&&p>=0;}),rate=prices.length?prices.reduce(function(n,p){return n+p;},0)/prices.length:Number(kind==='gas'?S.trip.tankPrice:ChargerData.referencePrice(kind)),toll=tripTolls(row.raw).cost;
       if(!Number.isFinite(rate)||rate<0)rate=kind==='ev'?.4:kind==='h2'?30:4;
       proxy={cost:energy*rate+(Number.isFinite(toll)?toll:0),service:stops*(kind==='ev'?35:kind==='h2'?12:10)};cache.set(row.routeKey,proxy);}
     var profile=traffic&&traffic.profile(row.raw,row.depart);return {cost:proxy.cost,minutes:(Number.isFinite(row.forecastMinutes)?row.forecastMinutes:(profile?profile.seconds:m.durationSec)/60)+proxy.service};
@@ -1148,7 +1148,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
         var sf=Garage.speedFn&&Garage.speedFn();if(KIND()==='gas'&&sf&&!speedOff(m)){var secs=flatSecs(m);m=T.withSpeeds(m,T.speedRates(secs,secs.map(function(sc){return Garage.ruleOff(sc.limit);}),sf.f,sf.lo,sf.hi));}
         var inventory={localOnly:true,skipNetworkPrices:true,official:KIND()==='gas'?known:[],google:[{k:altSel,list:known}]},g=KIND()==='gas'?await gatherAll([m],function(){},{},false,inventory,[altSel]):await gatherAlt([m],function(){},{},inventory,[raw]);if(!valid())return false;
         var row=g.per[0],o=makeBaseOpts(m,row.cands,result.startGal,raw);o._priceOriginal=true;o._priceIndices=indices;o._priceHours=base.hours?sel.map(function(k,i){return base.hours.filter(function(h){return h.leg===i&&h.key===RouteChoices.key(i,lists[i][k]);});}):null;o.rewardDepartAt=start;o.waits=waits;o.legDepartures=null;
-        if(KIND()==='ev'&&window.EVCharging){var ed=EVCharging.state(S.trip,route.stops),items={};indices.slice(1).forEach(function(old,i){if(ed.items[old-1])items[i]=ed.items[old-1];});var trip=Object.assign({},S.trip,{evDestinations:{signature:EVCharging.signature(base.stops),items:items}});o.destinationCharges=EVCharging.policies(trip,base.stops,Garage.car(),m,Garage.tank(),S.evPrice);}
+        if(KIND()==='ev'&&window.EVCharging){var ed=EVCharging.state(S.trip,route.stops),items={};indices.slice(1).forEach(function(old,i){if(ed.items[old-1])items[i]=ed.items[old-1];});var trip=Object.assign({},S.trip,{evDestinations:{signature:EVCharging.signature(base.stops),items:items}});o.destinationCharges=EVCharging.policies(trip,base.stops,Garage.car(),m,Garage.tank(),ChargerData.referencePrice('ev'));}
         if(o.propulsionContext){o.propulsionContext=Object.assign({},o.propulsionContext,{departAt:start,waits:waits,weather:[]});var wx=await RouteWx.forRoute(m,wxGet,{depart:start});if(!valid())return false;o.propulsionContext.weather=wx.temperatures||[];}
         var optimum=await optimizeRefreshedOptions(o,valid,false,'cost');if(!valid())return false;if(!optimum||!priceWindowsFit(optimum.opts,optimum.plan,indices)){incomplete++;continue;}
         optimum=Object.assign(optimum,{cost:optimum.cost+toll.cost,sel:sel,raw:raw,candidates:row,baseline:sel.every(function(k,i){return k===selected[i];})});if(optimum.baseline)current=optimum;if(!best||optimum.cost<best.cost-.005)best=optimum;
@@ -1514,7 +1514,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
           return false;
         }
       }
-      if(KIND()==='ev'&&window.EVCharging){var errs=EVCharging.errors(S.trip,route&&route.stops||[],Garage.car(),S.evPrice);if(errs.length){flag($('evDestinations'),'pick',errs.join(' '));return false;}}
+      if(KIND()==='ev'&&window.EVCharging){var errs=EVCharging.errors(S.trip,route&&route.stops||[],Garage.car(),ChargerData.referencePrice('ev'));if(errs.length){flag($('evDestinations'),'pick',errs.join(' '));return false;}}
       return true;
     }
     if(k===ST_HAZ){
@@ -1676,7 +1676,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       return '<div class="card"><h3>' + (kd === 'ev' ? 'How charged is it?' : 'How much gas do you have?') + '</h3><div id="tFuel"></div><div id="tEmpty"></div>' +
         (kd==='ev'?'<label class="nf"><span>Starting battery temperature (°C)</span><input id="tBatteryTemp" type="number" min="-40" max="65" step="1"></label><button type="button" class="btn tonal sm" id="tBatterySoak"></button>':'')+
         '<div class="grid2">' + num('tBuffer', 'Buffer (miles)', t.bufferMi, 5, 'never go below') +
-        num('tTankPrice', kd === 'ev' ? 'What\'s in the battery cost ($/kWh)' : kd === 'h2' ? 'Your tank\'s hydrogen ($/kg)' : 'Your tank\'s gas ($/gal)', t[tankPriceKey()]||'', 0.01, kd === 'ev' ? 'e.g. home charging · blank = the typical rate of this route\'s chargers' : 'blank = typical price on the route') + '</div></div>' +
+        (kd==='gas'?num('tTankPrice',"Your tank’s gas ($/gal)",t.tankPrice||'',.01,'Blank uses typical prices on the route'):'')+'</div></div>' +
         '<div class="card"><h3>' + (kd === 'ev' ? 'Charging stops' : 'Fuel stops') + '</h3>' +
       (kd==='ev'?'<button type="button" class="btn tonal" id="tRouteChargers">Charger types on Route</button>'+netListHtml():'')+
       '<div class="seg2" id="tMode"><button data-m="cheap" class="' + (!t.fillUp ? 'on' : '') + '">Cheapest overall</button><button data-m="fill" class="' + (t.fillUp ? 'on' : '') + '">' + (kd === 'ev' ? 'Charge to 80% each stop' : 'Fill up at each stop') + '</button></div>' +
@@ -1684,7 +1684,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       '<div class="grid2">' + num('tMinSave', 'Min. savings ($)', t.minSave, 0.25, 'per stop or detour') + num('tMaxMin', 'Max. extra time (1.0–30.0 min)', t.maxDetourMin, 0.1, 'extra driving per stop',1,30) + '</div>' +
       '<div class="sub-h">When you get there <button type="button" class="qi" id="tArriveQ" aria-label="More info">?</button></div>' +
       '<div class="seg2 arrive-seg'+(kd==='ev'?' ev-arrival-selector':'')+'" id="tArrive">'+(kd==='ev'?'<button data-a="destination" class="'+(arriveNow()==='destination'?'on':'')+'">At least one of my destinations will have a charger</button>':'')+'<button data-a="buffer" class="' + (arriveNow() === 'buffer' ? 'on' : '') + '">Just keep my buffer</button><button data-a="full" class="' + (arriveNow() === 'full' ? 'on' : '') + '">Arrive with the most ' + (kd === 'ev' ? 'charge' : kd === 'h2' ? 'hydrogen' : 'gas') + '</button></div>' +
-      (kd==='ev'&&window.EVCharging?EVCharging.html(t,route&&route.stops||[],Garage.car(),S.evPrice,esc):'')+
+      (kd==='ev'&&window.EVCharging?EVCharging.html(t,route&&route.stops||[],Garage.car(),ChargerData.referencePrice('ev'),esc):'')+
 
       '<div class="grid2' + (t.arrive === 'full' ? '' : ' hidden') + '" id="tTopBox">' + num('tTopMi', 'Top-up within (mi)', t.topUpMi, 0.1, 'for an optional last top-up') + '<span></span></div>' +
       '</div><div class="card"><h3>Cruising speed</h3>' +
@@ -1860,7 +1860,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     seg('tArrive', function(){S.trip.arriveSet=true;arriveHelp();}); seg('tMode');
     if($('tNetworks'))$('tNetworks').querySelectorAll('[data-net]').forEach(function(el){el.onchange=function(){var all=Array.from($('tNetworks').querySelectorAll('[data-net]'));if(!all.some(function(x){return x.checked;})){this.checked=true;A.toast('Keep at least one charging network selected.');return;}var o={};all.forEach(function(x){o[x.dataset.net]=!x.checked;});S.trip.evNetworksOff=o;result=null;choiceCandidates.clear();A.save();gateTabs();};});
     if($('tRouteChargers'))$('tRouteChargers').onclick=function(){step=ST_ROUTE;renderStep();var card=$('tRouteCharging');if(card)card.scrollIntoView({block:'start'});};
-    if($('evDestinations'))EVCharging.bind($('evDestinations'),S.trip,route&&route.stops||[],Garage.car(),Garage.tank(),carModel().comb?1/carModel().comb:model?model.combGpm:0,S.evPrice,function(){result=null;stopRecommendations();A.save();gateTabs();},function(i){var charges=result&&result.plan&&result.plan.destinationCharges||[],c=charges.find(function(c){return c.index===i;});return c?c.arriveGal:NaN;});
+    if($('evDestinations'))EVCharging.bind($('evDestinations'),S.trip,route&&route.stops||[],Garage.car(),Garage.tank(),carModel().comb?1/carModel().comb:model?model.combGpm:0,ChargerData.referencePrice('ev'),function(){result=null;stopRecommendations();A.save();gateTabs();},function(i){var charges=result&&result.plan&&result.plan.destinationCharges||[],c=charges.find(function(c){return c.index===i;});return c?c.arriveGal:NaN;});
     var ruleSave = function () {
       var previous=S.speed.rule||{},autoCap=previous.capAuto===true||previous.cap==null;if(this.id==='tRuleCap')autoCap=false;
       S.speed.rule = { on: $('tRule').checked, over: Math.max(-10, Math.min(15, parseInt($('tRuleOver').value, 10) || 0)), cap: Math.max(40, Math.min(90, parseInt($('tRuleCap').value, 10) || Garage.ruleCap())),capAuto:autoCap };
@@ -3249,9 +3249,9 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function arriveNow(){var t=S.trip,a=t.arrive;if(KIND()==='ev'&&!t.arriveSet){t.arrive='destination';return 'destination';}return a==='full'||a==='destination'&&KIND()==='ev'?a:'buffer';}
   /** What's already in the tank / battery cost, typed per fuel kind (a gas price is never a $/kWh). */
   function tankPriceKey(){var k=KIND();return k==='gas'?'tankPrice':k+'TankPrice';}
-  function startRate(p){var tp=parseFloat(S.trip[tankPriceKey()]);return tp>0?tp:KIND()==='ev'&&evRates&&evRates.all?evRates.all:p.refPrice;}
+  function startRate(p){var tp=KIND()==='gas'?parseFloat(S.trip.tankPrice):0;return tp>0?tp:KIND()==='ev'&&evRates&&evRates.all?evRates.all:p.refPrice;}
   var evRates=null;   // this route's published charger rates (ChargerData.routeRates), for unpriced chargers and the battery's energy
-  function evGuess(dc,fallback){var r=evRates;if(r&&(dc?r.dc:r.ac))return {price:dc?r.dc:r.ac,label:'Typical published '+(dc?'fast-charging':'Level 2')+' rate on this route ('+(dc?r.nDc:r.nAc)+' chargers; estimate)'};if(r&&r.all)return {price:r.all,label:'Typical published charging rate on this route ('+(r.nDc+r.nAc)+' chargers; estimate)'};return {price:fallback,label:'Your charging-price estimate'};}
+  function evGuess(dc,fallback){var r=evRates;if(r&&(dc?r.dc:r.ac))return {price:dc?r.dc:r.ac,label:'Typical published '+(dc?'fast-charging':'Level 2')+' rate on this route ('+(dc?r.nDc:r.nAc)+' chargers; estimate)'};if(r&&r.all)return {price:r.all,label:'Typical published charging rate on this route ('+(r.nDc+r.nAc)+' chargers; estimate)'};return {price:fallback,label:'Typical public charging rate estimate'};}
   // Raw discovery, not planner candidates: changing charge/buffer/network settings
   // must re-filter and re-project. Keep each leg so switching combinations reuses it.
   var altSearches=new Map(),altPricePasses=new Map();
@@ -3278,7 +3278,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   async function gatherAlt(models, pg, dbgS,replay,rawRoutes,force) {
     var kd = KIND(), c = Garage.car(), plugs = kd === 'ev' ? Garage.plugs(c) : null, corridor = altCorridor();
     if(kd==='ev')plugs=AltFuel.compatiblePlugs(c,plugs);
-    var price = kd === 'ev' ? (+S.evPrice || 0.48) : (+S.h2Price || 36), tv = 0;
+    var price = ChargerData.referencePrice(kd), tv = 0;
     var notes = [], per = [], raw = [], skippedPrices=0,discoveryIncomplete=false,priceKeys=[],priceReused=[];
     dbgS.started = new Date().toISOString(); dbgS.kind = kd;
     for (var mi = 0; mi < models.length; mi++) {
@@ -3313,7 +3313,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       if(queueWorking&&kd==='ev'&&!(replay&&replay.localOnly))priceReused[mi]=list.every(function(st){return st.netPrice&&P.priceFresh({updated:st.netPrice.t},S.evPriceAgeHours||24);});
       raw.push(list);
     }
-    // chargers that publish no price get what this route's chargers do publish (median paid $/kWh, fast vs slower), else your estimate
+    // Use the route's published rates first, then the regional or published reference estimate.
     // Inventory searches can return thousands of sites outside the actual corridor.
     // Project once, before expensive website reads; reuse those projections below.
     var projectionAt=Date.now(),projections=[];
@@ -3330,12 +3330,15 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     evRates=kd==='ev'&&window.ChargerData&&ChargerData.routeRates?ChargerData.routeRates([].concat.apply([],raw.map(function(list,i){return list.map(function(st,j){var ch=kinds[i][j];return ch?{st:st,kw:ch.kw,dc:ch.level==='dc_fast'}:null;}).filter(Boolean);}))):null;
     for (mi = 0; mi < models.length; mi++) {
       var list = raw[mi], m = models[mi];
+      var hydrogenRates=kd==='h2'?list.map(function(st,i){return projections[mi][i].length?ChargerData.hydrogenRate(st):null;}).filter(Number.isFinite).sort(function(a,b){return a-b;}):[];
+      var h2Estimate=hydrogenRates.length?(hydrogenRates[Math.floor((hydrogenRates.length-1)/2)]+hydrogenRates[Math.floor(hydrogenRates.length/2)])/2:price;
       var cands = [];
       for (var si = 0; si < list.length; si++) {
         var st = list[si],charging=kinds[mi][si];if(kd==='ev'&&st.netPrice&&st.netPrice.src==='flo')charging=AltFuel.charging(st,c,S.trip.evChargers,plugs);if(kd==='ev'&&!charging)continue;
-        var guess=kd==='ev'?evGuess(charging.level==='dc_fast',price):{price:price,label:'Your hydrogen-price estimate'};
+        var h2Published=kd==='h2'?ChargerData.hydrogenRate(st):null;
+        var guess=kd==='ev'?evGuess(charging.level==='dc_fast',price):{price:h2Published??h2Estimate,label:h2Published!=null?'Published hydrogen rate':'Typical hydrogen price estimate'};
         var eta=departAt().getTime()+m.timeTo((projections[mi][si][0]||{}).along||0)*1000;
-        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,guess.price,charging.kw,eta):{price:price,estimated:true,label:'Your hydrogen-price estimate',updated:null};
+        var tariff=kd==='ev'&&window.ChargerData?ChargerData.tariff(st,guess.price,charging.kw,eta):{price:guess.price,known:h2Published!=null,estimated:h2Published==null,label:guess.label,updated:null};
         if(kd==='ev'&&(!AltFuel.netAllowed(st)||(!tariff.known||tariff.complete===false)&&S.evAllowUnknownPrices!==true)){skippedPrices++;continue;}
         if(tariff.estimated&&tariff.price===guess.price&&tariff.label==='Your charging-price estimate')tariff.label=guess.label;
         var prs = projections[mi][si];
@@ -4338,7 +4341,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
       model: model, cands: cands, startGal: startGal, capGal: Garage.tank(), bufferGal: tripBuf() * model.combGpm,
       propulsion:kd==='gas'?null:Object.assign({},Garage.car().propulsion,{kind:kd,capacity:cap,dcKw:curve?curve.peak:+Garage.car().dcKw||150,acKw:+Garage.car().acKw||7.2},kd==='ev'?Garage.evEnergy():{},curve?{curve:curve.points,initialTempC:battery.ambient?null:battery.temperature,ambientStart:battery.ambient===true}:{},S.trafficEnergy?{auxModel:true,preset:window.Climate&&Climate.current?Climate.current(Garage.car()):null}:{}),
       chargeCurve:curve?{points:curve.points,acKw:+Garage.car().acKw||7.2,src:curve.src}:null,propulsionContext:kd==='gas'?null:propulsionContext(model,raw),
-      destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,S.evPrice):[],
+      destinationCharges:kd==='ev'&&window.EVCharging?EVCharging.policies(S.trip,route&&route.stops||[],Garage.car(),model,cap,ChargerData.referencePrice('ev')):[],
       arriveGal: tripBuf() * model.combGpm, fillUp: S.trip.fillUp,
       // arriving with the most gas: a late, cheap fill-up is the point, so the "must save" bar drops to $0.25
       stopPenalty: S.trip.arrive === 'full' ? Math.min(S.trip.minSave, 0.25) : S.trip.minSave,
@@ -4848,7 +4851,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     h += '<button class="btn tonal" id="tChooseDirections">Directions by leg or individual stop</button>';
     var t = p.totals, out = summary||r.acc.legs[0];
     var costQ = summary?'Fuel or energy used on this leg, valued at the running average cost in your tank or battery. Purchases at a destination belong to the leg arriving there.':'The ' + out.burnGal.toFixed(1) + ' ' + UN() + ' this drive uses: what\'s already in your ' + (KIND() === 'ev' ? 'battery' : 'tank') + ' at ' + priceText(r.startPrice) + '/' + UN() +
-      (parseFloat(S.trip[tankPriceKey()]) > 0 ? ' (what you said it cost)' : KIND() === 'ev' && evRates && evRates.all ? ' (the typical published rate of this route\'s chargers; set yours in Parameters)' : ' (typical on this route; set yours in Parameters)') + ', plus what you buy at what you pay.';
+      (KIND()==='gas'&&parseFloat(S.trip.tankPrice)>0 ? ' (what you said it cost)' : KIND() === 'ev' && evRates && evRates.all ? ' (the typical published rate of this route\'s chargers)' : KIND()==='gas' ? ' (typical on this route; set yours in Parameters)' : ' (estimated from available rates)') + ', plus what you buy at what you pay.';
     var saveQ = 'Compared with filling up at the typical price on this route.' +
       (p.easy && p.savings > 0.005 ? ' The easiest plan (fewest stops, closest to the road) would be ' + money(p.easy.totals.net) + ' net vs. ' + money(t.net) + ' for this one' + (t.detourMin - p.easy.totals.detourMin > 0.5 ? ', which adds ' + Math.round(t.detourMin - p.easy.totals.detourMin) + ' min of detours' : '') + '.' : '') +
       (p.minStops != null && t.stops > p.minStops ? ' You only need ' + p.minStops + ' stop' + (p.minStops === 1 ? '' : 's') + '; the extra one pays for itself with cheaper gas.' : '');
@@ -4909,7 +4912,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
   function hzSel(i) { return legsMode() ? (route.legs[i] || {}).sel || 0 : altSel; }
   /** When you'd start leg i: when you leave, plus the legs before it (the way back: your "head back" time, if later). */
   function hzDepart(i) {
-    var t=departAt().getTime(),lastArrival=t,policies=[];if(KIND()==='ev'&&window.EVCharging&&model)try{policies=EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),S.evPrice);}catch(e){}
+    var t=departAt().getTime(),lastArrival=t,policies=[];if(KIND()==='ev'&&window.EVCharging&&model)try{policies=EVCharging.policies(S.trip,route.stops,Garage.car(),model,Garage.tank(),ChargerData.referencePrice('ev'));}catch(e){}
     for(var j=0;j<=i;j++){
       var site=route&&route.stops[j];if(j&&site&&site.rest)t=Math.max(t+(site.rest.overlap?0:site.rest.minimumRest*60000),lastArrival+site.rest.minimumRest*60000,site.rest.leaveAt);
       if(j&&site&&!site.rest&&windows&&windows.enabled()){var anchor=restDepartureAnchors()[j];if(Number.isFinite(anchor))t=Math.max(t,anchor);}if(j&&j===hzLegs()-1&&S.trip.returnTrip&&(!windows||!windows.enabled())&&!backAuto()&&S.trip.backAt)t=Math.max(t,+new Date(S.trip.backAt));if(j===i)return t;
@@ -6032,7 +6035,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     if(!s)return ST_PARAMS;
     if((s.route&&s.route.stops||[]).some(function(p){return p.rest&&(!RestPlaces.hasPermission(p.rest,c.id,VehicleCompare.profile(c))||p.rest.leaveAt<Date.now());}))return ST_PARAMS;
     var kd=Garage.kind(c),f=FuelGauge.math.norm(s.trip.fuel,kd,s.trip.milesLeft);
-    if(!(FuelGauge.math.miles(f,+c.tank,Garage.carModel(c).comb)>0)||FuelGauge.math.empty(f,+c.tank,Garage.carModel(c).comb)||kd==='ev'&&EVCharging.errors(s.trip,s.route&&s.route.stops||[],c,S.evPrice).length)return ST_PARAMS;
+    if(!(FuelGauge.math.miles(f,+c.tank,Garage.carModel(c).comb)>0)||FuelGauge.math.empty(f,+c.tank,Garage.carModel(c).comb)||kd==='ev'&&EVCharging.errors(s.trip,s.route&&s.route.stops||[],c,ChargerData.referencePrice('ev')).length)return ST_PARAMS;
     if(s.trip.windowPlan&&s.trip.windowPlan.enabled&&windows&&!windows.readyFor(s))return ST_HAZ;
     return comparePrepared(s)?null:ST_HAZ;
   }
@@ -6186,7 +6189,7 @@ o.bufferGal=o.arriveGal=x.buffer*m.combGpm;o.maxDetourMin=x.detour;o.objective=p
     // wasn't there at the review (one that went away never asks).
     var extreme=hazards.filter(compareExtreme).map(function(h){return h.kind+'|'+(h.event||'');}).filter(function(k,i,a){return a.indexOf(k)===i;}),baseline=compareReviewed&&old&&old.reviewedAt===compareReviewed&&old.reviewExtreme?old.reviewExtreme:null;
     if(baseline){var added=extreme.filter(function(k){return baseline.indexOf(k)<0;});if(added.length){LG.info('compare','New extreme hazard: review needed',{plan:key,added:added});compareReviewed=0;compareReviewProof=null;}}
-    var s={id:key,mode:old&&old.mode,savedAt:Date.now(),profile:profile,kind:KIND(),trip:VehicleCompare.clone(S.trip),speed:VehicleCompare.clone(S.speed),route:route,alts:alts,altSel:altSel,altSure:altSure,rawRoute:rawRoute,model:model,result:result,replay:replay,evRates:evRates,hzCache:hzCache,hzModels:hzModels,hzRiskAcks:hzRiskAcks,hzLeg:hzLeg,choiceSavedId:choiceSavedId,choiceChecked:choiceChecked,choiceReviewedAt:choiceReviewedAt,choiceComplete:choiceComplete,choicePool:choicePool,choiceCandidates:choiceCandidates,routeReview:routeReview,reviewedAt:compareReviewed,needsReview:!compareReviewed,hazards:hazards,tolls:choiceLists().map(function(l,i){return tollsOf(l[hzSel(i)]);}),startEstimated:!(+S.trip[tankPriceKey()]>0),resumeStep:step===ST_COMPARE?old&&old.resumeStep||ST_ADVISORY:Math.min(step,ST_STOPS)};
+    var s={id:key,mode:old&&old.mode,savedAt:Date.now(),profile:profile,kind:KIND(),trip:VehicleCompare.clone(S.trip),speed:VehicleCompare.clone(S.speed),route:route,alts:alts,altSel:altSel,altSure:altSure,rawRoute:rawRoute,model:model,result:result,replay:replay,evRates:evRates,hzCache:hzCache,hzModels:hzModels,hzRiskAcks:hzRiskAcks,hzLeg:hzLeg,choiceSavedId:choiceSavedId,choiceChecked:choiceChecked,choiceReviewedAt:choiceReviewedAt,choiceComplete:choiceComplete,choicePool:choicePool,choiceCandidates:choiceCandidates,routeReview:routeReview,reviewedAt:compareReviewed,needsReview:!compareReviewed,hazards:hazards,tolls:choiceLists().map(function(l,i){return tollsOf(l[hzSel(i)]);}),startEstimated:!(KIND()==='gas'&&+S.trip.tankPrice>0),resumeStep:step===ST_COMPARE?old&&old.resumeStep||ST_ADVISORY:Math.min(step,ST_STOPS)};
     Object.defineProperty(s.trip,'routeChoices',{value:VehicleCompare.clone(S.trip.routeChoices||{}),writable:true,configurable:true,enumerable:false});
     s.speedTiming=KIND()==='gas'&&!speedOff()?flatSecs(model).map(function(sc,i){var offsets=result&&result.speedState&&result.speedState.offsets||{};return Object.assign({},sc,{offset:offsets[i]==null?Garage.ruleOff(sc.limit):offsets[i],lo:25,hi:Math.max(80,+S.speed.max||84)});}):[];
     s.evRecovery=evRecovery&&evRecovery.base===result?evRecovery:null;s.adjustError=adjustError;

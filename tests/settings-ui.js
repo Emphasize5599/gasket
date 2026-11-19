@@ -7,3 +7,10 @@ module.exports=async function(p,group){
  await p.click('[data-settings-group="'+group+'"]');
  while(await p.locator('.settings-group:not(.hidden) details[data-ux-performance]:not([open])').count())await p.locator('.settings-group:not(.hidden) details[data-ux-performance]:not([open])').first().locator(':scope > summary').click();
 };
+
+module.exports.openTiles=async function(p,ids){
+ for(const id of ids){
+  const summaries=p.locator('details:has(#'+id+'):not([open]) > summary:visible');
+  while(await summaries.count())await summaries.first().click();
+ }
+};

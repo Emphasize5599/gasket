@@ -167,7 +167,7 @@ async function run() {
     const ui = await browser.newPage({ viewport: { width: 412, height: 915 } });
     ui.on('pageerror', e => errors.push(e.message));
     await ui.goto(pathToFileURL(path.join(root, 'assets/web/index.html')).href);
-    await require('./settings-ui')(ui,'connections');await ui.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop');
+    await require('./settings-ui')(ui,'connections');await require('./settings-ui').openTiles(ui,['apiKey']);await ui.fill('#apiKey', 'AIzaSyTESTKEY0123456789abcdefghijklmnop');
     await require('./onboarding-ui')(ui);
     await ui.evaluate(fs.readFileSync(path.join(root, 'tests/trip_mocks.js'), 'utf8'));
     await ui.evaluate(() => {
@@ -249,7 +249,7 @@ async function run() {
     const catalogUI = await browser.newPage({viewport:{width:320,height:800}});
     catalogUI.on('pageerror',e=>errors.push(e.message));
     await catalogUI.goto(pathToFileURL(path.join(root,'assets/web/index.html')).href);
-    await require('./settings-ui')(catalogUI,'connections');await catalogUI.fill('#apiKey','AIzaSyTESTKEY0123456789abcdefghijklmnop'); await require('./onboarding-ui')(catalogUI);
+    await require('./settings-ui')(catalogUI,'connections');await require('./settings-ui').openTiles(catalogUI,['apiKey']);await catalogUI.fill('#apiKey','AIzaSyTESTKEY0123456789abcdefghijklmnop'); await require('./onboarding-ui')(catalogUI);
     await catalogUI.evaluate(fs.readFileSync(path.join(root,'tests/trip_mocks.js'),'utf8'));
     await catalogUI.evaluate(tires=>{
       __app.S.cars.push({id:'prius-catalog',name:'2016 Prius Two',year:2016,make:'Toyota',model:'Prius',trim:'Two',info:{},obs:{},entries:[],tires:{size:'195/65R15',sizeSrc:'user',type:'grand touring all-season',brand:'Cooper',model:'Endeavor',list:{size:'195/65R15',catalogVersion:2,failed:'incomplete',t:Date.now(),items:[{brand:'Continental',model:'SecureContact AW',type:'Grand Touring All-Season'}]}}});

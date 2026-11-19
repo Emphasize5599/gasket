@@ -9,7 +9,7 @@ await p.evaluate(()=>{
  window.resolveAI=()=>{const pending=aiPending.shift();if(!pending)return;aiActive--;onNativeResult(pending.id,{text:JSON.stringify({summary:'The rear tread needs attention first.',top:[{n:1,why:'Consider the checked condition and fitment together.'}]})});modelState.phase='idle';modelState.busy=false;onGemmaStatus({...modelState});};
  onGemmaStatus({...modelState});__app.openSettings(false);
 });
-await require('./settings-ui')(p,'ai');await p.locator('#gemmaSettings').scrollIntoViewIfNeeded();await p.click('#gemmaEnable');assert(!await p.isDisabled('#gemmaDownload'));assert.equal(await p.evaluate(()=>aiCalls.includes('download')),false);
+await require('./settings-ui')(p,'downloads');await p.click('#gemmaEnable');assert(!await p.isDisabled('#gemmaDownload'));assert.equal(await p.evaluate(()=>aiCalls.includes('download')),false);
 await p.click('#gemmaDownload');await p.click('#cfmNo');assert.equal(await p.evaluate(()=>aiCalls.includes('download')),false,'explicit consent required');await p.click('#gemmaDownload');await p.click('#cfmYes');await p.waitForSelector('#jobBar');assert.match(await p.locator('#jobBar').innerText(),/Downloading Gemma/);
 // time left from the recent speed (a few minutes at these test speeds)
 await p.evaluate(()=>{const real=Date.now;let t=real();Date.now=()=>t;Object.assign(modelState,{phase:'download',bytes:100e6});onGemmaStatus({...modelState});t+=10000;Object.assign(modelState,{bytes:200e6});onGemmaStatus({...modelState});Date.now=real;});

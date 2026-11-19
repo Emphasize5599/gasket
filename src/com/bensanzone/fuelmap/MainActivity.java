@@ -368,6 +368,11 @@ public class MainActivity extends Activity {
         workers.put("tirerack", new SiteWorker("tirerack", "https://www.tirerack.com/tires/brands", "https://www.tirerack.com/"));
         // Brave Search's AI answer: a car's fuel tank size (in the background, or shown to the user to finish it themselves)
         workers.put("brave", new SiteWorker("brave", "https://search.brave.com/", "https://search.brave.com/"));
+        for (int lane = 1; lane <= 3; lane++) {
+            String reader = "bravefeature" + lane;
+            workers.put(reader, new SiteWorker(reader, "https://search.brave.com/", "https://search.brave.com/"));
+        }
+
         // Tesla's charger map: Supercharger prices it publishes signed out (read in the background, a few sites at a time)
         workers.put("tesla", new SiteWorker("tesla", "https://www.tesla.com/findus", "https://www.tesla.com/"));
         // ChargePoint's public station page: the price each station's host set (one station per read)
@@ -1409,7 +1414,9 @@ public class MainActivity extends Activity {
         handleQueueIntent(i);
     }
 
-    private static final int PICK_FILE = 4711, RESTORE_FILE = 4712, PICK_IMAGE = 4713;
+    private static final int PICK_FILE = 4711, RESTORE_FILE = 4712, PICK_IMAGE = 4713, EXPORT_DATA = 4714;
+    private int exportDataReq = -1;
+    private String exportDataText;
     private int pickReq = -1, restoreReq = -1, imagePickReq = -1;
 
     // ---------------- full backup / restore (moving to a new install) ----------------
@@ -1565,6 +1572,30 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == EXPORT_DATA && exportDataReq >= 0) {
+            final int id = exportDataReq;
+            final String contents = exportDataText;
+            exportDataReq = -1;
+            exportDataText = null;
+            final Uri destination = result == RESULT_OK && data != null ? data.getData() : null;
+            new Thread(() -> {
+                JSONObject response = new JSONObject();
+                try {
+                    if (destination == null) response.put("cancelled", true);
+                    else {
+                        try (java.io.OutputStream out = getContentResolver().openOutputStream(destination, "wt")) {
+                            if (out == null) throw new java.io.IOException("Could not open the selected document");
+                            out.write(contents.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        }
+                        response.put("saved", true);
+                    }
+                } catch (Exception e) {
+                    try { response.put("error", "Could not write the export"); } catch (Exception ignored) { }
+                }
+                reply(id, response);
+            }).start();
+            return;
+        }
         if (request == RESTORE_FILE && restoreReq >= 0) {
             final int rq = restoreReq; restoreReq = -1;
             final Uri ru = result == RESULT_OK && data != null ? data.getData() : null;
@@ -2542,6 +2573,101 @@ public class MainActivity extends Activity {
             return f;
         }
 
+        private boolean portableNamespace(String ns) {
+            return "stationstore".equals(ns) || "pricehistory".equals(ns) || "traffic".equals(ns);
+        }
+
+        private void importPortableRecord(String ns, File file, String value) throws Exception {
+            if (!file.exists()) {
+                KVStore.write(file, value, true);
+                return;
+            }
+            // Rows and columns index the station cells. Combining them makes imported
+            // cells discoverable even when the receiving device already has a cache.
+            if (!"stationstore".equals(ns)) return;
+            JSONObject saved = new JSONObject(readAll(new java.io.FileInputStream(file)));
+            JSONObject incoming = new JSONObject(value);
+            if (!(saved.opt("v") instanceof JSONArray) || !(incoming.opt("v") instanceof JSONArray)) return;
+            JSONArray existing = saved.getJSONArray("v"), added = incoming.getJSONArray("v");
+            java.util.LinkedHashSet<Integer> cells = new java.util.LinkedHashSet<>();
+            for (JSONArray list : new JSONArray[]{existing, added}) {
+                for (int i = 0; i < list.length(); i++) {
+                    Object cell = list.get(i);
+                    if (!(cell instanceof Number)) return;
+                    int n = ((Number) cell).intValue();
+                    if (n < 0 || n > 2500 || ((Number) cell).doubleValue() != n) return;
+                    cells.add(n);
+                }
+            }
+            if (cells.size() > existing.length()) {
+                saved.put("v", new JSONArray(cells));
+                KVStore.write(file, saved.toString(), true);
+            }
+        }
+
+        @JavascriptInterface
+        public void portableRecords(final int id, final String ns, final String incoming) {
+            new Thread(() -> {
+                JSONObject result = new JSONObject();
+                try {
+                    if (!portableNamespace(ns)) throw new IllegalArgumentException("Unknown data type");
+                    JSONObject records = incoming.isEmpty() ? new JSONObject() : new JSONObject(incoming);
+                    if (!incoming.isEmpty()) {
+                        for (java.util.Iterator<String> keys = records.keys(); keys.hasNext();) {
+                            String name = keys.next();
+                            if (!name.matches("[a-f0-9]{40}")) throw new IllegalArgumentException("Invalid record name");
+                            JSONObject envelope = new JSONObject(records.getString(name));
+                            if (!envelope.has("v") || !envelope.has("t")) throw new IllegalArgumentException("Invalid record");
+                        }
+                    }
+                    synchronized (MainActivity.this) {
+                        File dir = kvDir(ns, KV_STORAGE.contains(ns));
+                        if (incoming.isEmpty()) {
+                            File[] files = dir.listFiles();
+                            long size = 0;
+                            if (files != null) for (File file : files) {
+                                if (!file.isFile() || !file.getName().matches("[a-f0-9]{40}")) continue;
+                                size += file.length();
+                                if (size > 6000000) throw new java.io.IOException("Use a full backup for large caches");
+                                records.put(file.getName(), readAll(new java.io.FileInputStream(file)));
+                            }
+                            result.put("records", records);
+                        } else {
+                            if (!dir.exists()) dir.mkdirs();
+                            for (java.util.Iterator<String> keys = records.keys(); keys.hasNext();) {
+                                String name = keys.next();
+                                File file = new File(dir, name);
+                                importPortableRecord(ns, file, records.getString(name));
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    try { result.put("error", incoming.isEmpty() ? "Could not export " + ns + ". For large caches, use a full backup." : "Could not import " + ns); } catch (Exception ignored) { }
+                }
+                reply(id, result);
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void exportPortable(final int id, final String name, final String contents) {
+            main.post(() -> {
+                if (exportDataReq >= 0) { js("window.onNativeResult&&onNativeResult(" + id + ",{error:'Export already open'})"); return; }
+                if (contents.length() > 6500000) { js("window.onNativeResult&&onNativeResult(" + id + ",{error:'Export too large. Choose fewer data types or use a full backup.'})"); return; }
+                exportDataReq = id;
+                exportDataText = contents;
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/json");
+                intent.putExtra(Intent.EXTRA_TITLE, name);
+                try { startActivityForResult(intent, EXPORT_DATA); }
+                catch (Exception e) {
+                    exportDataReq = -1;
+                    exportDataText = null;
+                    js("window.onNativeResult&&onNativeResult(" + id + ",{error:'File picker unavailable'})");
+                }
+            });
+        }
+
         @JavascriptInterface
         public String kvGet(String ns, String key) {
             try {
@@ -2632,9 +2758,10 @@ public class MainActivity extends Activity {
             main.post(new Runnable() {
                 public void run() {
                     SiteWorker w = ensureWorker(key);
-                    String script = w != null ? asset((isGasWorker(key) ? "gasweb" : isOemVin(key) ? "oemvin" : key) + "_worker.js") : "";
+                    boolean braveReader = "brave".equals(key) || key.matches("bravefeature[1-3]");
+                    String script = w != null ? asset((isGasWorker(key) ? "gasweb" : isOemVin(key) ? "oemvin" : braveReader ? "brave" : key) + "_worker.js") : "";
                     if ("restmaps".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/restmaps.js") + "\nreturn (" + script + ")(reqId,args);}";
-                    if ("brave".equals(key) && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
+                    if (braveReader && script.length() > 0) script = "async function(reqId,args){\n" + asset("web/trims.js") + "\nreturn (" + script + ")(reqId,args);}";
                     boolean gasDiscovery = false;
                     try { gasDiscovery = "discover".equals(new JSONObject(argsJson).optString("mode")); } catch (Exception ignored) { }
                     // Only saved-station refresh needs the application matcher; discovery has no target list.
@@ -2645,7 +2772,7 @@ public class MainActivity extends Activity {
                     boolean ok = ("nhtsa".equals(key) && url.startsWith("https://www.nhtsa.gov/recalls?vymm="))
                             || ("walmart".equals(key) && url.equals("https://www.walmart.com/store-finder"))
                             || ("murphy".equals(key) && url.equals("https://service.murphydriverewards.com/mapmodule/"))
-                            || ("brave".equals(key) && (url.startsWith("https://search.brave.com/search?") || url.startsWith("https://search.brave.com/ask?")))
+                            || (braveReader && (url.startsWith("https://search.brave.com/search?") || url.startsWith("https://search.brave.com/ask?")))
                             || ("tirerack".equals(key) && url.startsWith("https://www.tirerack.com/tires/"))
                             || ("tesla".equals(key) && url.equals("https://www.tesla.com/findus"))
                             || ("chargepoint".equals(key) && url.matches("https://driver\\.chargepoint\\.com/stations/[0-9]{4,12}"))
@@ -2708,7 +2835,7 @@ public class MainActivity extends Activity {
                         JSONObject arguments = new JSONObject(argsJson);
                         discoveryRead = "discover".equals(arguments.optString("mode"));
                     } catch (Exception ignored) { }
-                    main.postDelayed(fw.readDeadline, "brave".equals(key) ? 150000 : "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) || isOemVin(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
+                    main.postDelayed(fw.readDeadline, braveReader ? 150000 : "restmaps".equals(key) ? 35000 : "campendium".equals(key) ? 60000 : "xom".equals(key) || isOemVin(key) ? 35000 : "tirerack".equals(key) ? 75000 : isGasWorker(key) ? (discoveryRead ? 210000 : 40000) : "nhtsa".equals(key) ? 120000 : 90000);
                     main.postDelayed(new Runnable() {
                         public void run() {
                             if (fw.view == null) return;

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.addInitScript(()=>sessionStorage.setItem('standinRestored',JSON.stringify({s:JSON.stringify({setupDone:true,apiKey:''})})));
  await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href+'#restored');await p.waitForSelector('#btnLocate.live');
- await p.click('#btnSettings');await require('./settings-ui')(p,'connections');assert.match(await p.innerText('#settings'),/Google API key · recommended/i);
+ await p.click('#btnSettings');await require('./settings-ui')(p,'connections');assert.match(await p.innerText('#settings'),/Google Maps API key/i);
  assert.equal(await p.inputValue('#apiKey'),'');await require('./onboarding-ui')(p);
  await p.evaluate(fs.readFileSync('tests/trip_mocks.js','utf8'));
  await p.evaluate(()=>{

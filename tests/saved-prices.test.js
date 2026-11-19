@@ -12,7 +12,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   const p=await b.newPage({viewport:{width:320,height:900}}),errors=[];
   p.on('pageerror',e=>errors.push(e.message));
   await p.goto(pathToFileURL(path.join(root,'assets/web/index.html')).href);
-  await require('./settings-ui')(p,'connections');await p.fill('#apiKey','AIzaSyTESTKEY0123456789abcdefghijklmnop');await require('./onboarding-ui')(p);
+  await require('./settings-ui')(p,'connections');await require('./settings-ui').openTiles(p,['apiKey']);await p.fill('#apiKey','AIzaSyTESTKEY0123456789abcdefghijklmnop');await require('./onboarding-ui')(p);
   await p.evaluate(fs.readFileSync(path.join(root,'tests/trip_mocks.js'),'utf8'));
   await p.evaluate(()=>{
     const A=__app,S=A.S;S.trip.fuel={mode:'miles',miles:'180'};S.trip.milesLeft='180';S.trip.bufferMi=20;S.brands={exxon:true};

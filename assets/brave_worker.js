@@ -40,7 +40,8 @@ async function (reqId, args) {
   // the best-ranked figure (the first of those): a "20-gallon tank, light at 4 gallons left" answer is 20, not 4
   const best = (list) => list.reduce((a, x) => (!a || x.rank > a.rank ? x : a), null);
   // the AI answer's own text, or '' (not there yet)
-  const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), dckw = !!(args && args.kind === 'dckw'), packs = !!(args && args.kind === 'packs'), words = spare || trims || dckw || packs;   // text answers, not a number
+  const feature = !!(args && args.kind === 'feature');
+  const spare = !!(args && args.kind === 'spare'), trims = !!(args && args.kind === 'trims'), dckw = !!(args && args.kind === 'dckw'), packs = !!(args && args.kind === 'packs'), words = spare || trims || dckw || packs || feature;   // text answers, not a number
   const loc = typeof location !== 'undefined' ? location : { pathname: '', search: '' };
   const ask = loc.pathname.indexOf('/ask') === 0;
   // Ask rewrites the address with an abbreviated question once a conversation begins.
@@ -62,7 +63,7 @@ async function (reqId, args) {
     if (spare) a = a.replace(/Start with:?\s*Full-size spare,?\s*Compact spare,?\s*Repair kit,?\s*Run-flat tires,?\s*(or\s+)?No spare\.?/gi, ' ');
     return flat(a);
   };
-  const packWords = /\bPACK:|battery pack|lithium iron phosphate|\bLFP\b|\bNCA\b|\bNMC\b|pack chemistry/i; const want = packs ? packWords : spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /gal/i;
+  const packWords = /\bPACK:|battery pack|lithium iron phosphate|\bLFP\b|\bNCA\b|\bNMC\b|pack chemistry/i; const want = feature ? /\b(?:yes|no|unknown)\b/i : packs ? packWords : spare ? /spare|repair kit|inflator|run-?flat/i : trims ? /\btrims?\b/i : dckw ? /\d\s*-?\s*kw(?!h)\b/i : /gal/i;
   const aiText = () => {
     let best = null;
     document.querySelectorAll('div, section, article, aside').forEach((el) => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.509 — 2026-11-19
+
+- Group data downloads, trip defaults, and connection keys in Settings.
+- Estimate fast-charging and hydrogen prices from available rates.
+- Choose which garage, station, traffic, and rest-stop data to export, import, or delete.
+- Configure trailer spares and additional spares. Ask Brave about multiple vehicle features at once.
+- See payment rules for covered tows in Texas, Washington, California, and Palm Beach County.
+
 ## 0.0.508 — 2026-11-18
 
 - The DEMO_KEY hint is back on the DOE charger key (where a blank key really uses the shared demo key), not the car pictures key.

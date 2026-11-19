@@ -1049,6 +1049,128 @@
     if (kind !== 'all' || text.length < 300000) N.shareText('Gasket ' + (kind === 'all' ? 'data' : 'bad CITGO list'), text);
     toast(where && !/^error/.test(where) ? 'Saved to ' + where : kind === 'all' ? 'Couldn\'t save the file' + (where ? ' (' + where.replace(/^error: /, '') + ')' : '') : 'Shared the list');
   }
+  var portableTypes = {
+    general:'General data (garage without VINs, stations, prices, traffic and rest-stop marks)',
+    preferences:'Station preferences (use / don’t use)',
+    citgo:'Bad CITGO lists'
+  };
+  var portableNamespaces = ['stationstore','pricehistory','traffic'];
+  function portableChecklist(action, available) {
+    return '<fieldset data-portable-list><legend>Data types</legend><label class="keep"><input type="checkbox" data-portable-all> All</label>'+
+      Object.keys(portableTypes).map(function(k){
+        return '<label class="keep"><input type="checkbox" value="'+k+'" data-portable-type'+
+          (available.includes(k)?(action==='delete'?'':' checked'):' disabled')+'> '+esc(portableTypes[k])+'</label>';
+      }).join('')+'</fieldset>';
+  }
+  function bindPortable(host, button, action) {
+    var master=host.querySelector('[data-portable-all]'),boxes=Array.from(host.querySelectorAll('[data-portable-type]:not(:disabled)'));
+    function sync(){
+      var checked=boxes.filter(function(box){return box.checked;}).length;
+      master.checked=!!boxes.length&&checked===boxes.length;
+      master.indeterminate=checked>0&&checked<boxes.length;
+      master.disabled=!boxes.length;
+      button.disabled=!checked;
+    }
+    master.onchange=function(){boxes.forEach(function(box){box.checked=master.checked;});sync();};
+    boxes.forEach(function(box){box.onchange=sync;});
+    button.onclick=async function(){
+      button.disabled=true;
+      try{await action(boxes.filter(function(b){return b.checked;}).map(function(b){return b.value;}));}
+      catch(e){toast(e.message);}
+      finally{sync();}
+    };
+    sync();
+  }
+  function portableCars(cars) {
+    return JSON.parse(JSON.stringify(Array.isArray(cars)?cars:[]),function(key,value){
+      return /^vin/i.test(key)?undefined:value;
+    });
+  }
+  function restMarks() {
+    return (((KV.get('restplaces','user-index')||{}).v)||[]).map(function(id){
+      var record=(KV.get('restplaces','user|'+id)||{}).v;
+      if(!record||!record.origin||!['rating','unsightly','amenities'].some(function(k){return record[k]!=null;}))return null;
+      var marks={origin:record.origin};
+      ['rating','unsightly','amenities'].forEach(function(key){if(record[key]!=null)marks[key]=record[key];});
+      return {id:id,marks:marks};
+    }).filter(Boolean);
+  }
+  async function transferRecords(namespace, incoming) {
+    if(!N.portableRecords)throw Error('This transfer needs the Android app.');
+    var result=await window.__trip.call('portableRecords',namespace,incoming?JSON.stringify(incoming):'');
+    if(result.error)throw Error(result.error);
+    return result.records||{};
+  }
+  async function exportPortable(types) {
+    var data={gasketPortable:1, types:{}};
+    if(types.includes('general')){
+      var records={};
+      for(var ns of portableNamespaces)records[ns]=await transferRecords(ns);
+      data.types.general={cars:portableCars(S.cars),records:records,rests:restMarks()};
+    }
+    if(types.includes('preferences'))data.types.preferences={ignored:IG.list(),brands:S.brands};
+    if(types.includes('citgo'))data.types.citgo=BL.list();
+    if(!N.exportPortable)throw Error('The folder picker needs the Android app.');
+    var result=await window.__trip.call('exportPortable','gasket-data-'+stamp()+'.json',JSON.stringify(data));
+    if(result.error)throw Error(result.error);
+    if(result.saved)toast('Export saved.');
+  }
+  async function importPortable() {
+    var res=await window.__trip.call('pickTextFile');
+    if(res.cancelled)return;
+    if(res.error)throw Error(res.error);
+    var file=JSON.parse(res.body),data=file.gasketPortable===1?file.types:null;
+    if(!data&&(file.gasketData===1||file.fuelPlusData===1)){
+      data={};
+      if(Array.isArray(file.blacklist))data.citgo=file.blacklist;
+      if(file.settings&&Array.isArray(file.settings.cars))data.general={cars:file.settings.cars};
+      if(file.settings&&Array.isArray(file.settings.ignoredStations))data.preferences={ignored:file.settings.ignoredStations};
+    }
+    if(!data||typeof data!=='object')throw Error('That is not a Gasket data export.');
+    var available=Object.keys(portableTypes).filter(function(k){return Object.prototype.hasOwnProperty.call(data,k)&&data[k]!=null;});
+    if(!available.length)throw Error('This file has no importable data.');
+    var close=subPage('Import data',portableChecklist('import',available)+'<button class="btn primary" data-portable-confirm>Confirm</button><button class="btn tonal" data-portable-cancel>Cancel</button>',function(body){
+      body.querySelector('[data-portable-cancel]').onclick=function(){close();};
+      bindPortable(body,body.querySelector('[data-portable-confirm]'),async function(types){
+        if(types.includes('general')){
+          var g=data.general;
+          for(var ns of portableNamespaces)if(g.records&&g.records[ns])await transferRecords(ns,g.records[ns]);
+          mergeData({gasketData:1,settings:{cars:portableCars(g.cars)}},'all');
+          var index=((KV.get('restplaces','user-index')||{}).v||[]).slice();
+          (Array.isArray(g.rests)?g.rests:[]).forEach(function(row){
+            if(!row||typeof row.id!=='string'||!row.marks||!row.marks.origin||!Number.isFinite(row.marks.origin.lat)||!Number.isFinite(row.marks.origin.lng)||Math.abs(row.marks.origin.lat)>90||Math.abs(row.marks.origin.lng)>180)return;
+            var key='user|'+row.id,record=(KV.get('restplaces',key)||{}).v||{origin:row.marks.origin};
+            ['rating','unsightly','amenities'].forEach(function(k){if(record[k]==null&&row.marks[k]!=null)record[k]=row.marks[k];});
+            if(KV.put('restplaces',key,record)&&!index.includes(row.id))index.push(row.id);
+          });
+          KV.put('restplaces','user-index',index);
+        }
+        if(types.includes('preferences')){
+          var current=IG.list(),incoming=data.preferences;
+          (Array.isArray(incoming.ignored)?incoming.ignored:[]).forEach(function(row){if(row&&typeof row.id==='string'&&Number.isFinite(row.lat)&&Number.isFinite(row.lng)&&!current.some(function(v){return v.id===row.id;}))current.push(row);});
+          if(incoming.brands&&typeof incoming.brands==='object')Object.keys(S.brands).forEach(function(k){if(typeof incoming.brands[k]==='boolean')S.brands[k]=incoming.brands[k];});
+        }
+        if(types.includes('citgo'))mergeData({gasketData:1,blacklist:data.citgo},'bl');
+        save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));BL.changed();close();toast('Selected data imported.');
+      });
+    });
+  }
+  async function deletePortable(types) {
+    if(!await confirmDel({always:true,title:'Delete selected data?',body:types.map(function(k){return esc(portableTypes[k]);}).join('<br>'),action:'Delete'}))return;
+    if(types.includes('general')){
+      S.cars=[];S.carId='';N.saveCache('');gStations=[];official={};stations=[];lastFetch=null;
+      portableNamespaces.forEach(function(ns){KV.clear(ns);});
+      restMarks().forEach(function(row){
+        var key='user|'+row.id,record=(KV.get('restplaces',key)||{}).v;
+        if(record){delete record.rating;delete record.unsightly;delete record.amenities;KV.put('restplaces',key,record);}
+      });
+    }
+    if(types.includes('preferences')){S.ignoredStations=[];S.brands=Object.assign({},P.DEFAULTS.brands);}
+    if(types.includes('citgo'))S.blacklist=[];
+    save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));BL.changed();
+    // Reload hydrated in-memory caches and garage state after a deletion.
+    location.reload();
+  }
   /** Full backup: the native side writes every setting, saved answer, trip and lookup count straight to a file. */
   function fullBackup(btn) {
     if (!N.backupAll || !window.__trip) { toast('This needs the app.'); return; }
@@ -1275,19 +1397,18 @@
       '<div class="field"><div class="lbl">Google website traffic forecasts<small>Keyless, estimated traffic at your projected arrival. Sends route sections and departure times to Google; origin timezone lookup uses Open-Meteo. Verification may be required. © Google.</small></div>' + sw('googleTraffic', S.googleTraffic !== false).replace('<input ', '<input id="googleTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">Use HERE for traffic forecasts<small>Optional alternative to Google website forecasts. Uses the shared HERE allowance; toll estimates remain independent.</small></div>' + sw('hereTraffic', S.hereTraffic === true).replace('<input ', '<input id="hereTraffic" ') + '</div>' +
       '<div class="field"><div class="lbl">HERE routing lookups this month<small class="keep">' + (N.hereCallsThisMonth ? N.hereCallsThisMonth() : 0) + ' used. Stops at this many (0 = no limit); traffic forecasts and toll lookups share this cap. Check your HERE account allowance.</small></div><input type="number" id="hereMonthlyCap" min="0" max="100000" step="100" value="' + (S.hereMonthlyCap == null ? 2000 : S.hereMonthlyCap) + '"></div>' +
-      '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>' +
-      '<div class="field"><div class="lbl">Fast-charging price estimate ($/kWh)<small>Used only if you allow chargers without published prices and the route has too few known rates. Also estimates your starting battery cost.</small></div><input type="number" id="evPrice" min="0" max="2" step="0.01" value="' + (S.evPrice || 0.48) + '"></div>' +
-      '<div class="field"><div class="lbl">Hydrogen price ($/kg)<small>What you expect to pay. California stations have been around $30–36.</small></div><input type="number" id="h2Price" min="0" max="100" step="0.5" value="' + (S.h2Price || 36) + '"></div></div>';
+      '<div class="field col"><div class="lbl">Car pictures key (optional)<small>Fuel API: pick one of your trim\'s factory colors under Edit and see your car in it. Demo keys show a large FUEL watermark on every picture (kept as is). Get one: <a href="#" data-url="https://fuelapi.com/demo">fuelapi.com</a>. Never logged or exported.</small></div><input type="password" id="fuelKey" autocomplete="off" spellcheck="false" value="' + esc(S.fuelKey || '') + '"></div>'  + '</div>';
     h += '<div class="card"><h3>Station lists</h3>' +
       '<div class="field"><div class="lbl">Where Walmart+ didn\'t work<small class="keep" id="blCount">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blOpen">Manage</button></div><div class="field"><div class="lbl">Stations Gasket won\'t use<small class="keep" id="igCount">' + IG.list().length + ' station' + (IG.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="igOpen">Manage</button></div></div>';
     h += '<div class="card"><h3>Your data</h3>' +
       '<div class="field"><div class="lbl">Remembered stations & price history<small>Station locations, completed scan areas and price observations are shared across trips and map searches in app storage. Full backups include them. Clear cache keeps them; Rediscover checks an area again, while Update prices only checks known stations.</small></div></div>' +
-      '<div class="field col"><div class="lbl">Export<small>Saves a file to Downloads/Gasket you can share. Your API key is never included.</small></div><div class="btns wrap"><button class="btn tonal sm" id="exAll">All data</button><button class="btn tonal sm" id="exBl">Bad CITGO list</button></div></div>' +
-      '<div class="field col"><div class="lbl">Import<small>Adds only what\'s new — duplicates are skipped and nothing of yours is overwritten.</small></div><div class="btns wrap"><button class="btn tonal sm" id="imAll">All data</button><button class="btn tonal sm" id="imBl">Bad CITGO list</button></div></div>' +
+      '<details class="disclosure-tile" id="portableExport"><summary>Export</summary>'+portableChecklist('export',Object.keys(portableTypes))+'<button class="btn tonal" id="exAll">Choose a folder…</button></details>' +
+      '<div class="field"><div class="lbl">Import</div><button class="btn tonal" id="imAll">Browse…</button></div>' +
       '<div class="field col"><div class="lbl">Full backup (moving to a new install)<small class="keep">Everything, exactly as it is: settings <b>including your API keys</b>, cars, trips, all saved searches and prices, the bad CITGO list, the debug log and this month\'s Google lookup counts. Restoring replaces everything in the app, and lookup counts never go down, so your monthly cap still holds. Uses no lookups. Keep the file private — it has your keys.</small></div>' +
         '<div class="btns wrap"><button class="btn tonal sm" id="bkSave">Save full backup</button><button class="btn tonal sm" id="bkRestore">Restore full backup</button></div></div>' +
       '<div class="field"><div class="lbl">Clear cache<small>Clears temporary responses, AI explanations, speed limits and route lookups. Remembered stations, scanned areas, price history, trips, cars and settings stay.</small></div><button class="btn tonal sm" id="kvClear">Clear</button></div>' +
-      '<div class="field"><div class="lbl">Delete bad CITGO list<small class="keep" id="blCount2">' + BL.list().length + ' station' + (BL.list().length === 1 ? '' : 's') + '</small></div><button class="btn tonal sm" id="blDelAll">Delete</button></div>' +
+      '<details class="disclosure-tile" id="portableDelete"><summary>Delete selected data</summary>'+portableChecklist('delete',Object.keys(portableTypes))+'<button class="btn tonal caution" id="blDelAll">Delete selected</button></details>' +
+
       '<div class="field"><div class="lbl">Erase all data<small>Settings, API key, cars, mileage log, trips, the bad CITGO list and the cache — like a fresh install. This month\'s lookup count is kept so your safety cap still works.</small></div><button class="btn tonal sm danger-sm" id="eraseAll">Erase</button></div></div>';
     h += '<div class="card"><h3>Debugging</h3>' +
       '<div class="field"><div class="lbl">Debug logging<small>Keeps a log on this phone you can share for troubleshooting. Your API key is never written to it.</small></div>' + sw('debug', !!S.debug) + '</div>' +
@@ -1311,10 +1432,10 @@
     $('blOpen').onclick = openBlPage;
     if ($('igOpen')) $('igOpen').onclick = openBlPage;
     $('licOpen').onclick = openLicPage;
-    $('exAll').onclick = function () { exportData('all'); };
-    $('exBl').onclick = function () { exportData('blacklist'); };
-    $('imAll').onclick = function () { importData('all'); };
-    $('imBl').onclick = function () { importData('blacklist'); };
+    bindPortable($('portableExport'),$('exAll'),exportPortable);
+    bindPortable($('portableDelete'),$('blDelAll'),deletePortable);
+    $('imAll').onclick=function(){importPortable().catch(function(e){toast(e.message);});};
+
     $('bkSave').onclick = function () { fullBackup(this); };
     $('bkRestore').onclick = function () { fullRestore(this); };
     $('sLogShare').onclick = function () { shareLog(); };
@@ -1337,7 +1458,6 @@
         if (!ok) return; var n = 0; CACHE_NS.forEach(function (ns) { n += KV.clear(ns); });window.dispatchEvent(new Event('cacheclear')); toast('Cleared ' + n + ' saved answers.');
       });
     };
-    $('blDelAll').onclick = function () { askDeleteBl().then(function (ok) { if (ok) { $('blCount2').textContent = '0 stations'; $('blCount').textContent = '0 stations'; } }); };
     $('eraseAll').onclick = function () {
       var b = this;
       if (S.confirmDeletes !== false) {
@@ -1436,8 +1556,6 @@
     if ($('hereKey')) { S.hereKey = $('hereKey').value.trim(); apiCount(); }
     if ($('hereMonthlyCap')) S.hereMonthlyCap = Math.max(0, parseInt($('hereMonthlyCap').value, 10) || 0);
     if ($('fuelKey')) { var fk = $('fuelKey').value.trim(); if (fk !== (S.fuelKey || '')) { S.fuelKey = fk; if (window.CarPics) CarPics.keyChanged(); } }
-    S.evPrice = Math.max(0, parseFloat($('evPrice').value) || 0.48);
-    S.h2Price = Math.max(0, parseFloat($('h2Price').value) || 36);
     if($('prefBuffer')){var tripPrefs=S.trip||(S.trip={});[['prefBuffer','bufferMi'],['prefMinSave','minSave'],['prefDetour','maxDetourMin'],['prefAltSave','altMinSave']].forEach(function(x){var v=parseFloat($(x[0]).value);if(Number.isFinite(v))tripPrefs[x[1]]=Math.max(0,v);});}
     pg.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
       var k = cb.dataset.k;

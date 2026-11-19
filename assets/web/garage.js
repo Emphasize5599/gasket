@@ -936,10 +936,10 @@
     var fl = FEATURES.filter(function (f) { return featApplies(f, c); }).sort(function (a, b) { return a.label.localeCompare(b.label); });
     var n = fl.filter(function (f) { return on.indexOf(f.key) >= 0; }).length;
     return '<details class="ac-feats" id="gFeats"' + (featOpen ? ' open' : '') + '><summary><span>Features ' + A.qBtn('Checked ones marked "from your VIN" or "from the EPA" are confirmed. Check anything else your car has: Advisory uses this list.') + '</span></summary>' +
-      '<div class="ac-flist">' + fl.map(function (f) {
+      '<button type="button" class="btn tonal" id="gAskFeatures">Ask Brave about unchecked features</button><p id="gFeatureStatus" role="status"></p><div class="ac-flist">' + fl.map(function (f) {
         var chk = on.indexOf(f.key) >= 0, conf = chk && (fs[f.key] === 'vin' || fs[f.key] === 'epa');
         return '<div class="ac-f"><label><input type="checkbox" data-feat="' + esc(f.key) + '"' + (chk ? ' checked' : '') + '><span>' + esc(f.label) +
-          (conf ? '<small>' + (fs[f.key] === 'vin' ? 'from your VIN' : 'from the EPA') + '</small>' : '') + '</span></label>' + A.qBtn(f.q) + '</div>';
+          (fs[f.key]==='brave'?'<small>Suggested by Brave</small>':conf ? '<small>' + (fs[f.key] === 'vin' ? 'from your VIN' : 'from the EPA') + '</small>' : '') + '</span></label>' + A.qBtn(f.q) + '</div>';
       }).join('') + '</div></details>';
   }
   /** The Garage page's About this car: what's known, to read. Changing it is in Edit (the Details section). */
@@ -1233,6 +1233,32 @@
     both('[data-vid]').forEach(function (b) { b.onclick = function () { pickVariant(c, b.dataset.vid); }; });
     // features: a checklist; confirmed ones (from the VIN or the EPA) ask before they're unchecked; one camshaft layout only
     if ($('gFeats')) $('gFeats').addEventListener('toggle', function () { featOpen = this.open; });
+    var askFeatures=$('gAskFeatures');
+    if(askFeatures)askFeatures.onclick=async function(){
+      var signature=tankKey(c),info=c.info||(c.info={}),features=(info.features||[]).slice(),sources=Object.assign({},info.featSrc);
+      if(!c.year||!c.make||!c.model){A.toast('Enter your year, make and model first.');return;}
+      var pending=FEATURES.filter(function(f){return featApplies(f,c)&&!sources[f.key]&&!features.includes(f.key);});
+      if(!pending.length){A.toast('No unchecked features to look up.');return;}
+      var panel=askFeatures.closest('#gFeats'),status=$('gFeatureStatus'),next=0,done=0,answers=[],blocked=false;
+      function current(){return panel.isConnected&&editing&&tankKey(c)===signature;}
+      askFeatures.disabled=true;
+      async function reader(lane){
+        while(!blocked&&next<pending.length&&current()){
+          var f=pending[next++],url=BraveLookup.url('Does the US '+signature+' have '+f.label+'? Reply yes, no, or unknown only. End: GASKET DONE.');
+          var r=await call('siteRead','bravefeature'+lane,JSON.stringify({url:url,kind:'feature',bg:true,aiOnly:true})).catch(function(){return {};});
+          if(r&&r.blocked)blocked=true;
+          var yes=r&&!r.error&&!r.blocked&&/^\s*yes[.!]?\s*(?:GASKET DONE\.?)?\s*$/i.test(r.text||'');
+          if(yes)answers.push(f);
+          if(current())status.textContent=(++done)+' / '+pending.length+' checked';
+        }
+      }
+      await Promise.all([reader(1),reader(2),reader(3)]);
+      if(!current())return;
+      var accepted=answers.filter(function(f){return !f.one||!FEATURES.some(function(other){return other.key!==f.key&&other.one===f.one&&(features.includes(other.key)||answers.includes(other));});});
+      accepted.forEach(function(f){features.push(f.key);sources[f.key]='brave';});
+      info.features=features;info.featSrc=sources;featOpen=true;save();draw();
+      A.toast(blocked?'Brave asked for verification. Review any suggestions and try again later.':accepted.length+' features suggested by Brave. Review them before saving.');
+    };
     both('[data-feat]').forEach(function (cb) {
       cb.onchange = function () {
         var f = cb.dataset.feat, fs = info.featSrc = Object.assign({}, info.featSrc), l = (info.features || []).slice(), def = FEATURES.filter(function (o) { return o.key === f; })[0] || {};
@@ -1704,8 +1730,8 @@
     var mn = Math.max(25, Math.round(+S.speed.min || 55)), mx = Math.max(mn + 5, Math.round(+S.speed.max || 84));
     if (kind(c) === 'ev') {
       var ef = evSpeedFn(c); if (!ef) return null;
-      var eo = parseFloat(S.speed.evPrice), ep = eo > 0 ? eo : +S.evPrice > 0 ? +S.evPrice : 0.4;
-      return { c: c, ev: true, f: ef, cal: { scale: 1, used: 0, points: [] }, near: null, price: ep, priceSrc: eo > 0 ? 'yours' : 'settings', min: mn, max: mx,
+      var ep = ChargerData.referencePrice('ev');
+      return { c: c, ev: true, f: ef, cal: { scale: 1, used: 0, points: [] }, near: null, price: ep, priceSrc: 'estimate', min: mn, max: mx,
         rec: SP.recommend({ f: ef, min: mn, max: mx, price: ep, timeValue: 0 }) };
     }
     if (!hasEpa(c) || kind(c) !== 'gas') return null;
@@ -1762,7 +1788,7 @@
       : 'Not calibrated yet — log mileage with the speed you held to fit this to your car.') +
       ' Curve: ' + esc((SP.TYPES[c.type] || SP.TYPES.car).label.toLowerCase()) + ', anchored at ' + (c.type === 'hybrid' ? '1.3 × ' : '') + 'EPA highway (' + c.epa.hwy + ' mpg) at 55 mph. Shaded: speeds where going 1% faster saves more time than it costs in gas.' + tireTxt + '</div>';
     h += '<details class="spd-set"><summary>Speed settings · ' + money(m.price) + '/' + U.unit + '</summary><div class="grid2">' +
-      (m.ev ? '<label class="nf"><span>Charging price ($/kWh)<small>blank = your EV price setting (' + money(m.price) + ')</small></span><input type="number" inputmode="decimal" step="0.01" id="sPrice" value="' + esc(S.speed.evPrice || '') + '"></label>'
+      (m.ev ? '<p>Typical public charging rate: '+money(m.price)+'/kWh</p>'
         : '<label class="nf"><span>Gas price ($/gal)<small>' + (m.near ? 'blank = cheapest near you: ' + money(m.near.price) + ' at ' + esc(m.near.name) : 'blank = cheapest on the map') + '</small></span><input type="number" inputmode="decimal" step="0.01" id="sPrice" value="' + esc(S.speed.price) + '"></label>') +
       '<label class="nf"><span>Minimum speed (mph)</span><input type="number" inputmode="numeric" step="1" id="sMin" value="' + m.min + '"></label>' +
       '<label class="nf"><span>Maximum speed (mph)</span><input type="number" inputmode="numeric" step="1" id="sMax" value="' + m.max + '"></label></div></details>';
@@ -1773,12 +1799,12 @@
     bindSpdOpen();
     speedHost.querySelector('.spd-set').addEventListener('toggle', function () { setOpen = this.open; });
     var upd = function () {
-      if (m.ev) S.speed.evPrice = $('sPrice').value.trim(); else S.speed.price = $('sPrice').value.trim();
+      if (!m.ev) S.speed.price = $('sPrice').value.trim();
       var a = parseInt($('sMin').value, 10), b = parseInt($('sMax').value, 10);
       if (a >= 25 && a <= 100) S.speed.min = a; if (b >= 30 && b <= 110) S.speed.max = b;
       save(); drawSpeed();
     };
-    ['sPrice', 'sMin', 'sMax'].forEach(function (id) { $(id).onchange = upd; });
+    ['sPrice', 'sMin', 'sMax'].forEach(function (id) { if ($(id)) $(id).onchange = upd; });
     var tryOut = function () {
       var v = +$('gTry').value, mi = Math.max(1, parseFloat($('gTripMi').value) || 500), base = r.speed;
       var t = mi * (1 / base - 1 / v) * 60, gal = mi * (1 / f(v) - 1 / f(base)), cost = gal * m.price;

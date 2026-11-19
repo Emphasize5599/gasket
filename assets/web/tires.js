@@ -1135,6 +1135,13 @@
       ['full', 'compact', 'kit', 'runflat', 'none'].map(function (k) { return '<option value="' + k + '"' + (kind === k ? ' selected' : '') + '>' + SPARE_NAME[k] + '</option>'; }).join('') + '</select></label>';
     var k1 = kind || guess;
     if(k1==='full'||k1==='compact')h+='<label class="nf wide"><span>Where the spare is stored'+q('Inside includes a spare under the cargo floor. Underbody means below the vehicle. Rear-mounted means outside on a rear door, tailgate or carrier, possibly hidden by a soft or hard cover. A cover alone does not establish the spare type or factory equipment. Confirm on your vehicle or in its manual.')+'</span><select id="tzSpareLocation"><option value="">Not confirmed</option>'+['inside','under','rear'].map(function(v){return '<option value="'+v+'"'+(sp.location===v?' selected':'')+'>'+locationName(v)+'</option>';}).join('')+'</select></label>'+(sp.lookup&&sp.lookup.location&&sp.lookup.location!==sp.location?'<p class="lead small keep">Brave suggests: '+esc(locationName(sp.lookup.location))+'. Confirm the location on your vehicle.</p>':'');
+    h += spareControls(t,'car');
+    if(t.towMode)(t.trailers||[]).forEach(function(tr){
+      h += '<div class="sub-h tz-h">'+esc(tr.name||'Trailer')+' spare tire</div><label class="nf wide"><span>What your trailer has</span><select data-tr-spare="'+esc(tr.id)+'">'+
+        [['','Not sure'],['full','Full-size spare'],['compact','Compact spare'],['none','No spare']].map(function(option){
+          return '<option value="'+option[0]+'"'+((tr.spareKind||'')===option[0]?' selected':'')+'>'+option[1]+'</option>';
+        }).join('')+'</select></label>'+spareControls(tr,tr.id);
+    });
     // a tip from before tips were short: said again the short way, from the answer it kept
     if (sp.lookup && sp.lookup.tip && !(sp.lookup.tipV >= 3) && sp.lookup.text) { sp.lookup.tip = spareTip(spareClauses(sp.lookup.text)); sp.lookup.tipV = 3; }
     // 0.0.151: an answer that says a spare was optional gets that sentence as its tip
@@ -1686,6 +1693,67 @@
     };
     b.querySelectorAll('[data-why]').forEach(function(button){button.onclick=function(){openWhy(button.dataset.why,function(){openCarDetails(c);});};});
   }
+  function spareControls(unit, key) {
+    var extras = unit.extraSpares || [];
+    return '<label class="nf chk"><span>Additional spares</span><input type="checkbox" data-extra-enabled="'+esc(key)+'"'+(unit.extraSparesEnabled?' checked':'')+'></label>'+
+      (!unit.extraSparesEnabled?'':'<label class="nf"><span>Number of additional spares</span><input type="number" min="1" max="12" data-extra-count="'+esc(key)+'" value="'+(extras.length||1)+'"></label>'+
+      (extras.length?extras:['all']).map(function(axle,i){
+        return '<label class="nf"><span>Spare '+(i+1)+' fits</span><select data-extra-unit="'+esc(key)+'" data-extra-axle="'+i+'">'+
+          [['all','All'],['front','Front'],['rear','Rear']].map(function(option){
+            return '<option value="'+option[0]+'"'+(axle===option[0]?' selected':'')+'>'+option[1]+'</option>';
+          }).join('')+'</select></label>';
+      }).join(''));
+  }
+
+  function bindSpareControls(host, t, set) {
+    function unit(key) { return key==='car'?t:(t.trailers||[]).find(function(tr){return tr.id===key;}); }
+    host.querySelectorAll('[data-tr-spare]').forEach(function(input){
+      input.onchange=set(function(){unit(input.dataset.trSpare).spareKind=input.value;});
+    });
+    host.querySelectorAll('[data-extra-enabled]').forEach(function(input){
+      input.onchange=set(function(){
+        var u=unit(input.dataset.extraEnabled);
+        u.extraSparesEnabled=input.checked;
+        if(input.checked&&!(u.extraSpares||[]).length)u.extraSpares=['all'];
+      });
+    });
+    host.querySelectorAll('[data-extra-count]').forEach(function(input){
+      input.onchange=set(function(){
+        var u=unit(input.dataset.extraCount), count=Math.max(1,Math.min(12,Math.round(+input.value)||1));
+        u.extraSpares=Array.from({length:count},function(_,i){return (u.extraSpares||[])[i]||'all';});
+      });
+    });
+    host.querySelectorAll('[data-extra-axle]').forEach(function(input){
+      input.onchange=set(function(){unit(input.dataset.extraUnit).extraSpares[+input.dataset.extraAxle]=input.value;});
+    });
+  }
+
+  function spareRing(x,y,kind,label){
+    var r=kind==='compact'?7.5:9;
+    return '<g class="tz-w tz-spare" data-spare="'+kind+'"><title>'+esc(label)+'</title><circle cx="'+x+'" cy="'+y+'" r="'+r+'" style="fill:var(--line)"/><circle cx="'+x+'" cy="'+y+'" r="'+r*.62+'" class="tz-rim"/><circle cx="'+x+'" cy="'+y+'" r="'+r*.2+'" class="tz-hub"/></g>';
+  }
+
+  function extraSparesSvg(unit,top,length,center,primary,towing){
+    var spares=unit.extraSparesEnabled?(unit.extraSpares||[]):[];
+    if(!spares.length)return '';
+    var perColumn=Math.max(1,Math.floor(Math.max(length,40)/20)), used=[];
+    return spares.map(function(axle,i){
+      var middle=spares.length===1&&!primary&&!towing&&axle!=='front';
+      var target=axle==='front'?0:axle==='rear'?perColumn-1:Math.floor((perColumn-1)/2);
+      var slot=target;
+      while(used.includes(slot)){
+        var first=Math.floor(slot/perColumn)*perColumn;
+        var open=Array.from({length:perColumn},function(_,j){return first+j;}).filter(function(j){return !used.includes(j);});
+        slot=open.length?open.sort(function(a,b){return Math.abs(a-first-target)-Math.abs(b-first-target);})[0]:first+perColumn+target;
+      }
+      used.push(slot);
+      var row=slot%perColumn, column=Math.floor(slot/perColumn);
+      var x=middle?center:(column%2?14:126)+(column%2?-1:1)*Math.floor(column/2)*20;
+      var y=middle?top+length+11:top+Math.min(10,length/2)+row*Math.min(20,Math.max(0,length-20)/Math.max(1,perColumn-1));
+      return spareRing(x,y,'full','Additional spare '+(i+1)+' · '+axle);
+    }).join('');
+  }
+
   function bind(c) {
     var t = tires(c);
     var set = function (fn) { return function () { fn.call(this); save(); draw(); onChange(); }; };
@@ -1703,6 +1771,7 @@
     if ($('tzAddTr')) $('tzAddTr').onclick = addTrailer;
     if ($('tzSaved')) $('tzSaved').onclick = function () { openSaved(c); };
     // the spare
+    bindSpareControls(host,t,set);
     $('tzSpare').onchange = set(function () { spare(t).kind = this.value;if(this.value!=='full'&&this.value!=='compact')delete spare(t).location; LG.info('car', 'Spare tire: ' + (this.value || 'not sure')); });
     if($('tzSpareLocation'))$('tzSpareLocation').onchange=set(function(){spare(t).location=this.value;});
     if ($('tzSpareShow')) $('tzSpareShow').onclick = function () { spareLookup(c, true); };
@@ -2016,11 +2085,11 @@
     else h += wheel('lr', 44, 84) + wheel('rr', 96, 84);
     var H = 116, top = 108,topX=70, towing=!carOnly&&hooked(t).length>0;
     // the spare, lying on its side: behind the car, or beside it on the right while a trailer takes the space behind
-    var sk = spareKind(t);
+    var sk = spareKind(t), primary=sk==='full'||sk==='compact', extra=t.extraSparesEnabled&&t.extraSpares&&t.extraSpares.length;
     if (sk === 'full' || sk === 'compact') {
       var sp = spare(t), sdot = dotOk(sp.dot) ? sp.dot : spareDot(c.year), sa = ageYears(sdot), ss = ageStatus(sa);
       // lying flat (rim on the floor): from above, a ring around the rim; a compact spare is smaller
-      var r = sk === 'compact' ? 7.5 : 9, sx = towing ? 126 : 70, sy = towing ? 60 : top + 4 + r, sh = r * 2;
+      var r = sk === 'compact' ? 7.5 : 9, sx = towing || extra ? 109 : 70, sy = towing || extra ? 111 : top + 4 + r, sh = r * 2;
       h += '<g class="tz-w tz-spare" data-spare="' + sk + '"><title>Spare (' + (sk === 'compact' ? 'compact' : 'full-size') + (sp.kind ? '' : ', not confirmed') + ')' + (sa != null ? ': ' + (dotOk(sp.dot) ? 'made ' : 'assumed made ') + agePhrase(sa).replace(' old', ' ago') : '') + '</title>' +
         '<circle cx="' + sx + '" cy="' + sy + '" r="' + r + '" style="fill:' + (ss ? hue({ fine: 1, inspect: .6, old: .3, replace: 0 }[ss]) : 'var(--line)') + '"' + (sp.kind ? '' : ' stroke-dasharray="2 1.5" class="tz-spare-guess"') + '/>' +
         '<circle cx="' + sx + '" cy="' + sy + '" r="' + (r * .62).toFixed(2) + '" class="tz-rim"/>' +
@@ -2030,12 +2099,17 @@
       tags.spare = {side:'r', y:sy, edge:sx+r, nums:[{n:P.length+1,x:sx}]};
       if (!towing) { top = sy + r + 2; H = Math.max(H, top + 4); }
     }
+    h += extraSparesSvg(t,0,108,70,primary,towing);
+    if(extra&&!towing)H=Math.max(H,132);
     (carOnly?[]:hooked(t)).forEach(function (tr) {        // each trailer hooked up, one behind the other
       var g=trailerGeometry(tr,C),z=g.geometry,span=z.leftFt+z.rightFt+g.leftReach+g.rightReach,s=Math.min(100/span,160/z.lengthFt),len=z.lengthFt*s,y0=top+16;
       var x=(W-span*s)/2+(z.leftFt+g.leftReach)*s,left=x-z.leftFt*s,right=x+z.rightFt*s;
       h+='<line x1="'+topX+'" y1="'+top+'" x2="'+x+'" y2="'+y0+'" class="tz-hitch"/><rect x="'+left+'" y="'+y0+'" width="'+((z.leftFt+z.rightFt)*s)+'" height="'+len+'" rx="4" class="il-body"/>';
       g.axles.forEach(function(ax,i){var y=y0+g.centers[i]*s;h+='<line x1="'+(left-g.leftReach*s)+'" y1="'+y+'" x2="'+(right+g.rightReach*s)+'" y2="'+y+'" class="tz-axle"/>';ax.wheels.forEach(function(w){h+=wheel(w.key,w.side==='left'?left-w.offset*s:right+w.offset*s,y,w.width*s,w.diameter*s);});});
-      top=y0+len;topX=x;H=top+6;
+      var trPrimary=tr.spareKind==='full'||tr.spareKind==='compact';
+      if(trPrimary)h+=spareRing(109,y0+len-1,tr.spareKind,(tr.name||'Trailer')+' spare');
+      h+=extraSparesSvg(tr,y0,len,x,trPrimary,true);
+      top=y0+len;topX=x;H=top+(trPrimary?12:6);
     });
     // the tags for tiny wheels: a gray pill with the numbers, a short line to the wheels (like the map's tags)
     Object.keys(tags).forEach(function (k) {
