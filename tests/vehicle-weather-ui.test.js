@@ -37,6 +37,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.uncheck('#portableExport [data-portable-all]');assert(await p.isDisabled('#exAll'));
  await p.check('#portableExport [value="general"]');assert(await p.locator('#portableExport [data-portable-all]').evaluate(e=>e.indeterminate));
  await p.evaluate(()=>{__mocks.pick=JSON.stringify({gasketPortable:1,types:{general:{rests:[{id:'fixture-rest',marks:{origin:{lat:36,lng:-89},rating:'good',amenities:{restrooms:false}}}]}}});});
+ assert(await p.locator('#imAll').evaluate(button=>{
+   const label=button.previousElementSibling;
+   return label.clientWidth>0&&label.getBoundingClientRect().bottom<=button.getBoundingClientRect().top;
+ }),'Import label and Browse button each have their own row');
  await p.click('#imAll');await p.waitForSelector('[data-portable-confirm]');
  assert(await p.isChecked('.sub-page [value="general"]'));assert(await p.isDisabled('.sub-page [value="citgo"]'));assert(await p.isDisabled('.sub-page [value="preferences"]'));
  await p.click('[data-portable-confirm]');await p.waitForFunction(()=>__app.KV.get('restplaces','user|fixture-rest')?.v?.amenities?.restrooms===false);

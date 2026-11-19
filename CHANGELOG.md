@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.513 — 2026-11-19
+
+- Keep the Import label visible above Browse in Your data on narrow screens.
+- Includes backlog items 63–70 from 0.0.509–0.0.512.
+
 ## 0.0.512 — 2026-11-19
 
 - Update release checks for the new Connections layout and published-price estimates.
