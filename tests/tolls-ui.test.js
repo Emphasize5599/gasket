@@ -97,7 +97,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{__app.S.apiKey='';__app.S.hereKey='TEST_HERE_KEY_123';});
  // the key boxes live in Connections & usage → Other optional keys (they used to stay behind in EV & hydrogen)
  await p.evaluate(()=>{__trip.close&&__trip.close();});await p.evaluate(()=>document.getElementById('btnSettings').click());await p.waitForSelector('[data-settings-group="connections"]');
- assert.deepEqual(await p.evaluate(()=>['hereKey','hereMonthlyCap','nrelKey','fuelKey'].map(id=>{const e=document.getElementById(id),v=e&&e.closest('[data-settings-view]'),h=e&&e.closest('.card').querySelector('h3');return v&&v.dataset.settingsView+'/'+h.textContent;})),Array(4).fill('connections/Other optional keys'));
+ assert.deepEqual(await p.evaluate(()=>['hereKey','hereMonthlyCap','nrelKey','fuelKey'].map(id=>{const e=document.getElementById(id),v=e&&e.closest('[data-settings-view]'),h=e&&e.closest('details')?.querySelector('summary');return v&&v.dataset.settingsView+'/'+h.textContent;})),['connections/HERE routing key','connections/HERE routing key','connections/DOE station-finder key','connections/Fuel API vehicle images key']);
  assert.equal(await p.evaluate(()=>__paid),0);assert.equal(errors.length,0,errors.join('\n'));
  await p.close();
  }

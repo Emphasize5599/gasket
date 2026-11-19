@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.512 — 2026-11-19
+
+- Update release checks for the new Connections layout and published-price estimates.
+- Includes all Settings, data transfer, Garage, and towing guidance changes from 0.0.509–0.0.511.
+
 ## 0.0.511 — 2026-11-19
 
 - Set axle fit for the primary car and trailer spares, as well as the additional spares.
