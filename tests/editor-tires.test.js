@@ -11,12 +11,32 @@ assert.equal(M.generalized({type:'Touring',brand:'Example',model:'Model A'}),fal
  const initial=await p.evaluate(()=>({id:__app.S.carId,count:__app.S.cars.length}));await p.click('[data-car="+"]');assert.equal(await p.isDisabled('#gSave'),true);
  await p.click('#gDiscard');await p.click('#cfmNo');assert.equal(await p.isDisabled('#gSave'),true);await p.click('#gDiscard');await p.click('#cfmYes');await p.waitForFunction(n=>__app.S.cars.length===n,initial.count);assert.equal(await p.evaluate(()=>__app.S.carId),initial.id);
  await p.click('#gEdit');await p.waitForFunction(()=>!Garage.trimBusy());await p.waitForTimeout(100);
+ await p.evaluate(()=>{
+   window.featureReads={active:0,max:0,questions:[]};
+   const old=__app.N.siteRead;
+   __app.N.siteRead=(id,key,json)=>{
+     if(!/^bravefeature[1-3]$/.test(key))return old(id,key,json);
+     const query=new URL(JSON.parse(json).url).searchParams.get('q');
+     featureReads.questions.push(query);
+     featureReads.max=Math.max(featureReads.max,++featureReads.active);
+     setTimeout(()=>{featureReads.active--;onNativeResult(id,{text:/active grille shutters/i.test(query)?'Yes.':'No.'});},15);
+   };
+ });
+ await require('./settings-ui').openTiles(p,['gAskFeatures']);await p.click('#gAskFeatures');
+ await p.waitForFunction(()=>Garage.car().info.featSrc?.['Active grille shutters']==='brave');
+ assert.equal(await p.evaluate(()=>featureReads.max),3);
+ assert(await p.evaluate(()=>featureReads.questions.every(q=>q.includes('Reply yes, no, or unknown only'))));
  // the trim is in the identity tile, folded for a car that's all known (its summary names the trim): open it
  if(!await p.evaluate(()=>document.getElementById('tEpa').open))await p.click('#tEpa > summary');await p.waitForSelector('#gTrim',{state:'visible'});const trim=await p.inputValue('#gTrim');await p.fill('#gTrim','Test trim');await p.dispatchEvent('#gTrim','change');await p.click('#gDiscard');await p.click('#cfmNo');assert.equal(await p.inputValue('#gTrim'),'Test trim');await p.click('#gDiscard');await p.click('#cfmYes');await p.waitForSelector('#gTrim',{state:'detached'});assert.equal(await p.evaluate(()=>Garage.car().trim),trim);
  await p.evaluate(()=>{const c=Garage.car();c.tires={size:'195/65R15',sizeSrc:'user',type:'Winter',brand:'',model:'',tread:{mode:'miles',miles:10000,rotated:'yes'},spare:{lookup:{key:Garage.carKey(c),t:Date.now(),guess:'compact',by:'answer',location:'under',locationV:1,text:'Compact spare. Location: under vehicle.'}},list:{size:'195/65R15',t:Date.now(),items:[{brand:'Example A',model:'Touring A',type:'Touring',warrantyMi:60000},{brand:'Example B',model:'Winter B',type:'Winter',warrantyMi:40000}]}};Garage.redraw();});
  await p.click('#gTires summary');await p.waitForSelector('#tzDet');assert.match(await p.innerText('#gTires'),/extremely generalized/);
  assert.equal(await p.locator('.tz-guess').evaluate(e=>getComputedStyle(e).display),'block','sentence fragments must not become separately spaced flex items');
  const buttons=await p.locator('.tz-gbtns button').evaluateAll(bs=>bs.map(b=>b.getBoundingClientRect().top));assert.equal(buttons.length,2);assert.ok(Math.abs(buttons[0]-buttons[1])<2);await p.click('#tzSpareYes');assert.equal(await p.inputValue('#tzSpareLocation'),'under');assert.doesNotMatch(await p.evaluate(()=>Tires.departureNote(Garage.car())),/stored/i);
+ await p.check('[data-extra-enabled="car"]');assert.equal(await p.inputValue('[data-extra-axle="0"]'),'all');
+ await p.fill('[data-extra-count="car"]','3');await p.dispatchEvent('[data-extra-count="car"]','change');
+ await p.selectOption('[data-extra-axle="0"]','front');await p.selectOption('[data-extra-axle="2"]','rear');
+ assert.deepEqual(await p.evaluate(()=>Garage.car().tires.extraSpares),['front','all','rear']);
+ assert.equal(await p.locator('#gTires .tz-spare title').filter({hasText:'Additional spare'}).count(),3);
  await p.click('#tzDet');await p.waitForSelector('#tzBrand');const order=await p.locator('.tz-pick select,.tz-pick input').evaluateAll(es=>es.map(e=>e.id));assert.deepEqual(order,['tzBrand','tzModel','tzType']);assert.doesNotMatch(await p.locator('#tzBrand').innerText(),/Example A/,'a Winter type lists only winter tires');assert.match(await p.locator('#tzBrand').innerText(),/Example B/);
  // a lookup's reply while you type the miles: the box keeps what you typed, and it's saved when you leave it
  await p.focus('#tzMiles');await p.fill('#tzMiles','');await p.keyboard.type('23456');await p.evaluate(()=>Tires.replyRedraw());assert.equal(await p.inputValue('#tzMiles'),'23456','a reply does not wipe typed miles');await p.locator('#tzMiles').blur();await p.waitForFunction(()=>Tires.editing(Garage.car()).tread.miles===23456);await p.fill('#tzDot','2324');await p.dispatchEvent('#tzDot','change');

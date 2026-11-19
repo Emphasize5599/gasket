@@ -1736,7 +1736,7 @@
   function extraSparesSvg(unit,top,length,center,primary,towing){
     var spares=unit.extraSparesEnabled?(unit.extraSpares||[]):[];
     if(!spares.length)return '';
-    var perColumn=Math.max(1,Math.floor(Math.max(length,40)/20)), used=[];
+    var perColumn=Math.max(2,Math.floor(Math.max(length,40)/20)), used=[];
     return spares.map(function(axle,i){
       var middle=spares.length===1&&!primary&&!towing&&axle!=='front';
       var target=axle==='front'?0:axle==='rear'?perColumn-1:Math.floor((perColumn-1)/2);
@@ -2089,7 +2089,7 @@
     if (sk === 'full' || sk === 'compact') {
       var sp = spare(t), sdot = dotOk(sp.dot) ? sp.dot : spareDot(c.year), sa = ageYears(sdot), ss = ageStatus(sa);
       // lying flat (rim on the floor): from above, a ring around the rim; a compact spare is smaller
-      var r = sk === 'compact' ? 7.5 : 9, sx = towing || extra ? 109 : 70, sy = towing || extra ? 111 : top + 4 + r, sh = r * 2;
+      var r = sk === 'compact' ? 7.5 : 9, sx = towing || extra ? 109 : 70, sy = towing || extra ? 111 : top + 4 + r;
       h += '<g class="tz-w tz-spare" data-spare="' + sk + '"><title>Spare (' + (sk === 'compact' ? 'compact' : 'full-size') + (sp.kind ? '' : ', not confirmed') + ')' + (sa != null ? ': ' + (dotOk(sp.dot) ? 'made ' : 'assumed made ') + agePhrase(sa).replace(' old', ' ago') : '') + '</title>' +
         '<circle cx="' + sx + '" cy="' + sy + '" r="' + r + '" style="fill:' + (ss ? hue({ fine: 1, inspect: .6, old: .3, replace: 0 }[ss]) : 'var(--line)') + '"' + (sp.kind ? '' : ' stroke-dasharray="2 1.5" class="tz-spare-guess"') + '/>' +
         '<circle cx="' + sx + '" cy="' + sy + '" r="' + (r * .62).toFixed(2) + '" class="tz-rim"/>' +
@@ -2101,15 +2101,16 @@
     }
     h += extraSparesSvg(t,0,108,70,primary,towing);
     if(extra&&!towing)H=Math.max(H,132);
-    (carOnly?[]:hooked(t)).forEach(function (tr) {        // each trailer hooked up, one behind the other
+    (carOnly?[]:hooked(t)).forEach(function (tr,i,trailers) {        // each trailer hooked up, one behind the other
       var g=trailerGeometry(tr,C),z=g.geometry,span=z.leftFt+z.rightFt+g.leftReach+g.rightReach,s=Math.min(100/span,160/z.lengthFt),len=z.lengthFt*s,y0=top+16;
       var x=(W-span*s)/2+(z.leftFt+g.leftReach)*s,left=x-z.leftFt*s,right=x+z.rightFt*s;
       h+='<line x1="'+topX+'" y1="'+top+'" x2="'+x+'" y2="'+y0+'" class="tz-hitch"/><rect x="'+left+'" y="'+y0+'" width="'+((z.leftFt+z.rightFt)*s)+'" height="'+len+'" rx="4" class="il-body"/>';
       g.axles.forEach(function(ax,i){var y=y0+g.centers[i]*s;h+='<line x1="'+(left-g.leftReach*s)+'" y1="'+y+'" x2="'+(right+g.rightReach*s)+'" y2="'+y+'" class="tz-axle"/>';ax.wheels.forEach(function(w){h+=wheel(w.key,w.side==='left'?left-w.offset*s:right+w.offset*s,y,w.width*s,w.diameter*s);});});
       var trPrimary=tr.spareKind==='full'||tr.spareKind==='compact';
       if(trPrimary)h+=spareRing(109,y0+len-1,tr.spareKind,(tr.name||'Trailer')+' spare');
-      h+=extraSparesSvg(tr,y0,len,x,trPrimary,true);
-      top=y0+len;topX=x;H=top+(trPrimary?12:6);
+      var following=i<trailers.length-1, count=tr.extraSparesEnabled&&tr.extraSpares&&tr.extraSpares.length;
+      h+=extraSparesSvg(tr,y0,len,x,trPrimary,following);
+      top=y0+len;topX=x;H=top+(count&&!following?24:trPrimary?12:10);
     });
     // the tags for tiny wheels: a gray pill with the numbers, a short line to the wheels (like the map's tags)
     Object.keys(tags).forEach(function (k) {

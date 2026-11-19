@@ -108,7 +108,7 @@ assert.ok(compute.indexOf('.commit()')<compute.indexOf('googlePost(ROUTES_URL'))
   assert.equal(await p.evaluate(()=>__api.places+__api.routes),0,'closing the check resumes this scan, never starts a paid map lookup');
   await p.click('#tClose');await p.click('#btnSettings');
   assert.equal(await p.inputValue('#routesMonthlyCap'),'9500');
-  await require('./settings-ui')(p,'connections');await p.fill('#routesMonthlyCap','9400');await require('./onboarding-ui')(p);
+  await require('./settings-ui')(p,'connections');await require('./settings-ui').openTiles(p,['routesMonthlyCap']);await p.fill('#routesMonthlyCap','9400');await require('./onboarding-ui')(p);
   assert.equal(await p.evaluate(()=>__app.S.routesMonthlyCap),9400);
   assert.equal(await p.evaluate(()=>__app.S.monthlyCap),900);
   assert.equal(errors.length,0,errors.join('\n'));

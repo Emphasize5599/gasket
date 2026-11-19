@@ -180,6 +180,14 @@ if(!n.required)return html;
   root.addEventListener('restmapsverified',function(){maps.resume(true);});root.addEventListener('restmapscancel',function(){maps.resume(false);});
   function source(p){var names={'USDOT/BTS NTAD':'U.S. DOT / BTS','Recreation.gov (RIDB)':'Recreation.gov','Google Maps website':'Google Maps'},parts=[p.source,p.detailsSource,p.mapsSource].filter(Boolean).map(function(s){return names[s]||s;});return Array.from(new Set(parts)).join(' · ')||'Source not recorded';}
   var userIndex=A.KV.get('restplaces','user-index'),userIds=new Set(userIndex&&Array.isArray(userIndex.v)?userIndex.v:[]),userRecords=new Map();
+  root.addEventListener('restmarksimport',function(){
+    var imported=A.KV.get('restplaces','user-index');
+    userIds=new Set(imported&&Array.isArray(imported.v)?imported.v:[]);
+    userRecords.clear();
+    recoIdentities=new WeakMap();
+    accessVer++;
+    redraw();
+  });
   // 0.0.346: remember each place's checkable nightly rate for Settings' per-source chart (deferred, coalesced)
   var priceRecTimer=null;function recordPrices(){if(!root.RestPriceDist||priceRecTimer)return;priceRecTimer=setTimeout(function(){priceRecTimer=null;try{RestPriceDist.record(A.KV,(state.sites||[]).map(function(x){return effective(x.site,false);}));}catch(e){if(root.FLog)FLog.warn('rest','Rest price chart record failed',{error:String(e&&e.message||e)});}},400);}
   function effective(p,withMaps){p=RestPlaces.classify(p);var user=null;if(userIds.has(p.id)){if(!userRecords.has(p.id)){var r=A.KV.get('restplaces','user|'+p.id);userRecords.set(p.id,r&&r.v);}user=userRecords.get(p.id);}if(user&&(!user.origin||!Number.isFinite(user.origin.lat)||!Number.isFinite(user.origin.lng)||Trip.hav(user.origin,p)>.05))user=null;var out=Object.assign({},p,user);if(p.weighFacility){out.weighFacility=true;out.publicRestArea=p.publicRestArea;out.kind=p.kind;}out.amenities=Object.assign({},p.amenities,user&&user.amenities);var match=withMaps===false?null:maps.peek(out);if(match&&match.state==='found'){out.mapsUri=match.url;out.mapsSource=match.source;}out.userPricingExpired=!!(out.userPricing&&(!out.userPricingAt||Date.now()-out.userPricingAt>=RestAccess.refreshMs(A.S)));if(!out.userPricing&&out.userPriceBase)out=UserRestPrice.apply(out);return out;}

@@ -1151,7 +1151,7 @@
           if(incoming.brands&&typeof incoming.brands==='object')Object.keys(S.brands).forEach(function(k){if(typeof incoming.brands[k]==='boolean')S.brands[k]=incoming.brands[k];});
         }
         if(types.includes('citgo'))mergeData({gasketData:1,blacklist:data.citgo},'bl');
-        save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));BL.changed();close();toast('Selected data imported.');
+        save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));if(types.includes('general'))window.dispatchEvent(new Event('restmarksimport'));BL.changed();close();toast('Selected data imported.');
       });
     });
   }

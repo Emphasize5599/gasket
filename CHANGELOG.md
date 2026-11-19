@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.510 — 2026-11-19
+
+- Apply imported rest-stop marks immediately and improve spare placement for short trailers.
+- Includes the Settings and Garage updates in 0.0.509.
+
 ## 0.0.509 — 2026-11-19
 
 - Group data downloads, trip defaults, and connection keys in Settings.

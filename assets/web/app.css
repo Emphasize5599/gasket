@@ -2601,3 +2601,7 @@ details:not([open]) > summary .sum-edit { display:none; }
 #gDetails[open] > summary small { display:none; }
 .tz-retry-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(0, 1fr)); gap:8px; margin:8px 0; }
 .tz-retry-row > .btn { width:100%; margin:0; white-space:normal; }
+
+[data-portable-list] { display:grid; gap:10px; min-width:0; margin:8px 0; padding:8px 12px; border:1px solid var(--line); border-radius:12px; }
+[data-portable-list] label { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:10px; }
+[data-portable-list] label:has(input:disabled) { opacity:.55; }
