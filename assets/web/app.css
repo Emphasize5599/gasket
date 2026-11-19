@@ -2605,3 +2605,8 @@ details:not([open]) > summary .sum-edit { display:none; }
 [data-portable-list] { display:grid; gap:10px; min-width:0; margin:8px 0; padding:8px 12px; border:1px solid var(--line); border-radius:12px; }
 [data-portable-list] label { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:10px; }
 [data-portable-list] label:has(input:disabled) { opacity:.55; }
+
+.download-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.download-actions > .btn { width:100%; min-width:0; height:auto; min-height:54px; margin-top:0; }
+.download-actions:has(> button:not(.hidden):nth-child(2)) { grid-template-columns:repeat(3,minmax(0,1fr)); }
+#obExplore + #sDemo { margin-top:8px; }

@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 function setup(shared=new Map()){
  const calls=[],state={},row={id:41,fuel_type_code:'ELEC',station_name:'Fixture charger',latitude:35,longitude:-91,country:'US',ev_level2_evse_num:2,ev_connector_types:['J1772'],ev_pricing:'$0.35/kWh'},ctx={Map,Set,Date,Promise,Math,Number,JSON,URLSearchParams,setTimeout(){},setInterval(){},clearInterval(){}};ctx.window=ctx;ctx.addEventListener=()=>{};ctx.L={GridLayer:{extend:()=>function(){}}};
- ctx.__app={S:state,N:{fetchStationRoute(){},chargerInventory(){},fetchChargerApi(){}},P:{haversineMi:(a,b,c,d)=>Math.hypot(a-c,b-d)*69},KV:{get:(n,k,age)=>{const o=shared.get(n+'|'+k);return o&&(!age||Date.now()-o.t<=age)?o:null;},put:(n,k,v)=>{shared.set(n+'|'+k,{v:JSON.parse(JSON.stringify(v)),t:Date.now()});return true;}},map:{},esc:s=>String(s)};
+ ctx.__app={S:state,N:{fetchStationRoute(){},chargerInventory(){},fetchChargerApi(){}},P:{haversineMi:(a,b,c,d)=>Math.hypot(a-c,b-d)*69},KV:{get:(n,k,age)=>{const o=shared.get(n+'|'+k);return o&&(!age||Date.now()-o.t<=age)?o:null;},put:(n,k,v)=>{shared.set(n+'|'+k,{v:JSON.parse(JSON.stringify(v)),t:Date.now()});return true;}},map:{},qBtn:()=>'',esc:s=>String(s)};
  let fail=false,downloaded=true;
  ctx.__trip={call:async(fn,...args)=>{calls.push({fn,args});if(fn==='chargerInventory')return {count:downloaded?1:0,updated:Date.now(),fuel_stations:downloaded?[row]:[]};if(fail)return {error:'HTTP 429',status:429};if(fn==='fetchChargerApi')return {body:'[]'};return {body:JSON.stringify({fuel_stations:[row]}),remaining:'998',limit:'1000'};}};
  for(const f of ['altfuel','chargerdata'])vm.runInNewContext(fs.readFileSync('assets/web/'+f+'.js','utf8'),ctx);

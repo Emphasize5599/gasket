@@ -134,10 +134,10 @@
   '<details class="settings-help"><summary>Get a free Open Charge Map key</summary><ol class="steps"><li><a href="#" data-url="https://openchargemap.org/profile">Sign in or register</a>.</li><li>Open My profile → My apps → Register an application.</li><li>Copy the API key here, then tap Done.</li></ol><p>Optional additional coverage. Fair-use limits apply; this is not an unlimited live-price service.</p></details>'+
   '<label><input type="checkbox" id="evUseDOE"'+(S.evUseDOE!==false?' checked':'')+'> Use DOE for route updates</label><label><input type="checkbox" id="evNetPrices"'+(S.evNetPrices!==false?' checked':'')+'> Read networks\' published prices (Tesla, IONNA, Blink, ChargePoint, FLO)</label><label><input type="checkbox" id="evUseOCM"'+(S.evUseOCM?' checked':'')+'> Use Open Charge Map for additional coverage</label><label><input type="checkbox" id="evRefreshPrices"'+(S.evRefreshPrices!==false?' checked':'')+'> Update route pricing information online</label>'+
   '<label for="evPriceAgeHours">Prefer EV prices checked within (hours)</label><input type="number" id="evPriceAgeHours" min="1" max="720" step="1" value="'+(Math.max(1,Math.min(720,+S.evPriceAgeHours||24)))+'"><small>Default: 24 hours. Some prices change in real time; this is not a price guarantee. Older or undated rates are used if recent prices cannot cover the trip.</small><label><input type="checkbox" id="evAllowUnknownPrices"'+(S.evAllowUnknownPrices===true?' checked':'')+'> Allow chargers without a published price (estimated cost)</label>'+
-  '<label><input type="checkbox" id="evGuestApps"'+(S.evGuestApps?' checked':'')+'> Optional guest-app price sources</label><small>Uses undocumented guest APIs for EA, EVgo, ChargePoint and optional aggregators. May be blocked or change. Anonymous identities are generated on your phone; no captured session tokens. Provider terms and data rights still apply. Enable networks separately in Parameters.</small>'+
+  '<label><input type="checkbox" id="evGuestApps"'+(S.evGuestApps?' checked':'')+'> <span>Guest-app EV price sources '+A.qBtn('Uses guest APIs for EA, EVgo, ChargePoint and optional aggregators. Availability can change. Anonymous identities are generated on your phone. Enable networks separately in Parameters.')+'</span></label>'+
   '<details class="settings-help"><summary>Guest source configuration</summary><p>EA needs no credential. EVgo and Chargeway register anonymous identities on this device. Shared app-client configuration is included with owner approval; it is not a personal API entitlement. Generated tokens and optional overrides stay encrypted on this device, never in backups or logs. Advanced: import an authorized replacement JSON configuration below.</p><textarea id="evGuestCredentials" autocomplete="off" spellcheck="false" aria-label="Private EV source credentials" placeholder="Optional configuration JSON"></textarea><div class="btns"><button type="button" class="btn tonal sm" id="evGuestImport">Save overrides</button><button type="button" class="btn tonal sm" id="evGuestClear">Reset guest sources</button></div></details><small id="evGuestStatus" role="status"></small>'+
   '<details class="settings-help"><summary>Offline charger data</summary><p>Download all public, operating DOE chargers in the U.S. and Canada. This can be a large download; Wi-Fi is recommended. Discovery then works locally, without repeated API searches. Update the inventory periodically for new or closed sites.</p><p>Online updates only cover your route. Neither source guarantees current prices or available stalls. Chargers without prices are excluded unless you allow estimated costs above. Disabled networks without a price reader stay unavailable.</p></details>'+
-  '<div class="btns"><button type="button" class="btn tonal sm" id="evDownload">Download U.S. + Canada chargers</button><button type="button" class="btn tonal sm hidden" id="evCancelDownload">Cancel</button></div><div id="evInventoryStatus" role="status"></div><small id="evQuotaStatus">'+esc(quotaText())+'</small></div>';}
+  '<div class="download-actions"><button type="button" class="btn tonal" id="evDownload">Download</button><button type="button" class="btn tonal hidden" id="evCancelDownload">Cancel</button><button type="button" class="btn tonal" id="evDeleteDownload" disabled>Delete</button></div><div id="evInventoryStatus" role="status"></div><small id="evQuotaStatus">'+esc(quotaText())+'</small></div>';}
  async function download(key){if(downloadPromise)return downloadPromise;before('doe',key);var timer,done=false;
   downloadPromise=(async function(){try{if(root.Tasks)Tasks.upsert('charger-inventory',{text:'Downloading U.S. + Canada chargers',frac:null,cancel:function(){call('chargerInventory','cancel','');}});
    // one status read at a time; a slow reply never moves the bar back, and none lands after the download ends
@@ -161,7 +161,13 @@
    catch(e){A.toast('Charger download failed: '+e.message+'. Retry in Settings → Connections.');}
   }finally{firstTripCheck=null;}})();return firstTripCheck;
  }
- function attach(pg){var button=pg.querySelector('#evDownload'),cancel=pg.querySelector('#evCancelDownload'),info=pg.querySelector('#evInventoryStatus');if(!button)return;
+ function attach(pg){var button=pg.querySelector('#evDownload'),cancel=pg.querySelector('#evCancelDownload'),info=pg.querySelector('#evInventoryStatus'),remove=pg.querySelector('#evDeleteDownload');if(!button)return;
+  var count=0,working=false;
+  function actions(){
+   button.disabled=!N.chargerInventory||working;
+   button.textContent=count?'Update':'Download';
+   remove.disabled=!count||working;
+  }
   var toggle=pg.querySelector('#evGuestApps'),status=pg.querySelector('#evGuestStatus'),input=pg.querySelector('#evGuestCredentials');
   async function guest(a){try{var r=await root.EVGuest.configure(a);status.textContent='Guest sources '+(r.enabled?'enabled':'off')+' · EVgo '+(r.evgo?'ready':'not configured')+' · Chargeway '+(r.chargeway?'ready':'not configured')+' · PlugShare '+(r.plugshare?'ready':'not configured');return r;}catch(e){status.textContent='Private source settings unavailable on this device.';return null;}}
   if(toggle){toggle.disabled=!N.evGuestConfig;toggle.onchange=async function(){var wanted=toggle.checked;toggle.checked=!!S.evGuestApps;toggle.disabled=true;try{if(await root.EVGuest.setEnabled(wanted))await guest({});}catch(e){status.textContent='Guest-source change could not be saved. Your previous setting is unchanged.';}finally{toggle.checked=!!S.evGuestApps;toggle.disabled=false;}};}
@@ -169,9 +175,25 @@
   var imp=pg.querySelector('#evGuestImport'),forget=pg.querySelector('#evGuestClear');
   if(imp)imp.onclick=async function(){try{var v=JSON.parse(input.value);await guest({credentials:v});}catch(e){status.textContent='Enter a valid JSON credential object.';}finally{input.value='';}};
   if(forget)forget.onclick=async function(){await guest({clear:true});S.evGuestApps=false;toggle.checked=false;input.value='';if(root.EVGuest)root.EVGuest.cancel();A.save();};
-  function show(r){info.textContent=r.error?r.error:r.count?Number(r.count).toLocaleString()+' chargers saved · '+new Date(r.updated).toLocaleDateString():'No offline charger inventory downloaded yet.';var q=pg.querySelector('#evQuotaStatus');if(q)q.textContent=quotaText();}
-  button.disabled=!N.chargerInventory;if(N.chargerInventory)call('chargerInventory','status','').then(show);else info.textContent='Offline downloads are available in the Android app.';
-  button.onclick=async function(){button.disabled=true;cancel.classList.remove('hidden');try{show(await download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));}catch(e){show({error:e.message});}finally{button.disabled=false;cancel.classList.add('hidden');}};cancel.onclick=function(){call('chargerInventory','cancel','');};
+  function show(r){if(Number.isFinite(r.count))count=r.count;actions();info.textContent=r.error?r.error:r.count?Number(r.count).toLocaleString()+' chargers saved · '+new Date(r.updated).toLocaleDateString():'No offline charger inventory downloaded yet.';var q=pg.querySelector('#evQuotaStatus');if(q)q.textContent=quotaText();}
+  actions();
+  if(N.chargerInventory)call('chargerInventory','status','').then(function(r){if(!working)show(r);});
+  else info.textContent='Offline downloads are available in the Android app.';
+  async function watchDownload(task){
+   working=true;actions();cancel.classList.remove('hidden');
+   try{show(await task);}catch(e){show({error:e.message});}
+   finally{working=false;cancel.classList.add('hidden');actions();}
+  }
+  if(downloadPromise)watchDownload(downloadPromise);
+  button.onclick=function(){watchDownload(download(pg.querySelector('#nrelKey').value.trim()||'DEMO_KEY'));};
+  cancel.onclick=function(){call('chargerInventory','cancel','');};
+  remove.onclick=async function(){
+   if(working)return;
+   working=true;actions();
+   try{
+    if(await A.confirmDel({always:true,title:'Delete downloaded charger inventory?',body:'Removes the offline DOE charger download from this device.',action:'Delete'}))show(await call('chargerInventory','clear',''));
+   }finally{working=false;actions();}
+  };
  }
  root.ChargerData={restRate:restRate,potentiallyComplimentary:potentiallyComplimentary,firstTrip:firstTrip,routeRates:routeRates,before:before,after:after,meterRows:meterRows,quotaText:quotaText,localRoute:localRoute,localNear:localNear,ocmRoute:ocmRoute,normOCM:normOCM,merge:merge,tariff:tariff,referencePrice:referencePrice,hydrogenRate:hydrogenRate,settingsHtml:settingsHtml,attach:attach,download:download,boxes:boxes,encode:encode};
  if(root.__apiCount)root.__apiCount();

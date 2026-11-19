@@ -8,7 +8,7 @@
   groups.forEach(function(g){var e=document.createElement('div');e.className='settings-group hidden';e.dataset.settingsView=g[0];views[g[0]]=e;});
   var buckets={'Station discovery':'map','Website readers':'map','Traffic readers':'map','Website workers':'map','Official price sources':'map','Prices':'map','Search':'map','Trip planner':'trip','EV & hydrogen':'trip','Discounts':'savings','Station lists':'savings','Bad CITGO stations':'savings','Google API key · recommended':'connections','Routes API — separate budget':'connections','Local AI explanations · optional':'ai','General':'data','Your data':'data','Debugging':'help','About':'help'};
   buckets['Visual diagnostics']='help';
-  Array.from(body.children).forEach(function(e){if(e.id==='sDone')return;var title=e.querySelector('h3'),key=e.id==='gemmaSettings'?'ai':buckets[title&&title.textContent.trim()]||'help';views[key].appendChild(e);});
+  Array.from(body.children).forEach(function(e){if(e.id==='sDone')return;var title=e.querySelector('h3'),key=e.id==='gemmaSettings'?'ai':buckets[title&&title.textContent.replace(/\s*\?$/,'').trim()]||'help';views[key].appendChild(e);});
   function section(tag,title,destination){var el=document.createElement(tag);el.className='card';var head=document.createElement(tag==='details'?'summary':'h3');head.textContent=title;el.appendChild(head);destination.appendChild(el);return el;}
   function move(id,destination,selector){var el=Object.values(views).map(function(v){return v.querySelector('#'+id);}).find(Boolean);if(el)destination.appendChild(selector?el.closest(selector):el);}
   var trip=views.trip.querySelector('.card'),connections=views.connections,ev=views.trip.querySelector('#chargerSettings');
@@ -25,7 +25,7 @@
   var campground=section('div','Recreation.gov campgrounds',views.downloads);move('ridbSettings',campground);
   if(ev){
    var chargers=section('div','DOE charger inventory',views.downloads);
-   move('evDownload',chargers,'.btns');
+   move('evDownload',chargers,'.download-actions');
    var note=document.createElement('p');note.className='lead small keep';note.textContent='Uses the DOE key from Connections & usage. A personal key can help with large downloads.';chargers.append(note);move('evInventoryStatus',chargers);
    var evTile=section('details','EV data sources and keys',connections);evTile.appendChild(ev);
    var doe=section('details','DOE station-finder key',ev),ocm=section('details','Open Charge Map key',ev);
@@ -37,9 +37,9 @@
    ev.prepend(doe,ocm);
    var guestToggle=ev.querySelector('#evGuestApps'),guestLabel=guestToggle&&guestToggle.closest('label');
    if(guestLabel){
-    var description=guestLabel.nextElementSibling,config=description.nextElementSibling;
+    var config=guestLabel.nextElementSibling;
     var advanced=section('details','Advanced guest price sources',ev);
-    advanced.append(guestLabel,description,config);move('evGuestStatus',advanced);
+    advanced.append(guestLabel,config);move('evGuestStatus',advanced);
    }
   }
   Array.from(views.trip.children).filter(function(card){return card!==trip&&!card.querySelector('input,button,select');}).forEach(function(card){card.remove();});

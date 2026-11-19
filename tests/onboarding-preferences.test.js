@@ -2,7 +2,12 @@ const assert=require('node:assert/strict'),path=require('node:path'),{pathToFile
 (async()=>{const b=await chromium.launch({executablePath:process.env.CHROME||undefined});try{for(const width of [320,448]){
  const p=await b.newPage({viewport:{width,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:\/\//,r=>r.abort());await p.goto(pathToFileURL(path.resolve('assets/web/index.html')).href);
  const fields={obKey:'apiKey',obNrelKey:'nrelKey',obOcmKey:'ocmKey',obHereKey:'hereKey',obFuelKey:'fuelKey'};assert(await p.evaluate(()=>__app.S.trafficEnergy));await p.evaluate(()=>{window.__calls=0;['search','placesFind','computeRoute','routeSearch'].forEach(k=>__app.N[k]=()=>__calls++);});
- await p.click('#obNext');await p.locator('summary',{hasText:'More optional keys'}).click();for(const [id,key] of Object.entries(fields))await p.fill('#'+id,'  test-'+key+'  ');
+ await p.click('#obNext');await p.click('#obGoogleKey > summary');await p.locator('summary',{hasText:'More optional keys'}).click();for(const [id,key] of Object.entries(fields))await p.fill('#'+id,'  test-'+key+'  ');
+ assert.equal(await p.locator('#obReaders [data-ux-performance]').count(),3);
+ await p.locator('#obReaders [data-ux-performance="rest"] > summary').click();
+ await p.locator('#obReaders [data-rest-workers]').fill('18');
+ await p.locator('#obReaders [data-rest-workers]').dispatchEvent('change');
+ assert.equal(await p.evaluate(()=>__app.S.restWorkers),18);
  await p.locator('#trafficWorkers').evaluate(e=>{e.value=12;e.dispatchEvent(new Event('input',{bubbles:true}));});await p.click('#obNext');assert.equal(await p.evaluate(()=>__app.S.trafficWorkers),12);
  const config=async(group,target)=>{await p.click('[data-ob-config="'+group+'"]'+(target?'[data-ob-target="'+target+'"]':':not([data-ob-target="hazardPrefs"])'));await p.waitForSelector('#settings:not(.hidden)');assert.equal(await p.locator('#onboarding').count(),0);};
  const done=async()=>{await p.click('#sDone');await p.waitForSelector('#onboarding');assert(!await p.evaluate(()=>__app.S.setupDone));};

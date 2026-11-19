@@ -746,7 +746,7 @@
       '<button class="x" id="dClose" aria-label="Close">✕</button></div>';
     if (c) {
       var saved = c.base - c.final;
-      h += '<div class="final"><span class="v">' + priceHtml(c.final) + '</span><span class="l">/gal ' + P.GRADES[S.grade].label.toLowerCase() + '<br>your price</span></div>';
+      h += '<div class="final"><span class="v">' + priceHtml(c.final) + '</span><span class="l">/gal ' + P.GRADES[S.grade].label.toLowerCase() + '</span></div>';
       h += '<div class="fresh' + (c.stale ? ' stale' : '') + '">' + (c.updated ? (c.source || s.source || 'Google') + ' price updated ' + ago(c.updated.getTime()) : 'Update time unknown') + (c.stale ? ' — may be out of date' : '') + '</div>';
       if(c.observedAt)h+='<div class="note">Price retrieved '+esc(ago(c.observedAt))+'. Retrieval time is not a pump-update time.</div>';
       h += '<div class="bd">';
@@ -757,7 +757,8 @@
       var info = c.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + (S.walmartPlus ? '<p><b>How to get it:</b> ' + esc(br.howTo) + '</p>' : '') +
         (s.extra ? '<p>Also sold here: ' + esc(s.extra.label) + ' — $' + P.fmt3(s.extra.price) + ' posted.</p>' : '');
       h += '<div class="ln tot"><div class="k">You pay per gallon' + (info ? ' ' + qBtn(info) : '') + '</div><div class="a">' + money(c.final) + '</div></div></div>';
-      if (saved > 0) h += '<span class="save-pill">Saves $' + (saved * 15).toFixed(2) + ' on 15 gal</span>';
+      var car = window.Garage && Garage.car(), gallons = car && Garage.kind(car)==='gas' ? Number(car.tank) : 0;
+      if (saved > 0 && Number.isFinite(gallons) && gallons > 0) h += '<span class="save-pill">Save $' + (saved * gallons).toFixed(2) + ' on ' + gallons + (gallons===1?' gallon':' gallons') + '</span>';
     } else {
       h += '<div class="empty">No ' + P.GRADES[S.grade].label.toLowerCase() + ' price is published for this station (not on Google or the brand\'s site).</div>';
     }
@@ -1050,11 +1051,20 @@
     toast(where && !/^error/.test(where) ? 'Saved to ' + where : kind === 'all' ? 'Couldn\'t save the file' + (where ? ' (' + where.replace(/^error: /, '') + ')' : '') : 'Shared the list');
   }
   var portableTypes = {
-    general:'General data (garage without VINs, stations, prices, traffic and rest-stop marks)',
+    garage:'Garage (without VINs)',
+    stations:'Station locations and prices',
+    traffic:'Traffic data',
+    restRatings:'Rest-stop ratings',
+    restAppearance:'Rest stops marked Not pleasing',
+    restAmenities:'Added rest-stop amenities',
     preferences:'Station preferences (use / don’t use)',
     citgo:'Bad CITGO lists'
   };
-  var portableNamespaces = ['stationstore','pricehistory','traffic'];
+  var portableRecords = {stations:['stationstore','pricehistory'],traffic:['traffic']};
+  var portableRestFields = {restRatings:'rating',restAppearance:'unsightly',restAmenities:'amenities'};
+  function restFields(types) {
+    return Object.keys(portableRestFields).filter(function(type){return types.includes(type);}).map(function(type){return portableRestFields[type];});
+  }
   function portableChecklist(action, available) {
     return '<fieldset data-portable-list><legend>Data types</legend><label class="keep"><input type="checkbox" data-portable-all> All</label>'+
       Object.keys(portableTypes).map(function(k){
@@ -1086,14 +1096,56 @@
       return /^vin/i.test(key)?undefined:value;
     });
   }
-  function restMarks() {
+  function restMarks(fields) {
     return (((KV.get('restplaces','user-index')||{}).v)||[]).map(function(id){
       var record=(KV.get('restplaces','user|'+id)||{}).v;
-      if(!record||!record.origin||!['rating','unsightly','amenities'].some(function(k){return record[k]!=null;}))return null;
+      if(!record||!record.origin||!fields.some(function(k){return record[k]!=null;}))return null;
       var marks={origin:record.origin};
-      ['rating','unsightly','amenities'].forEach(function(key){if(record[key]!=null)marks[key]=record[key];});
+      fields.forEach(function(key){if(record[key]!=null)marks[key]=record[key];});
       return {id:id,marks:marks};
     }).filter(Boolean);
+  }
+  function importRestMarks(data,types) {
+    var index=new Set(((KV.get('restplaces','user-index')||{}).v)||[]);
+    types.filter(function(type){return portableRestFields[type];}).forEach(function(type){
+      var field=portableRestFields[type];
+      data[type].forEach(function(row){
+        if(!row||typeof row.id!=='string'||!row.marks||row.marks[field]==null)return;
+        var origin=row.marks.origin;
+        if(!origin||!Number.isFinite(origin.lat)||!Number.isFinite(origin.lng)||Math.abs(origin.lat)>90||Math.abs(origin.lng)>180)return;
+        var key='user|'+row.id,record=(KV.get('restplaces',key)||{}).v||{origin:origin};
+        if(record[field]==null){record[field]=row.marks[field];if(KV.put('restplaces',key,record))index.add(row.id);}
+      });
+    });
+    KV.put('restplaces','user-index',Array.from(index));
+    window.dispatchEvent(new Event('restmarksimport'));
+  }
+  function portableImportTypes(file) {
+    if(!file||typeof file!=='object')return null;
+    if(file.gasketPortable===2&&file.types&&typeof file.types==='object')return file.types;
+    if(file.gasketPortable===1&&file.types&&typeof file.types==='object'){
+      var data=Object.assign({},file.types),general=data.general;
+      if(!general)return data;
+      delete data.general;
+      if(Array.isArray(general.cars))data.garage=general.cars;
+      Object.keys(portableRecords).forEach(function(type){
+        var records={};
+        portableRecords[type].forEach(function(ns){if(general.records&&general.records[ns])records[ns]=general.records[ns];});
+        if(Object.keys(records).length)data[type]=records;
+      });
+      if(Array.isArray(general.rests))Object.keys(portableRestFields).forEach(function(type){
+        var field=portableRestFields[type];
+        var rows=general.rests.filter(function(row){return row&&row.marks&&row.marks[field]!=null;});
+        if(rows.length)data[type]=rows;
+      });
+      return data;
+    }
+    if(file.gasketData!==1&&file.fuelPlusData!==1)return null;
+    var legacy={};
+    if(Array.isArray(file.blacklist))legacy.citgo=file.blacklist;
+    if(file.settings&&Array.isArray(file.settings.cars))legacy.garage=file.settings.cars;
+    if(file.settings&&Array.isArray(file.settings.ignoredStations))legacy.preferences={ignored:file.settings.ignoredStations};
+    return legacy;
   }
   async function transferRecords(namespace, incoming) {
     if(!N.portableRecords)throw Error('This transfer needs the Android app.');
@@ -1102,14 +1154,17 @@
     return result.records||{};
   }
   async function exportPortable(types) {
-    var data={gasketPortable:1, types:{}};
-    if(types.includes('general')){
-      var records={};
-      for(var ns of portableNamespaces)records[ns]=await transferRecords(ns);
-      data.types.general={cars:portableCars(S.cars),records:records,rests:restMarks()};
+    var data={gasketPortable:2, types:{}};
+    for(var type of types){
+      if(portableRecords[type]){
+        var records={};
+        for(var ns of portableRecords[type])records[ns]=await transferRecords(ns);
+        data.types[type]=records;
+      }else if(portableRestFields[type])data.types[type]=restMarks([portableRestFields[type]]);
+      else if(type==='garage')data.types.garage=portableCars(S.cars);
+      else if(type==='preferences')data.types.preferences={ignored:IG.list(),brands:S.brands};
+      else if(type==='citgo')data.types.citgo=BL.list();
     }
-    if(types.includes('preferences'))data.types.preferences={ignored:IG.list(),brands:S.brands};
-    if(types.includes('citgo'))data.types.citgo=BL.list();
     if(!N.exportPortable)throw Error('The folder picker needs the Android app.');
     var result=await window.__trip.call('exportPortable','gasket-data-'+stamp()+'.json',JSON.stringify(data));
     if(result.error)throw Error(result.error);
@@ -1119,52 +1174,44 @@
     var res=await window.__trip.call('pickTextFile');
     if(res.cancelled)return;
     if(res.error)throw Error(res.error);
-    var file=JSON.parse(res.body),data=file.gasketPortable===1?file.types:null;
-    if(!data&&(file.gasketData===1||file.fuelPlusData===1)){
-      data={};
-      if(Array.isArray(file.blacklist))data.citgo=file.blacklist;
-      if(file.settings&&Array.isArray(file.settings.cars))data.general={cars:file.settings.cars};
-      if(file.settings&&Array.isArray(file.settings.ignoredStations))data.preferences={ignored:file.settings.ignoredStations};
-    }
-    if(!data||typeof data!=='object')throw Error('That is not a Gasket data export.');
-    var available=Object.keys(portableTypes).filter(function(k){return Object.prototype.hasOwnProperty.call(data,k)&&data[k]!=null;});
+    var data=portableImportTypes(JSON.parse(res.body));
+    if(!data)throw Error('That is not a Gasket data export.');
+    var available=Object.keys(portableTypes).filter(function(type){
+      if(portableRecords[type])return portableRecords[type].some(function(ns){return data[type]&&data[type][ns]&&typeof data[type][ns]==='object';});
+      if(type==='preferences')return !!data[type]&&typeof data[type]==='object';
+      return Array.isArray(data[type]);
+    });
     if(!available.length)throw Error('This file has no importable data.');
     var close=subPage('Import data',portableChecklist('import',available)+'<button class="btn primary" data-portable-confirm>Confirm</button><button class="btn tonal" data-portable-cancel>Cancel</button>',function(body){
       body.querySelector('[data-portable-cancel]').onclick=function(){close();};
       bindPortable(body,body.querySelector('[data-portable-confirm]'),async function(types){
-        if(types.includes('general')){
-          var g=data.general;
-          for(var ns of portableNamespaces)if(g.records&&g.records[ns])await transferRecords(ns,g.records[ns]);
-          mergeData({gasketData:1,settings:{cars:portableCars(g.cars)}},'all');
-          var index=((KV.get('restplaces','user-index')||{}).v||[]).slice();
-          (Array.isArray(g.rests)?g.rests:[]).forEach(function(row){
-            if(!row||typeof row.id!=='string'||!row.marks||!row.marks.origin||!Number.isFinite(row.marks.origin.lat)||!Number.isFinite(row.marks.origin.lng)||Math.abs(row.marks.origin.lat)>90||Math.abs(row.marks.origin.lng)>180)return;
-            var key='user|'+row.id,record=(KV.get('restplaces',key)||{}).v||{origin:row.marks.origin};
-            ['rating','unsightly','amenities'].forEach(function(k){if(record[k]==null&&row.marks[k]!=null)record[k]=row.marks[k];});
-            if(KV.put('restplaces',key,record)&&!index.includes(row.id))index.push(row.id);
-          });
-          KV.put('restplaces','user-index',index);
+        for(var type of types){
+          for(var ns of portableRecords[type]||[])if(data[type][ns])await transferRecords(ns,data[type][ns]);
         }
+        if(types.includes('garage'))mergeData({gasketData:1,settings:{cars:portableCars(data.garage)}},'all');
+        if(restFields(types).length)importRestMarks(data,types);
         if(types.includes('preferences')){
           var current=IG.list(),incoming=data.preferences;
           (Array.isArray(incoming.ignored)?incoming.ignored:[]).forEach(function(row){if(row&&typeof row.id==='string'&&Number.isFinite(row.lat)&&Number.isFinite(row.lng)&&!current.some(function(v){return v.id===row.id;}))current.push(row);});
           if(incoming.brands&&typeof incoming.brands==='object')Object.keys(S.brands).forEach(function(k){if(typeof incoming.brands[k]==='boolean')S.brands[k]=incoming.brands[k];});
         }
         if(types.includes('citgo'))mergeData({gasketData:1,blacklist:data.citgo},'bl');
-        save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));if(types.includes('general'))window.dispatchEvent(new Event('restmarksimport'));BL.changed();close();toast('Selected data imported.');
+        save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));BL.changed();close();toast('Selected data imported.');
       });
     });
   }
   async function deletePortable(types) {
     if(!await confirmDel({always:true,title:'Delete selected data?',body:types.map(function(k){return esc(portableTypes[k]);}).join('<br>'),action:'Delete'}))return;
-    if(types.includes('general')){
-      S.cars=[];S.carId='';N.saveCache('');gStations=[];official={};stations=[];lastFetch=null;
-      portableNamespaces.forEach(function(ns){KV.clear(ns);});
-      restMarks().forEach(function(row){
-        var key='user|'+row.id,record=(KV.get('restplaces',key)||{}).v;
-        if(record){delete record.rating;delete record.unsightly;delete record.amenities;KV.put('restplaces',key,record);}
-      });
-    }
+    if(types.includes('garage')){S.cars=[];S.carId='';}
+    if(types.includes('stations')){N.saveCache('');gStations=[];official={};stations=[];lastFetch=null;}
+    types.forEach(function(type){(portableRecords[type]||[]).forEach(function(ns){KV.clear(ns);});});
+    var fields=restFields(types);
+    if(fields.length)restMarks(fields).forEach(function(row){
+      var key='user|'+row.id,record=(KV.get('restplaces',key)||{}).v;
+      if(!record)return;
+      fields.forEach(function(field){delete record[field];});
+      KV.put('restplaces',key,record);
+    });
     if(types.includes('preferences')){S.ignoredStations=[];S.brands=Object.assign({},P.DEFAULTS.brands);}
     if(types.includes('citgo'))S.blacklist=[];
     save();window.dispatchEvent(new Event('stationsreset'));window.dispatchEvent(new Event('cacheclear'));BL.changed();
@@ -1336,7 +1383,7 @@
     if (onboarding) h += '<p class="lead">Start without an API key. Website searches are slower and coverage varies.</p>';
     h+='<button class="btn tonal" id="sDemo">Let me test Gasket out with demo data</button><p class="lead small keep">Adds four example vehicles only—no stations, prices or trips. Your existing vehicles are kept.</p>';
     h += '<div class="card"><h3>Station discovery</h3><div class="field"><div class="lbl">Prefer website discovery<small>Works without an API key for nearby and route searches. Scans overlapping areas and scrolls each result list. Slower and less consistent: websites can omit stations or prices, stall, or restrict access. No automatic paid fallback. Without a key this method is selected automatically; with a key you can choose either method.</small></div>' + sw('keylessRegular',!!S.keylessRegular) + '</div></div>';
-    h+=WorkerSettings.html({S:S,N:N},S.keylessWorkers);
+    h+=WorkerSettings.html(window.__app,S.keylessWorkers);
     h += '<div class="card"><h3>Google API key · recommended</h3><p class="lead small">Optional. Faster station discovery and more reliable trip planning.</p>' +
       '<div class="field col"><input type="password" id="apiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" value="' + esc(S.apiKey) + '"></div>' +
       '<details class="alt-entry"><summary>How to get a key</summary><ol class="steps"><li>Open <a href="#" data-url="https://console.cloud.google.com/apis/library/places.googleapis.com">Places API (New)</a> in Google Cloud and enable it (needs a billing account; 1,000 price lookups/month are free).</li>' +
@@ -1366,9 +1413,7 @@
     h += '<div class="card"><h3>Official price sources</h3>' +
       '<div class="field"><div class="lbl">Walmart (walmart.com)<small>Walmart\'s own store pages. Updated daily by Walmart.</small></div>' + sw('walmartDirect', S.walmartDirect !== false) + '</div>' +
       '<div class="field"><div class="lbl">Murphy USA (murphyusa.com)<small>Murphy\'s own store-finder map. Updated through the day.</small></div>' + sw('murphyDirect', S.murphyDirect !== false) + '</div>' +
-      '<div class="field"><div class="lbl">Site checks<small>If a site asks “are you human?”, open it and complete the check yourself.</small></div>' +
-      '<div class="btns"><button class="btn tonal sm" data-verify="walmart">Walmart</button><button class="btn tonal sm" data-verify="murphy">Murphy</button></div></div>' +
-      '<p class="lead" style="font-size:12.5px;margin:4px 0 10px">Official prices supplement API discovery and saved-price refreshes. Website discovery needs no key.</p></div>';
+      '</div>';
     h += '<div class="card"><h3>Prices</h3>' +
       '<div class="field"><div class="lbl">Round prices to the nearest cent<small>$3.199 shows as $3.20; $3.191 shows as $3.19. Only changes how prices look; savings are still worked out exactly.</small></div>' + sw('roundCents', !!S.roundCents) + '</div></div>';
     h += '<div class="card"><h3>Search</h3>' +
@@ -1474,9 +1519,6 @@
     $('sLogClear').onclick = function () {
       confirmDel({ title: 'Clear the debug log?', action: 'Clear' }).then(function (ok) { if (!ok) return; if (window.FLog) FLog.clear(); $('logCount').textContent = '0 entries'; toast('Log cleared.'); });
     };
-    pg.querySelectorAll('[data-verify]').forEach(function (bt) {
-      bt.onclick = function () { closeSettings(false); if (N.siteVerify) N.siteVerify(bt.dataset.verify); };
-    });
     $('sDemo').onclick = function () {
       closeSettings(false);if(window.Garage)Garage.installDemo();
     };

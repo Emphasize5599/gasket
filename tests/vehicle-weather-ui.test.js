@@ -31,19 +31,19 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
  await p.evaluate(()=>{__incomplete=true;__app.S.trip.departNow=false;__app.S.trip.depart=new Date(Date.now()+86400000).toISOString().slice(0,16);__trip.step(5);});await p.waitForFunction(()=>__weatherReads===4);
  assert.equal(await p.locator('.hz-fit strong').evaluateAll(es=>es.every(e=>e.textContent.includes('Not ranked'))),true,'missing data is never promoted to best');
  if(process.env.UI_SHOTS)await p.screenshot({path:path.join(process.env.UI_SHOTS,'vehicle-fit-'+width+'.png')});
- await p.evaluate(()=>__trip.step(1));await p.check('#clAcBroken');await p.evaluate(()=>__trip.close());await p.click('#btnSettings');await require('./settings-ui')(p,'data');await p.evaluate(()=>{__app.N.portableRecords=(id)=>onNativeResult(id,{records:{}});__app.N.exportPortable=(id,name,text)=>{window.__saved={name,text};onNativeResult(id,{saved:true});};});await p.locator('#portableExport > summary').click();await p.check('#portableExport [value="general"]');await p.click('#exAll');
- const exported=await p.evaluate(()=>JSON.parse(__saved.text));assert.equal(exported.types.general.cars[0].climate.acBroken,true);assert.equal(exported.types.general.cars[0].info.hazardProfile,'low');
- assert(!Object.keys(exported.types.general.cars[0]).some(k=>/^vin/i.test(k)));
+ await p.evaluate(()=>__trip.step(1));await p.check('#clAcBroken');await p.evaluate(()=>__trip.close());await p.click('#btnSettings');await require('./settings-ui')(p,'data');await p.evaluate(()=>{__app.N.portableRecords=(id)=>onNativeResult(id,{records:{}});__app.N.exportPortable=(id,name,text)=>{window.__saved={name,text};onNativeResult(id,{saved:true});};});await p.locator('#portableExport > summary').click();await p.check('#portableExport [value="garage"]');await p.click('#exAll');
+ const exported=await p.evaluate(()=>JSON.parse(__saved.text));assert.equal(exported.types.garage[0].climate.acBroken,true);assert.equal(exported.types.garage[0].info.hazardProfile,'low');
+ assert(!Object.keys(exported.types.garage[0]).some(k=>/^vin/i.test(k)));
  await p.uncheck('#portableExport [data-portable-all]');assert(await p.isDisabled('#exAll'));
- await p.check('#portableExport [value="general"]');assert(await p.locator('#portableExport [data-portable-all]').evaluate(e=>e.indeterminate));
+ await p.check('#portableExport [value="garage"]');assert(await p.locator('#portableExport [data-portable-all]').evaluate(e=>e.indeterminate));
  await p.evaluate(()=>{__mocks.pick=JSON.stringify({gasketPortable:1,types:{general:{rests:[{id:'fixture-rest',marks:{origin:{lat:36,lng:-89},rating:'good',amenities:{restrooms:false}}}]}}});});
  assert(await p.locator('#imAll').evaluate(button=>{
    const label=button.previousElementSibling;
    return label.clientWidth>0&&label.getBoundingClientRect().bottom<=button.getBoundingClientRect().top;
  }),'Import label and Browse button each have their own row');
  await p.click('#imAll');await p.waitForSelector('[data-portable-confirm]');
- assert(await p.isChecked('.sub-page [value="general"]'));assert(await p.isDisabled('.sub-page [value="citgo"]'));assert(await p.isDisabled('.sub-page [value="preferences"]'));
- await p.click('[data-portable-confirm]');await p.waitForFunction(()=>__app.KV.get('restplaces','user|fixture-rest')?.v?.amenities?.restrooms===false);
+ assert(await p.isChecked('.sub-page [value="restAmenities"]'));assert(await p.isDisabled('.sub-page [value="garage"]'));await p.uncheck('.sub-page [value="restRatings"]');assert(await p.isDisabled('.sub-page [value="citgo"]'));assert(await p.isDisabled('.sub-page [value="preferences"]'));
+ await p.click('[data-portable-confirm]');await p.waitForFunction(()=>__app.KV.get('restplaces','user|fixture-rest')?.v?.amenities?.restrooms===false);assert.equal(await p.evaluate(()=>__app.KV.get('restplaces','user|fixture-rest').v.rating),undefined);
  await p.evaluate(()=>{__app.N.backupAll=(id)=>{window.__backupPrefs=JSON.parse(__app.N.loadSettings());onNativeResult(id,{path:'test backup',prefs:1,kv:0});};});await p.click('#bkSave');
  await p.waitForFunction(()=>!!window.__backupPrefs);assert.equal(await p.evaluate(()=>__backupPrefs.cars[0].climate.acBroken),true);
  await p.evaluate(()=>{__mocks.restoreFile=JSON.stringify({fullBackup:1,prefs:{settings:{t:'s',v:JSON.stringify(__backupPrefs)}},kv:{}});});await p.click('#bkRestore');

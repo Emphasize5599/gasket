@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.514 — 2026-11-19
+
+- Move the demo vehicles to the last setup screen, group reader controls, and shorten setup copy.
+- Double the regular RAM-based reader defaults while retaining low-memory backoff.
+- Show station savings for the selected vehicle’s tank and simplify the download controls.
+- Select garage, station, traffic, and rest-stop data types individually for transfer or deletion.
+
 ## 0.0.513 — 2026-11-19
 
 - Keep the Import label visible above Browse in Your data on narrow screens.
