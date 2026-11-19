@@ -32,6 +32,7 @@ assert.equal(M.generalized({type:'Touring',brand:'Example',model:'Model A'}),fal
  await p.click('#gTires summary');await p.waitForSelector('#tzDet');assert.match(await p.innerText('#gTires'),/extremely generalized/);
  assert.equal(await p.locator('.tz-guess').evaluate(e=>getComputedStyle(e).display),'block','sentence fragments must not become separately spaced flex items');
  const buttons=await p.locator('.tz-gbtns button').evaluateAll(bs=>bs.map(b=>b.getBoundingClientRect().top));assert.equal(buttons.length,2);assert.ok(Math.abs(buttons[0]-buttons[1])<2);await p.click('#tzSpareYes');assert.equal(await p.inputValue('#tzSpareLocation'),'under');assert.doesNotMatch(await p.evaluate(()=>Tires.departureNote(Garage.car())),/stored/i);
+ await p.selectOption('[data-primary-spare="car"]','front');assert.equal(await p.evaluate(()=>Garage.car().tires.spareAxle),'front');
  await p.check('[data-extra-enabled="car"]');assert.equal(await p.inputValue('[data-extra-axle="0"]'),'all');
  await p.fill('[data-extra-count="car"]','3');await p.dispatchEvent('[data-extra-count="car"]','change');
  await p.selectOption('[data-extra-axle="0"]','front');await p.selectOption('[data-extra-axle="2"]','rear');

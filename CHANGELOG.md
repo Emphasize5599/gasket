@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.511 — 2026-11-19
+
+- Set axle fit for the primary car and trailer spares, as well as the additional spares.
+- Includes the Settings, data transfer, and Garage updates in 0.0.509 and 0.0.510.
+
 ## 0.0.510 — 2026-11-19
 
 - Apply imported rest-stop marks immediately and improve spare placement for short trailers.
