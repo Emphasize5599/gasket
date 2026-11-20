@@ -2797,7 +2797,8 @@ public class MainActivity extends Activity {
                             || ("audiparts".equals(key) && url.equals("https://parts.audiusa.com/"))
                             || ("campendium".equals(key) && url.startsWith("https://maps.campendium.com/?"))
                             || ("traffic".equals(key) && url.equals("https://www.google.com/maps"))
-                            || ("restmaps".equals(key) && (url.startsWith("https://www.google.com/maps/search/?api=1&query=") || restMapsPlaceUrl(url)))
+                            || ("restmaps".equals(key) && (url.startsWith("https://www.google.com/maps/search/?api=1&query=") || restMapsPlaceUrl(url)
+                                    || url.matches("https://www\\.google\\.com/maps/search/rest\\+area/@-?\\d{1,2}\\.\\d{1,8},-?\\d{1,3}\\.\\d{1,8},15z\\?hl=en")))
                             || (isGasWorker(key) && url.startsWith("https://www.google.com/maps/search/gas+stations/@"));
                     if (w == null || script.length() == 0 || !ok || verifying == w) {
                         js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Not available.'})");

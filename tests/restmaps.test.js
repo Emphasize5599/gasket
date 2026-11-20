@@ -42,8 +42,11 @@ const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.85
  assert.equal(M.queries({...plaza,highway:null}).length,5,'unknown highway: all four');assert.equal(M.queries({...plaza,id:'osm:node:1'}).length,1,'other sources: own name only');
  assert.deepEqual(M.queries({...plaza,name:'Ohio Turnpike Plaza EB'}).map(q=>q.name),['Ohio Turnpike Plaza EB','Ohio Turnpike Plaza'],'name already has a direction: no NB/SB/EB/WB variants, only the name without it');
  const asked=[],kv=new Map(),page={primary:true,name:'Ohio Turnpike Plaza WB',url:'https://www.google.com/maps/place/Ohio+Turnpike+Plaza+WB/data=!3d41.3003!4d-81.6004'};
- const s=M.create({get:k=>kv.get(k),put:(k,v)=>kv.set(k,v),read:async q=>{asked.push(q.name);return {complete:true,places:/WB$/.test(q.name)?[page]:[]};},blocked:()=>assert.fail('no check')});
- const got=await s.resolve(plaza);assert.equal(got.state,'found');assert.equal(got.query,'Ohio Turnpike Plaza WB');assert.deepEqual(asked,['Ohio Turnpike Plaza','Ohio Turnpike Plaza EB','Ohio Turnpike Plaza WB']);
+ // 0.0.516: a U.S. DOT/BTS place is looked up once, by Maps' nearby "rest area" search at its coordinates (other sources still use the name queries)
+ const s=M.create({get:k=>kv.get(k),put:(k,v)=>kv.set(k,v),read:async q=>{asked.push(q);return {complete:true,places:q.nearby?[page]:[]};},blocked:()=>assert.fail('no check')});
+ const got=await s.resolve(plaza);assert.equal(got.state,'found');assert.equal(asked.length,1);assert(asked[0].nearby);assert.equal(asked[0].name,'Ohio Turnpike Plaza');
+ const named=[],s2=M.create({get:()=>null,put:()=>{},read:async q=>{named.push(q.name);return {complete:true,places:/WB$/.test(q.name)?[page]:[]};},blocked:()=>assert.fail('no check')});
+ assert.equal((await s2.resolve({...plaza,id:'rvparky:77',highway:'I-80'})).state,'notfound','other sources: own name only');assert.deepEqual(named,['Ohio Turnpike Plaza']);
  assert(M.choose({...plaza,direction:'W'},[page]),'exact name with its direction suffix matches');assert.equal(M.choose({...plaza,direction:'E'},[page]),null,'opposite direction rejected');
  const none=M.create({get:()=>null,put:()=>{},read:async()=>({complete:true,places:[]}),blocked:()=>{}});assert.equal((await none.resolve({...plaza,id:'ntad:78'})).state,'notfound');
  console.log('Direction-suffixed Maps searches for U.S. DOT/BTS rest areas passed');})().catch(e=>{console.error(e);process.exitCode=1;});
@@ -65,3 +68,23 @@ const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.85
 // User choice is explicit identity evidence even when the displayed name differs.
 {const store=new Map(),io={get:k=>store.get(k),put:(k,v)=>store.set(k,v),now:()=>123456789,read:async()=>({complete:true,places:[]})},picker=M.create(io),choice={url:row.url,name:'Different listing title',closure:'temporarily_closed'};
  picker.select(site,choice);assert.equal(picker.peek(site).url,choice.url);assert.equal(picker.peek(site).closure,'temporarily_closed');assert(picker.peek(site).userSelected);assert.equal(M.create(io).peek(site).name,choice.name);assert.throws(()=>picker.select(site,{url:'https://evil.test/maps/place/no'}));}
+
+// 0.0.516: nearby "rest area" search at the coordinates, picked by category, direction, road and name words
+{const oldham={id:'ntad:900',name:'I-71 North Oldham County Rest Area',lat:38.4,lng:-85.4,direction:'N',highway:'I-71'};
+ const u=r=>'https://www.google.com/maps/search/?api=1&query=x&query_place_id='+r;
+ const own={name:'I 71 oldham rest area',lat:38.4004,lng:-85.4,cats:['Rest stop'],url:u('ChIJaaaaaaaaaaaa'),closure:'temporarily_closed'},
+  sb={name:'Southbound Rest Area',lat:38.4,lng:-85.4012,cats:['Rest stop'],url:u('ChIJbbbbbbbbbbbb')},
+  lot={name:'Parking lot',lat:38.4001,lng:-85.4001,cats:['Parking lot'],url:u('ChIJcccccccccccc')},
+  weigh={name:'Oldham weigh station',lat:38.4001,lng:-85.4,cats:['Weigh station'],url:u('ChIJdddddddddddd')},
+  far={name:'I 71 oldham rest area',lat:38.42,lng:-85.4,cats:['Rest stop'],url:u('ChIJeeeeeeeeeeee')},
+  other={name:'I 65 rest area',lat:38.4002,lng:-85.4,cats:['Rest stop'],url:u('ChIJffffffffffff')};
+ const got=M.pick(oldham,[sb,lot,weigh,other,own]);assert.equal(got.url,own.url,'own direction, own road, place words');assert.equal(got.closure,'temporarily_closed');
+ assert.equal(M.pick(oldham,[sb]),null,'the opposite direction is never taken');
+ assert.equal(M.pick(oldham,[weigh]),null,'a weigh station is only for weigh sites');
+ assert.equal(M.pick(oldham,[far]),null,'too far from the inventory point');
+ assert.equal(M.pick(oldham,[other]),null,'another highway');
+ assert.equal(M.pick({...oldham,name:'Sample Weigh Station'},[weigh]).url,weigh.url);
+ assert.equal(M.pick({...oldham,direction:null,name:'Rest Area',highway:''},[{...sb,name:'Rest area A',lat:38.4015,lng:-85.4},{...own,name:'Rest area B',lat:38.3985,lng:-85.4}]),null,'two equal unrelated answers far apart: none');
+ assert.equal(M.nearbyUrl(oldham),'https://www.google.com/maps/search/rest+area/@38.400000,-85.400000,15z?hl=en');
+ assert.deepEqual(M.nearbyQueries(oldham),['rest area','parking']);assert.deepEqual(M.nearbyQueries({name:'Sidney Weigh Station'}),['rest area','weigh station']);
+ const java=fs.readFileSync(__dirname+'/../src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert(java.includes('maps/search/rest\\\\+area/@'),'native allows the nearby page');}

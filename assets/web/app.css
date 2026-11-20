@@ -2217,6 +2217,8 @@ body.job-on:not(.job-map) .tpick-new:not(.cont), body.job-on:not(.job-map) .hist
 .rest-row-actions .rest-links:empty { display:none; }
 .rest-row-actions .rest-edit-btn { margin:0; display:inline-flex; align-items:center; gap:4px; width:auto; min-height:36px; padding:6px 12px 6px 9px; flex:none; }
 .rest-row-actions .rest-edit-btn svg { width:17px; height:17px; }
+.rest-row-actions .rest-choose-maps, .rest-maps-row .rest-choose-maps { margin:0; display:inline-flex; align-items:center; gap:4px; width:auto; min-height:36px; padding:6px 12px 6px 9px; flex:none; }
+.rest-choose-maps svg { width:17px; height:17px; fill:currentColor; }
 .rest-row-actions .rest-icon { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:0; border:0; border-radius:12px; color:var(--ink); background:var(--surface-2); cursor:pointer; }
 .rest-row-actions .rest-icon[aria-pressed="true"] { background:var(--warn); color:#fff; }
 .rest-views { grid-column:1 / -1; min-width:0; }

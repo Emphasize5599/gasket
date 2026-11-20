@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.516 — 2026-11-20
+
+- U.S. DOT rest areas find their Google Maps place automatically by searching "rest area" near their coordinates (like Maps' Nearby button), so a closure such as "temporarily closed" shows without searching yourself.
+- "Choose a Maps page..." sits beside Edit, and moves into the Edit page once a stop has its Maps page.
+- Bug fixes
+
 ## 0.0.515 — 2026-11-20
 
 - Rest stops find their Google Maps page when Maps names them differently (e.g. U.S. DOT's "I-71 North Oldham County Rest Area" is "I 71 Oldham Rest Area"), so closures like "temporarily closed" are caught without searching yourself.
