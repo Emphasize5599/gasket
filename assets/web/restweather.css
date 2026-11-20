@@ -18,3 +18,21 @@
 .rest-wx-metric:last-child{grid-column:1/-1}.rest-wx-metric:last-child strong{font-size:18px}
 .sub-page .sub-body .rest-weather details{background:rgba(0,0,0,.18);border-color:rgba(255,255,255,.25);color:#fff}
 .sub-page .sub-body .rest-weather details>summary{position:relative;background:transparent;color:#fff}
+
+/* Condition charts (original drawing, phone-weather-app style). */
+.rest-wx-charts{background:rgba(0,0,0,.15);border-radius:15px;margin:18px 0;padding:12px 12px 8px;min-width:0}
+.rest-wx-chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.rest-wx-pick select{font:inherit;font-size:14px;font-weight:600;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 12px;min-height:36px;max-width:100%}
+.rest-wx-readout{font-size:17px;font-weight:500;margin:4px 2px 0;min-height:1.3em;flex:1 1 140px;min-width:0}
+.rest-wx-chart{touch-action:pan-y;user-select:none;-webkit-user-select:none;min-width:0}
+.rest-wx-chart svg{display:block;overflow:visible}
+.rest-wx-chart .wx-grid{stroke:rgba(255,255,255,.16);stroke-width:1}
+.rest-wx-chart .wx-tick{stroke:rgba(255,255,255,.07);stroke-width:1}
+.rest-wx-chart .wx-ylab,.rest-wx-chart .wx-xlab{fill:rgba(255,255,255,.72);font-size:11px}
+.rest-wx-chart .wx-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.rest-wx-chart .wx-line2{stroke:rgba(255,255,255,.55);stroke-width:2;stroke-dasharray:4 4}
+.rest-wx-chart .wx-area{fill-opacity:.25;stroke:none}
+.rest-wx-chart .wx-mark{fill:#fff;font-size:11px;font-weight:600}
+.rest-wx-chart .wx-cursor{stroke:#fff;stroke-width:2}
+.rest-wx-chart .wx-empty{fill:rgba(255,255,255,.8);font-size:13px}
+.rest-wx-legend{font-size:12px;margin:4px 2px 0;color:#e2eaf4;min-height:1em}

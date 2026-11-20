@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.518 — 2026-11-20
+
+- Weather during rest now uses Weather Underground: 15-day hourly forecasts everywhere, pollen worldwide (tree, grass and ragweed, by 12-hour period), weather alerts outside the U.S., and a current air-quality reading when the forecast has none. AccuWeather is the backup.
+- New forecast charts on the rest weather page: temperature with feels-like, precipitation, wind with gusts, humidity, UV, air quality and pollen. Pick one from the Chart menu and drag across it to see each hour.
+
 ## 0.0.517 — 2026-11-20
 
 - Choose a Maps page... opens the stop's coordinates in Google Maps, taps Nearby and searches for it, the way you'd do it by hand.

@@ -4,7 +4,7 @@ const release=['rest-access-cancel-ui','tripdates','old-rest-trip-ui','restweath
 release.push('nhtsa-reader','editor-tires','hazard-prefetch','styled-tire-flow','trailer-editor','vehicle-catalog','nhtsa-catalog','setup-demo');
 release.push('carpics','carpics-download','car-photo-picker','recalls-nhtsa','car-search-name','fuel-angles','car-rotation-ui','car-photo-fallback','car-photo-fallback-ui','car-photo-samelook','tire-fuel','tire-fuel-ui','tesla-premium','evspecs','dc-charging-ui','charge-curve','dc-curve-ui');
 release.push('citgo-trip','scan-audit','citgo-trip-ui');
-release.push('vin-feedback','roadside-cash');
+release.push('vin-feedback','roadside-cash','restweatherchart');
 release.push('station-reconcile','map-scan-merge');
 release.push('routechoices','routechoices-ui','vehicle-required','vehicle-identity-edit');
 release.push('adaptive-readers');
