@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.517 — 2026-11-20
+
+- Choose a Maps page... opens the stop's coordinates in Google Maps, taps Nearby and searches for it, the way you'd do it by hand.
+- Rest stop rows: the satellite credit and "Tap to pan and zoom" sit above the picture, beside the + button; Edit moves onto the icon row once the stop has its Maps page.
+- Rest stops look up their Google Maps pages again.
+- Bug fixes
+
 ## 0.0.516 — 2026-11-20
 
 - U.S. DOT rest areas find their Google Maps place automatically by searching "rest area" near their coordinates (like Maps' Nearby button), so a closure such as "temporarily closed" shows without searching yourself.

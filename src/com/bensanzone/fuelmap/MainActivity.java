@@ -2907,9 +2907,11 @@ public class MainActivity extends Activity {
                     if (verifying != null) { js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Close the current website first.'})"); return; }
                     SiteWorker picker = ensureWorker("restmapschoose");
                     if (picker == null) throw new Exception("Maps picker unavailable");
-                    String query = args.optString("name", "Rest stop") + " near " + lat + "," + lng;
-                    String url = "https://www.google.com/maps/search/?api=1&query=" + java.net.URLEncoder.encode(query, "UTF-8");
-                    startShow(picker, reqId, url, "");
+                    // the raw coordinates' page, then its Nearby button with the keywords (assets/restmaps_pick.js)
+                    String q = args.optString("query", "rest area").replaceAll("[^A-Za-z0-9 ]", " ").trim();
+                    if (q.isEmpty() || q.length() > 40) q = "rest area";
+                    String url = String.format(Locale.US, "https://www.google.com/maps/search/%.6f,%.6f?hl=en", lat, lng);
+                    startShow(picker, reqId, url, "(" + asset("restmaps_pick.js") + ")(" + JSONObject.quote(q) + "," + reqId + ")");
                     wmDone.setText("Done — use selected place");
                 } catch (Exception e) {
                     js("window.onNativeResult&&onNativeResult(" + reqId + ",{error:'Could not open Maps selection.'})");

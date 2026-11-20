@@ -2612,3 +2612,11 @@ details:not([open]) > summary .sum-edit { display:none; }
 .download-actions > .btn { width:100%; min-width:0; height:auto; min-height:54px; margin-top:0; }
 .download-actions:has(> button:not(.hidden):nth-child(2)) { grid-template-columns:repeat(3,minmax(0,1fr)); }
 #obExplore + #sDemo { margin-top:8px; }
+
+/* 0.0.517: satellite caption above the picture, left of the + ; Edit on the icon row when there's no Maps chooser */
+.rest-heading > .rest-head-col {flex:1; min-width:0;}
+.rest-cap:empty {display:none;}
+.rest-cap small.rest-preview-caption, .rest-list .rest-cap small.rest-preview-caption {display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin:4px 0 0; font-size:11px; color:var(--ink-2); text-align:left;}
+.rest-cap .rest-preview-caption span:last-child {text-align:right;}
+.rest-row:has(.rest-sat-live) .rest-cap {display:none;}
+.rest-inspect > .rest-edit-btn {margin-right:auto;}
