@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.515 — 2026-11-20
+
+- Rest stops find their Google Maps page when Maps names them differently (e.g. U.S. DOT's "I-71 North Oldham County Rest Area" is "I 71 Oldham Rest Area"), so closures like "temporarily closed" are caught without searching yourself.
+- Choosing a Maps page by hand no longer ends on "Webpage not available".
+- Bug fixes
+
 ## 0.0.514 — 2026-11-19
 
 - Move the demo vehicles to the last setup screen, group reader controls, and shorten setup copy.

@@ -13,6 +13,18 @@ assert.equal(M.choose(site,[{...row,name:'Completely unrelated rest area'}]),nul
  const app=fs.readFileSync('assets/web/app.js','utf8'),native=fs.readFileSync('src/com/bensanzone/fuelmap/MainActivity.java','utf8');assert.match(app,/if\(key==='restmaps'\).*restmapsverified.*return/);assert.match(app,/restmapscancel/);assert.match(native,/"restmaps"\.equals\(key\).*url\.startsWith\("https:\/\/www\.google\.com\/maps\/search\/\?api=1&query="\)/);new Function('return ('+fs.readFileSync('assets/restmaps_worker.js','utf8')+')');
  console.log('Rest Maps: strict page identity, proximity/direction/ambiguity, durable reuse, single reader, pause/resume/dismiss and no false negative caching passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+(()=>{// owner (0.0.508 phone): U.S. DOT's "I-71 North Oldham County Rest Area" is "I 71 Oldham Rest Area" on Google Maps (temporarily closed there)
+ const old={id:'ntad:900',name:'I-71 North Oldham County Rest Area',lat:38.33852799,lng:-85.5161140000042,highway:'I-71'};
+ assert.deepEqual(M.queries(old).map(q=>q.name),['I-71 North Oldham County Rest Area','I-71 Oldham Rest Area','I-71 North Oldham County Rest Area NB','I-71 North Oldham County Rest Area SB','I-71 rest area']);
+ const at=(name,lat,lng)=>({name,url:'https://www.google.com/maps/place/'+encodeURIComponent(name)+'/data=!3d'+lat+'!4d'+lng,primary:true,closure:'temporarily_closed'});
+ const hit=M.choose(old,[at('I 71 Oldham Rest Area',38.3427,-85.5132)]);assert(hit,'same highway + county name + rest area within 0.75 mi');assert.equal(hit.closure,'temporarily_closed');
+ assert(!M.choose(old,[at('I 71 Oldham Rest Area',38.355,-85.51)]),'over 0.75 mi stays unmatched');
+ assert(!M.choose(old,[at('I 71 Henry Rest Area',38.3427,-85.5132)]),'another place on the same highway is not this one');
+ assert(!M.choose(old,[at('I 64 Oldham Rest Area',38.3427,-85.5132)]),'another highway is not this one');
+ assert(!M.choose(old,[at('Oldham Gas Station',38.3388,-85.5161)]),'not a rest area');
+ assert.equal(M.queries({...old,id:'osm:node:1'}).length,1,'other sources: own name only');
+ console.log('Maps names without direction / county words (I-71 Oldham) passed');
+})();
 
 const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.854,direction:'N'};const ardsleyPage={name:ardsley.name,url:'https://www.google.com/maps/place/Ardsley+Travel+Plaza/data=!3d40.984875!4d-73.852596'};assert(M.choose(ardsley,[ardsleyPage]),'exact-name plaza matches its measured inventory-to-entrance displacement');assert.equal(M.choose(ardsley,[{...ardsleyPage,name:'Different Travel Plaza'}]),null,'wider tolerance requires exact identity');
 (async()=>{
@@ -28,7 +40,7 @@ const ardsley={id:'ntad:1882',name:'Ardsley Travel Plaza',lat:40.9824,lng:-73.85
  assert.deepEqual(M.queries({...plaza,highway:'I-71'}).map(q=>q.name).slice(1),['Ohio Turnpike Plaza NB','Ohio Turnpike Plaza SB'],'odd = north/south');
  assert.deepEqual(M.queries({...plaza,direction:'W'}).map(q=>q.name).slice(1),['Ohio Turnpike Plaza WB'],'known direction only');
  assert.equal(M.queries({...plaza,highway:null}).length,5,'unknown highway: all four');assert.equal(M.queries({...plaza,id:'osm:node:1'}).length,1,'other sources: own name only');
- assert.equal(M.queries({...plaza,name:'Ohio Turnpike Plaza EB'}).length,1,'name already has a direction');
+ assert.deepEqual(M.queries({...plaza,name:'Ohio Turnpike Plaza EB'}).map(q=>q.name),['Ohio Turnpike Plaza EB','Ohio Turnpike Plaza'],'name already has a direction: no NB/SB/EB/WB variants, only the name without it');
  const asked=[],kv=new Map(),page={primary:true,name:'Ohio Turnpike Plaza WB',url:'https://www.google.com/maps/place/Ohio+Turnpike+Plaza+WB/data=!3d41.3003!4d-81.6004'};
  const s=M.create({get:k=>kv.get(k),put:(k,v)=>kv.set(k,v),read:async q=>{asked.push(q.name);return {complete:true,places:/WB$/.test(q.name)?[page]:[]};},blocked:()=>assert.fail('no check')});
  const got=await s.resolve(plaza);assert.equal(got.state,'found');assert.equal(got.query,'Ohio Turnpike Plaza WB');assert.deepEqual(asked,['Ohio Turnpike Plaza','Ohio Turnpike Plaza EB','Ohio Turnpike Plaza WB']);

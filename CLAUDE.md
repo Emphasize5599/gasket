@@ -4,6 +4,12 @@ Current UX design brief: [docs/UX_CHARTER.md](docs/UX_CHARTER.md) records the ow
 
 UI screenshot tour (on demand, every screen at 412 px, light and dark): `tools/ui-tour`, Actions → UI screenshot tour; see [docs/UI_TOUR.md](docs/UI_TOUR.md). New UI tests can be added to its list in `tools/ui-tour/run.cjs`.
 
+## 0.0.515 - rest Maps matching without direction / county words; picker app links
+
+Owner (phone screenshot): the manual Maps picker (`restmapschoose`) ended on "Webpage not available" for `intent://www.google.com/maps/search/...#Intent;scheme=https;package=com.google...` (net::ERR_UNKNOWN_URL_SCHEME), and U.S. DOT's "I-71 North Oldham County Rest Area" (Maps: "I 71 Oldham Rest Area", temporarily closed) wasn't matched automatically. Cause of the intent: ensureWorker built `restmapschoose` with the mobile UA (its desktop list lacked it); Google's mobile site in a WebView redirects to the app (`utm_campaign=ml-ardl-wv`). Now the picker uses the desktop page at the phone's width (wide viewport/overview off), and every SiteWorker's `shouldOverrideUrlLoading(WebView, WebResourceRequest)` refuses non-http(s) links (stays on the page). RestMaps: `short(name)` drops north/south/east/west(bound), NB/SB/EB/WB, county/parish; `queries()` for NTAD adds it after the name, keeps the NB/SB/EB/WB variants (only when the name has no direction), and ends with "I-71 rest area" (the name's highway) near the place. `choose()` `roadPlace` = same highway token + rest area / rest stop / welcome center / travel or service plaza + one place word (not road/direction/county) → accepted within 0.75 mi (others .15, exact .5). Tests restmaps (Oldham queries, match + closure, 0.75 mi, other place / highway / non-rest-area rejected), restmaps-reader (native source checks). The live Maps answer for this place and the desktop picker at phone width are not verified (no phone/live Maps here); the coordinates in the test are invented near the NTAD point.
+
+Phone checks: a trip past I-71 at Oldham County KY: the rest row gets a Maps pin and shows Google Maps' temporarily-closed note with no manual search. Choose a Maps page by hand on any rest row: the page stays on Google Maps (no "Webpage not available") and Done picks the place.
+
 ## 0.0.508 - DEMO_KEY hint on the DOE key
 
 507's APK (a3820a6) shipped DEMO_KEY as the Fuel API key placeholder; e0bc99a put it back on `#nrelKey` (no version bump, so its build stopped at the tag guard). 508 ships that. Phone check: Settings → Connections: DOE key shows DEMO_KEY, Fuel API key blank.

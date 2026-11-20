@@ -777,6 +777,14 @@ public class MainActivity extends Activity {
             view.setWebChromeClient(new WebChromeClient());
             view.setWebViewClient(new WebViewClient() {
                 @Override
+                public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                    // Google Maps' mobile site sends "open in the app" intent:// links a WebView can't load
+                    // ("Webpage not available"); never follow a non-web link from a site page, stay where it is.
+                    String scheme = String.valueOf(req.getUrl().getScheme()).toLowerCase(Locale.US);
+                    return !"http".equals(scheme) && !"https".equals(scheme);
+                }
+
+                @Override
                 public void onPageCommitVisible(WebView v, String url) {
                     // a background read (siteRead) starts its reader as soon as the page is drawn: some pages (NHTSA's)
                     // keep loading in the background for a long time, and the reader waits for its answer by itself
@@ -929,11 +937,15 @@ public class MainActivity extends Activity {
             return fresh;
         }
         if (old.view != null) { old.cancelIdleRelease(); return old; }
-        boolean desktop = isGasWorker(key) || "gmaps".equals(key) || "traffic".equals(key) || "restmaps".equals(key);
+        boolean desktop = isGasWorker(key) || "gmaps".equals(key) || "traffic".equals(key) || "restmaps".equals(key) || "restmapschoose".equals(key);
         SiteWorker fresh = new SiteWorker(key, old.home, old.origin, desktop, true);
         fresh.verificationUrl = old.verificationUrl;
         workers.put(key, fresh);
-        root.addView(fresh.view, 0, new FrameLayout.LayoutParams(desktop ? 1280 : -1, desktop ? 900 : -1));
+        // The Maps picker is shown to the user: the desktop page (Maps' mobile site in a WebView only offers
+        // "open in the app" links), laid out at the phone's own width rather than zoomed out to 1280 px.
+        boolean shown = "restmapschoose".equals(key);
+        if (shown) { fresh.view.getSettings().setUseWideViewPort(false); fresh.view.getSettings().setLoadWithOverviewMode(false); }
+        root.addView(fresh.view, 0, new FrameLayout.LayoutParams(desktop && !shown ? 1280 : -1, desktop && !shown ? 900 : -1));
         return fresh;
     }
 
