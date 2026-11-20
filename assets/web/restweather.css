@@ -19,20 +19,38 @@
 .sub-page .sub-body .rest-weather details{background:rgba(0,0,0,.18);border-color:rgba(255,255,255,.25);color:#fff}
 .sub-page .sub-body .rest-weather details>summary{position:relative;background:transparent;color:#fff}
 
-/* Condition charts (original drawing, phone-weather-app style). */
-.rest-wx-charts{background:rgba(0,0,0,.15);border-radius:15px;margin:18px 0;padding:12px 12px 8px;min-width:0}
-.rest-wx-chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+/* Condition charts (uPlot; behavior notes in restweatherchart.js). */
+.rest-wx-charts{background:rgba(0,0,0,.15);border-radius:18px;margin:18px 0;padding:14px 14px 12px;min-width:0}
+.rest-wx-chart-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.rest-wx-chart-top .rest-wx-pick{order:-1}
+.rest-wx-card-label{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;letter-spacing:.02em;color:rgba(255,255,255,.72);text-transform:uppercase;min-width:0}
+.rest-wx-card-label svg{width:22px;height:22px;flex:none;color:rgba(255,255,255,.8)}
 .rest-wx-pick select{font:inherit;font-size:14px;font-weight:600;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 12px;min-height:36px;max-width:100%}
-.rest-wx-readout{font-size:17px;font-weight:500;margin:4px 2px 0;min-height:1.3em;flex:1 1 140px;min-width:0}
-.rest-wx-chart{touch-action:pan-y;user-select:none;-webkit-user-select:none;min-width:0}
-.rest-wx-chart svg{display:block;overflow:visible}
-.rest-wx-chart .wx-grid{stroke:rgba(255,255,255,.16);stroke-width:1}
-.rest-wx-chart .wx-tick{stroke:rgba(255,255,255,.07);stroke-width:1}
-.rest-wx-chart .wx-ylab,.rest-wx-chart .wx-xlab{fill:rgba(255,255,255,.72);font-size:11px}
-.rest-wx-chart .wx-line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
-.rest-wx-chart .wx-line2{stroke:rgba(255,255,255,.55);stroke-width:2;stroke-dasharray:4 4}
-.rest-wx-chart .wx-area{fill-opacity:.25;stroke:none}
-.rest-wx-chart .wx-mark{fill:#fff;font-size:11px;font-weight:600}
-.rest-wx-chart .wx-cursor{stroke:#fff;stroke-width:2}
-.rest-wx-chart .wx-empty{fill:rgba(255,255,255,.8);font-size:13px}
-.rest-wx-legend{font-size:12px;margin:4px 2px 0;color:#e2eaf4;min-height:1em}
+.rest-wx-seg{display:inline-flex;background:rgba(0,0,0,.22);border-radius:10px;padding:2px;margin:0 0 10px}
+.rest-wx-seg[hidden]{display:none}
+.rest-wx-seg button{font:inherit;font-size:13px;color:#fff;background:none;border:0;border-radius:8px;padding:6px 12px;min-height:32px;cursor:pointer}
+.rest-wx-seg button[aria-pressed=true]{background:rgba(255,255,255,.9);color:#1f3f63;font-weight:600}
+.rest-wx-chart{position:relative;touch-action:pan-y;user-select:none;-webkit-user-select:none;min-width:0;border-radius:10px}
+.rest-wx-chart:focus-visible{outline:2px solid #cbe0ff;outline-offset:4px}
+.rest-wx-chart .uplot{font-family:inherit}
+.rest-wx-pop{position:absolute;z-index:2;pointer-events:none;background:#fff;color:#000;border-radius:12px;padding:7px 12px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.18);white-space:nowrap}
+.rest-wx-pop strong{display:block;font-size:24px;font-weight:500;line-height:1.1}
+.rest-wx-pop small{display:block;font-size:12px;color:rgba(0,0,0,.62)}
+.rest-wx-pop em{display:block;font-style:normal;font-size:12px;color:#1c6ca8}
+.rest-wx-chart-empty{font-size:14px;opacity:.85;margin:24px 0;text-align:center}
+.rest-wx-summary{display:flex;margin-top:10px}
+.rest-wx-summary>div{flex:1 1 0;text-align:center;min-width:0;padding:0 4px}
+.rest-wx-summary>div+div{border-left:1px solid rgba(255,255,255,.12)}
+.rest-wx-summary small{display:block;font-size:12px;color:rgba(255,255,255,.58)}
+.rest-wx-summary strong{display:block;font-size:18px;font-weight:500}
+.rest-wx-dirs{display:flex;gap:14px;overflow-x:auto;margin-top:12px;padding-bottom:4px;scrollbar-width:thin}
+.rest-wx-dirs>div{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;min-width:44px}
+.rest-wx-dirs small{font-size:11px;color:rgba(255,255,255,.6)}
+.rest-wx-dirs svg{width:20px;height:20px;color:#bfe0ff}
+.rest-wx-dirs strong{font-size:13px}
+.rest-wx-legend{font-size:12px;margin:8px 2px 0;color:#e2eaf4}
+.rest-wx-pollen{display:flex;flex-direction:column;gap:10px}
+.rest-wx-prow>span{display:block;font-size:13px;margin-bottom:4px}
+.rest-wx-pbar{position:relative;height:26px;background:rgba(255,255,255,.08);border-radius:8px;overflow:hidden}
+.rest-wx-pbar i{font-style:normal;position:absolute;top:0;bottom:0;border-right:1px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.rest-wx-pbar b{font-size:11px;font-weight:600;color:#10233a;white-space:nowrap}

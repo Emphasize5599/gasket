@@ -465,6 +465,32 @@ The per-leg rest directory checks visible rest-site names and coordinates agains
 ## Offline timezone lookup
 
 `assets/web/vendor/tz-lookup.js` is the unmodified browser distribution of `@photostructure/tz-lookup` 11.7.0 by The Dark Sky Company and PhotoStructure contributors, CC0-1.0. Full license: `assets/web/vendor/tz-lookup-LICENSE.txt`; pinned package provenance and integrity: `tz-lookup-SOURCE.json`. Source: https://github.com/photostructure/tz-lookup . Its compressed timezone estimates derive from timezone-boundary-builder, https://github.com/evansiroky/timezone-boundary-builder , based on © OpenStreetMap contributors (ODbL, https://www.openstreetmap.org/copyright). Original boundary sources remain available there. Estimates trade precision for a small offline footprint; Gasket prefers explicit/saved provider zones and defers detected ambiguous boundary neighborhoods to its existing online resolver. Android/browser IANA rules supply daylight-saving offsets.
+## uPlot 1.6.32
+
+`assets/web/lib/uplot.min.js` and `uplot.min.css` are the unmodified distribution of uPlot 1.6.32 (https://github.com/leeoniya/uPlot), used to draw the rest-weather charts. npm `uplot@1.6.32`, `dist/uPlot.iife.min.js` sha256 19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f, `dist/uPlot.min.css` sha256 df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04.
+
+The MIT License (MIT)
+
+Copyright (c) 2022 Leon Sorokin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
 ## SunCalc 1.9.0
 
 Offline sunrise, sunset and civil-twilight calculations by Vladimir Agafonkin, BSD-2-Clause. Source: https://github.com/mourner/suncalc/tree/v1.9.0 . Full notice: `assets/web/vendor/suncalc-LICENSE.txt`.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.519 — 2026-11-20
+
+- Rest weather charts redrawn in the style of Apple's Weather app: smooth temperature curve colored by temperature with an Actual / Feels like switch, chance-of-rain bars under it, rounded rain bars with the expected total, wind with gusts and direction arrows, UV on its risk bands, air quality and pollen by period. Slide a finger sideways across a chart to read any hour on a floating card; up-and-down still scrolls the page. Each chart has an arrival / low / high / average row.
+- Fix the AccuWeather backup forecast and pollen, which never loaded: AccuWeather's website answers in a different format than the app expected.
+
 ## 0.0.518 — 2026-11-20
 
 - Weather during rest now uses Weather Underground: 15-day hourly forecasts everywhere, pollen worldwide (tree, grass and ragweed, by 12-hour period), weather alerts outside the U.S., and a current air-quality reading when the forecast has none. AccuWeather is the backup.

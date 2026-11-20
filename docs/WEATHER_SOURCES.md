@@ -16,7 +16,7 @@ Status (0.0.518): WU is wired in with its client key hardcoded in `RestWeatherHt
 
 Changes from the plan below: WU's key also answers the pollen daypart endpoint worldwide (checked 2026-11-20 at Little Rock, Toronto, London, Mexico City, Vancouver and Sydney; Sydney had non-zero spring grass pollen), so pollen is WU-first everywhere and the TWC sdui fallback was removed. WU's air quality is current-only (its hourly air forecasts answer 401 "apikey is not authorized for this product"), so the hourly CAMS forecast stays primary for a future stay. Other 401s with this key: `v2/indices/pollen/daily/5day`, `v3/wx/globalAirQuality/forecast/hourly/3day`.
 
-The submenu has condition charts (temperature with feels-like, precipitation, wind with gusts, humidity, UV, air quality, pollen; `restweatherchart.js`, original SVG): pick one from the Chart menu, drag across it to move the selected hour.
+The submenu has condition charts drawn with uPlot (0.0.519; behavior notes at the top of `restweatherchart.js`). 0.0.519 also fixed the AccuWeather parsers, which never matched the website's real `/api/hourly` and lifestyle-indices replies.
 
 Earlier status: initial stay-window submenu implemented in 0.0.479.
 
