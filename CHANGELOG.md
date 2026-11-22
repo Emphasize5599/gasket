@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.520 — 2026-11-22
+
+- New app icon: a dotted route ending at a map pin with a house, on sky blue (replaces the gas pump). Themed icons on Android 13+ use it too.
+
 ## 0.0.519 — 2026-11-20
 
 - Rest weather charts redrawn in the style of Apple's Weather app: smooth temperature curve colored by temperature with an Actual / Feels like switch, chance-of-rain bars under it, rounded rain bars with the expected total, wind with gusts and direction arrows, UV on its risk bands, air quality and pollen by period. Slide a finger sideways across a chart to read any hour on a floating card; up-and-down still scrolls the page. Each chart has an arrival / low / high / average row.
